@@ -79,18 +79,14 @@ export const authService = {
     localStorage.removeItem("student-auth-storage");
   },
 
-  async getLinkedAccounts(
-    studentId: number,
-  ): Promise<LinkedAccountsResponse> {
+  async getLinkedAccounts(studentId: number): Promise<LinkedAccountsResponse> {
     const response = await api.get(
       `/api/students/${studentId}/linked-accounts`,
     );
     return response.data;
   },
 
-  async switchAccount(
-    targetStudentId: number,
-  ): Promise<SwitchAccountResponse> {
+  async switchAccount(targetStudentId: number): Promise<SwitchAccountResponse> {
     const response = await api.post("/api/students/switch-account", {
       target_student_id: targetStudentId,
     });

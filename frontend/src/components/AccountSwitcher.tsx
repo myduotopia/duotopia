@@ -13,10 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Building2, School, Users, Check } from "lucide-react";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
-import {
-  authService,
-  type LinkedAccount,
-} from "@/services/authService";
+import { authService, type LinkedAccount } from "@/services/authService";
 
 export function AccountSwitcher() {
   const { t } = useTranslation();
@@ -160,9 +157,7 @@ export function AccountSwitcher() {
                   {account.name?.charAt(0).toUpperCase() || "S"}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {account.name}
-                  </p>
+                  <p className="text-sm font-medium truncate">{account.name}</p>
                   <div className="flex items-center gap-1 text-xs text-gray-500">
                     {account.organization && (
                       <>

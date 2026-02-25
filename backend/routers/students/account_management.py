@@ -12,7 +12,12 @@ from datetime import datetime, timedelta
 from database import get_db
 from models import Student, StudentIdentity, Classroom, ClassroomStudent
 from models.organization import ClassroomSchool, School, Organization
-from auth import get_current_user, create_access_token, verify_password, _get_student_password_hash
+from auth import (
+    get_current_user,
+    create_access_token,
+    verify_password,
+    _get_student_password_hash,
+)
 from .validators import SwitchAccountRequest
 
 router = APIRouter()
@@ -84,9 +89,7 @@ def _build_account_info(db: Session, student: Student) -> dict:
         "classroom": classroom_info,
         "school": school_info,
         "organization": organization_info,
-        "last_login": (
-            student.last_login.isoformat() if student.last_login else None
-        ),
+        "last_login": (student.last_login.isoformat() if student.last_login else None),
     }
 
 

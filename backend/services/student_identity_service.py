@@ -35,12 +35,16 @@ class StudentIdentityService:
             StudentIdentity 或 None（若失敗）
         """
         if not student.email or not student.email_verified:
-            logger.warning(f"Student {student.id} has no verified email, skip consolidation")
+            logger.warning(
+                f"Student {student.id} has no verified email, skip consolidation"
+            )
             return None
 
         # 如果已經整合過，不重複處理
         if student.identity_id is not None:
-            logger.info(f"Student {student.id} already consolidated to identity {student.identity_id}")
+            logger.info(
+                f"Student {student.id} already consolidated to identity {student.identity_id}"
+            )
             return student.identity
 
         try:
@@ -55,7 +59,9 @@ class StudentIdentityService:
             )
 
             if existing_identity:
-                return self._merge_into_existing_identity(db, student, existing_identity)
+                return self._merge_into_existing_identity(
+                    db, student, existing_identity
+                )
             else:
                 return self._create_new_identity(db, student)
 
@@ -64,16 +70,16 @@ class StudentIdentityService:
             db.rollback()
             return None
 
-    def _create_new_identity(
-        self, db: Session, student: Student
-    ) -> StudentIdentity:
+    def _create_new_identity(self, db: Session, student: Student) -> StudentIdentity:
         """建立新的 StudentIdentity（首次 Email 驗證）"""
         identity = StudentIdentity(
             primary_student_id=student.id,
             verified_email=student.email,
             password_hash=student.password_hash,
             password_changed=student.password_changed,
-            last_password_change=datetime.utcnow() if student.password_changed else None,
+            last_password_change=datetime.utcnow()
+            if student.password_changed
+            else None,
             merge_source="email_verification",
         )
         db.add(identity)
@@ -139,9 +145,7 @@ class StudentIdentityService:
         # 都是預設密碼 → 保持 Identity 的
         return
 
-    def get_linked_students(
-        self, db: Session, identity_id: int
-    ) -> list[Student]:
+    def get_linked_students(self, db: Session, identity_id: int) -> list[Student]:
         """取得 Identity 下所有關聯的 Student 帳號"""
         return (
             db.query(Student)
