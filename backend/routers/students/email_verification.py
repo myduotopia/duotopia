@@ -163,18 +163,31 @@ async def resend_email_verification(
 
 @router.get("/verify-email/{token}")
 async def verify_email(token: str, db: Session = Depends(get_db)):
-    """驗證 email token"""
+    """驗證 email token，並觸發身分整合"""
     from services.email_service import email_service
+    from services.student_identity_service import student_identity_service
 
     student = email_service.verify_email_token(db, token)
     if not student:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    # 觸發身分整合
+    identity = student_identity_service.consolidate_on_email_verification(db, student)
+    db.commit()
+
+    linked_count = 0
+    if identity:
+        linked_count = len(
+            [s for s in identity.linked_students if s.id != student.id and s.is_active]
+        )
 
     return {
         "message": "Email 驗證成功",
         "student_name": student.name,
         "email": student.email,
         "verified": True,
+        "identity_consolidated": identity is not None,
+        "linked_accounts_count": linked_count,
     }
 
 

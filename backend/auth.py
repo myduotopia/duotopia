@@ -125,13 +125,35 @@ def authenticate_teacher(db: Session, email: str, password: str):
 
 
 def authenticate_student(db: Session, email: str, password: str):
-    """學生認證"""
+    """學生認證（支援 StudentIdentity 統一密碼）"""
     student = db.query(Student).filter(Student.email == email).first()
     if not student:
         return None
-    if not verify_password(password, student.password_hash):
+
+    # 判斷使用哪個密碼來源
+    password_hash = _get_student_password_hash(db, student)
+    if not verify_password(password, password_hash):
         return None
     return student
+
+
+def _get_student_password_hash(db: Session, student) -> str:
+    """取得學生的有效密碼 hash
+
+    已遷移到 Identity 的帳號使用 Identity 的統一密碼，
+    否則使用 Student 自身的密碼。
+    """
+    if student.password_migrated_to_identity and student.identity_id:
+        from models.user import StudentIdentity
+
+        identity = (
+            db.query(StudentIdentity)
+            .filter(StudentIdentity.id == student.identity_id)
+            .first()
+        )
+        if identity:
+            return identity.password_hash
+    return student.password_hash
 
 
 async def get_current_user(

@@ -31,7 +31,7 @@ class EmailUpdateRequest(BaseModel):
 
 class SwitchAccountRequest(BaseModel):
     target_student_id: int
-    password: str  # 目標帳號的密碼（生日）
+    password: Optional[str] = None  # Identity 關聯帳號不需密碼，fallback 才需要
 
 
 # Practice Words schemas

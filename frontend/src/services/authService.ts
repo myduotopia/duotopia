@@ -21,6 +21,40 @@ interface LoginResponse {
   };
 }
 
+export interface LinkedAccount {
+  student_id: number;
+  name: string;
+  student_number: string | null;
+  is_primary_account: boolean | null;
+  classroom: {
+    id: number;
+    name: string;
+    teacher_name: string | null;
+  } | null;
+  school: {
+    id: string;
+    name: string;
+  } | null;
+  organization: {
+    id: string;
+    name: string;
+  } | null;
+  last_login: string | null;
+}
+
+interface LinkedAccountsResponse {
+  linked_accounts: LinkedAccount[];
+  current_email: string;
+  identity_id: number | null;
+}
+
+interface SwitchAccountResponse {
+  access_token: string;
+  token_type: string;
+  student: LinkedAccount;
+  message: string;
+}
+
 export const authService = {
   async studentLogin(
     credentials: StudentLoginCredentials,
@@ -43,5 +77,23 @@ export const authService = {
     // Clear local storage
     localStorage.removeItem("auth-storage");
     localStorage.removeItem("student-auth-storage");
+  },
+
+  async getLinkedAccounts(
+    studentId: number,
+  ): Promise<LinkedAccountsResponse> {
+    const response = await api.get(
+      `/api/students/${studentId}/linked-accounts`,
+    );
+    return response.data;
+  },
+
+  async switchAccount(
+    targetStudentId: number,
+  ): Promise<SwitchAccountResponse> {
+    const response = await api.post("/api/students/switch-account", {
+      target_student_id: targetStudentId,
+    });
+    return response.data;
   },
 };

@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session, joinedload
 from datetime import timedelta
 
 from database import get_db
-from models import Student, Classroom, ClassroomStudent
+from models import Student, Classroom, ClassroomStudent, StudentIdentity
 from models.organization import ClassroomSchool, School, Organization
-from auth import create_access_token, verify_password
+from auth import create_access_token, verify_password, _get_student_password_hash
 from .validators import StudentValidateRequest, StudentLoginResponse
 
 router = APIRouter()
@@ -17,7 +17,7 @@ router = APIRouter()
 async def validate_student(
     request: StudentValidateRequest, db: Session = Depends(get_db)
 ):
-    """學生登入驗證"""
+    """學生登入驗證（支援 Identity 統一密碼）"""
     # 查詢學生
     student = db.query(Student).filter(Student.email == request.email).first()
 
@@ -26,8 +26,9 @@ async def validate_student(
             status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
         )
 
-    # 驗證密碼 - 未改密碼時是生日，改密碼後是新密碼
-    if not verify_password(request.password, student.password_hash):
+    # 驗證密碼 - 支援 Identity 統一密碼
+    password_hash = _get_student_password_hash(db, student)
+    if not verify_password(request.password, password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid password"
         )
@@ -82,6 +83,21 @@ async def validate_student(
                 organization_id = str(org.id)
                 organization_name = org.name
 
+    # 查詢關聯帳號數量
+    has_linked_accounts = False
+    linked_accounts_count = 0
+    if student.identity_id:
+        linked_accounts_count = (
+            db.query(Student)
+            .filter(
+                Student.identity_id == student.identity_id,
+                Student.id != student.id,
+                Student.is_active.is_(True),
+            )
+            .count()
+        )
+        has_linked_accounts = linked_accounts_count > 0
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -96,5 +112,7 @@ async def validate_student(
             "school_name": school_name,
             "organization_id": organization_id,
             "organization_name": organization_name,
+            "has_linked_accounts": has_linked_accounts,
+            "linked_accounts_count": linked_accounts_count,
         },
     }

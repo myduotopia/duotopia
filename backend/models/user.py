@@ -1,9 +1,10 @@
 """
-User models: Teacher and Student
+User models: Teacher, Student, and StudentIdentity
 """
 
 from sqlalchemy import (
     Column,
+    ForeignKey,
     Integer,
     String,
     DateTime,
@@ -259,6 +260,56 @@ class Teacher(Base):
         return f"<Teacher {self.name} ({self.email})>"
 
 
+class StudentIdentity(Base):
+    """學生統一身分表
+
+    整合同一位學生在不同機構/教師下創建的多個 Student 帳號，
+    透過 Email 驗證識別為同一人。
+    """
+
+    __tablename__ = "student_identities"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # 主帳號（學生登入時使用的帳號）
+    primary_student_id = Column(Integer, ForeignKey("students.id"), nullable=True)
+
+    # 已驗證的統一 Email（唯一）
+    verified_email = Column(String(255), unique=True, nullable=False, index=True)
+
+    # 身分識別資訊（用於 1Campus SSO，Phase 6）
+    national_id_hash = Column(String(64), unique=True, nullable=True)  # SHA-256
+    one_campus_student_id = Column(String(100), nullable=True, index=True)
+
+    # 密碼統一管理
+    password_hash = Column(String(255), nullable=False)
+    password_changed = Column(Boolean, default=False)
+    last_password_change = Column(DateTime(timezone=True), nullable=True)
+
+    # 整合資訊
+    merged_at = Column(DateTime(timezone=True), server_default=func.now())
+    merge_source = Column(String(50), default="email_verification")  # email_verification / one_campus_sso / manual_merge
+
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    primary_student = relationship(
+        "Student",
+        foreign_keys=[primary_student_id],
+        post_update=True,
+    )
+    linked_students = relationship(
+        "Student",
+        back_populates="identity",
+        foreign_keys="Student.identity_id",
+    )
+
+    def __repr__(self):
+        return f"<StudentIdentity {self.verified_email}>"
+
+
 class Student(Base):
     """學生模型"""
 
@@ -280,6 +331,11 @@ class Student(Base):
     is_active = Column(Boolean, default=True)
     last_login = Column(DateTime(timezone=True))  # 最後登入時間
 
+    # 身分整合欄位
+    identity_id = Column(Integer, ForeignKey("student_identities.id"), nullable=True)
+    is_primary_account = Column(Boolean, nullable=True)  # null = 未整合
+    password_migrated_to_identity = Column(Boolean, default=False)
+
     # 學習目標設定
     target_wpm = Column(Integer, default=80)  # 目標每分鐘字數
     target_accuracy = Column(Float, default=0.8)  # 目標準確率
@@ -288,6 +344,11 @@ class Student(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
+    identity = relationship(
+        "StudentIdentity",
+        back_populates="linked_students",
+        foreign_keys=[identity_id],
+    )
     classroom_enrollments = relationship("ClassroomStudent", back_populates="student")
     school_enrollments = relationship("StudentSchool", back_populates="student")
     assignments = relationship("StudentAssignment", back_populates="student")
