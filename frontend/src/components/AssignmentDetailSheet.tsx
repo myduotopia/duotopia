@@ -55,8 +55,12 @@ export function AssignmentDetailSheet({
   useEffect(() => {
     if (assignment && open) {
       setEditTitle(assignment.title);
-      setEditInstructions(assignment.instructions || assignment.description || "");
-      setEditDueDate(assignment.due_date ? assignment.due_date.split("T")[0] : "");
+      setEditInstructions(
+        assignment.instructions || assignment.description || "",
+      );
+      setEditDueDate(
+        assignment.due_date ? assignment.due_date.split("T")[0] : "",
+      );
       setIsEditing(false);
       fetchProgress();
     }
@@ -89,14 +93,11 @@ export function AssignmentDetailSheet({
     if (!assignment) return;
     setSaving(true);
     try {
-      await apiClient.patch(
-        `/api/teachers/assignments/${assignment.id}`,
-        {
-          title: editTitle,
-          description: editInstructions,
-          due_date: editDueDate || null,
-        },
-      );
+      await apiClient.patch(`/api/teachers/assignments/${assignment.id}`, {
+        title: editTitle,
+        description: editInstructions,
+        due_date: editDueDate || null,
+      });
       toast.success(t("assignmentDetail.messages.updateSuccess", "已儲存變更"));
       setIsEditing(false);
       onAssignmentUpdated?.();
@@ -110,8 +111,12 @@ export function AssignmentDetailSheet({
   const handleCancelEdit = () => {
     if (!assignment) return;
     setEditTitle(assignment.title);
-    setEditInstructions(assignment.instructions || assignment.description || "");
-    setEditDueDate(assignment.due_date ? assignment.due_date.split("T")[0] : "");
+    setEditInstructions(
+      assignment.instructions || assignment.description || "",
+    );
+    setEditDueDate(
+      assignment.due_date ? assignment.due_date.split("T")[0] : "",
+    );
     setIsEditing(false);
   };
 
@@ -119,27 +124,33 @@ export function AssignmentDetailSheet({
     const config: Record<string, { label: string; className: string }> = {
       SUBMITTED: {
         label: t("assignmentDetail.status.submitted", "已繳交"),
-        className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+        className:
+          "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
       },
       GRADED: {
         label: t("assignmentDetail.status.graded", "已批改"),
-        className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+        className:
+          "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
       },
       IN_PROGRESS: {
         label: t("assignmentDetail.status.inProgress", "進行中"),
-        className: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
+        className:
+          "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
       },
       NOT_STARTED: {
         label: t("assignmentDetail.status.notStarted", "未開始"),
-        className: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
+        className:
+          "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
       },
       RETURNED: {
         label: t("assignmentDetail.status.returned", "已退回"),
-        className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
+        className:
+          "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
       },
       RESUBMITTED: {
         label: t("assignmentDetail.status.resubmitted", "已重交"),
-        className: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+        className:
+          "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
       },
     };
     return config[status] || config.NOT_STARTED;
@@ -154,51 +165,68 @@ export function AssignmentDetailSheet({
       if (practiceMode === "word_selection") {
         return {
           label: t("classroomDetail.contentTypes.WORD_SELECTION"),
-          className: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
+          className:
+            "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
         };
       }
       return {
         label: t("classroomDetail.contentTypes.WORD_READING"),
-        className: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+        className:
+          "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
       };
     }
 
-    if (contentType === "EXAMPLE_SENTENCES" || contentType === "READING_ASSESSMENT") {
+    if (
+      contentType === "EXAMPLE_SENTENCES" ||
+      contentType === "READING_ASSESSMENT"
+    ) {
       if (practiceMode === "rearrangement") {
         return {
           label: t("classroomDetail.contentTypes.REARRANGEMENT"),
-          className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+          className:
+            "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
         };
       }
       return {
         label: t("classroomDetail.contentTypes.SPEAKING"),
-        className: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+        className:
+          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
       };
     }
 
-    const otherTypeLabels: Record<string, { label: string; className: string }> = {
+    const otherTypeLabels: Record<
+      string,
+      { label: string; className: string }
+    > = {
       SPEAKING_PRACTICE: {
         label: t("classroomDetail.contentTypes.speakingPractice"),
-        className: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+        className:
+          "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
       },
       SPEAKING_SCENARIO: {
         label: t("classroomDetail.contentTypes.speakingScenario"),
-        className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+        className:
+          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
       },
       LISTENING_CLOZE: {
         label: t("classroomDetail.contentTypes.listeningCloze"),
-        className: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+        className:
+          "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
       },
       SPEAKING_QUIZ: {
         label: t("classroomDetail.contentTypes.speakingQuiz"),
-        className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+        className:
+          "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
       },
     };
 
-    return otherTypeLabels[contentType || ""] || {
-      label: t("classroomDetail.labels.unknownType"),
-      className: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
-    };
+    return (
+      otherTypeLabels[contentType || ""] || {
+        label: t("classroomDetail.labels.unknownType"),
+        className:
+          "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
+      }
+    );
   };
 
   if (!assignment) return null;
@@ -312,7 +340,9 @@ export function AssignmentDetailSheet({
                   </div>
                   <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
                     {assignment.due_date
-                      ? new Date(assignment.due_date).toLocaleDateString("zh-TW")
+                      ? new Date(assignment.due_date).toLocaleDateString(
+                          "zh-TW",
+                        )
                       : t("classroomDetail.labels.noDeadline")}
                   </div>
                 </div>
@@ -378,7 +408,11 @@ export function AssignmentDetailSheet({
         <div className="border-t dark:border-gray-700 px-6 py-4 flex justify-end gap-3">
           {isEditing ? (
             <>
-              <Button variant="outline" onClick={handleCancelEdit} disabled={saving}>
+              <Button
+                variant="outline"
+                onClick={handleCancelEdit}
+                disabled={saving}
+              >
                 <X className="h-4 w-4 mr-1.5" />
                 {t("common.cancel", "取消")}
               </Button>
@@ -392,10 +426,7 @@ export function AssignmentDetailSheet({
               </Button>
             </>
           ) : (
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
               {t("common.close", "關閉")}
             </Button>
           )}

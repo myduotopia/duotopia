@@ -199,7 +199,9 @@ export default function ClassroomDetail({
   const [selectedAssignment] = useState<Assignment | null>(null);
   const [showAssignmentDetails, setShowAssignmentDetails] = useState(false);
   // Assignment detail sheet state
-  const [sheetAssignment, setSheetAssignment] = useState<Assignment | null>(null);
+  const [sheetAssignment, setSheetAssignment] = useState<Assignment | null>(
+    null,
+  );
   const [showAssignmentSheet, setShowAssignmentSheet] = useState(false);
   // Filter states
   const [filterKeyword, setFilterKeyword] = useState("");
@@ -2121,19 +2123,25 @@ export default function ClassroomDetail({
                                         onClick={() =>
                                           setStickyNoteModal({
                                             open: true,
-                                            assignmentIndex: assignments.findIndex(
-                                              (a) => a.id === assignment.id,
-                                            ),
+                                            assignmentIndex:
+                                              assignments.findIndex(
+                                                (a) => a.id === assignment.id,
+                                              ),
                                           })
                                         }
                                       >
                                         <StickyNote className="h-4 w-4 mr-2" />
-                                        {t("classroomDetail.buttons.stickyNote", "便利貼")}
+                                        {t(
+                                          "classroomDetail.buttons.stickyNote",
+                                          "便利貼",
+                                        )}
                                       </DropdownMenuItem>
                                       {showArchived ? (
                                         <DropdownMenuItem
                                           onClick={() =>
-                                            handleUnarchiveAssignment(assignment)
+                                            handleUnarchiveAssignment(
+                                              assignment,
+                                            )
                                           }
                                         >
                                           <ArchiveRestore className="h-4 w-4 mr-2" />
@@ -2179,7 +2187,10 @@ export default function ClassroomDetail({
                                   </th>
                                 )}
                                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200">
-                                  {t("classroomDetail.labels.assignmentInfo", "作業資訊")}
+                                  {t(
+                                    "classroomDetail.labels.assignmentInfo",
+                                    "作業資訊",
+                                  )}
                                 </th>
                                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 w-28">
                                   {t(
