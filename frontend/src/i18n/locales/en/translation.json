@@ -2647,7 +2647,8 @@
       "cancel": "Cancel",
       "saveChanges": "Save Changes",
       "addItem": "Add Item",
-      "record": "Record"
+      "record": "Record",
+      "stickyNote": "Sticky Note"
     },
     "stats": {
       "studentCount": "Students",
@@ -2675,6 +2676,7 @@
       "assignmentList": "Assignment List"
     },
     "labels": {
+      "assignmentInfo": "Assignment Info",
       "assignedTo": "Assigned To",
       "dueDate": "Due Date",
       "completionProgress": "Completion Progress",
@@ -2892,6 +2894,25 @@
       "noInstructions": "No instructions",
       "notSet": "Not set",
       "people": "people"
+    },
+    "sheet": {
+      "viewTitle": "Assignment Details",
+      "editTitle": "Edit Assignment",
+      "editButton": "Edit",
+      "titleLabel": "Title",
+      "instructionsLabel": "Instructions",
+      "dueDateLabel": "Due Date",
+      "studentProgress": "Student Progress",
+      "noStudents": "No student data",
+      "save": "Save Changes"
+    },
+    "status": {
+      "submitted": "Submitted",
+      "graded": "Graded",
+      "inProgress": "In Progress",
+      "notStarted": "Not Started",
+      "returned": "Returned",
+      "resubmitted": "Resubmitted"
     },
     "contentTypes": {
       "readingAssessment": "Example Sentences",
