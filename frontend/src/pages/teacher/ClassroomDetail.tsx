@@ -2016,46 +2016,28 @@ export default function ClassroomDetail({
                                   {assignment.practice_mode !==
                                     "rearrangement" &&
                                     assignment.practice_mode !==
-                                      "word_selection" && (
+                                      "word_selection" &&
+                                    canUseAiGrading && (
                                       <div className="flex flex-col items-end flex-shrink-0">
-                                        {canUseAiGrading ? (
-                                          <Button
-                                            variant="default"
-                                            size="sm"
-                                            className="h-11 px-3 gap-1.5 bg-purple-600 hover:bg-purple-700 text-white"
-                                            onClick={() => {
-                                              setBatchGradingModal({
-                                                open: true,
-                                                assignmentId: assignment.id,
-                                                classroomId: Number(id),
-                                              });
-                                            }}
-                                          >
-                                            <Sparkles className="w-5 h-5" />
-                                            <span className="text-sm font-medium">
-                                              {t(
-                                                "assignmentDetail.buttons.batchGrade",
-                                              )}
-                                            </span>
-                                          </Button>
-                                        ) : (
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-11 px-3 gap-1.5"
-                                            onClick={() => {
-                                              setSheetAssignment(assignment);
-                                              setShowAssignmentSheet(true);
-                                            }}
-                                          >
-                                            <Eye className="w-5 h-5" />
-                                            <span className="text-sm font-medium">
-                                              {t(
-                                                "classroomDetail.buttons.viewDetails",
-                                              )}
-                                            </span>
-                                          </Button>
-                                        )}
+                                        <Button
+                                          variant="default"
+                                          size="sm"
+                                          className="h-11 px-3 gap-1.5 bg-purple-600 hover:bg-purple-700 text-white"
+                                          onClick={() => {
+                                            setBatchGradingModal({
+                                              open: true,
+                                              assignmentId: assignment.id,
+                                              classroomId: Number(id),
+                                            });
+                                          }}
+                                        >
+                                          <Sparkles className="w-5 h-5" />
+                                          <span className="text-sm font-medium">
+                                            {t(
+                                              "assignmentDetail.buttons.batchGrade",
+                                            )}
+                                          </span>
+                                        </Button>
                                       </div>
                                     )}
                                 </div>
@@ -2412,7 +2394,7 @@ export default function ClassroomDetail({
                                           "rearrangement" &&
                                           assignment.practice_mode !==
                                             "word_selection" &&
-                                          (canUseAiGrading ? (
+                                          canUseAiGrading && (
                                             <Button
                                               variant="default"
                                               size="sm"
@@ -2430,23 +2412,7 @@ export default function ClassroomDetail({
                                                 "assignmentDetail.buttons.batchGrade",
                                               )}
                                             </Button>
-                                          ) : (
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className="h-10 min-h-10"
-                                              onClick={() => {
-                                                navigate(
-                                                  `/teacher/classroom/${id}/assignment/${assignment.id}`,
-                                                );
-                                              }}
-                                            >
-                                              <Eye className="w-4 h-4 mr-1" />
-                                              {t(
-                                                "classroomDetail.buttons.viewDetails",
-                                              )}
-                                            </Button>
-                                          ))}
+                                          )}
                                         <Button
                                           variant="ghost"
                                           size="sm"
