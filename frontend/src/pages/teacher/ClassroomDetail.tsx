@@ -3188,6 +3188,20 @@ export default function ClassroomDetail({
         onOpenChange={setShowAssignmentSheet}
         assignment={sheetAssignment}
         classroomId={id || ""}
+        canUseAiGrading={canUseAiGrading}
+        onGradeClick={(assignmentId) =>
+          navigate(
+            `/teacher/classroom/${id}/assignment/${assignmentId}/grading`,
+          )
+        }
+        onBatchGradeClick={(assignmentId) => {
+          setShowAssignmentSheet(false);
+          setBatchGradingModal({
+            open: true,
+            assignmentId,
+            classroomId: Number(id),
+          });
+        }}
         onAssignmentUpdated={() => fetchAssignments()}
       />
 

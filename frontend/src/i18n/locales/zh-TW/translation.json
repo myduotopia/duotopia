@@ -40,7 +40,10 @@
       "dueDateLabel": "截止日期",
       "studentProgress": "學生完成狀況",
       "noStudents": "尚無學生資料",
-      "save": "儲存變更"
+      "save": "儲存變更",
+      "contentTitle": "作業內容",
+      "itemCount": "題",
+      "editContentWarning": "注意：此為作業副本。刪除已有學生進度的題目將被阻止。"
     },
     "status": {
       "submitted": "已繳交",

@@ -2904,7 +2904,10 @@
       "dueDateLabel": "Due Date",
       "studentProgress": "Student Progress",
       "noStudents": "No student data",
-      "save": "Save Changes"
+      "save": "Save Changes",
+      "contentTitle": "Assignment Content",
+      "itemCount": "items",
+      "editContentWarning": "Note: This is an assignment copy. Deleting items with existing student progress will be blocked."
     },
     "status": {
       "submitted": "Submitted",
