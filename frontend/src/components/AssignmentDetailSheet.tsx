@@ -580,7 +580,10 @@ export function AssignmentDetailSheet({
                                   <span className="font-medium ml-2">
                                     {contentDetails[content.id].items?.length ||
                                       0}{" "}
-                                    {t("assignmentDetail.sheet.itemCount", "題")}
+                                    {t(
+                                      "assignmentDetail.sheet.itemCount",
+                                      "題",
+                                    )}
                                   </span>
                                 </div>
                                 <div className="space-y-1 max-h-60 overflow-y-auto">
