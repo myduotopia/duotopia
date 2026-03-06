@@ -2905,7 +2905,8 @@
       "studentProgress": "Student Progress",
       "noStudents": "No student data",
       "save": "Save Changes",
-      "contentTitle": "Assignment Content",
+      "contentTitle": "Assignment Content Units",
+      "questionCount": "Questions: ",
       "itemCount": "items",
       "editContentWarning": "Note: This is an assignment copy. Deleting items with existing student progress will be blocked."
     },

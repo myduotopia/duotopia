@@ -497,19 +497,40 @@ export function AssignmentDetailSheet({
                 {assignmentContents.length > 0 && (
                   <div className="border dark:border-gray-700 rounded-lg">
                     <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-t-lg">
-                      <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {t("assignmentDetail.sheet.contentTitle", "作業內容")} (
-                        {assignmentContents.length})
+                      <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                        {t(
+                          "assignmentDetail.sheet.contentTitle",
+                          "作業單元內容",
+                        )}{" "}
+                        ({assignmentContents.length})
                       </h4>
                     </div>
-                    <div className="divide-y dark:divide-gray-700">
-                      {assignmentContents.map((content) => (
-                        <div key={content.id} className="px-4 py-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <button
-                                className="flex items-center gap-2 min-w-0 flex-1 text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                    <div className="p-3 space-y-2">
+                      {assignmentContents.map((content, index) => (
+                        <div
+                          key={content.id}
+                          className="border dark:border-gray-700 rounded-lg p-3 hover:shadow-md transition-shadow"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
+                              <span className="text-sm font-bold text-blue-600 flex-shrink-0">
+                                #{index + 1}
+                              </span>
+                              <span className="font-medium text-sm truncate">
+                                {content.title}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className="text-xs flex-shrink-0"
+                              >
+                                {getContentTypeLabel(content.type || "")}
+                              </Badge>
+                            </div>
+                            <div className="flex gap-1 flex-shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => {
                                   if (expandedContentId === content.id) {
                                     setExpandedContentId(null);
@@ -518,59 +539,65 @@ export function AssignmentDetailSheet({
                                     loadContentDetail(content.id);
                                   }
                                 }}
+                                className="text-blue-600 hover:text-blue-700 text-xs px-2"
                               >
                                 <ChevronRight
-                                  className={`h-4 w-4 flex-shrink-0 transition-transform ${
+                                  className={`h-4 w-4 transition-transform ${
                                     expandedContentId === content.id
                                       ? "rotate-90"
                                       : ""
                                   }`}
                                 />
-                                <span className="text-sm font-medium truncate">
-                                  {content.title}
+                                <span className="ml-1">
+                                  {t("common.expand", "展開")}
                                 </span>
-                                <Badge variant="outline" className="text-xs">
-                                  {getContentTypeLabel(content.type || "")}
-                                </Badge>
-                              </button>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2 text-gray-500 hover:text-blue-600"
-                              onClick={() => {
-                                setEditingContentId(content.id);
-                                loadContentDetail(content.id);
-                              }}
-                            >
-                              <Edit2 className="h-3.5 w-3.5 mr-1" />
-                              <span className="text-xs">
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingContentId(content.id);
+                                  loadContentDetail(content.id);
+                                }}
+                                className="text-orange-600 hover:text-orange-700 border-orange-200 hover:bg-orange-50 text-xs px-2"
+                              >
+                                <Edit2 className="h-3.5 w-3.5 mr-1" />
                                 {t("common.edit", "編輯")}
-                              </span>
-                            </Button>
+                              </Button>
+                            </div>
                           </div>
                           {/* Expanded content detail */}
                           {expandedContentId === content.id &&
                             contentDetails[content.id] && (
-                              <div className="mt-2 ml-6 space-y-1">
-                                <p className="text-xs text-gray-500">
-                                  {contentDetails[content.id].items?.length ||
-                                    0}{" "}
-                                  {t("assignmentDetail.sheet.itemCount", "題")}
-                                </p>
-                                <div className="space-y-1 max-h-48 overflow-y-auto">
+                              <div className="mt-3 space-y-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                <div className="text-sm">
+                                  <span className="text-gray-600 dark:text-gray-300">
+                                    {t(
+                                      "assignmentDetail.sheet.questionCount",
+                                      "題目數量：",
+                                    )}
+                                  </span>
+                                  <span className="font-medium ml-2">
+                                    {contentDetails[content.id].items?.length ||
+                                      0}{" "}
+                                    {t("assignmentDetail.sheet.itemCount", "題")}
+                                  </span>
+                                </div>
+                                <div className="space-y-1 max-h-60 overflow-y-auto">
                                   {contentDetails[content.id].items?.map(
                                     (item, idx) => (
                                       <div
                                         key={item.id}
-                                        className="text-xs text-gray-600 dark:text-gray-400 py-0.5"
+                                        className="text-xs p-2 bg-white dark:bg-gray-800 rounded"
                                       >
-                                        <span className="text-gray-400 mr-1">
+                                        <span className="text-gray-600 dark:text-gray-400">
                                           {idx + 1}.
+                                        </span>{" "}
+                                        <span className="font-medium">
+                                          {item.text}
                                         </span>
-                                        {item.text}
                                         {item.translation && (
-                                          <span className="ml-2 text-gray-400">
+                                          <span className="text-gray-500 ml-2">
                                             ({item.translation})
                                           </span>
                                         )}
