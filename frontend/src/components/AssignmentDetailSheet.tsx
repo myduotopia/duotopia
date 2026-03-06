@@ -605,6 +605,12 @@ export function AssignmentDetailSheet({
                 <div className="space-y-1">
                   {studentProgress.map((sp) => {
                     const badge = getStatusBadge(sp.status);
+                    const hasScore =
+                      sp.score !== undefined &&
+                      sp.score !== null &&
+                      (sp.status === "GRADED" ||
+                        sp.status === "RETURNED" ||
+                        sp.status === "RESUBMITTED");
                     return (
                       <div
                         key={sp.student_id || sp.student_number}
@@ -613,11 +619,26 @@ export function AssignmentDetailSheet({
                         <span className="text-sm text-gray-700 dark:text-gray-300">
                           {sp.student_name}
                         </span>
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}
-                        >
-                          {badge.label}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {hasScore && (
+                            <span
+                              className={`text-sm font-bold ${
+                                sp.score! >= 80
+                                  ? "text-green-600 dark:text-green-400"
+                                  : "text-red-600 dark:text-red-400"
+                              }`}
+                            >
+                              {sp.score!.toFixed(1)}
+                              {assignment.practice_mode === "word_selection" &&
+                                "%"}
+                            </span>
+                          )}
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}
+                          >
+                            {badge.label}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}
