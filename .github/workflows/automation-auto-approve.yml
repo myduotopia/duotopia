@@ -65,7 +65,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: `🤖 **Auto-Approval Detected**\n\nApproval from @${author} has been recorded.\nLabel \`✅ tested-in-staging\` added.\n\nThis issue is ready for Release PR.`
+                body: `🤖 **Auto-Approval Detected**\n\nApproval from @${author} has been recorded.\nLabel \`✅ tested-in-staging\` added.\n\n🤖 Automated Release PR workflow will now create a PR to staging and attempt to fix CI/review issues.`
               });
 
               console.log('Label added and confirmation posted');

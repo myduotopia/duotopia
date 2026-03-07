@@ -167,6 +167,11 @@ gcloud run services list --region=asia-east1 | grep "preview-issue"  # Should be
    - 🤖 Auto-Approval Detection workflow monitors Issue comments
    - When approval keyword detected → auto-adds label `✅ tested-in-staging`
    - No manual command needed!
+6b. **Automated Release PR** (triggered by `✅ tested-in-staging` label):
+   - 🤖 `automation-release-pr.yml` automatically creates PR to staging
+   - Claude Code Action auto-fixes CI failures and code review issues (1 round)
+   - LINE notification sent when PR is ready to merge or needs attention
+   - No manual PR creation needed!
 7. Merge PR to staging: `gh pr merge <PR> --squash` (use gh command, not manual merge)
 
 8. **Issue auto-closes** when PR merges to staging (via "Fixes #<NUM>" keyword)

@@ -1,0 +1,615 @@
+name: Automated Release PR
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+  id-token: write
+
+jobs:
+  create-release-pr:
+    if: github.event.label.name == '✅ tested-in-staging'
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.create-pr.outputs.pr_number }}
+      pr_url: ${{ steps.create-pr.outputs.pr_url }}
+      branch: ${{ steps.find-branch.outputs.branch }}
+      skipped: ${{ steps.find-branch.outputs.skipped }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find issue branch
+        id: find-branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUM=${{ github.event.issue.number }}
+          echo "Looking for branches matching issue-${ISSUE_NUM}..."
+
+          # Find all branches containing issue-XX pattern
+          # Same regex as cleanup-per-issue-on-close.yml
+          BRANCHES=$(git ls-remote --heads origin | grep -E "issue-${ISSUE_NUM}([^0-9]|$)" | sed 's/.*refs\/heads\///' || true)
+
+          if [ -z "$BRANCHES" ]; then
+            echo "No branch found for issue #${ISSUE_NUM}"
+            echo "skipped=no_branch" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Found branches:"
+          echo "$BRANCHES"
+
+          # If multiple branches, pick the one with the most recent commit
+          SELECTED_BRANCH=""
+          LATEST_DATE=0
+          while IFS= read -r branch; do
+            if [ -n "$branch" ]; then
+              DATE=$(git log -1 --format=%ct "origin/${branch}" 2>/dev/null || echo "0")
+              echo "  ${branch}: commit date ${DATE}"
+              if [ "$DATE" -gt "$LATEST_DATE" ]; then
+                LATEST_DATE=$DATE
+                SELECTED_BRANCH=$branch
+              fi
+            fi
+          done <<< "$BRANCHES"
+
+          echo "Selected branch: ${SELECTED_BRANCH}"
+          echo "branch=${SELECTED_BRANCH}" >> $GITHUB_OUTPUT
+
+      - name: Check existing PR
+        if: steps.find-branch.outputs.branch != '' && steps.find-branch.outputs.skipped == ''
+        id: check-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="${{ steps.find-branch.outputs.branch }}"
+          EXISTING=$(gh pr list --head "$BRANCH" --base staging --state open --json number,url --jq '.[0]' 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            PR_NUM=$(echo "$EXISTING" | jq -r '.number')
+            PR_URL=$(echo "$EXISTING" | jq -r '.url')
+            echo "Existing PR found: #${PR_NUM}"
+            echo "pr_number=${PR_NUM}" >> $GITHUB_OUTPUT
+            echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
+            echo "status=existing" >> $GITHUB_OUTPUT
+          else
+            echo "No existing PR, will create one"
+            echo "status=needs_creation" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create PR to staging
+        if: steps.find-branch.outputs.branch != '' && steps.find-branch.outputs.skipped == '' && steps.check-pr.outputs.status == 'needs_creation'
+        id: create-new-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUM=${{ github.event.issue.number }}
+          ISSUE_TITLE="${{ github.event.issue.title }}"
+          BRANCH="${{ steps.find-branch.outputs.branch }}"
+
+          PR_URL=$(gh pr create \
+            --base staging \
+            --head "$BRANCH" \
+            --title "Release: ${ISSUE_TITLE} (Fixes #${ISSUE_NUM})" \
+            --body "$(cat <<'PREOF'
+          ## Release PR
+
+          Fixes #${{ github.event.issue.number }}
+
+          ### Source
+          - **Issue**: #${{ github.event.issue.number }} - ${{ github.event.issue.title }}
+          - **Branch**: `${{ steps.find-branch.outputs.branch }}`
+          - **Created by**: Automated Release PR workflow
+
+          ### Auto-generated
+          This PR was automatically created when the `tested-in-staging` label was added.
+          CI checks and code review fixes will be applied automatically (1 round).
+
+          ---
+          _Merging this PR will close Issue #${{ github.event.issue.number }} and deploy changes to staging._
+          PREOF
+          )")
+
+          PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+          echo "Created PR #${PR_NUM}: ${PR_URL}"
+          echo "pr_number=${PR_NUM}" >> $GITHUB_OUTPUT
+          echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
+
+      - name: Set PR outputs
+        id: create-pr
+        run: |
+          if [ "${{ steps.find-branch.outputs.skipped }}" = "no_branch" ]; then
+            echo "pr_number=" >> $GITHUB_OUTPUT
+            echo "pr_url=" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.check-pr.outputs.status }}" = "existing" ]; then
+            echo "pr_number=${{ steps.check-pr.outputs.pr_number }}" >> $GITHUB_OUTPUT
+            echo "pr_url=${{ steps.check-pr.outputs.pr_url }}" >> $GITHUB_OUTPUT
+          else
+            echo "pr_number=${{ steps.create-new-pr.outputs.pr_number }}" >> $GITHUB_OUTPUT
+            echo "pr_url=${{ steps.create-new-pr.outputs.pr_url }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on Issue - No branch found
+        if: steps.find-branch.outputs.skipped == 'no_branch'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## Automated Release PR - No Branch Found\n\nNo branch matching \`issue-${context.issue.number}\` was found.\n\nPlease create a PR to staging manually.`
+            });
+
+      - name: Notify LINE - No branch found
+        if: steps.find-branch.outputs.skipped == 'no_branch'
+        run: |
+          curl -s -X POST "https://api.line.me/v2/bot/message/push" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}" \
+            -d '{
+              "to": "${{ secrets.LINE_USER_ID }}",
+              "messages": [{
+                "type": "text",
+                "text": "Issue #${{ github.event.issue.number }} - No branch found for automated Release PR.\n\nPlease create a PR manually."
+              }]
+            }' || true
+
+      - name: Comment on Issue - PR created/found
+        if: steps.create-pr.outputs.pr_number != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNum = '${{ steps.create-pr.outputs.pr_number }}';
+            const prUrl = '${{ steps.create-pr.outputs.pr_url }}';
+            const isNew = '${{ steps.check-pr.outputs.status }}' !== 'existing';
+            const branch = '${{ steps.find-branch.outputs.branch }}';
+
+            const action = isNew ? 'Created' : 'Found existing';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## Automated Release PR\n\n${action} PR #${prNum} to staging.\n\n- **Branch**: \`${branch}\`\n- **PR**: ${prUrl}\n\nCI checks and auto-fix will run next. You'll be notified via LINE when the PR is ready to merge.`
+            });
+
+      - name: Notify LINE - PR created
+        if: steps.create-pr.outputs.pr_number != ''
+        env:
+          PR_NUM: ${{ steps.create-pr.outputs.pr_number }}
+          PR_URL: ${{ steps.create-pr.outputs.pr_url }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          REPO="${{ github.repository }}"
+          IS_NEW="${{ steps.check-pr.outputs.status }}"
+          ACTION="Created"
+          if [ "$IS_NEW" = "existing" ]; then
+            ACTION="Found existing"
+          fi
+
+          curl -s -X POST "https://api.line.me/v2/bot/message/push" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}" \
+            -d '{
+              "to": "'"${{ secrets.LINE_USER_ID }}"'",
+              "messages": [{
+                "type": "flex",
+                "altText": "Release PR #'"${PR_NUM}"' for Issue #'"${ISSUE_NUM}"'",
+                "contents": {
+                  "type": "bubble",
+                  "size": "kilo",
+                  "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#1DB446",
+                    "paddingAll": "12px",
+                    "contents": [{
+                      "type": "text",
+                      "text": "Release PR '"${ACTION}"'",
+                      "color": "#FFFFFF",
+                      "weight": "bold",
+                      "size": "md"
+                    }]
+                  },
+                  "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "spacing": "sm",
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "#'"${ISSUE_NUM}"' '"${ISSUE_TITLE}"'",
+                        "wrap": true,
+                        "weight": "bold",
+                        "size": "sm"
+                      },
+                      {
+                        "type": "text",
+                        "text": "PR #'"${PR_NUM}"' -> staging",
+                        "size": "sm",
+                        "color": "#666666"
+                      },
+                      {
+                        "type": "text",
+                        "text": "CI checks + auto-fix running...",
+                        "size": "xs",
+                        "color": "#FF8C00",
+                        "margin": "md"
+                      }
+                    ]
+                  },
+                  "footer": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [{
+                      "type": "button",
+                      "action": {
+                        "type": "uri",
+                        "label": "View PR",
+                        "uri": "'"${PR_URL}"'"
+                      },
+                      "style": "primary",
+                      "color": "#1DB446",
+                      "height": "sm"
+                    }]
+                  }
+                }
+              }]
+            }' || true
+
+  auto-fix:
+    needs: create-release-pr
+    if: needs.create-release-pr.outputs.pr_number != '' && needs.create-release-pr.outputs.skipped == ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-release-pr.outputs.branch }}
+          fetch-depth: 0
+
+      - name: Run Claude Code auto-fix
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are automatically fixing CI and code review issues for PR #${{ needs.create-release-pr.outputs.pr_number }}.
+            Branch: ${{ needs.create-release-pr.outputs.branch }}
+            Issue: #${{ github.event.issue.number }}
+
+            ## Phase 1: Wait for CI checks
+
+            Poll PR checks every 30 seconds, up to 15 minutes:
+            ```bash
+            POLL=0
+            while true; do
+              CHECKS=$(gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,status,conclusion 2>/dev/null || echo "[]")
+              PENDING=$(echo "$CHECKS" | jq '[.[] | select(.name | test("Test Backend|Test Frontend"; "i")) | select(.status != "completed")] | length')
+              if [ "$PENDING" = "0" ]; then break; fi
+              POLL=$((POLL + 1))
+              if [ "$POLL" -ge 30 ]; then echo "CI timeout after 15 minutes"; break; fi
+              echo "Waiting for CI... ($PENDING pending, poll $POLL/30)"
+              sleep 30
+            done
+            ```
+
+            ## Phase 2: Fix CI failures
+
+            Check which CI checks failed:
+            ```bash
+            gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,conclusion,status
+            ```
+
+            For each failing test check (Test Backend, Test Frontend):
+            1. Get the failed run logs:
+               ```bash
+               RUN_ID=$(gh run list --workflow="<workflow-name>" --branch="${{ needs.create-release-pr.outputs.branch }}" --limit=1 --json databaseId -q '.[0].databaseId')
+               gh run view "$RUN_ID" --log-failed | tail -200
+               ```
+            2. Apply fixes based on error type:
+               - Black formatting: `cd backend && python -m black .`
+               - Prettier: `cd frontend && npx prettier --write src`
+               - ESLint auto-fixable: `cd frontend && npx eslint --fix src/`
+               - Flake8 errors: Parse `file:line:col: CODE msg` format, fix each
+               - TypeScript errors: Parse `file(line,col): error TSxxxx: msg`, fix types
+               - Import errors: Fix import paths
+            3. Do NOT fix migration errors - flag them as NEEDS_HUMAN
+            4. Do NOT fix errors in files outside the PR diff unless they block CI
+
+            ## Phase 3: Wait for Claude Code Review
+
+            Poll for Claude Code Review check:
+            ```bash
+            POLL=0
+            while true; do
+              CHECKS=$(gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,status,conclusion 2>/dev/null || echo "[]")
+              REVIEW_PENDING=$(echo "$CHECKS" | jq '[.[] | select(.name | test("claude|review"; "i")) | select(.status != "completed")] | length')
+              if [ "$REVIEW_PENDING" = "0" ]; then break; fi
+              POLL=$((POLL + 1))
+              if [ "$POLL" -ge 20 ]; then echo "Review timeout after 10 minutes"; break; fi
+              echo "Waiting for Code Review... (poll $POLL/20)"
+              sleep 30
+            done
+            ```
+
+            ## Phase 4: Fix code review issues
+
+            Fetch the latest review comment from github-actions[bot]:
+            ```bash
+            gh api repos/${{ github.repository }}/issues/${{ needs.create-release-pr.outputs.pr_number }}/comments \
+              --jq '.[] | select(.user.login == "github-actions[bot]") | {body: .body, created_at: .created_at}' \
+              | jq -s 'sort_by(.created_at) | last'
+            ```
+
+            Also fetch inline review comments:
+            ```bash
+            gh api repos/${{ github.repository }}/pulls/${{ needs.create-release-pr.outputs.pr_number }}/comments \
+              --jq '.[] | select(.user.login == "github-actions[bot]") | {path: .path, line: .line, body: .body}'
+            ```
+
+            For each review item:
+            - If it's a clear code fix (rename, null check, typo, type fix): apply the fix
+            - If it requires human judgment (architectural decision, unclear intent): skip and note it
+            - If it's informational only: skip
+
+            ## Phase 5: Commit and push
+
+            If any changes were made:
+            ```bash
+            git add -A
+            git commit -m "fix: auto-fix CI and review issues for PR #${{ needs.create-release-pr.outputs.pr_number }}
+
+            Related to #${{ github.event.issue.number }}
+
+            Co-Authored-By: Claude <noreply@anthropic.com>"
+            git push origin ${{ needs.create-release-pr.outputs.branch }}
+            ```
+
+            ## Phase 6: Report
+
+            If items need human judgment, comment on the PR:
+            ```bash
+            gh pr comment ${{ needs.create-release-pr.outputs.pr_number }} --body "## Auto-fix Report
+
+            ### Fixed
+            - [list of fixes applied]
+
+            ### Needs Human Decision
+            - [items requiring judgment]
+
+            Use \`/fix-review ${{ needs.create-release-pr.outputs.pr_number }}\` or \`/fix-workflow ${{ needs.create-release-pr.outputs.pr_number }}\` locally for further fixes."
+            ```
+
+            ## IMPORTANT RULES
+            - Only fix files that are part of the PR diff
+            - Never modify migration files without explicit approval
+            - Use `Related to #${{ github.event.issue.number }}` in commit messages, NOT `Fixes #`
+            - If all checks already pass and review is clean, just report success - no changes needed
+          claude_args: '--allowed-tools "Bash,Read,Write,Edit,Grep,Glob"'
+
+  notify-status:
+    needs: [create-release-pr, auto-fix]
+    if: always() && needs.create-release-pr.outputs.pr_number != '' && needs.create-release-pr.outputs.skipped == ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for final CI settlement
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ needs.create-release-pr.outputs.pr_number }}"
+          echo "Waiting for CI to settle after auto-fix..."
+          sleep 30
+
+          POLL=0
+          while true; do
+            CHECKS=$(gh pr checks "$PR_NUM" --json name,status 2>/dev/null || echo "[]")
+            PENDING=$(echo "$CHECKS" | jq '[.[] | select(.status != "completed")] | length')
+            if [ "$PENDING" = "0" ]; then break; fi
+            POLL=$((POLL + 1))
+            if [ "$POLL" -ge 30 ]; then
+              echo "Timeout waiting for final CI (15 min)"
+              break
+            fi
+            echo "Waiting for $PENDING check(s)... (poll $POLL/30)"
+            sleep 30
+          done
+
+      - name: Assess final status
+        id: assess
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ needs.create-release-pr.outputs.pr_number }}"
+          CHECKS=$(gh pr checks "$PR_NUM" --json name,conclusion,status 2>/dev/null || echo "[]")
+
+          FAILED=$(echo "$CHECKS" | jq '[.[] | select(.conclusion == "failure")] | length')
+          PENDING=$(echo "$CHECKS" | jq '[.[] | select(.status != "completed")] | length')
+          FAILED_NAMES=$(echo "$CHECKS" | jq -r '[.[] | select(.conclusion == "failure") | .name] | join(", ")')
+
+          if [ "$PENDING" -gt 0 ]; then
+            echo "status=pending" >> $GITHUB_OUTPUT
+            echo "details=Some checks still running" >> $GITHUB_OUTPUT
+          elif [ "$FAILED" -gt 0 ]; then
+            echo "status=needs_human" >> $GITHUB_OUTPUT
+            echo "details=${FAILED_NAMES}" >> $GITHUB_OUTPUT
+          else
+            echo "status=ready" >> $GITHUB_OUTPUT
+            echo "details=All checks passed" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Add ready-to-merge label
+        if: steps.assess.outputs.status == 'ready'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Add label to PR
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ needs.create-release-pr.outputs.pr_number }},
+              labels: ['ready-to-merge']
+            });
+            // Also add to Issue
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['ready-to-merge']
+            });
+
+      - name: Comment on Issue - Ready to merge
+        if: steps.assess.outputs.status == 'ready'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNum = '${{ needs.create-release-pr.outputs.pr_number }}';
+            const prUrl = '${{ needs.create-release-pr.outputs.pr_url }}';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## Release PR Ready to Merge\n\nPR #${prNum} has passed all CI checks.\n\n**Merge command:**\n\`\`\`bash\ngh pr merge ${prNum} --squash\n\`\`\`\n\n[View PR](${prUrl})`
+            });
+
+      - name: Comment on Issue - Needs attention
+        if: steps.assess.outputs.status == 'needs_human' || steps.assess.outputs.status == 'pending'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNum = '${{ needs.create-release-pr.outputs.pr_number }}';
+            const prUrl = '${{ needs.create-release-pr.outputs.pr_url }}';
+            const status = '${{ steps.assess.outputs.status }}';
+            const details = `${{ steps.assess.outputs.details }}`;
+
+            let body;
+            if (status === 'needs_human') {
+              body = `## Release PR Needs Attention\n\nPR #${prNum} has failing checks after auto-fix:\n\n**Failing**: ${details}\n\nUse \`/fix-workflow ${prNum}\` or \`/fix-review ${prNum}\` locally to resolve.\n\n[View PR](${prUrl})`;
+            } else {
+              body = `## Release PR - Checks Pending\n\nPR #${prNum} still has pending checks. Will need manual follow-up.\n\n[View PR](${prUrl})`;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+
+      - name: Notify LINE - Ready to merge
+        if: steps.assess.outputs.status == 'ready'
+        env:
+          PR_NUM: ${{ needs.create-release-pr.outputs.pr_number }}
+          PR_URL: ${{ needs.create-release-pr.outputs.pr_url }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          curl -s -X POST "https://api.line.me/v2/bot/message/push" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}" \
+            -d '{
+              "to": "'"${{ secrets.LINE_USER_ID }}"'",
+              "messages": [{
+                "type": "flex",
+                "altText": "PR #'"${PR_NUM}"' ready to merge!",
+                "contents": {
+                  "type": "bubble",
+                  "size": "kilo",
+                  "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#1DB446",
+                    "paddingAll": "12px",
+                    "contents": [{
+                      "type": "text",
+                      "text": "Ready to Merge",
+                      "color": "#FFFFFF",
+                      "weight": "bold",
+                      "size": "md"
+                    }]
+                  },
+                  "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "spacing": "sm",
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "#'"${ISSUE_NUM}"' '"${ISSUE_TITLE}"'",
+                        "wrap": true,
+                        "weight": "bold",
+                        "size": "sm"
+                      },
+                      {
+                        "type": "text",
+                        "text": "PR #'"${PR_NUM}"' - All checks passed",
+                        "size": "sm",
+                        "color": "#1DB446"
+                      },
+                      {
+                        "type": "separator",
+                        "margin": "md"
+                      },
+                      {
+                        "type": "text",
+                        "text": "gh pr merge '"${PR_NUM}"' --squash",
+                        "size": "xs",
+                        "color": "#666666",
+                        "margin": "md"
+                      }
+                    ]
+                  },
+                  "footer": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [{
+                      "type": "button",
+                      "action": {
+                        "type": "uri",
+                        "label": "View PR",
+                        "uri": "'"${PR_URL}"'"
+                      },
+                      "style": "primary",
+                      "color": "#1DB446",
+                      "height": "sm"
+                    }]
+                  }
+                }
+              }]
+            }' || true
+
+      - name: Notify LINE - Needs attention
+        if: steps.assess.outputs.status == 'needs_human' || steps.assess.outputs.status == 'pending'
+        env:
+          PR_NUM: ${{ needs.create-release-pr.outputs.pr_number }}
+          PR_URL: ${{ needs.create-release-pr.outputs.pr_url }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          STATUS: ${{ steps.assess.outputs.status }}
+          DETAILS: ${{ steps.assess.outputs.details }}
+        run: |
+          if [ "$STATUS" = "needs_human" ]; then
+            MSG="PR #${PR_NUM} needs your attention.\n\nIssue #${ISSUE_NUM}\nFailing: ${DETAILS}\n\nUse /fix-workflow or /fix-review locally.\n\n${PR_URL}"
+          else
+            MSG="PR #${PR_NUM} still has pending checks.\n\nIssue #${ISSUE_NUM}\n\n${PR_URL}"
+          fi
+
+          curl -s -X POST "https://api.line.me/v2/bot/message/push" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}" \
+            -d '{
+              "to": "'"${{ secrets.LINE_USER_ID }}"'",
+              "messages": [{
+                "type": "text",
+                "text": "'"${MSG}"'"
+              }]
+            }' || true
