@@ -125,7 +125,7 @@ def authenticate_teacher(db: Session, email: str, password: str):
 
 
 def authenticate_student(db: Session, email: str, password: str):
-    """學生認證（支援 StudentIdentity 統一密碼）"""
+    """學生認證（支援 Identity 統一密碼）"""
     student = db.query(Student).filter(Student.email == email).first()
     if not student:
         return None
@@ -144,11 +144,11 @@ def _get_student_password_hash(db: Session, student) -> str:
     否則使用 Student 自身的密碼。
     """
     if student.password_migrated_to_identity and student.identity_id:
-        from models.user import StudentIdentity
+        from models.user import Identity
 
         identity = (
-            db.query(StudentIdentity)
-            .filter(StudentIdentity.id == student.identity_id)
+            db.query(Identity)
+            .filter(Identity.id == student.identity_id)
             .first()
         )
         if identity:

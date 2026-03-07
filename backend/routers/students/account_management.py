@@ -1,6 +1,6 @@
 """Student account management endpoints (account switching, linking, email binding).
 
-Uses StudentIdentity for account linking when available, falls back to
+Uses Identity for account linking when available, falls back to
 email-based matching for backward compatibility.
 """
 
@@ -10,7 +10,7 @@ from typing import Dict, Any
 from datetime import datetime, timedelta
 
 from database import get_db
-from models import Student, StudentIdentity, Classroom, ClassroomStudent
+from models import Student, Identity, Classroom, ClassroomStudent
 from models.organization import ClassroomSchool, School, Organization
 from auth import (
     get_current_user,
@@ -265,7 +265,7 @@ async def unbind_email(
     # 如果有 Identity 關聯，解除
     old_identity_id = student.identity_id
     if student.identity_id:
-        # 如果是主帳號，需要轉移主帳號給其他關聯帳號
+        # 如果是主帳號，轉移給其他關聯帳號
         if student.is_primary_account:
             other_linked = (
                 db.query(Student)
@@ -277,15 +277,7 @@ async def unbind_email(
                 .first()
             )
             if other_linked:
-                # 轉移主帳號
-                identity = (
-                    db.query(StudentIdentity)
-                    .filter(StudentIdentity.id == student.identity_id)
-                    .first()
-                )
-                if identity:
-                    identity.primary_student_id = other_linked.id
-                    other_linked.is_primary_account = True
+                other_linked.is_primary_account = True
 
         student.identity_id = None
         student.is_primary_account = None

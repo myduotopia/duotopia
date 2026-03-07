@@ -1,7 +1,7 @@
-"""Add student identity consolidation system
+"""Add unified identities system
 
-Creates student_identities table and adds identity-related columns to students.
-Supports merging multiple student accounts under one unified identity.
+Creates identities table as a unified identity layer for both teachers and students.
+Supports account consolidation via email verification and future OAuth integration.
 
 Revision ID: 20260225_1600
 Revises: 20260225_1000
@@ -19,20 +19,17 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # 1. Create student_identities table
+    # 1. Create identities table (unified for teachers and students)
     op.execute(
         """
-        CREATE TABLE IF NOT EXISTS student_identities (
+        CREATE TABLE IF NOT EXISTS identities (
             id SERIAL PRIMARY KEY,
-            primary_student_id INTEGER,
-            verified_email VARCHAR(255) NOT NULL,
-            national_id_hash VARCHAR(64),
-            one_campus_student_id VARCHAR(100),
-            password_hash VARCHAR(255) NOT NULL,
+            email VARCHAR(255) NOT NULL,
+            password_hash VARCHAR(255),
+            email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+            email_verified_at TIMESTAMPTZ,
             password_changed BOOLEAN DEFAULT FALSE,
             last_password_change TIMESTAMPTZ,
-            merged_at TIMESTAMPTZ DEFAULT NOW(),
-            merge_source VARCHAR(50) DEFAULT 'email_verification',
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMPTZ DEFAULT NOW(),
             updated_at TIMESTAMPTZ
@@ -40,53 +37,23 @@ def upgrade() -> None:
     """
     )
 
-    # 2. Add unique constraint on verified_email
+    # 2. Add unique constraint on email
     op.execute(
         """
         DO $$ BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_student_identities_verified_email') THEN
-                ALTER TABLE student_identities ADD CONSTRAINT uq_student_identities_verified_email UNIQUE (verified_email);
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_identities_email') THEN
+                ALTER TABLE identities ADD CONSTRAINT uq_identities_email UNIQUE (email);
             END IF;
         END $$;
     """
     )
 
-    # 3. Add unique constraint on national_id_hash (allowing nulls)
+    # 3. Add index on email
     op.execute(
-        """
-        DO $$ BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_student_identities_national_id_hash') THEN
-                ALTER TABLE student_identities ADD CONSTRAINT uq_student_identities_national_id_hash UNIQUE (national_id_hash);
-            END IF;
-        END $$;
-    """
+        "CREATE INDEX IF NOT EXISTS idx_identities_email ON identities (email)"
     )
 
-    # 4. Add FK from student_identities.primary_student_id -> students.id
-    op.execute(
-        """
-        DO $$ BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_student_identities_primary_student') THEN
-                ALTER TABLE student_identities
-                ADD CONSTRAINT fk_student_identities_primary_student
-                FOREIGN KEY (primary_student_id) REFERENCES students(id) ON DELETE SET NULL;
-            END IF;
-        END $$;
-    """
-    )
-
-    # 5. Add indexes
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_student_identities_primary_student_id ON student_identities (primary_student_id)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_student_identities_verified_email ON student_identities (verified_email)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_student_identities_one_campus_student_id ON student_identities (one_campus_student_id)"
-    )
-
-    # 6. Add identity_id column to students
+    # 4. Add identity_id column to students
     op.execute(
         """
         DO $$ BEGIN
@@ -98,7 +65,7 @@ def upgrade() -> None:
     """
     )
 
-    # 7. Add is_primary_account column to students
+    # 5. Add is_primary_account column to students
     op.execute(
         """
         DO $$ BEGIN
@@ -110,7 +77,7 @@ def upgrade() -> None:
     """
     )
 
-    # 8. Add password_migrated_to_identity column to students
+    # 6. Add password_migrated_to_identity column to students
     op.execute(
         """
         DO $$ BEGIN
@@ -122,22 +89,52 @@ def upgrade() -> None:
     """
     )
 
-    # 9. Add FK from students.identity_id -> student_identities.id
+    # 7. Add FK from students.identity_id -> identities.id
     op.execute(
         """
         DO $$ BEGIN
             IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_students_identity') THEN
                 ALTER TABLE students
                 ADD CONSTRAINT fk_students_identity
-                FOREIGN KEY (identity_id) REFERENCES student_identities(id) ON DELETE SET NULL;
+                FOREIGN KEY (identity_id) REFERENCES identities(id) ON DELETE SET NULL;
             END IF;
         END $$;
     """
     )
 
-    # 10. Add index on students.identity_id
+    # 8. Add index on students.identity_id
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_students_identity_id ON students (identity_id)"
+    )
+
+    # 9. Add identity_id column to teachers
+    op.execute(
+        """
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name = 'teachers' AND column_name = 'identity_id') THEN
+                ALTER TABLE teachers ADD COLUMN identity_id INTEGER;
+            END IF;
+        END $$;
+    """
+    )
+
+    # 10. Add FK from teachers.identity_id -> identities.id
+    op.execute(
+        """
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_teachers_identity') THEN
+                ALTER TABLE teachers
+                ADD CONSTRAINT fk_teachers_identity
+                FOREIGN KEY (identity_id) REFERENCES identities(id) ON DELETE SET NULL;
+            END IF;
+        END $$;
+    """
+    )
+
+    # 11. Add index on teachers.identity_id
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS idx_teachers_identity_id ON teachers (identity_id)"
     )
 
 

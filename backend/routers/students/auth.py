@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from datetime import timedelta
 
 from database import get_db
-from models import Student, Classroom, ClassroomStudent, StudentIdentity
+from models import Student, Classroom, ClassroomStudent, Identity
 from models.organization import ClassroomSchool, School, Organization
 from auth import create_access_token, verify_password, _get_student_password_hash
 from .validators import StudentValidateRequest, StudentLoginResponse

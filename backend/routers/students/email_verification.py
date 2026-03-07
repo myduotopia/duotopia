@@ -165,14 +165,14 @@ async def resend_email_verification(
 async def verify_email(token: str, db: Session = Depends(get_db)):
     """驗證 email token，並觸發身分整合"""
     from services.email_service import email_service
-    from services.student_identity_service import student_identity_service
+    from services.identity_service import identity_service
 
     student = email_service.verify_email_token(db, token)
     if not student:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
 
     # 觸發身分整合
-    identity = student_identity_service.consolidate_on_email_verification(db, student)
+    identity = identity_service.consolidate_on_email_verification(db, student)
     db.commit()
 
     linked_count = 0
