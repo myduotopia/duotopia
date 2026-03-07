@@ -133,26 +133,35 @@ export function AssignmentDetailSheet({
     if (!assignment) return;
     setLoading(true);
     try {
-      const response = await apiClient.get(
-        `/api/teachers/assignments/${assignment.id}/progress`,
-      );
+      // Fetch assignment detail (includes contents) and student progress in parallel
+      const [detailResponse, progressResponse] = await Promise.all([
+        apiClient.get(`/api/teachers/assignments/${assignment.id}`),
+        apiClient
+          .get(`/api/teachers/assignments/${assignment.id}/progress`)
+          .catch(() => []),
+      ]);
+
+      // Extract contents from detail response
+      const contents =
+        (detailResponse as { contents?: AssignmentContent[] }).contents || [];
+      setAssignmentContents(contents);
+
       // Extract student progress
-      const progressData = Array.isArray(response)
-        ? response
-        : (response as { students_progress?: unknown[]; data?: unknown[] })
-            .students_progress ||
-          (response as { data?: unknown[] }).data ||
+      const progressData = Array.isArray(progressResponse)
+        ? progressResponse
+        : (
+            progressResponse as {
+              students_progress?: unknown[];
+              data?: unknown[];
+            }
+          ).students_progress ||
+          (progressResponse as { data?: unknown[] }).data ||
           [];
       setStudentProgress(
         (progressData as StudentProgress[]).filter(
           (p) => p.status !== "unassigned" && p.is_assigned !== false,
         ),
       );
-
-      // Extract contents
-      const contents =
-        (response as { contents?: AssignmentContent[] }).contents || [];
-      setAssignmentContents(contents);
     } catch {
       setStudentProgress([]);
       setAssignmentContents([]);
