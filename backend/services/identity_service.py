@@ -59,9 +59,7 @@ class IdentityService:
             )
 
             if existing_identity:
-                return self._merge_student_into_identity(
-                    db, student, existing_identity
-                )
+                return self._merge_student_into_identity(db, student, existing_identity)
             else:
                 return self._create_identity_for_student(db, student)
 
@@ -125,9 +123,7 @@ class IdentityService:
             db.rollback()
             return None
 
-    def _create_identity_for_student(
-        self, db: Session, student: Student
-    ) -> Identity:
+    def _create_identity_for_student(self, db: Session, student: Student) -> Identity:
         """建立新的 Identity（首次 Email 驗證）"""
         identity = Identity(
             email=student.email,
@@ -171,9 +167,7 @@ class IdentityService:
         )
         return identity
 
-    def _smart_password_merge(
-        self, student: Student, identity: Identity
-    ) -> None:
+    def _smart_password_merge(self, student: Student, identity: Identity) -> None:
         """智慧密碼選擇策略
 
         1. Identity 已有自定義密碼 -> 保持不變
@@ -214,11 +208,7 @@ class IdentityService:
         student = db.query(Student).filter(Student.id == student_id).first()
         if not student or not student.identity_id:
             return None
-        return (
-            db.query(Identity)
-            .filter(Identity.id == student.identity_id)
-            .first()
-        )
+        return db.query(Identity).filter(Identity.id == student.identity_id).first()
 
     def update_unified_password(
         self,

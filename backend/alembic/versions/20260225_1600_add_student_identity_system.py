@@ -49,9 +49,7 @@ def upgrade() -> None:
     )
 
     # 3. Add index on email
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_identities_email ON identities (email)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS idx_identities_email ON identities (email)")
 
     # 4. Add identity_id column to students
     op.execute(

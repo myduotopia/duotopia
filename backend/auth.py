@@ -146,11 +146,7 @@ def _get_student_password_hash(db: Session, student) -> str:
     if student.password_migrated_to_identity and student.identity_id:
         from models.user import Identity
 
-        identity = (
-            db.query(Identity)
-            .filter(Identity.id == student.identity_id)
-            .first()
-        )
+        identity = db.query(Identity).filter(Identity.id == student.identity_id).first()
         if identity:
             return identity.password_hash
     return student.password_hash
