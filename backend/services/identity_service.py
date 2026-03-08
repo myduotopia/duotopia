@@ -59,9 +59,7 @@ class IdentityService:
             )
 
             if existing_identity:
-                result = self._link_student_to_identity(
-                    db, student, existing_identity
-                )
+                result = self._link_student_to_identity(db, student, existing_identity)
             else:
                 result = self._create_identity_for_student(
                     db, student, email, verified=False
@@ -71,15 +69,11 @@ class IdentityService:
             return result
 
         except Exception as e:
-            logger.error(
-                f"Failed to ensure identity for student {student.id}: {e}"
-            )
+            logger.error(f"Failed to ensure identity for student {student.id}: {e}")
             nested.rollback()
             return None
 
-    def on_email_verified(
-        self, db: Session, student: Student
-    ) -> Optional[Identity]:
+    def on_email_verified(self, db: Session, student: Student) -> Optional[Identity]:
         """Email 驗證成功時更新 Identity 狀態
 
         - 若已有 Identity → 更新 email_verified=True + 密碼遷移
@@ -93,9 +87,7 @@ class IdentityService:
             Identity 或 None（若失敗）
         """
         if not student.email or not student.email_verified:
-            logger.warning(
-                f"Student {student.id} has no verified email, skip"
-            )
+            logger.warning(f"Student {student.id} has no verified email, skip")
             return None
 
         try:
@@ -210,11 +202,7 @@ class IdentityService:
             email=email,
             password_hash=student.password_hash,
             email_verified=verified,
-            email_verified_at=(
-                student.email_verified_at
-                if verified
-                else None
-            ),
+            email_verified_at=(student.email_verified_at if verified else None),
             password_changed=student.password_changed if verified else False,
             last_password_change=(
                 datetime.now(timezone.utc)
@@ -261,9 +249,7 @@ class IdentityService:
         )
         return identity
 
-    def _unlink_student_from_identity(
-        self, db: Session, student: Student
-    ) -> None:
+    def _unlink_student_from_identity(self, db: Session, student: Student) -> None:
         """解除 Student 與 Identity 的關聯"""
         old_identity_id = student.identity_id
 
@@ -285,9 +271,7 @@ class IdentityService:
         student.is_primary_account = None
         student.password_migrated_to_identity = False
         db.flush()
-        logger.info(
-            f"Unlinked student {student.id} from identity {old_identity_id}"
-        )
+        logger.info(f"Unlinked student {student.id} from identity {old_identity_id}")
 
     def _smart_password_merge(self, student: Student, identity: Identity) -> None:
         """智慧密碼選擇策略
