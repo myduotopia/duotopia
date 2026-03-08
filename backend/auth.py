@@ -147,7 +147,7 @@ def _get_student_password_hash(db: Session, student) -> str:
         from models.user import Identity
 
         identity = db.query(Identity).filter(Identity.id == student.identity_id).first()
-        if identity:
+        if identity and identity.password_hash:
             return identity.password_hash
     return student.password_hash
 

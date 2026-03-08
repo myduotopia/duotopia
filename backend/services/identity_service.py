@@ -5,7 +5,7 @@
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -48,6 +48,9 @@ class IdentityService:
             return student.identity
 
         try:
+            # 使用 savepoint 隔離，避免失敗時 rollback 影響 caller 的 transaction
+            nested = db.begin_nested()
+
             # 查找是否已有相同 email 的 Identity
             existing_identity = (
                 db.query(Identity)
@@ -59,13 +62,18 @@ class IdentityService:
             )
 
             if existing_identity:
-                return self._merge_student_into_identity(db, student, existing_identity)
+                result = self._merge_student_into_identity(
+                    db, student, existing_identity
+                )
             else:
-                return self._create_identity_for_student(db, student)
+                result = self._create_identity_for_student(db, student)
+
+            nested.commit()
+            return result
 
         except Exception as e:
             logger.error(f"Failed to consolidate student {student.id}: {e}")
-            db.rollback()
+            nested.rollback()
             return None
 
     def get_or_create_identity_for_teacher(
@@ -84,6 +92,8 @@ class IdentityService:
             return teacher.identity
 
         try:
+            nested = db.begin_nested()
+
             existing_identity = (
                 db.query(Identity)
                 .filter(
@@ -99,6 +109,7 @@ class IdentityService:
                 logger.info(
                     f"Linked teacher {teacher.id} to existing identity {existing_identity.id}"
                 )
+                nested.commit()
                 return existing_identity
             else:
                 identity = Identity(
@@ -116,11 +127,12 @@ class IdentityService:
                 logger.info(
                     f"Created new identity {identity.id} for teacher {teacher.id}"
                 )
+                nested.commit()
                 return identity
 
         except Exception as e:
             logger.error(f"Failed to create identity for teacher {teacher.id}: {e}")
-            db.rollback()
+            nested.rollback()
             return None
 
     def _create_identity_for_student(self, db: Session, student: Student) -> Identity:
@@ -131,7 +143,7 @@ class IdentityService:
             email_verified=True,
             email_verified_at=student.email_verified_at,
             password_changed=student.password_changed,
-            last_password_change=datetime.utcnow()
+            last_password_change=datetime.now(timezone.utc)
             if student.password_changed
             else None,
         )
@@ -181,7 +193,7 @@ class IdentityService:
         if not identity.password_changed and student.password_changed:
             identity.password_hash = student.password_hash
             identity.password_changed = True
-            identity.last_password_change = datetime.utcnow()
+            identity.last_password_change = datetime.now(timezone.utc)
             logger.info(
                 f"Adopted student {student.id}'s custom password for identity {identity.id}"
             )
@@ -219,7 +231,7 @@ class IdentityService:
         """更新統一密碼（所有關聯帳號共用）"""
         identity.password_hash = new_password_hash
         identity.password_changed = True
-        identity.last_password_change = datetime.utcnow()
+        identity.last_password_change = datetime.now(timezone.utc)
         db.flush()
         logger.info(f"Updated unified password for identity {identity.id}")
 

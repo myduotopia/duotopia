@@ -7,7 +7,7 @@ email-based matching for backward compatibility.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from typing import Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from database import get_db
 from models import Student, Identity, Classroom, ClassroomStudent
@@ -113,7 +113,7 @@ async def get_linked_accounts(
 
     linked_students = []
 
-    # 方式 1：透過 StudentIdentity 查詢（首選）
+    # 方式 1：透過 Identity 查詢（首選）
     if student.identity_id:
         linked_students = (
             db.query(Student)
@@ -194,17 +194,22 @@ async def switch_account(
         raise HTTPException(status_code=403, detail="Target account is not linked")
 
     # Identity 關聯的帳號不需要密碼（密碼已統一）
-    # Email fallback 仍需密碼
-    if not is_identity_linked and request.password:
+    # Email fallback 仍需密碼驗證
+    if not is_identity_linked:
+        if not request.password:
+            raise HTTPException(
+                status_code=400,
+                detail="Password is required for email-linked accounts",
+            )
         password_hash = _get_student_password_hash(db, target_student)
         if not verify_password(request.password, password_hash):
             raise HTTPException(status_code=401, detail="Invalid password")
 
     # 更新最後登入時間
-    target_student.last_login = datetime.utcnow()
+    target_student.last_login = datetime.now(timezone.utc)
     db.commit()
 
-    # 建立新的 JWT token
+    # 建立新的 JWT token（24h：帳號切換是已認證操作，給予較長 session）
     access_token = create_access_token(
         data={"sub": str(target_student.id), "type": "student"},
         expires_delta=timedelta(hours=24),
