@@ -18,14 +18,72 @@ logger = logging.getLogger(__name__)
 class IdentityService:
     """統一身分管理服務"""
 
-    def consolidate_on_email_verification(
+    def ensure_identity_on_email_bind(
+        self, db: Session, student: Student, email: str
+    ) -> Optional[Identity]:
+        """學生綁定 email 時，建立或關聯 Identity（未驗證狀態）
+
+        - 若已有相同 email 的 Identity → 關聯到該 Identity
+        - 若沒有 → 建立新 Identity（email_verified=False）
+        - 若 email 改變 → 解除舊 Identity，建立/關聯新 Identity
+
+        Args:
+            db: 資料庫 session
+            student: 學生
+            email: 要綁定的 email
+
+        Returns:
+            Identity 或 None（若失敗）
+        """
+        if not email or "@duotopia.local" in email:
+            return None
+
+        # 如果 email 沒變且已有 Identity，不重複處理
+        if student.identity_id and student.identity:
+            if student.identity.email == email:
+                return student.identity
+
+            # email 改變了，解除舊 Identity 關聯
+            self._unlink_student_from_identity(db, student)
+
+        try:
+            nested = db.begin_nested()
+
+            existing_identity = (
+                db.query(Identity)
+                .filter(
+                    Identity.email == email,
+                    Identity.is_active.is_(True),
+                )
+                .first()
+            )
+
+            if existing_identity:
+                result = self._link_student_to_identity(
+                    db, student, existing_identity
+                )
+            else:
+                result = self._create_identity_for_student(
+                    db, student, email, verified=False
+                )
+
+            nested.commit()
+            return result
+
+        except Exception as e:
+            logger.error(
+                f"Failed to ensure identity for student {student.id}: {e}"
+            )
+            nested.rollback()
+            return None
+
+    def on_email_verified(
         self, db: Session, student: Student
     ) -> Optional[Identity]:
-        """Email 驗證成功時觸發學生身分整合
+        """Email 驗證成功時更新 Identity 狀態
 
-        1. 檢查是否已有相同 email 的 Identity
-        2. 若有 -> 將此 Student 加入既有 Identity
-        3. 若無 -> 建立新 Identity
+        - 若已有 Identity → 更新 email_verified=True + 密碼遷移
+        - 若沒有 Identity（不應發生）→ 建立一個
 
         Args:
             db: 資料庫 session
@@ -36,43 +94,52 @@ class IdentityService:
         """
         if not student.email or not student.email_verified:
             logger.warning(
-                f"Student {student.id} has no verified email, skip consolidation"
+                f"Student {student.id} has no verified email, skip"
             )
             return None
 
-        # 如果已經整合過，不重複處理
-        if student.identity_id is not None:
-            logger.info(
-                f"Student {student.id} already consolidated to identity {student.identity_id}"
-            )
-            return student.identity
-
         try:
-            # 使用 savepoint 隔離，避免失敗時 rollback 影響 caller 的 transaction
             nested = db.begin_nested()
 
-            # 查找是否已有相同 email 的 Identity
-            existing_identity = (
-                db.query(Identity)
-                .filter(
-                    Identity.email == student.email,
-                    Identity.is_active.is_(True),
+            if student.identity_id:
+                identity = (
+                    db.query(Identity)
+                    .filter(Identity.id == student.identity_id)
+                    .first()
                 )
-                .first()
+                if identity:
+                    # 更新驗證狀態
+                    if not identity.email_verified:
+                        identity.email_verified = True
+                        identity.email_verified_at = datetime.now(timezone.utc)
+
+                    # 遷移密碼到 Identity
+                    self._smart_password_merge(student, identity)
+                    student.password_migrated_to_identity = True
+                    db.flush()
+
+                    nested.commit()
+                    logger.info(
+                        f"Email verified for identity {identity.id} "
+                        f"(student {student.id})"
+                    )
+                    return identity
+
+            # 沒有 Identity（不應發生，但做防禦處理）
+            logger.warning(
+                f"Student {student.id} verified but has no identity, creating"
             )
-
-            if existing_identity:
-                result = self._merge_student_into_identity(
-                    db, student, existing_identity
-                )
-            else:
-                result = self._create_identity_for_student(db, student)
-
+            result = self._create_identity_for_student(
+                db, student, student.email, verified=True
+            )
             nested.commit()
             return result
 
         except Exception as e:
-            logger.error(f"Failed to consolidate student {student.id}: {e}")
+            logger.error(
+                f"Failed to update identity on verification "
+                f"for student {student.id}: {e}"
+            )
             nested.rollback()
             return None
 
@@ -135,49 +202,92 @@ class IdentityService:
             nested.rollback()
             return None
 
-    def _create_identity_for_student(self, db: Session, student: Student) -> Identity:
-        """建立新的 Identity（首次 Email 驗證）"""
+    def _create_identity_for_student(
+        self, db: Session, student: Student, email: str, verified: bool
+    ) -> Identity:
+        """建立新的 Identity 並關聯到 Student"""
         identity = Identity(
-            email=student.email,
+            email=email,
             password_hash=student.password_hash,
-            email_verified=True,
-            email_verified_at=student.email_verified_at,
-            password_changed=student.password_changed,
-            last_password_change=datetime.now(timezone.utc)
-            if student.password_changed
-            else None,
+            email_verified=verified,
+            email_verified_at=(
+                student.email_verified_at
+                if verified
+                else None
+            ),
+            password_changed=student.password_changed if verified else False,
+            last_password_change=(
+                datetime.now(timezone.utc)
+                if verified and student.password_changed
+                else None
+            ),
         )
         db.add(identity)
         db.flush()
 
-        # 更新 Student
         student.identity_id = identity.id
         student.is_primary_account = True
-        student.password_migrated_to_identity = True
+        student.password_migrated_to_identity = verified
 
         db.flush()
         logger.info(
-            f"Created new identity {identity.id} for student {student.id} ({student.email})"
+            f"Created identity {identity.id} for student {student.id} "
+            f"({email}, verified={verified})"
         )
         return identity
 
-    def _merge_student_into_identity(
+    def _link_student_to_identity(
         self, db: Session, student: Student, identity: Identity
     ) -> Identity:
-        """將 Student 合併到既有的 Identity"""
-        # 智慧密碼選擇
-        self._smart_password_merge(student, identity)
-
-        # 將此 Student 加入 Identity
+        """將 Student 關聯到既有的 Identity（不做密碼遷移，等驗證後再處理）"""
         student.identity_id = identity.id
-        student.is_primary_account = False
-        student.password_migrated_to_identity = True
+        # 如果 Identity 還沒有其他 primary，設為 primary
+        has_primary = (
+            db.query(Student)
+            .filter(
+                Student.identity_id == identity.id,
+                Student.is_primary_account.is_(True),
+                Student.is_active.is_(True),
+            )
+            .first()
+        )
+        student.is_primary_account = has_primary is None
+        student.password_migrated_to_identity = False
 
         db.flush()
         logger.info(
-            f"Merged student {student.id} into identity {identity.id} ({identity.email})"
+            f"Linked student {student.id} to identity {identity.id} "
+            f"({identity.email})"
         )
         return identity
+
+    def _unlink_student_from_identity(
+        self, db: Session, student: Student
+    ) -> None:
+        """解除 Student 與 Identity 的關聯"""
+        old_identity_id = student.identity_id
+
+        # 如果是 primary，轉移給其他人
+        if student.is_primary_account:
+            other = (
+                db.query(Student)
+                .filter(
+                    Student.identity_id == student.identity_id,
+                    Student.id != student.id,
+                    Student.is_active.is_(True),
+                )
+                .first()
+            )
+            if other:
+                other.is_primary_account = True
+
+        student.identity_id = None
+        student.is_primary_account = None
+        student.password_migrated_to_identity = False
+        db.flush()
+        logger.info(
+            f"Unlinked student {student.id} from identity {old_identity_id}"
+        )
 
     def _smart_password_merge(self, student: Student, identity: Identity) -> None:
         """智慧密碼選擇策略

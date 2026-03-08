@@ -178,10 +178,12 @@ async def switch_account(
     if not target_student.is_active:
         raise HTTPException(status_code=400, detail="Target account is inactive")
 
-    # 驗證關聯性
+    # 驗證關聯性（Identity 需已驗證才能免密碼切換）
     is_identity_linked = (
         current_student.identity_id is not None
         and current_student.identity_id == target_student.identity_id
+        and current_student.identity
+        and current_student.identity.email_verified
     )
     is_email_linked = (
         current_student.email

@@ -30,10 +30,15 @@ async def update_student_email(
             status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
         )
 
+    from services.identity_service import identity_service
+
     # 更新 email
     student.email = request.email
     student.email_verified = False
     student.email_verified_at = None
+
+    # 建立/關聯 Identity（未驗證狀態）
+    identity_service.ensure_identity_on_email_bind(db, student, request.email)
 
     # 發送驗證信
     success = email_service.send_verification_email(db, student, request.email)
@@ -62,6 +67,12 @@ async def unbind_student_email(
             status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
         )
 
+    from services.identity_service import identity_service
+
+    # 解除 Identity 關聯
+    if student.identity_id:
+        identity_service._unlink_student_from_identity(db, student)
+
     # 清除 email 相關欄位
     student.email = None
     student.email_verified = False
@@ -87,6 +98,7 @@ async def request_email_verification(
 ):
     """請求發送 email 驗證信"""
     from services.email_service import email_service
+    from services.identity_service import identity_service
 
     # 確認是學生本人
     if (
@@ -106,6 +118,9 @@ async def request_email_verification(
     email = email_request.get("email")
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
+
+    # 建立/關聯 Identity（未驗證狀態）
+    identity_service.ensure_identity_on_email_bind(db, student, email)
 
     # 發送驗證信
     success = email_service.send_verification_email(db, student, email)
@@ -171,8 +186,8 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
     if not student:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
 
-    # 觸發身分整合
-    identity = identity_service.consolidate_on_email_verification(db, student)
+    # 更新 Identity 驗證狀態 + 密碼遷移
+    identity = identity_service.on_email_verified(db, student)
     db.commit()
 
     linked_count = 0
