@@ -39,11 +39,8 @@ async def validate_student(
         expires_delta=timedelta(minutes=30),
     )
 
-    # 取得班級資訊 - 使用 JOIN 優化查詢（避免 N+1）
-    # 原本：3次查詢 (Student + ClassroomStudent + Classroom)
-    # 現在：1次查詢 (JOIN + joinedload)
-    # 擴充：加入 organization 和 school 資訊
-    classroom = (
+    # 取得所有班級資訊（支援多班級切換）
+    all_classrooms = (
         db.query(Classroom)
         .join(ClassroomStudent)
         .outerjoin(ClassroomSchool, Classroom.id == ClassroomSchool.classroom_id)
@@ -52,36 +49,48 @@ async def validate_student(
         .options(
             joinedload(Classroom.classroom_schools)
             .joinedload(ClassroomSchool.school)
-            .joinedload(School.organization)
+            .joinedload(School.organization),
+            joinedload(Classroom.teacher),
         )
-        .filter(ClassroomStudent.student_id == student.id)
-        .first()
+        .filter(
+            ClassroomStudent.student_id == student.id,
+            ClassroomStudent.is_active.is_(True),
+        )
+        .all()
     )
 
-    classroom_id = classroom.id if classroom else None
-    classroom_name = classroom.name if classroom else None
+    # 建立班級列表
+    classrooms_list = []
+    for cr in all_classrooms:
+        cr_info = {
+            "id": cr.id,
+            "name": cr.name,
+            "teacher_name": cr.teacher.name if cr.teacher else None,
+        }
+        # 取得學校和機構
+        cs = next((c for c in (cr.classroom_schools or []) if c.is_active), None)
+        if cs and cs.school:
+            cr_info["school_id"] = str(cs.school.id)
+            cr_info["school_name"] = cs.school.name
+            if cs.school.organization:
+                cr_info["organization_id"] = str(cs.school.organization.id)
+                cr_info["organization_name"] = cs.school.organization.name
+        classrooms_list.append(cr_info)
 
-    # Extract organization and school information
-    school_id = None
-    school_name = None
-    organization_id = None
-    organization_name = None
+    # 預設使用第一個班級
+    first = all_classrooms[0] if all_classrooms else None
+    classroom_id = first.id if first else None
+    classroom_name = first.name if first else None
 
-    if classroom and classroom.classroom_schools:
-        # Get the first active classroom_school relationship
-        classroom_school = next(
-            (cs for cs in classroom.classroom_schools if cs.is_active), None
-        )
-
-        if classroom_school and classroom_school.school:
-            school = classroom_school.school
-            school_id = str(school.id)
-            school_name = school.name
-
-            if school.organization:
-                org = school.organization
-                organization_id = str(org.id)
-                organization_name = org.name
+    # 從 classrooms_list 取得第一個的學校/機構資訊
+    school_id = classrooms_list[0].get("school_id") if classrooms_list else None
+    school_name = classrooms_list[0].get("school_name") if classrooms_list else None
+    organization_id = (
+        classrooms_list[0].get("organization_id") if classrooms_list else None
+    )
+    organization_name = (
+        classrooms_list[0].get("organization_name") if classrooms_list else None
+    )
 
     # 查詢關聯帳號數量
     has_linked_accounts = False
@@ -114,5 +123,7 @@ async def validate_student(
             "organization_name": organization_name,
             "has_linked_accounts": has_linked_accounts,
             "linked_accounts_count": linked_accounts_count,
+            "classrooms": classrooms_list,
+            "classrooms_count": len(classrooms_list),
         },
     }

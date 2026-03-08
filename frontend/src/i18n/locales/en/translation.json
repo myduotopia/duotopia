@@ -1176,6 +1176,11 @@
       "defaultClass": "No class assigned"
     }
   },
+  "classroomSwitcher": {
+    "switchClassroom": "Switch Classroom",
+    "currentClassroom": "Current Classroom",
+    "otherClassrooms": "Other Classrooms"
+  },
   "accountSwitcher": {
     "switchAccount": "Switch Account",
     "currentAccount": "Current Account",

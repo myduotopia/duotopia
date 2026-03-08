@@ -1175,6 +1175,11 @@
       "defaultClass": "未分配班級"
     }
   },
+  "classroomSwitcher": {
+    "switchClassroom": "切換班級",
+    "currentClassroom": "目前班級",
+    "otherClassrooms": "其他班級"
+  },
   "accountSwitcher": {
     "switchAccount": "切換帳號",
     "currentAccount": "目前帳號",
