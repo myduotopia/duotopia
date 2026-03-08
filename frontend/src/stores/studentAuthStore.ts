@@ -6,6 +6,7 @@ export interface ClassroomInfo {
   id: number;
   name: string;
   teacher_name?: string | null;
+  student_id?: number;
   school_id?: string;
   school_name?: string;
   organization_id?: string;

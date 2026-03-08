@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,10 +15,12 @@ import {
   useStudentAuthStore,
   type ClassroomInfo,
 } from "@/stores/studentAuthStore";
+import { authService } from "@/services/authService";
 
 export function ClassroomSwitcher() {
   const { t } = useTranslation();
-  const { user, switchClassroom } = useStudentAuthStore();
+  const { user, login, switchClassroom } = useStudentAuthStore();
+  const [switching, setSwitching] = useState(false);
 
   const classrooms = user?.classrooms || [];
 
@@ -25,11 +29,43 @@ export function ClassroomSwitcher() {
     return null;
   }
 
-  const handleSwitch = (classroom: ClassroomInfo) => {
+  const handleSwitch = async (classroom: ClassroomInfo) => {
     if (classroom.id === user?.classroom_id) return;
-    switchClassroom(classroom);
-    // Reload page to refresh data for new classroom
-    window.location.reload();
+
+    // If switching to a different student_id, call the API
+    if (classroom.student_id && classroom.student_id !== user?.id) {
+      setSwitching(true);
+      try {
+        const result = await authService.switchClassroom(classroom.student_id);
+        login(result.access_token, {
+          id: result.student.id,
+          name: result.student.name,
+          email: result.student.email,
+          student_number: result.student.student_number || "",
+          classroom_id: classroom.id,
+          classroom_name: classroom.name,
+          teacher_name: classroom.teacher_name || undefined,
+          school_id: classroom.school_id,
+          school_name: classroom.school_name,
+          organization_id: classroom.organization_id,
+          organization_name: classroom.organization_name,
+          classrooms: result.student.classrooms,
+          classrooms_count: result.student.classrooms_count,
+        });
+        toast.success(
+          t("classroomSwitcher.switchSuccess", { name: classroom.name }),
+        );
+        window.location.reload();
+      } catch {
+        toast.error(t("classroomSwitcher.switchError"));
+      } finally {
+        setSwitching(false);
+      }
+    } else {
+      // Same student_id, just update local state
+      switchClassroom(classroom);
+      window.location.reload();
+    }
   };
 
   return (
@@ -39,6 +75,7 @@ export function ClassroomSwitcher() {
           variant="ghost"
           size="sm"
           className="w-full justify-between text-xs text-emerald-600 hover:bg-emerald-50 mt-1 px-3 py-1.5 h-auto"
+          disabled={switching}
         >
           <div className="flex items-center gap-1.5">
             <GraduationCap className="h-3.5 w-3.5" />
@@ -83,8 +120,9 @@ export function ClassroomSwitcher() {
           .filter((cr) => cr.id !== user?.classroom_id)
           .map((classroom) => (
             <DropdownMenuItem
-              key={classroom.id}
+              key={`${classroom.student_id}-${classroom.id}`}
               onClick={() => handleSwitch(classroom)}
+              disabled={switching}
               className="cursor-pointer"
             >
               <div className="flex items-center gap-2 w-full">

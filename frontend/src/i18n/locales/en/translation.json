@@ -1143,6 +1143,16 @@
     "buttons": {
       "back": "Back"
     },
+    "emailLogin": {
+      "switchToEmail": "Verified account? Login with Email",
+      "title": "Email Login",
+      "description": "For students with verified email. See all your classrooms at once.",
+      "emailPlaceholder": "Enter your email",
+      "passwordPlaceholder": "Enter your password",
+      "login": "Login",
+      "loggingIn": "Logging in...",
+      "error": "Login failed. Please check your email and password."
+    },
     "errors": {
       "teacherNotFound": "Teacher account not found",
       "teacherValidationFailed": "Unable to verify teacher account, please try again later",
@@ -1179,7 +1189,9 @@
   "classroomSwitcher": {
     "switchClassroom": "Switch Classroom",
     "currentClassroom": "Current Classroom",
-    "otherClassrooms": "Other Classrooms"
+    "otherClassrooms": "Other Classrooms",
+    "switchSuccess": "Switched to \"{{name}}\"",
+    "switchError": "Failed to switch classroom. Please try again."
   },
   "accountSwitcher": {
     "switchAccount": "Switch Account",

@@ -34,6 +34,10 @@ class SwitchAccountRequest(BaseModel):
     password: Optional[str] = None  # Identity 關聯帳號不需密碼，fallback 才需要
 
 
+class SwitchClassroomRequest(BaseModel):
+    target_student_id: int  # 目標班級對應的 student_id
+
+
 # Practice Words schemas
 class PracticeWord(BaseModel):
     """練習單字資料"""
