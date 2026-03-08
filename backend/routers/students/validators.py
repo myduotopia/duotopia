@@ -1,12 +1,12 @@
 """Pydantic schemas and validators for student endpoints."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
 class StudentValidateRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str  # Can be birthdate (YYYYMMDD) or new password if changed
 
 

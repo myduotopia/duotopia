@@ -73,20 +73,22 @@ async def validate_student(
 
     if not student:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
         )
 
     # 驗證密碼 - 支援 Identity 統一密碼
     password_hash = _get_student_password_hash(db, student)
     if not verify_password(request.password, password_hash):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid password"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
         )
 
     # 建立 token
     access_token = create_access_token(
         data={"sub": str(student.id), "type": "student"},
-        expires_delta=timedelta(minutes=30),
+        expires_delta=timedelta(hours=24),
     )
 
     # 取得登入學生自己的班級

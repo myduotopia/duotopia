@@ -176,14 +176,15 @@ export default function StudentLogin() {
           ...response.user,
           student_number:
             response.user.student_number || response.user.id.toString(),
-          classroom_id: selectedClassroom?.id || 0,
+          classroom_id: selectedClassroom?.id ?? undefined,
           classroom_name: selectedClassroom?.name,
           teacher_name: teacherHistory.find((t) => t.email === teacherEmail)
             ?.name,
         } as StudentUser);
         navigate("/student/dashboard");
       }
-    } catch {
+    } catch (err) {
+      console.error("Student login failed:", err);
       setError(t("studentLogin.errors.loginFailed"));
     } finally {
       setLoading(false);
@@ -208,9 +209,9 @@ export default function StudentLogin() {
         name: s.name,
         email: s.email,
         student_number: s.student_number || "",
-        classroom_id: s.classroom_id || 0,
+        classroom_id: s.classroom_id ?? undefined,
         classroom_name: s.classroom_name || undefined,
-        teacher_name: undefined,
+        teacher_name: s.classrooms?.[0]?.teacher_name || undefined,
         school_id: s.school_id || undefined,
         school_name: s.school_name || undefined,
         organization_id: s.organization_id || undefined,
@@ -221,7 +222,8 @@ export default function StudentLogin() {
         classrooms_count: s.classrooms_count,
       } as StudentUser);
       navigate("/student/dashboard");
-    } catch {
+    } catch (err) {
+      console.error("Email login failed:", err);
       setError(t("studentLogin.emailLogin.error"));
     } finally {
       setLoading(false);
@@ -335,7 +337,7 @@ export default function StudentLogin() {
                   value={emailLoginPassword}
                   onChange={(e) => setEmailLoginPassword(e.target.value)}
                   className="text-lg py-6"
-                  onKeyPress={(e) => e.key === "Enter" && handleEmailLogin()}
+                  onKeyDown={(e) => e.key === "Enter" && handleEmailLogin()}
                 />
 
                 <Button
@@ -374,7 +376,7 @@ export default function StudentLogin() {
                   value={teacherEmail}
                   onChange={(e) => setTeacherEmail(e.target.value)}
                   className="text-lg py-6"
-                  onKeyPress={(e) => e.key === "Enter" && handleTeacherSubmit()}
+                  onKeyDown={(e) => e.key === "Enter" && handleTeacherSubmit()}
                 />
 
                 <Button
@@ -534,7 +536,7 @@ export default function StudentLogin() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="text-lg py-6"
-                    onKeyPress={(e) => e.key === "Enter" && handleLogin()}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                   />
                   {/* Password hint - always visible */}
                   <div className="text-sm text-gray-600 space-y-1 px-1">

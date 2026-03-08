@@ -56,7 +56,8 @@ export function ClassroomSwitcher() {
           t("classroomSwitcher.switchSuccess", { name: classroom.name }),
         );
         window.location.reload();
-      } catch {
+      } catch (err) {
+        console.error("Classroom switch failed:", err);
         toast.error(t("classroomSwitcher.switchError"));
       } finally {
         setSwitching(false);
