@@ -1,12 +1,12 @@
 """Pydantic schemas and validators for student endpoints."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
 class StudentValidateRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str  # Can be birthdate (YYYYMMDD) or new password if changed
 
 
@@ -32,6 +32,10 @@ class EmailUpdateRequest(BaseModel):
 class SwitchAccountRequest(BaseModel):
     target_student_id: int
     password: Optional[str] = None  # Identity 關聯帳號不需密碼，fallback 才需要
+
+
+class SwitchClassroomRequest(BaseModel):
+    target_student_id: int  # 目標班級對應的 student_id
 
 
 # Practice Words schemas

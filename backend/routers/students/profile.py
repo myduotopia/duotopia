@@ -1,7 +1,7 @@
 """Student profile management endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, cast, Date
 from typing import Dict, Any
 
@@ -13,6 +13,7 @@ from models import (
     StudentAssignment,
     AssignmentStatus,
 )
+from models.organization import ClassroomSchool, School, Organization
 from auth import verify_password, get_password_hash, validate_password_strength
 from .dependencies import get_current_student, get_student_id
 from .validators import UpdateStudentProfileRequest, UpdatePasswordRequest
@@ -205,6 +206,52 @@ async def update_student_password(
     db.commit()
 
     return {"message": "Password updated successfully"}
+
+
+@router.get("/my-classrooms")
+async def get_my_classrooms(
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """取得當前學生的所有班級列表"""
+    student_id = int(current_student.get("sub"))
+
+    classrooms = (
+        db.query(Classroom)
+        .join(ClassroomStudent)
+        .outerjoin(ClassroomSchool, Classroom.id == ClassroomSchool.classroom_id)
+        .outerjoin(School, ClassroomSchool.school_id == School.id)
+        .outerjoin(Organization, School.organization_id == Organization.id)
+        .options(
+            joinedload(Classroom.classroom_schools)
+            .joinedload(ClassroomSchool.school)
+            .joinedload(School.organization),
+            joinedload(Classroom.teacher),
+        )
+        .filter(
+            ClassroomStudent.student_id == student_id,
+            ClassroomStudent.is_active.is_(True),
+        )
+        .all()
+    )
+
+    result = []
+    for cr in classrooms:
+        cr_info = {
+            "id": cr.id,
+            "name": cr.name,
+            "teacher_name": cr.teacher.name if cr.teacher else None,
+        }
+        cs = next((c for c in (cr.classroom_schools or []) if c.is_active), None)
+        if cs and cs.school:
+            cr_info["school_id"] = str(cs.school.id)
+            cr_info["school_name"] = cs.school.name
+            if cs.school.organization:
+                cr_info["organization_id"] = str(cs.school.organization.id)
+                cr_info["organization_name"] = cs.school.organization.name
+        result.append(cr_info)
+
+    return {"classrooms": result, "count": len(result)}
 
 
 @router.get("/stats")

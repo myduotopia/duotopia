@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { ArrowLeft, ChevronRight, Home } from "lucide-react";
+import { ArrowLeft, ChevronRight, Home, Mail } from "lucide-react";
 import { useStudentAuthStore, StudentUser } from "@/stores/studentAuthStore";
 import { authService } from "@/services/authService";
 import { teacherService } from "@/services/teacherService";
@@ -43,6 +43,9 @@ export default function StudentLogin() {
   const isProduction = import.meta.env.VITE_ENVIRONMENT === "production";
   const showDemoBlocks = !isProduction || isDemoMode;
 
+  // Login mode: "teacher" (original 4-step) or "email" (direct email login)
+  const [loginMode, setLoginMode] = useState<"teacher" | "email">("teacher");
+
   // Multi-step form state
   const [step, setStep] = useState(1);
   const [teacherEmail, setTeacherEmail] = useState("");
@@ -58,6 +61,10 @@ export default function StudentLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const hasAutoSubmitted = useRef(false);
+
+  // Email direct login state
+  const [emailLoginEmail, setEmailLoginEmail] = useState("");
+  const [emailLoginPassword, setEmailLoginPassword] = useState("");
 
   // Load teacher history from localStorage
   useEffect(() => {
@@ -169,15 +176,55 @@ export default function StudentLogin() {
           ...response.user,
           student_number:
             response.user.student_number || response.user.id.toString(),
-          classroom_id: selectedClassroom?.id || 0,
+          classroom_id: selectedClassroom?.id ?? undefined,
           classroom_name: selectedClassroom?.name,
           teacher_name: teacherHistory.find((t) => t.email === teacherEmail)
             ?.name,
         } as StudentUser);
         navigate("/student/dashboard");
       }
-    } catch {
+    } catch (err) {
+      console.error("Student login failed:", err);
       setError(t("studentLogin.errors.loginFailed"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Email direct login
+  const handleEmailLogin = async () => {
+    if (!emailLoginEmail || !emailLoginPassword) return;
+
+    setLoading(true);
+    setError("");
+    try {
+      const response = await authService.studentEmailLogin(
+        emailLoginEmail,
+        emailLoginPassword,
+      );
+
+      const s = response.student;
+      login(response.access_token, {
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        student_number: s.student_number || "",
+        classroom_id: s.classroom_id ?? undefined,
+        classroom_name: s.classroom_name || undefined,
+        teacher_name: s.classrooms?.[0]?.teacher_name || undefined,
+        school_id: s.school_id || undefined,
+        school_name: s.school_name || undefined,
+        organization_id: s.organization_id || undefined,
+        organization_name: s.organization_name || undefined,
+        has_linked_accounts: s.has_linked_accounts,
+        linked_accounts_count: s.linked_accounts_count,
+        classrooms: s.classrooms,
+        classrooms_count: s.classrooms_count,
+      } as StudentUser);
+      navigate("/student/dashboard");
+    } catch (err) {
+      console.error("Email login failed:", err);
+      setError(t("studentLogin.emailLogin.error"));
     } finally {
       setLoading(false);
     }
@@ -185,6 +232,12 @@ export default function StudentLogin() {
 
   const handleBack = () => {
     setError("");
+    if (loginMode === "email") {
+      setLoginMode("teacher");
+      setEmailLoginEmail("");
+      setEmailLoginPassword("");
+      return;
+    }
     if (step > 1) {
       setStep(step - 1);
     }
@@ -247,7 +300,7 @@ export default function StudentLogin() {
 
       <Card className="w-full max-w-2xl">
         <CardHeader>
-          {step > 1 && (
+          {(step > 1 || loginMode === "email") && (
             <Button
               variant="ghost"
               size="sm"
@@ -260,8 +313,57 @@ export default function StudentLogin() {
           )}
         </CardHeader>
         <CardContent>
+          {/* Email Direct Login Mode */}
+          {loginMode === "email" && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-semibold text-center">
+                {t("studentLogin.emailLogin.title")}
+              </h2>
+              <p className="text-sm text-gray-500 text-center">
+                {t("studentLogin.emailLogin.description")}
+              </p>
+
+              <div className="space-y-4">
+                <Input
+                  type="email"
+                  placeholder={t("studentLogin.emailLogin.emailPlaceholder")}
+                  value={emailLoginEmail}
+                  onChange={(e) => setEmailLoginEmail(e.target.value)}
+                  className="text-lg py-6"
+                />
+                <Input
+                  type="password"
+                  placeholder={t("studentLogin.emailLogin.passwordPlaceholder")}
+                  value={emailLoginPassword}
+                  onChange={(e) => setEmailLoginPassword(e.target.value)}
+                  className="text-lg py-6"
+                  onKeyDown={(e) => e.key === "Enter" && handleEmailLogin()}
+                />
+
+                <Button
+                  onClick={handleEmailLogin}
+                  disabled={!emailLoginEmail || !emailLoginPassword || loading}
+                  className="w-full py-6 text-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
+                >
+                  {loading ? (
+                    <>
+                      <span className="animate-spin mr-2">⏳</span>
+                      {t("studentLogin.emailLogin.loggingIn")}
+                    </>
+                  ) : (
+                    t("studentLogin.emailLogin.login")
+                  )}
+                </Button>
+              </div>
+
+              {error && (
+                <p className="text-red-500 text-center mt-4">{error}</p>
+              )}
+            </div>
+          )}
+
           {/* Step 1: Teacher Email */}
-          {step === 1 && (
+          {loginMode === "teacher" && step === 1 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-semibold text-center">
                 {t("studentLogin.step1.title")}
@@ -274,7 +376,7 @@ export default function StudentLogin() {
                   value={teacherEmail}
                   onChange={(e) => setTeacherEmail(e.target.value)}
                   className="text-lg py-6"
-                  onKeyPress={(e) => e.key === "Enter" && handleTeacherSubmit()}
+                  onKeyDown={(e) => e.key === "Enter" && handleTeacherSubmit()}
                 />
 
                 <Button
@@ -341,11 +443,26 @@ export default function StudentLogin() {
                   </div>
                 </div>
               )}
+
+              {/* Email direct login link */}
+              <div className="mt-6 pt-6 border-t text-center">
+                <Button
+                  variant="link"
+                  className="text-emerald-600 hover:text-emerald-700"
+                  onClick={() => {
+                    setLoginMode("email");
+                    setError("");
+                  }}
+                >
+                  <Mail className="h-4 w-4 mr-1.5" />
+                  {t("studentLogin.emailLogin.switchToEmail")}
+                </Button>
+              </div>
             </div>
           )}
 
           {/* Step 2: Classroom Selection */}
-          {step === 2 && (
+          {loginMode === "teacher" && step === 2 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-semibold text-center">
                 {t("studentLogin.step2.title")}
@@ -372,7 +489,7 @@ export default function StudentLogin() {
           )}
 
           {/* Step 3: Student Selection */}
-          {step === 3 && selectedClassroom && (
+          {loginMode === "teacher" && step === 3 && selectedClassroom && (
             <div className="space-y-6">
               <div className="text-center">
                 <h2 className="text-xl font-semibold">
@@ -401,7 +518,7 @@ export default function StudentLogin() {
           )}
 
           {/* Step 4: Password */}
-          {step === 4 && selectedStudent && (
+          {loginMode === "teacher" && step === 4 && selectedStudent && (
             <div className="space-y-6">
               <div className="text-center">
                 <h2 className="text-2xl font-semibold">
@@ -419,7 +536,7 @@ export default function StudentLogin() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="text-lg py-6"
-                    onKeyPress={(e) => e.key === "Enter" && handleLogin()}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                   />
                   {/* Password hint - always visible */}
                   <div className="text-sm text-gray-600 space-y-1 px-1">

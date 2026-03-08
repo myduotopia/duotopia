@@ -287,6 +287,19 @@ async def create_student(
     # Email is optional now - can be NULL or shared between students
     email = student_data.email if student_data.email else None
 
+    # 檢查同 email 是否已有驗證過的學生，若有則繼承驗證狀態與 identity_id
+    existing_verified = None
+    if email:
+        existing_verified = (
+            db.query(Student)
+            .filter(
+                Student.email == email,
+                Student.email_verified.is_(True),
+                Student.is_active.is_(True),
+            )
+            .first()
+        )
+
     # Create student
     student = Student(
         name=student_data.name,
@@ -298,6 +311,8 @@ async def create_student(
         target_wpm=80,
         target_accuracy=0.8,
         is_active=True,
+        email_verified=True if existing_verified else False,
+        identity_id=existing_verified.identity_id if existing_verified else None,
     )
 
     try:
@@ -333,7 +348,7 @@ async def create_student(
         "classroom_id": student_data.classroom_id,
         "student_id": student.student_number,
         "phone": student_data.phone,
-        "email_verified": False,  # 新建立的學生 email 未驗證
+        "email_verified": bool(existing_verified),
     }
 
     # Add warning if no classroom assigned

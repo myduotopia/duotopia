@@ -1142,6 +1142,16 @@
     "buttons": {
       "back": "返回"
     },
+    "emailLogin": {
+      "switchToEmail": "已驗證帳號？用 Email 直接登入",
+      "title": "Email 登入",
+      "description": "適用於已驗證 Email 的學生，可一次看到所有班級",
+      "emailPlaceholder": "請輸入你的 Email",
+      "passwordPlaceholder": "請輸入密碼",
+      "login": "登入",
+      "loggingIn": "登入中...",
+      "error": "登入失敗，請確認 Email 和密碼是否正確"
+    },
     "errors": {
       "teacherNotFound": "找不到此教師帳號",
       "teacherValidationFailed": "無法驗證教師帳號，請稍後再試",
@@ -1174,6 +1184,13 @@
       "defaultStudent": "學生",
       "defaultClass": "未分配班級"
     }
+  },
+  "classroomSwitcher": {
+    "switchClassroom": "切換班級",
+    "currentClassroom": "目前班級",
+    "otherClassrooms": "其他班級",
+    "switchSuccess": "已切換至「{{name}}」",
+    "switchError": "切換班級失敗，請稍後再試"
   },
   "accountSwitcher": {
     "switchAccount": "切換帳號",

@@ -204,6 +204,22 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 
     # 更新 Identity 驗證狀態 + 密碼遷移
     identity = identity_service.on_email_verified(db, student)
+
+    # 將 identity_id 同步到所有同 email 的 sibling students
+    if student.identity_id and student.email:
+        siblings = (
+            db.query(Student)
+            .filter(
+                Student.email == student.email,
+                Student.id != student.id,
+                Student.is_active.is_(True),
+                Student.identity_id.is_(None),
+            )
+            .all()
+        )
+        for sibling in siblings:
+            sibling.identity_id = student.identity_id
+
     db.commit()
 
     linked_count = 0

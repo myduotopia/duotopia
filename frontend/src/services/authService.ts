@@ -55,11 +55,67 @@ interface SwitchAccountResponse {
   message: string;
 }
 
+interface StudentEmailLoginResponse {
+  access_token: string;
+  token_type: string;
+  student: {
+    id: number;
+    name: string;
+    email: string;
+    student_number: string;
+    classroom_id: number | null;
+    classroom_name: string | null;
+    school_id: string | null;
+    school_name: string | null;
+    organization_id: string | null;
+    organization_name: string | null;
+    has_linked_accounts: boolean;
+    linked_accounts_count: number;
+    classrooms: Array<{
+      id: number;
+      name: string;
+      teacher_name: string | null;
+      student_id: number;
+      school_id?: string;
+      school_name?: string;
+      organization_id?: string;
+      organization_name?: string;
+    }>;
+    classrooms_count: number;
+  };
+}
+
+interface SwitchClassroomResponse {
+  access_token: string;
+  token_type: string;
+  student: StudentEmailLoginResponse["student"];
+}
+
 export const authService = {
   async studentLogin(
     credentials: StudentLoginCredentials,
   ): Promise<LoginResponse> {
     const response = await api.post("/api/auth/student/login", credentials);
+    return response.data;
+  },
+
+  async studentEmailLogin(
+    email: string,
+    password: string,
+  ): Promise<StudentEmailLoginResponse> {
+    const response = await api.post("/api/students/validate", {
+      email,
+      password,
+    });
+    return response.data;
+  },
+
+  async switchClassroom(
+    targetStudentId: number,
+  ): Promise<SwitchClassroomResponse> {
+    const response = await api.post("/api/students/switch-classroom", {
+      target_student_id: targetStudentId,
+    });
     return response.data;
   },
 
