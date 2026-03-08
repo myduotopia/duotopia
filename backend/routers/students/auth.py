@@ -63,6 +63,27 @@ def _get_classrooms_for_student(db: Session, student_id: int) -> list:
     return result
 
 
+def _get_aggregated_classrooms(db: Session, student: Student) -> list:
+    """取得學生的所有班級（含跨帳號已驗證 email 的 sibling students）"""
+    classrooms_list = _get_classrooms_for_student(db, student.id)
+
+    if student.email_verified and student.email:
+        sibling_students = (
+            db.query(Student)
+            .filter(
+                Student.email == student.email,
+                Student.email_verified.is_(True),
+                Student.id != student.id,
+                Student.is_active.is_(True),
+            )
+            .all()
+        )
+        for sibling in sibling_students:
+            classrooms_list.extend(_get_classrooms_for_student(db, sibling.id))
+
+    return classrooms_list
+
+
 @router.post("/validate", response_model=StudentLoginResponse)
 async def validate_student(
     request: StudentValidateRequest, db: Session = Depends(get_db)
@@ -91,24 +112,8 @@ async def validate_student(
         expires_delta=timedelta(hours=24),
     )
 
-    # 取得登入學生自己的班級
-    classrooms_list = _get_classrooms_for_student(db, student.id)
-
-    # 如果已驗證 email，聚合所有同 email 已驗證學生的班級
-    if student.email_verified:
-        sibling_students = (
-            db.query(Student)
-            .filter(
-                Student.email == student.email,
-                Student.email_verified.is_(True),
-                Student.id != student.id,
-                Student.is_active.is_(True),
-            )
-            .all()
-        )
-        for sibling in sibling_students:
-            sibling_classrooms = _get_classrooms_for_student(db, sibling.id)
-            classrooms_list.extend(sibling_classrooms)
+    # 取得登入學生的所有班級（含跨帳號聚合）
+    classrooms_list = _get_aggregated_classrooms(db, student)
 
     # 預設使用第一個班級
     first_cr = classrooms_list[0] if classrooms_list else None
@@ -213,20 +218,8 @@ async def switch_classroom(
         expires_delta=timedelta(hours=24),
     )
 
-    # 取得目標學生的所有班級（含跨帳號）
-    classrooms_list = _get_classrooms_for_student(db, target_student.id)
-    sibling_students = (
-        db.query(Student)
-        .filter(
-            Student.email == target_student.email,
-            Student.email_verified.is_(True),
-            Student.id != target_student.id,
-            Student.is_active.is_(True),
-        )
-        .all()
-    )
-    for sibling in sibling_students:
-        classrooms_list.extend(_get_classrooms_for_student(db, sibling.id))
+    # 取得目標學生的所有班級（含跨帳號聚合）
+    classrooms_list = _get_aggregated_classrooms(db, target_student)
 
     first_cr = classrooms_list[0] if classrooms_list else None
 
