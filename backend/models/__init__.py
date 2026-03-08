@@ -21,7 +21,7 @@ from .base import (
 )
 
 # User models
-from .user import Teacher, Student
+from .user import Teacher, Student, Identity
 
 # Subscription models
 from .subscription import (
@@ -87,6 +87,7 @@ __all__ = [
     # Users
     "Teacher",
     "Student",
+    "Identity",
     # Subscriptions
     "SubscriptionPeriod",
     "PointUsageLog",

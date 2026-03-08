@@ -789,6 +789,13 @@ async def update_school_student(
             student.email_verified = False
             student.email_verified_at = None
             student.email_verification_token = None
+            # 建立/關聯 Identity（非系統 email 才處理）
+            if "@duotopia.local" not in update_data.email:
+                from services.identity_service import identity_service
+
+                identity_service.ensure_identity_on_email_bind(
+                    db, student, update_data.email
+                )
         student.email = update_data.email
 
     if update_data.student_number is not None:

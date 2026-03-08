@@ -1175,6 +1175,14 @@
       "defaultClass": "未分配班級"
     }
   },
+  "accountSwitcher": {
+    "switchAccount": "切換帳號",
+    "currentAccount": "目前帳號",
+    "linkedAccounts": "其他關聯帳號",
+    "loading": "載入中...",
+    "switchSuccess": "已切換至 {{name}}（{{org}}）",
+    "switchError": "切換帳號失敗，請稍後再試"
+  },
   "studentDashboard": {
     "welcome": {
       "greeting": "你好，{{name}}！歡迎回到 Duotopia 🚀",

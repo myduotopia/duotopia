@@ -349,8 +349,11 @@ async def student_login(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )
 
-    # 驗證密碼
-    if not verify_password(login_req.password, student.password_hash):
+    # 驗證密碼（支援 Identity 統一密碼）
+    from auth import _get_student_password_hash
+
+    password_hash = _get_student_password_hash(db, student)
+    if not verify_password(login_req.password, password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )

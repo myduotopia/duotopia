@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { AccountSwitcher } from "@/components/AccountSwitcher";
 import {
   BookOpen,
   Home,
@@ -167,6 +168,8 @@ export default function StudentLayout() {
                 </p>
               </div>
             </div>
+            {/* Account Switcher */}
+            <AccountSwitcher />
           </div>
         </div>
 

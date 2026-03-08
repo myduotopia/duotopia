@@ -1176,6 +1176,14 @@
       "defaultClass": "No class assigned"
     }
   },
+  "accountSwitcher": {
+    "switchAccount": "Switch Account",
+    "currentAccount": "Current Account",
+    "linkedAccounts": "Linked Accounts",
+    "loading": "Loading...",
+    "switchSuccess": "Switched to {{name}} ({{org}})",
+    "switchError": "Failed to switch account. Please try again."
+  },
   "studentDashboard": {
     "welcome": {
       "greeting": "Hello, {{name}}! Welcome back to Duotopia 🚀",

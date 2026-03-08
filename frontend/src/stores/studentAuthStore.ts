@@ -14,6 +14,8 @@ export interface StudentUser {
   school_name?: string;
   organization_id?: string;
   organization_name?: string;
+  has_linked_accounts?: boolean;
+  linked_accounts_count?: number;
 }
 
 interface StudentAuthState {
