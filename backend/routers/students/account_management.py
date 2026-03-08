@@ -235,7 +235,7 @@ async def unbind_email(
 ):
     """解除 email 綁定（學生自己或老師都可以操作）
 
-    解除後也會從 StudentIdentity 中移除關聯。
+    解除後也會從 Identity 中移除關聯。
     """
     # 檢查權限：學生本人或老師
     is_student_self = (
@@ -269,26 +269,12 @@ async def unbind_email(
                 status_code=403, detail="Student is not in your classroom"
             )
 
-    # 如果有 Identity 關聯，解除
+    # 如果有 Identity 關聯，解除（委託給 identity_service 避免邏輯重複）
     old_identity_id = student.identity_id
     if student.identity_id:
-        # 如果是主帳號，轉移給其他關聯帳號
-        if student.is_primary_account:
-            other_linked = (
-                db.query(Student)
-                .filter(
-                    Student.identity_id == student.identity_id,
-                    Student.id != student_id,
-                    Student.is_active.is_(True),
-                )
-                .first()
-            )
-            if other_linked:
-                other_linked.is_primary_account = True
+        from services.identity_service import identity_service
 
-        student.identity_id = None
-        student.is_primary_account = None
-        student.password_migrated_to_identity = False
+        identity_service._unlink_student_from_identity(db, student)
 
     # 清除 email 綁定相關資訊
     old_email = student.email

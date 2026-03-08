@@ -37,8 +37,15 @@ async def update_student_email(
     student.email_verified = False
     student.email_verified_at = None
 
-    # 建立/關聯 Identity（未驗證狀態）
-    identity_service.ensure_identity_on_email_bind(db, student, request.email)
+    # 建立/關聯 Identity（未驗證狀態，失敗不阻擋 email 更新）
+    identity = identity_service.ensure_identity_on_email_bind(db, student, request.email)
+    if not identity:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            f"Failed to create/link identity for student {student.id}, "
+            f"email update continues without identity"
+        )
 
     # 發送驗證信
     success = email_service.send_verification_email(db, student, request.email)
@@ -119,8 +126,15 @@ async def request_email_verification(
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
 
-    # 建立/關聯 Identity（未驗證狀態）
-    identity_service.ensure_identity_on_email_bind(db, student, email)
+    # 建立/關聯 Identity（未驗證狀態，失敗不阻擋驗證流程）
+    identity = identity_service.ensure_identity_on_email_bind(db, student, email)
+    if not identity:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            f"Failed to create/link identity for student {student.id}, "
+            f"verification continues without identity"
+        )
 
     # 發送驗證信
     success = email_service.send_verification_email(db, student, email)
