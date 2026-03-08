@@ -331,9 +331,7 @@ export default function StudentLogin() {
                 />
                 <Input
                   type="password"
-                  placeholder={t(
-                    "studentLogin.emailLogin.passwordPlaceholder",
-                  )}
+                  placeholder={t("studentLogin.emailLogin.passwordPlaceholder")}
                   value={emailLoginPassword}
                   onChange={(e) => setEmailLoginPassword(e.target.value)}
                   className="text-lg py-6"
