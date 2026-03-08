@@ -88,7 +88,7 @@ export function ClassroomSwitcher() {
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start" className="w-72">
+      <DropdownMenuContent align="start" className="w-72 bg-white shadow-lg">
         <DropdownMenuLabel className="text-xs text-gray-500">
           {t("classroomSwitcher.currentClassroom")}
         </DropdownMenuLabel>
