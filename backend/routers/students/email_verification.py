@@ -38,7 +38,9 @@ async def update_student_email(
     student.email_verified_at = None
 
     # 建立/關聯 Identity（未驗證狀態，失敗不阻擋 email 更新）
-    identity = identity_service.ensure_identity_on_email_bind(db, student, request.email)
+    identity = identity_service.ensure_identity_on_email_bind(
+        db, student, request.email
+    )
     if not identity:
         import logging
 
