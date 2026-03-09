@@ -1616,9 +1616,9 @@ export default function ClassroomDetail({
                       ? (item, level) => {
                           if (level === 2) {
                             setInstantPracticeContent({
-                              id: item.id,
-                              title: item.title || item.name,
-                              type: item.type,
+                              id: item.id as number,
+                              title: (item.title || item.name) as string,
+                              type: item.type as string | undefined,
                             });
                             setShowInstantPractice(true);
                           }

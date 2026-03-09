@@ -131,9 +131,8 @@ interface RecursiveTreeNodeProps {
     level: number,
     parentId?: string | number,
   ) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onInstantPractice?: (
-    item: any,
+    item: Record<string, unknown>,
     level: number,
     parentId?: string | number,
   ) => void;
@@ -630,9 +629,8 @@ interface RecursiveTreeAccordionProps {
     level: number,
     parentId?: string | number,
   ) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onInstantPractice?: (
-    item: any,
+    item: Record<string, unknown>,
     level: number,
     parentId?: string | number,
   ) => void;
