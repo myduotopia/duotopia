@@ -270,12 +270,60 @@ jobs:
     needs: create-release-pr
     if: needs.create-release-pr.outputs.pr_number != '' && needs.create-release-pr.outputs.skipped == ''
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.create-release-pr.outputs.branch }}
           fetch-depth: 0
 
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # --- Environment setup (matches local dev) ---
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci --prefer-offline --no-audit
+
+      # --- Phase 1: Deterministic auto-formatters ---
+      - name: Run auto-formatters
+        run: |
+          echo "=== Running Black (backend) ==="
+          cd backend && python -m black . && cd ..
+
+          echo "=== Running Prettier (frontend) ==="
+          cd frontend && npx prettier --write src && cd ..
+
+      - name: Commit formatter fixes
+        run: |
+          if ! git diff --quiet; then
+            git add -A
+            git commit -m "style: auto-format code
+
+            Related to #${{ github.event.issue.number }}
+
+            Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+            git push origin ${{ needs.create-release-pr.outputs.branch }}
+            echo "✅ Formatter fixes committed and pushed"
+          else
+            echo "✅ No formatting issues found"
+          fi
+
+      # --- Phase 2: Claude Code handles non-trivial fixes ---
       - name: Run Claude Code auto-fix
         uses: anthropics/claude-code-action@v1
         with:
@@ -285,7 +333,10 @@ jobs:
             Branch: ${{ needs.create-release-pr.outputs.branch }}
             Issue: #${{ github.event.issue.number }}
 
-            ## Phase 1: Wait for CI checks
+            **Environment**: Python 3.11 and Node 20 are installed with all project dependencies.
+            Black and Prettier formatting has already been applied. Focus on remaining issues.
+
+            ## Phase 1: Wait for CI checks to complete
 
             Poll PR checks every 30 seconds, up to 15 minutes:
             ```bash
@@ -301,7 +352,7 @@ jobs:
             done
             ```
 
-            ## Phase 2: Fix CI failures
+            ## Phase 2: Fix CI failures (up to 3 rounds)
 
             Check which CI checks failed:
             ```bash
@@ -315,14 +366,26 @@ jobs:
                gh run view "$RUN_ID" --log-failed | tail -200
                ```
             2. Apply fixes based on error type:
-               - Black formatting: `cd backend && python -m black .`
-               - Prettier: `cd frontend && npx prettier --write src`
-               - ESLint auto-fixable: `cd frontend && npx eslint --fix src/`
-               - Flake8 errors: Parse `file:line:col: CODE msg` format, fix each
-               - TypeScript errors: Parse `file(line,col): error TSxxxx: msg`, fix types
-               - Import errors: Fix import paths
+               - Flake8 errors: Parse `file:line:col: CODE msg` format, fix each. Verify: `cd backend && flake8 --count`
+               - TypeScript errors: Parse `file(line,col): error TSxxxx: msg`, fix types. Verify: `cd frontend && npx tsc --noEmit`
+               - ESLint errors: Try `cd frontend && npx eslint --fix src/` first, then fix remaining manually. Verify: `cd frontend && npm run lint:ci`
+               - Import errors: Fix import paths. Verify: `cd backend && python -c "import main"`
+               - Build errors: Fix and verify: `cd frontend && npm run build`
             3. Do NOT fix migration errors - flag them as NEEDS_HUMAN
             4. Do NOT fix errors in files outside the PR diff unless they block CI
+
+            After fixing, commit and push:
+            ```bash
+            git add -A
+            git commit -m "fix: resolve CI failures for PR #${{ needs.create-release-pr.outputs.pr_number }}
+
+            Related to #${{ github.event.issue.number }}
+
+            Co-Authored-By: Claude <noreply@anthropic.com>"
+            git push origin ${{ needs.create-release-pr.outputs.branch }}
+            ```
+
+            Then wait for CI to re-run (poll again). Repeat up to 3 rounds if new failures appear.
 
             ## Phase 3: Wait for Claude Code Review
 
@@ -360,22 +423,11 @@ jobs:
             - If it requires human judgment (architectural decision, unclear intent): skip and note it
             - If it's informational only: skip
 
-            ## Phase 5: Commit and push
+            If fixes were applied, commit, push, and wait for review to re-run. Repeat up to 3 rounds.
 
-            If any changes were made:
-            ```bash
-            git add -A
-            git commit -m "fix: auto-fix CI and review issues for PR #${{ needs.create-release-pr.outputs.pr_number }}
+            ## Phase 5: Report
 
-            Related to #${{ github.event.issue.number }}
-
-            Co-Authored-By: Claude <noreply@anthropic.com>"
-            git push origin ${{ needs.create-release-pr.outputs.branch }}
-            ```
-
-            ## Phase 6: Report
-
-            If items need human judgment, comment on the PR:
+            Comment on the PR with a summary:
             ```bash
             gh pr comment ${{ needs.create-release-pr.outputs.pr_number }} --body "## Auto-fix Report
 
@@ -383,7 +435,7 @@ jobs:
             - [list of fixes applied]
 
             ### Needs Human Decision
-            - [items requiring judgment]
+            - [items requiring judgment, if any]
 
             Use \`/fix-review ${{ needs.create-release-pr.outputs.pr_number }}\` or \`/fix-workflow ${{ needs.create-release-pr.outputs.pr_number }}\` locally for further fixes."
             ```
@@ -393,7 +445,9 @@ jobs:
             - Never modify migration files without explicit approval
             - Use `Related to #${{ github.event.issue.number }}` in commit messages, NOT `Fixes #`
             - If all checks already pass and review is clean, just report success - no changes needed
-          claude_args: '--allowed-tools "Bash,Read,Write,Edit,Grep,Glob"'
+            - Always verify fixes locally before committing (run the relevant check command)
+            - Maximum 3 rounds of CI fix + 3 rounds of review fix
+          claude_args: '--max-turns 30 --allowed-tools "Bash,Read,Write,Edit,Grep,Glob"'
 
   notify-status:
     needs: [create-release-pr, auto-fix]
