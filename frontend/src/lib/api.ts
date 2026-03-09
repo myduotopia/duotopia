@@ -11,6 +11,9 @@ import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 // 🔐 Security: Only enable debug logs in development
 const DEBUG = false; // 暫時關閉以便追蹤其他問題
 
+// Prevent multiple simultaneous 401 redirects
+let isRedirectingToLogin = false;
+
 /**
  * Custom API Error class for better error handling
  */
@@ -197,6 +200,19 @@ class ApiClient {
           typeof error === "object" && error !== null && "detail" in error
             ? error.detail
             : `HTTP ${response.status} Error`;
+
+        // Auto-logout on 401 (expired/invalid token)
+        if (response.status === 401 && !endpoint.includes("/auth/")) {
+          if (!isRedirectingToLogin) {
+            isRedirectingToLogin = true;
+            clearAllAuth();
+            window.location.href = "/teacher/login";
+            // Reset flag after a short delay so future 401s can still redirect
+            setTimeout(() => {
+              isRedirectingToLogin = false;
+            }, 3000);
+          }
+        }
 
         // Throw ApiError instead of generic Error
         throw new ApiError(response.status, detail, error);

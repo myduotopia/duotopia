@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import TeacherLayout from "@/components/TeacherLayout";
 import {
   useResourceMaterialsAPI,
@@ -57,16 +58,14 @@ function ContentItemAccordion({
 }: {
   content: ResourceMaterialDetail["lessons"][number]["contents"][number];
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   const contentTypeLabel = (type: string | null) => {
-    const labels: Record<string, string> = {
-      reading_assessment: "閱讀評量",
-      example_sentences: "例句集",
-      vocabulary_set: "單字集",
-      sentence_making: "造句",
-    };
-    return type ? (labels[type.toLowerCase()] ?? type) : "";
+    if (!type) return "";
+    const key = `resourceMaterials.contentTypes.${type.toLowerCase()}`;
+    const translated = t(key);
+    return translated === key ? type : translated;
   };
 
   return (
@@ -93,7 +92,9 @@ function ContentItemAccordion({
             </span>
           )}
           <span className="text-xs text-gray-400">
-            {content.item_count} 項目
+            {t("resourceMaterials.detail.itemCount", {
+              count: content.item_count,
+            })}
           </span>
           <ChevronDown
             className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
@@ -108,9 +109,13 @@ function ContentItemAccordion({
               <span className="w-8 text-xs font-medium text-gray-500 flex-shrink-0">
                 #
               </span>
-              <span className="text-xs font-medium text-gray-500">內容</span>
+              <span className="text-xs font-medium text-gray-500">
+                {t("resourceMaterials.detail.tableHeader.content")}
+              </span>
               <span className="text-xs font-medium text-gray-500">/</span>
-              <span className="text-xs font-medium text-gray-500">翻譯</span>
+              <span className="text-xs font-medium text-gray-500">
+                {t("resourceMaterials.detail.tableHeader.translation")}
+              </span>
             </div>
             {/* Items */}
             {content.items.map((item, idx) => (
@@ -135,7 +140,9 @@ function ContentItemAccordion({
       )}
       {expanded && (!content.items || content.items.length === 0) && (
         <div className="px-3 pb-3">
-          <p className="text-sm text-gray-400 text-center py-2">暫無項目</p>
+          <p className="text-sm text-gray-400 text-center py-2">
+            {t("resourceMaterials.detail.noItems")}
+          </p>
         </div>
       )}
     </div>
@@ -143,6 +150,7 @@ function ContentItemAccordion({
 }
 
 function ResourceMaterialsInner() {
+  const { t } = useTranslation();
   const { loading, listMaterials, getMaterialDetail, copyMaterial } =
     useResourceMaterialsAPI();
 
@@ -181,7 +189,9 @@ function ResourceMaterialsInner() {
     setCopying(true);
     try {
       await copyMaterial(copyTarget.id, "individual");
-      toast.success(`已複製「${copyTarget.name}」到我的教材`);
+      toast.success(
+        t("resourceMaterials.toast.copySuccess", { name: copyTarget.name }),
+      );
       // Optimistic update: increment local copy count
       setMaterials((prev) =>
         prev.map((m) => {
@@ -199,7 +209,7 @@ function ResourceMaterialsInner() {
       setCopyDialogOpen(false);
       setCopyTarget(null);
     } catch {
-      toast.error("複製失敗，請稍後再試");
+      toast.error(t("resourceMaterials.toast.copyFailed"));
     } finally {
       setCopying(false);
     }
@@ -223,26 +233,35 @@ function ResourceMaterialsInner() {
     <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>確認複製教材</DialogTitle>
+          <DialogTitle>{t("resourceMaterials.copyDialog.title")}</DialogTitle>
           <DialogDescription>
-            將「{copyTarget?.name}
-            」複製到你的教材庫中。複製後你可以自由編輯內容。
+            {t("resourceMaterials.copyDialog.description", {
+              name: copyTarget?.name,
+            })}
           </DialogDescription>
         </DialogHeader>
         {copyTarget && (
           <div className="py-2 text-sm space-y-1">
             <p>
-              <span className="font-medium">課程名稱：</span>
+              <span className="font-medium">
+                {t("resourceMaterials.copyDialog.courseName")}
+              </span>
               {copyTarget.name}
             </p>
             <p>
-              <span className="font-medium">包含：</span>
-              {copyTarget.lesson_count} 個單元、{copyTarget.content_count}{" "}
-              個內容
+              <span className="font-medium">
+                {t("resourceMaterials.copyDialog.includes")}
+              </span>
+              {t("resourceMaterials.copyDialog.units", {
+                count: copyTarget.lesson_count,
+              })}
+              {t("resourceMaterials.copyDialog.contents", {
+                count: copyTarget.content_count,
+              })}
             </p>
             {copyTarget.copied_today && (
               <p className="text-red-500 text-xs mt-2">
-                此課程今日已達複製上限（10 次），請明天再試
+                {t("resourceMaterials.copyDialog.limitReached")}
               </p>
             )}
           </div>
@@ -253,7 +272,7 @@ function ResourceMaterialsInner() {
             onClick={() => setCopyDialogOpen(false)}
             disabled={copying}
           >
-            取消
+            {t("resourceMaterials.copyDialog.cancel")}
           </Button>
           <Button
             onClick={handleConfirmCopy}
@@ -262,12 +281,12 @@ function ResourceMaterialsInner() {
             {copying ? (
               <>
                 <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                複製中...
+                {t("resourceMaterials.copyDialog.copying")}
               </>
             ) : (
               <>
                 <Copy className="w-4 h-4 mr-1" />
-                確認複製
+                {t("resourceMaterials.copyDialog.confirmCopy")}
               </>
             )}
           </Button>
@@ -289,7 +308,7 @@ function ResourceMaterialsInner() {
           }}
         >
           <ArrowLeft className="w-4 h-4 mr-1" />
-          返回列表
+          {t("resourceMaterials.detail.backToList")}
         </Button>
 
         {/* Program-level card (mimics RecursiveTreeAccordion program row) */}
@@ -322,7 +341,10 @@ function ResourceMaterialsInner() {
                 {selectedDetail.estimated_hours && (
                   <div className="flex items-center text-sm text-gray-500">
                     <Clock className="h-4 w-4 mr-1" />
-                    <span>{selectedDetail.estimated_hours} 小時</span>
+                    <span>
+                      {selectedDetail.estimated_hours}{" "}
+                      {t("resourceMaterials.detail.hours")}
+                    </span>
                   </div>
                 )}
               </div>
@@ -375,7 +397,9 @@ function ResourceMaterialsInner() {
                           </div>
                         </div>
                         <span className="text-xs text-gray-400 flex-shrink-0">
-                          {lesson.content_count} 內容
+                          {t("resourceMaterials.detail.contentCount", {
+                            count: lesson.content_count,
+                          })}
                         </span>
                       </div>
                     </AccordionTrigger>
@@ -389,7 +413,7 @@ function ResourceMaterialsInner() {
                         ))}
                         {lesson.contents.length === 0 && (
                           <p className="text-sm text-gray-500 py-4 text-center">
-                            暫無內容
+                            {t("resourceMaterials.detail.noContent")}
                           </p>
                         )}
                       </div>
@@ -399,7 +423,9 @@ function ResourceMaterialsInner() {
               ))}
             </Accordion>
             {selectedDetail.lessons.length === 0 && (
-              <p className="text-sm text-gray-500 py-4 text-center">暫無單元</p>
+              <p className="text-sm text-gray-500 py-4 text-center">
+                {t("resourceMaterials.detail.noUnits")}
+              </p>
             )}
           </div>
         </div>
@@ -419,7 +445,7 @@ function ResourceMaterialsInner() {
             className="px-8"
           >
             <Copy className="w-4 h-4 mr-2" />
-            複製到我的教材
+            {t("resourceMaterials.card.copyToMy")}
           </Button>
         </div>
         {copyDialog}
@@ -433,9 +459,9 @@ function ResourceMaterialsInner() {
       <div className="flex items-center gap-3">
         <Package className="w-6 h-6 text-orange-500" />
         <div>
-          <h1 className="text-2xl font-bold">資源教材包</h1>
+          <h1 className="text-2xl font-bold">{t("resourceMaterials.title")}</h1>
           <p className="text-muted-foreground text-sm">
-            瀏覽並複製公開的教材資源到你的教材庫
+            {t("resourceMaterials.subtitle")}
           </p>
         </div>
       </div>
@@ -444,7 +470,9 @@ function ResourceMaterialsInner() {
       {loading && materials.length === 0 && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-muted-foreground">載入中...</span>
+          <span className="ml-2 text-muted-foreground">
+            {t("resourceMaterials.loading")}
+          </span>
         </div>
       )}
 
@@ -453,9 +481,11 @@ function ResourceMaterialsInner() {
         <div className="text-center py-12">
           <Package className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
           <h3 className="text-lg font-medium text-muted-foreground">
-            目前沒有可用的資源教材
+            {t("resourceMaterials.empty.title")}
           </h3>
-          <p className="text-sm text-muted-foreground mt-1">稍後再來看看吧</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {t("resourceMaterials.empty.subtitle")}
+          </p>
         </div>
       )}
 
@@ -491,11 +521,12 @@ function ResourceMaterialsInner() {
               <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
                 <span className="flex items-center gap-1">
                   <Layers className="w-3.5 h-3.5" />
-                  {material.lesson_count} 單元
+                  {material.lesson_count} {t("resourceMaterials.card.units")}
                 </span>
                 <span className="flex items-center gap-1">
                   <FileText className="w-3.5 h-3.5" />
-                  {material.content_count} 內容
+                  {material.content_count}{" "}
+                  {t("resourceMaterials.card.contents")}
                 </span>
               </div>
               <Button
@@ -508,7 +539,7 @@ function ResourceMaterialsInner() {
                 }}
               >
                 <Copy className="w-4 h-4 mr-1" />
-                複製到我的教材
+                {t("resourceMaterials.card.copyToMy")}
               </Button>
             </CardContent>
           </Card>

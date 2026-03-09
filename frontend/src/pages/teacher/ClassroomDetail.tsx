@@ -765,7 +765,22 @@ export default function ClassroomDetail({
     // 覆蓋掉 vocabulary_translation 等欄位 (#366)
     const contentType = selectedContent.type?.toLowerCase();
     if (contentType === "vocabulary_set" || contentType === "sentence_making") {
-      await refreshPrograms();
+      // 直接更新前端 state，不重新載入整個 tree
+      if (selectedContent.id) {
+        setPrograms((prevPrograms) =>
+          prevPrograms.map((program) => ({
+            ...program,
+            lessons: program.lessons?.map((lesson) => ({
+              ...lesson,
+              contents: lesson.contents?.map((content) =>
+                content.id === selectedContent.id
+                  ? { ...content, ...editingContent }
+                  : content,
+              ),
+            })),
+          })),
+        );
+      }
       closePanel();
       return;
     }
@@ -3109,13 +3124,51 @@ export default function ClassroomDetail({
                 editingContent={{ id: vocabularySetContentId ?? undefined }}
                 lessonId={vocabularySetLessonId}
                 onUpdateContent={() => {}}
-                onSave={async () => {
-                  // VocabularySetPanel handles save internally
-                  // Just close the editor on successful save
+                onSave={async (
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  savedContent?: any,
+                ) => {
+                  // 即時更新前端狀態，不重整頁面
+                  if (savedContent && vocabularySetLessonId) {
+                    if (vocabularySetContentId) {
+                      // 編輯模式：更新 title
+                      setPrograms((prevPrograms) =>
+                        prevPrograms.map((program) => ({
+                          ...program,
+                          lessons: program.lessons?.map((lesson) => ({
+                            ...lesson,
+                            contents: lesson.contents?.map((content) =>
+                              content.id === vocabularySetContentId
+                                ? { ...content, ...savedContent }
+                                : content,
+                            ),
+                          })),
+                        })),
+                      );
+                    } else {
+                      // 新增模式：加入新內容
+                      setPrograms((prevPrograms) =>
+                        prevPrograms.map((program) => ({
+                          ...program,
+                          lessons: program.lessons?.map((lesson) => {
+                            if (lesson.id === vocabularySetLessonId) {
+                              return {
+                                ...lesson,
+                                contents: [
+                                  ...(lesson.contents || []),
+                                  savedContent,
+                                ],
+                              };
+                            }
+                            return lesson;
+                          }),
+                        })),
+                      );
+                    }
+                  }
                   setShowVocabularySetEditor(false);
                   setVocabularySetLessonId(null);
                   setVocabularySetContentId(null);
-                  await refreshPrograms();
                   toast.success(t("classroomDetail.messages.contentSaved"));
                 }}
                 onCancel={() => {

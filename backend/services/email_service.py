@@ -223,10 +223,28 @@ class EmailService:
                     logger.warning(f"Token 已過期: {token}")
                     return None
 
-            # 標記為已驗證
+            # 標記為已驗證（包含所有同 email 的學生記錄）
+            now = datetime.utcnow()
             student.email_verified = True
-            student.email_verified_at = datetime.utcnow()
+            student.email_verified_at = now
             student.email_verification_token = None  # 清除 token
+
+            # 同步更新所有同 email 的其他學生記錄
+            if student.email:
+                siblings = (
+                    db.query(Student)
+                    .filter(
+                        Student.email == student.email,
+                        Student.id != student.id,
+                        Student.is_active.is_(True),
+                    )
+                    .all()
+                )
+                for sibling in siblings:
+                    if not sibling.email_verified:
+                        sibling.email_verified = True
+                        sibling.email_verified_at = now
+
             db.commit()
 
             logger.info(f"Email 驗證成功: {student.email}")

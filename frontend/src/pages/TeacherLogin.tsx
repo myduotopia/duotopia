@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,16 +17,26 @@ import { apiClient } from "../lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { getTeacherDashboardRoute } from "@/utils/authNavigation";
 
 export default function TeacherLogin() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const isAuthenticated = useTeacherAuthStore((state) => state.isAuthenticated);
+  const user = useTeacherAuthStore((state) => state.user);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      navigate(getTeacherDashboardRoute(user), { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
 
   // 檢查是否為 demo 模式 (通過 URL 參數 ?is_demo=true)
   const searchParams = new URLSearchParams(window.location.search);
@@ -55,18 +65,8 @@ export default function TeacherLogin() {
         is_admin: result.user.is_admin,
       });
 
-      // 登入成功後，根據角色重定向
-      const hasOrgRole = [
-        "org_owner",
-        "org_admin",
-        "school_admin",
-        "school_director",
-      ].includes(result.user.role || "");
-      if (hasOrgRole) {
-        navigate("/organization/dashboard");
-      } else {
-        navigate("/teacher/dashboard");
-      }
+      // 登入成功後，一律導向個人教師 dashboard
+      navigate("/teacher/dashboard");
     } catch (err) {
       console.error("🔑 [ERROR] 登入失敗:", err);
       setError(t("teacherLogin.errors.loginFailed"));
@@ -99,18 +99,8 @@ export default function TeacherLogin() {
         is_admin: result.user.is_admin,
       });
 
-      // 快速登入成功後，根據角色重定向
-      const hasOrgRole = [
-        "org_owner",
-        "org_admin",
-        "school_admin",
-        "school_director",
-      ].includes(result.user.role || "");
-      if (hasOrgRole) {
-        navigate("/organization/dashboard");
-      } else {
-        navigate("/teacher/dashboard");
-      }
+      // 快速登入成功後，一律導向個人教師 dashboard
+      navigate("/teacher/dashboard");
     } catch (err) {
       console.error("🔑 [ERROR] 快速登入失敗:", err);
       setError(t("teacherLogin.errors.quickLoginFailed", { email }));

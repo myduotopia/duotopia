@@ -18,13 +18,13 @@ export const getSidebarGroups = (
   // 🏢 組織管理 (org_owner, org_admin, school_admin) - Notion Style
   {
     id: "organization-hub",
-    label: "組織管理",
+    label: t("teacherLayout.nav.orgManagement"),
     icon: Building2,
     requiredRoles: ["org_owner", "org_admin", "school_admin"],
     items: [
       {
         id: "organizations-hub",
-        label: "組織架構",
+        label: t("teacherLayout.nav.orgStructure"),
         icon: Building2,
         path: "/teacher/organizations-hub",
       },
@@ -33,7 +33,7 @@ export const getSidebarGroups = (
   // 👥 教學管理 (所有教師) - 包含儀表板
   {
     id: "class-management",
-    label: "教學管理",
+    label: t("teacherLayout.nav.teachingManagement"),
     icon: GraduationCap,
     items: [
       {
@@ -62,7 +62,7 @@ export const getSidebarGroups = (
       },
       {
         id: "org-materials",
-        label: "機構教材",
+        label: t("teacherLayout.nav.orgMaterials"),
         icon: Building2,
         path: "/teacher/org-materials",
       },
@@ -71,12 +71,12 @@ export const getSidebarGroups = (
   // 📦 共享資源 (所有教師)
   {
     id: "shared-resources",
-    label: "共享資源",
+    label: t("teacherLayout.nav.sharedResources"),
     icon: Package,
     items: [
       {
         id: "resource-materials",
-        label: "資源教材包",
+        label: t("resourceMaterials.title"),
         icon: Package,
         path: "/teacher/resource-materials",
       },

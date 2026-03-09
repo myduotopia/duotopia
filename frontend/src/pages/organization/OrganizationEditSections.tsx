@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { SchoolListTable } from "@/components/organization/SchoolListTable";
 import { StaffTable, StaffMember } from "@/components/organization/StaffTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -160,6 +161,7 @@ export function QuickActionsCards({
   teachersCount,
 }: QuickActionsProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   return (
     <div className="flex flex-wrap gap-4">
@@ -224,8 +226,12 @@ export function QuickActionsCards({
               <Package className="h-6 w-6 text-orange-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 mb-1">資源教材包</h3>
-              <p className="text-sm text-gray-500">瀏覽與複製教材</p>
+              <h3 className="font-semibold text-gray-900 mb-1">
+                {t("resourceMaterials.title")}
+              </h3>
+              <p className="text-sm text-gray-500">
+                {t("resourceMaterials.browseAndCopy")}
+              </p>
             </div>
           </div>
         </CardContent>

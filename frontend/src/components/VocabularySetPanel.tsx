@@ -1433,7 +1433,8 @@ interface VocabularySetPanelProps {
   content?: { id?: number; title?: string; items?: ContentRow[] };
   editingContent?: { id?: number; title?: string; items?: ContentRow[] };
   onUpdateContent?: (content: Record<string, unknown>) => void;
-  onSave?: () => void | Promise<void>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onSave?: (content?: any) => void | Promise<void>;
   // Alternative props for ClassroomDetail usage
   lessonId?: number;
   programLevel?: string; // Program difficulty level for AI generation
@@ -3659,14 +3660,11 @@ export default function VocabularySetPanel({
                     toast.success(t("contentEditor.messages.savingSuccess"));
 
                     if (onSave) {
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      await (onSave as (content?: any) => void | Promise<void>)(
-                        {
-                          id: existingContentId,
-                          title: saveData.title,
-                          items: saveData.items,
-                        },
-                      );
+                      await onSave({
+                        id: existingContentId,
+                        title: saveData.title,
+                        items: saveData.items,
+                      });
                     }
                   } catch (error) {
                     console.error("Failed to update content:", error);
@@ -3685,10 +3683,7 @@ export default function VocabularySetPanel({
                     );
 
                     if (onSave) {
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      await (onSave as (content?: any) => void | Promise<void>)(
-                        newContent,
-                      );
+                      await onSave(newContent);
                     }
                   } catch (error) {
                     console.error("Failed to create content:", error);

@@ -85,6 +85,9 @@ class Assignment(Base):
     is_archived = Column(Boolean, default=False)
     archived_at = Column(DateTime(timezone=True), nullable=True)
 
+    # 即刻練習標記（暫時資料，懶清理：建立新的時刪除舊的）
+    is_instant_practice = Column(Boolean, default=False)
+
     # Relationships
     classroom = relationship("Classroom", back_populates="assignments")
     teacher = relationship("Teacher", back_populates="assignments")

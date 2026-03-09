@@ -770,9 +770,8 @@ export function ProgramTreeView({
                       if (updatedContent && editorContentId) {
                         updateProgramContent(editorContentId, updatedContent);
                       }
-                      // Keep editor open after save for continued editing
+                      closeReadingEditor();
                       toast.success("內容已儲存");
-                      // Local update already done by updateProgramContent, no need to refresh
                     }}
                     onCancel={closeReadingEditor}
                   />
@@ -915,10 +914,12 @@ export function ProgramTreeView({
                     vocabularySetLessonId,
                   )}
                   isCreating={true}
-                  onSave={async () => {
+                  onSave={async (newContent?: Content) => {
+                    if (newContent && vocabularySetLessonId) {
+                      addContentToLesson(vocabularySetLessonId, newContent);
+                    }
                     closeVocabularySetEditor();
                     toast.success("內容已儲存");
-                    if (onRefresh) onRefresh();
                   }}
                 />
               </div>
@@ -980,10 +981,15 @@ export function ProgramTreeView({
                       vocabularySetLessonId,
                     )}
                     isCreating={false}
-                    onSave={async () => {
+                    onSave={async (updatedContent?: Content) => {
+                      if (updatedContent && vocabularySetContentId) {
+                        updateProgramContent(
+                          vocabularySetContentId,
+                          updatedContent,
+                        );
+                      }
                       closeVocabularySetEditor();
                       toast.success("內容已儲存");
-                      if (onRefresh) onRefresh();
                     }}
                   />
                 </div>

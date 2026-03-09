@@ -59,18 +59,8 @@ export default function TeacherLoginSheet({
 
       onClose();
 
-      // 登入成功後，根據角色重定向
-      const hasOrgRole = [
-        "org_owner",
-        "org_admin",
-        "school_admin",
-        "school_director",
-      ].includes(result.user.role || "");
-      if (hasOrgRole) {
-        navigate("/organization/dashboard");
-      } else {
-        navigate("/teacher/dashboard");
-      }
+      // 登入成功後，一律導向個人教師 dashboard
+      navigate("/teacher/dashboard");
     } catch (err) {
       console.error("Login failed:", err);
       setError(t("teacherLogin.errors.loginFailed"));
@@ -102,18 +92,8 @@ export default function TeacherLoginSheet({
 
       onClose();
 
-      // 登入成功後，根據角色重定向
-      const hasOrgRole = [
-        "org_owner",
-        "org_admin",
-        "school_admin",
-        "school_director",
-      ].includes(result.user.role || "");
-      if (hasOrgRole) {
-        navigate("/organization/dashboard");
-      } else {
-        navigate("/teacher/dashboard");
-      }
+      // 登入成功後，一律導向個人教師 dashboard
+      navigate("/teacher/dashboard");
     } catch (err) {
       console.error("Quick login failed:", err);
       setError(t("teacherLogin.errors.quickLoginFailed", { email }));

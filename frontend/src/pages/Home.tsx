@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
+import { useStudentAuthStore } from "@/stores/studentAuthStore";
+import { getTeacherDashboardRoute } from "@/utils/authNavigation";
 import {
   Mic,
   GraduationCap,
@@ -35,9 +38,14 @@ interface DemoConfig {
 
 export default function Home() {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const isEn = i18n.language === "en";
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [isTeacherLoginOpen, setIsTeacherLoginOpen] = useState(false);
+
+  const { isAuthenticated: isTeacherAuth, user: teacherUser } =
+    useTeacherAuthStore();
+  const { isAuthenticated: isStudentAuth } = useStudentAuthStore();
 
   // Demo section state
   const [demoConfig, setDemoConfig] = useState<DemoConfig | null>(null);
@@ -96,19 +104,38 @@ export default function Home() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setIsTeacherLoginOpen(true)}
+            onClick={() => {
+              if (isTeacherAuth && teacherUser) {
+                navigate(getTeacherDashboardRoute(teacherUser));
+              } else {
+                setIsTeacherLoginOpen(true);
+              }
+            }}
             className="text-xs sm:text-sm px-2 sm:px-3 h-8 sm:h-9"
           >
-            {t("home.header.teacherLogin")}
+            {isTeacherAuth
+              ? t("home.header.teacherDashboard", "教師後台")
+              : t("home.header.teacherLogin")}
           </Button>
-          <Link to="/student/login">
-            <Button
-              size="sm"
-              className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-xs sm:text-sm px-2 sm:px-3 h-8 sm:h-9"
-            >
-              {t("home.header.studentLogin")}
-            </Button>
-          </Link>
+          {isStudentAuth ? (
+            <Link to="/student/dashboard">
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-xs sm:text-sm px-2 sm:px-3 h-8 sm:h-9"
+              >
+                {t("home.header.studentDashboard", "學生專區")}
+              </Button>
+            </Link>
+          ) : (
+            <Link to="/student/login">
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-xs sm:text-sm px-2 sm:px-3 h-8 sm:h-9"
+              >
+                {t("home.header.studentLogin")}
+              </Button>
+            </Link>
+          )}
           <LanguageSwitcher />
         </div>
       </header>

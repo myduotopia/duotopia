@@ -336,7 +336,9 @@
     "header": {
       "logo": "Duotopia",
       "teacherLogin": "Teacher Login",
-      "studentLogin": "Student Login"
+      "studentLogin": "Student Login",
+      "teacherDashboard": "Dashboard",
+      "studentDashboard": "Student Area"
     },
     "cta2": {
       "title": "Ready to Reclaim Your Teaching Time?",
@@ -1141,6 +1143,16 @@
     "buttons": {
       "back": "Back"
     },
+    "emailLogin": {
+      "switchToEmail": "Verified account? Login with Email",
+      "title": "Email Login",
+      "description": "For students with verified email. See all your classrooms at once.",
+      "emailPlaceholder": "Enter your email",
+      "passwordPlaceholder": "Enter your password",
+      "login": "Login",
+      "loggingIn": "Logging in...",
+      "error": "Login failed. Please check your email and password."
+    },
     "errors": {
       "teacherNotFound": "Teacher account not found",
       "teacherValidationFailed": "Unable to verify teacher account, please try again later",
@@ -1173,6 +1185,21 @@
       "defaultStudent": "Student",
       "defaultClass": "No class assigned"
     }
+  },
+  "classroomSwitcher": {
+    "switchClassroom": "Switch Classroom",
+    "currentClassroom": "Current Classroom",
+    "otherClassrooms": "Other Classrooms",
+    "switchSuccess": "Switched to \"{{name}}\"",
+    "switchError": "Failed to switch classroom. Please try again."
+  },
+  "accountSwitcher": {
+    "switchAccount": "Switch Account",
+    "currentAccount": "Current Account",
+    "linkedAccounts": "Linked Accounts",
+    "loading": "Loading...",
+    "switchSuccess": "Switched to {{name}} ({{org}})",
+    "switchError": "Failed to switch account. Please try again."
   },
   "studentDashboard": {
     "welcome": {
@@ -2202,6 +2229,10 @@
       "systemAdmin": "System Admin",
       "profile": "Profile",
       "orgManagement": "Organization",
+      "orgStructure": "Organization Structure",
+      "teachingManagement": "Teaching",
+      "orgMaterials": "Org Materials",
+      "sharedResources": "Shared Resources",
       "language": "Language"
     }
   },
@@ -4377,6 +4408,64 @@
     "footer": {
       "willActivate": "Your account will be activated immediately after setting the password",
       "useAllFeatures": "You can start using all Duotopia features"
+    }
+  },
+  "resourceMaterials": {
+    "title": "Resource Materials",
+    "subtitle": "Browse and copy public teaching resources to your material library",
+    "subtitleOrg": "Browse and copy teaching resources to your organization's material library",
+    "browseAndCopy": "Browse & Copy Materials",
+    "loading": "Loading...",
+    "empty": {
+      "title": "No resource materials available",
+      "subtitle": "Check back later"
+    },
+    "card": {
+      "units": "Units",
+      "contents": "Contents",
+      "copyToMy": "Copy to My Materials",
+      "copyToOrg": "Copy to Org Materials",
+      "copiedToday": "Copied Today"
+    },
+    "detail": {
+      "backToList": "Back to List",
+      "back": "Back",
+      "noContent": "No content",
+      "noUnits": "No units",
+      "hours": "hrs",
+      "contentCount": "{{count}} contents",
+      "itemCount": "{{count}} items",
+      "noItems": "No items",
+      "tableHeader": {
+        "content": "Content",
+        "translation": "Translation"
+      }
+    },
+    "contentTypes": {
+      "reading_assessment": "Reading Assessment",
+      "example_sentences": "Example Sentences",
+      "vocabulary_set": "Vocabulary Set",
+      "sentence_making": "Sentence Making"
+    },
+    "copyDialog": {
+      "title": "Confirm Copy Material",
+      "titleOrg": "Confirm Copy Material to Organization",
+      "description": "Copy \"{{name}}\" to your material library. You can freely edit the content after copying.",
+      "descriptionOrg": "Copy \"{{name}}\" to the organization's materials. Organization admins can freely edit the content after copying.",
+      "orgLimit": "Each organization can copy each course up to 1 time per day",
+      "courseName": "Course Name: ",
+      "includes": "Includes: ",
+      "units": "{{count}} units, ",
+      "contents": "{{count}} contents",
+      "limitReached": "This course has reached the daily copy limit (10 times). Please try again tomorrow.",
+      "copying": "Copying...",
+      "confirmCopy": "Confirm Copy",
+      "cancel": "Cancel"
+    },
+    "toast": {
+      "copySuccess": "Copied \"{{name}}\" to My Materials",
+      "copySuccessOrg": "Copied \"{{name}}\" to Organization Materials",
+      "copyFailed": "Copy failed. Please try again later."
     }
   }
 }

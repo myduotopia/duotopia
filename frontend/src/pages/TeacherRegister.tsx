@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -15,14 +15,27 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, User, Lock, Mail, Phone } from "lucide-react";
 import { apiClient } from "../lib/api";
+import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { validatePasswordStrength } from "@/utils/passwordValidation";
+import { getTeacherDashboardRoute } from "@/utils/authNavigation";
 
 export default function TeacherRegister() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const isAuthenticated = useTeacherAuthStore((state) => state.isAuthenticated);
+  const user = useTeacherAuthStore((state) => state.user);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      navigate(getTeacherDashboardRoute(user), {
+        replace: true,
+      });
+    }
+  }, [isAuthenticated, user, navigate]);
   const [formData, setFormData] = useState({
     email: "",
     password: "",

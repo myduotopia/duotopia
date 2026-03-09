@@ -311,7 +311,8 @@ jobs:
               'organization_points_log',
               'program_copy_logs',
               'demo_config',
-              'student_identities',
+              'identities',
+              'oauth_identities',
               -- n8n 系統表（外部服務，不適用 RLS）
               'annotation_tag_entity', 'auth_identity', 'auth_provider_sync_history', 'binary_data',
               'chat_hub_agents', 'chat_hub_messages', 'chat_hub_sessions', 'credentials_entity',

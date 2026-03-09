@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   useResourceMaterialsAPI,
   ResourceMaterial,
@@ -50,16 +51,14 @@ function ContentItemAccordion({
 }: {
   content: ResourceMaterialDetail["lessons"][number]["contents"][number];
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   const contentTypeLabel = (type: string | null) => {
-    const labels: Record<string, string> = {
-      reading_assessment: "閱讀評量",
-      example_sentences: "例句集",
-      vocabulary_set: "單字集",
-      sentence_making: "造句",
-    };
-    return type ? (labels[type.toLowerCase()] ?? type) : "";
+    if (!type) return "";
+    const key = `resourceMaterials.contentTypes.${type.toLowerCase()}`;
+    const translated = t(key);
+    return translated === key ? type : translated;
   };
 
   return (
@@ -86,7 +85,9 @@ function ContentItemAccordion({
             </span>
           )}
           <span className="text-xs text-gray-400">
-            {content.item_count} 項目
+            {t("resourceMaterials.detail.itemCount", {
+              count: content.item_count,
+            })}
           </span>
           <ChevronDown
             className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
@@ -101,9 +102,13 @@ function ContentItemAccordion({
               <span className="w-8 text-xs font-medium text-gray-500 flex-shrink-0">
                 #
               </span>
-              <span className="text-xs font-medium text-gray-500">內容</span>
+              <span className="text-xs font-medium text-gray-500">
+                {t("resourceMaterials.detail.tableHeader.content")}
+              </span>
               <span className="text-xs font-medium text-gray-500">/</span>
-              <span className="text-xs font-medium text-gray-500">翻譯</span>
+              <span className="text-xs font-medium text-gray-500">
+                {t("resourceMaterials.detail.tableHeader.translation")}
+              </span>
             </div>
             {/* Items */}
             {content.items.map((item, idx) => (
@@ -128,7 +133,9 @@ function ContentItemAccordion({
       )}
       {expanded && (!content.items || content.items.length === 0) && (
         <div className="px-3 pb-3">
-          <p className="text-sm text-gray-400 text-center py-2">暫無項目</p>
+          <p className="text-sm text-gray-400 text-center py-2">
+            {t("resourceMaterials.detail.noItems")}
+          </p>
         </div>
       )}
     </div>
@@ -136,6 +143,7 @@ function ContentItemAccordion({
 }
 
 export default function OrgResourceMaterialsPage() {
+  const { t } = useTranslation();
   const { orgId } = useParams<{ orgId: string }>();
   const navigate = useNavigate();
   const { loading, listMaterials, getMaterialDetail, copyMaterial } =
@@ -177,12 +185,16 @@ export default function OrgResourceMaterialsPage() {
     setCopying(true);
     try {
       await copyMaterial(copyTarget.id, "organization", orgId);
-      toast.success(`已複製「${copyTarget.name}」到組織教材`);
+      toast.success(
+        t("resourceMaterials.toast.copySuccessOrg", {
+          name: copyTarget.name,
+        }),
+      );
       setCopyDialogOpen(false);
       setCopyTarget(null);
       fetchMaterials();
     } catch {
-      toast.error("複製失敗，請稍後再試");
+      toast.error(t("resourceMaterials.toast.copyFailed"));
     } finally {
       setCopying(false);
     }
@@ -206,26 +218,37 @@ export default function OrgResourceMaterialsPage() {
     <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>確認複製教材到組織</DialogTitle>
+          <DialogTitle>
+            {t("resourceMaterials.copyDialog.titleOrg")}
+          </DialogTitle>
           <DialogDescription>
-            將「{copyTarget?.name}
-            」複製到組織教材中。複製後組織管理者可以自由編輯內容。
+            {t("resourceMaterials.copyDialog.descriptionOrg", {
+              name: copyTarget?.name,
+            })}
             <br />
             <span className="text-xs text-muted-foreground">
-              每個組織每個課程每天最多可複製 1 次
+              {t("resourceMaterials.copyDialog.orgLimit")}
             </span>
           </DialogDescription>
         </DialogHeader>
         {copyTarget && (
           <div className="py-2 text-sm space-y-1">
             <p>
-              <span className="font-medium">課程名稱：</span>
+              <span className="font-medium">
+                {t("resourceMaterials.copyDialog.courseName")}
+              </span>
               {copyTarget.name}
             </p>
             <p>
-              <span className="font-medium">包含：</span>
-              {copyTarget.lesson_count} 個單元、{copyTarget.content_count}{" "}
-              個內容
+              <span className="font-medium">
+                {t("resourceMaterials.copyDialog.includes")}
+              </span>
+              {t("resourceMaterials.copyDialog.units", {
+                count: copyTarget.lesson_count,
+              })}
+              {t("resourceMaterials.copyDialog.contents", {
+                count: copyTarget.content_count,
+              })}
             </p>
           </div>
         )}
@@ -235,18 +258,18 @@ export default function OrgResourceMaterialsPage() {
             onClick={() => setCopyDialogOpen(false)}
             disabled={copying}
           >
-            取消
+            {t("resourceMaterials.copyDialog.cancel")}
           </Button>
           <Button onClick={handleConfirmCopy} disabled={copying}>
             {copying ? (
               <>
                 <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                複製中...
+                {t("resourceMaterials.copyDialog.copying")}
               </>
             ) : (
               <>
                 <Copy className="w-4 h-4 mr-1" />
-                確認複製
+                {t("resourceMaterials.copyDialog.confirmCopy")}
               </>
             )}
           </Button>
@@ -268,7 +291,7 @@ export default function OrgResourceMaterialsPage() {
           }}
         >
           <ArrowLeft className="w-4 h-4 mr-1" />
-          返回列表
+          {t("resourceMaterials.detail.backToList")}
         </Button>
 
         {/* Program-level card */}
@@ -301,7 +324,10 @@ export default function OrgResourceMaterialsPage() {
                 {selectedDetail.estimated_hours && (
                   <div className="flex items-center text-sm text-gray-500">
                     <Clock className="h-4 w-4 mr-1" />
-                    <span>{selectedDetail.estimated_hours} 小時</span>
+                    <span>
+                      {selectedDetail.estimated_hours}{" "}
+                      {t("resourceMaterials.detail.hours")}
+                    </span>
                   </div>
                 )}
               </div>
@@ -354,7 +380,9 @@ export default function OrgResourceMaterialsPage() {
                           </div>
                         </div>
                         <span className="text-xs text-gray-400 flex-shrink-0">
-                          {lesson.content_count} 內容
+                          {t("resourceMaterials.detail.contentCount", {
+                            count: lesson.content_count,
+                          })}
                         </span>
                       </div>
                     </AccordionTrigger>
@@ -368,7 +396,7 @@ export default function OrgResourceMaterialsPage() {
                         ))}
                         {lesson.contents.length === 0 && (
                           <p className="text-sm text-gray-500 py-4 text-center">
-                            暫無內容
+                            {t("resourceMaterials.detail.noContent")}
                           </p>
                         )}
                       </div>
@@ -378,7 +406,9 @@ export default function OrgResourceMaterialsPage() {
               ))}
             </Accordion>
             {selectedDetail.lessons.length === 0 && (
-              <p className="text-sm text-gray-500 py-4 text-center">暫無單元</p>
+              <p className="text-sm text-gray-500 py-4 text-center">
+                {t("resourceMaterials.detail.noUnits")}
+              </p>
             )}
           </div>
         </div>
@@ -398,7 +428,7 @@ export default function OrgResourceMaterialsPage() {
             className="px-8"
           >
             <Copy className="w-4 h-4 mr-2" />
-            複製到組織教材
+            {t("resourceMaterials.card.copyToOrg")}
           </Button>
         </div>
         {copyDialog}
@@ -416,13 +446,13 @@ export default function OrgResourceMaterialsPage() {
           onClick={() => navigate(`/organization/${orgId}`)}
         >
           <ArrowLeft className="w-4 h-4 mr-1" />
-          返回
+          {t("resourceMaterials.detail.back")}
         </Button>
         <Package className="w-6 h-6 text-orange-500" />
         <div>
-          <h1 className="text-2xl font-bold">資源教材包</h1>
+          <h1 className="text-2xl font-bold">{t("resourceMaterials.title")}</h1>
           <p className="text-muted-foreground text-sm">
-            瀏覽並複製教材資源到組織教材庫
+            {t("resourceMaterials.subtitleOrg")}
           </p>
         </div>
       </div>
@@ -431,7 +461,9 @@ export default function OrgResourceMaterialsPage() {
       {loading && materials.length === 0 && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-muted-foreground">載入中...</span>
+          <span className="ml-2 text-muted-foreground">
+            {t("resourceMaterials.loading")}
+          </span>
         </div>
       )}
 
@@ -440,9 +472,11 @@ export default function OrgResourceMaterialsPage() {
         <div className="text-center py-12">
           <Package className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
           <h3 className="text-lg font-medium text-muted-foreground">
-            目前沒有可用的資源教材
+            {t("resourceMaterials.empty.title")}
           </h3>
-          <p className="text-sm text-muted-foreground mt-1">稍後再來看看吧</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {t("resourceMaterials.empty.subtitle")}
+          </p>
         </div>
       )}
 
@@ -478,11 +512,12 @@ export default function OrgResourceMaterialsPage() {
               <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
                 <span className="flex items-center gap-1">
                   <Layers className="w-3.5 h-3.5" />
-                  {material.lesson_count} 單元
+                  {material.lesson_count} {t("resourceMaterials.card.units")}
                 </span>
                 <span className="flex items-center gap-1">
                   <FileText className="w-3.5 h-3.5" />
-                  {material.content_count} 內容
+                  {material.content_count}{" "}
+                  {t("resourceMaterials.card.contents")}
                 </span>
               </div>
               <Button
@@ -498,12 +533,12 @@ export default function OrgResourceMaterialsPage() {
                 {material.copied_today ? (
                   <>
                     <CheckCircle2 className="w-4 h-4 mr-1" />
-                    今日已複製
+                    {t("resourceMaterials.card.copiedToday")}
                   </>
                 ) : (
                   <>
                     <Copy className="w-4 h-4 mr-1" />
-                    複製到組織教材
+                    {t("resourceMaterials.card.copyToOrg")}
                   </>
                 )}
               </Button>

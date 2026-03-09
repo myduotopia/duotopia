@@ -21,7 +21,7 @@ from .base import (
 )
 
 # User models
-from .user import Teacher, Student
+from .user import Teacher, Student, Identity
 
 # Subscription models
 from .subscription import (
@@ -62,6 +62,9 @@ from .progress import (
     PracticeAnswer,
 )
 
+# OAuth identity models
+from .oauth_identity import OAuthIdentity
+
 # Demo models
 from .demo_config import DemoConfig
 
@@ -84,6 +87,7 @@ __all__ = [
     # Users
     "Teacher",
     "Student",
+    "Identity",
     # Subscriptions
     "SubscriptionPeriod",
     "PointUsageLog",
@@ -118,6 +122,8 @@ __all__ = [
     "PracticeAnswer",
     # Points
     "OrganizationPointsLog",
+    # OAuth
+    "OAuthIdentity",
     # Demo
     "DemoConfig",
 ]

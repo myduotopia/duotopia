@@ -1435,7 +1435,20 @@ async def update_student(
     if update_data.name is not None:
         student.name = update_data.name
     if update_data.email is not None:
+        old_email = student.email
         student.email = update_data.email
+        # 建立/關聯 Identity（非系統 email 才處理）
+        if (
+            update_data.email != old_email
+            and "@duotopia.local" not in update_data.email
+        ):
+            from services.identity_service import identity_service
+
+            student.email_verified = False
+            student.email_verified_at = None
+            identity_service.ensure_identity_on_email_bind(
+                db, student, update_data.email
+            )
 
     # 🔥 Issue #31: Validate student_number uniqueness within classroom when updating
     if update_data.student_number is not None:
