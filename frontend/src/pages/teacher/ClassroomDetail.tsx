@@ -22,6 +22,7 @@ import ContentTypeDialog from "@/components/ContentTypeDialog";
 import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
 import VocabularySetPanel from "@/components/VocabularySetPanel";
 import { AssignmentDialog } from "@/components/AssignmentDialog";
+import { InstantPracticeDialog } from "@/components/InstantPracticeDialog";
 import BatchGradingModal from "@/components/BatchGradingModal";
 import { StudentCompletionDashboard } from "@/components/StudentCompletionDashboard";
 import { RecursiveTreeAccordion } from "@/components/shared/RecursiveTreeAccordion";
@@ -174,6 +175,14 @@ export default function ClassroomDetail({
   const [vocabularySetContentId, setVocabularySetContentId] = useState<
     number | null
   >(null);
+
+  // Instant practice states
+  const [showInstantPractice, setShowInstantPractice] = useState(false);
+  const [instantPracticeContent, setInstantPracticeContent] = useState<{
+    id: number;
+    title: string;
+    type?: string;
+  } | null>(null);
 
   // Assignment states
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
@@ -1602,6 +1611,20 @@ export default function ClassroomDetail({
                         toIndex,
                       );
                   }}
+                  onInstantPractice={
+                    !isTemplateMode
+                      ? (item, level) => {
+                          if (level === 2) {
+                            setInstantPracticeContent({
+                              id: item.id,
+                              title: item.title || item.name,
+                              type: item.type,
+                            });
+                            setShowInstantPractice(true);
+                          }
+                        }
+                      : undefined
+                  }
                 />
               </TabsContent>
 
@@ -2877,6 +2900,26 @@ export default function ClassroomDetail({
           fetchAssignments(); // Refresh assignments after creating
         }}
       />
+
+      {/* Instant Practice Dialog */}
+      {instantPracticeContent && (
+        <InstantPracticeDialog
+          open={showInstantPractice}
+          onClose={() => {
+            setShowInstantPractice(false);
+            setInstantPracticeContent(null);
+          }}
+          contentId={instantPracticeContent.id}
+          contentTitle={instantPracticeContent.title}
+          contentType={instantPracticeContent.type}
+          classroomId={Number(id)}
+          onStartPractice={(assignmentId) => {
+            navigate(
+              `/teacher/classroom/${id}/assignment/${assignmentId}/preview`,
+            );
+          }}
+        />
+      )}
 
       {/* Assignment Details Dialog */}
       {showAssignmentDetails && selectedAssignment && (

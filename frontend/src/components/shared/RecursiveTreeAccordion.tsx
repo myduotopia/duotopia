@@ -17,6 +17,7 @@ import {
   GripVertical,
   LucideIcon,
   MoreHorizontal,
+  Zap,
 } from "lucide-react";
 
 // Level-based color system - flat design with colored left accent
@@ -130,6 +131,8 @@ interface RecursiveTreeNodeProps {
     level: number,
     parentId?: string | number,
   ) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onInstantPractice?: (item: any, level: number, parentId?: string | number) => void;
 
   // Accordion state
   expandedValue: string;
@@ -151,6 +154,7 @@ function RecursiveTreeNode({
   onClick,
   onCreate,
   onReorder,
+  onInstantPractice,
   disableActions = false,
   disableReason = "",
 }: RecursiveTreeNodeProps) {
@@ -435,6 +439,7 @@ function RecursiveTreeNode({
                               onClick={onClick}
                               onCreate={onCreate}
                               onReorder={onReorder}
+                              onInstantPractice={onInstantPractice}
                               expandedValue={childExpandedValue}
                               onExpandedChange={setChildExpandedValue}
                               disableActions={disableActions}
@@ -549,8 +554,8 @@ function RecursiveTreeNode({
                 </span>
               ))}
 
-              {/* More menu (⋯) with delete */}
-              {config.canDelete && onDelete && (
+              {/* More menu (⋯) with instant practice + delete */}
+              {(onInstantPractice || (config.canDelete && onDelete)) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     onClick={(e) => e.stopPropagation()}
@@ -562,16 +567,30 @@ function RecursiveTreeNode({
                     align="end"
                     className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
                   >
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete(data, level, parentId);
-                      }}
-                      className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 focus:text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      刪除
-                    </DropdownMenuItem>
+                    {onInstantPractice && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onInstantPractice(data, level, parentId);
+                        }}
+                        className="cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                      >
+                        <Zap className="h-4 w-4 mr-2 text-amber-500" />
+                        即刻練習
+                      </DropdownMenuItem>
+                    )}
+                    {config.canDelete && onDelete && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(data, level, parentId);
+                        }}
+                        className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 focus:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        刪除
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -607,6 +626,8 @@ interface RecursiveTreeAccordionProps {
     level: number,
     parentId?: string | number,
   ) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onInstantPractice?: (item: any, level: number, parentId?: string | number) => void;
   disableActions?: boolean;
   disableReason?: string;
 }
@@ -623,6 +644,7 @@ export function RecursiveTreeAccordion({
   onClick,
   onCreate,
   onReorder,
+  onInstantPractice,
   disableActions = false,
   disableReason = "",
 }: RecursiveTreeAccordionProps) {
@@ -775,6 +797,7 @@ export function RecursiveTreeAccordion({
                   onClick={onClick}
                   onCreate={onCreate}
                   onReorder={onReorder}
+                  onInstantPractice={onInstantPractice}
                   expandedValue={expandedValue}
                   onExpandedChange={setExpandedValue}
                   disableActions={disableActions}
