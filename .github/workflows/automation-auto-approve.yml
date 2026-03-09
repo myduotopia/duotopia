@@ -27,7 +27,7 @@ jobs:
             }
 
             // Only from authorized users
-            const authorizedUsers = ['kaddy-eunice'];
+            const authorizedUsers = ['kaddy-eunice', 'cbtzeng', 'Youngger9765', 'myduotopia'];
             if (!authorizedUsers.includes(author)) {
               console.log(`Comment from ${author} - not authorized for approval`);
               return;
