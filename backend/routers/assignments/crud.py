@@ -382,9 +382,11 @@ async def get_assignments(
     - 可依班級和狀態篩選
     - 預設只顯示未封存作業，is_archived=true 顯示封存作業
     """
-    # 建立查詢
+    # 建立查詢（排除即刻練習暫時作業）
     query = db.query(Assignment).filter(
-        Assignment.teacher_id == current_teacher.id, Assignment.is_active.is_(True)
+        Assignment.teacher_id == current_teacher.id,
+        Assignment.is_active.is_(True),
+        Assignment.is_instant_practice.is_(False),
     )
 
     # 封存篩選
