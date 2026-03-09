@@ -74,7 +74,7 @@ export default function StudentAssignmentList() {
     setActiveTab(tab);
     setCurrentPage(1);
   };
-  const [sortBy, setSortBy] = useState("due_date_asc");
+  const [sortBy, setSortBy] = useState("assigned_at_desc");
   const [filterMode, setFilterMode] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 8;
