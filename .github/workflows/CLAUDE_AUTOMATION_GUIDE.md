@@ -157,15 +157,17 @@ Claude 每次在 Issue 留言後，都會在最後提供「建議回覆選項」
 **自動化**：
 - 執行 `check-approvals` 會自動偵測批准
 - 自動加上 `✅ tested-in-staging` label
+- 🤖 **自動建立 Release PR**（`automation-release-pr.yml`）：
+  - 找到 `claude/issue-<N>*` 分支
+  - 建立 PR → staging
+  - Claude Code Action 自動修正 CI/review 問題（1 round）
+  - LINE 通知結果
 
 ### 4️⃣ Act（Merge 和清理）
 
 **你需要做什麼**：
 ```bash
-# 確認雙重批准：
-# ✅ 系統通過：PR CI/CD 全綠
-# ✅ 業務通過：Issue 案主批准
-
+# 收到 LINE 通知 "Ready to Merge" 後
 # Merge PR
 gh pr merge <PR_NUMBER> --squash
 ```
@@ -207,7 +209,8 @@ Claude **不會**做以下事情：
 | `✅ PDCA: Do` | Do 階段完成 | Claude |
 | `⏳ 等待 CI/CD` | 等待部署 | Claude |
 | `✅ PDCA: Check` | Check 階段 | 手動 |
-| `✅ tested-in-staging` | 案主測試通過 | 自動偵測 |
+| `✅ tested-in-staging` | 案主測試通過 → 觸發自動 Release PR | 自動偵測 |
+| `ready-to-merge` | PR 所有 CI 通過，可以 merge | 自動（Release PR workflow） |
 | `🛡️ PDCA: Act` | Act 階段 | 手動 |
 
 ---
