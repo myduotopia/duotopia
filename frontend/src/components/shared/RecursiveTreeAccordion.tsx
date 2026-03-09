@@ -132,7 +132,11 @@ interface RecursiveTreeNodeProps {
     parentId?: string | number,
   ) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onInstantPractice?: (item: any, level: number, parentId?: string | number) => void;
+  onInstantPractice?: (
+    item: any,
+    level: number,
+    parentId?: string | number,
+  ) => void;
 
   // Accordion state
   expandedValue: string;
@@ -627,7 +631,11 @@ interface RecursiveTreeAccordionProps {
     parentId?: string | number,
   ) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onInstantPractice?: (item: any, level: number, parentId?: string | number) => void;
+  onInstantPractice?: (
+    item: any,
+    level: number,
+    parentId?: string | number,
+  ) => void;
   disableActions?: boolean;
   disableReason?: string;
 }

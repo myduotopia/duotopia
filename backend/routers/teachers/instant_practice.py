@@ -40,7 +40,9 @@ class InstantPracticeRequest(BaseModel):
 
     content_id: int
     classroom_id: int
-    practice_mode: str = "reading"  # reading, rearrangement, word_reading, word_selection
+    practice_mode: str = (
+        "reading"  # reading, rearrangement, word_reading, word_selection
+    )
     time_limit_per_question: Optional[int] = None
     shuffle_questions: bool = False
     show_answer: bool = False
@@ -136,9 +138,7 @@ async def create_instant_practice(
 
         # Delete copied content and items
         for content_id in copied_content_ids:
-            db.query(ContentItem).filter(
-                ContentItem.content_id == content_id
-            ).delete()
+            db.query(ContentItem).filter(ContentItem.content_id == content_id).delete()
             db.query(Content).filter(Content.id == content_id).delete()
 
         db.delete(old_assignment)
