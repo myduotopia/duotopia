@@ -11,7 +11,6 @@ from auth import (
     create_access_token,
     verify_password,
     get_current_user,
-    _get_student_password_hash,
 )
 from .validators import (
     StudentValidateRequest,
@@ -88,19 +87,39 @@ def _get_aggregated_classrooms(db: Session, student: Student) -> list:
 async def validate_student(
     request: StudentValidateRequest, db: Session = Depends(get_db)
 ):
-    """學生登入驗證（支援 Identity 統一密碼 + 跨帳號班級聚合）"""
-    # 查詢學生
-    student = db.query(Student).filter(Student.email == request.email).first()
+    """學生登入驗證（透過 Identity 統一密碼 + 跨帳號班級聚合）"""
+    # 查詢 Identity（Email 流程直接用 Identity 密碼驗證）
+    identity = (
+        db.query(Identity)
+        .filter(Identity.email == request.email, Identity.is_active.is_(True))
+        .first()
+    )
 
-    if not student:
+    if not identity:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
 
-    # 驗證密碼 - 支援 Identity 統一密碼
-    password_hash = _get_student_password_hash(db, student)
-    if not verify_password(request.password, password_hash):
+    # 驗證密碼 - 直接用 Identity 統一密碼
+    if not verify_password(request.password, identity.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+
+    # 找到該 Identity 下的主要學生帳號（用來建立 token）
+    student = (
+        db.query(Student)
+        .filter(
+            Student.identity_id == identity.id,
+            Student.is_active.is_(True),
+        )
+        .order_by(Student.is_primary_account.desc().nulls_last(), Student.id)
+        .first()
+    )
+
+    if not student:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

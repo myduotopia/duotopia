@@ -18,7 +18,6 @@ from auth import (
     verify_password,
     get_password_hash,
     validate_password_strength,
-    _get_student_password_hash,
 )
 from .dependencies import get_current_student, get_student_id
 from .validators import UpdateStudentProfileRequest, UpdatePasswordRequest
@@ -186,8 +185,17 @@ async def update_student_password(
             status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
         )
 
-    # Verify current password（支援 Identity 統一密碼）
-    effective_hash = _get_student_password_hash(db, student)
+    # 取得有效密碼：有 identity_id 就用 Identity 密碼，否則用本地密碼
+    effective_hash = student.password_hash
+    identity = None
+    if student.identity_id:
+        from models.user import Identity
+
+        identity = db.query(Identity).filter(Identity.id == student.identity_id).first()
+        if identity and identity.password_hash:
+            effective_hash = identity.password_hash
+
+    # Verify current password
     if not verify_password(request.current_password, effective_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -206,18 +214,14 @@ async def update_student_password(
     if not is_valid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
-    # Update password - 同時更新 Student 和 Identity
+    # Update password
     new_hash = get_password_hash(request.new_password)
     student.password_hash = new_hash
     student.password_changed = True
 
-    # 如果已遷移到 Identity，同步更新 Identity 密碼
-    if student.password_migrated_to_identity and student.identity_id:
-        from models.user import Identity
-
-        identity = db.query(Identity).filter(Identity.id == student.identity_id).first()
-        if identity:
-            identity.password_hash = new_hash
+    # 有 Identity 就同步更新 Identity 密碼
+    if identity:
+        identity.password_hash = new_hash
 
     db.commit()
 
