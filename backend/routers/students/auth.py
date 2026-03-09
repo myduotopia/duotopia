@@ -101,8 +101,10 @@ async def validate_student(
             detail="Invalid email or password",
         )
 
-    # 驗證密碼 - 直接用 Identity 統一密碼
-    if not verify_password(request.password, identity.password_hash):
+    # 驗證密碼 - 直接用 Identity 統一密碼（OAuth-only 帳號可能沒有密碼）
+    if not identity.password_hash or not verify_password(
+        request.password, identity.password_hash
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

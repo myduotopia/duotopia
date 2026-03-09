@@ -10,6 +10,7 @@ from models import (
     Student,
     Classroom,
     ClassroomStudent,
+    Identity,
     StudentAssignment,
     AssignmentStatus,
 )
@@ -189,8 +190,6 @@ async def update_student_password(
     effective_hash = student.password_hash
     identity = None
     if student.identity_id:
-        from models.user import Identity
-
         identity = db.query(Identity).filter(Identity.id == student.identity_id).first()
         if identity and identity.password_hash:
             effective_hash = identity.password_hash
