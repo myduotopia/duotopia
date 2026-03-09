@@ -14,7 +14,12 @@ from models import (
     AssignmentStatus,
 )
 from models.organization import ClassroomSchool, School, Organization
-from auth import verify_password, get_password_hash, validate_password_strength
+from auth import (
+    verify_password,
+    get_password_hash,
+    validate_password_strength,
+    _get_student_password_hash,
+)
 from .dependencies import get_current_student, get_student_id
 from .validators import UpdateStudentProfileRequest, UpdatePasswordRequest
 
@@ -181,15 +186,16 @@ async def update_student_password(
             status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
         )
 
-    # Verify current password
-    if not verify_password(request.current_password, student.password_hash):
+    # Verify current password（支援 Identity 統一密碼）
+    effective_hash = _get_student_password_hash(db, student)
+    if not verify_password(request.current_password, effective_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
 
     # Check if new password is same as current password
-    if verify_password(request.new_password, student.password_hash):
+    if verify_password(request.new_password, effective_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password must be different from current password",
@@ -200,9 +206,21 @@ async def update_student_password(
     if not is_valid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
-    # Update password
-    student.password_hash = get_password_hash(request.new_password)
-    student.password_changed = True  # Mark that password has been changed
+    # Update password - 同時更新 Student 和 Identity
+    new_hash = get_password_hash(request.new_password)
+    student.password_hash = new_hash
+    student.password_changed = True
+
+    # 如果已遷移到 Identity，同步更新 Identity 密碼
+    if student.password_migrated_to_identity and student.identity_id:
+        from models.user import Identity
+
+        identity = (
+            db.query(Identity).filter(Identity.id == student.identity_id).first()
+        )
+        if identity:
+            identity.password_hash = new_hash
+
     db.commit()
 
     return {"message": "Password updated successfully"}
