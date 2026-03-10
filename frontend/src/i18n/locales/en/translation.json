@@ -503,6 +503,16 @@
       "a8": "You can cancel anytime in account settings. You won't be charged the following month. Remaining points can be used until they expire."
     }
   },
+  "teacherToolbar": {
+    "help": {
+      "title": "Help Guides",
+      "description": "Click the links below to learn how to use Duotopia",
+      "teacherManual": "Teacher Guide",
+      "studentGuide": "Student Guide",
+      "dontShowAgain": "Don't show this again",
+      "start": "Get Started"
+    }
+  },
   "teacherDashboard": {
     "loading": "Loading...",
     "errors": {
@@ -521,8 +531,10 @@
       "trialDaysRemaining": "Free trial remaining {{days}} days"
     },
     "welcome": {
-      "title": "Welcome back, {{name}}!",
-      "subtitle": "Manage your classes, courses, and student learning progress"
+      "title": "Welcome, {{name}}!",
+      "subtitle": "Manage your classes, courses, and student learning progress",
+      "tagline1": "Duotopia makes teaching smarter and learning more active.",
+      "tagline2": "Save 80% of lesson prep and grading time."
     },
     "subscription": {
       "trialTitle": "🎉 Free Trial",
@@ -603,6 +615,15 @@
         "title": "Resource Materials",
         "description": "Browse shared resources and start teaching interactions with students"
       }
+    },
+    "dailyFlow": {
+      "title": "Once set up, here's your daily routine",
+      "step1": "Assign Homework",
+      "step1Desc": "Assign programs to students from your classroom",
+      "step2": "AI Auto-grades",
+      "step2Desc": "AI grades submissions instantly after students submit",
+      "step3": "Review Results",
+      "step3Desc": "Track student learning progress and outcomes"
     }
   },
   "admin": {

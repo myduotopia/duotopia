@@ -300,8 +300,11 @@ export default function TeacherDashboardWithSidebar() {
         <div className="p-4 border-b flex items-center justify-between">
           {!sidebarCollapsed && (
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Duotopia</h1>
-              <p className="text-sm text-gray-500">教師後台</p>
+              <img
+                src="https://storage.googleapis.com/duotopia-social-media-videos/website/logo/logo_row_nobg.png"
+                alt="Duotopia"
+                className="h-8 sm:h-10"
+              />
             </div>
           )}
           <Button

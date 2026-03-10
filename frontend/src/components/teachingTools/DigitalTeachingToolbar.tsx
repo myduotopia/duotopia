@@ -16,7 +16,12 @@ import {
   Share2,
   Copy,
   Check,
+  HelpCircle,
+  ExternalLink,
+  BookOpen,
+  Users,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { QRCodeSVG } from "qrcode.react";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useTranslation } from "react-i18next";
@@ -35,8 +40,8 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
   show,
   onClose,
 }) => {
-  const [minutes, setMinutes] = useState(0);
-  const [seconds, setSeconds] = useState(0);
+  const [, setMinutes] = useState(0);
+  const [, setSeconds] = useState(0);
   const [isActive, setIsActive] = useState(false);
   const [isBeeping, setIsBeeping] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -76,14 +81,6 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
     return () => window.removeEventListener("resize", onResize);
   }, [clampTimerPos]);
 
-  // 固定點大小，同時讓間距跟隨工具縮放
-  const handleTransform = useCallback(
-    (tx: number, ty: number) => ({
-      transform: `translate(${tx}%, ${ty}%) scale(${1 / timerScale})`,
-      transformOrigin: "center",
-    }),
-    [timerScale],
-  );
 
   // 初始化音效
   useEffect(() => {
@@ -464,14 +461,6 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
   const [enableTransition, setEnableTransition] = useState(true);
   const [diceScale, setDiceScale] = useState(1.6);
   const [dicePos, setDicePos] = useState<{ x: number; y: number } | null>(null);
-  const handleTransform = useCallback(
-    (tx: number, ty: number, extraY: number = 0) => ({
-      transform: `translate(${tx}%, ${ty}%) translateY(${extraY}px) scale(${1 / diceScale})`,
-      transformOrigin: "center",
-    }),
-    [diceScale],
-  );
-
   const rollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedDicePos = useRef(false);
 
@@ -797,6 +786,12 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 // Removed DrawingCanvas and all drawing-related UI and logic.
 
 // Main Toolbar Component
+const HELP_DISMISSED_KEY = "duotopia_help_dismissed";
+const TEACHER_MANUAL_URL =
+  "https://www.canva.com/design/DAHDIN6lTPU/RZTs5TqZoyJRKob2f1-f6Q/view?utm_content=DAHDIN6lTPU&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h10dd0c0854";
+const STUDENT_GUIDE_URL =
+  "https://www.canva.com/design/DAHDJKkPn6Q/DZqIgDN_g7ZTVwpZbDd6kw/view?utm_content=DAHDJKkPn6Q&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h4500142b17";
+
 const DigitalTeachingToolbar: React.FC = () => {
   const { t } = useTranslation();
   const user = useTeacherAuthStore((state) => state.user);
@@ -805,12 +800,33 @@ const DigitalTeachingToolbar: React.FC = () => {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toolbarY, setToolbarY] = useState<number | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [helpDismissed, setHelpDismissed] = useState(
+    () => localStorage.getItem(HELP_DISMISSED_KEY) === "true",
+  );
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     if (toolbarY === null) {
       setToolbarY(window.innerHeight / 2);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!helpDismissed) {
+      setShowHelp(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleDismissChange = useCallback((checked: boolean) => {
+    setHelpDismissed(checked);
+    if (checked) {
+      localStorage.setItem(HELP_DISMISSED_KEY, "true");
+    } else {
+      localStorage.removeItem(HELP_DISMISSED_KEY);
+    }
   }, []);
 
   const handleToolbarDrag = useCallback(
@@ -830,8 +846,9 @@ const DigitalTeachingToolbar: React.FC = () => {
           : (moveEvent as MouseEvent).clientY;
         if (frameId) cancelAnimationFrame(frameId);
         frameId = requestAnimationFrame(() => {
+          const halfH = (toolbarRef.current?.offsetHeight ?? 180) / 2;
           setToolbarY(
-            Math.max(40, Math.min(window.innerHeight - 40, moveY - startOffset)),
+            Math.max(halfH, Math.min(window.innerHeight - halfH, moveY - startOffset)),
           );
         });
         if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
@@ -925,8 +942,68 @@ const DigitalTeachingToolbar: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Help Dialog */}
+      <Dialog open={showHelp} onOpenChange={setShowHelp}>
+        <DialogContent className="sm:max-w-md pointer-events-auto">
+          <DialogHeader>
+            <DialogTitle>{t("teacherToolbar.help.title")}</DialogTitle>
+            <DialogDescription>
+              {t("teacherToolbar.help.description")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <a
+              href={TEACHER_MANUAL_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors min-h-[160px]"
+            >
+              <BookOpen className="h-20 w-20 text-blue-500" />
+              <span className="text-sm font-semibold text-gray-800 leading-tight text-center">
+                {t("teacherToolbar.help.teacherManual")}
+              </span>
+              <ExternalLink className="absolute bottom-3 right-3 h-4 w-4 text-blue-400" />
+            </a>
+            <a
+              href={STUDENT_GUIDE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors min-h-[160px]"
+            >
+              <Users className="h-20 w-20 text-blue-500" />
+              <span className="text-sm font-semibold text-gray-800 leading-tight text-center">
+                {t("teacherToolbar.help.studentGuide")}
+              </span>
+              <ExternalLink className="absolute bottom-3 right-3 h-4 w-4 text-blue-400" />
+            </a>
+          </div>
+          <div className="flex items-center justify-center gap-2 pt-1">
+            <Checkbox
+              id="help-dismiss"
+              checked={helpDismissed}
+              onCheckedChange={(checked) =>
+                handleDismissChange(checked as boolean)
+              }
+            />
+            <label
+              htmlFor="help-dismiss"
+              className="text-sm text-gray-600 cursor-pointer"
+            >
+              {t("teacherToolbar.help.dontShowAgain")}
+            </label>
+          </div>
+          <Button
+            onClick={() => setShowHelp(false)}
+            className="w-full"
+          >
+            {t("teacherToolbar.help.start")}
+          </Button>
+        </DialogContent>
+      </Dialog>
+
       {/* Side toolbar */}
       <div
+        ref={toolbarRef}
         className="fixed right-0 flex flex-col gap-1 bg-white/90 backdrop-blur-md shadow-2xl border border-gray-200 border-r-0 rounded-l-xl p-1.5 z-[150] pointer-events-auto"
         style={{
           top: `${toolbarY ?? window.innerHeight / 2}px`,
@@ -981,6 +1058,21 @@ const DigitalTeachingToolbar: React.FC = () => {
           aria-label="Dice"
         >
           <Dice5 size={18} />
+        </button>
+
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setShowHelp((prev) => !prev)}
+          className={`p-1.5 rounded-lg transition-all duration-300 ${
+            showHelp
+              ? "bg-red-500 text-white shadow-md"
+              : helpDismissed
+                ? "hover:bg-gray-100 text-blue-500"
+                : "hover:bg-red-50 text-red-500"
+          }`}
+          aria-label="Help"
+        >
+          <HelpCircle size={18} />
         </button>
       </div>
 

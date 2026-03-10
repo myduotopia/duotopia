@@ -18,11 +18,14 @@ import {
   Share2,
   Copy,
   Check,
+  Send,
+  Brain,
+  Radar,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { apiClient } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+import { useTranslation, getI18n } from "react-i18next";
 
 interface DashboardData {
   teacher: {
@@ -70,6 +73,64 @@ export default function TeacherDashboard() {
 
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const taglines = [
+    {
+      en: "Duotopia makes teaching smarter and learning more active.",
+      "zh-TW": "語拓邦讓教學更智能、學習更主動。",
+    },
+    {
+      en: "Save 80% of lesson prep and grading time.",
+      "zh-TW": "節省 80% 備課與批改時間。",
+    },
+    {
+      en: "Use the Timer & Dice in the toolbar — teaching made effortless.",
+      "zh-TW": "善用右側工具列的計時器與骰子，讓教學更輕鬆。",
+    },
+    {
+      en: "Assign once, AI grades instantly.",
+      "zh-TW": "派作業一次，AI 即時完成批改。",
+    },
+    {
+      en: "Every student gets personalized feedback.",
+      "zh-TW": "每位學生都能獲得個人化回饋。",
+    },
+    {
+      en: "Track progress, celebrate growth.",
+      "zh-TW": "追蹤學習進度，見證每一步成長。",
+    },
+  ];
+
+  const [taglineIndex, setTaglineIndex] = useState(0);
+  const [typedText, setTypedText] = useState("");
+  const [showTranslation, setShowTranslation] = useState(false);
+
+  useEffect(() => {
+    const fullText = taglines[taglineIndex].en;
+    let i = 0;
+    setTypedText("");
+    setShowTranslation(false);
+
+    const typeTimer = setInterval(() => {
+      i++;
+      setTypedText(fullText.slice(0, i));
+      if (i >= fullText.length) {
+        clearInterval(typeTimer);
+        setTimeout(() => setShowTranslation(true), 200);
+      }
+    }, 45);
+
+    const nextTimer = setTimeout(
+      () => setTaglineIndex((prev) => (prev + 1) % taglines.length),
+      fullText.length * 45 + 5000,
+    );
+
+    return () => {
+      clearInterval(typeTimer);
+      clearTimeout(nextTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taglineIndex]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -263,15 +324,30 @@ export default function TeacherDashboard() {
       </Dialog>
 
       <div>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-3xl font-bold text-gray-900">
-            {t("teacherDashboard.welcome.title", {
-              name: dashboardData.teacher.name,
-            })}
-          </h2>
+        <div className="flex items-start justify-between mb-6 gap-4">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">
+              {t("teacherDashboard.welcome.title", {
+                name: dashboardData.teacher.name,
+              })}
+            </h2>
+            <div className="min-h-[3.5rem]">
+              <p className="text-base sm:text-xl italic text-gray-700 font-serif">
+                &ldquo;{typedText}
+                <span className="animate-pulse">|</span>&rdquo;
+              </p>
+              {getI18n().language !== "en" && (
+                <p
+                  className={`text-sm sm:text-base text-blue-600 mt-1 transition-opacity duration-300 ${showTranslation ? "opacity-100" : "opacity-0"}`}
+                >
+                  {taglines[taglineIndex]["zh-TW"]}
+                </p>
+              )}
+            </div>
+          </div>
           <Button
             onClick={() => setShowShareDialog(true)}
-            className="flex items-center gap-2"
+            className="hidden md:flex items-center gap-2 flex-shrink-0"
           >
             <Share2 className="h-4 w-4" />
             {t("teacherDashboard.share.button")}
@@ -279,16 +355,16 @@ export default function TeacherDashboard() {
         </div>
 
         {/* Four Function Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:grid-rows-2">
           {functionButtons.map((btn) => {
             const Icon = btn.icon;
             return (
               <Card
                 key={btn.key}
-                className="cursor-pointer hover:shadow-md transition-shadow border hover:border-gray-300"
+                className="cursor-pointer hover:shadow-md transition-shadow border hover:border-gray-300 h-full min-h-[130px]"
                 onClick={() => navigate(btn.path)}
               >
-                <CardContent className="pt-6 pb-6">
+                <CardContent className="pt-6 pb-6 h-full">
                   <div className="flex items-start gap-4">
                     <div className={`p-3 ${btn.bgColor} rounded-lg flex-shrink-0`}>
                       <Icon className={`h-6 w-6 ${btn.iconColor}`} />
@@ -320,6 +396,66 @@ export default function TeacherDashboard() {
               </Card>
             );
           })}
+        </div>
+
+        {/* Daily Flow */}
+        <div className="mt-8 p-6 bg-blue-50 rounded-2xl">
+          <p className="text-sm font-medium text-blue-700 mb-4">
+            {t("teacherDashboard.dailyFlow.title")}
+          </p>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 text-center">
+              <div className="mb-2 flex justify-center"><Send className="h-12 w-12 text-blue-500" /></div>
+              <p className="text-sm font-semibold text-gray-800">
+                {t("teacherDashboard.dailyFlow.step1")}
+              </p>
+              <p className="hidden md:block text-xs text-gray-500 mt-0.5">
+                {t("teacherDashboard.dailyFlow.step1Desc")}
+              </p>
+            </div>
+            <div className="flex-shrink-0 flex items-center">
+              {/* Short arrow: mobile */}
+              <svg className="md:hidden" width="20" height="16" viewBox="0 0 20 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="0" y1="8" x2="12" y2="8" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round"/>
+                <polyline points="8,3 16,8 8,13" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {/* Long arrow: desktop */}
+              <svg className="hidden md:block" width="72" height="16" viewBox="0 0 72 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="0" y1="8" x2="58" y2="8" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round"/>
+                <polyline points="52,3 64,8 52,13" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div className="flex-1 text-center">
+              <div className="mb-2 flex justify-center"><Brain className="h-12 w-12 text-purple-500" /></div>
+              <p className="text-sm font-semibold text-gray-800">
+                {t("teacherDashboard.dailyFlow.step2")}
+              </p>
+              <p className="hidden md:block text-xs text-gray-500 mt-0.5">
+                {t("teacherDashboard.dailyFlow.step2Desc")}
+              </p>
+            </div>
+            <div className="flex-shrink-0 flex items-center">
+              {/* Short arrow: mobile */}
+              <svg className="md:hidden" width="20" height="16" viewBox="0 0 20 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="0" y1="8" x2="12" y2="8" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round"/>
+                <polyline points="8,3 16,8 8,13" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {/* Long arrow: desktop */}
+              <svg className="hidden md:block" width="72" height="16" viewBox="0 0 72 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="0" y1="8" x2="58" y2="8" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round"/>
+                <polyline points="52,3 64,8 52,13" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div className="flex-1 text-center">
+              <div className="mb-2 flex justify-center"><Radar className="h-12 w-12 text-green-500" /></div>
+              <p className="text-sm font-semibold text-gray-800">
+                {t("teacherDashboard.dailyFlow.step3")}
+              </p>
+              <p className="hidden md:block text-xs text-gray-500 mt-0.5">
+                {t("teacherDashboard.dailyFlow.step3Desc")}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </>
