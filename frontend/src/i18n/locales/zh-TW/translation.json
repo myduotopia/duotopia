@@ -579,6 +579,30 @@
       "instructions": "分享方式：",
       "instruction1": "掃描 QR 碼：學生可以用手機掃描 QR 碼直接進入登入頁面",
       "instruction2": "複製連結：點擊「複製」按鈕，將連結分享給學生"
+    },
+    "functionButtons": {
+      "myClassrooms": {
+        "step": "Step 1",
+        "title": "我的班級",
+        "description": "建立班級，派發作業並批改",
+        "count": "班級總數：{{count}} 個"
+      },
+      "allStudents": {
+        "step": "Step 2",
+        "title": "所有學生",
+        "description": "新增班級學生，以記錄個別學生聽說讀寫四項能力指標",
+        "count": "學生總數：{{count}} 位"
+      },
+      "myMaterials": {
+        "step": "Step 3",
+        "title": "我的教材",
+        "description": "建立與指派教學課程",
+        "count": "課程總數：{{count}} 個"
+      },
+      "resourceMaterials": {
+        "title": "資源教材包",
+        "description": "瀏覽共享教材資源，馬上開始與學生進行教學互動"
+      }
     }
   },
   "admin": {

@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import TeacherLayout from "@/components/TeacherLayout";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -280,35 +279,30 @@ export default function TeacherProfile() {
 
   if (loading) {
     return (
-      <TeacherLayout>
-        <div className="max-w-4xl mx-auto">
-          <Card>
-            <CardContent className="p-6 sm:p-8 text-center dark:bg-gray-800">
-              {t("teacherProfile.loading")}
-            </CardContent>
-          </Card>
-        </div>
-      </TeacherLayout>
+      <div className="max-w-4xl mx-auto">
+        <Card>
+          <CardContent className="p-6 sm:p-8 text-center dark:bg-gray-800">
+            {t("teacherProfile.loading")}
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   if (!teacherInfo) {
     return (
-      <TeacherLayout>
-        <div className="max-w-4xl mx-auto">
-          <Card>
-            <CardContent className="p-6 sm:p-8 text-center dark:bg-gray-800">
-              {t("teacherProfile.errors.loadFailed")}
-            </CardContent>
-          </Card>
-        </div>
-      </TeacherLayout>
+      <div className="max-w-4xl mx-auto">
+        <Card>
+          <CardContent className="p-6 sm:p-8 text-center dark:bg-gray-800">
+            {t("teacherProfile.errors.loadFailed")}
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <TeacherLayout>
-      <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-4 sm:mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
@@ -580,6 +574,5 @@ export default function TeacherProfile() {
           </CardContent>
         </Card>
       </div>
-    </TeacherLayout>
   );
 }

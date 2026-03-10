@@ -188,7 +188,9 @@ function App() {
           path="/teacher/programs"
           element={
             <ProtectedRoute>
-              <TeacherTemplatePrograms />
+              <TeacherLayout>
+                <TeacherTemplatePrograms />
+              </TeacherLayout>
             </ProtectedRoute>
           }
         />
@@ -196,7 +198,9 @@ function App() {
           path="/teacher/template-programs"
           element={
             <ProtectedRoute>
-              <TeacherTemplatePrograms />
+              <TeacherLayout>
+                <TeacherTemplatePrograms />
+              </TeacherLayout>
             </ProtectedRoute>
           }
         />
@@ -204,7 +208,9 @@ function App() {
           path="/teacher/template-programs/:id"
           element={
             <ProtectedRoute>
-              <ClassroomDetail isTemplateMode={true} />
+              <TeacherLayout>
+                <ClassroomDetail isTemplateMode={true} />
+              </TeacherLayout>
             </ProtectedRoute>
           }
         />
@@ -222,7 +228,9 @@ function App() {
           path="/teacher/resource-materials"
           element={
             <ProtectedRoute>
-              <ResourceMaterialsPage />
+              <TeacherLayout>
+                <ResourceMaterialsPage />
+              </TeacherLayout>
             </ProtectedRoute>
           }
         />
@@ -230,7 +238,9 @@ function App() {
           path="/teacher/subscription"
           element={
             <ProtectedRoute>
-              <TeacherSubscription />
+              <TeacherLayout>
+                <TeacherSubscription />
+              </TeacherLayout>
             </ProtectedRoute>
           }
         />
@@ -238,7 +248,9 @@ function App() {
           path="/teacher/profile"
           element={
             <ProtectedRoute>
-              <TeacherProfile />
+              <TeacherLayout>
+                <TeacherProfile />
+              </TeacherLayout>
             </ProtectedRoute>
           }
         />

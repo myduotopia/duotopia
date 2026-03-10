@@ -47,15 +47,34 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const hasInitializedTimerPos = useRef(false);
 
-  // Initialize timer position to center when first shown
+  const clampTimerPos = useCallback(
+    (pos: { x: number; y: number }) => ({
+      x: Math.min(Math.max(0, pos.x), window.innerWidth - 320 * timerScale),
+      y: Math.min(Math.max(0, pos.y), window.innerHeight - 420 * timerScale),
+    }),
+    [timerScale],
+  );
+
+  // Initialize timer position to center when first shown; re-clamp on re-open
   useEffect(() => {
-    if (show && !hasInitializedTimerPos.current) {
-      const centerX = window.innerWidth / 2 - 150;
-      const centerY = window.innerHeight / 2 - 150;
-      setTimerPos({ x: centerX, y: centerY });
-      hasInitializedTimerPos.current = true;
+    if (show) {
+      if (!hasInitializedTimerPos.current) {
+        const centerX = window.innerWidth / 2 - 150;
+        const centerY = window.innerHeight / 2 - 150;
+        setTimerPos({ x: centerX, y: centerY });
+        hasInitializedTimerPos.current = true;
+      } else {
+        setTimerPos((prev) => clampTimerPos(prev));
+      }
     }
-  }, [show]);
+  }, [show, clampTimerPos]);
+
+  // Clamp on window resize
+  useEffect(() => {
+    const onResize = () => setTimerPos((prev) => clampTimerPos(prev));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [clampTimerPos]);
 
   // 固定點大小，同時讓間距跟隨工具縮放
   const handleTransform = useCallback(
@@ -111,16 +130,8 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
     };
   }, [isActive, timeLeft, startBeeping]);
 
-  const currentMin = isActive
-    ? Math.floor(timeLeft / 60)
-    : timeLeft > 0
-      ? Math.floor(timeLeft / 60)
-      : minutes;
-  const currentSec = isActive
-    ? timeLeft % 60
-    : timeLeft > 0
-      ? timeLeft % 60
-      : seconds;
+  const currentMin = isBeeping ? 0 : Math.floor(timeLeft / 60);
+  const currentSec = isBeeping ? 0 : timeLeft % 60;
 
   // 時鐘刻度
   const ticksElement = useMemo(() => {
@@ -253,7 +264,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 
   return (
     <div
-      className="fixed flex flex-col items-center group z-[200]"
+      className="fixed flex flex-col items-center group z-[200] bg-white/50 backdrop-blur-md rounded-2xl pb-4"
       ref={containerRef}
       style={{
         width: "320px",
@@ -265,11 +276,11 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       onMouseDown={(e) => startDrag(e, setTimerPos, timerPos)}
       onTouchStart={(e) => startDrag(e, setTimerPos, timerPos)}
     >
-      <div className="w-full flex justify-between items-center px-6 py-1 opacity-0 group-hover:opacity-100">
-        <GripHorizontal size={18} className="text-gray-400" />
+      <div className="absolute top-0 w-full flex justify-between items-center px-6 pt-5 pb-1 opacity-0 group-hover:opacity-100 pointer-events-none">
+        <GripHorizontal size={18} className="text-gray-400 pointer-events-auto" />
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-red-500"
+          className="text-gray-400 hover:text-red-500 pointer-events-auto"
           aria-label="Close timer"
         >
           <X size={18} />
@@ -277,21 +288,20 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       </div>
 
       <div
-        className={`relative flex items-center justify-center w-[260px] h-[260px] rounded-full bg-white/70 backdrop-blur-md border-[6px] border-white/80 shadow-2xl transition-all ${
+        className={`relative flex items-center justify-center w-[260px] h-[260px] rounded-full bg-white/70 backdrop-blur-md border-[6px] border-white/80 transition-all ${
           isBeeping ? "animate-pulse ring-8 ring-blue-400" : ""
         }`}
       >
         {ticksElement}
         <div
-          className="relative flex flex-col items-center z-10"
+          className="relative flex flex-col items-center z-10 select-none"
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="flex gap-4 mb-4">
             <button
               onClick={() => {
                 if (isBeeping) stopBeeping();
-                if (!isActive && (minutes > 0 || seconds > 0 || timeLeft > 0)) {
-                  if (timeLeft === 0) setTimeLeft(minutes * 60 + seconds);
+                if (!isActive && timeLeft > 0) {
                   setIsActive(true);
                 }
               }}
@@ -328,7 +338,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
                     setTimeLeft(
                       Math.max(
                         0,
-                        (timeLeft > 0 ? timeLeft : minutes * 60) + 60,
+                        timeLeft + 60,
                       ),
                     );
                 }}
@@ -344,7 +354,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
                     setTimeLeft(
                       Math.max(
                         0,
-                        (timeLeft > 0 ? timeLeft : minutes * 60) - 60,
+                        timeLeft - 60,
                       ),
                     );
                 }}
@@ -362,7 +372,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
                     setTimeLeft(
                       Math.max(
                         0,
-                        (timeLeft > 0 ? timeLeft : minutes * 60) + 10,
+                        timeLeft + 10,
                       ),
                     );
                 }}
@@ -378,7 +388,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
                     setTimeLeft(
                       Math.max(
                         0,
-                        (timeLeft > 0 ? timeLeft : minutes * 60) - 10,
+                        timeLeft - 10,
                       ),
                     );
                 }}
@@ -393,7 +403,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       </div>
 
       <div
-        className="flex gap-4 mt-4 bg-white/50 backdrop-blur-sm px-4 py-2 rounded-full border border-white/50 shadow-sm"
+        className="flex gap-4 mt-4 bg-white/50 backdrop-blur-sm px-4 py-2 rounded-full border border-white/50 shadow-sm select-none"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {[1, 3, 5, 10].map((m) => (
@@ -414,28 +424,27 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       </div>
 
       <div className="absolute inset-0 pointer-events-none transition-opacity opacity-0 group-hover:opacity-100">
-        {/* Four-corner resize handles styled like Word image handles (always visible) */}
+        {/* Top-left L */}
         <div
-          className="resize-handle pointer-events-auto absolute top-0 left-0 w-[5px] h-[5px] rounded-full bg-blue-500 shadow-sm cursor-nwse-resize"
-          style={handleTransform(-50, -50)}
+          className="resize-handle pointer-events-auto absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-blue-400 rounded-tl-lg cursor-nwse-resize"
           onMouseDown={(e) => startResize(e, setTimerScale, timerScale, -1)}
           onTouchStart={(e) => startResize(e, setTimerScale, timerScale, -1)}
         />
+        {/* Top-right L */}
         <div
-          className="resize-handle pointer-events-auto absolute top-0 right-0 w-[5px] h-[5px] rounded-full bg-blue-500 shadow-sm cursor-nesw-resize"
-          style={handleTransform(50, -50)}
+          className="resize-handle pointer-events-auto absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-blue-400 rounded-tr-lg cursor-nesw-resize"
           onMouseDown={(e) => startResize(e, setTimerScale, timerScale)}
           onTouchStart={(e) => startResize(e, setTimerScale, timerScale)}
         />
+        {/* Bottom-left L */}
         <div
-          className="resize-handle pointer-events-auto absolute bottom-0 left-0 w-[5px] h-[5px] rounded-full bg-blue-500 shadow-sm cursor-nesw-resize"
-          style={handleTransform(-50, 50)}
+          className="resize-handle pointer-events-auto absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-blue-400 rounded-bl-lg cursor-nesw-resize"
           onMouseDown={(e) => startResize(e, setTimerScale, timerScale, -1)}
           onTouchStart={(e) => startResize(e, setTimerScale, timerScale, -1)}
         />
+        {/* Bottom-right L */}
         <div
-          className="resize-handle pointer-events-auto absolute bottom-0 right-0 w-[5px] h-[5px] rounded-full bg-blue-500 shadow-sm cursor-nwse-resize"
-          style={handleTransform(50, 50)}
+          className="resize-handle pointer-events-auto absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-blue-400 rounded-br-lg cursor-nwse-resize"
           onMouseDown={(e) => startResize(e, setTimerScale, timerScale)}
           onTouchStart={(e) => startResize(e, setTimerScale, timerScale)}
         />
@@ -453,7 +462,7 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
   const [isRolling, setIsRolling] = useState(false);
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
   const [enableTransition, setEnableTransition] = useState(true);
-  const [diceScale, setDiceScale] = useState(1);
+  const [diceScale, setDiceScale] = useState(1.6);
   const [dicePos, setDicePos] = useState<{ x: number; y: number } | null>(null);
   const handleTransform = useCallback(
     (tx: number, ty: number, extraY: number = 0) => ({
@@ -466,14 +475,35 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
   const rollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedDicePos = useRef(false);
 
+  const clampDicePos = useCallback(
+    (pos: { x: number; y: number }) => ({
+      x: Math.min(Math.max(0, pos.x), window.innerWidth - 200 * diceScale),
+      y: Math.min(Math.max(0, pos.y), window.innerHeight - 200 * diceScale),
+    }),
+    [diceScale],
+  );
+
+  // Initialize dice position to center when first shown; re-clamp on re-open
   useEffect(() => {
-    if (show && !hasInitializedDicePos.current) {
-      const centerX = window.innerWidth / 2 - 75;
-      const centerY = window.innerHeight / 2 - 75;
-      setDicePos({ x: centerX, y: centerY });
-      hasInitializedDicePos.current = true;
+    if (show) {
+      if (!hasInitializedDicePos.current) {
+        const centerX = window.innerWidth / 2 - 100;
+        const centerY = window.innerHeight / 2 - 100;
+        setDicePos({ x: centerX, y: centerY });
+        hasInitializedDicePos.current = true;
+      } else {
+        setDicePos((prev) => (prev ? clampDicePos(prev) : prev));
+      }
     }
-  }, [show]);
+  }, [show, clampDicePos]);
+
+  // Clamp on window resize
+  useEffect(() => {
+    const onResize = () =>
+      setDicePos((prev) => (prev ? clampDicePos(prev) : prev));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [clampDicePos]);
 
   const rollDice = () => {
     // Prevent overlapping rolls
@@ -662,7 +692,7 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 
       if (frameId) cancelAnimationFrame(frameId);
       frameId = requestAnimationFrame(() => {
-        setScale(Math.max(0.5, Math.min(1.5, startScale + delta)));
+        setScale(Math.max(0.8, Math.min(2.4, startScale + delta)));
       });
 
       if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
@@ -687,9 +717,10 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 
   return (
     <div
-      className="fixed flex flex-col items-center group z-[200]"
+      className="fixed flex flex-col items-center justify-center group z-[200] bg-white/50 backdrop-blur-md rounded-2xl"
       style={{
-        width: "150px",
+        width: "200px",
+        height: "200px",
         left: `${dicePos.x}px`,
         top: `${dicePos.y}px`,
         transform: `scale(${diceScale})`,
@@ -699,37 +730,36 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       onTouchStart={(e) => startDrag(e, setDicePos, dicePos)}
     >
       <div className="absolute inset-0 pointer-events-none transition-opacity opacity-0 group-hover:opacity-100">
-        {/* Four-corner resize handles styled like Word image handles (always visible) */}
+        {/* Top-left L */}
         <div
-          className="resize-handle pointer-events-auto absolute top-0 left-0 w-[5px] h-[5px] rounded-full bg-blue-500 shadow-sm cursor-nwse-resize"
-          style={handleTransform(-50, -50, 0)}
+          className="resize-handle pointer-events-auto absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-blue-400 rounded-tl-lg cursor-nwse-resize"
           onMouseDown={(e) => startResize(e, setDiceScale, diceScale, -1)}
           onTouchStart={(e) => startResize(e, setDiceScale, diceScale, -1)}
         />
+        {/* Top-right L */}
         <div
-          className="resize-handle pointer-events-auto absolute top-0 right-0 w-[5px] h-[5px] rounded-full bg-blue-500 shadow-sm cursor-nesw-resize"
-          style={handleTransform(50, -50, 0)}
+          className="resize-handle pointer-events-auto absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-blue-400 rounded-tr-lg cursor-nesw-resize"
           onMouseDown={(e) => startResize(e, setDiceScale, diceScale)}
           onTouchStart={(e) => startResize(e, setDiceScale, diceScale)}
         />
+        {/* Bottom-left L */}
         <div
-          className="resize-handle pointer-events-auto absolute bottom-0 left-0 w-[5px] h-[5px] rounded-full bg-blue-500 shadow-sm cursor-nesw-resize"
-          style={handleTransform(-50, 50, 60)}
+          className="resize-handle pointer-events-auto absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-blue-400 rounded-bl-lg cursor-nesw-resize"
           onMouseDown={(e) => startResize(e, setDiceScale, diceScale, -1)}
           onTouchStart={(e) => startResize(e, setDiceScale, diceScale, -1)}
         />
+        {/* Bottom-right L */}
         <div
-          className="resize-handle pointer-events-auto absolute bottom-0 right-0 w-[5px] h-[5px] rounded-full bg-blue-500 shadow-sm cursor-nwse-resize"
-          style={handleTransform(50, 50, 60)}
+          className="resize-handle pointer-events-auto absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-blue-400 rounded-br-lg cursor-nwse-resize"
           onMouseDown={(e) => startResize(e, setDiceScale, diceScale)}
           onTouchStart={(e) => startResize(e, setDiceScale, diceScale)}
         />
       </div>
-      <div className="w-full flex justify-between items-center px-4 py-1 opacity-0 group-hover:opacity-100">
-        <GripHorizontal size={18} className="text-gray-400" />
+      <div className="absolute top-0 w-full flex justify-between items-center px-4 pt-5 pb-1 opacity-0 group-hover:opacity-100 pointer-events-none">
+        <GripHorizontal size={18} className="text-gray-400 pointer-events-auto" />
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-red-500"
+          className="text-gray-400 hover:text-red-500 pointer-events-auto"
           aria-label="Close dice"
         >
           <X size={18} />
@@ -737,7 +767,7 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       </div>
 
       <div
-        className="dice-clickable w-20 h-20 mt-4 cursor-pointer drop-shadow-2xl"
+        className="dice-clickable w-20 h-20 cursor-pointer select-none"
         style={{ perspective: "800px" }}
         onClick={(e) => {
           e.stopPropagation();
@@ -774,6 +804,55 @@ const DigitalTeachingToolbar: React.FC = () => {
   const [showDice, setShowDice] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [toolbarY, setToolbarY] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (toolbarY === null) {
+      setToolbarY(window.innerHeight / 2);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleToolbarDrag = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      const currentY = toolbarY ?? window.innerHeight / 2;
+      const clientY = (e as React.TouchEvent).touches
+        ? (e as React.TouchEvent).touches[0].clientY
+        : (e as React.MouseEvent).clientY;
+      const startOffset = clientY - currentY;
+      let frameId: number | null = null;
+
+      document.body.style.userSelect = "none";
+
+      const onMove = (moveEvent: MouseEvent | TouchEvent) => {
+        const moveY = (moveEvent as TouchEvent).touches
+          ? (moveEvent as TouchEvent).touches[0].clientY
+          : (moveEvent as MouseEvent).clientY;
+        if (frameId) cancelAnimationFrame(frameId);
+        frameId = requestAnimationFrame(() => {
+          setToolbarY(
+            Math.max(40, Math.min(window.innerHeight - 40, moveY - startOffset)),
+          );
+        });
+        if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
+      };
+
+      const onEnd = () => {
+        if (frameId) cancelAnimationFrame(frameId);
+        document.body.style.userSelect = "";
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onEnd);
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("touchend", onEnd);
+      };
+
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onEnd);
+      window.addEventListener("touchmove", onMove, { passive: false });
+      window.addEventListener("touchend", onEnd);
+    },
+    [toolbarY],
+  );
 
   const handleToggleTimer = useCallback(() => {
     setShowTimer((prev) => !prev);
@@ -847,10 +926,26 @@ const DigitalTeachingToolbar: React.FC = () => {
       </Dialog>
 
       {/* Side toolbar */}
-      <div className="fixed right-0 top-1/2 -translate-y-1/2 flex flex-col gap-1 bg-white/90 backdrop-blur-md shadow-2xl border border-gray-200 border-r-0 rounded-l-xl p-1.5 z-[150] pointer-events-auto">
+      <div
+        className="fixed right-0 flex flex-col gap-1 bg-white/90 backdrop-blur-md shadow-2xl border border-gray-200 border-r-0 rounded-l-xl p-1.5 z-[150] pointer-events-auto"
+        style={{
+          top: `${toolbarY ?? window.innerHeight / 2}px`,
+          transform: "translateY(-50%)",
+        }}
+      >
+        {/* Drag handle */}
+        <div
+          className="flex justify-center py-0.5 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 transition-colors"
+          onMouseDown={handleToolbarDrag}
+          onTouchStart={handleToolbarDrag}
+          title="拖曳上下移動"
+        >
+          <GripHorizontal size={14} />
+        </div>
         <button
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={() => {
-            setShowShareDialog(true);
+            setShowShareDialog((prev) => !prev);
             setShowTimer(false);
             setShowDice(false);
           }}
