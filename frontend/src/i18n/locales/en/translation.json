@@ -579,6 +579,30 @@
       "instructions": "How to share:",
       "instruction1": "Scan QR Code: Students can scan the QR code with their phone to go directly to the login page",
       "instruction2": "Copy Link: Click the 'Copy' button to share the link with students"
+    },
+    "functionButtons": {
+      "myClassrooms": {
+        "step": "Step 1",
+        "title": "My Classrooms",
+        "description": "Create classrooms, assign and grade work",
+        "count": "Total Classrooms: {{count}}"
+      },
+      "allStudents": {
+        "step": "Step 2",
+        "title": "All Students",
+        "description": "Add classes and students to track individual ability across listening, speaking, reading, and writing",
+        "count": "Total Students: {{count}}"
+      },
+      "myMaterials": {
+        "step": "Step 3",
+        "title": "My Materials",
+        "description": "Create and assign lesson programs",
+        "count": "Total Programs: {{count}}"
+      },
+      "resourceMaterials": {
+        "title": "Resource Materials",
+        "description": "Browse shared resources and start teaching interactions with students"
+      }
     }
   },
   "admin": {
