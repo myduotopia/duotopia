@@ -20,6 +20,7 @@ import {
   ExternalLink,
   BookOpen,
   Users,
+  Hand,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { QRCodeSVG } from "qrcode.react";
@@ -783,7 +784,284 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
   );
 };
 
-// Removed DrawingCanvas and all drawing-related UI and logic.
+// RPS (Rock-Paper-Scissors) Slot Machine Component
+const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
+  show,
+  onClose,
+}) => {
+  const CHOICES = ["✊", "✋", "✌️"];
+  const ITEM_H = 120;
+  const REEL = useMemo(() => {
+    const arr: string[] = [];
+    for (let i = 0; i < 20; i++) CHOICES.forEach((c) => arr.push(c));
+    return arr;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [reelIndex, setReelIndex] = useState(3); // start at index 3 so there's room above
+  const [reelTransition, setReelTransition] = useState(false);
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [rpsPos, setRpsPos] = useState({ x: 0, y: 0 });
+  const [rpsScale, setRpsScale] = useState(1);
+  const hasInitialized = useRef(false);
+
+  const clampRpsPos = useCallback(
+    (pos: { x: number; y: number }) => ({
+      x: Math.min(Math.max(0, pos.x), window.innerWidth - 220 * rpsScale),
+      y: Math.min(Math.max(0, pos.y), window.innerHeight - 260 * rpsScale),
+    }),
+    [rpsScale],
+  );
+
+  useEffect(() => {
+    if (show && !hasInitialized.current) {
+      setRpsPos({
+        x: window.innerWidth / 2 - 110,
+        y: window.innerHeight / 2 - 130,
+      });
+      hasInitialized.current = true;
+    } else if (show) {
+      setRpsPos((prev) => clampRpsPos(prev));
+    }
+  }, [show, clampRpsPos]);
+
+  useEffect(() => {
+    const onResize = () => setRpsPos((prev) => clampRpsPos(prev));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [clampRpsPos]);
+
+  const spin = () => {
+    if (isSpinning) return;
+    setIsSpinning(true);
+
+    const targetChoice = Math.floor(Math.random() * 3);
+    const currentMod = reelIndex % 3;
+    const diff = (targetChoice - currentMod + 3) % 3;
+    const advance = 15 + (diff === 0 ? 3 : diff);
+    const newIndex = reelIndex + advance;
+
+    setReelTransition(true);
+    setReelIndex(newIndex);
+
+    setTimeout(() => {
+      setIsSpinning(false);
+      if (newIndex > 30) {
+        setTimeout(() => {
+          setReelTransition(false);
+          setReelIndex((newIndex % 3) + 3);
+        }, 50);
+      }
+    }, 1900);
+  };
+
+  const startDrag = (
+    e: React.MouseEvent | React.TouchEvent,
+    setPos: (pos: { x: number; y: number }) => void,
+    currentPos: { x: number; y: number },
+  ) => {
+    if (
+      (e.target as HTMLElement).closest("button") ||
+      (e.target as HTMLElement).closest(".resize-handle")
+    ) return;
+
+    const clientX = (e as React.TouchEvent).touches
+      ? (e as React.TouchEvent).touches[0].clientX
+      : (e as React.MouseEvent).clientX;
+    const clientY = (e as React.TouchEvent).touches
+      ? (e as React.TouchEvent).touches[0].clientY
+      : (e as React.MouseEvent).clientY;
+
+    const startX = clientX - currentPos.x;
+    const startY = clientY - currentPos.y;
+    let frameId: number | null = null;
+    document.body.style.userSelect = "none";
+
+    const onMove = (moveEvent: MouseEvent | TouchEvent) => {
+      const moveX = (moveEvent as TouchEvent).touches
+        ? (moveEvent as TouchEvent).touches[0].clientX
+        : (moveEvent as MouseEvent).clientX;
+      const moveY = (moveEvent as TouchEvent).touches
+        ? (moveEvent as TouchEvent).touches[0].clientY
+        : (moveEvent as MouseEvent).clientY;
+      if (frameId) cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(() =>
+        setPos({ x: moveX - startX, y: moveY - startY }),
+      );
+      if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
+    };
+
+    const onEnd = () => {
+      if (frameId) cancelAnimationFrame(frameId);
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onEnd);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onEnd);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onEnd);
+  };
+
+  const startResize = (
+    e: React.MouseEvent | React.TouchEvent,
+    setScale: (scale: number) => void,
+    currentScale: number,
+    direction: number = 1,
+  ) => {
+    e.stopPropagation();
+    const clientX = (e as React.TouchEvent).touches
+      ? (e as React.TouchEvent).touches[0].clientX
+      : (e as React.MouseEvent).clientX;
+    const startX = clientX;
+    const startScale = currentScale;
+    let frameId: number | null = null;
+    document.body.style.userSelect = "none";
+
+    const onMove = (moveEvent: MouseEvent | TouchEvent) => {
+      const moveX = (moveEvent as TouchEvent).touches
+        ? (moveEvent as TouchEvent).touches[0].clientX
+        : (moveEvent as MouseEvent).clientX;
+      const delta = direction * (moveX - startX) * 0.005;
+      if (frameId) cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(() =>
+        setScale(Math.max(0.8, Math.min(1.5, startScale + delta))),
+      );
+      if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
+    };
+
+    const onEnd = () => {
+      if (frameId) cancelAnimationFrame(frameId);
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onEnd);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onEnd);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onEnd);
+  };
+
+  if (!show) return null;
+
+  return (
+    <div
+      className="fixed flex flex-col items-center group z-[200] bg-white/50 backdrop-blur-md rounded-2xl pb-5"
+      style={{
+        width: "220px",
+        left: `${rpsPos.x}px`,
+        top: `${rpsPos.y}px`,
+        transform: `scale(${rpsScale})`,
+        transformOrigin: "top left",
+      }}
+      onMouseDown={(e) => startDrag(e, setRpsPos, rpsPos)}
+      onTouchStart={(e) => startDrag(e, setRpsPos, rpsPos)}
+    >
+      {/* Drag handle + close */}
+      <div className="absolute top-0 w-full flex justify-between items-center px-4 pt-5 pb-1 opacity-0 group-hover:opacity-100 pointer-events-none">
+        <GripHorizontal size={18} className="text-gray-400 pointer-events-auto" />
+        <button
+          onClick={onClose}
+          className="text-gray-400 hover:text-red-500 pointer-events-auto"
+          aria-label="Close RPS"
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      {/* Slot reel */}
+      <div
+        className="mt-10 rounded-2xl overflow-hidden relative bg-white/70"
+        style={{ width: "180px", height: ITEM_H }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {/* Top fade */}
+        <div
+          className="absolute top-0 left-0 right-0 pointer-events-none z-10"
+          style={{
+            height: 16,
+            background: "linear-gradient(to bottom, rgba(255,255,255,0.7), transparent)",
+          }}
+        />
+        {/* Bottom fade */}
+        <div
+          className="absolute bottom-0 left-0 right-0 pointer-events-none z-10"
+          style={{
+            height: 16,
+            background: "linear-gradient(to top, rgba(255,255,255,0.7), transparent)",
+          }}
+        />
+        {/* Reel items */}
+        <div
+          style={{
+            transform: `translateY(${-(reelIndex * ITEM_H)}px)`,
+            transition: reelTransition
+              ? "transform 1.8s cubic-bezier(0.17, 0.67, 0.12, 0.99)"
+              : "none",
+          }}
+        >
+          {REEL.map((choice, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-center select-none"
+              style={{ height: ITEM_H, fontSize: "7rem" }}
+            >
+              {choice}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Spin button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          spin();
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        disabled={isSpinning}
+        className={`mt-4 rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all ${
+          isSpinning
+            ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+            : "bg-blue-500 text-white hover:bg-blue-600 hover:scale-105"
+        }`}
+        aria-label="Spin"
+      >
+        <Play size={20} fill="currentColor" />
+      </button>
+
+      {/* Resize handles */}
+      <div className="absolute inset-0 pointer-events-none transition-opacity opacity-0 group-hover:opacity-100">
+        <div
+          className="resize-handle pointer-events-auto absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-blue-400 rounded-tl-lg cursor-nwse-resize"
+          onMouseDown={(e) => startResize(e, setRpsScale, rpsScale, -1)}
+          onTouchStart={(e) => startResize(e, setRpsScale, rpsScale, -1)}
+        />
+        <div
+          className="resize-handle pointer-events-auto absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-blue-400 rounded-tr-lg cursor-nesw-resize"
+          onMouseDown={(e) => startResize(e, setRpsScale, rpsScale)}
+          onTouchStart={(e) => startResize(e, setRpsScale, rpsScale)}
+        />
+        <div
+          className="resize-handle pointer-events-auto absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-blue-400 rounded-bl-lg cursor-nesw-resize"
+          onMouseDown={(e) => startResize(e, setRpsScale, rpsScale, -1)}
+          onTouchStart={(e) => startResize(e, setRpsScale, rpsScale, -1)}
+        />
+        <div
+          className="resize-handle pointer-events-auto absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-blue-400 rounded-br-lg cursor-nwse-resize"
+          onMouseDown={(e) => startResize(e, setRpsScale, rpsScale)}
+          onTouchStart={(e) => startResize(e, setRpsScale, rpsScale)}
+        />
+      </div>
+    </div>
+  );
+};
 
 // Main Toolbar Component
 const HELP_DISMISSED_KEY = "duotopia_help_dismissed";
@@ -797,6 +1075,7 @@ const DigitalTeachingToolbar: React.FC = () => {
   const user = useTeacherAuthStore((state) => state.user);
   const [showTimer, setShowTimer] = useState(false);
   const [showDice, setShowDice] = useState(false);
+  const [showRps, setShowRps] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toolbarY, setToolbarY] = useState<number | null>(null);
@@ -872,11 +1151,33 @@ const DigitalTeachingToolbar: React.FC = () => {
   );
 
   const handleToggleTimer = useCallback(() => {
-    setShowTimer((prev) => !prev);
+    setShowTimer((prev) => {
+      if (!prev) {
+        setShowShareDialog(false);
+        setShowHelp(false);
+      }
+      return !prev;
+    });
   }, []);
 
   const handleToggleDice = useCallback(() => {
-    setShowDice((prev) => !prev);
+    setShowDice((prev) => {
+      if (!prev) {
+        setShowShareDialog(false);
+        setShowHelp(false);
+      }
+      return !prev;
+    });
+  }, []);
+
+  const handleToggleRps = useCallback(() => {
+    setShowRps((prev) => {
+      if (!prev) {
+        setShowShareDialog(false);
+        setShowHelp(false);
+      }
+      return !prev;
+    });
   }, []);
 
   const getStudentLoginUrl = useCallback(() => {
@@ -1020,23 +1321,6 @@ const DigitalTeachingToolbar: React.FC = () => {
           <GripHorizontal size={14} />
         </div>
         <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => {
-            setShowShareDialog((prev) => !prev);
-            setShowTimer(false);
-            setShowDice(false);
-          }}
-          className={`p-1.5 rounded-lg transition-all duration-300 ${
-            showShareDialog
-              ? "bg-blue-500 text-white shadow-md"
-              : "hover:bg-gray-100 text-blue-500"
-          }`}
-          aria-label={t("teacherDashboard.share.button")}
-        >
-          <Share2 size={18} />
-        </button>
-
-        <button
           onClick={handleToggleTimer}
           className={`p-1.5 rounded-lg transition-all duration-300 ${
             showTimer
@@ -1061,8 +1345,55 @@ const DigitalTeachingToolbar: React.FC = () => {
         </button>
 
         <button
+          onClick={handleToggleRps}
+          className={`p-1.5 rounded-lg transition-all duration-300 ${
+            showRps
+              ? "bg-blue-500 text-white shadow-md"
+              : "hover:bg-gray-100 text-blue-500"
+          }`}
+          aria-label="Rock Paper Scissors"
+        >
+          <Hand size={18} />
+        </button>
+
+        <div className="mx-1 border-t border-gray-200" />
+
+        <button
           onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => setShowHelp((prev) => !prev)}
+          onClick={() => {
+            setShowShareDialog((prev) => {
+              if (!prev) {
+                setShowTimer(false);
+                setShowDice(false);
+                setShowRps(false);
+                setShowHelp(false);
+              }
+              return !prev;
+            });
+          }}
+          className={`p-1.5 rounded-lg transition-all duration-300 ${
+            showShareDialog
+              ? "bg-blue-500 text-white shadow-md"
+              : "hover:bg-gray-100 text-blue-500"
+          }`}
+          aria-label={t("teacherDashboard.share.button")}
+        >
+          <Share2 size={18} />
+        </button>
+
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => {
+            setShowHelp((prev) => {
+              if (!prev) {
+                setShowShareDialog(false);
+                setShowTimer(false);
+                setShowDice(false);
+                setShowRps(false);
+              }
+              return !prev;
+            });
+          }}
           className={`p-1.5 rounded-lg transition-all duration-300 ${
             showHelp
               ? "bg-red-500 text-white shadow-md"
@@ -1082,6 +1413,9 @@ const DigitalTeachingToolbar: React.FC = () => {
       </div>
       <div className="pointer-events-auto">
         <DiceTool show={showDice} onClose={() => setShowDice(false)} />
+      </div>
+      <div className="pointer-events-auto">
+        <RpsTool show={showRps} onClose={() => setShowRps(false)} />
       </div>
     </div>
   );
