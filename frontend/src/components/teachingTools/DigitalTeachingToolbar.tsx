@@ -147,8 +147,8 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
             height: isMajor ? "14px" : "7px",
             left: "50%",
             top: "50%",
-            transformOrigin: `50% 120px`,
-            transform: `translate(-50%, -120px) rotate(${i * 6}deg)`,
+            transformOrigin: `50% 110px`,
+            transform: `translate(-50%, -110px) rotate(${i * 6}deg)`,
           }}
         />,
       );
@@ -267,7 +267,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       className="fixed flex flex-col items-center group z-[200] bg-white/50 backdrop-blur-md rounded-2xl pb-4"
       ref={containerRef}
       style={{
-        width: "320px",
+        width: "280px",
         left: `${timerPos.x}px`,
         top: `${timerPos.y}px`,
         transform: `scale(${timerScale})`,
@@ -288,7 +288,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       </div>
 
       <div
-        className={`relative flex items-center justify-center w-[260px] h-[260px] rounded-full bg-white/70 backdrop-blur-md border-[6px] border-white/80 transition-all ${
+        className={`relative flex items-center justify-center w-[220px] h-[220px] mt-8 rounded-full bg-white/70 backdrop-blur-md border-[6px] border-white/80 transition-all ${
           isBeeping ? "animate-pulse ring-8 ring-blue-400" : ""
         }`}
       >
@@ -330,7 +330,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
             </button>
           </div>
 
-          <div className="flex items-center gap-1 text-gray-900 font-mono font-black text-5xl">
+          <div className="flex items-center gap-1 text-gray-900 font-mono font-black text-4xl">
             <div className="flex flex-col items-center">
               <button
                 onClick={() => {
