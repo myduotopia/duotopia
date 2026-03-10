@@ -191,12 +191,11 @@ function TeacherLayoutInner({
             <div className="flex items-start justify-between">
               {!sidebarCollapsed ? (
                 <div className="flex-1">
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-1">
-                    {t("teacherLayout.title")}
-                  </h1>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {t("teacherLayout.subtitle")}
-                  </p>
+                  <img
+                    src="https://storage.googleapis.com/duotopia-social-media-videos/website/logo/logo_row_nobg.png"
+                    alt="Duotopia"
+                    className="h-8 sm:h-10"
+                  />
                 </div>
               ) : null}
               <Button
@@ -392,12 +391,11 @@ function TeacherLayoutInner({
       <div className="md:hidden bg-white dark:bg-gray-800 border-b dark:border-gray-700 sticky top-0 z-50">
         <div className="flex items-center justify-between p-4">
           <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-              {t("teacherLayout.title")}
-            </h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {t("teacherLayout.subtitle")}
-            </p>
+            <img
+              src="https://storage.googleapis.com/duotopia-social-media-videos/website/logo/logo_row_nobg.png"
+              alt="Duotopia"
+              className="h-7"
+            />
           </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
