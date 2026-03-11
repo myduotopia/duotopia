@@ -2184,7 +2184,7 @@
     },
     "passwordStatus": {
       "changed": "Changed",
-      "notSet": "Birthday not set",
+      "notSet": "Not set",
       "copyPassword": "Copy password: {{password}}",
       "passwordCopied": "Password copied: {{password}}",
       "resetToDefault": "Reset to default password"

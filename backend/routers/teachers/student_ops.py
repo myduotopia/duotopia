@@ -226,6 +226,9 @@ async def get_all_students(
                 "classroom_name": (classroom_info["name"] if classroom_info else "未分配"),
                 "school_id": school_id,
                 "organization_id": organization_id,
+                "created_at": (
+                    student.created_at.isoformat() if student.created_at else None
+                ),
                 "email_verified": student.email_verified,
                 "email_verified_at": (
                     student.email_verified_at.isoformat()

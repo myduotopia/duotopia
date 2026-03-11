@@ -2181,7 +2181,7 @@
     },
     "passwordStatus": {
       "changed": "已更改",
-      "notSet": "未設定生日",
+      "notSet": "未設定",
       "copyPassword": "複製密碼: {{password}}",
       "passwordCopied": "密碼已複製: {{password}}",
       "resetToDefault": "重設為預設密碼"

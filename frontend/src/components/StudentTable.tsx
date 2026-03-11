@@ -38,6 +38,7 @@ export interface Student {
   school_id?: string;
   school_name?: string;
   organization_id?: string;
+  created_at?: string;
 }
 
 interface StudentTableProps {
@@ -441,30 +442,42 @@ export default function StudentTable({
                   <div className="inline-flex items-center space-x-1">
                     {student.password_changed ? (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 whitespace-nowrap">
-                        {t("studentTable.passwordChanged")}
+                        {t("studentTable.passwordStatus.changed")}
                       </span>
                     ) : (
                       <>
-                        {student.birthdate ? (
+                        {student.created_at ? (
                           <>
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700 font-mono whitespace-nowrap">
-                              {student.birthdate?.replace(/-/g, "") || ""}
+                              {student.created_at
+                                ?.split("T")[0]
+                                ?.replace(/-/g, "") || ""}
                             </span>
                             <Button
                               variant="ghost"
                               size="sm"
-                              title={t("studentTable.copyPassword", {
-                                password:
-                                  student.birthdate?.replace(/-/g, "") || "",
-                              })}
+                              title={t(
+                                "studentTable.passwordStatus.copyPassword",
+                                {
+                                  password:
+                                    student.created_at
+                                      ?.split("T")[0]
+                                      ?.replace(/-/g, "") || "",
+                                },
+                              )}
                               onClick={() => {
                                 const password =
-                                  student.birthdate?.replace(/-/g, "") || "";
+                                  student.created_at
+                                    ?.split("T")[0]
+                                    ?.replace(/-/g, "") || "";
                                 navigator.clipboard.writeText(password);
                                 toast.success(
-                                  t("studentTable.passwordCopied", {
-                                    password,
-                                  }),
+                                  t(
+                                    "studentTable.passwordStatus.passwordCopied",
+                                    {
+                                      password,
+                                    },
+                                  ),
                                 );
                               }}
                               className="h-6 w-6 p-0"
@@ -474,7 +487,7 @@ export default function StudentTable({
                           </>
                         ) : (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-700 whitespace-nowrap">
-                            {t("studentTable.noBirthdate")}
+                            {t("studentTable.passwordStatus.notSet")}
                           </span>
                         )}
                       </>
@@ -483,7 +496,7 @@ export default function StudentTable({
                       <Button
                         variant="ghost"
                         size="sm"
-                        title={t("studentTable.resetPassword")}
+                        title={t("studentTable.passwordStatus.resetToDefault")}
                         onClick={() => onResetPassword(student)}
                         className="h-7 px-2"
                       >
