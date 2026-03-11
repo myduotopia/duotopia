@@ -302,14 +302,16 @@ async def create_school_student(
             status_code=status.HTTP_404_NOT_FOUND, detail="School not found"
         )
 
-    # Parse birthdate
-    try:
-        birthdate = date.fromisoformat(student_data.birthdate)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid birthdate format. Please use YYYY-MM-DD format",
-        )
+    # Parse birthdate (optional)
+    birthdate = None
+    if student_data.birthdate:
+        try:
+            birthdate = date.fromisoformat(student_data.birthdate)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid birthdate format. Please use YYYY-MM-DD format",
+            )
 
     default_password = date.today().strftime("%Y%m%d")
 
@@ -403,12 +405,14 @@ async def batch_import_students(
 
     for idx, student_item in enumerate(import_data.students):
         try:
-            # Parse birthdate
-            try:
-                birthdate = date.fromisoformat(student_item.birthdate)
-            except ValueError:
-                errors.append(f"Row {idx + 1}: Invalid birthdate format")
-                continue
+            # Parse birthdate (optional)
+            birthdate = None
+            if student_item.birthdate:
+                try:
+                    birthdate = date.fromisoformat(student_item.birthdate)
+                except ValueError:
+                    errors.append(f"Row {idx + 1}: Invalid birthdate format")
+                    continue
 
             default_password = date.today().strftime("%Y%m%d")
 

@@ -301,7 +301,7 @@ class Student(Base):
     student_number = Column(String(50))
     email = Column(String(255), nullable=True, index=True)
     password_hash = Column(String(255), nullable=False)
-    birthdate = Column(Date, nullable=False)
+    birthdate = Column(Date, nullable=True)
     password_changed = Column(Boolean, default=False)
     email_verified = Column(Boolean, default=False)
     email_verified_at = Column(DateTime(timezone=True))

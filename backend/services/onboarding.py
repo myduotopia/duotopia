@@ -119,9 +119,9 @@ class OnboardingService:
         Returns:
             Created Student instance
         """
-        # Create student with birthdate 2012-01-01
+        # Create demo student with today's date as default password
         birthdate = date(2012, 1, 1)
-        default_password = birthdate.strftime("%Y%m%d")  # "20120101"
+        default_password = date.today().strftime("%Y%m%d")
 
         student = Student(
             name=self.DEFAULT_STUDENT_NAME,

@@ -112,10 +112,6 @@ export function StudentDialogs({
       newErrors.email = t("dialogs.studentDialogs.form.emailError");
     }
 
-    if (!formData.birthdate) {
-      newErrors.birthdate = t("dialogs.studentDialogs.form.birthdateError");
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -622,9 +618,8 @@ export function StudentDialogs({
               <div>
                 <label htmlFor="birthdate" className="text-sm font-medium">
                   {t("studentDialogs.form.birthdateLabel")}{" "}
-                  <span className="text-red-500">*</span>
                   <span className="text-xs text-gray-500 font-normal ml-1">
-                    {t("studentDialogs.form.birthdateNote")}
+                    ({t("studentDialogs.form.emailOptional")})
                   </span>
                 </label>
                 <input
@@ -634,19 +629,9 @@ export function StudentDialogs({
                   onChange={(e) =>
                     setFormData({ ...formData, birthdate: e.target.value })
                   }
-                  className={`w-full mt-1 px-3 py-2 border rounded-md ${errors.birthdate ? "border-red-500" : ""}`}
+                  className="w-full mt-1 px-3 py-2 border rounded-md"
                   max={new Date().toISOString().split("T")[0]}
                 />
-                {errors.birthdate && (
-                  <p className="text-xs text-red-500 mt-1">
-                    {errors.birthdate}
-                  </p>
-                )}
-                {formData.birthdate && (
-                  <p className="text-xs text-blue-600 mt-1 font-medium">
-                    {t("studentDialogs.form.joinDatePassword")}
-                  </p>
-                )}
               </div>
 
               <div>
