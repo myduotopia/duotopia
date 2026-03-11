@@ -183,6 +183,11 @@ async def get_teacher_classrooms(
                         ),
                         "phone": "",  # Privacy: don't expose phone numbers in list
                         "status": "active" if cs.student.is_active else "inactive",
+                        "created_at": (
+                            cs.student.created_at.isoformat()
+                            if cs.student.created_at
+                            else None
+                        ),
                     }
                     for cs in classroom.students
                     if cs.is_active
