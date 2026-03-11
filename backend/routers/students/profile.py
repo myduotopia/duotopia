@@ -10,11 +10,16 @@ from models import (
     Student,
     Classroom,
     ClassroomStudent,
+    Identity,
     StudentAssignment,
     AssignmentStatus,
 )
 from models.organization import ClassroomSchool, School, Organization
-from auth import verify_password, get_password_hash, validate_password_strength
+from auth import (
+    verify_password,
+    get_password_hash,
+    validate_password_strength,
+)
 from .dependencies import get_current_student, get_student_id
 from .validators import UpdateStudentProfileRequest, UpdatePasswordRequest
 
@@ -181,15 +186,23 @@ async def update_student_password(
             status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
         )
 
+    # 取得有效密碼：有 identity_id 就用 Identity 密碼，否則用本地密碼
+    effective_hash = student.password_hash
+    identity = None
+    if student.identity_id:
+        identity = db.query(Identity).filter(Identity.id == student.identity_id).first()
+        if identity and identity.password_hash:
+            effective_hash = identity.password_hash
+
     # Verify current password
-    if not verify_password(request.current_password, student.password_hash):
+    if not verify_password(request.current_password, effective_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
 
     # Check if new password is same as current password
-    if verify_password(request.new_password, student.password_hash):
+    if verify_password(request.new_password, effective_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password must be different from current password",
@@ -201,8 +214,14 @@ async def update_student_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     # Update password
-    student.password_hash = get_password_hash(request.new_password)
-    student.password_changed = True  # Mark that password has been changed
+    new_hash = get_password_hash(request.new_password)
+    student.password_hash = new_hash
+    student.password_changed = True
+
+    # 有 Identity 就同步更新 Identity 密碼
+    if identity:
+        identity.password_hash = new_hash
+
     db.commit()
 
     return {"message": "Password updated successfully"}

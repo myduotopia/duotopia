@@ -7,6 +7,7 @@ from database import get_db
 from models import (
     Teacher,
     Student,
+    Identity,
     ClassroomStudent,
     ClassroomSchool,
     School,
@@ -349,11 +350,13 @@ async def student_login(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )
 
-    # 驗證密碼（支援 Identity 統一密碼）
-    from auth import _get_student_password_hash
-
-    password_hash = _get_student_password_hash(db, student)
-    if not verify_password(login_req.password, password_hash):
+    # 驗證密碼：已驗證學生用 Identity 統一密碼，未驗證用本地密碼
+    effective_hash = student.password_hash
+    if student.identity_id:
+        identity = db.query(Identity).filter(Identity.id == student.identity_id).first()
+        if identity and identity.password_hash:
+            effective_hash = identity.password_hash
+    if not verify_password(login_req.password, effective_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )
