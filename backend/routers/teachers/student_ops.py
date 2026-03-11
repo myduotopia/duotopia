@@ -674,6 +674,15 @@ async def get_classroom_students(
             "email": s.email,
             "student_number": s.student_number,
             "birthdate": s.birthdate.isoformat() if s.birthdate else None,
+            "phone": getattr(s, "phone", ""),
+            "password_changed": s.password_changed,
+            "last_login": (
+                s.last_login.isoformat() if s.last_login else None
+            ),
+            "status": "active" if s.is_active else "inactive",
+            "created_at": (
+                s.created_at.isoformat() if s.created_at else None
+            ),
         }
         for s in students
     ]
