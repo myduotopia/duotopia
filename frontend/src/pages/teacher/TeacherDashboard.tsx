@@ -366,7 +366,9 @@ export default function TeacherDashboard() {
               >
                 <CardContent className="pt-6 pb-6 h-full">
                   <div className="flex items-start gap-4">
-                    <div className={`p-3 ${btn.bgColor} rounded-lg flex-shrink-0`}>
+                    <div
+                      className={`p-3 ${btn.bgColor} rounded-lg flex-shrink-0`}
+                    >
                       <Icon className={`h-6 w-6 ${btn.iconColor}`} />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -386,7 +388,9 @@ export default function TeacherDashboard() {
                         {btn.description}
                       </p>
                       {btn.count && (
-                        <p className={`text-sm font-medium ${btn.countColor} mt-2`}>
+                        <p
+                          className={`text-sm font-medium ${btn.countColor} mt-2`}
+                        >
                           {btn.count}
                         </p>
                       )}
@@ -405,7 +409,9 @@ export default function TeacherDashboard() {
           </p>
           <div className="flex items-center gap-3">
             <div className="flex-1 text-center">
-              <div className="mb-2 flex justify-center"><Send className="h-12 w-12 text-blue-500" /></div>
+              <div className="mb-2 flex justify-center">
+                <Send className="h-12 w-12 text-blue-500" />
+              </div>
               <p className="text-sm font-semibold text-gray-800">
                 {t("teacherDashboard.dailyFlow.step1")}
               </p>
@@ -415,18 +421,64 @@ export default function TeacherDashboard() {
             </div>
             <div className="flex-shrink-0 flex items-center">
               {/* Short arrow: mobile */}
-              <svg className="md:hidden" width="20" height="16" viewBox="0 0 20 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <line x1="0" y1="8" x2="12" y2="8" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round"/>
-                <polyline points="8,3 16,8 8,13" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <svg
+                className="md:hidden"
+                width="20"
+                height="16"
+                viewBox="0 0 20 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <line
+                  x1="0"
+                  y1="8"
+                  x2="12"
+                  y2="8"
+                  stroke="#CBD5E1"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <polyline
+                  points="8,3 16,8 8,13"
+                  fill="none"
+                  stroke="#CBD5E1"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
               {/* Long arrow: desktop */}
-              <svg className="hidden md:block" width="72" height="16" viewBox="0 0 72 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <line x1="0" y1="8" x2="58" y2="8" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round"/>
-                <polyline points="52,3 64,8 52,13" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <svg
+                className="hidden md:block"
+                width="72"
+                height="16"
+                viewBox="0 0 72 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <line
+                  x1="0"
+                  y1="8"
+                  x2="58"
+                  y2="8"
+                  stroke="#CBD5E1"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <polyline
+                  points="52,3 64,8 52,13"
+                  fill="none"
+                  stroke="#CBD5E1"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </div>
             <div className="flex-1 text-center">
-              <div className="mb-2 flex justify-center"><Brain className="h-12 w-12 text-purple-500" /></div>
+              <div className="mb-2 flex justify-center">
+                <Brain className="h-12 w-12 text-purple-500" />
+              </div>
               <p className="text-sm font-semibold text-gray-800">
                 {t("teacherDashboard.dailyFlow.step2")}
               </p>
@@ -436,18 +488,64 @@ export default function TeacherDashboard() {
             </div>
             <div className="flex-shrink-0 flex items-center">
               {/* Short arrow: mobile */}
-              <svg className="md:hidden" width="20" height="16" viewBox="0 0 20 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <line x1="0" y1="8" x2="12" y2="8" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round"/>
-                <polyline points="8,3 16,8 8,13" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <svg
+                className="md:hidden"
+                width="20"
+                height="16"
+                viewBox="0 0 20 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <line
+                  x1="0"
+                  y1="8"
+                  x2="12"
+                  y2="8"
+                  stroke="#CBD5E1"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <polyline
+                  points="8,3 16,8 8,13"
+                  fill="none"
+                  stroke="#CBD5E1"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
               {/* Long arrow: desktop */}
-              <svg className="hidden md:block" width="72" height="16" viewBox="0 0 72 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <line x1="0" y1="8" x2="58" y2="8" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round"/>
-                <polyline points="52,3 64,8 52,13" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <svg
+                className="hidden md:block"
+                width="72"
+                height="16"
+                viewBox="0 0 72 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <line
+                  x1="0"
+                  y1="8"
+                  x2="58"
+                  y2="8"
+                  stroke="#CBD5E1"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <polyline
+                  points="52,3 64,8 52,13"
+                  fill="none"
+                  stroke="#CBD5E1"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </div>
             <div className="flex-1 text-center">
-              <div className="mb-2 flex justify-center"><Radar className="h-12 w-12 text-green-500" /></div>
+              <div className="mb-2 flex justify-center">
+                <Radar className="h-12 w-12 text-green-500" />
+              </div>
               <p className="text-sm font-semibold text-gray-800">
                 {t("teacherDashboard.dailyFlow.step3")}
               </p>
