@@ -413,7 +413,7 @@ jobs:
             POLL=0
             HAS_CHECKS=false
             while true; do
-              CHECKS=$(gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,status,conclusion 2>/dev/null || echo "[]")
+              CHECKS=$(gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,state 2>/dev/null || echo "[]")
               TOTAL=$(echo "$CHECKS" | jq 'length')
               if [ "$TOTAL" -gt 0 ]; then HAS_CHECKS=true; break; fi
               POLL=$((POLL + 1))
@@ -430,8 +430,8 @@ jobs:
             ```bash
             POLL=0
             while true; do
-              CHECKS=$(gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,status,conclusion 2>/dev/null || echo "[]")
-              PENDING=$(echo "$CHECKS" | jq '[.[] | select(.status != "completed")] | length')
+              CHECKS=$(gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,state 2>/dev/null || echo "[]")
+              PENDING=$(echo "$CHECKS" | jq '[.[] | select(.state == "PENDING")] | length')
               if [ "$PENDING" = "0" ]; then break; fi
               POLL=$((POLL + 1))
               if [ "$POLL" -ge 30 ]; then echo "CI timeout after 15 minutes"; break; fi
@@ -444,7 +444,7 @@ jobs:
 
             Check which CI checks failed:
             ```bash
-            gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,conclusion,status
+            gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,state
             ```
 
             For each failing test check (Test Backend, Test Frontend):
@@ -481,8 +481,8 @@ jobs:
             ```bash
             POLL=0
             while true; do
-              CHECKS=$(gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,status,conclusion 2>/dev/null || echo "[]")
-              REVIEW_PENDING=$(echo "$CHECKS" | jq '[.[] | select(.name | test("claude|review"; "i")) | select(.status != "completed")] | length')
+              CHECKS=$(gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,state 2>/dev/null || echo "[]")
+              REVIEW_PENDING=$(echo "$CHECKS" | jq '[.[] | select(.name | test("claude|review"; "i")) | select(.state == "PENDING")] | length')
               if [ "$REVIEW_PENDING" = "0" ]; then break; fi
               POLL=$((POLL + 1))
               if [ "$POLL" -ge 20 ]; then echo "Review timeout after 10 minutes"; break; fi
@@ -493,17 +493,17 @@ jobs:
 
             ## Phase 4: Fix code review issues
 
-            Fetch the latest review comment from github-actions[bot]:
+            Fetch the latest review comment from claude[bot] (the Code Review bot):
             ```bash
             gh api repos/${{ github.repository }}/issues/${{ needs.create-release-pr.outputs.pr_number }}/comments \
-              --jq '.[] | select(.user.login == "github-actions[bot]") | {body: .body, created_at: .created_at}' \
+              --jq '.[] | select(.user.login == "claude[bot]") | {body: .body, created_at: .created_at}' \
               | jq -s 'sort_by(.created_at) | last'
             ```
 
             Also fetch inline review comments:
             ```bash
             gh api repos/${{ github.repository }}/pulls/${{ needs.create-release-pr.outputs.pr_number }}/comments \
-              --jq '.[] | select(.user.login == "github-actions[bot]") | {path: .path, line: .line, body: .body}'
+              --jq '.[] | select(.user.login == "claude[bot]") | {path: .path, line: .line, body: .body}'
             ```
 
             For each review item:
@@ -554,8 +554,8 @@ jobs:
 
           POLL=0
           while true; do
-            CHECKS=$(gh pr checks "$PR_NUM" --json name,status 2>/dev/null || echo "[]")
-            PENDING=$(echo "$CHECKS" | jq '[.[] | select(.status != "completed")] | length')
+            CHECKS=$(gh pr checks "$PR_NUM" --json name,state 2>/dev/null || echo "[]")
+            PENDING=$(echo "$CHECKS" | jq '[.[] | select(.state == "PENDING")] | length')
             if [ "$PENDING" = "0" ]; then break; fi
             POLL=$((POLL + 1))
             if [ "$POLL" -ge 30 ]; then
@@ -572,12 +572,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUM="${{ needs.create-release-pr.outputs.pr_number }}"
-          CHECKS=$(gh pr checks "$PR_NUM" --json name,conclusion,status 2>/dev/null || echo "[]")
+          CHECKS=$(gh pr checks "$PR_NUM" --json name,state 2>/dev/null || echo "[]")
 
           TOTAL=$(echo "$CHECKS" | jq 'length')
-          FAILED=$(echo "$CHECKS" | jq '[.[] | select(.conclusion == "failure")] | length')
-          PENDING=$(echo "$CHECKS" | jq '[.[] | select(.status != "completed")] | length')
-          FAILED_NAMES=$(echo "$CHECKS" | jq -r '[.[] | select(.conclusion == "failure") | .name] | join(", ")')
+          FAILED=$(echo "$CHECKS" | jq '[.[] | select(.state == "FAILURE")] | length')
+          PENDING=$(echo "$CHECKS" | jq '[.[] | select(.state == "PENDING")] | length')
+          FAILED_NAMES=$(echo "$CHECKS" | jq -r '[.[] | select(.state == "FAILURE") | .name] | join(", ")')
 
           if [ "$TOTAL" = "0" ]; then
             echo "status=needs_human" >> $GITHUB_OUTPUT
