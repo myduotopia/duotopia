@@ -2191,7 +2191,7 @@
     },
     "lastLogin": {
       "never": "從未登入",
-      "daysAgo": "{{days}} 天前"
+      "daysAgo": "{{count}} 天前"
     },
     "actions": {
       "view": "查看",
@@ -3715,7 +3715,7 @@
     },
     "success": {
       "created": "學生「{{name}}」已成功新增",
-      "createdWithPassword": "學生「{{name}}」已成功新增\n預設密碼：{{password}}",
+      "createdWithPassword": "預設密碼：{{password}}",
       "createdWithWarning": "學生「{{name}}」已成功新增\n⚠️ {{warning}}\n預設密碼：{{password}}",
       "updated": "學生「{{name}}」資料已更新",
       "deleted": "學生「{{name}}」已刪除"

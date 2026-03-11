@@ -2194,7 +2194,7 @@
     },
     "lastLogin": {
       "never": "Never logged in",
-      "daysAgo": "{{days}} days ago"
+      "daysAgo": "{{count}} days ago"
     },
     "actions": {
       "view": "View",
@@ -3702,7 +3702,7 @@
     },
     "success": {
       "created": "Student \"{{name}}\" added successfully",
-      "createdWithPassword": "Student \"{{name}}\" added successfully\nDefault password: {{password}}",
+      "createdWithPassword": "Default password: {{password}}",
       "createdWithWarning": "Student \"{{name}}\" added successfully\n⚠️ {{warning}}\nDefault password: {{password}}",
       "updated": "Student \"{{name}}\" updated",
       "deleted": "Student \"{{name}}\" deleted"
