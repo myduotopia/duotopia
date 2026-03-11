@@ -67,7 +67,7 @@ jobs:
         if: steps.find-branch.outputs.branch != '' && steps.find-branch.outputs.skipped == ''
         id: check-pr
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="${{ steps.find-branch.outputs.branch }}"
           EXISTING=$(gh pr list --head "$BRANCH" --base staging --state open --json number,url --jq '.[0]' 2>/dev/null || echo "")
@@ -88,7 +88,7 @@ jobs:
         if: steps.find-branch.outputs.branch != '' && steps.find-branch.outputs.skipped == '' && steps.check-pr.outputs.status == 'needs_creation'
         id: create-new-pr
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: |
           ISSUE_NUM=${{ github.event.issue.number }}
           ISSUE_TITLE="${{ github.event.issue.title }}"
@@ -336,14 +336,32 @@ jobs:
             **Environment**: Python 3.11 and Node 20 are installed with all project dependencies.
             Black and Prettier formatting has already been applied. Focus on remaining issues.
 
-            ## Phase 1: Wait for CI checks to complete
+            ## Phase 1: Wait for CI checks to appear and complete
 
-            Poll PR checks every 30 seconds, up to 15 minutes:
+            First, wait up to 2 minutes for checks to appear on the PR:
+            ```bash
+            POLL=0
+            HAS_CHECKS=false
+            while true; do
+              CHECKS=$(gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,status,conclusion 2>/dev/null || echo "[]")
+              TOTAL=$(echo "$CHECKS" | jq 'length')
+              if [ "$TOTAL" -gt 0 ]; then HAS_CHECKS=true; break; fi
+              POLL=$((POLL + 1))
+              if [ "$POLL" -ge 4 ]; then break; fi
+              echo "Waiting for checks to appear... (poll $POLL/4)"
+              sleep 30
+            done
+            ```
+
+            If no checks appeared after 2 minutes, skip to Phase 5 and report:
+            "No CI checks were triggered. The RELEASE_PAT secret may be missing — PR created by GITHUB_TOKEN cannot trigger other workflows."
+
+            If checks exist, poll until CI completes (up to 15 minutes):
             ```bash
             POLL=0
             while true; do
               CHECKS=$(gh pr checks ${{ needs.create-release-pr.outputs.pr_number }} --json name,status,conclusion 2>/dev/null || echo "[]")
-              PENDING=$(echo "$CHECKS" | jq '[.[] | select(.name | test("Test Backend|Test Frontend"; "i")) | select(.status != "completed")] | length')
+              PENDING=$(echo "$CHECKS" | jq '[.[] | select(.status != "completed")] | length')
               if [ "$PENDING" = "0" ]; then break; fi
               POLL=$((POLL + 1))
               if [ "$POLL" -ge 30 ]; then echo "CI timeout after 15 minutes"; break; fi
@@ -486,11 +504,15 @@ jobs:
           PR_NUM="${{ needs.create-release-pr.outputs.pr_number }}"
           CHECKS=$(gh pr checks "$PR_NUM" --json name,conclusion,status 2>/dev/null || echo "[]")
 
+          TOTAL=$(echo "$CHECKS" | jq 'length')
           FAILED=$(echo "$CHECKS" | jq '[.[] | select(.conclusion == "failure")] | length')
           PENDING=$(echo "$CHECKS" | jq '[.[] | select(.status != "completed")] | length')
           FAILED_NAMES=$(echo "$CHECKS" | jq -r '[.[] | select(.conclusion == "failure") | .name] | join(", ")')
 
-          if [ "$PENDING" -gt 0 ]; then
+          if [ "$TOTAL" = "0" ]; then
+            echo "status=needs_human" >> $GITHUB_OUTPUT
+            echo "details=No CI checks found - GITHUB_TOKEN may not have triggered workflows. Check RELEASE_PAT secret." >> $GITHUB_OUTPUT
+          elif [ "$PENDING" -gt 0 ]; then
             echo "status=pending" >> $GITHUB_OUTPUT
             echo "details=Some checks still running" >> $GITHUB_OUTPUT
           elif [ "$FAILED" -gt 0 ]; then
