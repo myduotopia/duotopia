@@ -42,7 +42,6 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from "recharts";
-import TeacherLayout from "@/components/TeacherLayout";
 import TapPayPayment from "@/components/payment/TapPayPayment";
 import { SubscriptionCardManagement } from "@/components/payment/SubscriptionCardManagement";
 import TeacherLoginModal from "@/components/TeacherLoginModal";
@@ -425,7 +424,7 @@ export default function TeacherSubscription() {
   }
 
   return (
-    <TeacherLayout>
+    <>
       <div>
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">
@@ -1245,6 +1244,6 @@ export default function TeacherSubscription() {
           )}
         </DialogContent>
       </Dialog>
-    </TeacherLayout>
+    </>
   );
 }

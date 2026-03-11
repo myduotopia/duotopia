@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import TeacherLayout from "@/components/TeacherLayout";
 import {
   RecursiveTreeAccordion,
   TreeNodeConfig,
@@ -24,13 +23,8 @@ import { getProgramLevelByLessonId } from "@/hooks/useProgramTree";
 const RESOURCE_ACCOUNT_EMAIL =
   import.meta.env.VITE_RESOURCE_ACCOUNT_EMAIL || "contact@duotopia.co";
 
-// Wrapper component that provides TeacherLayout (which contains WorkspaceProvider)
 export default function TeacherTemplatePrograms() {
-  return (
-    <TeacherLayout>
-      <TeacherTemplateProgramsInner />
-    </TeacherLayout>
-  );
+  return <TeacherTemplateProgramsInner />;
 }
 
 // Inner component - 「我的教材」不需要 workspace context

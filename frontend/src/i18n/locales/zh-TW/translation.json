@@ -503,6 +503,16 @@
       "a8": "可隨時透過帳戶設定取消訂閱，下個月將不再扣款。未使用完的點數於點數期限內可使用，直到到期歸零。"
     }
   },
+  "teacherToolbar": {
+    "help": {
+      "title": "操作手冊",
+      "description": "點選以下連結了解如何使用 Duotopia",
+      "teacherManual": "老師操作手冊",
+      "studentGuide": "學生介面介紹",
+      "dontShowAgain": "不再主動提醒",
+      "start": "開始使用"
+    }
+  },
   "teacherDashboard": {
     "loading": "載入中...",
     "errors": {
@@ -521,8 +531,10 @@
       "trialDaysRemaining": "免費試用剩餘 {{days}} 天"
     },
     "welcome": {
-      "title": "歡迎回來，{{name}}！",
-      "subtitle": "管理您的班級、課程與學生學習進度"
+      "title": "歡迎，{{name}}！",
+      "subtitle": "管理您的班級、課程與學生學習進度",
+      "tagline1": "Duotopia makes teaching smarter and learning more active.",
+      "tagline2": "Save 80% of lesson prep and grading time."
     },
     "subscription": {
       "trialTitle": "🎉 免費試用",
@@ -579,6 +591,39 @@
       "instructions": "分享方式：",
       "instruction1": "掃描 QR 碼：學生可以用手機掃描 QR 碼直接進入登入頁面",
       "instruction2": "複製連結：點擊「複製」按鈕，將連結分享給學生"
+    },
+    "functionButtons": {
+      "myClassrooms": {
+        "step": "Step 1",
+        "title": "我的班級",
+        "description": "建立班級，派發作業並批改",
+        "count": "班級總數：{{count}} 個"
+      },
+      "allStudents": {
+        "step": "Step 2",
+        "title": "所有學生",
+        "description": "新增班級學生，以記錄個別學生聽說讀寫四項能力指標",
+        "count": "學生總數：{{count}} 位"
+      },
+      "myMaterials": {
+        "step": "Step 3",
+        "title": "我的教材",
+        "description": "建立與指派教學課程",
+        "count": "課程總數：{{count}} 個"
+      },
+      "resourceMaterials": {
+        "title": "資源教材包",
+        "description": "瀏覽共享教材資源，馬上開始與學生進行教學互動"
+      }
+    },
+    "dailyFlow": {
+      "title": "設定完成後，這是你的日常",
+      "step1": "派發作業",
+      "step1Desc": "從班級指派課程給學生",
+      "step2": "AI 自動批改",
+      "step2Desc": "學生提交後，AI 即時批改",
+      "step3": "查看成果",
+      "step3Desc": "追蹤學生學習進度與成效"
     }
   },
   "admin": {

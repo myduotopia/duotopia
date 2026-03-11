@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import TeacherLayout from "@/components/TeacherLayout";
 import {
   useResourceMaterialsAPI,
   ResourceMaterial,
@@ -45,11 +44,7 @@ import { getContentTypeIcon } from "@/lib/contentTypeIcon";
 import { toast } from "sonner";
 
 export default function ResourceMaterialsPage() {
-  return (
-    <TeacherLayout>
-      <ResourceMaterialsInner />
-    </TeacherLayout>
-  );
+  return <ResourceMaterialsInner />;
 }
 
 /** Expandable content card showing items inside */
