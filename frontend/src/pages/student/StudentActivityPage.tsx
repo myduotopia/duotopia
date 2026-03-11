@@ -296,7 +296,7 @@ export default function StudentActivityPage() {
       practiceMode={practiceMode}
       showAnswer={showAnswer}
       canUseAiAnalysis={canUseAiAnalysis}
-      onBack={() => navigate(`/student/assignment/${assignmentId}/detail`)}
+      onBack={() => navigate("/student/assignments")}
       onSubmit={handleSubmit}
     />
   );
