@@ -492,7 +492,7 @@ export default function StudentTable({
                         {formatDate(student.last_login)}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {t("studentTable.daysAgo", {
+                        {t("studentTable.lastLogin.daysAgo", {
                           count: Math.floor(
                             (Date.now() -
                               new Date(student.last_login).getTime()) /
