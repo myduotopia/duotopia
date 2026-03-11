@@ -1133,11 +1133,12 @@
       "placeholder": "請輸入你的密碼",
       "login": "登入",
       "selectOther": "選擇其他學生",
-      "passwordHint": "首次登入請輸入西元生日年月日，如: 2012 年 1 月 1 日，密碼為 20120101",
+      "passwordHint": "首次登入請輸入加入班級當天的日期，格式為 YYYYMMDD，如: 20260501",
       "forgotPassword": "若忘記密碼，請聯繫教師恢復預設密碼",
+      "verifiedEmailHint": "若已驗證過 Email，請使用驗證時設定的密碼登入",
       "demoHint": "💡 測試提示",
       "demoPassword": "Demo 學生預設密碼：",
-      "passwordFormat": "正式使用時，密碼為學生的生日 (格式：YYYYMMDD)"
+      "passwordFormat": "正式使用時，密碼為加入班級當天的日期 (格式：YYYYMMDD)"
     },
     "buttons": {
       "back": "返回"
@@ -1960,7 +1961,7 @@
       },
       "create": {
         "title": "新增學生",
-        "description": "填寫學生資料以新增學生。生日將作為預設密碼。"
+        "description": "填寫學生資料以新增學生。預設密碼為加入當天日期。"
       },
       "edit": {
         "title": "編輯學生資料",
@@ -1988,8 +1989,10 @@
         "birthdateLabel": "學生生日",
         "birthdateRequired": "*",
         "birthdateNote": "(請填寫學生的真實生日)",
-        "birthdateError": "生日為必填（用作預設密碼）",
+        "birthdateError": "生日為必填",
         "passwordNote": "⚠️ 學生登入密碼將設為: {{password}}",
+        "joinDatePassword": "預設密碼為加入當天日期（格式：YYYYMMDD）",
+        "verifiedEmailNote": "若學生已驗證過帳號，請提醒學生用驗證時設定的密碼登入",
         "classroomLabel": "班級",
         "classroomNone": "未分配班級",
         "statusLabel": "狀態",
@@ -2073,7 +2076,7 @@
       },
       "nextSteps": {
         "title": "下一步：",
-        "password": "學生預設密碼為生日（格式：YYYYMMDD）",
+        "password": "學生預設密碼為加入當天日期（格式：YYYYMMDD）",
         "remind": "請提醒學生首次登入後修改密碼",
         "viewStudents": "可以到「我的學生」頁面查看匯入的學生"
       },
@@ -3651,6 +3654,7 @@
       "status": {
         "changed": "已更改",
         "default": "預設密碼 ({{password}})",
+        "usingDefault": "使用預設密碼",
         "neverLoggedIn": "從未登入"
       },
       "badges": {
@@ -3662,7 +3666,7 @@
     },
     "create": {
       "title": "新增學生",
-      "description": "填寫學生資料以新增學生。生日將作為預設密碼。"
+      "description": "填寫學生資料以新增學生。預設密碼為加入當天日期。"
     },
     "edit": {
       "title": "編輯學生資料",
@@ -3692,6 +3696,8 @@
       "birthdateNote": "(請填寫學生的真實生日)",
       "birthdateError": "請選擇生日",
       "birthdatePassword": "⚠️ 學生登入密碼將設為: {{password}}",
+      "joinDatePassword": "預設密碼為加入當天日期（格式：YYYYMMDD）",
+      "verifiedEmailNote": "若學生已驗證過帳號，請提醒學生用驗證時設定的密碼登入",
       "classroomLabel": "班級",
       "classroomUnassigned": "未分配班級",
       "statusLabel": "狀態",
@@ -3722,7 +3728,7 @@
       "invalidBirthdate": "生日格式錯誤，請使用YYYY-MM-DD格式",
       "requiredFields": "請填寫所有必填欄位",
       "nameRequired": "姓名為必填",
-      "birthdateRequired": "生日為必填（用作預設密碼）",
+      "birthdateRequired": "生日為必填",
       "validationFailed": "資料驗證失敗",
       "fixErrors": "請修正標示的欄位",
       "deleteRetry": "刪除失敗，請稍後再試"
@@ -3776,7 +3782,7 @@
     },
     "nextSteps": {
       "title": "下一步：",
-      "step1": "學生預設密碼為生日（格式：YYYYMMDD）",
+      "step1": "學生預設密碼為加入當天日期（格式：YYYYMMDD）",
       "step2": "請提醒學生首次登入後修改密碼",
       "step3": "可以到「我的學生」頁面查看匯入的學生"
     },

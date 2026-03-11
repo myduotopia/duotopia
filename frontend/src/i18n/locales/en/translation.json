@@ -1136,9 +1136,12 @@
       "placeholder": "Enter your password",
       "login": "Login",
       "selectOther": "Select Another Student",
+      "passwordHint": "Your default password is the date you were added to the class (format: YYYYMMDD, e.g. 20260501)",
+      "forgotPassword": "Forgot password? Contact your teacher to reset it",
+      "verifiedEmailHint": "If you've verified your email, please use the password you set during verification",
       "demoHint": "💡 Test Hint",
       "demoPassword": "Default demo password:",
-      "passwordFormat": "For production use, password is student's birthday (Format: YYYYMMDD)"
+      "passwordFormat": "For production use, password is the date the student was added (Format: YYYYMMDD)"
     },
     "buttons": {
       "back": "Back"
@@ -1961,7 +1964,7 @@
       },
       "create": {
         "title": "Add Student",
-        "description": "Fill in student information. Birthdate will be used as the default password."
+        "description": "Fill in student information. Default password is the date the student is added."
       },
       "edit": {
         "title": "Edit Student",
@@ -1989,8 +1992,10 @@
         "birthdateLabel": "Student Birthdate",
         "birthdateRequired": "*",
         "birthdateNote": "(Enter the student's actual birthdate)",
-        "birthdateError": "Birthdate is required (used as default password)",
+        "birthdateError": "Birthdate is required",
         "passwordNote": "⚠️ Login password will be: {{password}}",
+        "joinDatePassword": "Default password is the date of enrollment (format: YYYYMMDD)",
+        "verifiedEmailNote": "If the student has verified their account, remind them to use the password set during verification",
         "classroomLabel": "Classroom",
         "classroomNone": "Unassigned",
         "statusLabel": "Status",
@@ -3636,6 +3641,7 @@
       "status": {
         "changed": "Changed",
         "default": "Default Password ({{password}})",
+        "usingDefault": "Using default password",
         "neverLoggedIn": "Never Logged In"
       },
       "badges": {
@@ -3647,7 +3653,7 @@
     },
     "create": {
       "title": "Add Student",
-      "description": "Fill in student information. Birthdate will be used as default password."
+      "description": "Fill in student information. Default password is the date the student is added."
     },
     "edit": {
       "title": "Edit Student",
@@ -3677,6 +3683,8 @@
       "birthdateNote": "(Please enter student's actual birthdate)",
       "birthdateError": "Please select birthdate",
       "birthdatePassword": "⚠️ Student login password will be: {{password}}",
+      "joinDatePassword": "Default password is the date of enrollment (format: YYYYMMDD)",
+      "verifiedEmailNote": "If the student has verified their account, remind them to use the password set during verification",
       "classroomLabel": "Classroom",
       "classroomUnassigned": "Unassigned",
       "statusLabel": "Status",
@@ -3707,7 +3715,7 @@
       "invalidBirthdate": "Invalid birthdate format, please use YYYY-MM-DD",
       "requiredFields": "Please fill in all required fields",
       "nameRequired": "Name is required",
-      "birthdateRequired": "Birthdate is required (used as default password)",
+      "birthdateRequired": "Birthdate is required",
       "validationFailed": "Data validation failed",
       "fixErrors": "Please fix the marked fields",
       "deleteRetry": "Delete failed, please try again later"
@@ -3761,7 +3769,7 @@
     },
     "nextSteps": {
       "title": "Next Steps:",
-      "step1": "Student default password is birthdate (format: YYYYMMDD)",
+      "step1": "Student default password is the date of enrollment (format: YYYYMMDD)",
       "step2": "Please remind students to change password after first login",
       "step3": "You can view imported students in \"My Students\" page"
     },

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy import func
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from uuid import UUID
 
 from database import get_db
@@ -282,7 +282,7 @@ async def create_student(
                 detail="Invalid birthdate format. Please use YYYY-MM-DD format",
             )
 
-    default_password = birthdate.strftime("%Y%m%d")
+    default_password = date.today().strftime("%Y%m%d")
 
     # Email is optional now - can be NULL or shared between students
     email = student_data.email if student_data.email else None
@@ -453,15 +453,10 @@ async def update_student(
                 detail="You don't have permission to update this student",
             )
 
-    # Check if birthdate is being changed and student is using default password
-    if update_data.birthdate is not None and not student.password_changed:
-        # Parse new birthdate
+    # Update birthdate (no longer syncs password since default password is join date)
+    if update_data.birthdate is not None:
         new_birthdate = datetime.strptime(update_data.birthdate, "%Y-%m-%d").date()
         student.birthdate = new_birthdate
-
-        # Update password to new birthdate (YYYYMMDD format)
-        new_default_password = new_birthdate.strftime("%Y%m%d")
-        student.password_hash = get_password_hash(new_default_password)
 
     # Update other fields
     if update_data.name is not None:
@@ -598,7 +593,7 @@ async def reset_student_password(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """重設學生密碼為預設值（生日）"""
+    """重設學生密碼為預設值（建立日期）"""
     # Get student and verify it belongs to teacher's classroom
     student = (
         db.query(Student)
@@ -616,12 +611,13 @@ async def reset_student_password(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    if not student.birthdate:
-        raise HTTPException(status_code=400, detail="Student birthdate not set")
+    if not student.created_at:
+        raise HTTPException(
+            status_code=400, detail="Student creation date not available"
+        )
 
-    # Reset password to birthdate (YYYYMMDD format)
-
-    default_password = student.birthdate.strftime("%Y%m%d")
+    # Reset password to creation date (YYYYMMDD format)
+    default_password = student.created_at.strftime("%Y%m%d")
     student.password_hash = get_password_hash(default_password)
     student.password_changed = False
 
@@ -701,9 +697,10 @@ async def batch_create_students(
         raise HTTPException(status_code=404, detail="Classroom not found")
 
     created_students = []
+    today_password = date.today().strftime("%Y%m%d")
     for student_data in batch_data.students:
         birthdate = date.fromisoformat(student_data["birthdate"])
-        default_password = birthdate.strftime("%Y%m%d")
+        default_password = today_password
 
         student = Student(
             name=student_data["name"],
@@ -735,7 +732,7 @@ async def batch_create_students(
                 "id": s.id,
                 "name": s.name,
                 "email": s.email,
-                "default_password": s.birthdate.strftime("%Y%m%d"),
+                "default_password": today_password,
             }
             for s in created_students
         ],
@@ -985,8 +982,8 @@ async def batch_import_students(
             # Don't generate fake email - let students bind their own email later
             # email = None allows students to decide whether to bind email themselves
 
-            # Create student
-            default_password = birthdate.strftime("%Y%m%d")
+            # Create student - default password is today's date
+            default_password = date.today().strftime("%Y%m%d")
             student = Student(
                 name=student_name,
                 email=None,  # Let students bind email themselves

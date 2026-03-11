@@ -311,7 +311,7 @@ async def create_school_student(
             detail="Invalid birthdate format. Please use YYYY-MM-DD format",
         )
 
-    default_password = birthdate.strftime("%Y%m%d")
+    default_password = date.today().strftime("%Y%m%d")
 
     # Check if student_number already exists in school (if provided)
     if student_data.student_number:
@@ -410,7 +410,7 @@ async def batch_import_students(
                 errors.append(f"Row {idx + 1}: Invalid birthdate format")
                 continue
 
-            default_password = birthdate.strftime("%Y%m%d")
+            default_password = date.today().strftime("%Y%m%d")
 
             # Check for duplicates based on duplicate_action
             existing = None
@@ -826,10 +826,6 @@ async def update_school_student(
     if update_data.birthdate is not None:
         try:
             new_birthdate = date.fromisoformat(update_data.birthdate)
-            # If password not changed and birthdate changed, update password
-            if not student.password_changed and new_birthdate != student.birthdate:
-                new_default_password = new_birthdate.strftime("%Y%m%d")
-                student.password_hash = get_password_hash(new_default_password)
             student.birthdate = new_birthdate
         except ValueError:
             raise HTTPException(

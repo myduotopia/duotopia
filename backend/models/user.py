@@ -335,9 +335,9 @@ class Student(Base):
     assignments = relationship("StudentAssignment", back_populates="student")
 
     def get_default_password(self):
-        """取得預設密碼（生日格式：YYYYMMDD）"""
-        if self.birthdate:
-            return self.birthdate.strftime("%Y%m%d")
+        """取得預設密碼（建立日期格式：YYYYMMDD）"""
+        if self.created_at:
+            return self.created_at.strftime("%Y%m%d")
         return None
 
     def __repr__(self):

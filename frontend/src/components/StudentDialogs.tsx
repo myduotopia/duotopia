@@ -144,6 +144,8 @@ export function StudentDialogs({
           unknown
         >;
 
+        const defaultPassword = response.default_password as string;
+
         // Check for warning message about unassigned students
         if (response.warning) {
           toast.warning(
@@ -154,13 +156,13 @@ export function StudentDialogs({
               <p className="text-sm mt-1 text-orange-600">
                 ⚠️ {response.warning as string}
               </p>
-              {formData.birthdate ? (
+              {defaultPassword ? (
                 <p className="text-sm mt-1">
                   {t("studentDialogs.success.createdWithPassword", {
                     password: "",
                   })}
                   <code className="bg-gray-100 px-1 rounded">
-                    {formData.birthdate.replace(/-/g, "")}
+                    {defaultPassword}
                   </code>
                 </p>
               ) : null}
@@ -168,9 +170,8 @@ export function StudentDialogs({
             { duration: 8000 },
           );
         } else {
-          // Show default password if birthdate is provided
-          if (formData.birthdate) {
-            const defaultPassword = formData.birthdate.replace(/-/g, "");
+          // Show default password from API response
+          if (defaultPassword) {
             toast.success(
               <div>
                 <p>
@@ -464,9 +465,7 @@ export function StudentDialogs({
                       </span>
                     ) : (
                       <span className="text-yellow-600">
-                        {t("studentDialogs.view.status.default", {
-                          password: student.birthdate?.replace(/-/g, ""),
-                        })}
+                        {t("studentDialogs.view.status.usingDefault")}
                       </span>
                     )}
                   </p>
@@ -644,10 +643,8 @@ export function StudentDialogs({
                   </p>
                 )}
                 {formData.birthdate && (
-                  <p className="text-xs text-amber-600 mt-1 font-medium">
-                    {t("studentDialogs.form.birthdatePassword", {
-                      password: formData.birthdate.replace(/-/g, ""),
-                    })}
+                  <p className="text-xs text-blue-600 mt-1 font-medium">
+                    {t("studentDialogs.form.joinDatePassword")}
                   </p>
                 )}
               </div>
@@ -705,6 +702,12 @@ export function StudentDialogs({
                   </option>
                 </select>
               </div>
+            )}
+
+            {dialogType === "create" && (
+              <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                ℹ️ {t("studentDialogs.form.verifiedEmailNote")}
+              </p>
             )}
 
             {errors.submit && (
