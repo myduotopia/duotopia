@@ -335,9 +335,19 @@ class Student(Base):
     assignments = relationship("StudentAssignment", back_populates="student")
 
     def get_default_password(self):
-        """取得預設密碼（建立日期格式：YYYYMMDD）"""
+        """取得預設密碼（建立日期台灣時區格式：YYYYMMDD）"""
         if self.created_at:
-            return self.created_at.strftime("%Y%m%d")
+            from zoneinfo import ZoneInfo
+
+            taipei_tz = ZoneInfo("Asia/Taipei")
+            created_tw = (
+                self.created_at.astimezone(taipei_tz)
+                if self.created_at.tzinfo
+                else self.created_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(
+                    taipei_tz
+                )
+            )
+            return created_tw.strftime("%Y%m%d")
         return None
 
     def __repr__(self):

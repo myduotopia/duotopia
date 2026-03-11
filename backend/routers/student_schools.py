@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, or_
 from typing import List, Optional
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 import uuid
 import json
 
@@ -313,7 +314,7 @@ async def create_school_student(
                 detail="Invalid birthdate format. Please use YYYY-MM-DD format",
             )
 
-    default_password = date.today().strftime("%Y%m%d")
+    default_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
 
     # Check if student_number already exists in school (if provided)
     if student_data.student_number:
@@ -414,7 +415,7 @@ async def batch_import_students(
                     errors.append(f"Row {idx + 1}: Invalid birthdate format")
                     continue
 
-            default_password = date.today().strftime("%Y%m%d")
+            default_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
 
             # Check for duplicates based on duplicate_action
             existing = None

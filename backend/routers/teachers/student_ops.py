@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy import func
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from uuid import UUID
 
 from database import get_db
@@ -285,7 +286,7 @@ async def create_student(
                     detail="Invalid birthdate format. Please use YYYY-MM-DD format",
                 )
 
-    default_password = date.today().strftime("%Y%m%d")
+    default_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
 
     # Email is optional now - can be NULL or shared between students
     email = student_data.email if student_data.email else None
@@ -619,8 +620,10 @@ async def reset_student_password(
             status_code=400, detail="Student creation date not available"
         )
 
-    # Reset password to creation date (YYYYMMDD format)
-    default_password = student.created_at.strftime("%Y%m%d")
+    # Reset password to creation date in Taiwan timezone (YYYYMMDD format)
+    taipei_tz = ZoneInfo("Asia/Taipei")
+    created_at_tw = student.created_at.astimezone(taipei_tz) if student.created_at.tzinfo else student.created_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(taipei_tz)
+    default_password = created_at_tw.strftime("%Y%m%d")
     student.password_hash = get_password_hash(default_password)
     student.password_changed = False
 
@@ -709,7 +712,7 @@ async def batch_create_students(
         raise HTTPException(status_code=404, detail="Classroom not found")
 
     created_students = []
-    today_password = date.today().strftime("%Y%m%d")
+    today_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
     for student_data in batch_data.students:
         birthdate = (
             date.fromisoformat(student_data["birthdate"])
@@ -987,7 +990,7 @@ async def batch_import_students(
             # email = None allows students to decide whether to bind email themselves
 
             # Create student - default password is today's date
-            default_password = date.today().strftime("%Y%m%d")
+            default_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
             student = Student(
                 name=student_name,
                 email=None,  # Let students bind email themselves

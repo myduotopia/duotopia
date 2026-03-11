@@ -7,6 +7,7 @@ This service implements the TDD GREEN phase to pass all 32 tests.
 
 import logging
 from datetime import datetime, timezone, date, timedelta
+from zoneinfo import ZoneInfo
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -121,7 +122,7 @@ class OnboardingService:
         """
         # Create demo student with today's date as default password
         birthdate = date(2012, 1, 1)
-        default_password = date.today().strftime("%Y%m%d")
+        default_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
 
         student = Student(
             name=self.DEFAULT_STUDENT_NAME,

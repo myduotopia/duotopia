@@ -408,11 +408,21 @@ export default function StudentTable({
                 <TableCell className="whitespace-nowrap">
                   <div className="inline-flex items-center space-x-1">
                     {(() => {
-                      const defaultPwd = student.created_at
-                        ? student.created_at.split("T")[0].replace(/-/g, "")
-                        : student.birthdate
-                          ? student.birthdate.replace(/-/g, "")
-                          : null;
+                      // Convert UTC created_at to Taiwan date (UTC+8)
+                      const getDefaultPwd = () => {
+                        if (student.created_at) {
+                          const d = new Date(student.created_at);
+                          const tw = new Date(
+                            d.getTime() + 8 * 60 * 60 * 1000,
+                          );
+                          return tw.toISOString().split("T")[0].replace(/-/g, "");
+                        }
+                        if (student.birthdate) {
+                          return student.birthdate.replace(/-/g, "");
+                        }
+                        return null;
+                      };
+                      const defaultPwd = getDefaultPwd();
 
                       if (student.password_changed) {
                         return (
