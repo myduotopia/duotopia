@@ -577,10 +577,7 @@ export function StudentDialogs({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="email" className="text-sm font-medium">
-                  {t("studentDialogs.form.emailLabel")}{" "}
-                  <span className="text-gray-400">
-                    {t("studentDialogs.form.emailOptional")}
-                  </span>
+                  {t("studentDialogs.form.emailLabel")}
                 </label>
                 <input
                   id="email"
@@ -619,7 +616,7 @@ export function StudentDialogs({
                 <label htmlFor="birthdate" className="text-sm font-medium">
                   {t("studentDialogs.form.birthdateLabel")}{" "}
                   <span className="text-xs text-gray-500 font-normal ml-1">
-                    ({t("studentDialogs.form.emailOptional")})
+                    {t("studentDialogs.form.emailOptional")}
                   </span>
                 </label>
                 <input
