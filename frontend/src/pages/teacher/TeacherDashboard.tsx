@@ -1,6 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import SystemOverviewTab from "./SystemOverviewTab";
+import ClassroomsTab from "./ClassroomsTab";
+import AllStudentsTab from "./AllStudentsTab";
+import ResourceMaterialsTab from "./ResourceMaterialsTab";
+import MaterialsTab from "./MaterialsTab";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,13 +15,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
+  GraduationCap,
   Users,
-  UserCheck,
   BookOpen,
-  Settings,
+  Package,
   Share2,
   Copy,
   Check,
+  Sparkles,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { apiClient } from "@/lib/api";
@@ -56,25 +61,95 @@ interface DashboardData {
   subscription_end_date?: string;
   days_remaining?: number;
   can_assign_homework?: boolean;
-  is_test_account?: boolean; // 後端提供的白名單狀態
+  is_test_account?: boolean;
 }
 
+const taglines = [
+  {
+    en: "Duotopia makes teaching smarter and learning more active.",
+    "zh-TW": "語拓邦讓教學更智能、學習更主動。",
+    ja: "Duotopiaで教育をよりスマートに、学びをより主体的に。",
+    ko: "Duotopia로 더 스마트하게 가르치고, 더 능동적으로 배우세요.",
+  },
+  {
+    en: "Save 80% of lesson prep and grading time.",
+    "zh-TW": "節省 80% 備課與批改時間。",
+    ja: "授業準備と採点時間を80%削減。",
+    ko: "수업 준비와 채점 시간을 80% 절약하세요.",
+  },
+  {
+    en: "Use the Timer & Dice in the toolbar — teaching made effortless.",
+    "zh-TW": "善用右側工具列的計時器與骰子，讓教學更輕鬆。",
+    ja: "ツールバーのタイマーとサイコロで、授業をもっと楽しく。",
+    ko: "도구 모음의 타이머와 주사위로 수업을 더 쉽게.",
+  },
+  {
+    en: "Assign once, AI grades instantly.",
+    "zh-TW": "派作業一次，AI 即時完成批改。",
+    ja: "課題を配布すれば、AIが即時採点。",
+    ko: "과제를 한 번 배정하면, AI가 즉시 채점.",
+  },
+  {
+    en: "Every student gets personalized feedback.",
+    "zh-TW": "每位學生都能獲得個人化回饋。",
+    ja: "すべての生徒に個別フィードバックを。",
+    ko: "모든 학생에게 맞춤형 피드백을 제공합니다.",
+  },
+  {
+    en: "Track progress, celebrate growth.",
+    "zh-TW": "追蹤學習進度，見證每一步成長。",
+    ja: "進捗を追跡し、成長を実感。",
+    ko: "학습 진행을 추적하고, 성장을 확인하세요.",
+  },
+];
+
 export default function TeacherDashboard() {
-  const { t } = useTranslation();
-  const { selectedSchool, selectedOrganization, mode } = useWorkspace();
+  const { t, i18n } = useTranslation();
+  useWorkspace();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(
     null,
   );
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Share dialog state
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState("intro");
+  const [slideDir, setSlideDir] = useState<"left" | "right">("left");
+  const [prevTab, setPrevTab] = useState<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  const [taglineIndex, setTaglineIndex] = useState(0);
+  const [typedText, setTypedText] = useState("");
+  const [showTranslation, setShowTranslation] = useState(false);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    const fullText = taglines[taglineIndex].en;
+    let i = 0;
+    setTypedText("");
+    setShowTranslation(false);
+
+    const typeTimer = setInterval(() => {
+      i++;
+      setTypedText(fullText.slice(0, i));
+      if (i >= fullText.length) {
+        clearInterval(typeTimer);
+        setTimeout(() => setShowTranslation(true), 200);
+      }
+    }, 45);
+
+    const nextTimer = setTimeout(
+      () => setTaglineIndex((prev) => (prev + 1) % taglines.length),
+      fullText.length * 45 + 5000,
+    );
+
+    return () => {
+      clearInterval(typeTimer);
+      clearTimeout(nextTimer);
+    };
+  }, [taglineIndex]);
+
+  const hasFetchedDashboard = useRef(false);
 
   const fetchDashboardData = async () => {
     try {
@@ -83,7 +158,6 @@ export default function TeacherDashboard() {
       setDashboardData(data);
     } catch (err) {
       console.error("Dashboard fetch error:", err);
-      // 如果是 401 錯誤，轉到登入頁
       if (err instanceof Error && err.message.includes("401")) {
         navigate("/teacher/login");
       }
@@ -92,9 +166,15 @@ export default function TeacherDashboard() {
     }
   };
 
+  useEffect(() => {
+    if (hasFetchedDashboard.current) return;
+    hasFetchedDashboard.current = true;
+    fetchDashboardData();
+  }, []);
+
   const handleCopyUrl = async () => {
     if (!dashboardData) return;
-    const studentLoginUrl = `${window.location.origin}/student/login?teacher_email=${dashboardData.teacher.email}`;
+    const studentLoginUrl = `${window.location.origin}/student/login?teacher_email=${encodeURIComponent(dashboardData.teacher.email)}`;
     try {
       await navigator.clipboard.writeText(studentLoginUrl);
       setCopied(true);
@@ -106,7 +186,7 @@ export default function TeacherDashboard() {
 
   const getStudentLoginUrl = () => {
     if (!dashboardData) return "";
-    return `${window.location.origin}/student/login?teacher_email=${dashboardData.teacher.email}`;
+    return `${window.location.origin}/student/login?teacher_email=${encodeURIComponent(dashboardData.teacher.email)}`;
   };
 
   if (loading) {
@@ -124,44 +204,69 @@ export default function TeacherDashboard() {
     return (
       <div className="text-center py-12">
         <p className="text-gray-500">
-          {t("teacherDashboard.error.loadFailed")}
+          {t("teacherDashboard.errors.loadFailed")}
         </p>
       </div>
     );
   }
 
-  // Filter classrooms based on workspace selection
-  const filteredClassrooms = dashboardData.classrooms.filter((classroom) => {
-    if (mode === "personal") {
-      // Personal mode: only show classrooms without school_id or organization_id
-      return !classroom.school_id && !classroom.organization_id;
-    }
-    if (selectedSchool) {
-      return classroom.school_id === selectedSchool.id;
-    }
-    if (selectedOrganization) {
-      return classroom.organization_id === selectedOrganization.id;
-    }
-    return true;
-  });
-
-  // Filter students based on workspace selection
-  const filteredStudents = dashboardData.recent_students.filter((student) => {
-    if (mode === "personal") return true;
-    if (selectedSchool) {
-      return student.school_id === selectedSchool.id;
-    }
-    if (selectedOrganization) {
-      return student.organization_id === selectedOrganization.id;
-    }
-    return true;
-  });
-
-  // Calculate filtered stats
-  const filteredStudentCount = filteredClassrooms.reduce(
-    (sum, c) => sum + c.student_count,
-    0,
-  );
+  const tabs = [
+    {
+      key: "intro",
+      label: t("teacherDashboard.tabs.intro"),
+      icon: Sparkles,
+      iconColor: "text-red-600",
+      textColor: "text-red-800",
+      activeFill: "#ef4444",
+      inactiveFill: "#fca5a5",
+      svgPath:
+        "M 8,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 0,52 L 0,8 Q 0,0 8,0 Z",
+    },
+    {
+      key: "classrooms",
+      label: t("teacherLayout.nav.myClassrooms"),
+      icon: GraduationCap,
+      iconColor: "text-blue-600",
+      textColor: "text-blue-800",
+      activeFill: "#3b82f6",
+      inactiveFill: "#93c5fd",
+      svgPath:
+        "M 8,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z",
+    },
+    {
+      key: "students",
+      label: t("teacherLayout.nav.allStudents"),
+      icon: Users,
+      iconColor: "text-green-600",
+      textColor: "text-green-800",
+      activeFill: "#22c55e",
+      inactiveFill: "#86efac",
+      svgPath:
+        "M 18,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z",
+    },
+    {
+      key: "materials",
+      label: t("teacherLayout.nav.publicPrograms"),
+      icon: BookOpen,
+      iconColor: "text-purple-600",
+      textColor: "text-purple-800",
+      activeFill: "#a855f7",
+      inactiveFill: "#d8b4fe",
+      svgPath:
+        "M 18,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z",
+    },
+    {
+      key: "resources",
+      label: t("teacherDashboard.functionButtons.resourceMaterials.title"),
+      icon: Package,
+      iconColor: "text-cyan-600",
+      textColor: "text-cyan-800",
+      activeFill: "#06b6d4",
+      inactiveFill: "#67e8f9",
+      svgPath:
+        "M 8,0 L 92,0 Q 100,0 100,8 L 100,52 Q 100,60 92,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z",
+    },
+  ];
 
   return (
     <>
@@ -175,12 +280,9 @@ export default function TeacherDashboard() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {/* QR Code */}
             <div className="flex justify-center p-4 bg-white border rounded-lg">
               <QRCodeSVG value={getStudentLoginUrl()} size={200} />
             </div>
-
-            {/* URL Input with Copy Button */}
             <div className="flex items-center space-x-2">
               <Input value={getStudentLoginUrl()} readOnly className="flex-1" />
               <Button
@@ -201,8 +303,6 @@ export default function TeacherDashboard() {
                 )}
               </Button>
             </div>
-
-            {/* Instructions */}
             <div className="text-sm text-gray-600 space-y-2">
               <p>{t("teacherDashboard.share.instructions")}</p>
               <ul className="list-disc list-inside space-y-1 text-xs">
@@ -215,193 +315,193 @@ export default function TeacherDashboard() {
       </Dialog>
 
       <div>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-3xl font-bold text-gray-900">
-            {t("teacherDashboard.welcome.title", {
-              name: dashboardData.teacher.name,
-            })}
-          </h2>
+        <div className="flex items-start justify-between mb-6 gap-4">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">
+              {t("teacherDashboard.welcome.title", {
+                name: dashboardData.teacher.name,
+              })}
+            </h2>
+            <div className="min-h-[3.5rem]">
+              <p className="text-base sm:text-xl italic text-gray-700 font-serif">
+                &ldquo;{typedText}
+                <span className="animate-pulse">|</span>&rdquo;
+              </p>
+              {i18n.language !== "en" && (
+                <p
+                  className={`text-sm sm:text-base text-blue-600 mt-1 transition-opacity duration-300 ${showTranslation ? "opacity-100" : "opacity-0"}`}
+                >
+                  {taglines[taglineIndex][
+                    i18n.language as keyof (typeof taglines)[0]
+                  ] ?? taglines[taglineIndex]["zh-TW"]}
+                </p>
+              )}
+            </div>
+          </div>
           <Button
             onClick={() => setShowShareDialog(true)}
-            className="flex items-center gap-2"
+            className="hidden md:flex items-center gap-2 flex-shrink-0"
           >
             <Share2 className="h-4 w-4" />
             {t("teacherDashboard.share.button")}
           </Button>
         </div>
 
-        {/* Subscription Status Card - Always Show */}
-        <Card
-          className={`mb-6 ${
-            dashboardData.subscription_status === "subscribed"
-              ? "bg-gradient-to-r from-green-50 to-blue-50 border-green-200"
-              : "bg-gradient-to-r from-red-50 to-gray-50 border-red-200"
-          }`}
-        >
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {dashboardData.subscription_status === "subscribed"
-                    ? t("teacherDashboard.subscription.statusSubscribed")
-                    : t("teacherDashboard.subscription.statusNotSubscribed")}
-                </h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  {dashboardData.subscription_status === "subscribed"
-                    ? t("teacherDashboard.subscription.willExpireIn", {
-                        days: dashboardData.days_remaining || 0,
-                      })
-                    : t("teacherDashboard.subscription.noActiveSubscription")}
-                </p>
-                {dashboardData.subscription_end_date && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    {t("teacherDashboard.subscription.expiryDateLabel")}{" "}
-                    {new Date(
-                      dashboardData.subscription_end_date,
-                    ).toLocaleDateString("zh-TW")}
-                  </p>
-                )}
-              </div>
-              <div className="text-center">
+        {/* Tab Navigation — trapezoid + circle icon style */}
+        <div className="flex">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => {
+                  if (tab.key === activeTab || isTransitioning) return;
+                  const tabKeys = tabs.map((t) => t.key);
+                  const currentIdx = tabKeys.indexOf(activeTab);
+                  const nextIdx = tabKeys.indexOf(tab.key);
+                  setSlideDir(nextIdx > currentIdx ? "left" : "right");
+                  setPrevTab(activeTab);
+                  setActiveTab(tab.key);
+                  setIsTransitioning(true);
+                }}
+                className="relative flex-1 flex flex-col items-center focus:outline-none transition-all duration-200"
+                style={{
+                  paddingTop: "20px",
+                  marginLeft: "0",
+                  filter: isActive ? "saturate(1)" : "none",
+                }}
+              >
+                {/* Circle icon — bottom half overlaps trapezoid top edge */}
                 <div
-                  className={`text-3xl font-bold ${
-                    dashboardData.subscription_status === "subscribed"
-                      ? "text-green-600"
-                      : "text-red-600"
+                  className={`absolute top-0 left-1/2 -translate-x-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
+                    isActive
+                      ? `bg-white shadow-sm ${tab.iconColor}`
+                      : `bg-white ${tab.iconColor} opacity-60`
                   }`}
                 >
-                  {(dashboardData.days_remaining ?? 0) > 0
-                    ? dashboardData.days_remaining
-                    : 0}
+                  <Icon size={18} />
                 </div>
-                <div className="text-sm text-gray-600">
-                  {t("teacherDashboard.subscription.remainingDays", {
-                    days: dashboardData.days_remaining ?? 0,
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Test Mode Button - Show for whitelist accounts */}
-            {dashboardData.is_test_account && (
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <Button
-                  onClick={() => navigate("/teacher/test-sub")}
-                  className="w-full bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white"
+                {/* Drop-shadow wrapper — must wrap SVG element separately */}
+                <div
+                  className="w-full relative flex-1"
+                  style={{
+                    minHeight: "56px",
+                    filter: isActive
+                      ? "drop-shadow(0 4px 10px rgba(0,0,0,0.08))"
+                      : "none",
+                  }}
                 >
-                  <Settings className="mr-2 h-4 w-4" />
-                  {t("teacherDashboard.subscription.testModeButton")}
-                </Button>
-                <p className="text-xs text-gray-500 text-center mt-2">
-                  {t("teacherDashboard.subscription.testModeDescription")}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {t("teacherDashboard.stats.classrooms")}
-              </CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {filteredClassrooms.length}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {t("teacherDashboard.stats.students")}
-              </CardTitle>
-              <UserCheck className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{filteredStudentCount}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {t("teacherDashboard.stats.programs")}
-              </CardTitle>
-              <BookOpen className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {dashboardData.program_count}
-              </div>
-            </CardContent>
-          </Card>
+                  {/* SVG rounded shape background */}
+                  <svg
+                    className="absolute inset-0 w-full h-full"
+                    viewBox="0 0 100 60"
+                    preserveAspectRatio="none"
+                    style={{ display: "block" }}
+                  >
+                    <path
+                      d={tab.svgPath}
+                      fill={isActive ? tab.activeFill : tab.inactiveFill}
+                    />
+                  </svg>
+                  {/* Label */}
+                  <div
+                    className={`relative z-10 text-center pt-8 pb-3 transition-colors duration-200 ${
+                      isActive ? tab.textColor : `${tab.textColor} opacity-50`
+                    }`}
+                  >
+                    <p
+                      className={`text-[15px] leading-tight px-4 break-words w-full ${isActive ? "font-bold" : "font-semibold"}`}
+                    >
+                      {tab.label}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("teacherDashboard.classrooms.title")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {filteredClassrooms.map((classroom) => (
-                  <div
-                    key={classroom.id}
-                    className="flex items-center justify-between p-3 border rounded"
-                  >
-                    <div>
-                      <h4 className="font-medium">{classroom.name}</h4>
-                      <p className="text-sm text-gray-500">
-                        {classroom.description}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">
-                        {t("teacherDashboard.classrooms.studentsCount", {
-                          count: classroom.student_count,
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+        {/* Tab Content */}
+        <div className="relative mt-4">
+          {/* Triangle pointer */}
+          <div
+            className="absolute z-20 transition-all duration-300"
+            style={{
+              top: "-18px",
+              left: `${((tabs.findIndex((t) => t.key === activeTab) + 0.5) / tabs.length) * 100}%`,
+              transform: "translateX(-50%)",
+            }}
+          >
+            <div
+              style={{
+                width: 0,
+                height: 0,
+                borderLeft: "18px solid transparent",
+                borderRight: "18px solid transparent",
+                borderBottom: "18px solid rgba(255,255,255,0.8)",
+              }}
+            />
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("teacherDashboard.students.title")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {filteredStudents.map((student) => (
-                  <div
-                    key={student.id}
-                    className="flex items-center space-x-3 p-3 border rounded"
-                  >
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-medium text-blue-600">
-                        {student.name.charAt(0)}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">{student.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {student.classroom_name}
-                      </p>
-                    </div>
+          <div className="overflow-hidden rounded-2xl relative min-h-[300px]">
+            {/* Outgoing content */}
+            {isTransitioning && prevTab && (
+              <div
+                className={`absolute inset-0 overflow-auto bg-white/80 ${
+                  slideDir === "left"
+                    ? "animate-slide-out-left"
+                    : "animate-slide-out-right"
+                }`}
+              >
+                {prevTab === "intro" ? (
+                  <SystemOverviewTab />
+                ) : prevTab === "classrooms" ? (
+                  <ClassroomsTab />
+                ) : prevTab === "students" ? (
+                  <AllStudentsTab />
+                ) : prevTab === "materials" ? (
+                  <MaterialsTab />
+                ) : prevTab === "resources" ? (
+                  <ResourceMaterialsTab />
+                ) : (
+                  <div className="min-h-[300px] flex items-center justify-center text-gray-400 text-sm">
+                    內容即將推出
                   </div>
-                ))}
+                )}
               </div>
-            </CardContent>
-          </Card>
+            )}
+            {/* Incoming content */}
+            <div
+              className={`bg-white/80 ${
+                isTransitioning
+                  ? slideDir === "left"
+                    ? "animate-slide-from-right"
+                    : "animate-slide-from-left"
+                  : ""
+              }`}
+              onAnimationEnd={() => {
+                setIsTransitioning(false);
+                setPrevTab(null);
+              }}
+            >
+              {activeTab === "intro" ? (
+                <SystemOverviewTab />
+              ) : activeTab === "classrooms" ? (
+                <ClassroomsTab />
+              ) : activeTab === "students" ? (
+                <AllStudentsTab />
+              ) : activeTab === "materials" ? (
+                <MaterialsTab />
+              ) : activeTab === "resources" ? (
+                <ResourceMaterialsTab />
+              ) : (
+                <div className="min-h-[300px] flex items-center justify-center text-gray-400 text-sm">
+                  內容即將推出
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </>

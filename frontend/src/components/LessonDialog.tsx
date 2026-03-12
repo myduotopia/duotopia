@@ -76,7 +76,7 @@ export function LessonDialog({
         program_id: programId,
       });
     }
-  }, [lesson, dialogType, programId]);
+  }, [lesson, dialogType, programId, currentLessonCount]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};

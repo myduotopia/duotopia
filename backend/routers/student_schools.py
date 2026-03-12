@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, or_
 from typing import List, Optional
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 import uuid
 import json
 
@@ -83,65 +84,74 @@ async def get_current_teacher(
 
 
 def build_student_response(student: Student, db: Session) -> dict:
-    """Build student response with schools and classrooms"""
-    # Get all schools the student belongs to
-    student_schools = (
-        db.query(StudentSchool)
+    """Build student response with schools and classrooms (single student fallback)"""
+    return build_student_responses_batch([student], db)[0] if student else {}
+
+
+def build_student_responses_batch(students: list, db: Session) -> list:
+    """Build student responses with schools and classrooms using batch queries.
+
+    Replaces N+1 pattern: instead of 5-7 queries per student,
+    uses 2 batch queries for all students.
+    """
+    student_ids = [s.id for s in students]
+    if not student_ids:
+        return []
+
+    # 1. Batch: get all schools for all students (1 JOIN query)
+    school_rows = (
+        db.query(StudentSchool.student_id, School.id, School.name)
+        .join(School, StudentSchool.school_id == School.id)
         .filter(
-            StudentSchool.student_id == student.id, StudentSchool.is_active.is_(True)
+            StudentSchool.student_id.in_(student_ids),
+            StudentSchool.is_active.is_(True),
         )
         .all()
     )
+    schools_map: dict = {}
+    for row in school_rows:
+        schools_map.setdefault(row[0], []).append({"id": str(row[1]), "name": row[2]})
 
-    schools = []
-    for ss in student_schools:
-        school = db.query(School).filter(School.id == ss.school_id).first()
-        if school:
-            schools.append({"id": str(school.id), "name": school.name})
-
-    # Get all classrooms the student belongs to
-    classroom_enrollments = (
-        db.query(ClassroomStudent)
+    # 2. Batch: get all classrooms + school_id for all students (1 JOIN query)
+    classroom_rows = (
+        db.query(
+            ClassroomStudent.student_id,
+            Classroom.id,
+            Classroom.name,
+            ClassroomSchool.school_id,
+        )
+        .join(Classroom, ClassroomStudent.classroom_id == Classroom.id)
+        .join(ClassroomSchool, ClassroomSchool.classroom_id == Classroom.id)
         .filter(
-            ClassroomStudent.student_id == student.id,
+            ClassroomStudent.student_id.in_(student_ids),
             ClassroomStudent.is_active.is_(True),
+            ClassroomSchool.is_active.is_(True),
         )
         .all()
     )
+    classrooms_map: dict = {}
+    for row in classroom_rows:
+        classrooms_map.setdefault(row[0], []).append(
+            {"id": row[1], "name": row[2], "school_id": str(row[3])}
+        )
 
-    classrooms = []
-    for cs in classroom_enrollments:
-        classroom = db.query(Classroom).filter(Classroom.id == cs.classroom_id).first()
-        if classroom:
-            # Get school for this classroom
-            classroom_school = (
-                db.query(ClassroomSchool)
-                .filter(
-                    ClassroomSchool.classroom_id == classroom.id,
-                    ClassroomSchool.is_active.is_(True),
-                )
-                .first()
-            )
-            if classroom_school:
-                classrooms.append(
-                    {
-                        "id": classroom.id,
-                        "name": classroom.name,
-                        "school_id": str(classroom_school.school_id),
-                    }
-                )
-
-    return {
-        "id": student.id,
-        "name": student.name,
-        "email": student.email,
-        "student_number": student.student_number,
-        "birthdate": student.birthdate.isoformat() if student.birthdate else None,
-        "is_active": student.is_active,
-        "last_login": student.last_login.isoformat() if student.last_login else None,
-        "schools": schools,
-        "classrooms": classrooms,
-    }
+    # 3. Assemble responses
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "email": s.email,
+            "student_number": s.student_number,
+            "birthdate": s.birthdate.isoformat() if s.birthdate else None,
+            "is_active": s.is_active,
+            "password_changed": s.password_changed or False,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "last_login": s.last_login.isoformat() if s.last_login else None,
+            "schools": schools_map.get(s.id, []),
+            "classrooms": classrooms_map.get(s.id, []),
+        }
+        for s in students
+    ]
 
 
 # ============ GET Endpoints ============
@@ -221,7 +231,7 @@ async def get_school_students(
     students = query.offset((page - 1) * limit).limit(limit).all()
 
     # Build response
-    result = [build_student_response(student, db) for student in students]
+    result = build_student_responses_batch(students, db)
 
     return result
 
@@ -266,7 +276,7 @@ async def get_classroom_students(
         .all()
     )
 
-    return [build_student_response(student, db) for student in classroom_students]
+    return build_student_responses_batch(classroom_students, db)
 
 
 # ============ POST Endpoints ============
@@ -302,16 +312,18 @@ async def create_school_student(
             status_code=status.HTTP_404_NOT_FOUND, detail="School not found"
         )
 
-    # Parse birthdate
-    try:
-        birthdate = date.fromisoformat(student_data.birthdate)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid birthdate format. Please use YYYY-MM-DD format",
-        )
+    # Parse birthdate (optional)
+    birthdate = None
+    if student_data.birthdate:
+        try:
+            birthdate = date.fromisoformat(student_data.birthdate)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid birthdate format. Please use YYYY-MM-DD format",
+            )
 
-    default_password = birthdate.strftime("%Y%m%d")
+    default_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
 
     # Check if student_number already exists in school (if provided)
     if student_data.student_number:
@@ -403,14 +415,16 @@ async def batch_import_students(
 
     for idx, student_item in enumerate(import_data.students):
         try:
-            # Parse birthdate
-            try:
-                birthdate = date.fromisoformat(student_item.birthdate)
-            except ValueError:
-                errors.append(f"Row {idx + 1}: Invalid birthdate format")
-                continue
+            # Parse birthdate (optional)
+            birthdate = None
+            if student_item.birthdate:
+                try:
+                    birthdate = date.fromisoformat(student_item.birthdate)
+                except ValueError:
+                    errors.append(f"Row {idx + 1}: Invalid birthdate format")
+                    continue
 
-            default_password = birthdate.strftime("%Y%m%d")
+            default_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
 
             # Check for duplicates based on duplicate_action
             existing = None
@@ -826,10 +840,6 @@ async def update_school_student(
     if update_data.birthdate is not None:
         try:
             new_birthdate = date.fromisoformat(update_data.birthdate)
-            # If password not changed and birthdate changed, update password
-            if not student.password_changed and new_birthdate != student.birthdate:
-                new_default_password = new_birthdate.strftime("%Y%m%d")
-                student.password_hash = get_password_hash(new_default_password)
             student.birthdate = new_birthdate
         except ValueError:
             raise HTTPException(
@@ -854,6 +864,70 @@ async def update_school_student(
         )
 
     return build_student_response(student, db)
+
+
+# ============ Password Management ============
+
+
+@router.post(
+    "/api/schools/{school_id}/students/{student_id}/reset-password",
+    response_model=dict,
+)
+async def reset_school_student_password(
+    school_id: uuid.UUID,
+    student_id: int,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """
+    Reset student password to default (creation date YYYYMMDD).
+
+    Permissions: school_admin, org_admin, org_owner
+    """
+    if not check_school_student_permission(teacher.id, school_id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions",
+        )
+
+    student = (
+        db.query(Student)
+        .join(StudentSchool, Student.id == StudentSchool.student_id)
+        .filter(
+            Student.id == student_id,
+            StudentSchool.school_id == school_id,
+            StudentSchool.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
+        )
+
+    if not student.created_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Student creation date not available",
+        )
+
+    taipei_tz = ZoneInfo("Asia/Taipei")
+    created_at_tw = (
+        student.created_at.astimezone(taipei_tz)
+        if student.created_at.tzinfo
+        else student.created_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(taipei_tz)
+    )
+    default_password = created_at_tw.strftime("%Y%m%d")
+    student.password_hash = get_password_hash(default_password)
+    student.password_changed = False
+
+    db.commit()
+
+    return {
+        "message": "Password reset successfully",
+        "default_password": default_password,
+    }
 
 
 # ============ DELETE Endpoints ============

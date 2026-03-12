@@ -38,14 +38,14 @@ describe("StudentLayout", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("should render student navigation", () => {
+  it("should render student sidebar", () => {
     render(
       <BrowserRouter>
         <StudentLayout />
       </BrowserRouter>,
     );
 
-    // Students should have their own navigation
-    expect(screen.getByText(/welcome/i)).toBeInTheDocument();
+    // Students should have sidebar navigation
+    expect(screen.getByRole("complementary")).toBeInTheDocument();
   });
 });

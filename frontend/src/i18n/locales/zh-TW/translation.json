@@ -503,7 +503,53 @@
       "a8": "可隨時透過帳戶設定取消訂閱，下個月將不再扣款。未使用完的點數於點數期限內可使用，直到到期歸零。"
     }
   },
+  "teacherToolbar": {
+    "help": {
+      "title": "操作手冊",
+      "description": "點選以下連結了解如何使用 Duotopia",
+      "teacherManual": "老師操作手冊",
+      "studentGuide": "學生介面介紹",
+      "dontShowAgain": "不再主動提醒",
+      "start": "開始使用"
+    }
+  },
   "teacherDashboard": {
+    "tabs": {
+      "intro": "系統介紹"
+    },
+    "systemOverview": {
+      "section1": "與專為語言教學訓練的AI協作，快速創建高品質教材，節省80%備課時間",
+      "section2": "5種題型全覆蓋，內建艾賓浩斯記憶曲線，把練習時間花在真正需要的地方",
+      "section3": "與AI協作批改作業，節省老師80%工作時間",
+      "imgAlt1": "創建教材截圖",
+      "imgAlt2": "作業類型截圖",
+      "imgAlt3": "AI批改截圖"
+    },
+    "classroomsTab": {
+      "section1": "為了讓AI了解學生的起點，程度基線讓批改報告更有溫度與針對性，設置班級、班級描述、程度非常必要。",
+      "section2": "挑選班級，選擇教材與派發類型，為作業命名後完成派發——三個步驟，輕鬆分配教學活動。",
+      "section3": "透過 QR Code 邀請學生登入，學生掃描後即可直接進入作業頁面完成活動。",
+      "section4": "AI 協助老師完成批改，依據學生程度與作業難度，給予每位學生最適切的回饋。",
+      "gifAlt1": "建立班級操作示意",
+      "gifAlt2": "派發活動操作示意",
+      "gifAlt3": "分享QR Code示意",
+      "gifAlt4": "AI批改示意"
+    },
+    "allStudentsTab": {
+      "section1": "新增學生時，需指定班級並輸入生日。AI 生成學習報告時，會依據學生的年齡與班級程度基線，給予最適切的回饋。",
+      "section2": "右側工具列的分享按鈕，可產生 QR Code 讓學生掃描，方便課前預習或課後複習。",
+      "gifAlt1": "新增學生操作示意",
+      "gifAlt2": "分享QR Code示意"
+    },
+    "materialsTab": {
+      "placeholder": "內容即將推出"
+    },
+    "resourceMaterialsTab": {
+      "section1": "資源教材包幫助老師快速開始教學，複製完整的主題教材，直接開始派發各種教學活動。",
+      "section2": "右側工具列有計時器、骰子、猜拳器，實用的小工具方便老師上課使用，也使得課程變得更活潑有趣。",
+      "gifAlt1": "資源教材包操作示意",
+      "gifAlt2": "課堂小工具示意"
+    },
     "loading": "載入中...",
     "errors": {
       "loadFailed": "載入儀表板失敗，請重新登入"
@@ -521,8 +567,10 @@
       "trialDaysRemaining": "免費試用剩餘 {{days}} 天"
     },
     "welcome": {
-      "title": "歡迎回來，{{name}}！",
-      "subtitle": "管理您的班級、課程與學生學習進度"
+      "title": "歡迎，{{name}}！",
+      "subtitle": "管理您的班級、課程與學生學習進度",
+      "tagline1": "Duotopia makes teaching smarter and learning more active.",
+      "tagline2": "Save 80% of lesson prep and grading time."
     },
     "subscription": {
       "trialTitle": "🎉 免費試用",
@@ -579,6 +627,39 @@
       "instructions": "分享方式：",
       "instruction1": "掃描 QR 碼：學生可以用手機掃描 QR 碼直接進入登入頁面",
       "instruction2": "複製連結：點擊「複製」按鈕，將連結分享給學生"
+    },
+    "functionButtons": {
+      "myClassrooms": {
+        "step": "Step 1",
+        "title": "我的班級",
+        "description": "建立班級，派發作業並批改",
+        "count": "班級總數：{{count}} 個"
+      },
+      "allStudents": {
+        "step": "Step 2",
+        "title": "所有學生",
+        "description": "新增班級學生，以記錄個別學生聽說讀寫四項能力指標",
+        "count": "學生總數：{{count}} 位"
+      },
+      "myMaterials": {
+        "step": "Step 3",
+        "title": "我的教材",
+        "description": "建立與指派教學課程",
+        "count": "課程總數：{{count}} 個"
+      },
+      "resourceMaterials": {
+        "title": "資源教材包",
+        "description": "瀏覽共享教材資源，馬上開始與學生進行教學互動"
+      }
+    },
+    "dailyFlow": {
+      "title": "設定完成後，這是你的日常",
+      "step1": "派發作業",
+      "step1Desc": "從班級指派課程給學生",
+      "step2": "AI 自動批改",
+      "step2Desc": "學生提交後，AI 即時批改",
+      "step3": "查看成果",
+      "step3Desc": "追蹤學生學習進度與成效"
     }
   },
   "admin": {
@@ -1133,11 +1214,12 @@
       "placeholder": "請輸入你的密碼",
       "login": "登入",
       "selectOther": "選擇其他學生",
-      "passwordHint": "首次登入請輸入西元生日年月日，如: 2012 年 1 月 1 日，密碼為 20120101",
+      "passwordHint": "首次登入請輸入加入班級當天的日期，格式為 YYYYMMDD，如: 20260501",
       "forgotPassword": "若忘記密碼，請聯繫教師恢復預設密碼",
+      "verifiedEmailHint": "若已驗證過 Email，請使用驗證時設定的密碼登入",
       "demoHint": "💡 測試提示",
       "demoPassword": "Demo 學生預設密碼：",
-      "passwordFormat": "正式使用時，密碼為學生的生日 (格式：YYYYMMDD)"
+      "passwordFormat": "正式使用時，密碼為加入班級當天的日期 (格式：YYYYMMDD)"
     },
     "buttons": {
       "back": "返回"
@@ -1960,7 +2042,7 @@
       },
       "create": {
         "title": "新增學生",
-        "description": "填寫學生資料以新增學生。生日將作為預設密碼。"
+        "description": "填寫學生資料以新增學生。預設密碼為加入當天日期。"
       },
       "edit": {
         "title": "編輯學生資料",
@@ -1988,8 +2070,10 @@
         "birthdateLabel": "學生生日",
         "birthdateRequired": "*",
         "birthdateNote": "(請填寫學生的真實生日)",
-        "birthdateError": "生日為必填（用作預設密碼）",
+        "birthdateError": "生日為必填",
         "passwordNote": "⚠️ 學生登入密碼將設為: {{password}}",
+        "joinDatePassword": "預設密碼為加入當天日期（格式：YYYYMMDD）",
+        "verifiedEmailNote": "若學生已驗證過帳號，請提醒學生用驗證時設定的密碼登入",
         "classroomLabel": "班級",
         "classroomNone": "未分配班級",
         "statusLabel": "狀態",
@@ -2073,7 +2157,7 @@
       },
       "nextSteps": {
         "title": "下一步：",
-        "password": "學生預設密碼為生日（格式：YYYYMMDD）",
+        "password": "學生預設密碼為加入當天日期（格式：YYYYMMDD）",
         "remind": "請提醒學生首次登入後修改密碼",
         "viewStudents": "可以到「我的學生」頁面查看匯入的學生"
       },
@@ -2178,7 +2262,7 @@
     },
     "passwordStatus": {
       "changed": "已更改",
-      "notSet": "未設定生日",
+      "notSet": "未設定",
       "copyPassword": "複製密碼: {{password}}",
       "passwordCopied": "密碼已複製: {{password}}",
       "resetToDefault": "重設為預設密碼"
@@ -2188,7 +2272,7 @@
     },
     "lastLogin": {
       "never": "從未登入",
-      "daysAgo": "{{days}} 天前"
+      "daysAgo": "{{count}} 天前"
     },
     "actions": {
       "view": "查看",
@@ -3651,6 +3735,7 @@
       "status": {
         "changed": "已更改",
         "default": "預設密碼 ({{password}})",
+        "usingDefault": "使用預設密碼",
         "neverLoggedIn": "從未登入"
       },
       "badges": {
@@ -3662,7 +3747,7 @@
     },
     "create": {
       "title": "新增學生",
-      "description": "填寫學生資料以新增學生。生日將作為預設密碼。"
+      "description": "填寫學生資料以新增學生。預設密碼為加入當天日期。"
     },
     "edit": {
       "title": "編輯學生資料",
@@ -3682,16 +3767,18 @@
       "studentNumberLabel": "學號",
       "studentNumberPlaceholder": "請輸入學號（選填）",
       "emailLabel": "Email",
-      "emailOptional": "Email (選填)",
+      "emailOptional": "(選填)",
       "emailPlaceholder": "student@example.com (選填)",
       "emailError": "Email格式錯誤",
       "phoneLabel": "電話",
-      "phonePlaceholder": "0912345678",
+      "phonePlaceholder": "0912345678 (選填)",
       "birthdateLabel": "學生生日",
       "birthdateRequired": "學生生日 *",
       "birthdateNote": "(請填寫學生的真實生日)",
       "birthdateError": "請選擇生日",
       "birthdatePassword": "⚠️ 學生登入密碼將設為: {{password}}",
+      "joinDatePassword": "預設密碼為加入當天日期（格式：YYYYMMDD）",
+      "verifiedEmailNote": "若學生已驗證過帳號，請提醒學生用驗證時設定的密碼登入",
       "classroomLabel": "班級",
       "classroomUnassigned": "未分配班級",
       "statusLabel": "狀態",
@@ -3709,7 +3796,7 @@
     },
     "success": {
       "created": "學生「{{name}}」已成功新增",
-      "createdWithPassword": "學生「{{name}}」已成功新增\n預設密碼：{{password}}",
+      "createdWithPassword": "預設密碼：{{password}}",
       "createdWithWarning": "學生「{{name}}」已成功新增\n⚠️ {{warning}}\n預設密碼：{{password}}",
       "updated": "學生「{{name}}」資料已更新",
       "deleted": "學生「{{name}}」已刪除"
@@ -3722,7 +3809,7 @@
       "invalidBirthdate": "生日格式錯誤，請使用YYYY-MM-DD格式",
       "requiredFields": "請填寫所有必填欄位",
       "nameRequired": "姓名為必填",
-      "birthdateRequired": "生日為必填（用作預設密碼）",
+      "birthdateRequired": "生日為必填",
       "validationFailed": "資料驗證失敗",
       "fixErrors": "請修正標示的欄位",
       "deleteRetry": "刪除失敗，請稍後再試"
@@ -3776,7 +3863,7 @@
     },
     "nextSteps": {
       "title": "下一步：",
-      "step1": "學生預設密碼為生日（格式：YYYYMMDD）",
+      "step1": "學生預設密碼為加入當天日期（格式：YYYYMMDD）",
       "step2": "請提醒學生首次登入後修改密碼",
       "step3": "可以到「我的學生」頁面查看匯入的學生"
     },
@@ -4135,13 +4222,15 @@
       "items": "個項目",
       "batchLimitError": "一次最多翻譯 {{count}} 個例句，請分批處理",
       "batchLimitTruncated": "已超過上限，僅前 {{count}} 個項目會被處理",
-      "batchLimitWarning": "超過 {{count}} 個項目上限，僅前 {{count}} 個會被處理"
+      "batchLimitWarning": "超過 {{count}} 個項目上限，僅前 {{count}} 個會被處理",
+      "batchPasteLimit": "批次貼上上限為 {{count}} 個項目，請減少後重試",
+      "batchPasteLimitShort": "上限 {{count}} 個"
     },
     "translationLanguages": {
       "chinese": "中文",
-      "english": "英文",
-      "japanese": "日文",
-      "korean": "韓文"
+      "english": "English",
+      "japanese": "日本語",
+      "korean": "한국어"
     },
     "warnings": {
       "assignmentCopy": "注意：此為作業副本",

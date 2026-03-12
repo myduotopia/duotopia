@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { apiClient } from "@/lib/api";
@@ -26,7 +26,14 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Plus, Search, Upload } from "lucide-react";
+import {
+  Users,
+  Plus,
+  Search,
+  Upload,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { toast } from "sonner";
 
 interface Classroom {
@@ -54,7 +61,7 @@ export default function SchoolStudentsPage() {
 
   const [students, setStudents] = useState<Student[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
-  const [selectedTab, setSelectedTab] = useState("unassigned");
+  const [selectedTab, setSelectedTab] = useState("all");
   const [school, setSchool] = useState<School | null>(
     location.state?.school ?? null,
   );
@@ -62,6 +69,7 @@ export default function SchoolStudentsPage() {
     location.state?.organization ?? null,
   );
   const [loading, setLoading] = useState(true);
+  const [isFilterLoading, setIsFilterLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -78,10 +86,21 @@ export default function SchoolStudentsPage() {
     studentId: number;
     classroomId: number;
   } | null>(null);
+  const [showResetPasswordConfirm, setShowResetPasswordConfirm] =
+    useState(false);
+  const [pendingResetStudent, setPendingResetStudent] =
+    useState<Student | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // Guard: prevent StrictMode double-mount from triggering duplicate fetches
+  const fetchedForRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (schoolId && token) {
+      if (fetchedForRef.current === schoolId) return;
+      fetchedForRef.current = schoolId;
       fetchSchool();
       fetchClassrooms();
     }
@@ -101,7 +120,7 @@ export default function SchoolStudentsPage() {
         setSchool(data);
         // 確保立即獲取組織信息
         if (data.organization_id) {
-          await fetchOrganization(data.organization_id);
+          fetchOrganization(data.organization_id);
         }
         await fetchStudents();
       } else {
@@ -159,7 +178,7 @@ export default function SchoolStudentsPage() {
 
     try {
       setError(null);
-      setLoading(true);
+      setIsFilterLoading(true);
 
       const params: {
         search?: string;
@@ -173,7 +192,7 @@ export default function SchoolStudentsPage() {
         params.search = searchTerm;
       } else if (selectedTab === "unassigned") {
         params.unassigned = true;
-      } else {
+      } else if (selectedTab !== "all") {
         const id = Number(selectedTab);
         if (!Number.isNaN(id)) {
           params.classroom_id = id;
@@ -185,16 +204,25 @@ export default function SchoolStudentsPage() {
         params,
       )) as Student[];
       setStudents(data);
+      setCurrentPage(1);
     } catch (error) {
       logError("Failed to fetch students", error, { schoolId });
       setError("載入學生列表失敗");
     } finally {
-      setLoading(false);
+      setIsFilterLoading(false);
     }
   };
 
+  // Track if initial student load is done (fetchSchool handles it)
+  const skipNextDebounce = useRef(true);
+
   useEffect(() => {
     if (schoolId) {
+      // Skip first trigger — fetchSchool already loads students on mount
+      if (skipNextDebounce.current) {
+        skipNextDebounce.current = false;
+        return;
+      }
       const debounceTimer = setTimeout(() => {
         fetchStudents();
       }, 300);
@@ -273,6 +301,35 @@ export default function SchoolStudentsPage() {
     }
   };
 
+  const handleResetPassword = (student: Student) => {
+    setPendingResetStudent(student);
+    setShowResetPasswordConfirm(true);
+  };
+
+  const confirmResetPassword = async () => {
+    if (!schoolId || !pendingResetStudent) return;
+
+    try {
+      const result = (await apiClient.resetSchoolStudentPassword(
+        schoolId,
+        pendingResetStudent.id,
+      )) as { default_password: string };
+      toast.success(
+        `${pendingResetStudent.name} 的密碼已重設為 ${result.default_password}`,
+      );
+      fetchStudents();
+    } catch (error) {
+      logError("Failed to reset student password", error, {
+        schoolId,
+        studentId: pendingResetStudent.id,
+      });
+      toast.error("重設密碼失敗，請稍後再試");
+    } finally {
+      setPendingResetStudent(null);
+      setShowResetPasswordConfirm(false);
+    }
+  };
+
   if (loading && !students.length) {
     return <LoadingSpinner />;
   }
@@ -282,7 +339,6 @@ export default function SchoolStudentsPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { label: "組織管理" },
           ...(organization
             ? [
                 {
@@ -350,6 +406,7 @@ export default function SchoolStudentsPage() {
                 <SelectValue placeholder="選擇班級" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">全部學生</SelectItem>
                 <SelectItem value="unassigned">未分配</SelectItem>
                 {classrooms.map((classroom) => (
                   <SelectItem key={classroom.id} value={String(classroom.id)}>
@@ -382,16 +439,56 @@ export default function SchoolStudentsPage() {
           {error && <ErrorMessage message={error} />}
 
           {/* Student List */}
-          {loading ? (
+          {isFilterLoading ? (
             <LoadingSpinner />
           ) : (
-            <StudentListTable
-              students={students}
-              onEdit={handleEdit}
-              onAssignClassroom={handleAssignClassroom}
-              onRemove={handleRemove}
-              onRemoveFromClassroom={handleRemoveFromClassroom}
-            />
+            <>
+              <StudentListTable
+                students={students.slice(
+                  (currentPage - 1) * itemsPerPage,
+                  currentPage * itemsPerPage,
+                )}
+                onEdit={handleEdit}
+                onAssignClassroom={handleAssignClassroom}
+                onRemove={handleRemove}
+                onRemoveFromClassroom={handleRemoveFromClassroom}
+                onResetPassword={handleResetPassword}
+              />
+              {students.length > itemsPerPage &&
+                (() => {
+                  const totalPages = Math.ceil(students.length / itemsPerPage);
+                  return (
+                    <div className="flex items-center justify-center gap-3 mt-6">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCurrentPage((prev) => Math.max(1, prev - 1))
+                        }
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm text-gray-600">
+                        第 {currentPage} 頁 / 共 {totalPages} 頁（共{" "}
+                        {students.length} 位學生）
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCurrentPage((prev) =>
+                            Math.min(totalPages, prev + 1),
+                          )
+                        }
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })()}
+            </>
           )}
         </CardContent>
       </Card>
@@ -446,6 +543,18 @@ export default function SchoolStudentsPage() {
         cancelText="取消"
         variant="destructive"
         onConfirm={confirmRemove}
+      />
+
+      {/* Reset Password Confirmation Dialog */}
+      <ConfirmDialog
+        open={showResetPasswordConfirm}
+        onOpenChange={setShowResetPasswordConfirm}
+        title="重設學生密碼"
+        description={`確定要將 ${pendingResetStudent?.name || "此學生"} 的密碼重設為預設密碼嗎？`}
+        confirmText="確定重設"
+        cancelText="取消"
+        variant="default"
+        onConfirm={confirmResetPassword}
       />
 
       {/* Remove From Classroom Confirmation Dialog */}
