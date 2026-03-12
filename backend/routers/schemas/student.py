@@ -11,8 +11,17 @@ class SchoolStudentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     email: Optional[str] = Field(None, max_length=255)
     student_number: Optional[str] = Field(None, max_length=50)
-    birthdate: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")  # YYYY-MM-DD
+    birthdate: Optional[str] = Field(
+        None, pattern=r"^\d{4}-\d{2}-\d{2}$"
+    )  # YYYY-MM-DD（選填）
     phone: Optional[str] = Field(None, max_length=20)
+
+    @field_validator("birthdate", mode="before")
+    @classmethod
+    def empty_birthdate_to_none(cls, v: Optional[str]) -> Optional[str]:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     @field_validator("student_number")
     @classmethod
@@ -61,6 +70,13 @@ class SchoolStudentUpdate(BaseModel):
     birthdate: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     phone: Optional[str] = Field(None, max_length=20)
     is_active: Optional[bool] = None
+
+    @field_validator("birthdate", mode="before")
+    @classmethod
+    def empty_birthdate_to_none(cls, v: Optional[str]) -> Optional[str]:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     @field_validator("student_number")
     @classmethod
@@ -122,7 +138,7 @@ class SchoolStudentResponse(BaseModel):
     name: str
     email: Optional[str]
     student_number: Optional[str]
-    birthdate: str
+    birthdate: Optional[str]
     is_active: bool
     last_login: Optional[datetime]
     schools: List[SchoolInfo]
@@ -156,9 +172,16 @@ class BatchStudentImportItem(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     email: Optional[str] = Field(None, max_length=255)
     student_number: Optional[str] = Field(None, max_length=50)
-    birthdate: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    birthdate: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     phone: Optional[str] = Field(None, max_length=20)
     classroom_id: Optional[int] = None
+
+    @field_validator("birthdate", mode="before")
+    @classmethod
+    def empty_birthdate_to_none(cls, v: Optional[str]) -> Optional[str]:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     @field_validator("student_number")
     @classmethod

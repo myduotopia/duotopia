@@ -112,10 +112,6 @@ export function StudentDialogs({
       newErrors.email = t("dialogs.studentDialogs.form.emailError");
     }
 
-    if (!formData.birthdate) {
-      newErrors.birthdate = t("dialogs.studentDialogs.form.birthdateError");
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -144,6 +140,8 @@ export function StudentDialogs({
           unknown
         >;
 
+        const defaultPassword = response.default_password as string;
+
         // Check for warning message about unassigned students
         if (response.warning) {
           toast.warning(
@@ -154,13 +152,13 @@ export function StudentDialogs({
               <p className="text-sm mt-1 text-orange-600">
                 ⚠️ {response.warning as string}
               </p>
-              {formData.birthdate ? (
+              {defaultPassword ? (
                 <p className="text-sm mt-1">
                   {t("studentDialogs.success.createdWithPassword", {
                     password: "",
                   })}
                   <code className="bg-gray-100 px-1 rounded">
-                    {formData.birthdate.replace(/-/g, "")}
+                    {defaultPassword}
                   </code>
                 </p>
               ) : null}
@@ -168,9 +166,8 @@ export function StudentDialogs({
             { duration: 8000 },
           );
         } else {
-          // Show default password if birthdate is provided
-          if (formData.birthdate) {
-            const defaultPassword = formData.birthdate.replace(/-/g, "");
+          // Show default password from API response
+          if (defaultPassword) {
             toast.success(
               <div>
                 <p>
@@ -464,9 +461,7 @@ export function StudentDialogs({
                       </span>
                     ) : (
                       <span className="text-yellow-600">
-                        {t("studentDialogs.view.status.default", {
-                          password: student.birthdate?.replace(/-/g, ""),
-                        })}
+                        {t("studentDialogs.view.status.usingDefault")}
                       </span>
                     )}
                   </p>
@@ -582,10 +577,7 @@ export function StudentDialogs({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="email" className="text-sm font-medium">
-                  {t("studentDialogs.form.emailLabel")}{" "}
-                  <span className="text-gray-400">
-                    {t("studentDialogs.form.emailOptional")}
-                  </span>
+                  {t("studentDialogs.form.emailLabel")}
                 </label>
                 <input
                   id="email"
@@ -623,9 +615,8 @@ export function StudentDialogs({
               <div>
                 <label htmlFor="birthdate" className="text-sm font-medium">
                   {t("studentDialogs.form.birthdateLabel")}{" "}
-                  <span className="text-red-500">*</span>
                   <span className="text-xs text-gray-500 font-normal ml-1">
-                    {t("studentDialogs.form.birthdateNote")}
+                    {t("studentDialogs.form.emailOptional")}
                   </span>
                 </label>
                 <input
@@ -635,21 +626,9 @@ export function StudentDialogs({
                   onChange={(e) =>
                     setFormData({ ...formData, birthdate: e.target.value })
                   }
-                  className={`w-full mt-1 px-3 py-2 border rounded-md ${errors.birthdate ? "border-red-500" : ""}`}
+                  className="w-full mt-1 px-3 py-2 border rounded-md"
                   max={new Date().toISOString().split("T")[0]}
                 />
-                {errors.birthdate && (
-                  <p className="text-xs text-red-500 mt-1">
-                    {errors.birthdate}
-                  </p>
-                )}
-                {formData.birthdate && (
-                  <p className="text-xs text-amber-600 mt-1 font-medium">
-                    {t("studentDialogs.form.birthdatePassword", {
-                      password: formData.birthdate.replace(/-/g, ""),
-                    })}
-                  </p>
-                )}
               </div>
 
               <div>
@@ -705,6 +684,12 @@ export function StudentDialogs({
                   </option>
                 </select>
               </div>
+            )}
+
+            {dialogType === "create" && (
+              <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                ℹ️ {t("studentDialogs.form.verifiedEmailNote")}
+              </p>
             )}
 
             {errors.submit && (

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, or_
 from typing import List, Optional
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 import uuid
 import json
 
@@ -138,6 +139,8 @@ def build_student_response(student: Student, db: Session) -> dict:
         "student_number": student.student_number,
         "birthdate": student.birthdate.isoformat() if student.birthdate else None,
         "is_active": student.is_active,
+        "password_changed": student.password_changed or False,
+        "created_at": student.created_at.isoformat() if student.created_at else None,
         "last_login": student.last_login.isoformat() if student.last_login else None,
         "schools": schools,
         "classrooms": classrooms,
@@ -302,16 +305,18 @@ async def create_school_student(
             status_code=status.HTTP_404_NOT_FOUND, detail="School not found"
         )
 
-    # Parse birthdate
-    try:
-        birthdate = date.fromisoformat(student_data.birthdate)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid birthdate format. Please use YYYY-MM-DD format",
-        )
+    # Parse birthdate (optional)
+    birthdate = None
+    if student_data.birthdate:
+        try:
+            birthdate = date.fromisoformat(student_data.birthdate)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid birthdate format. Please use YYYY-MM-DD format",
+            )
 
-    default_password = birthdate.strftime("%Y%m%d")
+    default_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
 
     # Check if student_number already exists in school (if provided)
     if student_data.student_number:
@@ -403,14 +408,16 @@ async def batch_import_students(
 
     for idx, student_item in enumerate(import_data.students):
         try:
-            # Parse birthdate
-            try:
-                birthdate = date.fromisoformat(student_item.birthdate)
-            except ValueError:
-                errors.append(f"Row {idx + 1}: Invalid birthdate format")
-                continue
+            # Parse birthdate (optional)
+            birthdate = None
+            if student_item.birthdate:
+                try:
+                    birthdate = date.fromisoformat(student_item.birthdate)
+                except ValueError:
+                    errors.append(f"Row {idx + 1}: Invalid birthdate format")
+                    continue
 
-            default_password = birthdate.strftime("%Y%m%d")
+            default_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
 
             # Check for duplicates based on duplicate_action
             existing = None
@@ -826,10 +833,6 @@ async def update_school_student(
     if update_data.birthdate is not None:
         try:
             new_birthdate = date.fromisoformat(update_data.birthdate)
-            # If password not changed and birthdate changed, update password
-            if not student.password_changed and new_birthdate != student.birthdate:
-                new_default_password = new_birthdate.strftime("%Y%m%d")
-                student.password_hash = get_password_hash(new_default_password)
             student.birthdate = new_birthdate
         except ValueError:
             raise HTTPException(
@@ -854,6 +857,70 @@ async def update_school_student(
         )
 
     return build_student_response(student, db)
+
+
+# ============ Password Management ============
+
+
+@router.post(
+    "/api/schools/{school_id}/students/{student_id}/reset-password",
+    response_model=dict,
+)
+async def reset_school_student_password(
+    school_id: uuid.UUID,
+    student_id: int,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """
+    Reset student password to default (creation date YYYYMMDD).
+
+    Permissions: school_admin, org_admin, org_owner
+    """
+    if not check_school_student_permission(teacher.id, school_id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions",
+        )
+
+    student = (
+        db.query(Student)
+        .join(StudentSchool, Student.id == StudentSchool.student_id)
+        .filter(
+            Student.id == student_id,
+            StudentSchool.school_id == school_id,
+            StudentSchool.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
+        )
+
+    if not student.created_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Student creation date not available",
+        )
+
+    taipei_tz = ZoneInfo("Asia/Taipei")
+    created_at_tw = (
+        student.created_at.astimezone(taipei_tz)
+        if student.created_at.tzinfo
+        else student.created_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(taipei_tz)
+    )
+    default_password = created_at_tw.strftime("%Y%m%d")
+    student.password_hash = get_password_hash(default_password)
+    student.password_changed = False
+
+    db.commit()
+
+    return {
+        "message": "Password reset successfully",
+        "default_password": default_password,
+    }
 
 
 # ============ DELETE Endpoints ============

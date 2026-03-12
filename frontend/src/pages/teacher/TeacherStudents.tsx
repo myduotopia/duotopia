@@ -109,6 +109,7 @@ export default function TeacherStudents() {
         status?: "active" | "inactive" | "suspended";
         last_login?: string | null;
         classroom_name?: string;
+        created_at?: string;
       }
 
       // Format students data
@@ -128,6 +129,7 @@ export default function TeacherStudents() {
             classroom_id: student.classroom_id,
             classroom_name:
               student.classroom_name || t("teacherStudents.filters.unassigned"),
+            created_at: student.created_at,
           };
         },
       );

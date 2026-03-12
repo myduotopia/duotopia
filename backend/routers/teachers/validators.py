@@ -123,7 +123,7 @@ class ClassroomUpdate(BaseModel):
 class StudentCreate(BaseModel):
     name: str
     email: Optional[str] = None  # Email（選填，可以是真實 email）
-    birthdate: str  # YYYY-MM-DD format
+    birthdate: Optional[str] = None  # YYYY-MM-DD format（選填）
     classroom_id: Optional[int] = None  # 班級改為選填，可以之後再分配
     student_number: Optional[str] = None
     phone: Optional[str] = None  # 新增 phone 欄位
@@ -148,7 +148,7 @@ class BatchStudentCreate(BaseModel):
 class BatchImportStudent(BaseModel):
     name: str
     classroom_name: str
-    birthdate: Any  # Can be string, int (Excel serial), etc.
+    birthdate: Any = None  # Can be string, int (Excel serial), etc. (optional)
 
 
 class BatchImportRequest(BaseModel):
