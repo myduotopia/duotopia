@@ -1025,6 +1025,7 @@ export function AssignmentDialog({
     }
 
     // 從 step 2 移動到 step 3 時，檢查驗證
+    // Note: 20 字下限驗證已依 #422 需求移除，word_selection 不再限制最低單字數
     if (currentStep === 2) {
       if (!checkAudioRequirement()) {
         return; // 驗證失敗，不繼續
