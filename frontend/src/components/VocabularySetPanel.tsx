@@ -176,6 +176,9 @@ const SENTENCE_TRANSLATION_LANGUAGES = [
   { value: "korean" as const, label: "한국어", code: "ko" },
 ];
 
+// 批次貼上上限 (#422)
+const BATCH_PASTE_MAX = 30;
+
 interface ContentRow {
   id: string | number;
   text: string;
@@ -2947,9 +2950,13 @@ export default function VocabularySetPanel({
       return;
     }
 
-    // 批次新增上限 30 個 (#422)
-    if (lines.length > 30) {
-      toast.error(t("contentEditor.messages.batchPasteLimit"));
+    // 批次新增上限 (#422)
+    if (lines.length > BATCH_PASTE_MAX) {
+      toast.error(
+        t("contentEditor.messages.batchPasteLimit", {
+          count: BATCH_PASTE_MAX,
+        }),
+      );
       return;
     }
 
@@ -3336,14 +3343,14 @@ export default function VocabularySetPanel({
                 const lineCount = batchPasteText
                   .split("\n")
                   .filter((line: string) => line.trim()).length;
-                const overLimit = lineCount > 30;
+                const overLimit = lineCount > BATCH_PASTE_MAX;
                 return (
                   <div
                     className={`text-xs mt-2 ${overLimit ? "text-red-500 font-medium" : "text-gray-500"}`}
                   >
                     {lineCount || 0} {t("contentEditor.messages.items")}
                     {overLimit &&
-                      ` (${t("contentEditor.messages.batchPasteLimitShort")})`}
+                      ` (${t("contentEditor.messages.batchPasteLimitShort", { count: BATCH_PASTE_MAX })})`}
                   </div>
                 );
               })()}
