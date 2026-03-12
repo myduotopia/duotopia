@@ -3333,12 +3333,17 @@ export default function VocabularySetPanel({
                 className="w-full min-h-80 max-h-[60vh] px-4 py-3 border-2 border-gray-300 rounded-lg font-mono text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-y overflow-y-auto"
               />
               {(() => {
-                const lineCount = batchPasteText.split("\n").filter((line: string) => line.trim()).length;
+                const lineCount = batchPasteText
+                  .split("\n")
+                  .filter((line: string) => line.trim()).length;
                 const overLimit = lineCount > 30;
                 return (
-                  <div className={`text-xs mt-2 ${overLimit ? "text-red-500 font-medium" : "text-gray-500"}`}>
+                  <div
+                    className={`text-xs mt-2 ${overLimit ? "text-red-500 font-medium" : "text-gray-500"}`}
+                  >
                     {lineCount || 0} {t("contentEditor.messages.items")}
-                    {overLimit && ` (${t("contentEditor.messages.batchPasteLimitShort")})`}
+                    {overLimit &&
+                      ` (${t("contentEditor.messages.batchPasteLimitShort")})`}
                   </div>
                 );
               })()}
