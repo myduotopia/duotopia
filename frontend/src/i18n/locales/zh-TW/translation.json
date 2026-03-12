@@ -542,7 +542,8 @@
       "gifAlt2": "分享QR Code示意"
     },
     "materialsTab": {
-      "placeholder": "內容即將推出"
+      "placeholder": "教學圖片製作中，功能皆可正常使用",
+      "encouragement": "動手探索，驚喜等著你！"
     },
     "resourceMaterialsTab": {
       "section1": "資源教材包幫助老師快速開始教學，複製完整的主題教材，直接開始派發各種教學活動。",
