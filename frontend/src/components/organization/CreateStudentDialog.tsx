@@ -62,11 +62,6 @@ export function CreateStudentDialog({
       return;
     }
 
-    if (!formData.birthdate) {
-      toast.error("請選擇出生日期");
-      return;
-    }
-
     if (!schoolId) {
       toast.error("找不到學校 ID");
       return;
@@ -80,12 +75,16 @@ export function CreateStudentDialog({
         name: string;
         email?: string;
         student_number?: string;
-        birthdate: string;
+        birthdate?: string;
         phone?: string;
       } = {
         name: trimmedName,
-        birthdate: formData.birthdate,
       };
+
+      // 只添加非空的生日
+      if (formData.birthdate && formData.birthdate.trim()) {
+        requestData.birthdate = formData.birthdate.trim();
+      }
 
       // 只添加非空欄位
       if (formData.email && formData.email.trim()) {
@@ -169,7 +168,8 @@ export function CreateStudentDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="birthdate">
-              出生日期 <span className="text-red-500">*</span>
+              出生日期{" "}
+              <span className="text-xs text-gray-500 font-normal">(選填)</span>
             </Label>
             <Input
               id="birthdate"

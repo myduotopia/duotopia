@@ -541,6 +541,7 @@ export default function StudentLogin() {
                   {/* Password hint - always visible */}
                   <div className="text-sm text-gray-600 space-y-1 px-1">
                     <p>💡 {t("studentLogin.step4.passwordHint")}</p>
+                    <p>📧 {t("studentLogin.step4.verifiedEmailHint")}</p>
                     <p>🔑 {t("studentLogin.step4.forgotPassword")}</p>
                   </div>
                 </div>

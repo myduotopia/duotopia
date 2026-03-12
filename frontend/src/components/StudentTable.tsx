@@ -38,6 +38,7 @@ export interface Student {
   school_id?: string;
   school_name?: string;
   organization_id?: string;
+  created_at?: string;
 }
 
 interface StudentTableProps {
@@ -118,35 +119,6 @@ export default function StudentTable({
     });
   };
 
-  const getStatusBadge = (status?: string) => {
-    switch (status) {
-      case "active":
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            {t("studentTable.status.active")}
-          </span>
-        );
-      case "inactive":
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-            {t("studentTable.status.inactive")}
-          </span>
-        );
-      case "suspended":
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-            {t("studentTable.status.suspended")}
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-            {t("studentTable.status.unknown")}
-          </span>
-        );
-    }
-  };
-
   if (students.length === 0) {
     return (
       <div className="text-center py-12">
@@ -214,7 +186,6 @@ export default function StudentTable({
                     </p>
                   </div>
                 </div>
-                {getStatusBadge(student.status)}
               </div>
 
               {/* Info Grid */}
@@ -369,9 +340,6 @@ export default function StudentTable({
               <TableHead className="text-left min-w-[100px] whitespace-nowrap">
                 {t("studentTable.columns.passwordStatus")}
               </TableHead>
-              <TableHead className="text-left w-[80px]">
-                {t("studentTable.columns.status")}
-              </TableHead>
               <TableHead className="text-left min-w-[100px] whitespace-nowrap">
                 {t("studentTable.columns.lastLogin")}
               </TableHead>
@@ -439,32 +407,67 @@ export default function StudentTable({
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   <div className="inline-flex items-center space-x-1">
-                    {student.password_changed ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 whitespace-nowrap">
-                        {t("studentTable.passwordChanged")}
-                      </span>
-                    ) : (
-                      <>
-                        {student.birthdate ? (
+                    {(() => {
+                      // Convert UTC created_at to Taiwan date (UTC+8)
+                      const getDefaultPwd = () => {
+                        if (student.created_at) {
+                          const d = new Date(student.created_at);
+                          const tw = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+                          return tw
+                            .toISOString()
+                            .split("T")[0]
+                            .replace(/-/g, "");
+                        }
+                        if (student.birthdate) {
+                          return student.birthdate.replace(/-/g, "");
+                        }
+                        return null;
+                      };
+                      const defaultPwd = getDefaultPwd();
+
+                      if (student.password_changed) {
+                        return (
+                          <>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 whitespace-nowrap">
+                              {t("studentTable.passwordStatus.changed")}
+                            </span>
+                            {onResetPassword && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title={t(
+                                  "studentTable.passwordStatus.resetToDefault",
+                                )}
+                                onClick={() => onResetPassword(student)}
+                                className="h-7 px-2"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </>
+                        );
+                      }
+
+                      if (defaultPwd) {
+                        return (
                           <>
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700 font-mono whitespace-nowrap">
-                              {student.birthdate?.replace(/-/g, "") || ""}
+                              {defaultPwd}
                             </span>
                             <Button
                               variant="ghost"
                               size="sm"
-                              title={t("studentTable.copyPassword", {
-                                password:
-                                  student.birthdate?.replace(/-/g, "") || "",
-                              })}
+                              title={t(
+                                "studentTable.passwordStatus.copyPassword",
+                                { password: defaultPwd },
+                              )}
                               onClick={() => {
-                                const password =
-                                  student.birthdate?.replace(/-/g, "") || "";
-                                navigator.clipboard.writeText(password);
+                                navigator.clipboard.writeText(defaultPwd);
                                 toast.success(
-                                  t("studentTable.passwordCopied", {
-                                    password,
-                                  }),
+                                  t(
+                                    "studentTable.passwordStatus.passwordCopied",
+                                    { password: defaultPwd },
+                                  ),
                                 );
                               }}
                               className="h-6 w-6 p-0"
@@ -472,28 +475,16 @@ export default function StudentTable({
                               <Copy className="h-3 w-3" />
                             </Button>
                           </>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-700 whitespace-nowrap">
-                            {t("studentTable.noBirthdate")}
-                          </span>
-                        )}
-                      </>
-                    )}
-                    {student.password_changed && onResetPassword && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title={t("studentTable.resetPassword")}
-                        onClick={() => onResetPassword(student)}
-                        className="h-7 px-2"
-                      >
-                        <RotateCcw className="h-3 w-3" />
-                      </Button>
-                    )}
+                        );
+                      }
+
+                      return (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-700 whitespace-nowrap">
+                          {t("studentTable.passwordStatus.notSet")}
+                        </span>
+                      );
+                    })()}
                   </div>
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  {getStatusBadge(student.status)}
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   {student.last_login ? (
@@ -502,7 +493,7 @@ export default function StudentTable({
                         {formatDate(student.last_login)}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {t("studentTable.daysAgo", {
+                        {t("studentTable.lastLogin.daysAgo", {
                           count: Math.floor(
                             (Date.now() -
                               new Date(student.last_login).getTime()) /

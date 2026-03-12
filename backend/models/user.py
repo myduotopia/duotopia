@@ -301,7 +301,7 @@ class Student(Base):
     student_number = Column(String(50))
     email = Column(String(255), nullable=True, index=True)
     password_hash = Column(String(255), nullable=False)
-    birthdate = Column(Date, nullable=False)
+    birthdate = Column(Date, nullable=True)
     password_changed = Column(Boolean, default=False)
     email_verified = Column(Boolean, default=False)
     email_verified_at = Column(DateTime(timezone=True))
@@ -335,9 +335,19 @@ class Student(Base):
     assignments = relationship("StudentAssignment", back_populates="student")
 
     def get_default_password(self):
-        """取得預設密碼（生日格式：YYYYMMDD）"""
-        if self.birthdate:
-            return self.birthdate.strftime("%Y%m%d")
+        """取得預設密碼（建立日期台灣時區格式：YYYYMMDD）"""
+        if self.created_at:
+            from zoneinfo import ZoneInfo
+
+            taipei_tz = ZoneInfo("Asia/Taipei")
+            created_tw = (
+                self.created_at.astimezone(taipei_tz)
+                if self.created_at.tzinfo
+                else self.created_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(
+                    taipei_tz
+                )
+            )
+            return created_tw.strftime("%Y%m%d")
         return None
 
     def __repr__(self):

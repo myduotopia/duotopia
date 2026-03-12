@@ -617,7 +617,7 @@ class ApiClient {
       name: string;
       email?: string;
       student_number?: string;
-      birthdate: string; // YYYY-MM-DD
+      birthdate?: string; // YYYY-MM-DD（選填）
       phone?: string;
     },
   ) {
@@ -649,6 +649,15 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify(data),
     });
+  }
+
+  async resetSchoolStudentPassword(schoolId: string, studentId: number) {
+    return this.request(
+      `/api/schools/${schoolId}/students/${studentId}/reset-password`,
+      {
+        method: "POST",
+      },
+    );
   }
 
   async removeStudentFromSchool(schoolId: string, studentId: number) {
@@ -710,7 +719,7 @@ class ApiClient {
       name: string;
       email?: string;
       student_number?: string;
-      birthdate: string;
+      birthdate?: string;
       phone?: string;
       classroom_id?: number;
     }>,

@@ -84,11 +84,6 @@ export function EditStudentDialog({
       return;
     }
 
-    if (!formData.birthdate) {
-      toast.error("請選擇出生日期");
-      return;
-    }
-
     if (!schoolId) {
       toast.error("找不到學校 ID");
       return;
@@ -192,7 +187,8 @@ export function EditStudentDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="edit-birthdate">
-              出生日期 <span className="text-red-500">*</span>
+              出生日期{" "}
+              <span className="text-xs text-gray-500 font-normal">(選填)</span>
             </Label>
             <Input
               id="edit-birthdate"
