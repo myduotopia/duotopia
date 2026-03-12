@@ -151,7 +151,6 @@ export default function SchoolMaterialsPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { label: "組織管理" },
           ...(organization
             ? [
                 {

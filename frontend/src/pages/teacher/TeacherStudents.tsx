@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { Button } from "@/components/ui/button";
@@ -51,11 +51,7 @@ export default function TeacherStudents() {
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
 
-  useEffect(() => {
-    fetchClassrooms();
-  }, [selectedSchool, selectedOrganization, mode]);
-
-  const fetchClassrooms = async () => {
+  const fetchClassrooms = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -142,7 +138,11 @@ export default function TeacherStudents() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [mode, selectedSchool, selectedOrganization, t]);
+
+  useEffect(() => {
+    fetchClassrooms();
+  }, [fetchClassrooms]);
 
   // 過濾並排序學生（workspace filtering 已在後端完成）
   const filteredStudents = allStudents

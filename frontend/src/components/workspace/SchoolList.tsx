@@ -102,7 +102,7 @@ const SchoolItem: React.FC<SchoolItemProps> = ({
       className={cn(
         "w-full px-3 py-2.5 rounded-md text-left flex items-center gap-3 transition-all duration-150",
         isSelected
-          ? "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-l-3 border-blue-600"
+          ? "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-l-4 border-blue-600"
           : isHovered
             ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
             : "text-slate-700 dark:text-slate-300",

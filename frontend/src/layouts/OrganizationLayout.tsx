@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -28,12 +28,15 @@ function OrganizationLayoutContent({ children }: OrganizationLayoutProps) {
   } = useTeacherAuthStore();
   const { setOrganizations, setIsFetchingOrgs } = useOrganization();
 
-  // Fetch organizations on mount
+  // Fetch organizations on mount (only if not already loaded)
+  const hasFetchedOrgs = useRef(false);
   useEffect(() => {
+    if (!token || hasFetchedOrgs.current) return;
+    hasFetchedOrgs.current = true;
+
     const fetchOrganizations = async () => {
       try {
         setIsFetchingOrgs(true);
-        // Fetch organizations where user has access (owner, admin, or school staff)
         const response = await fetch(`${API_URL}/api/organizations`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -41,20 +44,30 @@ function OrganizationLayoutContent({ children }: OrganizationLayoutProps) {
         if (response.ok) {
           const data = await response.json();
           setOrganizations(data);
+
+          // If on index route, redirect to first organization
+          const currentPath = window.location.pathname;
+          if (
+            (currentPath === "/organization" ||
+              currentPath === "/organization/") &&
+            data.length > 0
+          ) {
+            navigate(`/organization/${data[0].id}`, { replace: true });
+          }
         } else {
           console.error("Failed to fetch organizations:", response.status);
+          hasFetchedOrgs.current = false;
         }
       } catch (error) {
         console.error("Failed to fetch organizations:", error);
+        hasFetchedOrgs.current = false;
       } finally {
         setIsFetchingOrgs(false);
       }
     };
 
-    if (token) {
-      fetchOrganizations();
-    }
-  }, [token, setOrganizations, setIsFetchingOrgs]);
+    fetchOrganizations();
+  }, [token, navigate, setOrganizations, setIsFetchingOrgs]);
 
   // Check permissions on mount
   useEffect(() => {
@@ -146,7 +159,7 @@ function OrganizationLayoutContent({ children }: OrganizationLayoutProps) {
         </div>
 
         {/* Sidebar Navigation - Organization Tree */}
-        <nav className="flex-1 overflow-y-auto p-4">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden p-4">
           {!sidebarCollapsed ? (
             <>
               <div className="flex items-center justify-between mb-3">

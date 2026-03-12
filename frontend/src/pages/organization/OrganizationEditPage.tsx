@@ -155,7 +155,12 @@ export default function OrganizationEditPage() {
       {/* Breadcrumb with Settings Button */}
       <div className="flex items-center justify-between">
         <Breadcrumb
-          items={[{ label: "組織管理" }, { label: organization.name }]}
+          items={[
+            {
+              label: organization.name,
+              href: `/organization/${organization.id}`,
+            },
+          ]}
         />
         <Button
           onClick={() => setEditDialogOpen(true)}

@@ -239,7 +239,6 @@ export default function SchoolsPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { label: "組織管理" },
           {
             label: organization?.name || "...",
             href: `/organization/${orgId}`,

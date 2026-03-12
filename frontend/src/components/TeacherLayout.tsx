@@ -318,7 +318,7 @@ function TeacherLayoutInner({
                   <DropdownMenuItem
                     className="cursor-pointer"
                     onClick={() => {
-                      navigate("/organization/dashboard");
+                      navigate("/organization");
                       onNavigate?.();
                     }}
                   >

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import SystemOverviewTab from "./SystemOverviewTab";
 import ClassroomsTab from "./ClassroomsTab";
 import AllStudentsTab from "./AllStudentsTab";
@@ -64,6 +64,45 @@ interface DashboardData {
   is_test_account?: boolean;
 }
 
+const taglines = [
+  {
+    en: "Duotopia makes teaching smarter and learning more active.",
+    "zh-TW": "語拓邦讓教學更智能、學習更主動。",
+    ja: "Duotopiaで教育をよりスマートに、学びをより主体的に。",
+    ko: "Duotopia로 더 스마트하게 가르치고, 더 능동적으로 배우세요.",
+  },
+  {
+    en: "Save 80% of lesson prep and grading time.",
+    "zh-TW": "節省 80% 備課與批改時間。",
+    ja: "授業準備と採点時間を80%削減。",
+    ko: "수업 준비와 채점 시간을 80% 절약하세요.",
+  },
+  {
+    en: "Use the Timer & Dice in the toolbar — teaching made effortless.",
+    "zh-TW": "善用右側工具列的計時器與骰子，讓教學更輕鬆。",
+    ja: "ツールバーのタイマーとサイコロで、授業をもっと楽しく。",
+    ko: "도구 모음의 타이머와 주사위로 수업을 더 쉽게.",
+  },
+  {
+    en: "Assign once, AI grades instantly.",
+    "zh-TW": "派作業一次，AI 即時完成批改。",
+    ja: "課題を配布すれば、AIが即時採点。",
+    ko: "과제를 한 번 배정하면, AI가 즉시 채점.",
+  },
+  {
+    en: "Every student gets personalized feedback.",
+    "zh-TW": "每位學生都能獲得個人化回饋。",
+    ja: "すべての生徒に個別フィードバックを。",
+    ko: "모든 학생에게 맞춤형 피드백을 제공합니다.",
+  },
+  {
+    en: "Track progress, celebrate growth.",
+    "zh-TW": "追蹤學習進度，見證每一步成長。",
+    ja: "進捗を追跡し、成長を実感。",
+    ko: "학습 진행을 추적하고, 성장을 확인하세요.",
+  },
+];
+
 export default function TeacherDashboard() {
   const { t, i18n } = useTranslation();
   useWorkspace();
@@ -79,45 +118,6 @@ export default function TeacherDashboard() {
   const [slideDir, setSlideDir] = useState<"left" | "right">("left");
   const [prevTab, setPrevTab] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
-
-  const taglines = [
-    {
-      en: "Duotopia makes teaching smarter and learning more active.",
-      "zh-TW": "語拓邦讓教學更智能、學習更主動。",
-      ja: "Duotopiaで教育をよりスマートに、学びをより主体的に。",
-      ko: "Duotopia로 더 스마트하게 가르치고, 더 능동적으로 배우세요.",
-    },
-    {
-      en: "Save 80% of lesson prep and grading time.",
-      "zh-TW": "節省 80% 備課與批改時間。",
-      ja: "授業準備と採点時間を80%削減。",
-      ko: "수업 준비와 채점 시간을 80% 절약하세요.",
-    },
-    {
-      en: "Use the Timer & Dice in the toolbar — teaching made effortless.",
-      "zh-TW": "善用右側工具列的計時器與骰子，讓教學更輕鬆。",
-      ja: "ツールバーのタイマーとサイコロで、授業をもっと楽しく。",
-      ko: "도구 모음의 타이머와 주사위로 수업을 더 쉽게.",
-    },
-    {
-      en: "Assign once, AI grades instantly.",
-      "zh-TW": "派作業一次，AI 即時完成批改。",
-      ja: "課題を配布すれば、AIが即時採点。",
-      ko: "과제를 한 번 배정하면, AI가 즉시 채점.",
-    },
-    {
-      en: "Every student gets personalized feedback.",
-      "zh-TW": "每位學生都能獲得個人化回饋。",
-      ja: "すべての生徒に個別フィードバックを。",
-      ko: "모든 학생에게 맞춤형 피드백을 제공합니다.",
-    },
-    {
-      en: "Track progress, celebrate growth.",
-      "zh-TW": "追蹤學習進度，見證每一步成長。",
-      ja: "進捗を追跡し、成長を実感。",
-      ko: "학습 진행을 추적하고, 성장을 확인하세요.",
-    },
-  ];
 
   const [taglineIndex, setTaglineIndex] = useState(0);
   const [typedText, setTypedText] = useState("");
@@ -147,13 +147,9 @@ export default function TeacherDashboard() {
       clearInterval(typeTimer);
       clearTimeout(nextTimer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taglineIndex]);
 
-  useEffect(() => {
-    fetchDashboardData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const hasFetchedDashboard = useRef(false);
 
   const fetchDashboardData = async () => {
     try {
@@ -169,6 +165,12 @@ export default function TeacherDashboard() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (hasFetchedDashboard.current) return;
+    hasFetchedDashboard.current = true;
+    fetchDashboardData();
+  }, []);
 
   const handleCopyUrl = async () => {
     if (!dashboardData) return;

@@ -766,18 +766,18 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 };
 
 // RPS (Rock-Paper-Scissors) Slot Machine Component
+const RPS_CHOICES = ["✊", "✋", "✌️"];
+const RPS_REEL = (() => {
+  const arr: string[] = [];
+  for (let i = 0; i < 20; i++) RPS_CHOICES.forEach((c) => arr.push(c));
+  return arr;
+})();
+
 const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
   show,
   onClose,
 }) => {
-  const CHOICES = ["✊", "✋", "✌️"];
   const ITEM_H = 120;
-  const REEL = useMemo(() => {
-    const arr: string[] = [];
-    for (let i = 0; i < 20; i++) CHOICES.forEach((c) => arr.push(c));
-    return arr;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const [reelIndex, setReelIndex] = useState(3); // start at index 3 so there's room above
   const [reelTransition, setReelTransition] = useState(false);
@@ -993,7 +993,7 @@ const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
               : "none",
           }}
         >
-          {REEL.map((choice, i) => (
+          {RPS_REEL.map((choice, i) => (
             <div
               key={i}
               className="flex items-center justify-center select-none"

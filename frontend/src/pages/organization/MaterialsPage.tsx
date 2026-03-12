@@ -159,7 +159,6 @@ export default function MaterialsPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { label: "組織管理" },
           {
             label: organization?.name || "...",
             href: `/organization/${orgId}`,
