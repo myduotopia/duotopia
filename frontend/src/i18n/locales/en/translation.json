@@ -4165,13 +4165,14 @@
       "items": "items",
       "batchLimitError": "Maximum {{count}} items per batch, please process in batches",
       "batchLimitTruncated": "Exceeded limit, only the first {{count}} items will be processed",
-      "batchLimitWarning": "Exceeded {{count}} item limit, only the first {{count}} will be processed"
+      "batchLimitWarning": "Exceeded {{count}} item limit, only the first {{count}} will be processed",
+      "batchPasteLimit": "Batch paste limit is 30 items, please reduce and try again"
     },
     "translationLanguages": {
       "chinese": "Chinese",
       "english": "English",
-      "japanese": "Japanese",
-      "korean": "Korean"
+      "japanese": "日本語",
+      "korean": "한국어"
     },
     "warnings": {
       "assignmentCopy": "Note: This is an assignment copy",
