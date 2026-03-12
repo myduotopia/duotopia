@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { API_URL } from "@/config/api";
-import { apiClient } from "@/lib/api";
 import { logError } from "@/utils/errorLogger";
 import { Breadcrumb } from "@/components/organization/Breadcrumb";
 import { LoadingSpinner } from "@/components/organization/LoadingSpinner";
@@ -12,12 +11,11 @@ import { CreateClassroomDialog } from "@/components/organization/CreateClassroom
 import { EditClassroomDialog } from "@/components/organization/EditClassroomDialog";
 import { AssignTeacherDialog } from "@/components/organization/AssignTeacherDialog";
 import { ClassroomStudentsSidebar } from "@/components/organization/ClassroomStudentsSidebar";
-import { ClassroomMaterialsSidebar } from "@/components/organization/ClassroomMaterialsSidebar";
 import { AssignmentDialog } from "@/components/AssignmentDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { GraduationCap, Plus } from "lucide-react";
-import { toast } from "sonner";
+
 
 interface Classroom {
   id: string;
@@ -68,7 +66,6 @@ export default function SchoolClassroomsPage() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showStudentsSidebar, setShowStudentsSidebar] = useState(false);
-  const [showMaterialsSidebar, setShowMaterialsSidebar] = useState(false);
   const [editingClassroom, setEditingClassroom] = useState<Classroom | null>(
     null,
   );
@@ -190,32 +187,10 @@ export default function SchoolClassroomsPage() {
     setShowStudentsSidebar(true);
   };
 
-  const handleViewMaterials = (classroom: Classroom) => {
-    setViewingClassroom(classroom);
-    setShowMaterialsSidebar(true);
-  };
-
-  const handleAssignHomework = async (classroom: Classroom) => {
-    try {
-      // 取得班級學生列表
-      const students = (await apiClient.getClassroomStudents(
-        schoolId || "",
-        parseInt(classroom.id),
-      )) as { id: number; name: string; student_number?: string }[];
-      if (!students || students.length === 0) {
-        toast.error("此班級尚無學生，無法派發作業");
-        return;
-      }
-      setAssignmentClassroom(classroom);
-      setAssignmentStudents(students);
-      setShowAssignmentDialog(true);
-    } catch (error) {
-      logError("Failed to fetch classroom students for assignment", error, {
-        schoolId,
-        classroomId: classroom.id,
-      });
-      toast.error("載入學生列表失敗");
-    }
+  const handleAssignHomework = (classroom: Classroom) => {
+    setAssignmentClassroom(classroom);
+    setAssignmentStudents([]);
+    setShowAssignmentDialog(true);
   };
 
   return (
@@ -281,7 +256,6 @@ export default function SchoolClassroomsPage() {
               onEdit={handleEdit}
               onAssignTeacher={handleAssignTeacher}
               onViewStudents={handleViewStudents}
-              onViewMaterials={handleViewMaterials}
               onAssignHomework={handleAssignHomework}
             />
           )}
@@ -327,19 +301,6 @@ export default function SchoolClassroomsPage() {
           classroomId={parseInt(viewingClassroom.id)}
           classroomName={viewingClassroom.name}
           schoolId={schoolId || ""}
-          onSuccess={fetchClassrooms}
-        />
-      )}
-
-      {/* Classroom Materials Sidebar */}
-      {viewingClassroom && school && (
-        <ClassroomMaterialsSidebar
-          open={showMaterialsSidebar}
-          onOpenChange={setShowMaterialsSidebar}
-          classroomId={parseInt(viewingClassroom.id)}
-          classroomName={viewingClassroom.name}
-          schoolId={schoolId || ""}
-          organizationId={school.organization_id}
           onSuccess={fetchClassrooms}
         />
       )}

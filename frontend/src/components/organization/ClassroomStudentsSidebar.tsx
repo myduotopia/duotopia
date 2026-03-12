@@ -58,14 +58,26 @@ export function ClassroomStudentsSidebar({
   const fetchClassroomStudents = async () => {
     try {
       setLoading(true);
-      const students = (await apiClient.getClassroomStudents(
-        schoolId,
-        classroomId,
-      )) as Student[];
-      const classroomStudentsData = students || [];
+      // Parallel fetch: classroom students + school students at the same time
+      const [classroomData, schoolData] = await Promise.all([
+        apiClient.getClassroomStudents(schoolId, classroomId) as Promise<
+          Student[]
+        >,
+        apiClient.getSchoolStudents(schoolId) as Promise<Student[]>,
+      ]);
+
+      const classroomStudentsData = classroomData || [];
       setClassroomStudents(classroomStudentsData);
-      // 獲取班級學生後，立即更新可用學生列表
-      await fetchAvailableStudents(classroomStudentsData);
+
+      // Filter out students already in the classroom
+      const classroomStudentIds = new Set(
+        classroomStudentsData.map((s) => s.id),
+      );
+      setAvailableStudents(
+        (schoolData || []).filter(
+          (s: Student) => !classroomStudentIds.has(s.id),
+        ),
+      );
     } catch (error) {
       logError("Failed to fetch classroom students", error, {
         schoolId,
@@ -74,27 +86,6 @@ export function ClassroomStudentsSidebar({
       toast.error("載入班級學生失敗");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchAvailableStudents = async (
-    currentClassroomStudents: Student[] = classroomStudents,
-  ) => {
-    try {
-      const students = (await apiClient.getSchoolStudents(
-        schoolId,
-      )) as Student[];
-      // 過濾掉已經在班級中的學生
-      const currentClassroomStudentIds = new Set(
-        currentClassroomStudents.map((s) => s.id),
-      );
-      const available = (students || []).filter(
-        (s: Student) => !currentClassroomStudentIds.has(s.id),
-      );
-      setAvailableStudents(available);
-    } catch (error) {
-      logError("Failed to fetch available students", error, { schoolId });
-      toast.error("載入可用學生失敗");
     }
   };
 

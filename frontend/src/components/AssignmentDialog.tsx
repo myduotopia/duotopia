@@ -271,6 +271,8 @@ export function AssignmentDialog({
     !!propOrganizationId;
 
   const [loading, setLoading] = useState(false);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [internalStudents, setInternalStudents] = useState<Student[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [loadingClassroomPrograms, setLoadingClassroomPrograms] =
     useState(false);
@@ -285,6 +287,10 @@ export function AssignmentDialog({
   const [activeTab, setActiveTab] = useState<
     "template" | "classroom" | "organization"
   >(showOrgTab ? "organization" : "template");
+
+  // 學生列表：優先用外部傳入的，否則內部載入的
+  const effectiveStudents =
+    students.length > 0 ? students : internalStudents;
 
   // 分別儲存公版和班級課程
   const [templatePrograms, setTemplatePrograms] = useState<Program[]>([]);
@@ -340,8 +346,43 @@ export function AssignmentDialog({
     show_image: true, // 顯示圖片
   });
 
+  // 內部載入學生列表（當外部未傳入時）
+  const loadStudents = async () => {
+    if (!effectiveSchoolId) return;
+    setLoadingStudents(true);
+    try {
+      const data = (await apiClient.getClassroomStudents(
+        effectiveSchoolId,
+        classroomId,
+      )) as Student[];
+      if (!data || data.length === 0) {
+        toast.error("此班級尚無學生，無法派發作業");
+        onClose();
+        return;
+      }
+      setInternalStudents(data);
+      // 載入完成後更新 student_ids
+      setFormData((prev) => ({
+        ...prev,
+        student_ids: data.map((s) => s.id),
+      }));
+    } catch {
+      toast.error("載入學生列表失敗");
+      onClose();
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
   useEffect(() => {
     if (open) {
+      // 如果外部未傳入學生，內部自行載入
+      if (students.length === 0) {
+        setInternalStudents([]);
+        loadStudents();
+      } else {
+        setInternalStudents(students);
+      }
       loadTemplatePrograms();
       loadClassroomPrograms();
       if (showOrgTab) {
@@ -353,7 +394,7 @@ export function AssignmentDialog({
       setFormData({
         title: "",
         instructions: "",
-        student_ids: students.map((s) => s.id), // 預設全選所有學生
+        student_ids: students.map((s) => s.id), // 預設全選所有學生（外部傳入時）
         assign_to_all: true,
         due_date: undefined,
         start_date: new Date(), // 預設為今天
@@ -800,7 +841,7 @@ export function AssignmentDialog({
       return {
         ...prev,
         student_ids: newIds,
-        assign_to_all: newIds.length === students.length,
+        assign_to_all: newIds.length === effectiveStudents.length,
       };
     });
   };
@@ -809,7 +850,7 @@ export function AssignmentDialog({
     setFormData((prev) => ({
       ...prev,
       assign_to_all: !prev.assign_to_all,
-      student_ids: !prev.assign_to_all ? students.map((s) => s.id) : [],
+      student_ids: !prev.assign_to_all ? effectiveStudents.map((s) => s.id) : [],
     }));
   };
 
@@ -2732,6 +2773,13 @@ export function AssignmentDialog({
           {/* Step 3: Select Students */}
           {currentStep === 3 && (
             <div className="h-full flex flex-col">
+              {loadingStudents ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                  <span className="ml-2 text-sm text-gray-500">載入學生列表...</span>
+                </div>
+              ) : (
+              <>
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm text-gray-600">
                   {t("dialogs.assignmentDialog.selectStudents.description")}
@@ -2739,7 +2787,7 @@ export function AssignmentDialog({
                 <Badge variant="secondary" className="bg-blue-50 text-blue-700">
                   {t("dialogs.assignmentDialog.selectStudents.selected", {
                     selected: formData.student_ids.length,
-                    total: students.length,
+                    total: effectiveStudents.length,
                   })}
                 </Badge>
               </div>
@@ -2761,7 +2809,7 @@ export function AssignmentDialog({
                     <p className="text-xs text-blue-700">
                       {t(
                         "dialogs.assignmentDialog.selectStudents.totalStudents",
-                        { count: students.length },
+                        { count: effectiveStudents.length },
                       )}
                     </p>
                   </div>
@@ -2777,7 +2825,7 @@ export function AssignmentDialog({
               <div className="flex-1 border rounded-lg bg-gray-50 p-2 overflow-hidden">
                 <ScrollArea className="h-full">
                   <div className="grid grid-cols-3 gap-1.5 p-1">
-                    {[...students]
+                    {[...effectiveStudents]
                       .sort((a, b) => {
                         // Sort by student_number: students without number go to the end
                         if (!a.student_number && !b.student_number) return 0;
@@ -2837,7 +2885,7 @@ export function AssignmentDialog({
                   onClick={() =>
                     setFormData((prev) => ({
                       ...prev,
-                      student_ids: students.map((s) => s.id),
+                      student_ids: effectiveStudents.map((s) => s.id),
                       assign_to_all: true,
                     }))
                   }
@@ -2866,7 +2914,7 @@ export function AssignmentDialog({
                   size="sm"
                   onClick={() => {
                     const currentIds = formData.student_ids;
-                    const allIds = students.map((s) => s.id);
+                    const allIds = effectiveStudents.map((s) => s.id);
                     const newIds = allIds.filter(
                       (id) => !currentIds.includes(id),
                     );
@@ -2882,6 +2930,8 @@ export function AssignmentDialog({
                   {t("dialogs.assignmentDialog.selectStudents.invertSelection")}
                 </Button>
               </div>
+              </>
+              )}
             </div>
           )}
 
@@ -3090,7 +3140,7 @@ export function AssignmentDialog({
               ) : (
                 <Button
                   onClick={handleSubmit}
-                  disabled={loading || !canProceed()}
+                  disabled={loading || loadingStudents || !canProceed()}
                   className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
                 >
                   {loading ? (

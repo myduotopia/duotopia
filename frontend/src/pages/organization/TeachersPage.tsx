@@ -128,37 +128,41 @@ export default function TeachersPage() {
       setLoading(true);
       setError(null);
 
-      const url =
-        selectedSchoolId && selectedSchoolId !== "all"
-          ? `${API_URL}/api/schools/${selectedSchoolId}/teachers`
-          : `${API_URL}/api/organizations/${effectiveOrgId}/teachers`;
+      const headers = { Authorization: `Bearer ${token}` };
 
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // Always fetch org-level teachers (for correct org roles)
+      const orgResponse = await fetch(
+        `${API_URL}/api/organizations/${effectiveOrgId}/teachers`,
+        { headers },
+      );
 
-      if (response.ok) {
-        const data = await response.json();
+      if (!orgResponse.ok) {
+        setError(`載入教師列表失敗：${orgResponse.status}`);
+        toast.error("載入教師列表失敗");
+        return;
+      }
 
-        // Normalize: school endpoint returns { roles: string[] }, org endpoint returns { role: string }
-        if (selectedSchoolId && selectedSchoolId !== "all") {
-          const normalized = data.map(
-            (t: { id: number; email: string; name: string; roles: string[]; is_active: boolean; created_at: string }) => ({
-              ...t,
-              role: t.roles?.includes("school_admin")
-                ? "school_admin"
-                : t.roles?.includes("school_director")
-                  ? "school_director"
-                  : t.roles?.[0] || "teacher",
-            }),
+      const orgTeachers = await orgResponse.json();
+
+      // If a school is selected, fetch school teacher IDs to filter
+      if (selectedSchoolId && selectedSchoolId !== "all") {
+        const schoolResponse = await fetch(
+          `${API_URL}/api/schools/${selectedSchoolId}/teachers`,
+          { headers },
+        );
+        if (schoolResponse.ok) {
+          const schoolTeachers = await schoolResponse.json();
+          const schoolTeacherIds = new Set(
+            schoolTeachers.map((t: { id: number }) => t.id),
           );
-          setTeachers(normalized);
+          setTeachers(
+            orgTeachers.filter((t: StaffMember) => schoolTeacherIds.has(t.id)),
+          );
         } else {
-          setTeachers(data);
+          setError(`載入分校教師失敗：${schoolResponse.status}`);
         }
       } else {
-        setError(`載入教師列表失敗：${response.status}`);
-        toast.error("載入教師列表失敗");
+        setTeachers(orgTeachers);
       }
     } catch (error) {
       console.error("Failed to fetch teachers:", error);
@@ -174,35 +178,18 @@ export default function TeachersPage() {
     isActive: boolean,
   ) => {
     try {
-      let response: Response;
-
-      if (selectedSchoolId && selectedSchoolId !== "all") {
-        // Use school-level endpoint
-        response = await fetch(
-          `${API_URL}/api/schools/${selectedSchoolId}/teachers/${teacher.id}`,
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ is_active: isActive }),
+      // Always use org-level endpoint (we always display org-level roles)
+      const response = await fetch(
+        `${API_URL}/api/organizations/${effectiveOrgId}/teachers/${teacher.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
-        );
-      } else {
-        // Use org-level endpoint
-        response = await fetch(
-          `${API_URL}/api/organizations/${effectiveOrgId}/teachers/${teacher.id}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ role: teacher.role, is_active: isActive }),
-          },
-        );
-      }
+          body: JSON.stringify({ role: teacher.role, is_active: isActive }),
+        },
+      );
 
       if (response.ok) {
         toast.success(isActive ? "教師已啟用" : "教師已停用");
