@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -323,17 +323,21 @@ export default function ClassroomDetail({
     }
   };
 
+  const hasFetchedData = useRef<string | null>(null);
+
   useEffect(() => {
-    if (id) {
-      if (isTemplateMode) {
-        fetchTemplateProgramData();
-      } else {
-        fetchClassroomDetail();
-        fetchPrograms();
-        fetchStudents();
-        fetchAssignments();
-        fetchTeacherPermissions();
-      }
+    const key = `${id}-${isTemplateMode}`;
+    if (!id || hasFetchedData.current === key) return;
+    hasFetchedData.current = key;
+
+    if (isTemplateMode) {
+      fetchTemplateProgramData();
+    } else {
+      fetchClassroomDetail();
+      fetchPrograms();
+      fetchStudents();
+      fetchAssignments();
+      fetchTeacherPermissions();
     }
   }, [id, isTemplateMode]);
 

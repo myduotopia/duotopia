@@ -10,6 +10,7 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from "react";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
@@ -105,7 +106,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // Fetch organizations from API
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     if (!token) {
       console.warn("No token available, skipping organization fetch");
       return;
@@ -143,14 +144,14 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, teacherId]);
 
   // Load organizations on mount and when token/teacherId changes
   useEffect(() => {
     if (teacherId && token) {
       fetchOrganizations();
     }
-  }, [teacherId, token]);
+  }, [teacherId, token, fetchOrganizations]);
 
   // Persist mode to localStorage
   const setMode = (newMode: WorkspaceMode) => {
