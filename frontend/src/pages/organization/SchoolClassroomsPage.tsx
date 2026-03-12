@@ -16,7 +16,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { GraduationCap, Plus } from "lucide-react";
 
-
 interface Classroom {
   id: string;
   name: string;

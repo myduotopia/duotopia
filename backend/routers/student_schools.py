@@ -109,9 +109,7 @@ def build_student_responses_batch(students: list, db: Session) -> list:
     )
     schools_map: dict = {}
     for row in school_rows:
-        schools_map.setdefault(row[0], []).append(
-            {"id": str(row[1]), "name": row[2]}
-        )
+        schools_map.setdefault(row[0], []).append({"id": str(row[1]), "name": row[2]})
 
     # 2. Batch: get all classrooms + school_id for all students (1 JOIN query)
     classroom_rows = (

@@ -26,7 +26,14 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Plus, Search, Upload, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Users,
+  Plus,
+  Search,
+  Upload,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { toast } from "sonner";
 
 interface Classroom {
@@ -413,39 +420,40 @@ export default function SchoolStudentsPage() {
                 onRemove={handleRemove}
                 onRemoveFromClassroom={handleRemoveFromClassroom}
               />
-              {students.length > itemsPerPage && (() => {
-                const totalPages = Math.ceil(students.length / itemsPerPage);
-                return (
-                  <div className="flex items-center justify-center gap-3 mt-6">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setCurrentPage((prev) => Math.max(1, prev - 1))
-                      }
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="text-sm text-gray-600">
-                      第 {currentPage} 頁 / 共 {totalPages} 頁（共{" "}
-                      {students.length} 位學生）
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setCurrentPage((prev) =>
-                          Math.min(totalPages, prev + 1),
-                        )
-                      }
-                      disabled={currentPage === totalPages}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                );
-              })()}
+              {students.length > itemsPerPage &&
+                (() => {
+                  const totalPages = Math.ceil(students.length / itemsPerPage);
+                  return (
+                    <div className="flex items-center justify-center gap-3 mt-6">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCurrentPage((prev) => Math.max(1, prev - 1))
+                        }
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm text-gray-600">
+                        第 {currentPage} 頁 / 共 {totalPages} 頁（共{" "}
+                        {students.length} 位學生）
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCurrentPage((prev) =>
+                            Math.min(totalPages, prev + 1),
+                          )
+                        }
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })()}
             </>
           )}
         </CardContent>

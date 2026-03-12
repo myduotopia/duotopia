@@ -289,8 +289,7 @@ export function AssignmentDialog({
   >(showOrgTab ? "organization" : "template");
 
   // 學生列表：優先用外部傳入的，否則內部載入的
-  const effectiveStudents =
-    students.length > 0 ? students : internalStudents;
+  const effectiveStudents = students.length > 0 ? students : internalStudents;
 
   // 分別儲存公版和班級課程
   const [templatePrograms, setTemplatePrograms] = useState<Program[]>([]);
@@ -850,7 +849,9 @@ export function AssignmentDialog({
     setFormData((prev) => ({
       ...prev,
       assign_to_all: !prev.assign_to_all,
-      student_ids: !prev.assign_to_all ? effectiveStudents.map((s) => s.id) : [],
+      student_ids: !prev.assign_to_all
+        ? effectiveStudents.map((s) => s.id)
+        : [],
     }));
   };
 
@@ -2776,161 +2777,177 @@ export function AssignmentDialog({
               {loadingStudents ? (
                 <div className="flex-1 flex items-center justify-center">
                   <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                  <span className="ml-2 text-sm text-gray-500">載入學生列表...</span>
+                  <span className="ml-2 text-sm text-gray-500">
+                    載入學生列表...
+                  </span>
                 </div>
               ) : (
-              <>
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm text-gray-600">
-                  {t("dialogs.assignmentDialog.selectStudents.description")}
-                </p>
-                <Badge variant="secondary" className="bg-blue-50 text-blue-700">
-                  {t("dialogs.assignmentDialog.selectStudents.selected", {
-                    selected: formData.student_ids.length,
-                    total: effectiveStudents.length,
-                  })}
-                </Badge>
-              </div>
-
-              {/* Quick Select All */}
-              <Card className="p-2 mb-2 bg-blue-50 border-blue-200">
-                <div
-                  onClick={toggleAllStudents}
-                  className="flex items-center gap-3 w-full cursor-pointer"
-                >
-                  <Checkbox
-                    checked={formData.assign_to_all}
-                    className="data-[state=checked]:bg-blue-600 h-5 w-5"
-                  />
-                  <div className="flex-1 text-left">
-                    <p className="text-sm font-semibold text-blue-900">
-                      {t("dialogs.assignmentDialog.selectStudents.assignAll")}
+                <>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-sm text-gray-600">
+                      {t("dialogs.assignmentDialog.selectStudents.description")}
                     </p>
-                    <p className="text-xs text-blue-700">
-                      {t(
-                        "dialogs.assignmentDialog.selectStudents.totalStudents",
-                        { count: effectiveStudents.length },
-                      )}
-                    </p>
-                  </div>
-                  {formData.assign_to_all && (
-                    <Badge className="bg-blue-600 text-white">
-                      {t("dialogs.assignmentDialog.selectStudents.allSelected")}
+                    <Badge
+                      variant="secondary"
+                      className="bg-blue-50 text-blue-700"
+                    >
+                      {t("dialogs.assignmentDialog.selectStudents.selected", {
+                        selected: formData.student_ids.length,
+                        total: effectiveStudents.length,
+                      })}
                     </Badge>
-                  )}
-                </div>
-              </Card>
-
-              {/* Student Grid - Maximum use of space */}
-              <div className="flex-1 border rounded-lg bg-gray-50 p-2 overflow-hidden">
-                <ScrollArea className="h-full">
-                  <div className="grid grid-cols-3 gap-1.5 p-1">
-                    {[...effectiveStudents]
-                      .sort((a, b) => {
-                        // Sort by student_number: students without number go to the end
-                        if (!a.student_number && !b.student_number) return 0;
-                        if (!a.student_number) return 1;
-                        if (!b.student_number) return -1;
-                        return a.student_number.localeCompare(
-                          b.student_number,
-                          undefined,
-                          { numeric: true },
-                        );
-                      })
-                      .map((student) => (
-                        <div
-                          key={student.id}
-                          onClick={() => toggleStudent(student.id)}
-                          className={cn(
-                            "p-2 rounded-md border transition-all text-left relative cursor-pointer",
-                            formData.student_ids.includes(student.id)
-                              ? "bg-blue-50 border-blue-300 shadow-sm"
-                              : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm",
-                          )}
-                        >
-                          <div className="flex items-start gap-2">
-                            <Checkbox
-                              checked={formData.student_ids.includes(
-                                student.id,
-                              )}
-                              className="data-[state=checked]:bg-blue-600 mt-0.5 h-4 w-4 pointer-events-none"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-xs truncate">
-                                {student.student_number
-                                  ? `${student.student_number}.${student.name}`
-                                  : student.name}
-                              </p>
-                              <p className="text-[10px] text-gray-500 truncate">
-                                {student.email}
-                              </p>
-                            </div>
-                          </div>
-                          {formData.student_ids.includes(student.id) && (
-                            <div className="absolute top-1 right-1">
-                              <CheckCircle2 className="h-3 w-3 text-blue-600" />
-                            </div>
-                          )}
-                        </div>
-                      ))}
                   </div>
-                </ScrollArea>
-              </div>
 
-              {/* Action Buttons for quick selection */}
-              <div className="flex gap-2 mt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      student_ids: effectiveStudents.map((s) => s.id),
-                      assign_to_all: true,
-                    }))
-                  }
-                  className="flex-1"
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-1" />
-                  {t("dialogs.assignmentDialog.selectStudents.selectAllBtn")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      student_ids: [],
-                      assign_to_all: false,
-                    }))
-                  }
-                  className="flex-1"
-                >
-                  <Circle className="h-4 w-4 mr-1" />
-                  {t("dialogs.assignmentDialog.selectStudents.deselectAllBtn")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const currentIds = formData.student_ids;
-                    const allIds = effectiveStudents.map((s) => s.id);
-                    const newIds = allIds.filter(
-                      (id) => !currentIds.includes(id),
-                    );
-                    setFormData((prev) => ({
-                      ...prev,
-                      student_ids: newIds,
-                      assign_to_all: false,
-                    }));
-                  }}
-                  className="flex-1"
-                >
-                  <ArrowRight className="h-4 w-4 mr-1" />
-                  {t("dialogs.assignmentDialog.selectStudents.invertSelection")}
-                </Button>
-              </div>
-              </>
+                  {/* Quick Select All */}
+                  <Card className="p-2 mb-2 bg-blue-50 border-blue-200">
+                    <div
+                      onClick={toggleAllStudents}
+                      className="flex items-center gap-3 w-full cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={formData.assign_to_all}
+                        className="data-[state=checked]:bg-blue-600 h-5 w-5"
+                      />
+                      <div className="flex-1 text-left">
+                        <p className="text-sm font-semibold text-blue-900">
+                          {t(
+                            "dialogs.assignmentDialog.selectStudents.assignAll",
+                          )}
+                        </p>
+                        <p className="text-xs text-blue-700">
+                          {t(
+                            "dialogs.assignmentDialog.selectStudents.totalStudents",
+                            { count: effectiveStudents.length },
+                          )}
+                        </p>
+                      </div>
+                      {formData.assign_to_all && (
+                        <Badge className="bg-blue-600 text-white">
+                          {t(
+                            "dialogs.assignmentDialog.selectStudents.allSelected",
+                          )}
+                        </Badge>
+                      )}
+                    </div>
+                  </Card>
+
+                  {/* Student Grid - Maximum use of space */}
+                  <div className="flex-1 border rounded-lg bg-gray-50 p-2 overflow-hidden">
+                    <ScrollArea className="h-full">
+                      <div className="grid grid-cols-3 gap-1.5 p-1">
+                        {[...effectiveStudents]
+                          .sort((a, b) => {
+                            // Sort by student_number: students without number go to the end
+                            if (!a.student_number && !b.student_number)
+                              return 0;
+                            if (!a.student_number) return 1;
+                            if (!b.student_number) return -1;
+                            return a.student_number.localeCompare(
+                              b.student_number,
+                              undefined,
+                              { numeric: true },
+                            );
+                          })
+                          .map((student) => (
+                            <div
+                              key={student.id}
+                              onClick={() => toggleStudent(student.id)}
+                              className={cn(
+                                "p-2 rounded-md border transition-all text-left relative cursor-pointer",
+                                formData.student_ids.includes(student.id)
+                                  ? "bg-blue-50 border-blue-300 shadow-sm"
+                                  : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm",
+                              )}
+                            >
+                              <div className="flex items-start gap-2">
+                                <Checkbox
+                                  checked={formData.student_ids.includes(
+                                    student.id,
+                                  )}
+                                  className="data-[state=checked]:bg-blue-600 mt-0.5 h-4 w-4 pointer-events-none"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-xs truncate">
+                                    {student.student_number
+                                      ? `${student.student_number}.${student.name}`
+                                      : student.name}
+                                  </p>
+                                  <p className="text-[10px] text-gray-500 truncate">
+                                    {student.email}
+                                  </p>
+                                </div>
+                              </div>
+                              {formData.student_ids.includes(student.id) && (
+                                <div className="absolute top-1 right-1">
+                                  <CheckCircle2 className="h-3 w-3 text-blue-600" />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+
+                  {/* Action Buttons for quick selection */}
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          student_ids: effectiveStudents.map((s) => s.id),
+                          assign_to_all: true,
+                        }))
+                      }
+                      className="flex-1"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-1" />
+                      {t(
+                        "dialogs.assignmentDialog.selectStudents.selectAllBtn",
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          student_ids: [],
+                          assign_to_all: false,
+                        }))
+                      }
+                      className="flex-1"
+                    >
+                      <Circle className="h-4 w-4 mr-1" />
+                      {t(
+                        "dialogs.assignmentDialog.selectStudents.deselectAllBtn",
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const currentIds = formData.student_ids;
+                        const allIds = effectiveStudents.map((s) => s.id);
+                        const newIds = allIds.filter(
+                          (id) => !currentIds.includes(id),
+                        );
+                        setFormData((prev) => ({
+                          ...prev,
+                          student_ids: newIds,
+                          assign_to_all: false,
+                        }));
+                      }}
+                      className="flex-1"
+                    >
+                      <ArrowRight className="h-4 w-4 mr-1" />
+                      {t(
+                        "dialogs.assignmentDialog.selectStudents.invertSelection",
+                      )}
+                    </Button>
+                  </div>
+                </>
               )}
             </div>
           )}

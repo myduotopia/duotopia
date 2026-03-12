@@ -102,7 +102,11 @@ export function OrganizationTree({
   // Auto-expand first organization on initial load only
   const hasAutoExpanded = useRef(false);
   useEffect(() => {
-    if (!hasAutoExpanded.current && organizations.length > 0 && expandedOrgs.length === 0) {
+    if (
+      !hasAutoExpanded.current &&
+      organizations.length > 0 &&
+      expandedOrgs.length === 0
+    ) {
       hasAutoExpanded.current = true;
       setExpandedOrgs([organizations[0].id]);
     }
@@ -184,11 +188,7 @@ export function OrganizationTree({
         className="space-y-0"
       >
         {organizations.map((org) => (
-          <AccordionItem
-            key={org.id}
-            value={org.id}
-            className="border-none"
-          >
+          <AccordionItem key={org.id} value={org.id} className="border-none">
             <AccordionTrigger
               className={cn(
                 "hover:no-underline px-2 py-2 rounded-md transition-colors",

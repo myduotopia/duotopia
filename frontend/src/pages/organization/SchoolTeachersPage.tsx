@@ -92,17 +92,15 @@ export default function SchoolTeachersPage() {
       // Process teachers
       if (teachersRes.ok) {
         const teachersData = await teachersRes.json();
-        const sortedTeachers = teachersData.sort(
-          (a: Teacher, b: Teacher) => {
-            const getRolePriority = (roles: string[]) => {
-              if (roles.includes("school_admin")) return 1;
-              if (roles.includes("school_director")) return 2;
-              if (roles.includes("teacher")) return 3;
-              return 4;
-            };
-            return getRolePriority(a.roles) - getRolePriority(b.roles);
-          },
-        );
+        const sortedTeachers = teachersData.sort((a: Teacher, b: Teacher) => {
+          const getRolePriority = (roles: string[]) => {
+            if (roles.includes("school_admin")) return 1;
+            if (roles.includes("school_director")) return 2;
+            if (roles.includes("teacher")) return 3;
+            return 4;
+          };
+          return getRolePriority(a.roles) - getRolePriority(b.roles);
+        });
         setTeachers(sortedTeachers);
 
         // Process classrooms (already fetched in parallel)
@@ -215,39 +213,40 @@ export default function SchoolTeachersPage() {
                 onRoleUpdated={loadAll}
                 teacherClassrooms={teacherClassrooms}
               />
-              {teachers.length > itemsPerPage && (() => {
-                const totalPages = Math.ceil(teachers.length / itemsPerPage);
-                return (
-                  <div className="flex items-center justify-center gap-3 mt-6">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setCurrentPage((prev) => Math.max(1, prev - 1))
-                      }
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="text-sm text-gray-600">
-                      第 {currentPage} 頁 / 共 {totalPages} 頁（共{" "}
-                      {teachers.length} 位教師）
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setCurrentPage((prev) =>
-                          Math.min(totalPages, prev + 1),
-                        )
-                      }
-                      disabled={currentPage === totalPages}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                );
-              })()}
+              {teachers.length > itemsPerPage &&
+                (() => {
+                  const totalPages = Math.ceil(teachers.length / itemsPerPage);
+                  return (
+                    <div className="flex items-center justify-center gap-3 mt-6">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCurrentPage((prev) => Math.max(1, prev - 1))
+                        }
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm text-gray-600">
+                        第 {currentPage} 頁 / 共 {totalPages} 頁（共{" "}
+                        {teachers.length} 位教師）
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCurrentPage((prev) =>
+                            Math.min(totalPages, prev + 1),
+                          )
+                        }
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })()}
             </>
           )}
         </CardContent>

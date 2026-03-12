@@ -311,20 +311,23 @@ export default function TeachersPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <CardTitle>教師列表</CardTitle>
-              {organization?.teacher_license_count !== undefined && (() => {
-                const activeCount = teachers.filter((t) => t.is_active).length;
-                const licenseCount = organization.teacher_license_count;
-                const usageRate =
-                  licenseCount > 0 ? (activeCount / licenseCount) * 100 : 0;
-                let color = "text-gray-500";
-                if (usageRate >= 95) color = "text-red-600";
-                else if (usageRate >= 80) color = "text-orange-600";
-                return (
-                  <span className={`text-sm font-normal ${color}`}>
-                    啟用 {activeCount} / {licenseCount} 授權
-                  </span>
-                );
-              })()}
+              {organization?.teacher_license_count !== undefined &&
+                (() => {
+                  const activeCount = teachers.filter(
+                    (t) => t.is_active,
+                  ).length;
+                  const licenseCount = organization.teacher_license_count;
+                  const usageRate =
+                    licenseCount > 0 ? (activeCount / licenseCount) * 100 : 0;
+                  let color = "text-gray-500";
+                  if (usageRate >= 95) color = "text-red-600";
+                  else if (usageRate >= 80) color = "text-orange-600";
+                  return (
+                    <span className={`text-sm font-normal ${color}`}>
+                      啟用 {activeCount} / {licenseCount} 授權
+                    </span>
+                  );
+                })()}
             </div>
             <Button className="gap-2" onClick={() => setInviteDialogOpen(true)}>
               <UserPlus className="h-4 w-4" />
