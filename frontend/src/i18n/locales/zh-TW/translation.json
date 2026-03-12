@@ -4181,7 +4181,8 @@
       "batchLimitError": "一次最多翻譯 {{count}} 個例句，請分批處理",
       "batchLimitTruncated": "已超過上限，僅前 {{count}} 個項目會被處理",
       "batchLimitWarning": "超過 {{count}} 個項目上限，僅前 {{count}} 個會被處理",
-      "batchPasteLimit": "批次貼上上限為 30 個項目，請減少後重試"
+      "batchPasteLimit": "批次貼上上限為 30 個項目，請減少後重試",
+      "batchPasteLimitShort": "上限 30 個"
     },
     "translationLanguages": {
       "chinese": "中文",

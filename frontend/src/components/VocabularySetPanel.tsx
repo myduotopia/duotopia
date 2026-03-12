@@ -3332,18 +3332,16 @@ export default function VocabularySetPanel({
                 placeholder="apple&#10;banana&#10;orange"
                 className="w-full min-h-80 max-h-[60vh] px-4 py-3 border-2 border-gray-300 rounded-lg font-mono text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-y overflow-y-auto"
               />
-              <div
-                className={`text-xs mt-2 ${batchPasteText.split("\n").filter((line: string) => line.trim()).length > 30 ? "text-red-500 font-medium" : "text-gray-500"}`}
-              >
-                {batchPasteText
-                  .split("\n")
-                  .filter((line: string) => line.trim()).length || 0}{" "}
-                {t("contentEditor.messages.items")}
-                {batchPasteText
-                  .split("\n")
-                  .filter((line: string) => line.trim()).length > 30 &&
-                  ` (${t("contentEditor.messages.batchPasteLimit")})`}
-              </div>
+              {(() => {
+                const lineCount = batchPasteText.split("\n").filter((line: string) => line.trim()).length;
+                const overLimit = lineCount > 30;
+                return (
+                  <div className={`text-xs mt-2 ${overLimit ? "text-red-500 font-medium" : "text-gray-500"}`}>
+                    {lineCount || 0} {t("contentEditor.messages.items")}
+                    {overLimit && ` (${t("contentEditor.messages.batchPasteLimitShort")})`}
+                  </div>
+                );
+              })()}
             </div>
             <div className="flex gap-6 p-4 bg-gray-50 rounded-lg">
               <label className="flex items-center gap-3 cursor-pointer">

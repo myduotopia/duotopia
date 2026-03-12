@@ -4166,7 +4166,8 @@
       "batchLimitError": "Maximum {{count}} items per batch, please process in batches",
       "batchLimitTruncated": "Exceeded limit, only the first {{count}} items will be processed",
       "batchLimitWarning": "Exceeded {{count}} item limit, only the first {{count}} will be processed",
-      "batchPasteLimit": "Batch paste limit is 30 items, please reduce and try again"
+      "batchPasteLimit": "Batch paste limit is 30 items, please reduce and try again",
+      "batchPasteLimitShort": "max 30 items"
     },
     "translationLanguages": {
       "chinese": "Chinese",
