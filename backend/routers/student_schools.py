@@ -139,6 +139,8 @@ def build_student_response(student: Student, db: Session) -> dict:
         "student_number": student.student_number,
         "birthdate": student.birthdate.isoformat() if student.birthdate else None,
         "is_active": student.is_active,
+        "password_changed": student.password_changed or False,
+        "created_at": student.created_at.isoformat() if student.created_at else None,
         "last_login": student.last_login.isoformat() if student.last_login else None,
         "schools": schools,
         "classrooms": classrooms,
@@ -855,6 +857,70 @@ async def update_school_student(
         )
 
     return build_student_response(student, db)
+
+
+# ============ Password Management ============
+
+
+@router.post(
+    "/api/schools/{school_id}/students/{student_id}/reset-password",
+    response_model=dict,
+)
+async def reset_school_student_password(
+    school_id: uuid.UUID,
+    student_id: int,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """
+    Reset student password to default (creation date YYYYMMDD).
+
+    Permissions: school_admin, org_admin, org_owner
+    """
+    if not check_school_student_permission(teacher.id, school_id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions",
+        )
+
+    student = (
+        db.query(Student)
+        .join(StudentSchool, Student.id == StudentSchool.student_id)
+        .filter(
+            Student.id == student_id,
+            StudentSchool.school_id == school_id,
+            StudentSchool.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
+        )
+
+    if not student.created_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Student creation date not available",
+        )
+
+    taipei_tz = ZoneInfo("Asia/Taipei")
+    created_at_tw = (
+        student.created_at.astimezone(taipei_tz)
+        if student.created_at.tzinfo
+        else student.created_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(taipei_tz)
+    )
+    default_password = created_at_tw.strftime("%Y%m%d")
+    student.password_hash = get_password_hash(default_password)
+    student.password_changed = False
+
+    db.commit()
+
+    return {
+        "message": "Password reset successfully",
+        "default_password": default_password,
+    }
 
 
 # ============ DELETE Endpoints ============

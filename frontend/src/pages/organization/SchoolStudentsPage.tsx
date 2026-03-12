@@ -78,6 +78,10 @@ export default function SchoolStudentsPage() {
     studentId: number;
     classroomId: number;
   } | null>(null);
+  const [showResetPasswordConfirm, setShowResetPasswordConfirm] = useState(false);
+  const [pendingResetStudent, setPendingResetStudent] = useState<Student | null>(
+    null,
+  );
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
@@ -273,6 +277,34 @@ export default function SchoolStudentsPage() {
     }
   };
 
+  const handleResetPassword = (student: Student) => {
+    setPendingResetStudent(student);
+    setShowResetPasswordConfirm(true);
+  };
+
+  const confirmResetPassword = async () => {
+    if (!schoolId || !pendingResetStudent) return;
+
+    try {
+      const result = (await apiClient.resetSchoolStudentPassword(
+        schoolId,
+        pendingResetStudent.id,
+      )) as { default_password: string };
+      toast.success(
+        `${pendingResetStudent.name} 的密碼已重設為 ${result.default_password}`,
+      );
+      fetchStudents();
+    } catch (error) {
+      logError("Failed to reset student password", error, {
+        schoolId,
+        studentId: pendingResetStudent.id,
+      });
+      toast.error("重設密碼失敗，請稍後再試");
+    } finally {
+      setPendingResetStudent(null);
+    }
+  };
+
   if (loading && !students.length) {
     return <LoadingSpinner />;
   }
@@ -391,6 +423,7 @@ export default function SchoolStudentsPage() {
               onAssignClassroom={handleAssignClassroom}
               onRemove={handleRemove}
               onRemoveFromClassroom={handleRemoveFromClassroom}
+              onResetPassword={handleResetPassword}
             />
           )}
         </CardContent>
@@ -446,6 +479,18 @@ export default function SchoolStudentsPage() {
         cancelText="取消"
         variant="destructive"
         onConfirm={confirmRemove}
+      />
+
+      {/* Reset Password Confirmation Dialog */}
+      <ConfirmDialog
+        open={showResetPasswordConfirm}
+        onOpenChange={setShowResetPasswordConfirm}
+        title="重設學生密碼"
+        description={`確定要將 ${pendingResetStudent?.name || "此學生"} 的密碼重設為預設密碼嗎？`}
+        confirmText="確定重設"
+        cancelText="取消"
+        variant="default"
+        onConfirm={confirmResetPassword}
       />
 
       {/* Remove From Classroom Confirmation Dialog */}
