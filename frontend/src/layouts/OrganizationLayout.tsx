@@ -156,7 +156,7 @@ function OrganizationLayoutContent({ children }: OrganizationLayoutProps) {
         </div>
 
         {/* Sidebar Navigation - Organization Tree */}
-        <nav className="flex-1 overflow-y-auto p-4">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden p-4">
           {!sidebarCollapsed ? (
             <>
               <div className="flex items-center justify-between mb-3">

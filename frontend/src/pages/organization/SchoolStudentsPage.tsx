@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { apiClient } from "@/lib/api";
@@ -83,8 +83,13 @@ export default function SchoolStudentsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // Guard: prevent StrictMode double-mount from triggering duplicate fetches
+  const fetchedForRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (schoolId && token) {
+      if (fetchedForRef.current === schoolId) return;
+      fetchedForRef.current = schoolId;
       fetchSchool();
       fetchClassrooms();
     }
@@ -104,7 +109,7 @@ export default function SchoolStudentsPage() {
         setSchool(data);
         // 確保立即獲取組織信息
         if (data.organization_id) {
-          await fetchOrganization(data.organization_id);
+          fetchOrganization(data.organization_id);
         }
         await fetchStudents();
       } else {
@@ -197,8 +202,16 @@ export default function SchoolStudentsPage() {
     }
   };
 
+  // Track if initial student load is done (fetchSchool handles it)
+  const skipNextDebounce = useRef(true);
+
   useEffect(() => {
     if (schoolId) {
+      // Skip first trigger — fetchSchool already loads students on mount
+      if (skipNextDebounce.current) {
+        skipNextDebounce.current = false;
+        return;
+      }
       const debounceTimer = setTimeout(() => {
         fetchStudents();
       }, 300);

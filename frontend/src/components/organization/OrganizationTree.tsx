@@ -202,9 +202,9 @@ export function OrganizationTree({
               )}
               onClick={() => handleNodeClick("organization", org)}
             >
-              <div className="flex items-center gap-2 flex-1">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
                 <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
-                <span className="font-medium text-sm text-left truncate">
+                <span className="font-medium text-sm text-left break-words whitespace-normal line-clamp-2">
                   {org.display_name || org.name}
                 </span>
               </div>
@@ -224,14 +224,14 @@ export function OrganizationTree({
                           }
                         }}
                         className={cn(
-                          "flex-1 flex items-center gap-2 ml-3 px-2 py-1.5 rounded-md text-left transition-colors hover:bg-gray-100",
+                          "flex-1 flex items-center gap-2 ml-3 px-2 py-1.5 rounded-md text-left transition-colors hover:bg-gray-100 min-w-0",
                           selectedNode?.type === "school" &&
                             selectedNode.id === school.id &&
                             "bg-green-50 text-green-700",
                         )}
                       >
                         <SchoolIcon className="w-3.5 h-3.5 text-green-600 shrink-0" />
-                        <span className="text-sm truncate">
+                        <span className="text-sm break-words whitespace-normal line-clamp-2">
                           {school.display_name || school.name}
                         </span>
                       </button>

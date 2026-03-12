@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { API_URL } from "@/config/api";
@@ -83,11 +83,15 @@ export default function SchoolClassroomsPage() {
     { id: number; name: string; student_number?: string }[]
   >([]);
 
+  // Guard: prevent StrictMode double-mount from triggering duplicate fetches
+  const fetchedForRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (schoolId && token) {
+      if (fetchedForRef.current === schoolId) return;
+      fetchedForRef.current = schoolId;
       fetchSchool();
     }
-    // Note: token is stable from store, no need to include in deps
   }, [schoolId]);
 
   const fetchSchool = async () => {
