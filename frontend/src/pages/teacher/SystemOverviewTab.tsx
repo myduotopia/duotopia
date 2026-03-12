@@ -64,7 +64,6 @@ interface SectionProps {
   title: string;
   imageSrc?: string;
   imageAlt: string;
-  reverse?: boolean;
   isEn?: boolean;
   showAiBadge?: boolean;
   showMemoryBadge?: boolean;
@@ -74,7 +73,6 @@ function Section({
   title,
   imageSrc,
   imageAlt,
-  reverse = false,
   isEn = false,
   showAiBadge = false,
   showMemoryBadge = false,
@@ -199,7 +197,6 @@ export default function SystemOverviewTab() {
         title={t("teacherDashboard.systemOverview.section2")}
         imageSrc="https://storage.googleapis.com/duotopia-social-media-videos/website/systemoverview-02.png"
         imageAlt={t("teacherDashboard.systemOverview.imgAlt2")}
-        reverse
         isEn={isEn}
         showMemoryBadge
       />
