@@ -75,12 +75,16 @@ export function CreateStudentDialog({
         name: string;
         email?: string;
         student_number?: string;
-        birthdate: string;
+        birthdate?: string;
         phone?: string;
       } = {
         name: trimmedName,
-        birthdate: formData.birthdate,
       };
+
+      // 只添加非空的生日
+      if (formData.birthdate && formData.birthdate.trim()) {
+        requestData.birthdate = formData.birthdate.trim();
+      }
 
       // 只添加非空欄位
       if (formData.email && formData.email.trim()) {
