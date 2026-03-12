@@ -371,6 +371,7 @@ export function AssignmentDialog({
       setCurrentStep(1);
       setActiveTab(showOrgTab ? "organization" : "template");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, classroomId, students, showOrgTab]);
 
   const loadQuotaInfo = async () => {

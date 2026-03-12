@@ -52,6 +52,7 @@ export function DemoModal({
       setDemoData(null);
       setError(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, assignmentId]);
 
   const fetchDemoData = async () => {

@@ -80,6 +80,7 @@ export default function BatchGradingModal({
       // Automatically start grading
       handleStartGrading();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleStartGrading = async () => {

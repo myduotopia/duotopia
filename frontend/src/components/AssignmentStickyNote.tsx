@@ -188,7 +188,7 @@ export default function AssignmentStickyNote({
     if (open && currentAssignment) {
       fetchProgress(currentAssignment.id);
     }
-  }, [open, currentAssignment?.id, fetchProgress]);
+  }, [open, currentAssignment, fetchProgress]);
 
   const handlePrev = () => {
     const newIndex =
