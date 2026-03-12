@@ -35,7 +35,7 @@ export function StudentCompletionDashboard({
 
   useEffect(() => {
     fetchStudentStatuses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchStudentStatuses recreated each render; only re-fetch on assignmentId change
   }, [assignmentId]);
 
   const fetchStudentStatuses = async () => {

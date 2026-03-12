@@ -148,7 +148,7 @@ export default function CreateProgramDialog({
       fetchData();
       resetForms();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchData/resetForms recreated each render; only run on dialog open
   }, [open]);
 
   const fetchData = async () => {

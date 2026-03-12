@@ -59,7 +59,7 @@ export default function CopyProgramDialog({
       setSelectedPrograms([]);
       setSearchTerm("");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchPrograms recreated each render; only run on dialog open
   }, [open]);
 
   const fetchPrograms = async () => {

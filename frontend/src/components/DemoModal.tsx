@@ -52,7 +52,7 @@ export function DemoModal({
       setDemoData(null);
       setError(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchDemoData recreated each render; only re-fetch on open/assignmentId change
   }, [isOpen, assignmentId]);
 
   const fetchDemoData = async () => {

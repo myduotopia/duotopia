@@ -1234,7 +1234,7 @@ export default function ReadingAssessmentPanel({
         setIsInitialLoad(false);
       }, 100);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only reload when content ID changes, not on every editingContent mutation
   }, [content?.id, editingContent?.id]);
 
   const loadContentData = async () => {
@@ -1327,7 +1327,7 @@ export default function ReadingAssessmentPanel({
       title,
       items,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onUpdateContent/editingContent excluded to prevent infinite update loop
   }, [rows, title, isInitialLoad]);
 
   // dnd-kit drag end handler
