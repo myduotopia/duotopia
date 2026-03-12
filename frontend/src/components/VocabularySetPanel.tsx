@@ -162,9 +162,9 @@ type WordTranslationLanguage = "chinese" | "english" | "japanese" | "korean";
 
 const WORD_TRANSLATION_LANGUAGES = [
   { value: "chinese" as const, label: "中文", code: "zh-TW" },
-  { value: "english" as const, label: "英文", code: "en" },
-  { value: "japanese" as const, label: "日文", code: "ja" },
-  { value: "korean" as const, label: "韓文", code: "ko" },
+  { value: "english" as const, label: "English", code: "en" },
+  { value: "japanese" as const, label: "日本語", code: "ja" },
+  { value: "korean" as const, label: "한국어", code: "ko" },
 ];
 
 // 例句翻譯語言選項（不含英文）
@@ -172,9 +172,12 @@ type SentenceTranslationLanguage = "chinese" | "japanese" | "korean";
 
 const SENTENCE_TRANSLATION_LANGUAGES = [
   { value: "chinese" as const, label: "中文", code: "zh-TW" },
-  { value: "japanese" as const, label: "日文", code: "ja" },
-  { value: "korean" as const, label: "韓文", code: "ko" },
+  { value: "japanese" as const, label: "日本語", code: "ja" },
+  { value: "korean" as const, label: "한국어", code: "ko" },
 ];
+
+// 批次貼上上限 (#422)
+const BATCH_PASTE_MAX = 30;
 
 interface ContentRow {
   id: string | number;
@@ -2947,6 +2950,16 @@ export default function VocabularySetPanel({
       return;
     }
 
+    // 批次新增上限 (#422)
+    if (lines.length > BATCH_PASTE_MAX) {
+      toast.error(
+        t("contentEditor.messages.batchPasteLimit", {
+          count: BATCH_PASTE_MAX,
+        }),
+      );
+      return;
+    }
+
     setIsBatchPasting(true);
 
     toast.info(
@@ -3326,11 +3339,21 @@ export default function VocabularySetPanel({
                 placeholder="apple&#10;banana&#10;orange"
                 className="w-full min-h-80 max-h-[60vh] px-4 py-3 border-2 border-gray-300 rounded-lg font-mono text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-y overflow-y-auto"
               />
-              <div className="text-xs text-gray-500 mt-2">
-                {batchPasteText.split("\n").filter((line) => line.trim())
-                  .length || 0}{" "}
-                {t("contentEditor.messages.items")}
-              </div>
+              {(() => {
+                const lineCount = batchPasteText
+                  .split("\n")
+                  .filter((line: string) => line.trim()).length;
+                const overLimit = lineCount > BATCH_PASTE_MAX;
+                return (
+                  <div
+                    className={`text-xs mt-2 ${overLimit ? "text-red-500 font-medium" : "text-gray-500"}`}
+                  >
+                    {lineCount || 0} {t("contentEditor.messages.items")}
+                    {overLimit &&
+                      ` (${t("contentEditor.messages.batchPasteLimitShort", { count: BATCH_PASTE_MAX })})`}
+                  </div>
+                );
+              })()}
             </div>
             <div className="flex gap-6 p-4 bg-gray-50 rounded-lg">
               <label className="flex items-center gap-3 cursor-pointer">

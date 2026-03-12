@@ -40,7 +40,7 @@ interface ImportStudent {
   name: string;
   email?: string;
   student_number?: string;
-  birthdate: string;
+  birthdate?: string;
   phone?: string;
   classroom_id?: number;
   classroom_name?: string;
@@ -298,8 +298,6 @@ export function ImportStudentsDialog({
             formattedBirthdate = "";
           }
         }
-      } else {
-        studentErrors.push("生日為必填欄位");
       }
 
       // 驗證 Email
@@ -325,11 +323,11 @@ export function ImportStudentsDialog({
         name,
         email: email || undefined,
         student_number: student_number || undefined,
-        birthdate: formattedBirthdate || "",
+        birthdate: formattedBirthdate || undefined,
         phone: phone || undefined,
         classroom_id,
         classroom_name,
-        isValid: studentErrors.length === 0 && formattedBirthdate.length > 0,
+        isValid: studentErrors.length === 0,
         errors: studentErrors,
       });
     }
@@ -363,13 +361,16 @@ export function ImportStudentsDialog({
             name: string;
             email?: string;
             student_number?: string;
-            birthdate: string;
+            birthdate?: string;
             phone?: string;
             classroom_id?: number;
           } = {
             name: student.name,
-            birthdate: student.birthdate,
           };
+
+          if (student.birthdate) {
+            item.birthdate = student.birthdate;
+          }
 
           // 只添加非空欄位
           if (student.email && student.email.trim()) {

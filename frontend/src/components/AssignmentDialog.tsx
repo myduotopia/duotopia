@@ -1067,23 +1067,8 @@ export function AssignmentDialog({
     }
 
     // 從 step 2 移動到 step 3 時，檢查驗證
+    // Note: 20 字下限驗證已依 #422 需求移除，word_selection 不再限制最低單字數
     if (currentStep === 2) {
-      // 單字選擇模式需要至少 20 個單字 (#303)
-      if (formData.practice_mode === "word_selection") {
-        const totalWords = cartItems.reduce(
-          (sum, item) => sum + (item.itemsCount || 0),
-          0,
-        );
-        if (totalWords < 20) {
-          toast.error(t("dialogs.assignmentDialog.errors.insufficientWords"), {
-            description: t(
-              "dialogs.assignmentDialog.errors.insufficientWordsDesc",
-              { count: totalWords },
-            ),
-          });
-          return;
-        }
-      }
       if (!checkAudioRequirement()) {
         return; // 驗證失敗，不繼續
       }

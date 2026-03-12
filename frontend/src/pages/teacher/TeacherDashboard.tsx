@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
+import SystemOverviewTab from "./SystemOverviewTab";
+import ClassroomsTab from "./ClassroomsTab";
+import AllStudentsTab from "./AllStudentsTab";
+import ResourceMaterialsTab from "./ResourceMaterialsTab";
+import MaterialsTab from "./MaterialsTab";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,14 +22,12 @@ import {
   Share2,
   Copy,
   Check,
-  Send,
-  Brain,
-  Radar,
+  Sparkles,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { apiClient } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
-import { useTranslation, getI18n } from "react-i18next";
+import { useTranslation } from "react-i18next";
 
 interface DashboardData {
   teacher: {
@@ -63,8 +65,8 @@ interface DashboardData {
 }
 
 export default function TeacherDashboard() {
-  const { t } = useTranslation();
-  const { selectedSchool, selectedOrganization, mode } = useWorkspace();
+  const { t, i18n } = useTranslation();
+  useWorkspace();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(
     null,
   );
@@ -73,31 +75,47 @@ export default function TeacherDashboard() {
 
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState("intro");
+  const [slideDir, setSlideDir] = useState<"left" | "right">("left");
+  const [prevTab, setPrevTab] = useState<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   const taglines = [
     {
       en: "Duotopia makes teaching smarter and learning more active.",
       "zh-TW": "語拓邦讓教學更智能、學習更主動。",
+      ja: "Duotopiaで教育をよりスマートに、学びをより主体的に。",
+      ko: "Duotopia로 더 스마트하게 가르치고, 더 능동적으로 배우세요.",
     },
     {
       en: "Save 80% of lesson prep and grading time.",
       "zh-TW": "節省 80% 備課與批改時間。",
+      ja: "授業準備と採点時間を80%削減。",
+      ko: "수업 준비와 채점 시간을 80% 절약하세요.",
     },
     {
       en: "Use the Timer & Dice in the toolbar — teaching made effortless.",
       "zh-TW": "善用右側工具列的計時器與骰子，讓教學更輕鬆。",
+      ja: "ツールバーのタイマーとサイコロで、授業をもっと楽しく。",
+      ko: "도구 모음의 타이머와 주사위로 수업을 더 쉽게.",
     },
     {
       en: "Assign once, AI grades instantly.",
       "zh-TW": "派作業一次，AI 即時完成批改。",
+      ja: "課題を配布すれば、AIが即時採点。",
+      ko: "과제를 한 번 배정하면, AI가 즉시 채점.",
     },
     {
       en: "Every student gets personalized feedback.",
       "zh-TW": "每位學生都能獲得個人化回饋。",
+      ja: "すべての生徒に個別フィードバックを。",
+      ko: "모든 학생에게 맞춤형 피드백을 제공합니다.",
     },
     {
       en: "Track progress, celebrate growth.",
       "zh-TW": "追蹤學習進度，見證每一步成長。",
+      ja: "進捗を追跡し、成長を実感。",
+      ko: "학습 진행을 추적하고, 성장을 확인하세요.",
     },
   ];
 
@@ -154,7 +172,7 @@ export default function TeacherDashboard() {
 
   const handleCopyUrl = async () => {
     if (!dashboardData) return;
-    const studentLoginUrl = `${window.location.origin}/student/login?teacher_email=${dashboardData.teacher.email}`;
+    const studentLoginUrl = `${window.location.origin}/student/login?teacher_email=${encodeURIComponent(dashboardData.teacher.email)}`;
     try {
       await navigator.clipboard.writeText(studentLoginUrl);
       setCopied(true);
@@ -166,7 +184,7 @@ export default function TeacherDashboard() {
 
   const getStudentLoginUrl = () => {
     if (!dashboardData) return "";
-    return `${window.location.origin}/student/login?teacher_email=${dashboardData.teacher.email}`;
+    return `${window.location.origin}/student/login?teacher_email=${encodeURIComponent(dashboardData.teacher.email)}`;
   };
 
   if (loading) {
@@ -184,96 +202,67 @@ export default function TeacherDashboard() {
     return (
       <div className="text-center py-12">
         <p className="text-gray-500">
-          {t("teacherDashboard.error.loadFailed")}
+          {t("teacherDashboard.errors.loadFailed")}
         </p>
       </div>
     );
   }
 
-  const filteredClassrooms = dashboardData.classrooms.filter((classroom) => {
-    if (mode === "personal") {
-      return !classroom.school_id && !classroom.organization_id;
-    }
-    if (selectedSchool) {
-      return classroom.school_id === selectedSchool.id;
-    }
-    if (selectedOrganization) {
-      return classroom.organization_id === selectedOrganization.id;
-    }
-    return true;
-  });
-
-  const filteredStudentCount = filteredClassrooms.reduce(
-    (sum, c) => sum + c.student_count,
-    0,
-  );
-
-  const functionButtons = [
+  const tabs = [
     {
-      key: "myClassrooms",
-      path: "/teacher/classrooms",
+      key: "intro",
+      label: t("teacherDashboard.tabs.intro"),
+      icon: Sparkles,
+      iconColor: "text-red-600",
+      textColor: "text-red-800",
+      activeFill: "#ef4444",
+      inactiveFill: "#fca5a5",
+      svgPath:
+        "M 8,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 0,52 L 0,8 Q 0,0 8,0 Z",
+    },
+    {
+      key: "classrooms",
+      label: t("teacherLayout.nav.myClassrooms"),
       icon: GraduationCap,
-      bgColor: "bg-blue-100",
       iconColor: "text-blue-600",
-      badgeColor: "bg-blue-100 text-blue-600",
-      countColor: "text-blue-600",
-      step: t("teacherDashboard.functionButtons.myClassrooms.step"),
-      title: t("teacherDashboard.functionButtons.myClassrooms.title"),
-      description: t(
-        "teacherDashboard.functionButtons.myClassrooms.description",
-      ),
-      count: t("teacherDashboard.functionButtons.myClassrooms.count", {
-        count: filteredClassrooms.length,
-      }),
+      textColor: "text-blue-800",
+      activeFill: "#3b82f6",
+      inactiveFill: "#93c5fd",
+      svgPath:
+        "M 8,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z",
     },
     {
-      key: "allStudents",
-      path: "/teacher/students",
+      key: "students",
+      label: t("teacherLayout.nav.allStudents"),
       icon: Users,
-      bgColor: "bg-green-100",
       iconColor: "text-green-600",
-      badgeColor: "bg-green-100 text-green-600",
-      countColor: "text-green-600",
-      step: t("teacherDashboard.functionButtons.allStudents.step"),
-      title: t("teacherDashboard.functionButtons.allStudents.title"),
-      description: t(
-        "teacherDashboard.functionButtons.allStudents.description",
-      ),
-      count: t("teacherDashboard.functionButtons.allStudents.count", {
-        count: filteredStudentCount,
-      }),
+      textColor: "text-green-800",
+      activeFill: "#22c55e",
+      inactiveFill: "#86efac",
+      svgPath:
+        "M 18,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z",
     },
     {
-      key: "myMaterials",
-      path: "/teacher/programs",
+      key: "materials",
+      label: t("teacherLayout.nav.publicPrograms"),
       icon: BookOpen,
-      bgColor: "bg-purple-100",
       iconColor: "text-purple-600",
-      badgeColor: "bg-purple-100 text-purple-600",
-      countColor: "text-purple-600",
-      step: t("teacherDashboard.functionButtons.myMaterials.step"),
-      title: t("teacherDashboard.functionButtons.myMaterials.title"),
-      description: t(
-        "teacherDashboard.functionButtons.myMaterials.description",
-      ),
-      count: t("teacherDashboard.functionButtons.myMaterials.count", {
-        count: dashboardData.program_count,
-      }),
+      textColor: "text-purple-800",
+      activeFill: "#a855f7",
+      inactiveFill: "#d8b4fe",
+      svgPath:
+        "M 18,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z",
     },
     {
-      key: "resourceMaterials",
-      path: "/teacher/resource-materials",
+      key: "resources",
+      label: t("teacherDashboard.functionButtons.resourceMaterials.title"),
       icon: Package,
-      bgColor: "bg-orange-100",
-      iconColor: "text-orange-600",
-      badgeColor: null,
-      countColor: null,
-      step: null,
-      title: t("teacherDashboard.functionButtons.resourceMaterials.title"),
-      description: t(
-        "teacherDashboard.functionButtons.resourceMaterials.description",
-      ),
-      count: null,
+      iconColor: "text-cyan-600",
+      textColor: "text-cyan-800",
+      activeFill: "#06b6d4",
+      inactiveFill: "#67e8f9",
+      svgPath:
+        "M 8,0 L 92,0 Q 100,0 100,8 L 100,52 Q 100,60 92,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z",
     },
   ];
 
@@ -336,11 +325,13 @@ export default function TeacherDashboard() {
                 &ldquo;{typedText}
                 <span className="animate-pulse">|</span>&rdquo;
               </p>
-              {getI18n().language !== "en" && (
+              {i18n.language !== "en" && (
                 <p
                   className={`text-sm sm:text-base text-blue-600 mt-1 transition-opacity duration-300 ${showTranslation ? "opacity-100" : "opacity-0"}`}
                 >
-                  {taglines[taglineIndex]["zh-TW"]}
+                  {taglines[taglineIndex][
+                    i18n.language as keyof (typeof taglines)[0]
+                  ] ?? taglines[taglineIndex]["zh-TW"]}
                 </p>
               )}
             </div>
@@ -354,204 +345,159 @@ export default function TeacherDashboard() {
           </Button>
         </div>
 
-        {/* Four Function Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:grid-rows-2">
-          {functionButtons.map((btn) => {
-            const Icon = btn.icon;
+        {/* Tab Navigation — trapezoid + circle icon style */}
+        <div className="flex">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.key;
             return (
-              <Card
-                key={btn.key}
-                className="cursor-pointer hover:shadow-md transition-shadow border hover:border-gray-300 h-full min-h-[130px]"
-                onClick={() => navigate(btn.path)}
+              <button
+                key={tab.key}
+                onClick={() => {
+                  if (tab.key === activeTab || isTransitioning) return;
+                  const tabKeys = tabs.map((t) => t.key);
+                  const currentIdx = tabKeys.indexOf(activeTab);
+                  const nextIdx = tabKeys.indexOf(tab.key);
+                  setSlideDir(nextIdx > currentIdx ? "left" : "right");
+                  setPrevTab(activeTab);
+                  setActiveTab(tab.key);
+                  setIsTransitioning(true);
+                }}
+                className="relative flex-1 flex flex-col items-center focus:outline-none transition-all duration-200"
+                style={{
+                  paddingTop: "20px",
+                  marginLeft: "0",
+                  filter: isActive ? "saturate(1)" : "none",
+                }}
               >
-                <CardContent className="pt-6 pb-6 h-full">
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`p-3 ${btn.bgColor} rounded-lg flex-shrink-0`}
+                {/* Circle icon — bottom half overlaps trapezoid top edge */}
+                <div
+                  className={`absolute top-0 left-1/2 -translate-x-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
+                    isActive
+                      ? `bg-white shadow-sm ${tab.iconColor}`
+                      : `bg-white ${tab.iconColor} opacity-60`
+                  }`}
+                >
+                  <Icon size={18} />
+                </div>
+                {/* Drop-shadow wrapper — must wrap SVG element separately */}
+                <div
+                  className="w-full relative flex-1"
+                  style={{
+                    minHeight: "56px",
+                    filter: isActive
+                      ? "drop-shadow(0 4px 10px rgba(0,0,0,0.08))"
+                      : "none",
+                  }}
+                >
+                  {/* SVG rounded shape background */}
+                  <svg
+                    className="absolute inset-0 w-full h-full"
+                    viewBox="0 0 100 60"
+                    preserveAspectRatio="none"
+                    style={{ display: "block" }}
+                  >
+                    <path
+                      d={tab.svgPath}
+                      fill={isActive ? tab.activeFill : tab.inactiveFill}
+                    />
+                  </svg>
+                  {/* Label */}
+                  <div
+                    className={`relative z-10 text-center pt-8 pb-3 transition-colors duration-200 ${
+                      isActive ? tab.textColor : `${tab.textColor} opacity-50`
+                    }`}
+                  >
+                    <p
+                      className={`text-[15px] leading-tight px-4 break-words w-full ${isActive ? "font-bold" : "font-semibold"}`}
                     >
-                      <Icon className={`h-6 w-6 ${btn.iconColor}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {btn.step && (
-                        <div className="mb-1">
-                          <span
-                            className={`text-xs font-medium ${btn.badgeColor} px-2 py-0.5 rounded-full`}
-                          >
-                            {btn.step}
-                          </span>
-                        </div>
-                      )}
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {btn.title}
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {btn.description}
-                      </p>
-                      {btn.count && (
-                        <p
-                          className={`text-sm font-medium ${btn.countColor} mt-2`}
-                        >
-                          {btn.count}
-                        </p>
-                      )}
-                    </div>
+                      {tab.label}
+                    </p>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </button>
             );
           })}
         </div>
 
-        {/* Daily Flow */}
-        <div className="mt-8 p-6 bg-blue-50 rounded-2xl">
-          <p className="text-sm font-medium text-blue-700 mb-4">
-            {t("teacherDashboard.dailyFlow.title")}
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 text-center">
-              <div className="mb-2 flex justify-center">
-                <Send className="h-12 w-12 text-blue-500" />
+        {/* Tab Content */}
+        <div className="relative mt-4">
+          {/* Triangle pointer */}
+          <div
+            className="absolute z-20 transition-all duration-300"
+            style={{
+              top: "-18px",
+              left: `${((tabs.findIndex((t) => t.key === activeTab) + 0.5) / tabs.length) * 100}%`,
+              transform: "translateX(-50%)",
+            }}
+          >
+            <div
+              style={{
+                width: 0,
+                height: 0,
+                borderLeft: "18px solid transparent",
+                borderRight: "18px solid transparent",
+                borderBottom: "18px solid rgba(255,255,255,0.8)",
+              }}
+            />
+          </div>
+
+          <div className="overflow-hidden rounded-2xl relative min-h-[300px]">
+            {/* Outgoing content */}
+            {isTransitioning && prevTab && (
+              <div
+                className={`absolute inset-0 overflow-auto bg-white/80 ${
+                  slideDir === "left"
+                    ? "animate-slide-out-left"
+                    : "animate-slide-out-right"
+                }`}
+              >
+                {prevTab === "intro" ? (
+                  <SystemOverviewTab />
+                ) : prevTab === "classrooms" ? (
+                  <ClassroomsTab />
+                ) : prevTab === "students" ? (
+                  <AllStudentsTab />
+                ) : prevTab === "materials" ? (
+                  <MaterialsTab />
+                ) : prevTab === "resources" ? (
+                  <ResourceMaterialsTab />
+                ) : (
+                  <div className="min-h-[300px] flex items-center justify-center text-gray-400 text-sm">
+                    內容即將推出
+                  </div>
+                )}
               </div>
-              <p className="text-sm font-semibold text-gray-800">
-                {t("teacherDashboard.dailyFlow.step1")}
-              </p>
-              <p className="hidden md:block text-xs text-gray-500 mt-0.5">
-                {t("teacherDashboard.dailyFlow.step1Desc")}
-              </p>
-            </div>
-            <div className="flex-shrink-0 flex items-center">
-              {/* Short arrow: mobile */}
-              <svg
-                className="md:hidden"
-                width="20"
-                height="16"
-                viewBox="0 0 20 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="0"
-                  y1="8"
-                  x2="12"
-                  y2="8"
-                  stroke="#CBD5E1"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <polyline
-                  points="8,3 16,8 8,13"
-                  fill="none"
-                  stroke="#CBD5E1"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              {/* Long arrow: desktop */}
-              <svg
-                className="hidden md:block"
-                width="72"
-                height="16"
-                viewBox="0 0 72 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="0"
-                  y1="8"
-                  x2="58"
-                  y2="8"
-                  stroke="#CBD5E1"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <polyline
-                  points="52,3 64,8 52,13"
-                  fill="none"
-                  stroke="#CBD5E1"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <div className="flex-1 text-center">
-              <div className="mb-2 flex justify-center">
-                <Brain className="h-12 w-12 text-purple-500" />
-              </div>
-              <p className="text-sm font-semibold text-gray-800">
-                {t("teacherDashboard.dailyFlow.step2")}
-              </p>
-              <p className="hidden md:block text-xs text-gray-500 mt-0.5">
-                {t("teacherDashboard.dailyFlow.step2Desc")}
-              </p>
-            </div>
-            <div className="flex-shrink-0 flex items-center">
-              {/* Short arrow: mobile */}
-              <svg
-                className="md:hidden"
-                width="20"
-                height="16"
-                viewBox="0 0 20 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="0"
-                  y1="8"
-                  x2="12"
-                  y2="8"
-                  stroke="#CBD5E1"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <polyline
-                  points="8,3 16,8 8,13"
-                  fill="none"
-                  stroke="#CBD5E1"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              {/* Long arrow: desktop */}
-              <svg
-                className="hidden md:block"
-                width="72"
-                height="16"
-                viewBox="0 0 72 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="0"
-                  y1="8"
-                  x2="58"
-                  y2="8"
-                  stroke="#CBD5E1"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <polyline
-                  points="52,3 64,8 52,13"
-                  fill="none"
-                  stroke="#CBD5E1"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <div className="flex-1 text-center">
-              <div className="mb-2 flex justify-center">
-                <Radar className="h-12 w-12 text-green-500" />
-              </div>
-              <p className="text-sm font-semibold text-gray-800">
-                {t("teacherDashboard.dailyFlow.step3")}
-              </p>
-              <p className="hidden md:block text-xs text-gray-500 mt-0.5">
-                {t("teacherDashboard.dailyFlow.step3Desc")}
-              </p>
+            )}
+            {/* Incoming content */}
+            <div
+              className={`bg-white/80 ${
+                isTransitioning
+                  ? slideDir === "left"
+                    ? "animate-slide-from-right"
+                    : "animate-slide-from-left"
+                  : ""
+              }`}
+              onAnimationEnd={() => {
+                setIsTransitioning(false);
+                setPrevTab(null);
+              }}
+            >
+              {activeTab === "intro" ? (
+                <SystemOverviewTab />
+              ) : activeTab === "classrooms" ? (
+                <ClassroomsTab />
+              ) : activeTab === "students" ? (
+                <AllStudentsTab />
+              ) : activeTab === "materials" ? (
+                <MaterialsTab />
+              ) : activeTab === "resources" ? (
+                <ResourceMaterialsTab />
+              ) : (
+                <div className="min-h-[300px] flex items-center justify-center text-gray-400 text-sm">
+                  內容即將推出
+                </div>
+              )}
             </div>
           </div>
         </div>

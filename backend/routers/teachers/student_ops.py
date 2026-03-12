@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy import func
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from uuid import UUID
 
 from database import get_db
@@ -226,6 +227,9 @@ async def get_all_students(
                 "classroom_name": (classroom_info["name"] if classroom_info else "未分配"),
                 "school_id": school_id,
                 "organization_id": organization_id,
+                "created_at": (
+                    student.created_at.isoformat() if student.created_at else None
+                ),
                 "email_verified": student.email_verified,
                 "email_verified_at": (
                     student.email_verified_at.isoformat()
@@ -266,23 +270,21 @@ async def create_student(
         if not check_classroom_is_personal(classroom.id, db):
             raise HTTPException(status_code=403, detail="此班級屬於學校，請通過學校管理頁面創建學生")
 
-    # Parse birthdate with error handling
-    try:
-        # Try to parse the birthdate
-        birthdate = date.fromisoformat(student_data.birthdate)
-    except ValueError:
-        # If format is wrong, try to handle common formats
+    # Parse birthdate (optional)
+    birthdate = None
+    if student_data.birthdate:
         try:
-            # Try format with slashes
-
-            birthdate = datetime.strptime(student_data.birthdate, "%Y/%m/%d").date()
+            birthdate = date.fromisoformat(student_data.birthdate)
         except ValueError:
-            raise HTTPException(
-                status_code=422,
-                detail="Invalid birthdate format. Please use YYYY-MM-DD format",
-            )
+            try:
+                birthdate = datetime.strptime(student_data.birthdate, "%Y/%m/%d").date()
+            except ValueError:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Invalid birthdate format. Please use YYYY-MM-DD format",
+                )
 
-    default_password = birthdate.strftime("%Y%m%d")
+    default_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
 
     # Email is optional now - can be NULL or shared between students
     email = student_data.email if student_data.email else None
@@ -342,7 +344,7 @@ async def create_student(
         "id": student.id,
         "name": student.name,
         "email": student.email,
-        "birthdate": student.birthdate.isoformat(),
+        "birthdate": student.birthdate.isoformat() if student.birthdate else None,
         "default_password": default_password,
         "password_changed": False,
         "classroom_id": student_data.classroom_id,
@@ -405,7 +407,7 @@ async def get_student(
         "id": student.id,
         "name": student.name,
         "email": student.email,
-        "birthdate": student.birthdate.isoformat(),
+        "birthdate": student.birthdate.isoformat() if student.birthdate else None,
         "password_changed": student.password_changed,
         "student_id": student.student_number,
     }
@@ -453,15 +455,10 @@ async def update_student(
                 detail="You don't have permission to update this student",
             )
 
-    # Check if birthdate is being changed and student is using default password
-    if update_data.birthdate is not None and not student.password_changed:
-        # Parse new birthdate
+    # Update birthdate (no longer syncs password since default password is join date)
+    if update_data.birthdate is not None:
         new_birthdate = datetime.strptime(update_data.birthdate, "%Y-%m-%d").date()
         student.birthdate = new_birthdate
-
-        # Update password to new birthdate (YYYYMMDD format)
-        new_default_password = new_birthdate.strftime("%Y%m%d")
-        student.password_hash = get_password_hash(new_default_password)
 
     # Update other fields
     if update_data.name is not None:
@@ -598,7 +595,7 @@ async def reset_student_password(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """重設學生密碼為預設值（生日）"""
+    """重設學生密碼為預設值（建立日期）"""
     # Get student and verify it belongs to teacher's classroom
     student = (
         db.query(Student)
@@ -616,12 +613,19 @@ async def reset_student_password(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    if not student.birthdate:
-        raise HTTPException(status_code=400, detail="Student birthdate not set")
+    if not student.created_at:
+        raise HTTPException(
+            status_code=400, detail="Student creation date not available"
+        )
 
-    # Reset password to birthdate (YYYYMMDD format)
-
-    default_password = student.birthdate.strftime("%Y%m%d")
+    # Reset password to creation date in Taiwan timezone (YYYYMMDD format)
+    taipei_tz = ZoneInfo("Asia/Taipei")
+    created_at_tw = (
+        student.created_at.astimezone(taipei_tz)
+        if student.created_at.tzinfo
+        else student.created_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(taipei_tz)
+    )
+    default_password = created_at_tw.strftime("%Y%m%d")
     student.password_hash = get_password_hash(default_password)
     student.password_changed = False
 
@@ -675,6 +679,11 @@ async def get_classroom_students(
             "email": s.email,
             "student_number": s.student_number,
             "birthdate": s.birthdate.isoformat() if s.birthdate else None,
+            "phone": getattr(s, "phone", ""),
+            "password_changed": s.password_changed,
+            "last_login": (s.last_login.isoformat() if s.last_login else None),
+            "status": "active" if s.is_active else "inactive",
+            "created_at": (s.created_at.isoformat() if s.created_at else None),
         }
         for s in students
     ]
@@ -701,9 +710,14 @@ async def batch_create_students(
         raise HTTPException(status_code=404, detail="Classroom not found")
 
     created_students = []
+    today_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
     for student_data in batch_data.students:
-        birthdate = date.fromisoformat(student_data["birthdate"])
-        default_password = birthdate.strftime("%Y%m%d")
+        birthdate = (
+            date.fromisoformat(student_data["birthdate"])
+            if student_data.get("birthdate")
+            else None
+        )
+        default_password = today_password
 
         student = Student(
             name=student_data["name"],
@@ -735,7 +749,7 @@ async def batch_create_students(
                 "id": s.id,
                 "name": s.name,
                 "email": s.email,
-                "default_password": s.birthdate.strftime("%Y%m%d"),
+                "default_password": today_password,
             }
             for s in created_students
         ],
@@ -745,7 +759,7 @@ async def batch_create_students(
 class BatchImportStudent(BaseModel):
     name: str
     classroom_name: str
-    birthdate: Any  # Can be string, int (Excel serial), etc.
+    birthdate: Any = None  # Can be string, int (Excel serial), etc. (optional)
 
 
 class BatchImportRequest(BaseModel):
@@ -879,32 +893,27 @@ async def batch_import_students(
                 error_count += 1
                 continue
 
-            if not student_data.birthdate:
-                errors.append(
-                    {"row": idx + 1, "name": student_data.name, "error": "缺少必要欄位：生日"}
-                )
-                error_count += 1
-                continue
-
             # Clean data
             student_name = student_data.name.strip()
             classroom_name = student_data.classroom_name.strip()
 
-            # Parse birthdate
-            birthdate = parse_birthdate(student_data.birthdate)
-            if not birthdate:
-                errors.append(
-                    {
-                        "row": idx + 1,
-                        "name": student_name,
-                        "error": f"無效的日期格式：{student_data.birthdate}",
-                    }
-                )
-                error_count += 1
-                continue
+            # Parse birthdate (optional)
+            birthdate = None
+            if student_data.birthdate:
+                birthdate = parse_birthdate(student_data.birthdate)
+                if not birthdate:
+                    errors.append(
+                        {
+                            "row": idx + 1,
+                            "name": student_name,
+                            "error": f"無效的日期格式：{student_data.birthdate}",
+                        }
+                    )
+                    error_count += 1
+                    continue
 
             # Check if birthdate is in the future
-            if birthdate > datetime.now().date():
+            if birthdate and birthdate > datetime.now().date():
                 errors.append(
                     {"row": idx + 1, "name": student_name, "error": "生日不能是未來日期"}
                 )
@@ -947,12 +956,8 @@ async def batch_import_students(
                     existing_student = existing_enrollment.student
 
                     if existing_student:
-                        existing_student.birthdate = birthdate
-                        # Update password if it hasn't been changed
-                        if not existing_student.password_changed:
-                            existing_student.password_hash = get_password_hash(
-                                birthdate.strftime("%Y%m%d")
-                            )
+                        if birthdate:
+                            existing_student.birthdate = birthdate
                         db.flush()
 
                         created_students.append(
@@ -961,9 +966,6 @@ async def batch_import_students(
                                 "name": existing_student.name,
                                 "email": existing_student.email,
                                 "classroom_name": classroom_name,
-                                "default_password": birthdate.strftime("%Y%m%d")
-                                if not existing_student.password_changed
-                                else None,
                                 "action": "updated",
                             }
                         )
@@ -985,8 +987,8 @@ async def batch_import_students(
             # Don't generate fake email - let students bind their own email later
             # email = None allows students to decide whether to bind email themselves
 
-            # Create student
-            default_password = birthdate.strftime("%Y%m%d")
+            # Create student - default password is today's date
+            default_password = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
             student = Student(
                 name=student_name,
                 email=None,  # Let students bind email themselves
