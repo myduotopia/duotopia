@@ -188,6 +188,7 @@ export default function AssignmentStickyNote({
     if (open && currentAssignment) {
       fetchProgress(currentAssignment.id);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- track primitive id, not object reference
   }, [open, currentAssignment?.id, fetchProgress]);
 
   const handlePrev = () => {
