@@ -27,7 +27,7 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import { apiClient } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
-import { useTranslation, getI18n } from "react-i18next";
+import { useTranslation } from "react-i18next";
 
 interface DashboardData {
   teacher: {
@@ -65,7 +65,7 @@ interface DashboardData {
 }
 
 export default function TeacherDashboard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   useWorkspace();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(
     null,
@@ -84,26 +84,38 @@ export default function TeacherDashboard() {
     {
       en: "Duotopia makes teaching smarter and learning more active.",
       "zh-TW": "語拓邦讓教學更智能、學習更主動。",
+      ja: "Duotopiaで教育をよりスマートに、学びをより主体的に。",
+      ko: "Duotopia로 더 스마트하게 가르치고, 더 능동적으로 배우세요.",
     },
     {
       en: "Save 80% of lesson prep and grading time.",
       "zh-TW": "節省 80% 備課與批改時間。",
+      ja: "授業準備と採点時間を80%削減。",
+      ko: "수업 준비와 채점 시간을 80% 절약하세요.",
     },
     {
       en: "Use the Timer & Dice in the toolbar — teaching made effortless.",
       "zh-TW": "善用右側工具列的計時器與骰子，讓教學更輕鬆。",
+      ja: "ツールバーのタイマーとサイコロで、授業をもっと楽しく。",
+      ko: "도구 모음의 타이머와 주사위로 수업을 더 쉽게.",
     },
     {
       en: "Assign once, AI grades instantly.",
       "zh-TW": "派作業一次，AI 即時完成批改。",
+      ja: "課題を配布すれば、AIが即時採点。",
+      ko: "과제를 한 번 배정하면, AI가 즉시 채점.",
     },
     {
       en: "Every student gets personalized feedback.",
       "zh-TW": "每位學生都能獲得個人化回饋。",
+      ja: "すべての生徒に個別フィードバックを。",
+      ko: "모든 학생에게 맞춤형 피드백을 제공합니다.",
     },
     {
       en: "Track progress, celebrate growth.",
       "zh-TW": "追蹤學習進度，見證每一步成長。",
+      ja: "進捗を追跡し、成長を実感。",
+      ko: "학습 진행을 추적하고, 성장을 확인하세요.",
     },
   ];
 
@@ -160,7 +172,7 @@ export default function TeacherDashboard() {
 
   const handleCopyUrl = async () => {
     if (!dashboardData) return;
-    const studentLoginUrl = `${window.location.origin}/student/login?teacher_email=${dashboardData.teacher.email}`;
+    const studentLoginUrl = `${window.location.origin}/student/login?teacher_email=${encodeURIComponent(dashboardData.teacher.email)}`;
     try {
       await navigator.clipboard.writeText(studentLoginUrl);
       setCopied(true);
@@ -172,7 +184,7 @@ export default function TeacherDashboard() {
 
   const getStudentLoginUrl = () => {
     if (!dashboardData) return "";
-    return `${window.location.origin}/student/login?teacher_email=${dashboardData.teacher.email}`;
+    return `${window.location.origin}/student/login?teacher_email=${encodeURIComponent(dashboardData.teacher.email)}`;
   };
 
   if (loading) {
@@ -190,7 +202,7 @@ export default function TeacherDashboard() {
     return (
       <div className="text-center py-12">
         <p className="text-gray-500">
-          {t("teacherDashboard.error.loadFailed")}
+          {t("teacherDashboard.errors.loadFailed")}
         </p>
       </div>
     );
@@ -313,11 +325,13 @@ export default function TeacherDashboard() {
                 &ldquo;{typedText}
                 <span className="animate-pulse">|</span>&rdquo;
               </p>
-              {getI18n().language !== "en" && (
+              {i18n.language !== "en" && (
                 <p
                   className={`text-sm sm:text-base text-blue-600 mt-1 transition-opacity duration-300 ${showTranslation ? "opacity-100" : "opacity-0"}`}
                 >
-                  {taglines[taglineIndex]["zh-TW"]}
+                  {taglines[taglineIndex][
+                    i18n.language as keyof (typeof taglines)[0]
+                  ] ?? taglines[taglineIndex]["zh-TW"]}
                 </p>
               )}
             </div>
