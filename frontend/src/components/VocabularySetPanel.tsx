@@ -3335,8 +3335,9 @@ export default function VocabularySetPanel({
               <div
                 className={`text-xs mt-2 ${batchPasteText.split("\n").filter((line: string) => line.trim()).length > 30 ? "text-red-500 font-medium" : "text-gray-500"}`}
               >
-                {batchPasteText.split("\n").filter((line: string) => line.trim())
-                  .length || 0}{" "}
+                {batchPasteText
+                  .split("\n")
+                  .filter((line: string) => line.trim()).length || 0}{" "}
                 {t("contentEditor.messages.items")}
                 {batchPasteText
                   .split("\n")
