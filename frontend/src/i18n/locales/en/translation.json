@@ -514,6 +514,42 @@
     }
   },
   "teacherDashboard": {
+    "tabs": {
+      "intro": "System Overview"
+    },
+    "systemOverview": {
+      "section1": "Create Quality Materials Fast with AI Trained for Language Teaching, Save 80% Prep Time",
+      "section2": "5 Exercise Formats, Built-in Spaced Repetition — Practice Smarter, Not More",
+      "section3": "AI-Assisted Grading Saves You 80% of Grading Time",
+      "imgAlt1": "Create materials screenshot",
+      "imgAlt2": "Assignment types screenshot",
+      "imgAlt3": "AI grading screenshot"
+    },
+    "classroomsTab": {
+      "section1": "To help the AI understand your students, setting up your classroom — including its description and proficiency level — is essential. It's what makes grading reports feel personal and on-target.",
+      "section2": "Pick a class, choose your materials and activity type, name the assignment and you're done — three steps to assign any teaching activity.",
+      "section3": "Share a QR code to invite students — they scan, log in, and get straight to work.",
+      "section4": "AI assists with grading, delivering personalized feedback to each student based on their level and the assignment difficulty.",
+      "gifAlt1": "Classroom setup demo",
+      "gifAlt2": "Assign activity demo",
+      "gifAlt3": "Share QR code demo",
+      "gifAlt4": "AI grading demo"
+    },
+    "allStudentsTab": {
+      "section1": "When adding students, assign them to a classroom and enter their birthday. The AI uses their age and class baseline to tailor learning reports with feedback that truly fits.",
+      "section2": "The share button in the right toolbar generates a QR code — students can scan it for pre-class prep or post-class review.",
+      "gifAlt1": "Add student demo",
+      "gifAlt2": "Share QR code demo"
+    },
+    "materialsTab": {
+      "placeholder": "Content coming soon"
+    },
+    "resourceMaterialsTab": {
+      "section1": "Resource packs help teachers hit the ground running — duplicate a complete topic curriculum and start assigning activities right away.",
+      "section2": "The right toolbar includes a timer, dice, and rock-paper-scissors tool — handy gadgets that keep lessons lively and engaging.",
+      "gifAlt1": "Resource materials demo",
+      "gifAlt2": "Classroom tools demo"
+    },
     "loading": "Loading...",
     "errors": {
       "loadFailed": "Failed to load dashboard, please login again"
