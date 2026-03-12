@@ -169,9 +169,7 @@ export function CreateStudentDialog({
           <div className="grid gap-2">
             <Label htmlFor="birthdate">
               出生日期{" "}
-              <span className="text-xs text-gray-500 font-normal">
-                (選填)
-              </span>
+              <span className="text-xs text-gray-500 font-normal">(選填)</span>
             </Label>
             <Input
               id="birthdate"

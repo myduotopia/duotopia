@@ -11,7 +11,9 @@ class SchoolStudentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     email: Optional[str] = Field(None, max_length=255)
     student_number: Optional[str] = Field(None, max_length=50)
-    birthdate: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")  # YYYY-MM-DD（選填）
+    birthdate: Optional[str] = Field(
+        None, pattern=r"^\d{4}-\d{2}-\d{2}$"
+    )  # YYYY-MM-DD（選填）
     phone: Optional[str] = Field(None, max_length=20)
 
     @field_validator("birthdate", mode="before")

@@ -78,10 +78,10 @@ export default function SchoolStudentsPage() {
     studentId: number;
     classroomId: number;
   } | null>(null);
-  const [showResetPasswordConfirm, setShowResetPasswordConfirm] = useState(false);
-  const [pendingResetStudent, setPendingResetStudent] = useState<Student | null>(
-    null,
-  );
+  const [showResetPasswordConfirm, setShowResetPasswordConfirm] =
+    useState(false);
+  const [pendingResetStudent, setPendingResetStudent] =
+    useState<Student | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {

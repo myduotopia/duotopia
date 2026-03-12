@@ -277,9 +277,7 @@ async def create_student(
             birthdate = date.fromisoformat(student_data.birthdate)
         except ValueError:
             try:
-                birthdate = datetime.strptime(
-                    student_data.birthdate, "%Y/%m/%d"
-                ).date()
+                birthdate = datetime.strptime(student_data.birthdate, "%Y/%m/%d").date()
             except ValueError:
                 raise HTTPException(
                     status_code=422,
@@ -622,7 +620,11 @@ async def reset_student_password(
 
     # Reset password to creation date in Taiwan timezone (YYYYMMDD format)
     taipei_tz = ZoneInfo("Asia/Taipei")
-    created_at_tw = student.created_at.astimezone(taipei_tz) if student.created_at.tzinfo else student.created_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(taipei_tz)
+    created_at_tw = (
+        student.created_at.astimezone(taipei_tz)
+        if student.created_at.tzinfo
+        else student.created_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(taipei_tz)
+    )
     default_password = created_at_tw.strftime("%Y%m%d")
     student.password_hash = get_password_hash(default_password)
     student.password_changed = False
@@ -679,13 +681,9 @@ async def get_classroom_students(
             "birthdate": s.birthdate.isoformat() if s.birthdate else None,
             "phone": getattr(s, "phone", ""),
             "password_changed": s.password_changed,
-            "last_login": (
-                s.last_login.isoformat() if s.last_login else None
-            ),
+            "last_login": (s.last_login.isoformat() if s.last_login else None),
             "status": "active" if s.is_active else "inactive",
-            "created_at": (
-                s.created_at.isoformat() if s.created_at else None
-            ),
+            "created_at": (s.created_at.isoformat() if s.created_at else None),
         }
         for s in students
     ]
