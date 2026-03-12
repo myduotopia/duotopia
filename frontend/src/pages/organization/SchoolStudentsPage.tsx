@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Plus, Search, Upload } from "lucide-react";
+import { Users, Plus, Search, Upload, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 interface Classroom {
@@ -80,6 +80,8 @@ export default function SchoolStudentsPage() {
     classroomId: number;
   } | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     if (schoolId && token) {
@@ -186,6 +188,7 @@ export default function SchoolStudentsPage() {
         params,
       )) as Student[];
       setStudents(data);
+      setCurrentPage(1);
     } catch (error) {
       logError("Failed to fetch students", error, { schoolId });
       setError("載入學生列表失敗");
@@ -283,7 +286,6 @@ export default function SchoolStudentsPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { label: "組織管理" },
           ...(organization
             ? [
                 {
@@ -387,13 +389,51 @@ export default function SchoolStudentsPage() {
           {isFilterLoading ? (
             <LoadingSpinner />
           ) : (
-            <StudentListTable
-              students={students}
-              onEdit={handleEdit}
-              onAssignClassroom={handleAssignClassroom}
-              onRemove={handleRemove}
-              onRemoveFromClassroom={handleRemoveFromClassroom}
-            />
+            <>
+              <StudentListTable
+                students={students.slice(
+                  (currentPage - 1) * itemsPerPage,
+                  currentPage * itemsPerPage,
+                )}
+                onEdit={handleEdit}
+                onAssignClassroom={handleAssignClassroom}
+                onRemove={handleRemove}
+                onRemoveFromClassroom={handleRemoveFromClassroom}
+              />
+              {students.length > itemsPerPage && (() => {
+                const totalPages = Math.ceil(students.length / itemsPerPage);
+                return (
+                  <div className="flex items-center justify-center gap-3 mt-6">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(1, prev - 1))
+                      }
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-gray-600">
+                      第 {currentPage} 頁 / 共 {totalPages} 頁（共{" "}
+                      {students.length} 位學生）
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCurrentPage((prev) =>
+                          Math.min(totalPages, prev + 1),
+                        )
+                      }
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                );
+              })()}
+            </>
           )}
         </CardContent>
       </Card>

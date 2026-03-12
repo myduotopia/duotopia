@@ -17,12 +17,7 @@ interface BreadcrumbProps {
 export function Breadcrumb({ items }: BreadcrumbProps) {
   return (
     <nav className="flex items-center space-x-2 text-sm text-gray-600 mb-4">
-      <Link
-        to="/organization/dashboard"
-        className="hover:text-gray-900 transition-colors"
-      >
-        <Home className="h-4 w-4" />
-      </Link>
+      <Home className="h-4 w-4 text-gray-400" />
 
       {items.map((item, index) => {
         const isLast = index === items.length - 1;
@@ -30,10 +25,14 @@ export function Breadcrumb({ items }: BreadcrumbProps) {
         return (
           <div key={index} className="flex items-center space-x-2">
             <ChevronRight className="h-4 w-4 text-gray-400" />
-            {item.href && !isLast ? (
+            {item.href ? (
               <Link
                 to={item.href}
-                className="hover:text-gray-900 transition-colors"
+                className={
+                  isLast
+                    ? "font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                    : "hover:text-gray-900 transition-colors"
+                }
               >
                 {item.label}
               </Link>

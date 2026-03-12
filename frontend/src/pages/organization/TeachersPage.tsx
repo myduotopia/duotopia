@@ -17,13 +17,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Users,
   UserPlus,
   Search,
   ChevronLeft,
   ChevronRight,
+  Filter,
 } from "lucide-react";
 import { toast } from "sonner";
+
+interface SchoolOption {
+  id: string;
+  name: string;
+  display_name?: string;
+}
 
 // Use StaffMember from StaffTable component
 
@@ -43,6 +57,8 @@ export default function TeachersPage() {
     teacher_license_count?: number;
   } | null>(null);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [schoolOptions, setSchoolOptions] = useState<SchoolOption[]>([]);
+  const [selectedSchoolId, setSelectedSchoolId] = useState<string>("all");
 
   // Search, sort, pagination state
   const [searchQuery, setSearchQuery] = useState("");
@@ -79,10 +95,31 @@ export default function TeachersPage() {
   }, [effectiveOrgId, token]);
 
   useEffect(() => {
+    const fetchSchools = async () => {
+      if (!effectiveOrgId || !token) return;
+      try {
+        const res = await fetch(
+          `${API_URL}/api/schools?organization_id=${effectiveOrgId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSchoolOptions(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch schools:", error);
+      }
+    };
+    if (effectiveOrgId && token) {
+      fetchSchools();
+    }
+  }, [effectiveOrgId, token]);
+
+  useEffect(() => {
     if (effectiveOrgId) {
       fetchTeachers();
     }
-  }, [effectiveOrgId]);
+  }, [effectiveOrgId, selectedSchoolId]);
 
   const fetchTeachers = async () => {
     if (!effectiveOrgId) return;
@@ -91,16 +128,34 @@ export default function TeachersPage() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(
-        `${API_URL}/api/organizations/${effectiveOrgId}/teachers`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const url =
+        selectedSchoolId && selectedSchoolId !== "all"
+          ? `${API_URL}/api/schools/${selectedSchoolId}/teachers`
+          : `${API_URL}/api/organizations/${effectiveOrgId}/teachers`;
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       if (response.ok) {
         const data = await response.json();
-        setTeachers(data);
+
+        // Normalize: school endpoint returns { roles: string[] }, org endpoint returns { role: string }
+        if (selectedSchoolId && selectedSchoolId !== "all") {
+          const normalized = data.map(
+            (t: { id: number; email: string; name: string; roles: string[]; is_active: boolean; created_at: string }) => ({
+              ...t,
+              role: t.roles?.includes("school_admin")
+                ? "school_admin"
+                : t.roles?.includes("school_director")
+                  ? "school_director"
+                  : t.roles?.[0] || "teacher",
+            }),
+          );
+          setTeachers(normalized);
+        } else {
+          setTeachers(data);
+        }
       } else {
         setError(`載入教師列表失敗：${response.status}`);
         toast.error("載入教師列表失敗");
@@ -119,17 +174,35 @@ export default function TeachersPage() {
     isActive: boolean,
   ) => {
     try {
-      const response = await fetch(
-        `${API_URL}/api/organizations/${effectiveOrgId}/teachers/${teacher.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+      let response: Response;
+
+      if (selectedSchoolId && selectedSchoolId !== "all") {
+        // Use school-level endpoint
+        response = await fetch(
+          `${API_URL}/api/schools/${selectedSchoolId}/teachers/${teacher.id}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ is_active: isActive }),
           },
-          body: JSON.stringify({ role: teacher.role, is_active: isActive }),
-        },
-      );
+        );
+      } else {
+        // Use org-level endpoint
+        response = await fetch(
+          `${API_URL}/api/organizations/${effectiveOrgId}/teachers/${teacher.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ role: teacher.role, is_active: isActive }),
+          },
+        );
+      }
 
       if (response.ok) {
         toast.success(isActive ? "教師已啟用" : "教師已停用");
@@ -231,7 +304,6 @@ export default function TeachersPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { label: "組織管理" },
           {
             label: organization?.name || "...",
             href: `/organization/${orgId}`,
@@ -246,104 +318,68 @@ export default function TeachersPage() {
         <p className="text-gray-600 mt-2">管理組織內的教師成員</p>
       </div>
 
-      {/* Statistics */}
-      <div
-        className="grid gap-6"
-        style={{ gridTemplateColumns: "repeat(auto-fill, 200px)" }}
-      >
-        <Card
-          className="flex flex-col items-center justify-center"
-          style={{ width: 200, height: 200 }}
-        >
-          <Users className="h-8 w-8 text-blue-600 mb-2" />
-          <div className="text-3xl font-bold">{teachers.length}</div>
-          <p className="text-sm text-gray-500 mt-2">總教師數</p>
-        </Card>
-
-        <Card
-          className="flex flex-col items-center justify-center"
-          style={{ width: 200, height: 200 }}
-        >
-          <Users className="h-8 w-8 text-green-600 mb-2" />
-          <div className="text-3xl font-bold">
-            {teachers.filter((t) => t.is_active).length}
-          </div>
-          <p className="text-sm text-gray-500 mt-2">活躍教師</p>
-        </Card>
-
-        <Card
-          className="flex flex-col items-center justify-center"
-          style={{ width: 200, height: 200 }}
-        >
-          <Users className="h-8 w-8 text-purple-600 mb-2" />
-          <div className="text-3xl font-bold">
-            {
-              teachers.filter((t) =>
-                ["org_owner", "org_admin", "school_admin"].includes(t.role),
-              ).length
-            }
-          </div>
-          <p className="text-sm text-gray-500 mt-2">管理員</p>
-        </Card>
-
-        {/* License Status Card */}
-        {organization?.teacher_license_count !== undefined && (
-          <Card
-            className="flex flex-col items-center justify-center"
-            style={{ width: 200, height: 200 }}
-          >
-            {(() => {
-              const licenseCount = organization.teacher_license_count;
-              const usedCount = teachers.length;
-              const usageRate =
-                licenseCount > 0 ? (usedCount / licenseCount) * 100 : 0;
-
-              // Determine color based on usage rate
-              let iconColor = "text-blue-600";
-              let textColor = "text-gray-900";
-              if (usageRate >= 95) {
-                iconColor = "text-red-600";
-                textColor = "text-red-600";
-              } else if (usageRate >= 80) {
-                iconColor = "text-orange-600";
-                textColor = "text-orange-600";
-              }
-
-              return (
-                <>
-                  <Users className={`h-8 w-8 ${iconColor} mb-2`} />
-                  <div className={`text-3xl font-bold ${textColor}`}>
-                    {usedCount} / {licenseCount}
-                  </div>
-                  <p className="text-sm text-gray-500 mt-1">授權狀況</p>
-                  <p className={`text-xs ${textColor} mt-1`}>
-                    {usageRate.toFixed(0)}% 使用
-                  </p>
-                </>
-              );
-            })()}
-          </Card>
-        )}
-      </div>
-
       {/* Teachers Table */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle>教師列表</CardTitle>
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="搜尋姓名或 Email..."
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="pl-9 w-64"
-              />
+        <CardHeader className="space-y-3 pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <CardTitle>教師列表</CardTitle>
+              {organization?.teacher_license_count !== undefined && (() => {
+                const activeCount = teachers.filter((t) => t.is_active).length;
+                const licenseCount = organization.teacher_license_count;
+                const usageRate =
+                  licenseCount > 0 ? (activeCount / licenseCount) * 100 : 0;
+                let color = "text-gray-500";
+                if (usageRate >= 95) color = "text-red-600";
+                else if (usageRate >= 80) color = "text-orange-600";
+                return (
+                  <span className={`text-sm font-normal ${color}`}>
+                    啟用 {activeCount} / {licenseCount} 授權
+                  </span>
+                );
+              })()}
             </div>
             <Button className="gap-2" onClick={() => setInviteDialogOpen(true)}>
               <UserPlus className="h-4 w-4" />
               邀請教師
             </Button>
+          </div>
+          <div className="flex items-center gap-4">
+            {/* School Filter */}
+            {schoolOptions.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-gray-400" />
+                <Select
+                  value={selectedSchoolId}
+                  onValueChange={(val) => {
+                    setSelectedSchoolId(val);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="篩選分校" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部分校</SelectItem>
+                    {schoolOptions.map((school) => (
+                      <SelectItem key={school.id} value={school.id}>
+                        {school.display_name || school.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {/* Search */}
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="搜尋姓名或 Email..."
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent>

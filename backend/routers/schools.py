@@ -375,35 +375,29 @@ async def list_schools(
     )
     student_counts = dict(student_counts_raw)
 
+    # Batch fetch all school admins in one JOIN query (instead of N+1)
+    admin_rows = (
+        db.query(TeacherSchool.school_id, Teacher.name, Teacher.email)
+        .join(Teacher, Teacher.id == TeacherSchool.teacher_id)
+        .filter(
+            TeacherSchool.school_id.in_(school_ids),
+            TeacherSchool.roles.op("@>")(["school_admin"]),
+            TeacherSchool.is_active.is_(True),
+        )
+        .all()
+    )
+    admin_map = {row.school_id: (row.name, row.email) for row in admin_rows}
+
     # Build response with admin info and counts
     result = []
     for school in schools:
-        # Find school admin
-        admin_rel = (
-            db.query(TeacherSchool)
-            .filter(
-                TeacherSchool.school_id == school.id,
-                TeacherSchool.roles.op("@>")(["school_admin"]),
-                TeacherSchool.is_active.is_(True),
-            )
-            .first()
-        )
-
-        admin_name = None
-        admin_email = None
-        if admin_rel:
-            admin_teacher = (
-                db.query(Teacher).filter(Teacher.id == admin_rel.teacher_id).first()
-            )
-            if admin_teacher:
-                admin_name = admin_teacher.name
-                admin_email = admin_teacher.email
+        admin_info = admin_map.get(school.id)
 
         result.append(
             SchoolResponse.from_orm(
                 school,
-                admin_name=admin_name,
-                admin_email=admin_email,
+                admin_name=admin_info[0] if admin_info else None,
+                admin_email=admin_info[1] if admin_info else None,
                 classroom_count=classroom_counts.get(school.id, 0),
                 teacher_count=teacher_counts.get(school.id, 0),
                 student_count=student_counts.get(school.id, 0),
@@ -425,9 +419,10 @@ async def get_school(
     """
     school = check_school_permission(teacher.id, school_id, db)
 
-    # Find school admin
-    admin_rel = (
-        db.query(TeacherSchool)
+    # Find school admin with single JOIN query
+    admin = (
+        db.query(Teacher.name, Teacher.email)
+        .join(TeacherSchool, Teacher.id == TeacherSchool.teacher_id)
         .filter(
             TeacherSchool.school_id == school.id,
             TeacherSchool.roles.op("@>")(["school_admin"]),
@@ -436,18 +431,10 @@ async def get_school(
         .first()
     )
 
-    admin_name = None
-    admin_email = None
-    if admin_rel:
-        admin_teacher = (
-            db.query(Teacher).filter(Teacher.id == admin_rel.teacher_id).first()
-        )
-        if admin_teacher:
-            admin_name = admin_teacher.name
-            admin_email = admin_teacher.email
-
     return SchoolResponse.from_orm(
-        school, admin_name=admin_name, admin_email=admin_email
+        school,
+        admin_name=admin.name if admin else None,
+        admin_email=admin.email if admin else None,
     )
 
 
@@ -518,7 +505,12 @@ class AddTeacherToSchoolRequest(BaseModel):
 class UpdateTeacherRolesRequest(BaseModel):
     """Request model for updating teacher roles"""
 
-    roles: List[str] = Field(..., description="List of roles: school_admin, teacher")
+    roles: Optional[List[str]] = Field(
+        None, description="List of roles: school_admin, teacher"
+    )
+    is_active: Optional[bool] = Field(
+        None, description="Activate or deactivate teacher in this school"
+    )
 
 
 class TeacherSchoolRelationResponse(BaseModel):
@@ -573,37 +565,39 @@ async def list_school_teachers(
     # Check permission
     check_school_permission(teacher.id, school_id, db)
 
-    # Get all teacher relationships
-    teacher_schools = (
-        db.query(TeacherSchool)
-        .filter(TeacherSchool.school_id == school_id, TeacherSchool.is_active.is_(True))
+    # Single JOIN query instead of N+1
+    rows = (
+        db.query(Teacher, TeacherSchool)
+        .join(TeacherSchool, Teacher.id == TeacherSchool.teacher_id)
+        .filter(
+            TeacherSchool.school_id == school_id,
+            TeacherSchool.is_active.is_(True),
+        )
         .all()
     )
 
     result = []
-    for ts in teacher_schools:
-        t = db.query(Teacher).filter(Teacher.id == ts.teacher_id).first()
-        if t:
-            # Ensure roles is a list (handle both JSON string and list)
-            roles = ts.roles if ts.roles else []
-            if isinstance(roles, str):
-                import json
+    for t, ts in rows:
+        # Ensure roles is a list (handle both JSON string and list)
+        roles = ts.roles if ts.roles else []
+        if isinstance(roles, str):
+            import json
 
-                try:
-                    roles = json.loads(roles)
-                except Exception:
-                    roles = []
+            try:
+                roles = json.loads(roles)
+            except Exception:
+                roles = []
 
-            result.append(
-                SchoolTeacherInfo(
-                    id=t.id,
-                    email=t.email,
-                    name=t.name,
-                    roles=roles,
-                    is_active=ts.is_active,
-                    created_at=ts.created_at,
-                )
+        result.append(
+            SchoolTeacherInfo(
+                id=t.id,
+                email=t.email,
+                name=t.name,
+                roles=roles,
+                is_active=ts.is_active,
+                created_at=ts.created_at,
             )
+        )
 
     return result
 
@@ -726,25 +720,32 @@ async def update_teacher_school_roles(
     # Check permission
     check_school_permission(teacher.id, school_id, db)
 
-    # Validate roles
-    valid_roles = ["school_admin", "school_director", "teacher"]
-    for role in request.roles:
-        if role not in valid_roles:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid role: {role}. Must be one of {valid_roles}",
-            )
+    # Validate roles if provided
+    if request.roles is not None:
+        valid_roles = ["school_admin", "school_director", "teacher"]
+        for role in request.roles:
+            if role not in valid_roles:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid role: {role}. Must be one of {valid_roles}",
+                )
 
-    # Find relationship
-    teacher_school = (
-        db.query(TeacherSchool)
-        .filter(
-            TeacherSchool.teacher_id == teacher_id,
-            TeacherSchool.school_id == school_id,
-            TeacherSchool.is_active.is_(True),
+    # At least one field must be provided
+    if request.roles is None and request.is_active is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one of 'roles' or 'is_active' must be provided",
         )
-        .first()
-    )
+
+    # Find relationship (include inactive if toggling is_active)
+    query_filter = [
+        TeacherSchool.teacher_id == teacher_id,
+        TeacherSchool.school_id == school_id,
+    ]
+    if request.is_active is None:
+        query_filter.append(TeacherSchool.is_active.is_(True))
+
+    teacher_school = db.query(TeacherSchool).filter(*query_filter).first()
 
     if not teacher_school:
         raise HTTPException(
@@ -752,8 +753,13 @@ async def update_teacher_school_roles(
             detail="Teacher relationship not found",
         )
 
-    # Update roles
-    teacher_school.roles = request.roles
+    # Update roles if provided
+    if request.roles is not None:
+        teacher_school.roles = request.roles
+
+    # Update is_active if provided
+    if request.is_active is not None:
+        teacher_school.is_active = request.is_active
     db.commit()
     db.refresh(teacher_school)
 

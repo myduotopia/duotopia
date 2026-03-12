@@ -26,14 +26,14 @@ function OrganizationLayoutContent({ children }: OrganizationLayoutProps) {
     user,
     setUserRoles,
   } = useTeacherAuthStore();
-  const { setOrganizations, setIsFetchingOrgs } = useOrganization();
+  const { organizations, setOrganizations, setIsFetchingOrgs } =
+    useOrganization();
 
-  // Fetch organizations on mount
+  // Fetch organizations on mount (only if not already loaded)
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
         setIsFetchingOrgs(true);
-        // Fetch organizations where user has access (owner, admin, or school staff)
         const response = await fetch(`${API_URL}/api/organizations`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -41,6 +41,16 @@ function OrganizationLayoutContent({ children }: OrganizationLayoutProps) {
         if (response.ok) {
           const data = await response.json();
           setOrganizations(data);
+
+          // If on index route, redirect to first organization
+          const currentPath = window.location.pathname;
+          if (
+            (currentPath === "/organization" ||
+              currentPath === "/organization/") &&
+            data.length > 0
+          ) {
+            navigate(`/organization/${data[0].id}`, { replace: true });
+          }
         } else {
           console.error("Failed to fetch organizations:", response.status);
         }
@@ -51,10 +61,10 @@ function OrganizationLayoutContent({ children }: OrganizationLayoutProps) {
       }
     };
 
-    if (token) {
+    if (token && organizations.length === 0) {
       fetchOrganizations();
     }
-  }, [token, setOrganizations, setIsFetchingOrgs]);
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check permissions on mount
   useEffect(() => {

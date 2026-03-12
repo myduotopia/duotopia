@@ -9,10 +9,11 @@ import { InviteTeacherToSchoolDialog } from "@/components/organization/InviteTea
 import {
   TeacherListTable,
   Teacher,
+  ClassroomInfo,
 } from "@/components/organization/TeacherListTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, UserPlus } from "lucide-react";
+import { Users, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface School {
   id: string;
@@ -40,81 +41,89 @@ export default function SchoolTeachersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const [teacherClassrooms, setTeacherClassrooms] = useState<
+    Record<number, ClassroomInfo[]>
+  >({});
 
   useEffect(() => {
-    if (schoolId) {
-      fetchSchool();
+    if (schoolId && token) {
+      loadAll();
     }
   }, [schoolId]);
 
-  const fetchSchool = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/schools/${schoolId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+  const loadAll = async () => {
+    setLoading(true);
+    setError(null);
 
-      if (response.ok) {
-        const data = await response.json();
-        setSchool(data);
-        fetchOrganization(data.organization_id);
-        fetchTeachers();
-      } else {
-        setError(`載入學校失敗：${response.status}`);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    try {
+      // Parallel: fetch school + teachers + classrooms all at once
+      const [schoolRes, teachersRes, classroomsRes] = await Promise.all([
+        school
+          ? Promise.resolve(null)
+          : fetch(`${API_URL}/api/schools/${schoolId}`, { headers }),
+        fetch(`${API_URL}/api/schools/${schoolId}/teachers`, { headers }),
+        fetch(`${API_URL}/api/schools/${schoolId}/classrooms`, { headers }),
+      ]);
+
+      // Process school
+      if (schoolRes?.ok) {
+        const schoolData = await schoolRes.json();
+        setSchool(schoolData);
+        // Fetch org in background (non-blocking)
+        if (!organization) {
+          fetch(`${API_URL}/api/organizations/${schoolData.organization_id}`, {
+            headers,
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => data && setOrganization(data))
+            .catch(() => {});
+        }
       }
-    } catch (error) {
-      console.error("Failed to fetch school:", error);
-      setError("網路連線錯誤");
-    }
-  };
 
-  const fetchOrganization = async (orgId: string) => {
-    try {
-      const response = await fetch(`${API_URL}/api/organizations/${orgId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setOrganization(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch organization:", error);
-    }
-  };
-
-  const fetchTeachers = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch(
-        `${API_URL}/api/schools/${schoolId}/teachers`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-
-        // Sort teachers by role priority: school_admin > school_director > teacher
-        const sortedTeachers = data.sort((a: Teacher, b: Teacher) => {
-          const getRolePriority = (roles: string[]) => {
-            if (roles.includes("school_admin")) return 1;
-            if (roles.includes("school_director")) return 2;
-            if (roles.includes("teacher")) return 3;
-            return 4;
-          };
-
-          return getRolePriority(a.roles) - getRolePriority(b.roles);
-        });
-
+      // Process teachers
+      if (teachersRes.ok) {
+        const teachersData = await teachersRes.json();
+        const sortedTeachers = teachersData.sort(
+          (a: Teacher, b: Teacher) => {
+            const getRolePriority = (roles: string[]) => {
+              if (roles.includes("school_admin")) return 1;
+              if (roles.includes("school_director")) return 2;
+              if (roles.includes("teacher")) return 3;
+              return 4;
+            };
+            return getRolePriority(a.roles) - getRolePriority(b.roles);
+          },
+        );
         setTeachers(sortedTeachers);
+
+        // Process classrooms (already fetched in parallel)
+        if (classroomsRes.ok) {
+          const classrooms = await classroomsRes.json();
+          const emailToId: Record<string, number> = {};
+          sortedTeachers.forEach((t: Teacher) => {
+            emailToId[t.email] = t.id;
+          });
+          const map: Record<number, ClassroomInfo[]> = {};
+          classrooms.forEach(
+            (c: { id: string; name: string; teacher_email?: string }) => {
+              if (c.teacher_email && emailToId[c.teacher_email]) {
+                const tid = emailToId[c.teacher_email];
+                if (!map[tid]) map[tid] = [];
+                map[tid].push({ id: c.id, name: c.name });
+              }
+            },
+          );
+          setTeacherClassrooms(map);
+        }
       } else {
-        setError(`載入教師列表失敗：${response.status}`);
+        setError(`載入教師列表失敗：${teachersRes.status}`);
       }
     } catch (error) {
-      console.error("Failed to fetch teachers:", error);
+      console.error("Failed to load data:", error);
       setError("網路連線錯誤");
     } finally {
       setLoading(false);
@@ -122,7 +131,7 @@ export default function SchoolTeachersPage() {
   };
 
   const handleInviteSuccess = () => {
-    fetchTeachers();
+    loadAll();
   };
 
   return (
@@ -130,7 +139,6 @@ export default function SchoolTeachersPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { label: "組織管理" },
           ...(organization
             ? [
                 {
@@ -184,7 +192,7 @@ export default function SchoolTeachersPage() {
           {loading ? (
             <LoadingSpinner />
           ) : error ? (
-            <ErrorMessage message={error} onRetry={fetchTeachers} />
+            <ErrorMessage message={error} onRetry={loadAll} />
           ) : teachers.length === 0 ? (
             <div className="text-center py-12">
               <Users className="w-16 h-16 mx-auto mb-4 text-gray-300" />
@@ -192,11 +200,50 @@ export default function SchoolTeachersPage() {
               <p className="text-sm text-gray-400">點擊上方按鈕邀請教師加入</p>
             </div>
           ) : (
-            <TeacherListTable
-              teachers={teachers}
-              schoolId={schoolId || ""}
-              onRoleUpdated={fetchTeachers}
-            />
+            <>
+              <TeacherListTable
+                teachers={teachers.slice(
+                  (currentPage - 1) * itemsPerPage,
+                  currentPage * itemsPerPage,
+                )}
+                schoolId={schoolId || ""}
+                onRoleUpdated={loadAll}
+                teacherClassrooms={teacherClassrooms}
+              />
+              {teachers.length > itemsPerPage && (() => {
+                const totalPages = Math.ceil(teachers.length / itemsPerPage);
+                return (
+                  <div className="flex items-center justify-center gap-3 mt-6">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(1, prev - 1))
+                      }
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-gray-600">
+                      第 {currentPage} 頁 / 共 {totalPages} 頁（共{" "}
+                      {teachers.length} 位教師）
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCurrentPage((prev) =>
+                          Math.min(totalPages, prev + 1),
+                        )
+                      }
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                );
+              })()}
+            </>
           )}
         </CardContent>
       </Card>

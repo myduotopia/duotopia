@@ -223,7 +223,6 @@ export default function SchoolClassroomsPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { label: "組織管理" },
           ...(organization
             ? [
                 {

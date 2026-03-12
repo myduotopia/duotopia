@@ -7,6 +7,6 @@ const ORG_ROLES = ["org_owner", "org_admin", "school_admin", "school_director"];
  */
 export function getTeacherDashboardRoute(user: TeacherUser): string {
   return ORG_ROLES.includes(user.role || "")
-    ? "/organization/dashboard"
+    ? "/organization"
     : "/teacher/dashboard";
 }

@@ -467,13 +467,14 @@ export function StaffTable({
                 )}
               </TableCell>
               <TableCell>
-                {canEditRoles && member.id !== user?.id ? (
+                {canEditRoles ? (
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={member.is_active}
                       onCheckedChange={(checked: boolean) =>
                         onToggleStatus?.(member, checked)
                       }
+                      disabled={member.id === user?.id}
                     />
                     <span className="text-sm text-gray-600">
                       {member.is_active ? "啟用" : "停用"}

@@ -84,7 +84,7 @@ export default function OrganizationsListPage() {
   return (
     <div className="space-y-6">
       {/* Breadcrumb */}
-      <Breadcrumb items={[{ label: "組織管理" }, { label: "所有機構" }]} />
+      <Breadcrumb items={[{ label: "所有機構" }]} />
 
       {/* Header */}
       <div className="flex items-center justify-between">
