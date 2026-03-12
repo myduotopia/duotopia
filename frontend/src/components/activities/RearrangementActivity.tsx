@@ -135,7 +135,10 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   const hasPlayedFirstAudioRef = useRef(false);
 
   // 載入題目
+  const lastLoadedAssignmentRef = useRef<number | null>(null);
   useEffect(() => {
+    if (lastLoadedAssignmentRef.current === studentAssignmentId) return;
+    lastLoadedAssignmentRef.current = studentAssignmentId;
     hasPlayedFirstAudioRef.current = false; // 重置狀態
     loadQuestions();
     return () => {

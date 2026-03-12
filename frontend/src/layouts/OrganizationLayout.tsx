@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,11 +26,14 @@ function OrganizationLayoutContent({ children }: OrganizationLayoutProps) {
     user,
     setUserRoles,
   } = useTeacherAuthStore();
-  const { organizations, setOrganizations, setIsFetchingOrgs } =
-    useOrganization();
+  const { setOrganizations, setIsFetchingOrgs } = useOrganization();
 
   // Fetch organizations on mount (only if not already loaded)
+  const hasFetchedOrgs = useRef(false);
   useEffect(() => {
+    if (!token || hasFetchedOrgs.current) return;
+    hasFetchedOrgs.current = true;
+
     const fetchOrganizations = async () => {
       try {
         setIsFetchingOrgs(true);
@@ -53,18 +56,18 @@ function OrganizationLayoutContent({ children }: OrganizationLayoutProps) {
           }
         } else {
           console.error("Failed to fetch organizations:", response.status);
+          hasFetchedOrgs.current = false;
         }
       } catch (error) {
         console.error("Failed to fetch organizations:", error);
+        hasFetchedOrgs.current = false;
       } finally {
         setIsFetchingOrgs(false);
       }
     };
 
-    if (token && organizations.length === 0) {
-      fetchOrganizations();
-    }
-  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchOrganizations();
+  }, [token, navigate, setOrganizations, setIsFetchingOrgs]);
 
   // Check permissions on mount
   useEffect(() => {

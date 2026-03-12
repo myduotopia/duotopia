@@ -41,11 +41,7 @@ export default function OrganizationsListPage() {
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -66,7 +62,11 @@ export default function OrganizationsListPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
 
   const handleEditClick = (org: Organization) => {
     setEditingOrg(org);
@@ -74,12 +74,11 @@ export default function OrganizationsListPage() {
   };
 
   const handleEditSuccess = useCallback(() => {
-    fetchOrganizations(); // Refresh list after successful edit
-    // Sync sidebar organization data in OrganizationContext
+    fetchOrganizations();
     if (token) {
       refreshOrganizations(token);
     }
-  }, [token, refreshOrganizations]);
+  }, [token, refreshOrganizations, fetchOrganizations]);
 
   return (
     <div className="space-y-6">
