@@ -909,8 +909,8 @@ async def batch_import_students(
                             "error": f"無效的日期格式：{student_data.birthdate}",
                         }
                     )
-                error_count += 1
-                continue
+                    error_count += 1
+                    continue
 
             # Check if birthdate is in the future
             if birthdate and birthdate > datetime.now().date():

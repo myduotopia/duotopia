@@ -302,6 +302,7 @@ export default function SchoolStudentsPage() {
       toast.error("重設密碼失敗，請稍後再試");
     } finally {
       setPendingResetStudent(null);
+      setShowResetPasswordConfirm(false);
     }
   };
 

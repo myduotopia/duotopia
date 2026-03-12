@@ -9,13 +9,14 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 export interface Student {
   id: number;
   name: string;
   email?: string | null;
   student_number?: string | null;
-  birthdate: string;
+  birthdate?: string | null;
   is_active: boolean;
   password_changed?: boolean;
   schools?: Array<{ id: string; name: string }>;
@@ -53,9 +54,13 @@ export function StudentListTable({
   onRemoveFromClassroom,
   onResetPassword,
 }: StudentListTableProps) {
+  const { t } = useTranslation();
+
   const handleCopyPassword = (password: string) => {
     navigator.clipboard.writeText(password);
-    toast.success("已複製密碼");
+    toast.success(
+      t("studentTable.passwordStatus.passwordCopied", { password }),
+    );
   };
 
   return (
@@ -140,13 +145,15 @@ export function StudentListTable({
                     {student.password_changed ? (
                       <>
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 whitespace-nowrap">
-                          已變更
+                          {t("studentTable.passwordStatus.changed")}
                         </span>
                         {onResetPassword && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            title="重設為預設密碼"
+                            title={t(
+                              "studentTable.passwordStatus.resetToDefault",
+                            )}
                             onClick={() => onResetPassword(student)}
                             className="h-7 px-2"
                           >
@@ -162,7 +169,9 @@ export function StudentListTable({
                         <Button
                           variant="ghost"
                           size="sm"
-                          title="複製密碼"
+                          title={t("studentTable.passwordStatus.copyPassword", {
+                            password: defaultPwd,
+                          })}
                           onClick={() => handleCopyPassword(defaultPwd)}
                           className="h-7 px-2"
                         >
@@ -170,7 +179,9 @@ export function StudentListTable({
                         </Button>
                       </>
                     ) : (
-                      <span className="text-gray-400">未設定</span>
+                      <span className="text-gray-400">
+                        {t("studentTable.passwordStatus.notSet")}
+                      </span>
                     )}
                   </div>
                 </TableCell>
