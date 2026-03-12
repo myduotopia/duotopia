@@ -196,14 +196,62 @@ export default function TeacherDashboard() {
     );
   }
 
-
-
   const tabs = [
-    { key: "intro",      label: t("teacherDashboard.tabs.intro"),       icon: Sparkles,      iconColor: "text-red-600",    textColor: "text-red-800",    activeFill: "#ef4444", inactiveFill: "#fca5a5", svgPath: "M 8,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 0,52 L 0,8 Q 0,0 8,0 Z"       },
-    { key: "classrooms", label: t("teacherLayout.nav.myClassrooms"),     icon: GraduationCap, iconColor: "text-blue-600",   textColor: "text-blue-800",   activeFill: "#3b82f6", inactiveFill: "#93c5fd", svgPath: "M 8,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z"  },
-    { key: "students",   label: t("teacherLayout.nav.allStudents"),      icon: Users,         iconColor: "text-green-600",  textColor: "text-green-800",  activeFill: "#22c55e", inactiveFill: "#86efac", svgPath: "M 18,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z"  },
-    { key: "materials",  label: t("teacherLayout.nav.publicPrograms"),   icon: BookOpen,      iconColor: "text-purple-600", textColor: "text-purple-800", activeFill: "#a855f7", inactiveFill: "#d8b4fe", svgPath: "M 18,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z"  },
-    { key: "resources",  label: t("teacherDashboard.functionButtons.resourceMaterials.title"), icon: Package, iconColor: "text-cyan-600", textColor: "text-cyan-800", activeFill: "#06b6d4", inactiveFill: "#67e8f9", svgPath: "M 8,0 L 92,0 Q 100,0 100,8 L 100,52 Q 100,60 92,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z" },
+    {
+      key: "intro",
+      label: t("teacherDashboard.tabs.intro"),
+      icon: Sparkles,
+      iconColor: "text-red-600",
+      textColor: "text-red-800",
+      activeFill: "#ef4444",
+      inactiveFill: "#fca5a5",
+      svgPath:
+        "M 8,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 0,52 L 0,8 Q 0,0 8,0 Z",
+    },
+    {
+      key: "classrooms",
+      label: t("teacherLayout.nav.myClassrooms"),
+      icon: GraduationCap,
+      iconColor: "text-blue-600",
+      textColor: "text-blue-800",
+      activeFill: "#3b82f6",
+      inactiveFill: "#93c5fd",
+      svgPath:
+        "M 8,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z",
+    },
+    {
+      key: "students",
+      label: t("teacherLayout.nav.allStudents"),
+      icon: Users,
+      iconColor: "text-green-600",
+      textColor: "text-green-800",
+      activeFill: "#22c55e",
+      inactiveFill: "#86efac",
+      svgPath:
+        "M 18,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z",
+    },
+    {
+      key: "materials",
+      label: t("teacherLayout.nav.publicPrograms"),
+      icon: BookOpen,
+      iconColor: "text-purple-600",
+      textColor: "text-purple-800",
+      activeFill: "#a855f7",
+      inactiveFill: "#d8b4fe",
+      svgPath:
+        "M 18,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z",
+    },
+    {
+      key: "resources",
+      label: t("teacherDashboard.functionButtons.resourceMaterials.title"),
+      icon: Package,
+      iconColor: "text-cyan-600",
+      textColor: "text-cyan-800",
+      activeFill: "#06b6d4",
+      inactiveFill: "#67e8f9",
+      svgPath:
+        "M 8,0 L 92,0 Q 100,0 100,8 L 100,52 Q 100,60 92,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z",
+    },
   ];
 
   return (
@@ -302,7 +350,11 @@ export default function TeacherDashboard() {
                   setIsTransitioning(true);
                 }}
                 className="relative flex-1 flex flex-col items-center focus:outline-none transition-all duration-200"
-                style={{ paddingTop: "20px", marginLeft: "0", filter: isActive ? "saturate(1)" : "none" }}
+                style={{
+                  paddingTop: "20px",
+                  marginLeft: "0",
+                  filter: isActive ? "saturate(1)" : "none",
+                }}
               >
                 {/* Circle icon — bottom half overlaps trapezoid top edge */}
                 <div
@@ -341,7 +393,11 @@ export default function TeacherDashboard() {
                       isActive ? tab.textColor : `${tab.textColor} opacity-50`
                     }`}
                   >
-                    <p className={`text-[15px] leading-tight px-4 break-words w-full ${isActive ? "font-bold" : "font-semibold"}`}>{tab.label}</p>
+                    <p
+                      className={`text-[15px] leading-tight px-4 break-words w-full ${isActive ? "font-bold" : "font-semibold"}`}
+                    >
+                      {tab.label}
+                    </p>
                   </div>
                 </div>
               </button>
@@ -356,37 +412,71 @@ export default function TeacherDashboard() {
             className="absolute z-20 transition-all duration-300"
             style={{
               top: "-18px",
-              left: `${(tabs.findIndex((t) => t.key === activeTab) + 0.5) / tabs.length * 100}%`,
+              left: `${((tabs.findIndex((t) => t.key === activeTab) + 0.5) / tabs.length) * 100}%`,
               transform: "translateX(-50%)",
             }}
           >
-            <div style={{
-              width: 0, height: 0,
-              borderLeft: "18px solid transparent",
-              borderRight: "18px solid transparent",
-              borderBottom: "18px solid rgba(255,255,255,0.8)",
-            }} />
+            <div
+              style={{
+                width: 0,
+                height: 0,
+                borderLeft: "18px solid transparent",
+                borderRight: "18px solid transparent",
+                borderBottom: "18px solid rgba(255,255,255,0.8)",
+              }}
+            />
           </div>
 
-        <div className="overflow-hidden rounded-2xl relative min-h-[300px]">
-          {/* Outgoing content */}
-          {isTransitioning && prevTab && (
+          <div className="overflow-hidden rounded-2xl relative min-h-[300px]">
+            {/* Outgoing content */}
+            {isTransitioning && prevTab && (
+              <div
+                className={`absolute inset-0 overflow-auto bg-white/80 ${
+                  slideDir === "left"
+                    ? "animate-slide-out-left"
+                    : "animate-slide-out-right"
+                }`}
+              >
+                {prevTab === "intro" ? (
+                  <SystemOverviewTab />
+                ) : prevTab === "classrooms" ? (
+                  <ClassroomsTab />
+                ) : prevTab === "students" ? (
+                  <AllStudentsTab />
+                ) : prevTab === "materials" ? (
+                  <MaterialsTab />
+                ) : prevTab === "resources" ? (
+                  <ResourceMaterialsTab />
+                ) : (
+                  <div className="min-h-[300px] flex items-center justify-center text-gray-400 text-sm">
+                    內容即將推出
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Incoming content */}
             <div
-              className={`absolute inset-0 overflow-auto bg-white/80 ${
-                slideDir === "left"
-                  ? "animate-slide-out-left"
-                  : "animate-slide-out-right"
+              className={`bg-white/80 ${
+                isTransitioning
+                  ? slideDir === "left"
+                    ? "animate-slide-from-right"
+                    : "animate-slide-from-left"
+                  : ""
               }`}
+              onAnimationEnd={() => {
+                setIsTransitioning(false);
+                setPrevTab(null);
+              }}
             >
-              {prevTab === "intro" ? (
+              {activeTab === "intro" ? (
                 <SystemOverviewTab />
-              ) : prevTab === "classrooms" ? (
+              ) : activeTab === "classrooms" ? (
                 <ClassroomsTab />
-              ) : prevTab === "students" ? (
+              ) : activeTab === "students" ? (
                 <AllStudentsTab />
-              ) : prevTab === "materials" ? (
+              ) : activeTab === "materials" ? (
                 <MaterialsTab />
-              ) : prevTab === "resources" ? (
+              ) : activeTab === "resources" ? (
                 <ResourceMaterialsTab />
               ) : (
                 <div className="min-h-[300px] flex items-center justify-center text-gray-400 text-sm">
@@ -394,38 +484,7 @@ export default function TeacherDashboard() {
                 </div>
               )}
             </div>
-          )}
-          {/* Incoming content */}
-          <div
-            className={`bg-white/80 ${
-              isTransitioning
-                ? slideDir === "left"
-                  ? "animate-slide-from-right"
-                  : "animate-slide-from-left"
-                : ""
-            }`}
-            onAnimationEnd={() => {
-              setIsTransitioning(false);
-              setPrevTab(null);
-            }}
-          >
-            {activeTab === "intro" ? (
-              <SystemOverviewTab />
-            ) : activeTab === "classrooms" ? (
-              <ClassroomsTab />
-            ) : activeTab === "students" ? (
-              <AllStudentsTab />
-            ) : activeTab === "materials" ? (
-              <MaterialsTab />
-            ) : activeTab === "resources" ? (
-              <ResourceMaterialsTab />
-            ) : (
-              <div className="min-h-[300px] flex items-center justify-center text-gray-400 text-sm">
-                內容即將推出
-              </div>
-            )}
           </div>
-        </div>
         </div>
       </div>
     </>
