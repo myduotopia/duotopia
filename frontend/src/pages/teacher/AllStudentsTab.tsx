@@ -18,14 +18,14 @@ function Section({ title, gifUrl, gifAlt, isEn }: SectionProps) {
         style={isEn ? {
           maxWidth: "75%",
           fontFamily: "'Caveat', 'Dancing Script', cursive",
-          fontSize: "1.6rem",
+          fontSize: "clamp(1.1rem, 3.5vw, 1.6rem)",
           lineHeight: 1.3,
           color: "#1e293b",
           fontWeight: 600,
           textWrap: "balance",
         } : {
           maxWidth: "75%",
-          fontSize: "1.25rem",
+          fontSize: "clamp(0.95rem, 2.8vw, 1.25rem)",
           lineHeight: 1.4,
           color: "#1e293b",
           fontWeight: 700,
@@ -60,7 +60,7 @@ export default function AllStudentsTab() {
   const isEn = i18n.language === "en";
 
   return (
-    <div className="px-8 py-8 space-y-12 w-full">
+    <div className="px-1 py-2 md:px-8 md:py-8 space-y-12 w-full">
       <Section
         title={t("teacherDashboard.allStudentsTab.section1")}
         gifUrl={GIF_SECTION1_URL}

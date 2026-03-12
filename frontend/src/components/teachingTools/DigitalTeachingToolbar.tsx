@@ -82,7 +82,6 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
     return () => window.removeEventListener("resize", onResize);
   }, [clampTimerPos]);
 
-
   // 初始化音效
   useEffect(() => {
     const audio = new Audio(
@@ -275,7 +274,10 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       onTouchStart={(e) => startDrag(e, setTimerPos, timerPos)}
     >
       <div className="absolute top-0 w-full flex justify-between items-center px-6 pt-5 pb-1 opacity-0 group-hover:opacity-100 pointer-events-none">
-        <GripHorizontal size={18} className="text-gray-400 pointer-events-auto" />
+        <GripHorizontal
+          size={18}
+          className="text-gray-400 pointer-events-auto"
+        />
         <button
           onClick={onClose}
           className="text-gray-400 hover:text-red-500 pointer-events-auto"
@@ -332,13 +334,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
             <div className="flex flex-col items-center">
               <button
                 onClick={() => {
-                  if (!isActive)
-                    setTimeLeft(
-                      Math.max(
-                        0,
-                        timeLeft + 60,
-                      ),
-                    );
+                  if (!isActive) setTimeLeft(Math.max(0, timeLeft + 60));
                 }}
                 className="text-gray-400 hover:text-blue-500"
                 aria-label="Increase minutes"
@@ -348,13 +344,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
               <span>{String(currentMin).padStart(2, "0")}</span>
               <button
                 onClick={() => {
-                  if (!isActive)
-                    setTimeLeft(
-                      Math.max(
-                        0,
-                        timeLeft - 60,
-                      ),
-                    );
+                  if (!isActive) setTimeLeft(Math.max(0, timeLeft - 60));
                 }}
                 className="text-gray-400 hover:text-blue-500 rotate-180"
                 aria-label="Decrease minutes"
@@ -366,13 +356,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
             <div className="flex flex-col items-center">
               <button
                 onClick={() => {
-                  if (!isActive)
-                    setTimeLeft(
-                      Math.max(
-                        0,
-                        timeLeft + 10,
-                      ),
-                    );
+                  if (!isActive) setTimeLeft(Math.max(0, timeLeft + 10));
                 }}
                 className="text-gray-400 hover:text-blue-500"
                 aria-label="Increase seconds"
@@ -382,13 +366,7 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
               <span>{String(currentSec).padStart(2, "0")}</span>
               <button
                 onClick={() => {
-                  if (!isActive)
-                    setTimeLeft(
-                      Math.max(
-                        0,
-                        timeLeft - 10,
-                      ),
-                    );
+                  if (!isActive) setTimeLeft(Math.max(0, timeLeft - 10));
                 }}
                 className="text-gray-400 hover:text-blue-500 rotate-180"
                 aria-label="Decrease seconds"
@@ -746,7 +724,10 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
         />
       </div>
       <div className="absolute top-0 w-full flex justify-between items-center px-4 pt-5 pb-1 opacity-0 group-hover:opacity-100 pointer-events-none">
-        <GripHorizontal size={18} className="text-gray-400 pointer-events-auto" />
+        <GripHorizontal
+          size={18}
+          className="text-gray-400 pointer-events-auto"
+        />
         <button
           onClick={onClose}
           className="text-gray-400 hover:text-red-500 pointer-events-auto"
@@ -863,7 +844,8 @@ const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
     if (
       (e.target as HTMLElement).closest("button") ||
       (e.target as HTMLElement).closest(".resize-handle")
-    ) return;
+    )
+      return;
 
     const clientX = (e as React.TouchEvent).touches
       ? (e as React.TouchEvent).touches[0].clientX
@@ -965,7 +947,10 @@ const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
     >
       {/* Drag handle + close */}
       <div className="absolute top-0 w-full flex justify-between items-center px-4 pt-5 pb-1 opacity-0 group-hover:opacity-100 pointer-events-none">
-        <GripHorizontal size={18} className="text-gray-400 pointer-events-auto" />
+        <GripHorizontal
+          size={18}
+          className="text-gray-400 pointer-events-auto"
+        />
         <button
           onClick={onClose}
           className="text-gray-400 hover:text-red-500 pointer-events-auto"
@@ -986,7 +971,8 @@ const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
           className="absolute top-0 left-0 right-0 pointer-events-none z-10"
           style={{
             height: 16,
-            background: "linear-gradient(to bottom, rgba(255,255,255,0.7), transparent)",
+            background:
+              "linear-gradient(to bottom, rgba(255,255,255,0.7), transparent)",
           }}
         />
         {/* Bottom fade */}
@@ -994,7 +980,8 @@ const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
           className="absolute bottom-0 left-0 right-0 pointer-events-none z-10"
           style={{
             height: 16,
-            background: "linear-gradient(to top, rgba(255,255,255,0.7), transparent)",
+            background:
+              "linear-gradient(to top, rgba(255,255,255,0.7), transparent)",
           }}
         />
         {/* Reel items */}
@@ -1127,7 +1114,10 @@ const DigitalTeachingToolbar: React.FC = () => {
         frameId = requestAnimationFrame(() => {
           const halfH = (toolbarRef.current?.offsetHeight ?? 180) / 2;
           setToolbarY(
-            Math.max(halfH, Math.min(window.innerHeight - halfH, moveY - startOffset)),
+            Math.max(
+              halfH,
+              Math.min(window.innerHeight - halfH, moveY - startOffset),
+            ),
           );
         });
         if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
@@ -1293,10 +1283,7 @@ const DigitalTeachingToolbar: React.FC = () => {
               {t("teacherToolbar.help.dontShowAgain")}
             </label>
           </div>
-          <Button
-            onClick={() => setShowHelp(false)}
-            className="w-full"
-          >
+          <Button onClick={() => setShowHelp(false)} className="w-full">
             {t("teacherToolbar.help.start")}
           </Button>
         </DialogContent>

@@ -542,7 +542,8 @@
       "gifAlt2": "Share QR code demo"
     },
     "materialsTab": {
-      "placeholder": "Content coming soon"
+      "placeholder": "Tutorial images coming soon — all features are fully available",
+      "encouragement": "Try it yourself — surprises await!"
     },
     "resourceMaterialsTab": {
       "section1": "Resource packs help teachers hit the ground running — duplicate a complete topic curriculum and start assigning activities right away.",

@@ -1,6 +1,7 @@
 # CICD.md - Duotopia CI/CD 部署準則
 
 本文件規範 Duotopia 專案的 CI/CD 流程與部署準則，避免重複犯錯。
+<!-- Release workflow test: RELEASE_PAT verification -->
 
 ---
 

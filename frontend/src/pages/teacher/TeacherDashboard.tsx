@@ -199,11 +199,11 @@ export default function TeacherDashboard() {
 
 
   const tabs = [
-    { key: "intro",      label: t("teacherDashboard.tabs.intro"),       icon: Sparkles,      iconColor: "text-amber-600",  textColor: "text-amber-800",  activeFill: "#fbbf24", inactiveFill: "#fbbf24", svgPath: "M 8,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 0,52 L 0,8 Q 0,0 8,0 Z"       },
-    { key: "classrooms", label: t("teacherLayout.nav.myClassrooms"),     icon: GraduationCap, iconColor: "text-blue-700",   textColor: "text-blue-800",   activeFill: "#60a5fa", inactiveFill: "#60a5fa", svgPath: "M 8,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z"  },
-    { key: "students",   label: t("teacherLayout.nav.allStudents"),      icon: Users,         iconColor: "text-green-700",  textColor: "text-green-800",  activeFill: "#4ade80", inactiveFill: "#4ade80", svgPath: "M 18,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z"  },
-    { key: "materials",  label: t("teacherLayout.nav.publicPrograms"),   icon: BookOpen,      iconColor: "text-purple-700", textColor: "text-purple-800", activeFill: "#c084fc", inactiveFill: "#c084fc", svgPath: "M 18,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z"  },
-    { key: "resources",  label: t("teacherDashboard.functionButtons.resourceMaterials.title"), icon: Package, iconColor: "text-orange-700", textColor: "text-orange-800", activeFill: "#fb923c", inactiveFill: "#fb923c", svgPath: "M 8,0 L 92,0 Q 100,0 100,8 L 100,52 Q 100,60 92,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z" },
+    { key: "intro",      label: t("teacherDashboard.tabs.intro"),       icon: Sparkles,      iconColor: "text-red-600",    textColor: "text-red-800",    activeFill: "#ef4444", inactiveFill: "#fca5a5", svgPath: "M 8,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 0,52 L 0,8 Q 0,0 8,0 Z"       },
+    { key: "classrooms", label: t("teacherLayout.nav.myClassrooms"),     icon: GraduationCap, iconColor: "text-blue-600",   textColor: "text-blue-800",   activeFill: "#3b82f6", inactiveFill: "#93c5fd", svgPath: "M 8,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z"  },
+    { key: "students",   label: t("teacherLayout.nav.allStudents"),      icon: Users,         iconColor: "text-green-600",  textColor: "text-green-800",  activeFill: "#22c55e", inactiveFill: "#86efac", svgPath: "M 18,0 L 92,0 Q 100,0 98.7,7.9 L 91.3,52.1 Q 90,60 82,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z"  },
+    { key: "materials",  label: t("teacherLayout.nav.publicPrograms"),   icon: BookOpen,      iconColor: "text-purple-600", textColor: "text-purple-800", activeFill: "#a855f7", inactiveFill: "#d8b4fe", svgPath: "M 18,0 L 82,0 Q 90,0 91.3,7.9 L 98.7,52.1 Q 100,60 92,60 L 8,60 Q 0,60 1.3,52.1 L 8.7,7.9 Q 10,0 18,0 Z"  },
+    { key: "resources",  label: t("teacherDashboard.functionButtons.resourceMaterials.title"), icon: Package, iconColor: "text-cyan-600", textColor: "text-cyan-800", activeFill: "#06b6d4", inactiveFill: "#67e8f9", svgPath: "M 8,0 L 92,0 Q 100,0 100,8 L 100,52 Q 100,60 92,60 L 18,60 Q 10,60 8.7,52.1 L 1.3,7.9 Q 0,0 8,0 Z" },
   ];
 
   return (
@@ -316,9 +316,8 @@ export default function TeacherDashboard() {
                 </div>
                 {/* Drop-shadow wrapper — must wrap SVG element separately */}
                 <div
-                  className="w-full relative flex-1"
+                  className="w-full relative flex-1 min-h-[32px] md:min-h-[56px]"
                   style={{
-                    minHeight: "56px",
                     filter: isActive
                       ? "drop-shadow(0 4px 10px rgba(0,0,0,0.08))"
                       : "none",
@@ -336,9 +335,9 @@ export default function TeacherDashboard() {
                       fill={isActive ? tab.activeFill : tab.inactiveFill}
                     />
                   </svg>
-                  {/* Label */}
+                  {/* Label — hidden on mobile, shown on md+ */}
                   <div
-                    className={`relative z-10 text-center pt-8 pb-3 transition-colors duration-200 ${
+                    className={`relative z-10 text-center pt-8 pb-3 transition-colors duration-200 hidden md:block ${
                       isActive ? tab.textColor : `${tab.textColor} opacity-50`
                     }`}
                   >

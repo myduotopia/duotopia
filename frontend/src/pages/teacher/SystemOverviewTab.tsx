@@ -46,12 +46,12 @@ function Section({ title, imageSrc, imageAlt, reverse = false, isEn = false, sho
         className="w-3/4 text-center"
         style={isEn ? {
           fontFamily: "'Caveat', 'Dancing Script', cursive",
-          fontSize: "1.6rem",
+          fontSize: "clamp(1.1rem, 3.5vw, 1.6rem)",
           lineHeight: 1.3,
           color: "#1e293b",
           fontWeight: 600,
         } : {
-          fontSize: "1.25rem",
+          fontSize: "clamp(0.95rem, 2.8vw, 1.25rem)",
           lineHeight: 1.4,
           color: "#1e293b",
           fontWeight: 700,
@@ -135,7 +135,7 @@ export default function SystemOverviewTab() {
   const isEn = i18n.language === "en";
 
   return (
-    <div className="px-8 py-8 space-y-8 w-full">
+    <div className="px-1 py-2 md:px-8 md:py-8 space-y-8 w-full">
       <Section
         title={t("teacherDashboard.systemOverview.section1")}
         imageSrc="https://storage.googleapis.com/duotopia-social-media-videos/website/systemoverview-01.png"
