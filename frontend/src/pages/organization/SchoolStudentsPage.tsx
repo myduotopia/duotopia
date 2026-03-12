@@ -54,7 +54,7 @@ export default function SchoolStudentsPage() {
 
   const [students, setStudents] = useState<Student[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
-  const [selectedTab, setSelectedTab] = useState("unassigned");
+  const [selectedTab, setSelectedTab] = useState("all");
   const [school, setSchool] = useState<School | null>(
     location.state?.school ?? null,
   );
@@ -62,6 +62,7 @@ export default function SchoolStudentsPage() {
     location.state?.organization ?? null,
   );
   const [loading, setLoading] = useState(true);
+  const [isFilterLoading, setIsFilterLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -159,7 +160,7 @@ export default function SchoolStudentsPage() {
 
     try {
       setError(null);
-      setLoading(true);
+      setIsFilterLoading(true);
 
       const params: {
         search?: string;
@@ -173,7 +174,7 @@ export default function SchoolStudentsPage() {
         params.search = searchTerm;
       } else if (selectedTab === "unassigned") {
         params.unassigned = true;
-      } else {
+      } else if (selectedTab !== "all") {
         const id = Number(selectedTab);
         if (!Number.isNaN(id)) {
           params.classroom_id = id;
@@ -189,7 +190,7 @@ export default function SchoolStudentsPage() {
       logError("Failed to fetch students", error, { schoolId });
       setError("載入學生列表失敗");
     } finally {
-      setLoading(false);
+      setIsFilterLoading(false);
     }
   };
 
@@ -350,6 +351,7 @@ export default function SchoolStudentsPage() {
                 <SelectValue placeholder="選擇班級" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">全部學生</SelectItem>
                 <SelectItem value="unassigned">未分配</SelectItem>
                 {classrooms.map((classroom) => (
                   <SelectItem key={classroom.id} value={String(classroom.id)}>
@@ -382,7 +384,7 @@ export default function SchoolStudentsPage() {
           {error && <ErrorMessage message={error} />}
 
           {/* Student List */}
-          {loading ? (
+          {isFilterLoading ? (
             <LoadingSpinner />
           ) : (
             <StudentListTable
