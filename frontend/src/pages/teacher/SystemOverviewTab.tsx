@@ -5,12 +5,32 @@ function AiBadge() {
     <div
       className="absolute -top-3 -right-3 z-10 w-12 h-12 rounded-full flex flex-col items-center justify-center select-none"
       style={{
-        background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)",
-        boxShadow: "0 2px 8px rgba(99,102,241,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
+        background:
+          "linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)",
+        boxShadow:
+          "0 2px 8px rgba(99,102,241,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
       }}
     >
-      <span style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.7)", lineHeight: 1 }}>✦</span>
-      <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "white", letterSpacing: "0.05em", lineHeight: 1 }}>AI</span>
+      <span
+        style={{
+          fontSize: "0.65rem",
+          color: "rgba(255,255,255,0.7)",
+          lineHeight: 1,
+        }}
+      >
+        ✦
+      </span>
+      <span
+        style={{
+          fontSize: "0.85rem",
+          fontWeight: 800,
+          color: "white",
+          letterSpacing: "0.05em",
+          lineHeight: 1,
+        }}
+      >
+        AI
+      </span>
     </div>
   );
 }
@@ -20,11 +40,22 @@ function MemoryBadge() {
     <div
       className="absolute -top-3 -left-3 z-10 w-12 h-12 rounded-full flex flex-col items-center justify-center select-none"
       style={{
-        background: "linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%)",
-        boxShadow: "0 2px 8px rgba(16,185,129,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
+        background:
+          "linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%)",
+        boxShadow:
+          "0 2px 8px rgba(16,185,129,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
       }}
     >
-      <span style={{ fontSize: "1.35rem", fontWeight: 700, color: "white", lineHeight: 1 }}>∞</span>
+      <span
+        style={{
+          fontSize: "1.35rem",
+          fontWeight: 700,
+          color: "white",
+          lineHeight: 1,
+        }}
+      >
+        ∞
+      </span>
     </div>
   );
 }
@@ -39,23 +70,35 @@ interface SectionProps {
   showMemoryBadge?: boolean;
 }
 
-function Section({ title, imageSrc, imageAlt, reverse = false, isEn = false, showAiBadge = false, showMemoryBadge = false }: SectionProps) {
+function Section({
+  title,
+  imageSrc,
+  imageAlt,
+  reverse = false,
+  isEn = false,
+  showAiBadge = false,
+  showMemoryBadge = false,
+}: SectionProps) {
   return (
     <div className="flex flex-col gap-4 items-center">
       <p
         className="w-3/4 text-center"
-        style={isEn ? {
-          fontFamily: "'Caveat', 'Dancing Script', cursive",
-          fontSize: "1.6rem",
-          lineHeight: 1.3,
-          color: "#1e293b",
-          fontWeight: 600,
-        } : {
-          fontSize: "1.25rem",
-          lineHeight: 1.4,
-          color: "#1e293b",
-          fontWeight: 700,
-        }}
+        style={
+          isEn
+            ? {
+                fontFamily: "'Caveat', 'Dancing Script', cursive",
+                fontSize: "1.6rem",
+                lineHeight: 1.3,
+                color: "#1e293b",
+                fontWeight: 600,
+              }
+            : {
+                fontSize: "1.25rem",
+                lineHeight: 1.4,
+                color: "#1e293b",
+                fontWeight: 700,
+              }
+        }
       >
         {title}
       </p>
@@ -86,10 +129,7 @@ interface ArrowProps {
 }
 
 function Arrow({ src, rotate = 0, flipX = false, className = "" }: ArrowProps) {
-  const transform = [
-    `rotate(${rotate}deg)`,
-    flipX ? "scaleX(-1)" : "",
-  ]
+  const transform = [`rotate(${rotate}deg)`, flipX ? "scaleX(-1)" : ""]
     .filter(Boolean)
     .join(" ");
 
@@ -125,7 +165,12 @@ function Arrow({ src, rotate = 0, flipX = false, className = "" }: ArrowProps) {
 
   return (
     <div className={`flex justify-center ${className}`}>
-      <img src={src} alt="arrow" className="w-16 h-auto" style={{ transform }} />
+      <img
+        src={src}
+        alt="arrow"
+        className="w-16 h-auto"
+        style={{ transform }}
+      />
     </div>
   );
 }
@@ -145,7 +190,10 @@ export default function SystemOverviewTab() {
       />
 
       {/* Arrow 1: right side, no flip */}
-      <Arrow src="https://storage.googleapis.com/duotopia-social-media-videos/website/handwritingarrow.png" className="ml-auto mr-6" />
+      <Arrow
+        src="https://storage.googleapis.com/duotopia-social-media-videos/website/handwritingarrow.png"
+        className="ml-auto mr-6"
+      />
 
       <Section
         title={t("teacherDashboard.systemOverview.section2")}
@@ -157,7 +205,11 @@ export default function SystemOverviewTab() {
       />
 
       {/* Arrow 2: left side, flipX */}
-      <Arrow src="https://storage.googleapis.com/duotopia-social-media-videos/website/handwritingarrow.png" flipX className="ml-6 mr-auto" />
+      <Arrow
+        src="https://storage.googleapis.com/duotopia-social-media-videos/website/handwritingarrow.png"
+        flipX
+        className="ml-6 mr-auto"
+      />
 
       <Section
         title={t("teacherDashboard.systemOverview.section3")}

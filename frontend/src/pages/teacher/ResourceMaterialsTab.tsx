@@ -1,7 +1,9 @@
 import { useTranslation } from "react-i18next";
 
-const GIF_SECTION1_URL = "https://storage.googleapis.com/duotopia-social-media-videos/website/Resource%20Materials-tab01.gif";
-const GIF_SECTION2_URL = "https://storage.googleapis.com/duotopia-social-media-videos/website/Resource%20Materials-tab02.gif";
+const GIF_SECTION1_URL =
+  "https://storage.googleapis.com/duotopia-social-media-videos/website/Resource%20Materials-tab01.gif";
+const GIF_SECTION2_URL =
+  "https://storage.googleapis.com/duotopia-social-media-videos/website/Resource%20Materials-tab02.gif";
 
 interface SectionProps {
   title: string;
@@ -15,22 +17,26 @@ function Section({ title, gifUrl, gifAlt, isEn }: SectionProps) {
     <div className="space-y-6">
       <p
         className="text-center mx-auto"
-        style={isEn ? {
-          maxWidth: "75%",
-          fontFamily: "'Caveat', 'Dancing Script', cursive",
-          fontSize: "1.6rem",
-          lineHeight: 1.3,
-          color: "#1e293b",
-          fontWeight: 600,
-          textWrap: "balance",
-        } : {
-          maxWidth: "75%",
-          fontSize: "1.25rem",
-          lineHeight: 1.4,
-          color: "#1e293b",
-          fontWeight: 700,
-          textWrap: "balance",
-        }}
+        style={
+          isEn
+            ? {
+                maxWidth: "75%",
+                fontFamily: "'Caveat', 'Dancing Script', cursive",
+                fontSize: "1.6rem",
+                lineHeight: 1.3,
+                color: "#1e293b",
+                fontWeight: 600,
+                textWrap: "balance",
+              }
+            : {
+                maxWidth: "75%",
+                fontSize: "1.25rem",
+                lineHeight: 1.4,
+                color: "#1e293b",
+                fontWeight: 700,
+                textWrap: "balance",
+              }
+        }
       >
         {title}
       </p>
