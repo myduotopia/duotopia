@@ -84,67 +84,74 @@ async def get_current_teacher(
 
 
 def build_student_response(student: Student, db: Session) -> dict:
-    """Build student response with schools and classrooms"""
-    # Get all schools the student belongs to
-    student_schools = (
-        db.query(StudentSchool)
+    """Build student response with schools and classrooms (single student fallback)"""
+    return build_student_responses_batch([student], db)[0] if student else {}
+
+
+def build_student_responses_batch(students: list, db: Session) -> list:
+    """Build student responses with schools and classrooms using batch queries.
+
+    Replaces N+1 pattern: instead of 5-7 queries per student,
+    uses 2 batch queries for all students.
+    """
+    student_ids = [s.id for s in students]
+    if not student_ids:
+        return []
+
+    # 1. Batch: get all schools for all students (1 JOIN query)
+    school_rows = (
+        db.query(StudentSchool.student_id, School.id, School.name)
+        .join(School, StudentSchool.school_id == School.id)
         .filter(
-            StudentSchool.student_id == student.id, StudentSchool.is_active.is_(True)
+            StudentSchool.student_id.in_(student_ids),
+            StudentSchool.is_active.is_(True),
         )
         .all()
     )
+    schools_map: dict = {}
+    for row in school_rows:
+        schools_map.setdefault(row[0], []).append({"id": str(row[1]), "name": row[2]})
 
-    schools = []
-    for ss in student_schools:
-        school = db.query(School).filter(School.id == ss.school_id).first()
-        if school:
-            schools.append({"id": str(school.id), "name": school.name})
-
-    # Get all classrooms the student belongs to
-    classroom_enrollments = (
-        db.query(ClassroomStudent)
+    # 2. Batch: get all classrooms + school_id for all students (1 JOIN query)
+    classroom_rows = (
+        db.query(
+            ClassroomStudent.student_id,
+            Classroom.id,
+            Classroom.name,
+            ClassroomSchool.school_id,
+        )
+        .join(Classroom, ClassroomStudent.classroom_id == Classroom.id)
+        .join(ClassroomSchool, ClassroomSchool.classroom_id == Classroom.id)
         .filter(
-            ClassroomStudent.student_id == student.id,
+            ClassroomStudent.student_id.in_(student_ids),
             ClassroomStudent.is_active.is_(True),
+            ClassroomSchool.is_active.is_(True),
         )
         .all()
     )
+    classrooms_map: dict = {}
+    for row in classroom_rows:
+        classrooms_map.setdefault(row[0], []).append(
+            {"id": row[1], "name": row[2], "school_id": str(row[3])}
+        )
 
-    classrooms = []
-    for cs in classroom_enrollments:
-        classroom = db.query(Classroom).filter(Classroom.id == cs.classroom_id).first()
-        if classroom:
-            # Get school for this classroom
-            classroom_school = (
-                db.query(ClassroomSchool)
-                .filter(
-                    ClassroomSchool.classroom_id == classroom.id,
-                    ClassroomSchool.is_active.is_(True),
-                )
-                .first()
-            )
-            if classroom_school:
-                classrooms.append(
-                    {
-                        "id": classroom.id,
-                        "name": classroom.name,
-                        "school_id": str(classroom_school.school_id),
-                    }
-                )
-
-    return {
-        "id": student.id,
-        "name": student.name,
-        "email": student.email,
-        "student_number": student.student_number,
-        "birthdate": student.birthdate.isoformat() if student.birthdate else None,
-        "is_active": student.is_active,
-        "password_changed": student.password_changed or False,
-        "created_at": student.created_at.isoformat() if student.created_at else None,
-        "last_login": student.last_login.isoformat() if student.last_login else None,
-        "schools": schools,
-        "classrooms": classrooms,
-    }
+    # 3. Assemble responses
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "email": s.email,
+            "student_number": s.student_number,
+            "birthdate": s.birthdate.isoformat() if s.birthdate else None,
+            "is_active": s.is_active,
+            "password_changed": s.password_changed or False,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "last_login": s.last_login.isoformat() if s.last_login else None,
+            "schools": schools_map.get(s.id, []),
+            "classrooms": classrooms_map.get(s.id, []),
+        }
+        for s in students
+    ]
 
 
 # ============ GET Endpoints ============
@@ -224,7 +231,7 @@ async def get_school_students(
     students = query.offset((page - 1) * limit).limit(limit).all()
 
     # Build response
-    result = [build_student_response(student, db) for student in students]
+    result = build_student_responses_batch(students, db)
 
     return result
 
@@ -269,7 +276,7 @@ async def get_classroom_students(
         .all()
     )
 
-    return [build_student_response(student, db) for student in classroom_students]
+    return build_student_responses_batch(classroom_students, db)
 
 
 # ============ POST Endpoints ============

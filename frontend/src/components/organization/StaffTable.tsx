@@ -92,13 +92,6 @@ export function StaffTable({
         canAssignGrade: true,
       },
       {
-        role: "school_admin",
-        label: "學校管理員",
-        canEditMaterials: false,
-        canAccessBackend: true,
-        canAssignGrade: true,
-      },
-      {
         role: "teacher",
         label: "教師",
         canEditMaterials: false,
@@ -452,7 +445,6 @@ export function StaffTable({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="teacher">教師</SelectItem>
-                      <SelectItem value="school_admin">學校管理員</SelectItem>
                       <SelectItem value="org_admin">組織管理員</SelectItem>
                     </SelectContent>
                   </Select>
@@ -467,13 +459,14 @@ export function StaffTable({
                 )}
               </TableCell>
               <TableCell>
-                {canEditRoles && member.id !== user?.id ? (
+                {canEditRoles ? (
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={member.is_active}
                       onCheckedChange={(checked: boolean) =>
                         onToggleStatus?.(member, checked)
                       }
+                      disabled={member.id === user?.id}
                     />
                     <span className="text-sm text-gray-600">
                       {member.is_active ? "啟用" : "停用"}

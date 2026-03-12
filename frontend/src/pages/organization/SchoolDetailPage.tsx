@@ -197,7 +197,6 @@ export default function SchoolDetailPage() {
       <div className="flex items-center justify-between">
         <Breadcrumb
           items={[
-            { label: "組織管理" },
             ...(organization
               ? [
                   {

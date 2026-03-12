@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
@@ -96,11 +96,7 @@ export default function TeacherClassrooms() {
   const [assignmentClassroom, setAssignmentClassroom] =
     useState<ClassroomDetail | null>(null);
 
-  useEffect(() => {
-    fetchClassrooms();
-  }, [selectedSchool, selectedOrganization, mode]);
-
-  const fetchClassrooms = async () => {
+  const fetchClassrooms = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -130,7 +126,11 @@ export default function TeacherClassrooms() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [mode, selectedSchool, selectedOrganization]);
+
+  useEffect(() => {
+    fetchClassrooms();
+  }, [fetchClassrooms]);
 
   const handleEdit = (classroom: ClassroomDetail) => {
     setEditingClassroom(classroom);

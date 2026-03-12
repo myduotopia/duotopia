@@ -41,11 +41,7 @@ export default function OrganizationsListPage() {
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -66,7 +62,11 @@ export default function OrganizationsListPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
 
   const handleEditClick = (org: Organization) => {
     setEditingOrg(org);
@@ -74,17 +74,16 @@ export default function OrganizationsListPage() {
   };
 
   const handleEditSuccess = useCallback(() => {
-    fetchOrganizations(); // Refresh list after successful edit
-    // Sync sidebar organization data in OrganizationContext
+    fetchOrganizations();
     if (token) {
       refreshOrganizations(token);
     }
-  }, [token, refreshOrganizations]);
+  }, [token, refreshOrganizations, fetchOrganizations]);
 
   return (
     <div className="space-y-6">
       {/* Breadcrumb */}
-      <Breadcrumb items={[{ label: "組織管理" }, { label: "所有機構" }]} />
+      <Breadcrumb items={[{ label: "所有機構" }]} />
 
       {/* Header */}
       <div className="flex items-center justify-between">

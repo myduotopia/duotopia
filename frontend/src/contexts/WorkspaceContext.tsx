@@ -10,6 +10,7 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from "react";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
@@ -93,19 +94,27 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   const [selectedOrganization, setSelectedOrganization] =
     useState<Organization | null>(() => {
       const saved = localStorage.getItem(STORAGE_KEYS.ORGANIZATION);
-      return saved ? JSON.parse(saved) : null;
+      try {
+        return saved ? JSON.parse(saved) : null;
+      } catch {
+        return null;
+      }
     });
 
   const [selectedSchool, setSelectedSchool] = useState<School | null>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SCHOOL);
-    return saved ? JSON.parse(saved) : null;
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Fetch organizations from API
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     if (!token) {
       console.warn("No token available, skipping organization fetch");
       return;
@@ -143,14 +152,14 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, teacherId]);
 
   // Load organizations on mount and when token/teacherId changes
   useEffect(() => {
     if (teacherId && token) {
       fetchOrganizations();
     }
-  }, [teacherId, token]);
+  }, [teacherId, token, fetchOrganizations]);
 
   // Persist mode to localStorage
   const setMode = (newMode: WorkspaceMode) => {

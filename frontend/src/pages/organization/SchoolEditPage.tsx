@@ -7,7 +7,7 @@ export default function SchoolEditPage() {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "組織管理" }, { label: "學校詳情" }]} />
+      <Breadcrumb items={[{ label: "學校詳情" }]} />
 
       <Card>
         <CardHeader>

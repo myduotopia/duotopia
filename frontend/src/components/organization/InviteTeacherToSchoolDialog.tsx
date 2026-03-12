@@ -299,22 +299,6 @@ export function InviteTeacherToSchoolDialog({
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="role-existing">角色</Label>
-                <Select
-                  value={selectedRoleExisting}
-                  onValueChange={setSelectedRoleExisting}
-                >
-                  <SelectTrigger id="role-existing">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="teacher">教師</SelectItem>
-                    <SelectItem value="school_director">主任</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
               <DialogFooter>
                 <Button
                   type="button"
@@ -376,24 +360,6 @@ export function InviteTeacherToSchoolDialog({
                   required
                   placeholder="example@email.com"
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="role-new">角色</Label>
-                <Select
-                  value={newTeacherData.role}
-                  onValueChange={(value) =>
-                    setNewTeacherData({ ...newTeacherData, role: value })
-                  }
-                >
-                  <SelectTrigger id="role-new">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="teacher">教師</SelectItem>
-                    <SelectItem value="school_director">主任</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               <div className="rounded-lg bg-blue-50 p-3">

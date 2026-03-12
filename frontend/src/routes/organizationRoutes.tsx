@@ -2,6 +2,7 @@ import { Route } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import OrganizationLayout from "@/layouts/OrganizationLayout";
 import OrganizationDashboard from "@/pages/organization/OrganizationDashboard";
+import { OrganizationIndexRedirect } from "@/components/organization/OrganizationIndexRedirect";
 import SchoolsPage from "@/pages/organization/SchoolsPage";
 import TeachersPage from "@/pages/organization/TeachersPage";
 import MaterialsPage from "@/pages/organization/MaterialsPage";
@@ -80,7 +81,7 @@ export const organizationRoutes = (
     <Route path="teachers" element={<TeachersPage />} />
     <Route path="materials" element={<MaterialsPage />} />
 
-    {/* Default redirect to dashboard */}
-    <Route index element={<OrganizationDashboard />} />
+    {/* Default: redirect to first organization */}
+    <Route index element={<OrganizationIndexRedirect />} />
   </Route>
 );

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { apiClient } from "@/lib/api";
@@ -26,7 +26,14 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Plus, Search, Upload } from "lucide-react";
+import {
+  Users,
+  Plus,
+  Search,
+  Upload,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { toast } from "sonner";
 
 interface Classroom {
@@ -84,9 +91,16 @@ export default function SchoolStudentsPage() {
   const [pendingResetStudent, setPendingResetStudent] =
     useState<Student | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // Guard: prevent StrictMode double-mount from triggering duplicate fetches
+  const fetchedForRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (schoolId && token) {
+      if (fetchedForRef.current === schoolId) return;
+      fetchedForRef.current = schoolId;
       fetchSchool();
       fetchClassrooms();
     }
@@ -106,7 +120,7 @@ export default function SchoolStudentsPage() {
         setSchool(data);
         // 確保立即獲取組織信息
         if (data.organization_id) {
-          await fetchOrganization(data.organization_id);
+          fetchOrganization(data.organization_id);
         }
         await fetchStudents();
       } else {
@@ -190,6 +204,7 @@ export default function SchoolStudentsPage() {
         params,
       )) as Student[];
       setStudents(data);
+      setCurrentPage(1);
     } catch (error) {
       logError("Failed to fetch students", error, { schoolId });
       setError("載入學生列表失敗");
@@ -198,8 +213,16 @@ export default function SchoolStudentsPage() {
     }
   };
 
+  // Track if initial student load is done (fetchSchool handles it)
+  const skipNextDebounce = useRef(true);
+
   useEffect(() => {
     if (schoolId) {
+      // Skip first trigger — fetchSchool already loads students on mount
+      if (skipNextDebounce.current) {
+        skipNextDebounce.current = false;
+        return;
+      }
       const debounceTimer = setTimeout(() => {
         fetchStudents();
       }, 300);
@@ -316,7 +339,6 @@ export default function SchoolStudentsPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { label: "組織管理" },
           ...(organization
             ? [
                 {
@@ -420,14 +442,53 @@ export default function SchoolStudentsPage() {
           {isFilterLoading ? (
             <LoadingSpinner />
           ) : (
-            <StudentListTable
-              students={students}
-              onEdit={handleEdit}
-              onAssignClassroom={handleAssignClassroom}
-              onRemove={handleRemove}
-              onRemoveFromClassroom={handleRemoveFromClassroom}
-              onResetPassword={handleResetPassword}
-            />
+            <>
+              <StudentListTable
+                students={students.slice(
+                  (currentPage - 1) * itemsPerPage,
+                  currentPage * itemsPerPage,
+                )}
+                onEdit={handleEdit}
+                onAssignClassroom={handleAssignClassroom}
+                onRemove={handleRemove}
+                onRemoveFromClassroom={handleRemoveFromClassroom}
+                onResetPassword={handleResetPassword}
+              />
+              {students.length > itemsPerPage &&
+                (() => {
+                  const totalPages = Math.ceil(students.length / itemsPerPage);
+                  return (
+                    <div className="flex items-center justify-center gap-3 mt-6">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCurrentPage((prev) => Math.max(1, prev - 1))
+                        }
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm text-gray-600">
+                        第 {currentPage} 頁 / 共 {totalPages} 頁（共{" "}
+                        {students.length} 位學生）
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCurrentPage((prev) =>
+                            Math.min(totalPages, prev + 1),
+                          )
+                        }
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })()}
+            </>
           )}
         </CardContent>
       </Card>

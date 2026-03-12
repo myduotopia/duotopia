@@ -51,17 +51,11 @@ export const useSidebarRoles = (
 
       try {
         setRolesLoading(true);
-        console.log(
-          "🔍 [useSidebarRoles] Fetching roles from:",
-          `${API_URL}/api/teachers/me/roles`,
-        );
         const response = await fetch(`${API_URL}/api/teachers/me/roles`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (response.ok) {
           const data = await response.json();
-          console.log("✅ [useSidebarRoles] Roles received:", data);
-          console.log("✅ [useSidebarRoles] all_roles:", data.all_roles);
           setUserRoles(data.all_roles || []);
         } else {
           console.error(
