@@ -94,12 +94,20 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   const [selectedOrganization, setSelectedOrganization] =
     useState<Organization | null>(() => {
       const saved = localStorage.getItem(STORAGE_KEYS.ORGANIZATION);
-      return saved ? JSON.parse(saved) : null;
+      try {
+        return saved ? JSON.parse(saved) : null;
+      } catch {
+        return null;
+      }
     });
 
   const [selectedSchool, setSelectedSchool] = useState<School | null>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SCHOOL);
-    return saved ? JSON.parse(saved) : null;
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
 
   const [loading, setLoading] = useState(false);
