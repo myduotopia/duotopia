@@ -1,5 +1,7 @@
 """Student authentication endpoints."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from datetime import timedelta, datetime, timezone
@@ -12,6 +14,8 @@ from auth import (
     verify_password,
     get_current_user,
 )
+
+logger = logging.getLogger(__name__)
 from .validators import (
     StudentValidateRequest,
     StudentLoginResponse,
@@ -102,13 +106,10 @@ async def validate_student(
         )
 
     # 驗證密碼 - 直接用 Identity 統一密碼（OAuth-only 帳號可能沒有密碼）
-    if not identity.password_hash or not verify_password(
-        request.password, identity.password_hash
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-        )
+    password_matched = bool(
+        identity.password_hash
+        and verify_password(request.password, identity.password_hash)
+    )
 
     # 找到該 Identity 下的主要學生帳號（用來建立 token）
     student = (
@@ -120,6 +121,28 @@ async def validate_student(
         .order_by(Student.is_primary_account.desc().nulls_last(), Student.id)
         .first()
     )
+
+    # 🔍 Debug logging: 只在登入失敗時記錄詳細資訊
+    if not password_matched:
+        # 額外測試 Student 本地密碼（僅 log，不影響結果）
+        student_pw_matched = None
+        if student and student.password_hash:
+            student_pw_matched = verify_password(request.password, student.password_hash)
+
+        logger.warning(
+            f"[LOGIN-DEBUG] validate_student (email login) FAILED | "
+            f"email={request.email} | "
+            f"identity_id={identity.id} | "
+            f"identity_has_password={identity.password_hash is not None} | "
+            f"identity_password_changed={identity.password_changed} | "
+            f"student_id={student.id if student else 'None'} | "
+            f"student_local_pw_matched={student_pw_matched}"
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
 
     if not student:
         raise HTTPException(

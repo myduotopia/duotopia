@@ -203,7 +203,7 @@ async def switch_account(
                 status_code=400,
                 detail="Password is required for email-linked accounts",
             )
-        password_hash = _get_student_password_hash(db, target_student)
+        password_hash, _source = _get_student_password_hash(db, target_student)
         if not verify_password(request.password, password_hash):
             raise HTTPException(status_code=401, detail="Invalid password")
 
