@@ -21,6 +21,10 @@ import {
   BookOpen,
   Users,
   Hand,
+  ChevronLeft,
+  ChevronRight,
+  Volume2,
+  Gamepad2,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { QRCodeSVG } from "qrcode.react";
@@ -36,11 +40,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
+/** Compute max scale so the tool can fill up to 95% of the viewport */
+const getMaxScale = (baseW: number, baseH: number): number => {
+  const maxScaleX = (window.innerWidth * 0.95) / baseW;
+  const maxScaleY = (window.innerHeight * 0.95) / baseH;
+  return Math.min(maxScaleX, maxScaleY);
+};
+
 // Timer Component
-const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
-  show,
-  onClose,
-}) => {
+const TimerTool: React.FC<{
+  show: boolean;
+  onClose: () => void;
+  zCounterRef: React.MutableRefObject<number>;
+}> = ({ show, onClose, zCounterRef }) => {
   const [, setMinutes] = useState(0);
   const [, setSeconds] = useState(0);
   const [isActive, setIsActive] = useState(false);
@@ -54,10 +66,14 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
   const hasInitializedTimerPos = useRef(false);
 
   const clampTimerPos = useCallback(
-    (pos: { x: number; y: number }) => ({
-      x: Math.min(Math.max(0, pos.x), window.innerWidth - 320 * timerScale),
-      y: Math.min(Math.max(0, pos.y), window.innerHeight - 420 * timerScale),
-    }),
+    (pos: { x: number; y: number }) => {
+      const w = containerRef.current?.offsetWidth ?? 280;
+      const h = containerRef.current?.offsetHeight ?? 320;
+      return {
+        x: Math.min(Math.max(0, pos.x), Math.max(0, window.innerWidth - w * timerScale)),
+        y: Math.min(Math.max(0, pos.y), Math.max(0, window.innerHeight - h * timerScale)),
+      };
+    },
     [timerScale],
   );
 
@@ -72,8 +88,13 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       } else {
         setTimerPos((prev) => clampTimerPos(prev));
       }
+      // Bring to front when opened
+      if (containerRef.current) {
+        zCounterRef.current += 1;
+        containerRef.current.style.zIndex = String(zCounterRef.current);
+      }
     }
-  }, [show, clampTimerPos]);
+  }, [show, clampTimerPos, zCounterRef]);
 
   // Clamp on window resize
   useEffect(() => {
@@ -236,7 +257,9 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 
       if (frameId) cancelAnimationFrame(frameId);
       frameId = requestAnimationFrame(() => {
-        setScale(Math.max(0.5, Math.min(1.5, startScale + delta)));
+        const baseW = containerRef.current?.offsetWidth ?? 280;
+        const baseH = containerRef.current?.offsetHeight ?? 320;
+        setScale(Math.max(0.5, Math.min(getMaxScale(baseW, baseH), startScale + delta)));
       });
 
       if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
@@ -261,14 +284,19 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 
   return (
     <div
-      className="fixed flex flex-col items-center group z-[200] bg-white/50 backdrop-blur-md rounded-2xl pb-4"
+      className="fixed flex flex-col items-center group bg-white/50 backdrop-blur-md rounded-xl pb-4"
       ref={containerRef}
       style={{
+        zIndex: 200,
         width: "280px",
         left: `${timerPos.x}px`,
         top: `${timerPos.y}px`,
         transform: `scale(${timerScale})`,
         transformOrigin: "top left",
+      }}
+      onMouseDownCapture={(e) => {
+        zCounterRef.current += 1;
+        (e.currentTarget as HTMLElement).style.zIndex = String(zCounterRef.current);
       }}
       onMouseDown={(e) => startDrag(e, setTimerPos, timerPos)}
       onTouchStart={(e) => startDrag(e, setTimerPos, timerPos)}
@@ -330,46 +358,92 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
             </button>
           </div>
 
-          <div className="flex items-center gap-1 text-gray-900 font-mono font-black text-4xl">
+          <div className="flex items-center gap-2 text-gray-900 font-mono font-black text-4xl">
+            {/* Minutes tens digit */}
+            <div className="flex flex-col items-center">
+              <button
+                onClick={() => {
+                  if (!isActive) setTimeLeft(Math.max(0, timeLeft + 600));
+                }}
+                className="text-gray-400 hover:text-blue-500"
+                aria-label="Increase minutes tens"
+              >
+                <Triangle size={12} className="fill-current" />
+              </button>
+              <span>{String(currentMin).padStart(2, "0")[0]}</span>
+              <button
+                onClick={() => {
+                  if (!isActive) setTimeLeft(Math.max(0, timeLeft - 600));
+                }}
+                className="text-gray-400 hover:text-blue-500 rotate-180"
+                aria-label="Decrease minutes tens"
+              >
+                <Triangle size={12} className="fill-current" />
+              </button>
+            </div>
+            {/* Minutes ones digit */}
             <div className="flex flex-col items-center">
               <button
                 onClick={() => {
                   if (!isActive) setTimeLeft(Math.max(0, timeLeft + 60));
                 }}
                 className="text-gray-400 hover:text-blue-500"
-                aria-label="Increase minutes"
+                aria-label="Increase minutes ones"
               >
                 <Triangle size={12} className="fill-current" />
               </button>
-              <span>{String(currentMin).padStart(2, "0")}</span>
+              <span>{String(currentMin).padStart(2, "0")[1]}</span>
               <button
                 onClick={() => {
                   if (!isActive) setTimeLeft(Math.max(0, timeLeft - 60));
                 }}
                 className="text-gray-400 hover:text-blue-500 rotate-180"
-                aria-label="Decrease minutes"
+                aria-label="Decrease minutes ones"
               >
                 <Triangle size={12} className="fill-current" />
               </button>
             </div>
             <span className="text-blue-500/30">:</span>
+            {/* Seconds tens digit */}
             <div className="flex flex-col items-center">
               <button
                 onClick={() => {
                   if (!isActive) setTimeLeft(Math.max(0, timeLeft + 10));
                 }}
                 className="text-gray-400 hover:text-blue-500"
-                aria-label="Increase seconds"
+                aria-label="Increase seconds tens"
               >
                 <Triangle size={12} className="fill-current" />
               </button>
-              <span>{String(currentSec).padStart(2, "0")}</span>
+              <span>{String(currentSec).padStart(2, "0")[0]}</span>
               <button
                 onClick={() => {
                   if (!isActive) setTimeLeft(Math.max(0, timeLeft - 10));
                 }}
                 className="text-gray-400 hover:text-blue-500 rotate-180"
-                aria-label="Decrease seconds"
+                aria-label="Decrease seconds tens"
+              >
+                <Triangle size={12} className="fill-current" />
+              </button>
+            </div>
+            {/* Seconds ones digit */}
+            <div className="flex flex-col items-center">
+              <button
+                onClick={() => {
+                  if (!isActive) setTimeLeft(Math.max(0, timeLeft + 1));
+                }}
+                className="text-gray-400 hover:text-blue-500"
+                aria-label="Increase seconds ones"
+              >
+                <Triangle size={12} className="fill-current" />
+              </button>
+              <span>{String(currentSec).padStart(2, "0")[1]}</span>
+              <button
+                onClick={() => {
+                  if (!isActive) setTimeLeft(Math.max(0, timeLeft - 1));
+                }}
+                className="text-gray-400 hover:text-blue-500 rotate-180"
+                aria-label="Decrease seconds ones"
               >
                 <Triangle size={12} className="fill-current" />
               </button>
@@ -402,25 +476,25 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       <div className="absolute inset-0 pointer-events-none transition-opacity opacity-0 group-hover:opacity-100">
         {/* Top-left L */}
         <div
-          className="resize-handle pointer-events-auto absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-blue-400 rounded-tl-lg cursor-nwse-resize"
+          className="resize-handle pointer-events-auto absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-blue-400 rounded-tl cursor-nwse-resize"
           onMouseDown={(e) => startResize(e, setTimerScale, timerScale, -1)}
           onTouchStart={(e) => startResize(e, setTimerScale, timerScale, -1)}
         />
         {/* Top-right L */}
         <div
-          className="resize-handle pointer-events-auto absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-blue-400 rounded-tr-lg cursor-nesw-resize"
+          className="resize-handle pointer-events-auto absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-blue-400 rounded-tr cursor-nesw-resize"
           onMouseDown={(e) => startResize(e, setTimerScale, timerScale)}
           onTouchStart={(e) => startResize(e, setTimerScale, timerScale)}
         />
         {/* Bottom-left L */}
         <div
-          className="resize-handle pointer-events-auto absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-blue-400 rounded-bl-lg cursor-nesw-resize"
+          className="resize-handle pointer-events-auto absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-blue-400 rounded-bl cursor-nesw-resize"
           onMouseDown={(e) => startResize(e, setTimerScale, timerScale, -1)}
           onTouchStart={(e) => startResize(e, setTimerScale, timerScale, -1)}
         />
         {/* Bottom-right L */}
         <div
-          className="resize-handle pointer-events-auto absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-blue-400 rounded-br-lg cursor-nwse-resize"
+          className="resize-handle pointer-events-auto absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-blue-400 rounded-br cursor-nwse-resize"
           onMouseDown={(e) => startResize(e, setTimerScale, timerScale)}
           onTouchStart={(e) => startResize(e, setTimerScale, timerScale)}
         />
@@ -430,23 +504,28 @@ const TimerTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 };
 
 // Dice Component
-const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
-  show,
-  onClose,
-}) => {
+const DiceTool: React.FC<{
+  show: boolean;
+  onClose: () => void;
+  zCounterRef: React.MutableRefObject<number>;
+}> = ({ show, onClose, zCounterRef }) => {
   const [, setDiceValue] = useState(1);
   const [isRolling, setIsRolling] = useState(false);
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
   const [enableTransition, setEnableTransition] = useState(true);
   const [diceScale, setDiceScale] = useState(1.6);
   const [dicePos, setDicePos] = useState<{ x: number; y: number } | null>(null);
+  const [useArcadeSound, setUseArcadeSound] = useState(false);
   const rollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedDicePos = useRef(false);
+  const diceContainerRef = useRef<HTMLDivElement>(null);
+  const defaultAudioRef = useRef<HTMLAudioElement | null>(null);
+  const arcadeAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const clampDicePos = useCallback(
     (pos: { x: number; y: number }) => ({
-      x: Math.min(Math.max(0, pos.x), window.innerWidth - 200 * diceScale),
-      y: Math.min(Math.max(0, pos.y), window.innerHeight - 200 * diceScale),
+      x: Math.min(Math.max(0, pos.x), Math.max(0, window.innerWidth - 200 * diceScale)),
+      y: Math.min(Math.max(0, pos.y), Math.max(0, window.innerHeight - 200 * diceScale)),
     }),
     [diceScale],
   );
@@ -462,8 +541,12 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       } else {
         setDicePos((prev) => (prev ? clampDicePos(prev) : prev));
       }
+      if (diceContainerRef.current) {
+        zCounterRef.current += 1;
+        diceContainerRef.current.style.zIndex = String(zCounterRef.current);
+      }
     }
-  }, [show, clampDicePos]);
+  }, [show, clampDicePos, zCounterRef]);
 
   // Clamp on window resize
   useEffect(() => {
@@ -473,6 +556,38 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
     return () => window.removeEventListener("resize", onResize);
   }, [clampDicePos]);
 
+  // Preload dice sounds
+  useEffect(() => {
+    const defaultAudio = new Audio(
+      "https://storage.googleapis.com/duotopia-social-media-videos/website/sounds/diceroll.mp3",
+    );
+    defaultAudio.preload = "auto";
+    defaultAudioRef.current = defaultAudio;
+
+    const arcadeAudio = new Audio(
+      "https://storage.googleapis.com/duotopia-social-media-videos/website/sounds/Go%2C%20Dice%20Roll.mp3",
+    );
+    arcadeAudio.preload = "auto";
+    arcadeAudioRef.current = arcadeAudio;
+
+    return () => {
+      defaultAudio.pause();
+      defaultAudio.src = "";
+      arcadeAudio.pause();
+      arcadeAudio.src = "";
+    };
+  }, []);
+
+  const playDiceSound = useCallback(() => {
+    const audio = useArcadeSound
+      ? arcadeAudioRef.current
+      : defaultAudioRef.current;
+    if (audio) {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    }
+  }, [useArcadeSound]);
+
   const rollDice = () => {
     // Prevent overlapping rolls
     if (isRolling) return;
@@ -481,6 +596,7 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
     if (rollTimerRef.current) clearTimeout(rollTimerRef.current);
 
     setIsRolling(true);
+    playDiceSound();
     const newValue = Math.floor(Math.random() * 6) + 1;
     const targetRotations: Record<number, { x: number; y: number }> = {
       1: { x: 0, y: 0 },
@@ -559,7 +675,7 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 
     return (
       <div
-        className="absolute w-full h-full bg-white border border-gray-200 rounded-2xl flex items-center justify-center shadow-inner"
+        className="absolute w-full h-full bg-white border border-gray-200 rounded-xl flex items-center justify-center shadow-inner"
         style={{ transform, backfaceVisibility: "hidden" }}
       >
         <svg width="100%" height="100%" viewBox="0 0 100 100">
@@ -660,7 +776,7 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 
       if (frameId) cancelAnimationFrame(frameId);
       frameId = requestAnimationFrame(() => {
-        setScale(Math.max(0.8, Math.min(2.4, startScale + delta)));
+        setScale(Math.max(0.8, Math.min(getMaxScale(200, 200), startScale + delta)));
       });
 
       if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
@@ -685,8 +801,10 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 
   return (
     <div
-      className="fixed flex flex-col items-center justify-center group z-[200] bg-white/50 backdrop-blur-md rounded-2xl"
+      ref={diceContainerRef}
+      className="fixed flex flex-col items-center justify-center group bg-white/50 backdrop-blur-md rounded-xl"
       style={{
+        zIndex: 200,
         width: "200px",
         height: "200px",
         left: `${dicePos.x}px`,
@@ -694,31 +812,35 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
         transform: `scale(${diceScale})`,
         transformOrigin: "top left",
       }}
+      onMouseDownCapture={(e) => {
+        zCounterRef.current += 1;
+        (e.currentTarget as HTMLElement).style.zIndex = String(zCounterRef.current);
+      }}
       onMouseDown={(e) => startDrag(e, setDicePos, dicePos)}
       onTouchStart={(e) => startDrag(e, setDicePos, dicePos)}
     >
       <div className="absolute inset-0 pointer-events-none transition-opacity opacity-0 group-hover:opacity-100">
         {/* Top-left L */}
         <div
-          className="resize-handle pointer-events-auto absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-blue-400 rounded-tl-lg cursor-nwse-resize"
+          className="resize-handle pointer-events-auto absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-blue-400 rounded-tl cursor-nwse-resize"
           onMouseDown={(e) => startResize(e, setDiceScale, diceScale, -1)}
           onTouchStart={(e) => startResize(e, setDiceScale, diceScale, -1)}
         />
         {/* Top-right L */}
         <div
-          className="resize-handle pointer-events-auto absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-blue-400 rounded-tr-lg cursor-nesw-resize"
+          className="resize-handle pointer-events-auto absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-blue-400 rounded-tr cursor-nesw-resize"
           onMouseDown={(e) => startResize(e, setDiceScale, diceScale)}
           onTouchStart={(e) => startResize(e, setDiceScale, diceScale)}
         />
         {/* Bottom-left L */}
         <div
-          className="resize-handle pointer-events-auto absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-blue-400 rounded-bl-lg cursor-nesw-resize"
+          className="resize-handle pointer-events-auto absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-blue-400 rounded-bl cursor-nesw-resize"
           onMouseDown={(e) => startResize(e, setDiceScale, diceScale, -1)}
           onTouchStart={(e) => startResize(e, setDiceScale, diceScale, -1)}
         />
         {/* Bottom-right L */}
         <div
-          className="resize-handle pointer-events-auto absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-blue-400 rounded-br-lg cursor-nwse-resize"
+          className="resize-handle pointer-events-auto absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-blue-400 rounded-br cursor-nwse-resize"
           onMouseDown={(e) => startResize(e, setDiceScale, diceScale)}
           onTouchStart={(e) => startResize(e, setDiceScale, diceScale)}
         />
@@ -737,8 +859,21 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
         </button>
       </div>
 
+      {/* Sound toggle */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setUseArcadeSound((prev) => !prev);
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="absolute bottom-1 right-1/2 translate-x-1/2 z-10 text-gray-400 hover:text-blue-500 transition-all pointer-events-auto opacity-0 group-hover:opacity-100"
+        title={useArcadeSound ? "Arcade sound" : "Default sound"}
+      >
+        {useArcadeSound ? <Gamepad2 size={14} /> : <Volume2 size={14} />}
+      </button>
+
       <div
-        className="dice-clickable w-20 h-20 cursor-pointer select-none"
+        className="dice-clickable w-28 h-28 cursor-pointer select-none"
         style={{ perspective: "800px" }}
         onClick={(e) => {
           e.stopPropagation();
@@ -753,12 +888,12 @@ const DiceTool: React.FC<{ show: boolean; onClose: () => void }> = ({
             transform: `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg)`,
           }}
         >
-          <DieFace dots={1} transform="translateZ(40px)" isRed={true} />
-          <DieFace dots={2} transform="rotateY(180deg) translateZ(40px)" />
-          <DieFace dots={3} transform="rotateY(90deg) translateZ(40px)" />
-          <DieFace dots={4} transform="rotateY(-90deg) translateZ(40px)" />
-          <DieFace dots={5} transform="rotateX(90deg) translateZ(40px)" />
-          <DieFace dots={6} transform="rotateX(-90deg) translateZ(40px)" />
+          <DieFace dots={1} transform="translateZ(56px)" isRed={true} />
+          <DieFace dots={2} transform="rotateY(180deg) translateZ(56px)" />
+          <DieFace dots={3} transform="rotateY(90deg) translateZ(56px)" />
+          <DieFace dots={4} transform="rotateY(-90deg) translateZ(56px)" />
+          <DieFace dots={5} transform="rotateX(90deg) translateZ(56px)" />
+          <DieFace dots={6} transform="rotateX(-90deg) translateZ(56px)" />
         </div>
       </div>
     </div>
@@ -773,38 +908,52 @@ const RPS_REEL = (() => {
   return arr;
 })();
 
-const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
-  show,
-  onClose,
-}) => {
+const RpsTool: React.FC<{
+  show: boolean;
+  onClose: () => void;
+  zCounterRef: React.MutableRefObject<number>;
+}> = ({ show, onClose, zCounterRef }) => {
   const ITEM_H = 120;
 
-  const [reelIndex, setReelIndex] = useState(3); // start at index 3 so there's room above
-  const [reelTransition, setReelTransition] = useState(false);
+  const [reelIndexL, setReelIndexL] = useState(3);
+  const [reelIndexR, setReelIndexR] = useState(3);
+  const [reelTransitionL, setReelTransitionL] = useState(false);
+  const [reelTransitionR, setReelTransitionR] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
   const [rpsPos, setRpsPos] = useState({ x: 0, y: 0 });
   const [rpsScale, setRpsScale] = useState(1);
   const hasInitialized = useRef(false);
+  const rpsContainerRef = useRef<HTMLDivElement>(null);
 
   const clampRpsPos = useCallback(
-    (pos: { x: number; y: number }) => ({
-      x: Math.min(Math.max(0, pos.x), window.innerWidth - 220 * rpsScale),
-      y: Math.min(Math.max(0, pos.y), window.innerHeight - 260 * rpsScale),
-    }),
+    (pos: { x: number; y: number }) => {
+      const w = rpsContainerRef.current?.offsetWidth ?? 220;
+      const h = rpsContainerRef.current?.offsetHeight ?? 260;
+      return {
+        x: Math.min(Math.max(0, pos.x), Math.max(0, window.innerWidth - w * rpsScale)),
+        y: Math.min(Math.max(0, pos.y), Math.max(0, window.innerHeight - h * rpsScale)),
+      };
+    },
     [rpsScale],
   );
 
   useEffect(() => {
-    if (show && !hasInitialized.current) {
-      setRpsPos({
-        x: window.innerWidth / 2 - 110,
-        y: window.innerHeight / 2 - 130,
-      });
-      hasInitialized.current = true;
-    } else if (show) {
-      setRpsPos((prev) => clampRpsPos(prev));
+    if (show) {
+      if (!hasInitialized.current) {
+        setRpsPos({
+          x: window.innerWidth / 2 - 210,
+          y: window.innerHeight / 2 - 130,
+        });
+        hasInitialized.current = true;
+      } else {
+        setRpsPos((prev) => clampRpsPos(prev));
+      }
+      if (rpsContainerRef.current) {
+        zCounterRef.current += 1;
+        rpsContainerRef.current.style.zIndex = String(zCounterRef.current);
+      }
     }
-  }, [show, clampRpsPos]);
+  }, [show, clampRpsPos, zCounterRef]);
 
   useEffect(() => {
     const onResize = () => setRpsPos((prev) => clampRpsPos(prev));
@@ -816,21 +965,35 @@ const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
     if (isSpinning) return;
     setIsSpinning(true);
 
-    const targetChoice = Math.floor(Math.random() * 3);
-    const currentMod = reelIndex % 3;
-    const diff = (targetChoice - currentMod + 3) % 3;
-    const advance = 15 + (diff === 0 ? 3 : diff);
-    const newIndex = reelIndex + advance;
+    // Left reel
+    const targetL = Math.floor(Math.random() * 3);
+    const diffL = (targetL - (reelIndexL % 3) + 3) % 3;
+    const advanceL = 15 + (diffL === 0 ? 3 : diffL);
+    const newIndexL = reelIndexL + advanceL;
 
-    setReelTransition(true);
-    setReelIndex(newIndex);
+    // Right reel — slightly different advance for visual variety
+    const targetR = Math.floor(Math.random() * 3);
+    const diffR = (targetR - (reelIndexR % 3) + 3) % 3;
+    const advanceR = 18 + (diffR === 0 ? 3 : diffR);
+    const newIndexR = reelIndexR + advanceR;
+
+    setReelTransitionL(true);
+    setReelTransitionR(true);
+    setReelIndexL(newIndexL);
+    setReelIndexR(newIndexR);
 
     setTimeout(() => {
       setIsSpinning(false);
-      if (newIndex > 30) {
+      if (newIndexL > 30) {
         setTimeout(() => {
-          setReelTransition(false);
-          setReelIndex((newIndex % 3) + 3);
+          setReelTransitionL(false);
+          setReelIndexL((newIndexL % 3) + 3);
+        }, 50);
+      }
+      if (newIndexR > 30) {
+        setTimeout(() => {
+          setReelTransitionR(false);
+          setReelIndexR((newIndexR % 3) + 3);
         }, 50);
       }
     }, 1900);
@@ -909,9 +1072,11 @@ const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
         : (moveEvent as MouseEvent).clientX;
       const delta = direction * (moveX - startX) * 0.005;
       if (frameId) cancelAnimationFrame(frameId);
-      frameId = requestAnimationFrame(() =>
-        setScale(Math.max(0.8, Math.min(1.5, startScale + delta))),
-      );
+      frameId = requestAnimationFrame(() => {
+        const baseW = rpsContainerRef.current?.offsetWidth ?? 220;
+        const baseH = rpsContainerRef.current?.offsetHeight ?? 260;
+        setScale(Math.max(0.8, Math.min(getMaxScale(baseW, baseH), startScale + delta)));
+      });
       if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
     };
 
@@ -934,13 +1099,19 @@ const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
 
   return (
     <div
-      className="fixed flex flex-col items-center group z-[200] bg-white/50 backdrop-blur-md rounded-2xl pb-5"
+      className="fixed flex flex-col items-center group bg-white/50 backdrop-blur-md rounded-xl pb-5"
+      ref={rpsContainerRef}
       style={{
-        width: "220px",
+        zIndex: 200,
+        width: "420px",
         left: `${rpsPos.x}px`,
         top: `${rpsPos.y}px`,
         transform: `scale(${rpsScale})`,
         transformOrigin: "top left",
+      }}
+      onMouseDownCapture={(e) => {
+        zCounterRef.current += 1;
+        (e.currentTarget as HTMLElement).style.zIndex = String(zCounterRef.current);
       }}
       onMouseDown={(e) => startDrag(e, setRpsPos, rpsPos)}
       onTouchStart={(e) => startDrag(e, setRpsPos, rpsPos)}
@@ -960,48 +1131,63 @@ const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
         </button>
       </div>
 
-      {/* Slot reel */}
+      {/* Two slot reels side by side */}
       <div
-        className="mt-10 rounded-2xl overflow-hidden relative bg-white/70"
-        style={{ width: "180px", height: ITEM_H }}
+        className="mt-10 flex items-center gap-6"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Top fade */}
+        {/* Left reel */}
         <div
-          className="absolute top-0 left-0 right-0 pointer-events-none z-10"
-          style={{
-            height: 16,
-            background:
-              "linear-gradient(to bottom, rgba(255,255,255,0.7), transparent)",
-          }}
-        />
-        {/* Bottom fade */}
-        <div
-          className="absolute bottom-0 left-0 right-0 pointer-events-none z-10"
-          style={{
-            height: 16,
-            background:
-              "linear-gradient(to top, rgba(255,255,255,0.7), transparent)",
-          }}
-        />
-        {/* Reel items */}
-        <div
-          style={{
-            transform: `translateY(${-(reelIndex * ITEM_H)}px)`,
-            transition: reelTransition
-              ? "transform 1.8s cubic-bezier(0.17, 0.67, 0.12, 0.99)"
-              : "none",
-          }}
+          className="rounded-xl overflow-hidden relative bg-white/70"
+          style={{ width: "160px", height: ITEM_H }}
         >
-          {RPS_REEL.map((choice, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-center select-none"
-              style={{ height: ITEM_H, fontSize: "7rem" }}
-            >
-              {choice}
-            </div>
-          ))}
+          <div
+            className="absolute top-0 left-0 right-0 pointer-events-none z-10"
+            style={{ height: 16, background: "linear-gradient(to bottom, rgba(255,255,255,0.7), transparent)" }}
+          />
+          <div
+            className="absolute bottom-0 left-0 right-0 pointer-events-none z-10"
+            style={{ height: 16, background: "linear-gradient(to top, rgba(255,255,255,0.7), transparent)" }}
+          />
+          <div
+            style={{
+              transform: `translateY(${-(reelIndexL * ITEM_H)}px)`,
+              transition: reelTransitionL ? "transform 1.8s cubic-bezier(0.17, 0.67, 0.12, 0.99)" : "none",
+            }}
+          >
+            {RPS_REEL.map((choice, i) => (
+              <div key={i} className="flex items-center justify-center select-none" style={{ height: ITEM_H, fontSize: "6rem" }}>
+                {choice}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right reel */}
+        <div
+          className="rounded-xl overflow-hidden relative bg-white/70"
+          style={{ width: "160px", height: ITEM_H }}
+        >
+          <div
+            className="absolute top-0 left-0 right-0 pointer-events-none z-10"
+            style={{ height: 16, background: "linear-gradient(to bottom, rgba(255,255,255,0.7), transparent)" }}
+          />
+          <div
+            className="absolute bottom-0 left-0 right-0 pointer-events-none z-10"
+            style={{ height: 16, background: "linear-gradient(to top, rgba(255,255,255,0.7), transparent)" }}
+          />
+          <div
+            style={{
+              transform: `translateY(${-(reelIndexR * ITEM_H)}px)`,
+              transition: reelTransitionR ? "transform 1.8s cubic-bezier(0.17, 0.67, 0.12, 0.99)" : "none",
+            }}
+          >
+            {RPS_REEL.map((choice, i) => (
+              <div key={i} className="flex items-center justify-center select-none" style={{ height: ITEM_H, fontSize: "6rem" }}>
+                {choice}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -1026,22 +1212,22 @@ const RpsTool: React.FC<{ show: boolean; onClose: () => void }> = ({
       {/* Resize handles */}
       <div className="absolute inset-0 pointer-events-none transition-opacity opacity-0 group-hover:opacity-100">
         <div
-          className="resize-handle pointer-events-auto absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-blue-400 rounded-tl-lg cursor-nwse-resize"
+          className="resize-handle pointer-events-auto absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-blue-400 rounded-tl cursor-nwse-resize"
           onMouseDown={(e) => startResize(e, setRpsScale, rpsScale, -1)}
           onTouchStart={(e) => startResize(e, setRpsScale, rpsScale, -1)}
         />
         <div
-          className="resize-handle pointer-events-auto absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-blue-400 rounded-tr-lg cursor-nesw-resize"
+          className="resize-handle pointer-events-auto absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-blue-400 rounded-tr cursor-nesw-resize"
           onMouseDown={(e) => startResize(e, setRpsScale, rpsScale)}
           onTouchStart={(e) => startResize(e, setRpsScale, rpsScale)}
         />
         <div
-          className="resize-handle pointer-events-auto absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-blue-400 rounded-bl-lg cursor-nesw-resize"
+          className="resize-handle pointer-events-auto absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-blue-400 rounded-bl cursor-nesw-resize"
           onMouseDown={(e) => startResize(e, setRpsScale, rpsScale, -1)}
           onTouchStart={(e) => startResize(e, setRpsScale, rpsScale, -1)}
         />
         <div
-          className="resize-handle pointer-events-auto absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-blue-400 rounded-br-lg cursor-nwse-resize"
+          className="resize-handle pointer-events-auto absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-blue-400 rounded-br cursor-nwse-resize"
           onMouseDown={(e) => startResize(e, setRpsScale, rpsScale)}
           onTouchStart={(e) => startResize(e, setRpsScale, rpsScale)}
         />
@@ -1071,6 +1257,18 @@ const DigitalTeachingToolbar: React.FC = () => {
     () => localStorage.getItem(HELP_DISMISSED_KEY) === "true",
   );
   const [showHelp, setShowHelp] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(
+    () => localStorage.getItem("duotopia-toolbar-collapsed") === "true",
+  );
+  const zCounterRef = useRef(200);
+
+  const toggleCollapse = useCallback(() => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("duotopia-toolbar-collapsed", String(next));
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (toolbarY === null) {
@@ -1292,10 +1490,10 @@ const DigitalTeachingToolbar: React.FC = () => {
       {/* Side toolbar */}
       <div
         ref={toolbarRef}
-        className="fixed right-0 flex flex-col gap-1 bg-white/90 backdrop-blur-md shadow-2xl border border-gray-200 border-r-0 rounded-l-xl p-1.5 z-[150] pointer-events-auto"
+        className="fixed right-0 flex flex-col gap-1 bg-white/90 backdrop-blur-md shadow-2xl border border-gray-200 border-r-0 rounded-l-xl p-1.5 z-[150] pointer-events-auto transition-transform duration-300"
         style={{
           top: `${toolbarY ?? window.innerHeight / 2}px`,
-          transform: "translateY(-50%)",
+          transform: `translateY(-50%)${isCollapsed ? " translateX(100%)" : ""}`,
         }}
       >
         {/* Drag handle */}
@@ -1305,42 +1503,42 @@ const DigitalTeachingToolbar: React.FC = () => {
           onTouchStart={handleToolbarDrag}
           title="拖曳上下移動"
         >
-          <GripHorizontal size={14} />
+          <GripHorizontal size={18} />
         </div>
         <button
           onClick={handleToggleTimer}
-          className={`p-1.5 rounded-lg transition-all duration-300 ${
+          className={`p-2 rounded-lg transition-all duration-300 ${
             showTimer
               ? "bg-blue-500 text-white shadow-md"
               : "hover:bg-gray-100 text-blue-500"
           }`}
           aria-label="Timer"
         >
-          <Timer size={18} />
+          <Timer size={24} />
         </button>
 
         <button
           onClick={handleToggleDice}
-          className={`p-1.5 rounded-lg transition-all duration-300 ${
+          className={`p-2 rounded-lg transition-all duration-300 ${
             showDice
               ? "bg-blue-500 text-white shadow-md"
               : "hover:bg-gray-100 text-blue-500"
           }`}
           aria-label="Dice"
         >
-          <Dice5 size={18} />
+          <Dice5 size={24} />
         </button>
 
         <button
           onClick={handleToggleRps}
-          className={`p-1.5 rounded-lg transition-all duration-300 ${
+          className={`p-2 rounded-lg transition-all duration-300 ${
             showRps
               ? "bg-blue-500 text-white shadow-md"
               : "hover:bg-gray-100 text-blue-500"
           }`}
           aria-label="Rock Paper Scissors"
         >
-          <Hand size={18} />
+          <Hand size={24} />
         </button>
 
         <div className="mx-1 border-t border-gray-200" />
@@ -1358,14 +1556,14 @@ const DigitalTeachingToolbar: React.FC = () => {
               return !prev;
             });
           }}
-          className={`p-1.5 rounded-lg transition-all duration-300 ${
+          className={`p-2 rounded-lg transition-all duration-300 ${
             showShareDialog
               ? "bg-blue-500 text-white shadow-md"
               : "hover:bg-gray-100 text-blue-500"
           }`}
           aria-label={t("teacherDashboard.share.button")}
         >
-          <Share2 size={18} />
+          <Share2 size={24} />
         </button>
 
         <button
@@ -1381,7 +1579,7 @@ const DigitalTeachingToolbar: React.FC = () => {
               return !prev;
             });
           }}
-          className={`p-1.5 rounded-lg transition-all duration-300 ${
+          className={`p-2 rounded-lg transition-all duration-300 ${
             showHelp
               ? "bg-red-500 text-white shadow-md"
               : helpDismissed
@@ -1390,19 +1588,45 @@ const DigitalTeachingToolbar: React.FC = () => {
           }`}
           aria-label="Help"
         >
-          <HelpCircle size={18} />
+          <HelpCircle size={24} />
+        </button>
+
+        <div className="mx-1 border-t border-gray-200" />
+        <button
+          onClick={toggleCollapse}
+          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-all duration-300"
+          aria-label="Collapse toolbar"
+        >
+          <ChevronRight size={18} />
         </button>
       </div>
 
+      {/* Expand tab (visible when collapsed) */}
+      <button
+        className={`fixed right-0 z-[150] pointer-events-auto bg-white/90 backdrop-blur-md shadow-lg border border-gray-200 border-r-0 rounded-l-lg px-1 py-3 hover:bg-blue-50 text-blue-500 transition-all duration-300 ${
+          isCollapsed
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
+        }`}
+        style={{
+          top: `${toolbarY ?? window.innerHeight / 2}px`,
+          transform: "translateY(-50%)",
+        }}
+        onClick={toggleCollapse}
+        aria-label="Expand toolbar"
+      >
+        <ChevronLeft size={18} />
+      </button>
+
       {/* Tools */}
       <div className="pointer-events-auto">
-        <TimerTool show={showTimer} onClose={() => setShowTimer(false)} />
+        <TimerTool show={showTimer} onClose={() => setShowTimer(false)} zCounterRef={zCounterRef} />
       </div>
       <div className="pointer-events-auto">
-        <DiceTool show={showDice} onClose={() => setShowDice(false)} />
+        <DiceTool show={showDice} onClose={() => setShowDice(false)} zCounterRef={zCounterRef} />
       </div>
       <div className="pointer-events-auto">
-        <RpsTool show={showRps} onClose={() => setShowRps(false)} />
+        <RpsTool show={showRps} onClose={() => setShowRps(false)} zCounterRef={zCounterRef} />
       </div>
     </div>
   );
