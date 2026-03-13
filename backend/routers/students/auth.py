@@ -127,7 +127,9 @@ async def validate_student(
         # 額外測試 Student 本地密碼（僅 log，不影響結果）
         student_pw_matched = None
         if student and student.password_hash:
-            student_pw_matched = verify_password(request.password, student.password_hash)
+            student_pw_matched = verify_password(
+                request.password, student.password_hash
+            )
 
         logger.warning(
             f"[LOGIN-DEBUG] validate_student (email login) FAILED | "

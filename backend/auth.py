@@ -125,8 +125,7 @@ def verify_token(token: str):
         return payload
     except (JWTError, AttributeError) as e:
         logger.info(
-            f"[LOGIN-DEBUG] verify_token | "
-            f"⚠️ Token 驗證失敗: {type(e).__name__}: {e}"
+            f"[LOGIN-DEBUG] verify_token | " f"⚠️ Token 驗證失敗: {type(e).__name__}: {e}"
         )
         return None
 

@@ -373,7 +373,9 @@ async def student_login(
             len(login_req.password) == 8 and login_req.password.isdigit()
         )
         default_password = student.get_default_password()
-        is_trying_default = login_req.password == default_password if default_password else None
+        is_trying_default = (
+            login_req.password == default_password if default_password else None
+        )
 
         # 檢查 effective_hash 是否為 None 或空
         hash_status = "ok"
@@ -385,9 +387,13 @@ async def student_login(
         # 額外測試：輸入的密碼是否匹配另一個來源
         other_source_matched = None
         if password_source == "identity" and student.password_hash:
-            other_source_matched = verify_password(login_req.password, student.password_hash)
+            other_source_matched = verify_password(
+                login_req.password, student.password_hash
+            )
         elif password_source == "student" and identity and identity.password_hash:
-            other_source_matched = verify_password(login_req.password, identity.password_hash)
+            other_source_matched = verify_password(
+                login_req.password, identity.password_hash
+            )
 
         logger.warning(
             f"[LOGIN-DEBUG] student_login FAILED | "
