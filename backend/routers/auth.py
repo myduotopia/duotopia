@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -25,6 +27,8 @@ from auth import (
 from services.email_service import email_service
 from datetime import datetime, timedelta
 from core.limiter import limiter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
@@ -352,11 +356,59 @@ async def student_login(
 
     # 驗證密碼：已驗證學生用 Identity 統一密碼，未驗證用本地密碼
     effective_hash = student.password_hash
+    password_source = "student"
+    identity = None
     if student.identity_id:
         identity = db.query(Identity).filter(Identity.id == student.identity_id).first()
         if identity and identity.password_hash:
             effective_hash = identity.password_hash
-    if not verify_password(login_req.password, effective_hash):
+            password_source = "identity"
+
+    password_matched = verify_password(login_req.password, effective_hash)
+
+    # 🔍 Debug logging: 只在登入失敗時記錄詳細資訊
+    if not password_matched:
+        # 檢查是否為預設密碼嘗試（YYYYMMDD 格式）
+        is_default_password_attempt = (
+            len(login_req.password) == 8 and login_req.password.isdigit()
+        )
+        default_password = student.get_default_password()
+        is_trying_default = (
+            login_req.password == default_password if default_password else None
+        )
+
+        # 檢查 effective_hash 是否為 None 或空
+        hash_status = "ok"
+        if effective_hash is None:
+            hash_status = "None"
+        elif not effective_hash:
+            hash_status = "empty"
+
+        # 額外測試：輸入的密碼是否匹配另一個來源
+        other_source_matched = None
+        if password_source == "identity" and student.password_hash:
+            other_source_matched = verify_password(
+                login_req.password, student.password_hash
+            )
+        elif password_source == "student" and identity and identity.password_hash:
+            other_source_matched = verify_password(
+                login_req.password, identity.password_hash
+            )
+
+        logger.warning(
+            f"[LOGIN-DEBUG] student_login FAILED | "
+            f"student_id={student.id} | "
+            f"student_name={student.name} | "
+            f"password_source={password_source} | "
+            f"hash_status={hash_status} | "
+            f"identity_id={student.identity_id} | "
+            f"email_verified={student.email_verified} | "
+            f"password_changed={getattr(student, 'password_changed', None)} | "
+            f"is_default_pw_attempt={is_default_password_attempt} | "
+            f"is_trying_current_default={is_trying_default} | "
+            f"other_source_matched={other_source_matched}"
+        )
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )
