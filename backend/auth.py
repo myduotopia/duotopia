@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta  # noqa: F401
 from typing import Optional, Dict, Any  # noqa: F401
 from jose import JWTError, jwt
@@ -9,6 +10,8 @@ from models import Teacher, Student
 from database import get_session_local, SessionLocal
 import os
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -39,16 +42,26 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         raise TypeError("Password cannot be None")
 
     if hashed_password is None:
+        logger.warning("[LOGIN-DEBUG] verify_password | hashed_password is None")
         return False
 
-    # Ensure password is encoded properly and truncated if needed
-    password_bytes = plain_password.encode("utf-8")[:72]
-    hashed_bytes = (
-        hashed_password.encode("utf-8")
-        if isinstance(hashed_password, str)
-        else hashed_password
-    )
-    return bcrypt.checkpw(password_bytes, hashed_bytes)
+    try:
+        # Ensure password is encoded properly and truncated if needed
+        password_bytes = plain_password.encode("utf-8")[:72]
+        hashed_bytes = (
+            hashed_password.encode("utf-8")
+            if isinstance(hashed_password, str)
+            else hashed_password
+        )
+        return bcrypt.checkpw(password_bytes, hashed_bytes)
+    except Exception as e:
+        # 🔍 捕捉非密碼錯誤的異常（例如 hash 格式損壞）
+        logger.error(
+            f"[LOGIN-DEBUG] verify_password | "
+            f"⚠️ EXCEPTION during bcrypt.checkpw: {type(e).__name__}: {e} | "
+            f"hash_prefix={hashed_password[:20] if hashed_password else 'None'}..."
+        )
+        return False
 
 
 def validate_password_strength(password: str) -> tuple[bool, str]:
@@ -110,7 +123,10 @@ def verify_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
-    except (JWTError, AttributeError):
+    except (JWTError, AttributeError) as e:
+        logger.info(
+            f"[LOGIN-DEBUG] verify_token | " f"⚠️ Token 驗證失敗: {type(e).__name__}: {e}"
+        )
         return None
 
 
@@ -128,28 +144,44 @@ def authenticate_student(db: Session, email: str, password: str):
     """學生認證（支援 Identity 統一密碼）"""
     student = db.query(Student).filter(Student.email == email).first()
     if not student:
+        logger.info(
+            f"[LOGIN-DEBUG] authenticate_student | email={email} | student_found=False"
+        )
         return None
 
     # 判斷使用哪個密碼來源
-    password_hash = _get_student_password_hash(db, student)
-    if not verify_password(password, password_hash):
+    password_hash, password_source = _get_student_password_hash(db, student)
+    password_matched = verify_password(password, password_hash)
+
+    logger.info(
+        f"[LOGIN-DEBUG] authenticate_student | "
+        f"student_id={student.id} | "
+        f"email={email} | "
+        f"password_source={password_source} | "
+        f"password_matched={password_matched}"
+    )
+
+    if not password_matched:
         return None
     return student
 
 
-def _get_student_password_hash(db: Session, student) -> str:
+def _get_student_password_hash(db: Session, student) -> tuple[str, str]:
     """取得學生的有效密碼 hash
 
     已遷移到 Identity 的帳號使用 Identity 的統一密碼，
     否則使用 Student 自身的密碼。
+
+    Returns:
+        (password_hash, source) - source 為 "identity" 或 "student"
     """
     if student.password_migrated_to_identity and student.identity_id:
         from models.user import Identity
 
         identity = db.query(Identity).filter(Identity.id == student.identity_id).first()
         if identity and identity.password_hash:
-            return identity.password_hash
-    return student.password_hash
+            return identity.password_hash, "identity"
+    return student.password_hash, "student"
 
 
 async def get_current_user(
