@@ -1601,22 +1601,20 @@ const DigitalTeachingToolbar: React.FC = () => {
         </button>
       </div>
 
-      {/* Expand tab (visible when collapsed) */}
-      <button
-        className={`fixed right-0 z-[150] pointer-events-auto bg-white/90 backdrop-blur-md shadow-lg border border-gray-200 border-r-0 rounded-l-lg px-1 py-3 hover:bg-blue-50 text-blue-500 transition-all duration-300 ${
-          isCollapsed
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
-        }`}
-        style={{
-          top: `${toolbarY ?? window.innerHeight / 2}px`,
-          transform: "translateY(-50%)",
-        }}
-        onClick={toggleCollapse}
-        aria-label="Expand toolbar"
-      >
-        <ChevronLeft size={18} />
-      </button>
+      {/* Expand tab (visible only when collapsed) */}
+      {isCollapsed && (
+        <button
+          className="fixed right-0 z-[150] pointer-events-auto bg-white/90 backdrop-blur-md shadow-lg border border-gray-200 border-r-0 rounded-l-lg px-1 py-3 hover:bg-blue-50 text-blue-500 transition-all duration-300"
+          style={{
+            top: `${toolbarY ?? window.innerHeight / 2}px`,
+            transform: "translateY(-50%)",
+          }}
+          onClick={toggleCollapse}
+          aria-label="Expand toolbar"
+        >
+          <ChevronLeft size={18} />
+        </button>
+      )}
 
       {/* Tools */}
       <div className="pointer-events-auto">
