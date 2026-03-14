@@ -53,8 +53,6 @@ const TimerTool: React.FC<{
   onClose: () => void;
   zCounterRef: React.MutableRefObject<number>;
 }> = ({ show, onClose, zCounterRef }) => {
-  const [, setMinutes] = useState(0);
-  const [, setSeconds] = useState(0);
   const [isActive, setIsActive] = useState(false);
   const [isBeeping, setIsBeeping] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -359,8 +357,6 @@ const TimerTool: React.FC<{
                 stopBeeping();
                 setIsActive(false);
                 setTimeLeft(0);
-                setMinutes(0);
-                setSeconds(0);
               }}
               className="rounded-full bg-red-500 text-white shadow-lg w-10 h-10 flex items-center justify-center hover:scale-105 transition-transform"
               aria-label="Stop timer"
@@ -472,8 +468,6 @@ const TimerTool: React.FC<{
             key={m}
             onClick={() => {
               if (!isActive) {
-                setMinutes(m);
-                setSeconds(0);
                 setTimeLeft(m * 60);
               }
             }}
@@ -953,6 +947,9 @@ const RpsTool: React.FC<{
   const [rpsScale, setRpsScale] = useState(1);
   const hasInitialized = useRef(false);
   const rpsContainerRef = useRef<HTMLDivElement>(null);
+  const spinTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const resetTimerLRef = useRef<NodeJS.Timeout | null>(null);
+  const resetTimerRRef = useRef<NodeJS.Timeout | null>(null);
 
   const clampRpsPos = useCallback(
     (pos: { x: number; y: number }) => {
@@ -996,6 +993,15 @@ const RpsTool: React.FC<{
     return () => window.removeEventListener("resize", onResize);
   }, [clampRpsPos]);
 
+  // Clean up spin timers on unmount
+  useEffect(() => {
+    return () => {
+      if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
+      if (resetTimerLRef.current) clearTimeout(resetTimerLRef.current);
+      if (resetTimerRRef.current) clearTimeout(resetTimerRRef.current);
+    };
+  }, []);
+
   const spin = () => {
     if (isSpinning) return;
     setIsSpinning(true);
@@ -1017,16 +1023,16 @@ const RpsTool: React.FC<{
     setReelIndexL(newIndexL);
     setReelIndexR(newIndexR);
 
-    setTimeout(() => {
+    spinTimerRef.current = setTimeout(() => {
       setIsSpinning(false);
       if (newIndexL > 30) {
-        setTimeout(() => {
+        resetTimerLRef.current = setTimeout(() => {
           setReelTransitionL(false);
           setReelIndexL((newIndexL % 3) + 3);
         }, 50);
       }
       if (newIndexR > 30) {
-        setTimeout(() => {
+        resetTimerRRef.current = setTimeout(() => {
           setReelTransitionR(false);
           setReelIndexR((newIndexR % 3) + 3);
         }, 50);
@@ -1451,7 +1457,7 @@ const DigitalTeachingToolbar: React.FC = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error("Failed to copy URL:", err);
+      void err;
     }
   }, [getStudentLoginUrl]);
 
