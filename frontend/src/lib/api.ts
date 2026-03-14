@@ -140,14 +140,24 @@ class ApiClient {
   }
 
   private getToken(): string | null {
-    // 動態獲取 token，優先學生 token
     const studentToken = useStudentAuthStore.getState().token;
-    if (studentToken) return studentToken;
-
     const teacherToken = useTeacherAuthStore.getState().token;
-    if (teacherToken) return teacherToken;
 
-    return null;
+    // Context-aware token selection based on current page
+    const path = window.location.pathname;
+    const isTeacherContext =
+      path.startsWith("/teacher") || path.startsWith("/organization");
+    const isStudentContext = path.startsWith("/student");
+
+    if (isTeacherContext) {
+      return teacherToken || studentToken || null;
+    }
+    if (isStudentContext) {
+      return studentToken || teacherToken || null;
+    }
+
+    // Default: prefer whichever token exists (teacher first for API compatibility)
+    return teacherToken || studentToken || null;
   }
 
   private async request<T>(
