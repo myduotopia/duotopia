@@ -87,7 +87,8 @@
     "buttons": {
       "retry": "Try Again",
       "next": "Next Question",
-      "finish": "Finish"
+      "finish": "Finish",
+      "practiceAgain": "Practice Again"
     },
     "errors": {
       "loadFailed": "Failed to load questions",
