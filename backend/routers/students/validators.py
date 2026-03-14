@@ -98,6 +98,10 @@ class RearrangementQuestionResponse(BaseModel):
     audio_url: Optional[str] = None
     translation: Optional[str] = None
     original_text: Optional[str] = None  # 正確答案（用於顯示答案功能）
+    # 進度恢復欄位（重整頁面時使用）
+    progress_status: Optional[str] = None  # "COMPLETED" / "IN_PROGRESS" / None
+    progress_score: Optional[float] = None
+    progress_error_count: Optional[int] = None
 
 
 class RearrangementAnswerRequest(BaseModel):
