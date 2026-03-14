@@ -133,9 +133,7 @@ const TimerTool: React.FC<{
   const startBeeping = useCallback(() => {
     setIsBeeping(true);
     if (audioRef.current) {
-      audioRef.current
-        .play()
-        .catch(() => {});
+      audioRef.current.play().catch(() => {});
     }
   }, []);
 
