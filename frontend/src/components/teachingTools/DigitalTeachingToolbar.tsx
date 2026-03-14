@@ -70,8 +70,14 @@ const TimerTool: React.FC<{
       const w = containerRef.current?.offsetWidth ?? 280;
       const h = containerRef.current?.offsetHeight ?? 320;
       return {
-        x: Math.min(Math.max(0, pos.x), Math.max(0, window.innerWidth - w * timerScale)),
-        y: Math.min(Math.max(0, pos.y), Math.max(0, window.innerHeight - h * timerScale)),
+        x: Math.min(
+          Math.max(0, pos.x),
+          Math.max(0, window.innerWidth - w * timerScale),
+        ),
+        y: Math.min(
+          Math.max(0, pos.y),
+          Math.max(0, window.innerHeight - h * timerScale),
+        ),
       };
     },
     [timerScale],
@@ -259,7 +265,12 @@ const TimerTool: React.FC<{
       frameId = requestAnimationFrame(() => {
         const baseW = containerRef.current?.offsetWidth ?? 280;
         const baseH = containerRef.current?.offsetHeight ?? 320;
-        setScale(Math.max(0.5, Math.min(getMaxScale(baseW, baseH), startScale + delta)));
+        setScale(
+          Math.max(
+            0.5,
+            Math.min(getMaxScale(baseW, baseH), startScale + delta),
+          ),
+        );
       });
 
       if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
@@ -296,7 +307,9 @@ const TimerTool: React.FC<{
       }}
       onMouseDownCapture={(e) => {
         zCounterRef.current += 1;
-        (e.currentTarget as HTMLElement).style.zIndex = String(zCounterRef.current);
+        (e.currentTarget as HTMLElement).style.zIndex = String(
+          zCounterRef.current,
+        );
       }}
       onMouseDown={(e) => startDrag(e, setTimerPos, timerPos)}
       onTouchStart={(e) => startDrag(e, setTimerPos, timerPos)}
@@ -524,8 +537,14 @@ const DiceTool: React.FC<{
 
   const clampDicePos = useCallback(
     (pos: { x: number; y: number }) => ({
-      x: Math.min(Math.max(0, pos.x), Math.max(0, window.innerWidth - 200 * diceScale)),
-      y: Math.min(Math.max(0, pos.y), Math.max(0, window.innerHeight - 200 * diceScale)),
+      x: Math.min(
+        Math.max(0, pos.x),
+        Math.max(0, window.innerWidth - 200 * diceScale),
+      ),
+      y: Math.min(
+        Math.max(0, pos.y),
+        Math.max(0, window.innerHeight - 200 * diceScale),
+      ),
     }),
     [diceScale],
   );
@@ -776,7 +795,9 @@ const DiceTool: React.FC<{
 
       if (frameId) cancelAnimationFrame(frameId);
       frameId = requestAnimationFrame(() => {
-        setScale(Math.max(0.8, Math.min(getMaxScale(200, 200), startScale + delta)));
+        setScale(
+          Math.max(0.8, Math.min(getMaxScale(200, 200), startScale + delta)),
+        );
       });
 
       if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
@@ -814,7 +835,9 @@ const DiceTool: React.FC<{
       }}
       onMouseDownCapture={(e) => {
         zCounterRef.current += 1;
-        (e.currentTarget as HTMLElement).style.zIndex = String(zCounterRef.current);
+        (e.currentTarget as HTMLElement).style.zIndex = String(
+          zCounterRef.current,
+        );
       }}
       onMouseDown={(e) => startDrag(e, setDicePos, dicePos)}
       onTouchStart={(e) => startDrag(e, setDicePos, dicePos)}
@@ -930,8 +953,14 @@ const RpsTool: React.FC<{
       const w = rpsContainerRef.current?.offsetWidth ?? 220;
       const h = rpsContainerRef.current?.offsetHeight ?? 260;
       return {
-        x: Math.min(Math.max(0, pos.x), Math.max(0, window.innerWidth - w * rpsScale)),
-        y: Math.min(Math.max(0, pos.y), Math.max(0, window.innerHeight - h * rpsScale)),
+        x: Math.min(
+          Math.max(0, pos.x),
+          Math.max(0, window.innerWidth - w * rpsScale),
+        ),
+        y: Math.min(
+          Math.max(0, pos.y),
+          Math.max(0, window.innerHeight - h * rpsScale),
+        ),
       };
     },
     [rpsScale],
@@ -1075,7 +1104,12 @@ const RpsTool: React.FC<{
       frameId = requestAnimationFrame(() => {
         const baseW = rpsContainerRef.current?.offsetWidth ?? 220;
         const baseH = rpsContainerRef.current?.offsetHeight ?? 260;
-        setScale(Math.max(0.8, Math.min(getMaxScale(baseW, baseH), startScale + delta)));
+        setScale(
+          Math.max(
+            0.8,
+            Math.min(getMaxScale(baseW, baseH), startScale + delta),
+          ),
+        );
       });
       if ((moveEvent as TouchEvent).touches) moveEvent.preventDefault();
     };
@@ -1111,7 +1145,9 @@ const RpsTool: React.FC<{
       }}
       onMouseDownCapture={(e) => {
         zCounterRef.current += 1;
-        (e.currentTarget as HTMLElement).style.zIndex = String(zCounterRef.current);
+        (e.currentTarget as HTMLElement).style.zIndex = String(
+          zCounterRef.current,
+        );
       }}
       onMouseDown={(e) => startDrag(e, setRpsPos, rpsPos)}
       onTouchStart={(e) => startDrag(e, setRpsPos, rpsPos)}
@@ -1143,20 +1179,34 @@ const RpsTool: React.FC<{
         >
           <div
             className="absolute top-0 left-0 right-0 pointer-events-none z-10"
-            style={{ height: 16, background: "linear-gradient(to bottom, rgba(255,255,255,0.7), transparent)" }}
+            style={{
+              height: 16,
+              background:
+                "linear-gradient(to bottom, rgba(255,255,255,0.7), transparent)",
+            }}
           />
           <div
             className="absolute bottom-0 left-0 right-0 pointer-events-none z-10"
-            style={{ height: 16, background: "linear-gradient(to top, rgba(255,255,255,0.7), transparent)" }}
+            style={{
+              height: 16,
+              background:
+                "linear-gradient(to top, rgba(255,255,255,0.7), transparent)",
+            }}
           />
           <div
             style={{
               transform: `translateY(${-(reelIndexL * ITEM_H)}px)`,
-              transition: reelTransitionL ? "transform 1.8s cubic-bezier(0.17, 0.67, 0.12, 0.99)" : "none",
+              transition: reelTransitionL
+                ? "transform 1.8s cubic-bezier(0.17, 0.67, 0.12, 0.99)"
+                : "none",
             }}
           >
             {RPS_REEL.map((choice, i) => (
-              <div key={i} className="flex items-center justify-center select-none" style={{ height: ITEM_H, fontSize: "6rem" }}>
+              <div
+                key={i}
+                className="flex items-center justify-center select-none"
+                style={{ height: ITEM_H, fontSize: "6rem" }}
+              >
                 {choice}
               </div>
             ))}
@@ -1170,20 +1220,34 @@ const RpsTool: React.FC<{
         >
           <div
             className="absolute top-0 left-0 right-0 pointer-events-none z-10"
-            style={{ height: 16, background: "linear-gradient(to bottom, rgba(255,255,255,0.7), transparent)" }}
+            style={{
+              height: 16,
+              background:
+                "linear-gradient(to bottom, rgba(255,255,255,0.7), transparent)",
+            }}
           />
           <div
             className="absolute bottom-0 left-0 right-0 pointer-events-none z-10"
-            style={{ height: 16, background: "linear-gradient(to top, rgba(255,255,255,0.7), transparent)" }}
+            style={{
+              height: 16,
+              background:
+                "linear-gradient(to top, rgba(255,255,255,0.7), transparent)",
+            }}
           />
           <div
             style={{
               transform: `translateY(${-(reelIndexR * ITEM_H)}px)`,
-              transition: reelTransitionR ? "transform 1.8s cubic-bezier(0.17, 0.67, 0.12, 0.99)" : "none",
+              transition: reelTransitionR
+                ? "transform 1.8s cubic-bezier(0.17, 0.67, 0.12, 0.99)"
+                : "none",
             }}
           >
             {RPS_REEL.map((choice, i) => (
-              <div key={i} className="flex items-center justify-center select-none" style={{ height: ITEM_H, fontSize: "6rem" }}>
+              <div
+                key={i}
+                className="flex items-center justify-center select-none"
+                style={{ height: ITEM_H, fontSize: "6rem" }}
+              >
                 {choice}
               </div>
             ))}
@@ -1618,13 +1682,25 @@ const DigitalTeachingToolbar: React.FC = () => {
 
       {/* Tools */}
       <div className="pointer-events-auto">
-        <TimerTool show={showTimer} onClose={() => setShowTimer(false)} zCounterRef={zCounterRef} />
+        <TimerTool
+          show={showTimer}
+          onClose={() => setShowTimer(false)}
+          zCounterRef={zCounterRef}
+        />
       </div>
       <div className="pointer-events-auto">
-        <DiceTool show={showDice} onClose={() => setShowDice(false)} zCounterRef={zCounterRef} />
+        <DiceTool
+          show={showDice}
+          onClose={() => setShowDice(false)}
+          zCounterRef={zCounterRef}
+        />
       </div>
       <div className="pointer-events-auto">
-        <RpsTool show={showRps} onClose={() => setShowRps(false)} zCounterRef={zCounterRef} />
+        <RpsTool
+          show={showRps}
+          onClose={() => setShowRps(false)}
+          zCounterRef={zCounterRef}
+        />
       </div>
     </div>
   );
