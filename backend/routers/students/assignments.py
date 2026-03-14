@@ -1648,16 +1648,39 @@ async def get_rearrangement_questions(
         .all()
     )
 
+    # 查詢已有的進度記錄（用於重整後恢復進度）
+    progress_records = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == student_assignment.id,
+        )
+        .all()
+    )
+    progress_map = {p.content_item_id: p for p in progress_records}
+
+    # 使用 seeded RNG 確保同一學生每次取得相同的打亂順序
+    rng = random.Random(student_assignment.id)
+
     # 如果需要打亂順序
     if assignment.shuffle_questions:
-        random.shuffle(content_items)
+        rng.shuffle(content_items)
 
     questions = []
     for item in content_items:
-        # 打亂單字順序
+        # 打亂單字順序（使用 seeded RNG 確保一致性）
         words = item.text.strip().split()
         shuffled_words = words.copy()
-        random.shuffle(shuffled_words)
+        rng.shuffle(shuffled_words)
+
+        # 附加進度資料
+        progress = progress_map.get(item.id)
+        progress_status = None
+        progress_score = None
+        progress_error_count = None
+        if progress and progress.status == "COMPLETED":
+            progress_status = "COMPLETED"
+            progress_score = float(progress.expected_score) if progress.expected_score is not None else None
+            progress_error_count = progress.error_count
 
         questions.append(
             RearrangementQuestionResponse(
@@ -1674,6 +1697,9 @@ async def get_rearrangement_questions(
                 audio_url=item.audio_url,
                 translation=item.translation,
                 original_text=item.text.strip(),  # 正確答案
+                progress_status=progress_status,
+                progress_score=progress_score,
+                progress_error_count=progress_error_count,
             )
         )
 
