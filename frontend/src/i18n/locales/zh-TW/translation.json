@@ -59,6 +59,19 @@
     "tapToContinue": "點擊任意處繼續",
     "tapToRetry": "點擊任意處重新挑戰"
   },
+  "pronunciationChart": {
+    "overallScore": "總分",
+    "dimensionScores": "評分維度",
+    "wordDetails": "發音詳情",
+    "phonemeDetails": "音素發音詳情",
+    "shortLabels": {
+      "overall": "總體",
+      "accuracy": "準確度",
+      "fluency": "流暢度",
+      "completeness": "完整度",
+      "prosody": "韻律"
+    }
+  },
   "rearrangement": {
     "loading": "正在載入題目...",
     "noQuestions": "目前沒有需要練習的題目",
@@ -3959,6 +3972,7 @@
       "analyzing": "分析中...",
       "analyzed": "已分析",
       "analysisFailed": "分析失敗（點擊重試）",
+      "viewAnalysis": "查看分析",
       "aiAnalyzing": "AI 正在分析中...",
       "pleaseWait": "請稍候片刻",
       "clickToAssess": "點擊上方按鈕開始評估",

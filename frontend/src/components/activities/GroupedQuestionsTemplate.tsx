@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect, memo } from "react";
+import { useState, useRef, useEffect, useMemo, memo } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
-import AIScoreDisplay from "@/components/shared/AIScoreDisplay";
+import PronunciationScoreChart from "./shared/PronunciationScoreChart";
+import ScoreOverlay from "./shared/ScoreOverlay";
 import {
   Mic,
   Square,
@@ -158,6 +159,9 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isAssessing, setIsAssessing] = useState(false);
+  const [scoreOverlayOpen, setScoreOverlayOpen] = useState(false);
+  const [scoreOverlayScore, setScoreOverlayScore] = useState(0);
+  const [scoreModalOpen, setScoreModalOpen] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1.0); // 播放倍速
   const questionAudioRef = useRef<HTMLAudioElement | null>(null); // 題目音檔播放器
   const [assessmentResults, setAssessmentResults] = useState<
@@ -252,6 +256,34 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
   }, [initialAssessmentResults]);
 
   // 🔧 Issue #118: Removed auto-analyze useEffect
+  // 當前題目的發音分析資料（供 inline 和 modal 共用）
+  const chartData = useMemo(() => {
+    const result = assessmentResults[currentQuestionIndex];
+    if (!result) return null;
+    const overallScore =
+      result.overall_score ||
+      Math.round(
+        ((result.accuracy_score || 0) +
+          (result.fluency_score || 0) +
+          (result.pronunciation_score || 0)) /
+          3,
+      );
+    const dimensions = [
+      { label: t("pronunciationChart.shortLabels.overall"), score: overallScore },
+      result.accuracy_score != null && { label: t("pronunciationChart.shortLabels.accuracy"), score: result.accuracy_score },
+      result.fluency_score != null && { label: t("pronunciationChart.shortLabels.fluency"), score: result.fluency_score },
+      result.completeness_score != null && { label: t("pronunciationChart.shortLabels.completeness"), score: result.completeness_score },
+      result.prosody_score != null && { label: t("pronunciationChart.shortLabels.prosody"), score: result.prosody_score },
+    ].filter(Boolean) as Array<{ label: string; score: number }>;
+    const wordsData = result.detailed_words || result.word_details || result.words || [];
+    const details = wordsData.map((w: { word: string; accuracy_score?: number; error_type?: string }) => ({
+      label: w.word,
+      score: w.accuracy_score || 0,
+      errorType: w.error_type,
+    }));
+    return { overallScore, dimensions, details };
+  }, [assessmentResults, currentQuestionIndex, t]);
+
   // User now manually clicks "上傳並分析" button after recording stops
 
   // 檢查題目是否已完成 - 目前未使用
@@ -534,6 +566,18 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
         ...prev,
         [currentQuestionIndex]: result,
       }));
+
+      // 顯示星星鼓勵動畫
+      const overlayScore =
+        result.overall_score ||
+        Math.round(
+          ((result.accuracy_score || 0) +
+            (result.fluency_score || 0) +
+            (result.pronunciation_score || 0)) /
+            3,
+        );
+      setScoreOverlayScore(overlayScore);
+      setScoreOverlayOpen(true);
 
       // Notify parent component about assessment completion
       if (onAssessmentComplete) {
@@ -926,8 +970,8 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
             </div>
           </div>
 
-          {/* 老師評語 - 始終顯示，無評語時禁用狀態 */}
-          {
+          {/* 老師評語 - 有評語才顯示 */}
+          {currentQuestion?.teacher_feedback && (
             <div
               className={`rounded-lg border-2 p-3 ${
                 currentQuestion?.teacher_feedback
@@ -983,12 +1027,75 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                 </div>
               )}
             </div>
-          }
+          )}
+
+          {/* 手機版：分析按鈕 / 查看結果按鈕 */}
+          {canUseAiAnalysis &&
+            items[currentQuestionIndex]?.recording_url && (
+              <div className="flex justify-center py-4 md:hidden">
+                {assessmentResults[currentQuestionIndex] ? (
+                  <Button
+                    size="lg"
+                    onClick={() => setScoreModalOpen(true)}
+                    variant="outline"
+                    className="h-14 px-8 text-lg font-bold rounded-2xl border-2 border-indigo-400 text-indigo-600 hover:bg-indigo-50"
+                  >
+                    <Brain className="w-5 h-5 mr-2" />
+                    {t("groupedQuestionsTemplate.labels.viewAnalysis")}
+                  </Button>
+                ) : (
+                  <Button
+                    size="lg"
+                    onClick={handleAssessment}
+                    disabled={
+                      isAssessing || itemAnalysisState?.status === "analyzing"
+                    }
+                    className={`relative h-14 px-8 text-lg font-bold rounded-2xl shadow-xl transition-all ${
+                      itemAnalysisState?.status === "analyzing"
+                        ? "bg-gradient-to-r from-purple-600 to-purple-700 cursor-not-allowed opacity-70"
+                        : itemAnalysisState?.status === "analyzed"
+                          ? "bg-gradient-to-r from-green-600 to-green-700 cursor-not-allowed"
+                          : itemAnalysisState?.status === "failed"
+                            ? "bg-gradient-to-r from-red-600 to-red-700"
+                            : "bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                    }`}
+                    style={{
+                      animation:
+                        isAssessing || itemAnalysisState?.status === "analyzing"
+                          ? "none"
+                          : "pulse-scale 1.5s ease-in-out infinite",
+                    }}
+                  >
+                    {itemAnalysisState?.status === "analyzing" || isAssessing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        {t("groupedQuestionsTemplate.labels.analyzing")}
+                      </>
+                    ) : itemAnalysisState?.status === "analyzed" ? (
+                      <>
+                        <CheckCircle2 className="w-5 h-5 mr-2" />
+                        {t("groupedQuestionsTemplate.labels.analyzed")}
+                      </>
+                    ) : itemAnalysisState?.status === "failed" ? (
+                      <>
+                        <XCircle className="w-5 h-5 mr-2" />
+                        {t("groupedQuestionsTemplate.labels.analysisFailed")}
+                      </>
+                    ) : (
+                      <>
+                        <Brain className="w-5 h-5 mr-2 animate-pulse" />
+                        {t("groupedQuestionsTemplate.labels.analyze")}
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
         </div>
 
-        {/* AI分析 - 手機全寬，桌面根據是否有圖片調整 */}
+        {/* AI分析 - 手機版用 modal 顯示，桌面版 inline */}
         <div
-          className={`w-full ${currentQuestion?.image_url ? "sm:col-span-4" : "sm:col-span-6"} space-y-4`}
+          className={`w-full hidden md:block ${currentQuestion?.image_url ? "sm:col-span-4" : "sm:col-span-6"} space-y-4`}
         >
           {/* AI 評估結果 */}
           <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -1152,13 +1259,14 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                   >
                     <X className="w-4 h-4" />
                   </button>
-                  <AIScoreDisplay
-                    key={`assessment-${currentQuestionIndex}`}
-                    scores={assessmentResults[currentQuestionIndex]}
-                    hasRecording={true}
-                    title=""
-                    isStudentView={!isPreviewMode}
-                  />
+                  {chartData && (
+                    <PronunciationScoreChart
+                      key={`assessment-${currentQuestionIndex}`}
+                      overallScore={chartData.overallScore}
+                      dimensions={chartData.dimensions}
+                      details={chartData.details}
+                    />
+                  )}
                 </div>
 
                 {/* 思考動畫覆蓋層 - 在分析時顯示在最上層 */}
@@ -1221,6 +1329,41 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
           </div>
         </div>
       </div>
+
+      {/* 分析完成：星星鼓勵動畫 overlay */}
+      <ScoreOverlay
+        open={scoreOverlayOpen}
+        score={scoreOverlayScore}
+        isError={false}
+        onComplete={() => {
+          setScoreOverlayOpen(false);
+          if (window.innerWidth < 768) {
+            setScoreModalOpen(true);
+          }
+        }}
+      />
+
+      {/* 手機版：分數詳情 modal */}
+      {scoreModalOpen && chartData && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm md:hidden"
+          onClick={() => setScoreModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl mx-4 p-4 max-h-[85vh] overflow-y-auto w-full max-w-md"
+            onClick={() => setScoreModalOpen(false)}
+          >
+            <PronunciationScoreChart
+              overallScore={chartData.overallScore}
+              dimensions={chartData.dimensions}
+              details={chartData.details}
+            />
+            <p className="text-xs text-gray-400 mt-3 text-center">
+              {t("scoreOverlay.tapToContinue")}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
