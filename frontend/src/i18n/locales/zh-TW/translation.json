@@ -48,6 +48,17 @@
       "register": "免費註冊"
     }
   },
+  "scoreOverlay": {
+    "encouragement": {
+      "awesome": "太厲害了！",
+      "good": "做得好！",
+      "okay": "不錯喔！",
+      "bad": "加油！",
+      "error": "再試一次！"
+    },
+    "tapToContinue": "點擊任意處繼續",
+    "tapToRetry": "點擊任意處重新挑戰"
+  },
   "rearrangement": {
     "loading": "正在載入題目...",
     "noQuestions": "目前沒有需要練習的題目",
