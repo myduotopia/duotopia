@@ -43,6 +43,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import PricingPage from "./pages/PricingPage";
 import TestSubscription from "./pages/TestSubscription";
 import DemoAssignmentPage from "./pages/DemoAssignmentPage";
+import WordSpellingSample from "./pages/sample/WordSpellingSample";
 import { Toaster } from "sonner";
 
 /**
@@ -324,6 +325,12 @@ function App() {
 
         {/* Debug 頁面 */}
         <Route path="/debug" element={<DebugPage />} />
+
+        {/* Sample Pages — 設計稿，不需登入 */}
+        <Route
+          path="/sample/vocabulary-set/word-spelling"
+          element={<WordSpellingSample />}
+        />
 
         {/* Test Pages */}
         <Route
