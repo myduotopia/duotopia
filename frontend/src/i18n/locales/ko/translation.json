@@ -1,4 +1,9 @@
 {
+  "rearrangement": {
+    "buttons": {
+      "practiceAgain": "다시 연습하기"
+    }
+  },
   "studentAssignmentList": {
     "loading": "로딩 중...",
     "errors": {

@@ -106,7 +106,6 @@ export default function StudentAssignmentDetail() {
 
         if (activitiesResponse.ok) {
           const data = await activitiesResponse.json();
-          console.log("Activities API response:", data);
 
           // 設置 practice_mode（例句重組模式）
           if (data.practice_mode) {
@@ -183,13 +182,6 @@ export default function StudentAssignmentDetail() {
         completed_count: completedCount,
         content_count: totalCount,
       };
-
-      console.log("Assignment detail:", {
-        score: assignmentDetail.score,
-        completed: completedCount,
-        total: totalCount,
-        activities: contentProgress.length,
-      });
 
       setAssignment(assignmentDetail);
     } catch (error) {
