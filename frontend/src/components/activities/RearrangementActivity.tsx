@@ -57,7 +57,6 @@ interface RearrangementActivityProps {
   isPreviewMode?: boolean;
   isDemoMode?: boolean; // Demo mode - uses public demo API endpoints
   showAnswer?: boolean; // 答題結束後是否顯示正確答案
-  isPracticeMode?: boolean; // 練習模式：已提交的作業，不計分，可重新練習
   // 受控導航 props（由父組件控制題目切換）
   currentQuestionIndex?: number;
   onQuestionIndexChange?: (index: number) => void;
@@ -91,7 +90,6 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   isPreviewMode = false,
   isDemoMode = false,
   showAnswer = false,
-  isPracticeMode = false,
   currentQuestionIndex: controlledIndex,
   onQuestionIndexChange,
   onQuestionsLoaded,
@@ -264,12 +262,11 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
         }
       }
 
-      // 如果全部完成
+      // 如果全部完成，觸發 onComplete
       if (restoredCompletedCount === response.questions.length) {
-        if (!isPracticeMode && onComplete) {
+        if (onComplete) {
           onComplete(restoredTotalScore, response.questions.length);
         }
-        // 練習模式：不觸發 onComplete，停在第一題讓學生自由練習
       } else {
         // 跳到第一個未完成的題目
         if (firstIncompleteIndex > 0) {
@@ -392,8 +389,8 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     setCompletedQuestions((prev) => prev + 1);
     setResultModalOpen(true); // 打開結果 Modal（時間到也顯示結果）
 
-    // 學生模式：呼叫 API 儲存 timeout 分數（練習模式不存）
-    if (!isPreviewMode && !isDemoMode && !isPracticeMode) {
+    // 學生模式：呼叫 API 儲存 timeout 分數
+    if (!isPreviewMode && !isDemoMode) {
       try {
         await apiClient.post(
           `/api/students/assignments/${studentAssignmentId}/rearrangement-complete`,
@@ -529,8 +526,8 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       setCompletedQuestions((prev) => prev + 1);
       setResultModalOpen(true); // 打開結果 Modal
 
-      // 學生模式：完成時呼叫 API 儲存分數（練習模式不存）
-      if (!isPreviewMode && !isDemoMode && !isPracticeMode) {
+      // 學生模式：完成時呼叫 API 儲存分數
+      if (!isPreviewMode && !isDemoMode) {
         try {
           await apiClient.post(
             `/api/students/assignments/${studentAssignmentId}/rearrangement-complete`,
@@ -624,30 +621,6 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     }
   };
 
-  // 練習模式：重置已完成題目，讓學生可以重新練習（不呼叫 API）
-  const handlePracticeReset = () => {
-    const currentQuestion = questions[currentQuestionIndex];
-    setQuestionStates((prev) => {
-      const newStates = new Map(prev);
-      newStates.set(currentQuestion.content_item_id, {
-        selectedWords: [],
-        remainingWords: [...currentQuestion.shuffled_words],
-        errorCount: 0,
-        expectedScore: 100,
-        completed: false,
-        challengeFailed: false,
-        timeRemaining: currentQuestion.time_limit,
-        hasSeenAnswer: false,
-        maxScore: 100,
-      });
-      return newStates;
-    });
-
-    if (currentQuestion.time_limit > 0) {
-      startTimer(currentQuestion.content_item_id);
-    }
-  };
-
   // 處理受控索引變更（當父組件改變 currentQuestionIndex 時）
   const prevControlledIndexRef = useRef<number | undefined>(controlledIndex);
   useEffect(() => {
@@ -736,19 +709,17 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       }
     } else {
       // 所有題目都已完成
-      if (!isPracticeMode && onComplete) {
+      if (onComplete) {
         onComplete(totalScore, questions.length);
       }
-      if (!isPracticeMode) {
-        // 計算平均分數（總分 / 題數，四捨五入到小數點一位）
-        const averageScore =
-          Math.round((totalScore / questions.length) * 10) / 10;
-        toast.success(
-          t("rearrangement.messages.allComplete", {
-            score: averageScore,
-          }),
-        );
-      }
+      // 計算平均分數（總分 / 題數，四捨五入到小數點一位）
+      const averageScore =
+        Math.round((totalScore / questions.length) * 10) / 10;
+      toast.success(
+        t("rearrangement.messages.allComplete", {
+          score: averageScore,
+        }),
+      );
     }
   };
 
@@ -1040,16 +1011,6 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
                   {word}
                 </Button>
               ))}
-            </div>
-          )}
-
-          {/* 練習模式：已完成題目顯示重新練習按鈕 */}
-          {isPracticeMode && currentState.completed && (
-            <div className="flex justify-center py-4">
-              <Button variant="outline" size="lg" onClick={handlePracticeReset}>
-                <RotateCcw className="h-4 w-4 mr-2" />
-                {t("rearrangement.buttons.practiceAgain")}
-              </Button>
             </div>
           )}
 

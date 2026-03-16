@@ -87,8 +87,7 @@
     "buttons": {
       "retry": "重新挑戰",
       "next": "下一題",
-      "finish": "完成",
-      "practiceAgain": "重新練習"
+      "finish": "完成"
     },
     "errors": {
       "loadFailed": "載入題目失敗",

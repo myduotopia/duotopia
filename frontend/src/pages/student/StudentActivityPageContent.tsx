@@ -2086,7 +2086,6 @@ export default function StudentActivityPageContent({
             isPreviewMode={isPreviewMode}
             isDemoMode={isDemoMode}
             showAnswer={showAnswer}
-            isPracticeMode={assignmentStatus === "SUBMITTED" || assignmentStatus === "RESUBMITTED" || assignmentStatus === "GRADED"}
             currentQuestionIndex={rearrangementQuestionIndex}
             onQuestionIndexChange={setRearrangementQuestionIndex}
             onQuestionsLoaded={(questions, states) => {
