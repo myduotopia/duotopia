@@ -146,7 +146,7 @@ const PronunciationScoreChart: React.FC<PronunciationScoreChartProps> = ({
               fill="#6366f1"
               fillOpacity={0.15}
               isAnimationActive={true}
-              animationDuration={800}
+              animationDuration={300}
               animationEasing="ease-out"
               dot={renderRadarDot}
             />
@@ -232,7 +232,7 @@ const PronunciationScoreChart: React.FC<PronunciationScoreChartProps> = ({
               dataKey="score"
               radius={[0, 6, 6, 0]}
               isAnimationActive={true}
-              animationDuration={600}
+              animationDuration={300}
               animationEasing="ease-out"
               barSize={20}
             >

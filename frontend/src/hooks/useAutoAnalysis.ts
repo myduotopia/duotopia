@@ -123,6 +123,16 @@ export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
             fluency_score: azureResult.fluencyScore,
             completeness_score: azureResult.completenessScore,
             overall_score: azureResult.pronunciationScore,
+            detailed_words: azureResult.detailed_words || [],
+            word_details:
+              azureResult.words?.map((w) => ({
+                word: w.word,
+                accuracy_score: w.accuracyScore,
+                error_type: w.errorType,
+              })) || [],
+            reference_text: targetText,
+            recognized_text: "",
+            analysis_summary: azureResult.analysis_summary || {},
           }),
         );
         analysisFormData.append("progress_id", currentProgressId.toString());
@@ -166,7 +176,7 @@ export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
         fluency_score: azureResult.fluencyScore,
         completeness_score: azureResult.completenessScore,
         pronunciation_score: azureResult.pronunciationScore,
-        prosody_score: 0, // Azure 不提供此項
+        // prosody_score: Azure 不提供此項，不回傳（undefined → 雷達圖不顯示）
         word_details: azureResult.words?.map((w) => ({
           word: w.word,
           accuracy_score: w.accuracyScore,

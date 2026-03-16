@@ -458,6 +458,9 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
           fluency_score: analysisResult.fluency_score,
           completeness_score: analysisResult.completeness_score,
           words: analysisResult.words,
+          detailed_words: analysisResult.detailed_words || [],
+          reference_text: items[currentQuestionIndex]?.text || "",
+          analysis_summary: analysisResult.analysis_summary || {},
         }),
       );
 
@@ -586,13 +589,9 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
 
       toast.success(t("groupedQuestionsTemplate.messages.assessmentComplete"));
 
-      // 🎯 背景上傳音檔和分析結果（不阻塞 UI，僅在非預覽模式且非 Demo 模式）
-      if (
-        !isPreviewMode &&
-        !isDemoMode &&
-        typeof audioUrl === "string" &&
-        audioUrl.startsWith("blob:")
-      ) {
+      // 🎯 背景上傳分析結果（不阻塞 UI，僅在非預覽模式且非 Demo 模式）
+      // 無論音檔是 blob 或已上傳的 GCS URL，都要將分析結果存到 DB
+      if (!isPreviewMode && !isDemoMode) {
         uploadAnalysisInBackground(audioBlob, result, currentProgressId);
       }
     } catch (error) {
