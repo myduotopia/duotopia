@@ -16,10 +16,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Volume2, Clock, RotateCcw } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Loader2,
+  Volume2,
+  Clock,
+  CheckCircle,
+  XCircle,
+  RotateCcw,
+  ChevronRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
-import ScoreOverlay from "./shared/ScoreOverlay";
 
 export interface RearrangementQuestion {
   content_item_id: number;
@@ -125,7 +139,6 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
 
   // 追蹤是否已播放第一題音檔
   const hasPlayedFirstAudioRef = useRef(false);
-
 
   // 載入題目
   const lastLoadedAssignmentRef = useRef<number | null>(null);
@@ -686,31 +699,10 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     }
   }, [controlledIndex, questions, questionStates]);
 
-  // ScoreOverlay onComplete callbacks
-  const handleOverlayComplete = () => handleNextQuestion();
-  const handleErrorOverlayComplete = () => handleRetry();
-
-  // 防止 onComplete + onClick 重複觸發
-  const nextQuestionCalledRef = useRef(false);
-
   const handleNextQuestion = () => {
-    if (nextQuestionCalledRef.current) return;
-    nextQuestionCalledRef.current = true;
-    // 下次 resultModalOpen 時重置
-    setTimeout(() => {
-      nextQuestionCalledRef.current = false;
-    }, 300);
+    setResultModalOpen(false); // 關閉結果 Modal
 
-    setResultModalOpen(false); // 關閉結果 overlay
-
-    // 練習模式：直接跳到下一題（不管完成狀態）
-    if (isPracticeMode) {
-      const nextIndex = (currentQuestionIndex + 1) % questions.length;
-      setCurrentQuestionIndex(nextIndex);
-      return;
-    }
-
-    // 一般模式：找到下一個尚未完成的題目
+    // 找到下一個尚未完成的題目（跳過已完成或挑戰失敗的題目）
     let nextIndex = -1;
 
     // 先從當前題目之後找
@@ -744,17 +736,19 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       }
     } else {
       // 所有題目都已完成
-      if (onComplete) {
+      if (!isPracticeMode && onComplete) {
         onComplete(totalScore, questions.length);
       }
-      // 計算平均分數（總分 / 題數，四捨五入到小數點一位）
-      const averageScore =
-        Math.round((totalScore / questions.length) * 10) / 10;
-      toast.success(
-        t("rearrangement.messages.allComplete", {
-          score: averageScore,
-        }),
-      );
+      if (!isPracticeMode) {
+        // 計算平均分數（總分 / 題數，四捨五入到小數點一位）
+        const averageScore =
+          Math.round((totalScore / questions.length) * 10) / 10;
+        toast.success(
+          t("rearrangement.messages.allComplete", {
+            score: averageScore,
+          }),
+        );
+      }
     }
   };
 
@@ -1008,7 +1002,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
           </div>
 
           {/* 已選擇的單字（句子構建區） */}
-          <div className="min-h-[48px] sm:min-h-[60px] p-2 sm:p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+          <div className="min-h-[60px] p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
             {currentState.selectedWords.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {currentState.selectedWords.map((word, index) => (
@@ -1041,7 +1035,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
                   variant="outline"
                   size="lg"
                   onClick={() => handleWordSelect(word)}
-                  className="text-lg sm:text-lg text-base font-medium hover:bg-blue-50 hover:border-blue-400 px-3 py-1.5 sm:px-4 sm:py-2"
+                  className="text-lg font-medium hover:bg-blue-50 hover:border-blue-400"
                 >
                   {word}
                 </Button>
@@ -1059,27 +1053,90 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
             </div>
           )}
 
-          {/* 答對結果：ScoreOverlay */}
-          <ScoreOverlay
-            open={resultModalOpen && currentState.completed}
-            score={currentState.expectedScore}
-            isError={false}
-            onComplete={handleOverlayComplete}
-          />
+          {/* 結果 Modal */}
+          <Dialog open={resultModalOpen} onOpenChange={(open) => {
+            // challengeFailed 時禁止點外面或 Escape 關閉，必須透過「重試」按鈕
+            const currentQ = questions[currentQuestionIndex];
+            const state = currentQ ? questionStates.get(currentQ.content_item_id) : null;
+            if (!open && state?.challengeFailed && !state?.completed) return;
+            setResultModalOpen(open);
+          }}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-center">
+                  {currentState.completed ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <CheckCircle className="h-16 w-16 text-green-600" />
+                      <span className="text-green-800">
+                        {t("rearrangement.messages.correct")}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <XCircle className="h-16 w-16 text-red-600" />
+                      <span className="text-red-800">
+                        {t("rearrangement.messages.tooManyErrors")}
+                      </span>
+                    </div>
+                  )}
+                </DialogTitle>
+              </DialogHeader>
 
-          {/* 錯誤結果：ScoreOverlay */}
-          <ScoreOverlay
-            open={
-              resultModalOpen &&
-              !currentState.completed &&
-              currentState.challengeFailed
-            }
-            score={currentState.expectedScore}
-            isError={true}
-            showAnswer={showAnswer}
-            answerText={currentQuestion.original_text}
-            onComplete={handleErrorOverlayComplete}
-          />
+              <div className="space-y-4">
+                {/* 分數顯示 - 只在完成時顯示 */}
+                {currentState.completed && (
+                  <p className="text-center text-lg font-semibold text-gray-700">
+                    {t("rearrangement.messages.scoreEarned", {
+                      score: Math.round(currentState.expectedScore),
+                    })}
+                  </p>
+                )}
+
+                {/* 正確答案 - 根據 showAnswer 設定顯示 */}
+                {showAnswer && currentQuestion.original_text && (
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <p className="text-sm text-gray-500 mb-2">
+                      {t("rearrangement.correctAnswer")}
+                    </p>
+                    <p className="text-lg font-medium text-gray-800">
+                      {currentQuestion.original_text}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="sm:justify-center">
+                {currentState.completed ? (
+                  <Button
+                    size="lg"
+                    onClick={handleNextQuestion}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {/* 檢查是否還有未完成的題目 */}
+                    {questions.some((q, idx) => {
+                      if (idx === currentQuestionIndex) return false;
+                      const state = questionStates.get(q.content_item_id);
+                      return (
+                        state && !state.completed && !state.challengeFailed
+                      );
+                    }) ? (
+                      <>
+                        {t("rearrangement.buttons.next")}
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </>
+                    ) : (
+                      t("rearrangement.buttons.finish")
+                    )}
+                  </Button>
+                ) : (
+                  <Button size="lg" onClick={handleRetry}>
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                    {t("rearrangement.buttons.retry")}
+                  </Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
     </div>

@@ -48,17 +48,6 @@
       "register": "Sign Up Free"
     }
   },
-  "scoreOverlay": {
-    "encouragement": {
-      "awesome": "Amazing!",
-      "good": "Great job!",
-      "okay": "Nice try!",
-      "bad": "Keep going!",
-      "error": "Try again!"
-    },
-    "tapToContinue": "Tap anywhere to continue",
-    "tapToRetry": "Tap anywhere to retry"
-  },
   "rearrangement": {
     "loading": "Loading questions...",
     "noQuestions": "No questions available",
