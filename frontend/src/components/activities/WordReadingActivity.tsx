@@ -712,7 +712,7 @@ export default function WordReadingActivity({
       <Progress value={progress} className="h-2" />
 
       {/* Item Navigation Dots */}
-      <div className="flex gap-1 flex-wrap justify-center">
+      <div className="flex gap-1 overflow-x-auto justify-center pb-1">
         {items.map((item, index) => {
           const isActive = index === currentIndex;
           const isCompleted = !!item.recording_url;
@@ -723,7 +723,7 @@ export default function WordReadingActivity({
               key={item.id}
               onClick={() => setCurrentIndex(index)}
               className={cn(
-                "w-8 h-8 rounded border transition-all flex items-center justify-center text-xs font-medium",
+                "w-8 h-8 rounded border transition-all flex items-center justify-center text-xs font-medium flex-shrink-0",
                 isActive && "border-2 border-blue-600",
                 hasAssessment
                   ? "bg-green-100 text-green-800 border-green-400"
