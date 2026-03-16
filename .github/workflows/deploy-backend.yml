@@ -419,12 +419,14 @@ jobs:
           ENV_VARS="$ENV_VARS,ENABLE_PAYMENT=${{ secrets.PRODUCTION_ENABLE_PAYMENT }}"
           ENV_VARS="$ENV_VARS,DEMO_ALLOWED_ORIGINS=https://duotopia.co,https://www.duotopia.net"
 
-          # 💰 Production: 資源配置
-          MIN_INSTANCES=0      # Scale-to-Zero 節省成本
+          # 💰 Production: 資源配置（效能調校 2026-03-16）
+          MIN_INSTANCES=1      # 保持 warm instance，避免 cold start
           MEMORY="512Mi"       # Production 需要更多記憶體
           CPU="1000m"          # 1 CPU
-          CONCURRENCY=80       # 高併發
-          MAX_INSTANCES=6      # 支援更高流量
+          CONCURRENCY=20       # 降低單 instance 負載，讓 autoscaler 更早 scale out
+          MAX_INSTANCES=10     # 支援全班同時使用的高併發場景
+          CPU_THROTTLING="--no-cpu-throttling"  # 背景任務不被限制
+          CPU_BOOST="--cpu-boost"               # 加速新 instance 啟動
         elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
           ENV_VARS="$ENV_VARS,TAPPAY_ENV=sandbox"
           ENV_VARS="$ENV_VARS,USE_MOCK_PAYMENT=false"
@@ -438,6 +440,8 @@ jobs:
           CPU="500m"           # 0.5 CPU
           CONCURRENCY=1        # CPU < 1 時必須設為 1
           MAX_INSTANCES=1      # Develop 流量低，降為 1 節省成本
+          CPU_THROTTLING="--cpu-throttling"
+          CPU_BOOST="--no-cpu-boost"
         else
           ENV_VARS="$ENV_VARS,TAPPAY_ENV=production"  # Staging uses production TapPay
           ENV_VARS="$ENV_VARS,USE_MOCK_PAYMENT=false"
@@ -451,6 +455,8 @@ jobs:
           CPU="500m"           # 0.5 CPU
           CONCURRENCY=1        # CPU < 1 時必須設為 1
           MAX_INSTANCES=1      # Staging 流量低，降為 1 節省成本
+          CPU_THROTTLING="--cpu-throttling"
+          CPU_BOOST="--no-cpu-boost"
         fi
 
         # Use ~ as custom delimiter instead of , because env var values contain
@@ -468,9 +474,9 @@ jobs:
           --cpu $CPU \
           --max-instances $MAX_INSTANCES \
           --min-instances $MIN_INSTANCES \
-          --cpu-throttling \
+          $CPU_THROTTLING \
           --concurrency $CONCURRENCY \
-          --no-cpu-boost \
+          $CPU_BOOST \
           --set-env-vars="^~^$ENV_VARS_ESCAPED"
 
     - name: 🧹 Cleanup Old Backend Images
