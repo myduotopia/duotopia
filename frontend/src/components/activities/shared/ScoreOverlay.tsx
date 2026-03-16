@@ -22,7 +22,9 @@ const SCORE_ANIMATION_URLS: Record<string, string> = {
   confetti: "/lottie/confetti.json",
 };
 
-// Module-level 快取：所有 ScoreOverlay instance 共用，只 fetch 一次
+// Module-level 快取：所有 ScoreOverlay instance 共用，只 fetch 一次。
+// 注意：這些變數不會在 HMR 時重置（module 不會被重新載入），
+// 這是刻意的設計——避免每次 hot reload 都重新 fetch Lottie JSON。
 let cachedAnimations: Record<string, object> | null = null;
 let loadingPromise: Promise<Record<string, object>> | null = null;
 
