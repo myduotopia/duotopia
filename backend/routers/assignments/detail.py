@@ -52,7 +52,11 @@ def _compute_interim_score(sa, assignment, db: Session):
         return sa.score
 
     practice_mode = assignment.practice_mode
-    if not (sa.status and sa.status.value == "IN_PROGRESS" and practice_mode in AUTO_GRADED_MODES):
+    if not (
+        sa.status
+        and sa.status.value == "IN_PROGRESS"
+        and practice_mode in AUTO_GRADED_MODES
+    ):
         return None
 
     if practice_mode == "rearrangement":
