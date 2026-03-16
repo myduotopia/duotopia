@@ -608,7 +608,9 @@ export default function StudentProfile() {
                       onClick={() =>
                         setShowCurrentPassword(!showCurrentPassword)
                       }
-                      aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+                      aria-label={
+                        showCurrentPassword ? "Hide password" : "Show password"
+                      }
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
                       {showCurrentPassword ? (
@@ -636,7 +638,9 @@ export default function StudentProfile() {
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
-                      aria-label={showNewPassword ? "Hide password" : "Show password"}
+                      aria-label={
+                        showNewPassword ? "Hide password" : "Show password"
+                      }
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
                       {showNewPassword ? (
@@ -666,7 +670,9 @@ export default function StudentProfile() {
                       onClick={() =>
                         setShowConfirmPassword(!showConfirmPassword)
                       }
-                      aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                      aria-label={
+                        showConfirmPassword ? "Hide password" : "Show password"
+                      }
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
                       {showConfirmPassword ? (

@@ -349,7 +349,9 @@ export default function StudentLogin() {
                   <button
                     type="button"
                     onClick={() => setShowEmailPassword(!showEmailPassword)}
-                    aria-label={showEmailPassword ? "Hide password" : "Show password"}
+                    aria-label={
+                      showEmailPassword ? "Hide password" : "Show password"
+                    }
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
                     {showEmailPassword ? (
@@ -562,7 +564,9 @@ export default function StudentLogin() {
                     <button
                       type="button"
                       onClick={() => setShowStepPassword(!showStepPassword)}
-                      aria-label={showStepPassword ? "Hide password" : "Show password"}
+                      aria-label={
+                        showStepPassword ? "Hide password" : "Show password"
+                      }
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
                       {showStepPassword ? (
