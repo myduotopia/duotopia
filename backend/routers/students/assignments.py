@@ -1679,7 +1679,11 @@ async def get_rearrangement_questions(
         progress_error_count = None
         if progress and progress.status == "COMPLETED":
             progress_status = "COMPLETED"
-            progress_score = float(progress.expected_score) if progress.expected_score is not None else None
+            progress_score = (
+                float(progress.expected_score)
+                if progress.expected_score is not None
+                else None
+            )
             progress_error_count = progress.error_count
 
         questions.append(

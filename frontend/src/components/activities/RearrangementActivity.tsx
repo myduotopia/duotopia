@@ -758,7 +758,11 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     const currentQuestion = questions[currentQuestionIndex];
     if (!currentQuestion) return;
     const currentState = questionStates.get(currentQuestion.content_item_id);
-    if (currentState?.challengeFailed && !currentState.completed && !resultModalOpen) {
+    if (
+      currentState?.challengeFailed &&
+      !currentState.completed &&
+      !resultModalOpen
+    ) {
       setResultModalOpen(true);
     }
   }, [questionStates, currentQuestionIndex, questions, resultModalOpen]);
@@ -1054,13 +1058,18 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
           )}
 
           {/* 結果 Modal */}
-          <Dialog open={resultModalOpen} onOpenChange={(open) => {
-            // challengeFailed 時禁止點外面或 Escape 關閉，必須透過「重試」按鈕
-            const currentQ = questions[currentQuestionIndex];
-            const state = currentQ ? questionStates.get(currentQ.content_item_id) : null;
-            if (!open && state?.challengeFailed && !state?.completed) return;
-            setResultModalOpen(open);
-          }}>
+          <Dialog
+            open={resultModalOpen}
+            onOpenChange={(open) => {
+              // challengeFailed 時禁止點外面或 Escape 關閉，必須透過「重試」按鈕
+              const currentQ = questions[currentQuestionIndex];
+              const state = currentQ
+                ? questionStates.get(currentQ.content_item_id)
+                : null;
+              if (!open && state?.challengeFailed && !state?.completed) return;
+              setResultModalOpen(open);
+            }}
+          >
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="text-center">
