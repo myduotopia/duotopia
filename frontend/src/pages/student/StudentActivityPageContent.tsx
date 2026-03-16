@@ -2409,7 +2409,7 @@ export default function StudentActivityPageContent({
               {/* 例句重組模式：所有題目合併顯示，不分 activity */}
               {practiceMode === "rearrangement" &&
               rearrangementQuestions.length > 0 ? (
-                <div className="flex gap-0.5 sm:gap-1 flex-nowrap">
+                <div className="flex gap-0.5 sm:gap-1 overflow-x-auto scrollbar-hide">
                   {rearrangementQuestions.map((q, qIndex) => {
                     const state = rearrangementQuestionStates.get(
                       q.content_item_id,
