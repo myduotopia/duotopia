@@ -596,7 +596,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     toast.info(t("rearrangement.messages.retryStarted"));
 
     // 學生模式：通知後端重試（用於記錄 retry_count）
-    if (!isPreviewMode && !isDemoMode) {
+    if (!isPreviewMode && !isDemoMode && !isPracticeMode) {
       try {
         await apiClient.post(
           `/api/students/assignments/${studentAssignmentId}/rearrangement-retry`,
@@ -627,6 +627,12 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   // 練習模式：重置已完成題目，讓學生可以重新練習（不呼叫 API）
   const handlePracticeReset = () => {
     const currentQuestion = questions[currentQuestionIndex];
+
+    // 清除可能正在運行的計時器，避免舊計時器繼續運行
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
     setQuestionStates((prev) => {
       const newStates = new Map(prev);
       newStates.set(currentQuestion.content_item_id, {
