@@ -2086,6 +2086,11 @@ export default function StudentActivityPageContent({
             isPreviewMode={isPreviewMode}
             isDemoMode={isDemoMode}
             showAnswer={showAnswer}
+            isPracticeMode={
+              assignmentStatus === "SUBMITTED" ||
+              assignmentStatus === "RESUBMITTED" ||
+              assignmentStatus === "GRADED"
+            }
             currentQuestionIndex={rearrangementQuestionIndex}
             onQuestionIndexChange={setRearrangementQuestionIndex}
             onQuestionsLoaded={(questions, states) => {
@@ -2404,7 +2409,7 @@ export default function StudentActivityPageContent({
               {/* 例句重組模式：所有題目合併顯示，不分 activity */}
               {practiceMode === "rearrangement" &&
               rearrangementQuestions.length > 0 ? (
-                <div className="flex gap-0.5 sm:gap-1 flex-wrap">
+                <div className="flex gap-0.5 sm:gap-1 overflow-x-auto scrollbar-hide">
                   {rearrangementQuestions.map((q, qIndex) => {
                     const state = rearrangementQuestionStates.get(
                       q.content_item_id,
@@ -2420,7 +2425,7 @@ export default function StudentActivityPageContent({
                         className={cn(
                           "relative w-8 h-8 sm:w-8 sm:h-8 rounded border transition-all",
                           "flex items-center justify-center text-sm sm:text-xs font-medium",
-                          "min-w-[32px] sm:min-w-[32px]",
+                          "min-w-[32px]",
                           isCompleted
                             ? "bg-green-100 text-green-800 border-green-400"
                             : isFailed
@@ -2460,7 +2465,7 @@ export default function StudentActivityPageContent({
                         className="flex items-center gap-1 sm:gap-2 flex-shrink-0"
                       >
                         <div className="flex items-center gap-1">
-                          <span className="text-sm sm:text-xs font-medium text-gray-600 whitespace-nowrap max-w-[120px] sm:max-w-none truncate sm:truncate-none">
+                          <span className="text-sm sm:text-xs font-medium text-gray-600 whitespace-nowrap max-w-[120px] sm:max-w-none truncate sm:overflow-visible sm:whitespace-normal">
                             {activity.title}
                           </span>
                           <Badge
@@ -2540,7 +2545,7 @@ export default function StudentActivityPageContent({
                                 className={cn(
                                   "relative w-8 h-8 sm:w-8 sm:h-8 rounded border transition-all",
                                   "flex items-center justify-center text-sm sm:text-xs font-medium",
-                                  "min-w-[32px] sm:min-w-[32px]",
+                                  "min-w-[32px]",
                                   // 保持學生原本的完成狀態樣式
                                   // 🎯 Issue #147: 單字選擇模式只顯示狀態，不能點擊
                                   isWordSelectionMode

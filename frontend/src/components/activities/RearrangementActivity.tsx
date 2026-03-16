@@ -16,24 +16,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Loader2,
-  Volume2,
-  Clock,
-  CheckCircle,
-  XCircle,
-  RotateCcw,
-  ChevronRight,
-} from "lucide-react";
+import { Loader2, Volume2, Clock, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import ScoreOverlay from "./shared/ScoreOverlay";
 
 export interface RearrangementQuestion {
   content_item_id: number;
@@ -45,6 +31,10 @@ export interface RearrangementQuestion {
   audio_url?: string;
   translation?: string;
   original_text?: string; // 正確答案（用於顯示答案功能）
+  // 進度恢復欄位（重整頁面時使用）
+  progress_status?: string | null; // "COMPLETED" / "IN_PROGRESS" / null
+  progress_score?: number | null;
+  progress_error_count?: number | null;
 }
 
 interface RearrangementActivityProps {
@@ -53,6 +43,7 @@ interface RearrangementActivityProps {
   isPreviewMode?: boolean;
   isDemoMode?: boolean; // Demo mode - uses public demo API endpoints
   showAnswer?: boolean; // 答題結束後是否顯示正確答案
+  isPracticeMode?: boolean; // 練習模式：已提交的作業，不計分，可重新練習
   // 受控導航 props（由父組件控制題目切換）
   currentQuestionIndex?: number;
   onQuestionIndexChange?: (index: number) => void;
@@ -86,6 +77,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   isPreviewMode = false,
   isDemoMode = false,
   showAnswer = false,
+  isPracticeMode = false,
   currentQuestionIndex: controlledIndex,
   onQuestionIndexChange,
   onQuestionsLoaded,
@@ -101,6 +93,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   // 🚀 移除 submitting 狀態 - 驗證現在是即時的，不需要 loading 狀態
   const [scoreCategory, setScoreCategory] = useState<string>("writing");
   const [totalScore, setTotalScore] = useState(0);
+  const totalScoreRef = useRef(0);
   const [, setCompletedQuestions] = useState(0);
   // 追蹤第一題音檔是否因瀏覽器限制而無法自動播放
   const [showAudioPrompt, setShowAudioPrompt] = useState(false);
@@ -113,6 +106,8 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // 用 ref 存儲 questions，確保 handleTimeout 能同步獲取到最新數據
   const questionsRef = useRef<RearrangementQuestion[]>([]);
+  // 用 ref 存儲 questionStates，確保 timer callback 能獲取最新狀態
+  const questionStatesRef = useRef(questionStates);
 
   // 使用受控或內部索引
   const currentQuestionIndex = controlledIndex ?? internalQuestionIndex;
@@ -123,6 +118,11 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       setInternalQuestionIndex(index);
     }
   };
+
+  // 同步 questionStatesRef，確保 timer callback 能獲取最新狀態
+  useEffect(() => {
+    questionStatesRef.current = questionStates;
+  }, [questionStates]);
 
   // 通知父組件題目狀態變更
   useEffect(() => {
@@ -195,34 +195,86 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       questionsRef.current = response.questions; // 同步設置 ref，確保 handleTimeout 能立即獲取
       setScoreCategory(response.score_category || "writing");
 
-      // 初始化每題狀態
+      // 初始化每題狀態（含進度恢復）
       const initialStates = new Map<number, QuestionState>();
+      let restoredTotalScore = 0;
+      let restoredCompletedCount = 0;
+
       response.questions.forEach((q) => {
-        initialStates.set(q.content_item_id, {
-          selectedWords: [],
-          remainingWords: [...q.shuffled_words],
-          errorCount: 0,
-          expectedScore: 100,
-          completed: false,
-          challengeFailed: false,
-          timeRemaining: q.time_limit,
-          hasSeenAnswer: false,
-          maxScore: 100,
-        });
+        if (q.progress_status === "COMPLETED") {
+          // 已完成的題目：恢復為完成狀態
+          const correctWords = q.original_text?.trim().split(/\s+/) || [];
+          initialStates.set(q.content_item_id, {
+            selectedWords: correctWords,
+            remainingWords: [],
+            errorCount: q.progress_error_count || 0,
+            expectedScore: q.progress_score || 0,
+            completed: true,
+            challengeFailed: false,
+            timeRemaining: 0,
+            hasSeenAnswer: false,
+            maxScore: 100,
+          });
+          restoredTotalScore += q.progress_score || 0;
+          restoredCompletedCount += 1;
+        } else {
+          // 未完成的題目：初始化為空白狀態
+          initialStates.set(q.content_item_id, {
+            selectedWords: [],
+            remainingWords: [...q.shuffled_words],
+            errorCount: 0,
+            expectedScore: 100,
+            completed: false,
+            challengeFailed: false,
+            timeRemaining: q.time_limit,
+            hasSeenAnswer: false,
+            maxScore: 100,
+          });
+        }
       });
+
       setQuestionStates(initialStates);
+
+      // 恢復分數和已完成數
+      if (restoredTotalScore > 0) {
+        setTotalScore(restoredTotalScore);
+        totalScoreRef.current = restoredTotalScore;
+      }
+      if (restoredCompletedCount > 0) {
+        setCompletedQuestions(restoredCompletedCount);
+      }
 
       // 通知父組件題目已載入
       if (onQuestionsLoaded) {
         onQuestionsLoaded(response.questions, initialStates);
       }
 
-      // 開始計時（音檔播放由 useEffect 處理，避免重複播放）
-      // 如果 time_limit 為 0 表示不限時，不需要啟動計時器
-      if (response.questions.length > 0) {
-        const firstQuestion = response.questions[0];
-        if (firstQuestion.time_limit > 0) {
-          startTimer(firstQuestion.content_item_id);
+      // 找到第一個未完成的題目
+      let firstIncompleteIndex = 0;
+      for (let i = 0; i < response.questions.length; i++) {
+        const state = initialStates.get(response.questions[i].content_item_id);
+        if (state && !state.completed) {
+          firstIncompleteIndex = i;
+          break;
+        }
+      }
+
+      // 如果全部完成
+      if (restoredCompletedCount === response.questions.length) {
+        if (!isPracticeMode && onComplete) {
+          onComplete(restoredTotalScore, response.questions.length);
+        }
+        // 練習模式：不觸發 onComplete，停在第一題讓學生自由練習
+      } else {
+        // 跳到第一個未完成的題目
+        if (firstIncompleteIndex > 0) {
+          setCurrentQuestionIndex(firstIncompleteIndex);
+        }
+
+        // 開始計時（音檔播放由 useEffect 處理，避免重複播放）
+        const targetQuestion = response.questions[firstIncompleteIndex];
+        if (targetQuestion.time_limit > 0) {
+          startTimer(targetQuestion.content_item_id);
         }
       }
     } catch (error) {
@@ -249,23 +301,27 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     }
 
     timerRef.current = setInterval(() => {
-      setQuestionStates((prev) => {
-        const newStates = new Map(prev);
-        const state = newStates.get(contentItemId);
-        if (state && !state.completed && !state.challengeFailed) {
-          const newTime = state.timeRemaining - 1;
-          if (newTime <= 0) {
-            // 時間到，自動完成
-            handleTimeout(contentItemId);
-            return prev; // timeout handler 會更新狀態
-          }
-          newStates.set(contentItemId, {
-            ...state,
-            timeRemaining: newTime,
-          });
+      const prev = questionStatesRef.current;
+      const state = prev.get(contentItemId);
+      if (state && !state.completed && !state.challengeFailed) {
+        const newTime = state.timeRemaining - 1;
+        if (newTime <= 0) {
+          // 時間到，自動完成（在 updater 外呼叫，避免 side effect）
+          handleTimeout(contentItemId);
+          return;
         }
-        return newStates;
-      });
+        setQuestionStates((prev) => {
+          const newStates = new Map(prev);
+          const s = newStates.get(contentItemId);
+          if (s) {
+            newStates.set(contentItemId, {
+              ...s,
+              timeRemaining: newTime,
+            });
+          }
+          return newStates;
+        });
+      }
     }, 1000);
   };
 
@@ -274,8 +330,8 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       clearInterval(timerRef.current);
     }
 
-    // 取得目前狀態（在 try 之前取得，避免變數重複宣告）
-    const currentState = questionStates.get(contentItemId);
+    // 取得目前狀態（使用 ref 確保從 timer callback 呼叫時能獲取最新值）
+    const currentState = questionStatesRef.current.get(contentItemId);
 
     // 找到當前題目（使用 ref 確保第一題 timeout 時也能正確獲取）
     const currentQuestion = questionsRef.current.find(
@@ -331,12 +387,15 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     });
 
     // 計算並更新分數（使用實際分數）
-    setTotalScore((prev) => prev + actualScore);
+    setTotalScore((prev) => {
+      totalScoreRef.current = prev + actualScore;
+      return prev + actualScore;
+    });
     setCompletedQuestions((prev) => prev + 1);
     setResultModalOpen(true); // 打開結果 Modal（時間到也顯示結果）
 
-    // 學生模式：呼叫 API 儲存 timeout 分數
-    if (!isPreviewMode && !isDemoMode) {
+    // 學生模式：呼叫 API 儲存 timeout 分數（練習模式不存）
+    if (!isPreviewMode && !isDemoMode && !isPracticeMode) {
       try {
         await apiClient.post(
           `/api/students/assignments/${studentAssignmentId}/rearrangement-complete`,
@@ -468,12 +527,15 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
-      setTotalScore((prev) => prev + finalScore);
+      setTotalScore((prev) => {
+        totalScoreRef.current = prev + finalScore;
+        return prev + finalScore;
+      });
       setCompletedQuestions((prev) => prev + 1);
       setResultModalOpen(true); // 打開結果 Modal
 
-      // 學生模式：完成時呼叫 API 儲存分數
-      if (!isPreviewMode && !isDemoMode) {
+      // 學生模式：完成時呼叫 API 儲存分數（練習模式不存）
+      if (!isPreviewMode && !isDemoMode && !isPracticeMode) {
         try {
           await apiClient.post(
             `/api/students/assignments/${studentAssignmentId}/rearrangement-complete`,
@@ -539,7 +601,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     toast.info(t("rearrangement.messages.retryStarted"));
 
     // 學生模式：通知後端重試（用於記錄 retry_count）
-    if (!isPreviewMode && !isDemoMode) {
+    if (!isPreviewMode && !isDemoMode && !isPracticeMode) {
       try {
         await apiClient.post(
           `/api/students/assignments/${studentAssignmentId}/rearrangement-retry`,
@@ -564,6 +626,36 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
         console.error("Failed to record demo retry:", error);
         // 不影響 UI，靜默失敗
       }
+    }
+  };
+
+  // 練習模式：重置已完成題目，讓學生可以重新練習（不呼叫 API）
+  const handlePracticeReset = () => {
+    const currentQuestion = questions[currentQuestionIndex];
+
+    // 清除可能正在運行的計時器，避免舊計時器繼續運行
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
+    setQuestionStates((prev) => {
+      const newStates = new Map(prev);
+      newStates.set(currentQuestion.content_item_id, {
+        selectedWords: [],
+        remainingWords: [...currentQuestion.shuffled_words],
+        errorCount: 0,
+        expectedScore: 100,
+        completed: false,
+        challengeFailed: false,
+        timeRemaining: currentQuestion.time_limit,
+        hasSeenAnswer: false,
+        maxScore: 100,
+      });
+      return newStates;
+    });
+
+    if (currentQuestion.time_limit > 0) {
+      startTimer(currentQuestion.content_item_id);
     }
   };
 
@@ -618,10 +710,31 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     }
   }, [controlledIndex, questions, questionStates]);
 
-  const handleNextQuestion = () => {
-    setResultModalOpen(false); // 關閉結果 Modal
+  // ScoreOverlay onComplete callbacks
+  const handleOverlayComplete = () => handleNextQuestion();
+  const handleErrorOverlayComplete = () => handleRetry();
 
-    // 找到下一個尚未完成的題目（跳過已完成或挑戰失敗的題目）
+  // 防止 onComplete + onClick 重複觸發
+  const nextQuestionCalledRef = useRef(false);
+
+  const handleNextQuestion = () => {
+    if (nextQuestionCalledRef.current) return;
+    nextQuestionCalledRef.current = true;
+    // 下次 resultModalOpen 時重置
+    setTimeout(() => {
+      nextQuestionCalledRef.current = false;
+    }, 300);
+
+    setResultModalOpen(false); // 關閉結果 overlay
+
+    // 練習模式：直接跳到下一題（不管完成狀態）
+    if (isPracticeMode) {
+      const nextIndex = (currentQuestionIndex + 1) % questions.length;
+      setCurrentQuestionIndex(nextIndex);
+      return;
+    }
+
+    // 一般模式：找到下一個尚未完成的題目
     let nextIndex = -1;
 
     // 先從當前題目之後找
@@ -655,19 +768,36 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       }
     } else {
       // 所有題目都已完成
-      if (onComplete) {
-        onComplete(totalScore, questions.length);
+      if (!isPracticeMode && onComplete) {
+        onComplete(totalScoreRef.current, questions.length);
       }
-      // 計算平均分數（總分 / 題數，四捨五入到小數點一位）
-      const averageScore =
-        Math.round((totalScore / questions.length) * 10) / 10;
-      toast.success(
-        t("rearrangement.messages.allComplete", {
-          score: averageScore,
-        }),
-      );
+      if (!isPracticeMode) {
+        // 計算平均分數（總分 / 題數，四捨五入到小數點一位）
+        const averageScore =
+          Math.round((totalScoreRef.current / questions.length) * 10) / 10;
+        toast.success(
+          t("rearrangement.messages.allComplete", {
+            score: averageScore,
+          }),
+        );
+      }
     }
   };
+
+  // 確保 challengeFailed 時 modal 一定顯示（防止快速重試+亂點的 state batching race condition）
+  useEffect(() => {
+    if (questions.length === 0) return;
+    const currentQuestion = questions[currentQuestionIndex];
+    if (!currentQuestion) return;
+    const currentState = questionStates.get(currentQuestion.content_item_id);
+    if (
+      currentState?.challengeFailed &&
+      !currentState.completed &&
+      !resultModalOpen
+    ) {
+      setResultModalOpen(true);
+    }
+  }, [questionStates, currentQuestionIndex, questions, resultModalOpen]);
 
   // 異步播放音檔（返回 Promise，可以捕捉錯誤）
   const playAudioAsync = useCallback(
@@ -908,7 +1038,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
           </div>
 
           {/* 已選擇的單字（句子構建區） */}
-          <div className="min-h-[60px] p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+          <div className="min-h-[48px] sm:min-h-[60px] p-2 sm:p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
             {currentState.selectedWords.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {currentState.selectedWords.map((word, index) => (
@@ -941,7 +1071,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
                   variant="outline"
                   size="lg"
                   onClick={() => handleWordSelect(word)}
-                  className="text-lg font-medium hover:bg-blue-50 hover:border-blue-400"
+                  className="text-lg sm:text-lg text-base font-medium hover:bg-blue-50 hover:border-blue-400 px-3 py-1.5 sm:px-4 sm:py-2"
                 >
                   {word}
                 </Button>
@@ -949,84 +1079,37 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
             </div>
           )}
 
-          {/* 結果 Modal */}
-          <Dialog open={resultModalOpen} onOpenChange={setResultModalOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="text-center">
-                  {currentState.completed ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <CheckCircle className="h-16 w-16 text-green-600" />
-                      <span className="text-green-800">
-                        {t("rearrangement.messages.correct")}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <XCircle className="h-16 w-16 text-red-600" />
-                      <span className="text-red-800">
-                        {t("rearrangement.messages.tooManyErrors")}
-                      </span>
-                    </div>
-                  )}
-                </DialogTitle>
-              </DialogHeader>
+          {/* 練習模式：已完成題目顯示重新練習按鈕 */}
+          {isPracticeMode && currentState.completed && (
+            <div className="flex justify-center py-4">
+              <Button variant="outline" size="lg" onClick={handlePracticeReset}>
+                <RotateCcw className="h-4 w-4 mr-2" />
+                {t("rearrangement.buttons.practiceAgain")}
+              </Button>
+            </div>
+          )}
 
-              <div className="space-y-4">
-                {/* 分數顯示 - 只在完成時顯示 */}
-                {currentState.completed && (
-                  <p className="text-center text-lg font-semibold text-gray-700">
-                    {t("rearrangement.messages.scoreEarned", {
-                      score: Math.round(currentState.expectedScore),
-                    })}
-                  </p>
-                )}
+          {/* 答對結果：ScoreOverlay */}
+          <ScoreOverlay
+            open={resultModalOpen && currentState.completed}
+            score={currentState.expectedScore}
+            isError={false}
+            onComplete={handleOverlayComplete}
+          />
 
-                {/* 正確答案 - 根據 showAnswer 設定顯示 */}
-                {showAnswer && currentQuestion.original_text && (
-                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="text-sm text-gray-500 mb-2">
-                      {t("rearrangement.correctAnswer")}
-                    </p>
-                    <p className="text-lg font-medium text-gray-800">
-                      {currentQuestion.original_text}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <DialogFooter className="sm:justify-center">
-                {currentState.completed ? (
-                  <Button
-                    size="lg"
-                    onClick={handleNextQuestion}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    {/* 檢查是否還有未完成的題目 */}
-                    {questions.some((q, idx) => {
-                      if (idx === currentQuestionIndex) return false;
-                      const state = questionStates.get(q.content_item_id);
-                      return (
-                        state && !state.completed && !state.challengeFailed
-                      );
-                    }) ? (
-                      <>
-                        {t("rearrangement.buttons.next")}
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </>
-                    ) : (
-                      t("rearrangement.buttons.finish")
-                    )}
-                  </Button>
-                ) : (
-                  <Button size="lg" onClick={handleRetry}>
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    {t("rearrangement.buttons.retry")}
-                  </Button>
-                )}
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          {/* 錯誤結果：ScoreOverlay */}
+          <ScoreOverlay
+            open={
+              resultModalOpen &&
+              !currentState.completed &&
+              currentState.challengeFailed
+            }
+            score={currentState.expectedScore}
+            isError={true}
+            showAnswer={showAnswer}
+            answerText={currentQuestion.original_text}
+            onComplete={handleErrorOverlayComplete}
+          />
         </CardContent>
       </Card>
     </div>
