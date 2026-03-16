@@ -658,7 +658,7 @@ export default function WordSelectionActivity({
         {/* Word Text - hide when in audio mode */}
         {!playAudio && (
           <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-800">
+            <h2 className="text-3xl font-bold text-gray-800 select-none">
               {currentWord.text}
             </h2>
           </div>
@@ -742,7 +742,7 @@ export default function WordSelectionActivity({
                 key={index}
                 className={cn(
                   "h-full min-h-16 py-3 px-4 text-base sm:text-lg font-medium",
-                  "rounded-2xl border-2 shadow-md",
+                  "rounded-2xl border-2 shadow-md select-none",
                   "transition-all duration-200",
                   "whitespace-normal text-center break-words",
                   !showResult && "hover:shadow-lg hover:-translate-y-0.5 active:scale-95",
