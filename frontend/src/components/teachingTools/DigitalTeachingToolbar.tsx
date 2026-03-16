@@ -53,8 +53,6 @@ const TimerTool: React.FC<{
   onClose: () => void;
   zCounterRef: React.MutableRefObject<number>;
 }> = ({ show, onClose, zCounterRef }) => {
-  const [, setMinutes] = useState(0);
-  const [, setSeconds] = useState(0);
   const [isActive, setIsActive] = useState(false);
   const [isBeeping, setIsBeeping] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -133,9 +131,7 @@ const TimerTool: React.FC<{
   const startBeeping = useCallback(() => {
     setIsBeeping(true);
     if (audioRef.current) {
-      audioRef.current
-        .play()
-        .catch((e) => console.log("Audio play prevented:", e));
+      audioRef.current.play().catch(() => {});
     }
   }, []);
 
@@ -361,8 +357,6 @@ const TimerTool: React.FC<{
                 stopBeeping();
                 setIsActive(false);
                 setTimeLeft(0);
-                setMinutes(0);
-                setSeconds(0);
               }}
               className="rounded-full bg-red-500 text-white shadow-lg w-10 h-10 flex items-center justify-center hover:scale-105 transition-transform"
               aria-label="Stop timer"
@@ -474,8 +468,6 @@ const TimerTool: React.FC<{
             key={m}
             onClick={() => {
               if (!isActive) {
-                setMinutes(m);
-                setSeconds(0);
                 setTimeLeft(m * 60);
               }
             }}
@@ -512,6 +504,66 @@ const TimerTool: React.FC<{
           onTouchStart={(e) => startResize(e, setTimerScale, timerScale)}
         />
       </div>
+    </div>
+  );
+};
+
+// Die face component (module scope to avoid re-creation on every render)
+const DieFace: React.FC<{
+  dots: number;
+  transform: string;
+  isRed?: boolean;
+}> = ({ dots, transform, isRed = false }) => {
+  const dotMap: Record<number, Array<[number, number]>> = {
+    1: [[50, 50]],
+    2: [
+      [25, 25],
+      [75, 75],
+    ],
+    3: [
+      [25, 25],
+      [50, 50],
+      [75, 75],
+    ],
+    4: [
+      [25, 25],
+      [25, 75],
+      [75, 25],
+      [75, 75],
+    ],
+    5: [
+      [25, 25],
+      [25, 75],
+      [50, 50],
+      [75, 25],
+      [75, 75],
+    ],
+    6: [
+      [25, 20],
+      [25, 50],
+      [25, 80],
+      [75, 20],
+      [75, 50],
+      [75, 80],
+    ],
+  };
+
+  return (
+    <div
+      className="absolute w-full h-full bg-white border border-gray-200 rounded-xl flex items-center justify-center shadow-inner"
+      style={{ transform, backfaceVisibility: "hidden" }}
+    >
+      <svg width="100%" height="100%" viewBox="0 0 100 100">
+        {(dotMap[dots] || []).map(([cx, cy], i) => (
+          <circle
+            key={i}
+            cx={cx}
+            cy={cy}
+            r={dots === 1 ? 12 : 8}
+            fill={isRed ? "#ef4444" : "#374151"}
+          />
+        ))}
+      </svg>
     </div>
   );
 };
@@ -574,6 +626,13 @@ const DiceTool: React.FC<{
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [clampDicePos]);
+
+  // Clean up roll timer on unmount
+  useEffect(() => {
+    return () => {
+      if (rollTimerRef.current) clearTimeout(rollTimerRef.current);
+    };
+  }, []);
 
   // Preload dice sounds
   useEffect(() => {
@@ -651,65 +710,6 @@ const DiceTool: React.FC<{
         });
       });
     }, 700);
-  };
-
-  const DieFace: React.FC<{
-    dots: number;
-    transform: string;
-    isRed?: boolean;
-  }> = ({ dots, transform, isRed = false }) => {
-    const dotMap: Record<number, Array<[number, number]>> = {
-      1: [[50, 50]],
-      2: [
-        [25, 25],
-        [75, 75],
-      ],
-      3: [
-        [25, 25],
-        [50, 50],
-        [75, 75],
-      ],
-      4: [
-        [25, 25],
-        [25, 75],
-        [75, 25],
-        [75, 75],
-      ],
-      5: [
-        [25, 25],
-        [25, 75],
-        [50, 50],
-        [75, 25],
-        [75, 75],
-      ],
-      6: [
-        [25, 20],
-        [25, 50],
-        [25, 80],
-        [75, 20],
-        [75, 50],
-        [75, 80],
-      ],
-    };
-
-    return (
-      <div
-        className="absolute w-full h-full bg-white border border-gray-200 rounded-xl flex items-center justify-center shadow-inner"
-        style={{ transform, backfaceVisibility: "hidden" }}
-      >
-        <svg width="100%" height="100%" viewBox="0 0 100 100">
-          {(dotMap[dots] || []).map(([cx, cy], i) => (
-            <circle
-              key={i}
-              cx={cx}
-              cy={cy}
-              r={dots === 1 ? 12 : 8}
-              fill={isRed ? "#ef4444" : "#374151"}
-            />
-          ))}
-        </svg>
-      </div>
-    );
   };
 
   const startDrag = (
@@ -947,6 +947,9 @@ const RpsTool: React.FC<{
   const [rpsScale, setRpsScale] = useState(1);
   const hasInitialized = useRef(false);
   const rpsContainerRef = useRef<HTMLDivElement>(null);
+  const spinTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const resetTimerLRef = useRef<NodeJS.Timeout | null>(null);
+  const resetTimerRRef = useRef<NodeJS.Timeout | null>(null);
 
   const clampRpsPos = useCallback(
     (pos: { x: number; y: number }) => {
@@ -990,6 +993,15 @@ const RpsTool: React.FC<{
     return () => window.removeEventListener("resize", onResize);
   }, [clampRpsPos]);
 
+  // Clean up spin timers on unmount
+  useEffect(() => {
+    return () => {
+      if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
+      if (resetTimerLRef.current) clearTimeout(resetTimerLRef.current);
+      if (resetTimerRRef.current) clearTimeout(resetTimerRRef.current);
+    };
+  }, []);
+
   const spin = () => {
     if (isSpinning) return;
     setIsSpinning(true);
@@ -1011,16 +1023,16 @@ const RpsTool: React.FC<{
     setReelIndexL(newIndexL);
     setReelIndexR(newIndexR);
 
-    setTimeout(() => {
+    spinTimerRef.current = setTimeout(() => {
       setIsSpinning(false);
       if (newIndexL > 30) {
-        setTimeout(() => {
+        resetTimerLRef.current = setTimeout(() => {
           setReelTransitionL(false);
           setReelIndexL((newIndexL % 3) + 3);
         }, 50);
       }
       if (newIndexR > 30) {
-        setTimeout(() => {
+        resetTimerRRef.current = setTimeout(() => {
           setReelTransitionR(false);
           setReelIndexR((newIndexR % 3) + 3);
         }, 50);
@@ -1445,7 +1457,7 @@ const DigitalTeachingToolbar: React.FC = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error("Failed to copy URL:", err);
+      void err;
     }
   }, [getStudentLoginUrl]);
 
@@ -1554,7 +1566,7 @@ const DigitalTeachingToolbar: React.FC = () => {
       {/* Side toolbar */}
       <div
         ref={toolbarRef}
-        className="fixed right-0 flex flex-col gap-1 bg-white/90 backdrop-blur-md shadow-2xl border border-gray-200 border-r-0 rounded-l-xl p-1.5 z-[150] pointer-events-auto transition-transform duration-300"
+        className={`fixed right-0 flex flex-col gap-1 bg-white/90 backdrop-blur-md shadow-2xl border border-gray-200 border-r-0 rounded-l-xl p-1.5 z-[150] transition-transform duration-300 ${isCollapsed ? "pointer-events-none" : "pointer-events-auto"}`}
         style={{
           top: `${toolbarY ?? window.innerHeight / 2}px`,
           transform: `translateY(-50%)${isCollapsed ? " translateX(100%)" : ""}`,
