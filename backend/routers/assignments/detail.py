@@ -41,12 +41,26 @@ def _get_total_item_count(assignment_id: int, db: Session) -> int:
     )
 
 
-def _compute_interim_score(sa, assignment, db: Session):
+def _is_interim_score(sa, assignment) -> bool:
+    """Check if a student assignment should show an interim (provisional) score."""
+    return (
+        sa is not None
+        and sa.score is None
+        and sa.status is not None
+        and sa.status.value == "IN_PROGRESS"
+        and assignment.practice_mode in AUTO_GRADED_MODES
+    )
+
+
+def _compute_interim_score(sa, assignment, db: Session, total_items: int | None = None):
     """
     Compute interim score for IN_PROGRESS auto-graded assignments.
     - GRADED/RETURNED: return sa.score (already finalized)
     - IN_PROGRESS + rearrangement: sum(expected_scores) / total_items
     - IN_PROGRESS + word_selection: calculate_assignment_mastery DB function
+
+    Args:
+        total_items: Pre-computed total item count to avoid redundant DB queries.
     """
     if sa.score is not None:
         return sa.score
@@ -70,16 +84,20 @@ def _compute_interim_score(sa, assignment, db: Session):
         ]
         if not valid_scores:
             return None
-        total_items = _get_total_item_count(assignment.id, db)
+        if total_items is None:
+            total_items = _get_total_item_count(assignment.id, db)
         if total_items == 0:
             return None
         return round(sum(valid_scores) / total_items, 1)
 
     elif practice_mode == "word_selection":
-        result = db.execute(
-            text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
-            {"sa_id": sa.id},
-        ).fetchone()
+        try:
+            result = db.execute(
+                text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+                {"sa_id": sa.id},
+            ).fetchone()
+        except Exception:
+            return None
         if result and result.current_mastery is not None:
             return min(100, round(float(result.current_mastery) * 100, 1))
 
@@ -169,6 +187,9 @@ async def get_assignment_detail(
         .all()
     )
 
+    # Pre-compute total item count once (avoids O(N) redundant queries in the loop)
+    total_items = _get_total_item_count(assignment.id, db)
+
     students_progress = []
     for student in all_students:
         # 檢查這個學生是否已被指派
@@ -224,14 +245,12 @@ async def get_assignment_detail(
                     sa.submitted_at.isoformat() if sa and sa.submitted_at else None
                 ),
                 "content_progress": content_progress,
-                "score": _compute_interim_score(sa, assignment, db) if sa else None,
-                "is_interim_score": (
-                    sa is not None
-                    and sa.score is None
-                    and sa.status
-                    and sa.status.value == "IN_PROGRESS"
-                    and assignment.practice_mode in AUTO_GRADED_MODES
+                "score": (
+                    _compute_interim_score(sa, assignment, db, total_items=total_items)
+                    if sa
+                    else None
                 ),
+                "is_interim_score": _is_interim_score(sa, assignment),
             }
         )
 
@@ -317,6 +336,9 @@ async def get_assignment_progress(
     # 優化：使用字典查找避免嵌套循環 O(N*M) 問題
     student_assignments_dict = {sa.student_id: sa for sa in student_assignments}
 
+    # Pre-compute total item count once (avoids O(N) redundant queries in the loop)
+    total_items = _get_total_item_count(assignment.id, db)
+
     progress_list = []
     for student in all_students:
         # 使用字典快速查找，O(1) 時間複雜度
@@ -337,14 +359,12 @@ async def get_assignment_progress(
                 "submission_date": (
                     sa.submitted_at.isoformat() if sa and sa.submitted_at else None
                 ),
-                "score": _compute_interim_score(sa, assignment, db) if sa else None,
-                "is_interim_score": (
-                    sa is not None
-                    and sa.score is None
-                    and sa.status
-                    and sa.status.value == "IN_PROGRESS"
-                    and assignment.practice_mode in AUTO_GRADED_MODES
+                "score": (
+                    _compute_interim_score(sa, assignment, db, total_items=total_items)
+                    if sa
+                    else None
                 ),
+                "is_interim_score": _is_interim_score(sa, assignment),
                 "attempts": 1 if sa and sa.submitted_at else 0,
                 "last_activity": (
                     sa.updated_at.isoformat()
