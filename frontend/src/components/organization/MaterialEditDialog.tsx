@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { OrganizationProgram } from "@/types/organizationPrograms";
 
@@ -43,6 +43,8 @@ const CEFR_LEVELS = [
   { value: "C2", label: "C2" },
 ];
 
+const MAX_TAGS = 5;
+
 export function MaterialEditDialog({
   program,
   organizationId,
@@ -53,11 +55,12 @@ export function MaterialEditDialog({
   const token = useTeacherAuthStore((state) => state.token);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
+  const [tagInput, setTagInput] = useState("");
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     level: "",
-    total_hours: "",
+    tags: [] as string[],
     is_active: true,
   });
 
@@ -68,11 +71,31 @@ export function MaterialEditDialog({
         name: program.name || "",
         description: program.description || "",
         level: program.level || "",
-        total_hours: program.total_hours?.toString() || "",
+        tags: program.tags || [],
         is_active: program.is_active,
       });
+      setTagInput("");
     }
   }, [program]);
+
+  const handleAddTag = () => {
+    const tag = tagInput.trim();
+    if (!tag) return;
+    if (formData.tags.length >= MAX_TAGS) return;
+    if (formData.tags.includes(tag)) {
+      setTagInput("");
+      return;
+    }
+    setFormData({ ...formData, tags: [...formData.tags, tag] });
+    setTagInput("");
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setFormData({
+      ...formData,
+      tags: formData.tags.filter((t) => t !== tagToRemove),
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,7 +115,7 @@ export function MaterialEditDialog({
         is_active: boolean;
         description?: string;
         level?: string;
-        total_hours?: number;
+        tags?: string[];
       } = {
         name: formData.name.trim(),
         is_active: formData.is_active,
@@ -106,11 +129,8 @@ export function MaterialEditDialog({
         requestData.level = formData.level;
       }
 
-      if (formData.total_hours) {
-        const hours = parseInt(formData.total_hours);
-        if (hours > 0) {
-          requestData.total_hours = hours;
-        }
+      if (formData.tags.length > 0) {
+        requestData.tags = formData.tags;
       }
 
       const response = await fetch(
@@ -206,19 +226,45 @@ export function MaterialEditDialog({
             </Select>
           </div>
 
-          {/* 總時數 */}
+          {/* 標籤 */}
           <div className="space-y-2">
-            <Label htmlFor="total_hours">總時數</Label>
-            <Input
-              id="total_hours"
-              type="number"
-              min="0"
-              value={formData.total_hours}
-              onChange={(e) =>
-                setFormData({ ...formData, total_hours: e.target.value })
-              }
-              placeholder="例如：60（選填）"
-            />
+            <Label>
+              標籤{" "}
+              <span className="text-gray-500 text-xs">（最多 {MAX_TAGS} 個）</span>
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddTag();
+                  }
+                }}
+                placeholder="輸入標籤後按 Enter"
+                disabled={formData.tags.length >= MAX_TAGS}
+              />
+            </div>
+            {formData.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {formData.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm border border-blue-200"
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      className="ml-2 text-blue-500 hover:text-blue-700"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 啟用狀態 */}

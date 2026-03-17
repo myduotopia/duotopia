@@ -14,7 +14,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Search } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface OrganizationProgram {
@@ -53,6 +60,9 @@ export function SchoolProgramCreateDialog({
   const [saving, setSaving] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customDescription, setCustomDescription] = useState("");
+  const [customLevel, setCustomLevel] = useState("A1");
+  const [customTags, setCustomTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState("");
 
   useEffect(() => {
     if (!open) {
@@ -60,6 +70,9 @@ export function SchoolProgramCreateDialog({
       setSelected(new Set());
       setCustomName("");
       setCustomDescription("");
+      setCustomLevel("A1");
+      setCustomTags([]);
+      setCustomTagInput("");
     }
   }, [open]);
 
@@ -145,6 +158,24 @@ export function SchoolProgramCreateDialog({
     }
   };
 
+  const MAX_TAGS = 5;
+
+  const handleAddCustomTag = () => {
+    const tag = customTagInput.trim();
+    if (!tag) return;
+    if (customTags.length >= MAX_TAGS) return;
+    if (customTags.includes(tag)) {
+      setCustomTagInput("");
+      return;
+    }
+    setCustomTags([...customTags, tag]);
+    setCustomTagInput("");
+  };
+
+  const handleRemoveCustomTag = (tagToRemove: string) => {
+    setCustomTags(customTags.filter((t) => t !== tagToRemove));
+  };
+
   const handleCreateCustom = async () => {
     if (!customName.trim()) {
       toast.error("請填寫教材名稱");
@@ -165,6 +196,8 @@ export function SchoolProgramCreateDialog({
           body: JSON.stringify({
             name: customName.trim(),
             description: customDescription.trim() || undefined,
+            level: customLevel,
+            tags: customTags.length > 0 ? customTags : undefined,
           }),
         },
       );
@@ -319,6 +352,65 @@ export function SchoolProgramCreateDialog({
                 onChange={(e) => setCustomDescription(e.target.value)}
                 placeholder="輸入課程描述（選填）"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="school-program-level">程度</Label>
+              <Select
+                value={customLevel}
+                onValueChange={setCustomLevel}
+              >
+                <SelectTrigger id="school-program-level">
+                  <SelectValue placeholder="選擇程度" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PREA">PRE-A</SelectItem>
+                  <SelectItem value="A1">A1</SelectItem>
+                  <SelectItem value="A2">A2</SelectItem>
+                  <SelectItem value="B1">B1</SelectItem>
+                  <SelectItem value="B2">B2</SelectItem>
+                  <SelectItem value="C1">C1</SelectItem>
+                  <SelectItem value="C2">C2</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>
+                標籤{" "}
+                <span className="text-gray-500 text-xs">
+                  （最多 {MAX_TAGS} 個）
+                </span>
+              </Label>
+              <Input
+                value={customTagInput}
+                onChange={(e) => setCustomTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddCustomTag();
+                  }
+                }}
+                placeholder="輸入標籤後按 Enter"
+                disabled={customTags.length >= MAX_TAGS}
+              />
+              {customTags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {customTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm border border-blue-200"
+                    >
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCustomTag(tag)}
+                        className="ml-2 text-blue-500 hover:text-blue-700"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-3">
               <Button
