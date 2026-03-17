@@ -27,6 +27,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { X } from "lucide-react";
 
 type TreeItem = ProgramTreeProgram | ProgramTreeLesson | Content;
 type ReadingPanelRow = {
@@ -204,6 +212,10 @@ export function ProgramTreeView({
   const savingLessonRef = useRef(false);
   const [isSavingProgram, setIsSavingProgram] = useState(false);
   const savingProgramRef = useRef(false);
+  const [programLevel, setProgramLevel] = useState("");
+  const [programTags, setProgramTags] = useState<string[]>([]);
+  const [programTagInput, setProgramTagInput] = useState("");
+  const MAX_TAGS = 5;
 
   // Notify parent of changes (one-way: child -> parent)
   // Note: We do NOT sync externalPrograms back to avoid infinite loop
@@ -348,11 +360,20 @@ export function ProgramTreeView({
       open: true,
       program: { name: "", description: "" } as ProgramTreeProgram, // Empty program for create
     });
+    setProgramLevel("");
+    setProgramTags([]);
+    setProgramTagInput("");
   };
 
   const handleEditProgram = (item: TreeItem, level: number) => {
     if (level !== 0) return; // Only handle program level
-    setProgramEditDialog({ open: true, program: item as ProgramTreeProgram });
+    const program = item as ProgramTreeProgram;
+    setProgramEditDialog({ open: true, program });
+    setProgramLevel(program.level || "");
+    setProgramTags(
+      (program as ProgramTreeProgram & { tags?: string[] }).tags || [],
+    );
+    setProgramTagInput("");
   };
 
   const handleDeleteProgram = async (item: TreeItem, level: number) => {
@@ -1087,6 +1108,74 @@ export function ProgramTreeView({
                 rows={4}
               />
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="program-level">CEFR 等級</Label>
+              <Select value={programLevel} onValueChange={setProgramLevel}>
+                <SelectTrigger id="program-level">
+                  <SelectValue placeholder="選擇等級（選填）" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="preA">Pre-A</SelectItem>
+                  <SelectItem value="A1">A1</SelectItem>
+                  <SelectItem value="A2">A2</SelectItem>
+                  <SelectItem value="B1">B1</SelectItem>
+                  <SelectItem value="B2">B2</SelectItem>
+                  <SelectItem value="C1">C1</SelectItem>
+                  <SelectItem value="C2">C2</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>
+                標籤{" "}
+                <span className="text-gray-500 text-xs">
+                  （最多 {MAX_TAGS} 個）
+                </span>
+              </Label>
+              <Input
+                value={programTagInput}
+                onChange={(e) => setProgramTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const tag = programTagInput.trim();
+                    if (
+                      !tag ||
+                      programTags.length >= MAX_TAGS ||
+                      programTags.includes(tag)
+                    ) {
+                      setProgramTagInput("");
+                      return;
+                    }
+                    setProgramTags([...programTags, tag]);
+                    setProgramTagInput("");
+                  }
+                }}
+                placeholder="輸入標籤後按 Enter"
+                disabled={programTags.length >= MAX_TAGS}
+              />
+              {programTags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {programTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm border border-blue-200"
+                    >
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setProgramTags(programTags.filter((t) => t !== tag))
+                        }
+                        className="ml-2 text-blue-500 hover:text-blue-700"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -1114,6 +1203,8 @@ export function ProgramTreeView({
                       {
                         name: programEditDialog.program.name,
                         description: programEditDialog.program.description,
+                        level: programLevel || undefined,
+                        tags: programTags,
                       },
                     );
                     toast.success("教材更新成功");
@@ -1133,6 +1224,8 @@ export function ProgramTreeView({
                     const newProgram = await programAPI.createProgram({
                       name: programEditDialog.program.name,
                       description: programEditDialog.program.description,
+                      level: programLevel || undefined,
+                      tags: programTags,
                     });
                     toast.success("教材建立成功");
 

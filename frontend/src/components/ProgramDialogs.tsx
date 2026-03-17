@@ -17,6 +17,7 @@ import {
   Clock,
   Users,
   Layers,
+  X,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ export interface Program {
   student_count?: number;
   created_at?: string;
   updated_at?: string;
+  tags?: string[];
 }
 
 interface ProgramDialogsProps {
@@ -46,6 +48,8 @@ interface ProgramDialogsProps {
   onSwitchToEdit?: () => void;
   classrooms?: Array<{ id: number; name: string }>;
 }
+
+const MAX_TAGS = 5;
 
 export function ProgramDialogs({
   program,
@@ -62,11 +66,12 @@ export function ProgramDialogs({
     description: "",
     classroom_id: undefined,
     level: "beginner",
-    estimated_hours: 10,
     status: "draft",
+    tags: [],
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [tagInput, setTagInput] = useState("");
   const submittingRef = useRef(false);
 
   useEffect(() => {
@@ -76,18 +81,20 @@ export function ProgramDialogs({
         description: program.description || "",
         classroom_id: program.classroom_id,
         level: program.level,
-        estimated_hours: program.estimated_hours || 10,
         status: program.status || "draft",
+        tags: program.tags || [],
       });
+      setTagInput("");
     } else if (dialogType === "create") {
       setFormData({
         name: "",
         description: "",
         classroom_id: classrooms.length === 1 ? classrooms[0].id : undefined,
         level: "beginner",
-        estimated_hours: 10,
         status: "draft",
+        tags: [],
       });
+      setTagInput("");
     }
   }, [program, dialogType, classrooms]);
 
@@ -119,7 +126,7 @@ export function ProgramDialogs({
           description: formData.description,
           classroom_id: formData.classroom_id!,
           level: formData.level || "beginner",
-          estimated_hours: formData.estimated_hours || 10,
+          tags: formData.tags,
         });
         toast.success(
           t("dialogs.programDialogs.success.created", { name: formData.name }),
@@ -164,6 +171,25 @@ export function ProgramDialogs({
       submittingRef.current = false;
       setLoading(false);
     }
+  };
+
+  const handleAddTag = () => {
+    const tag = tagInput.trim();
+    if (!tag) return;
+    if ((formData.tags?.length || 0) >= MAX_TAGS) return;
+    if (formData.tags?.includes(tag)) {
+      setTagInput("");
+      return;
+    }
+    setFormData({ ...formData, tags: [...(formData.tags || []), tag] });
+    setTagInput("");
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setFormData({
+      ...formData,
+      tags: formData.tags?.filter((t) => t !== tagToRemove) || [],
+    });
   };
 
   const getLevelLabel = (level: string) => {
@@ -423,53 +449,72 @@ export function ProgramDialogs({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="hours" className="text-sm font-medium">
-                  預計時數
-                </label>
+            {/* 標籤 */}
+            <div>
+              <label className="text-sm font-medium">
+                標籤{" "}
+                <span className="text-gray-500 text-xs">
+                  （最多 {MAX_TAGS} 個）
+                </span>
+              </label>
+              <div className="flex gap-2 mt-1">
                 <input
-                  id="hours"
-                  type="number"
-                  value={formData.estimated_hours}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      estimated_hours: Number(e.target.value),
-                    })
-                  }
-                  className="w-full mt-1 px-3 py-2 border rounded-md"
-                  placeholder="10"
-                  min="1"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddTag();
+                    }
+                  }}
+                  className="w-full px-3 py-2 border rounded-md"
+                  placeholder="輸入標籤後按 Enter"
+                  disabled={(formData.tags?.length || 0) >= MAX_TAGS}
                 />
               </div>
-
-              {dialogType === "edit" && (
-                <div>
-                  <label htmlFor="status" className="text-sm font-medium">
-                    狀態
-                  </label>
-                  <select
-                    id="status"
-                    value={formData.status}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        status: e.target.value as
-                          | "active"
-                          | "draft"
-                          | "archived",
-                      })
-                    }
-                    className="w-full mt-1 px-3 py-2 border rounded-md"
-                  >
-                    <option value="draft">草稿</option>
-                    <option value="active">進行中</option>
-                    <option value="archived">已封存</option>
-                  </select>
+              {formData.tags && formData.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm border border-blue-200"
+                    >
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTag(tag)}
+                        className="ml-2 text-blue-500 hover:text-blue-700"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
+
+            {dialogType === "edit" && (
+              <div>
+                <label htmlFor="status" className="text-sm font-medium">
+                  狀態
+                </label>
+                <select
+                  id="status"
+                  value={formData.status}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      status: e.target.value as "active" | "draft" | "archived",
+                    })
+                  }
+                  className="w-full mt-1 px-3 py-2 border rounded-md"
+                >
+                  <option value="draft">草稿</option>
+                  <option value="active">進行中</option>
+                  <option value="archived">已封存</option>
+                </select>
+              </div>
+            )}
 
             {errors.submit && (
               <p className="text-sm text-red-500 bg-red-50 p-2 rounded">

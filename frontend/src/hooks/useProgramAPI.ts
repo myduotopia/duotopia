@@ -45,7 +45,12 @@ export function useProgramAPI(options: ProgramAPIOptions) {
       return response.json();
     },
 
-    createProgram: async (data: { name: string; description?: string }) => {
+    createProgram: async (data: {
+      name: string;
+      description?: string;
+      level?: string;
+      tags?: string[];
+    }) => {
       const response = await fetch(buildURL("/api/programs"), {
         method: "POST",
         headers,
@@ -57,7 +62,12 @@ export function useProgramAPI(options: ProgramAPIOptions) {
 
     updateProgram: async (
       id: number,
-      data: { name?: string; description?: string },
+      data: {
+        name?: string;
+        description?: string;
+        level?: string;
+        tags?: string[];
+      },
     ) => {
       const response = await fetch(buildURL(`/api/programs/${id}`), {
         method: "PUT",

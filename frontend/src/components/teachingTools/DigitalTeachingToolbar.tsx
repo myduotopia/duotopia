@@ -1350,14 +1350,14 @@ const DigitalTeachingToolbar: React.FC = () => {
     if (toolbarY === null) {
       setToolbarY(window.innerHeight / 2);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only, intentionally runs once to set initial toolbar position
   }, []);
 
   useEffect(() => {
     if (!helpDismissed) {
       setShowHelp(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only, intentionally runs once to check persisted help dismissal
   }, []);
 
   const handleDismissChange = useCallback((checked: boolean) => {

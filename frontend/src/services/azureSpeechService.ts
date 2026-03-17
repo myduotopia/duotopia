@@ -99,6 +99,7 @@ export class AzureSpeechService {
     audioBlob: Blob,
     referenceText: string,
     retryCount = 0,
+    granularity: "Word" | "Phoneme" = "Word",
   ): Promise<{
     result: sdk.PronunciationAssessmentResult;
     latencyMs: number;
@@ -117,12 +118,15 @@ export class AzureSpeechService {
       speechConfig.speechRecognitionLanguage = "en-US";
 
       // 3. 配置发音评估参数
-      // 🎯 Issue #118: 使用 Word 層級而非 Phoneme，加快分析速度
-      // 音素分析保留給未來的單字朗讀功能
+      // 🎯 Issue #450: 單字朗讀使用 Phoneme 層級，例句朗讀維持 Word 層級
+      const sdkGranularity =
+        granularity === "Phoneme"
+          ? sdk.PronunciationAssessmentGranularity.Phoneme
+          : sdk.PronunciationAssessmentGranularity.Word;
       const pronunciationConfig = new sdk.PronunciationAssessmentConfig(
         referenceText,
         sdk.PronunciationAssessmentGradingSystem.HundredMark,
-        sdk.PronunciationAssessmentGranularity.Word,
+        sdkGranularity,
         true, // enableMiscue
       );
 
@@ -130,7 +134,12 @@ export class AzureSpeechService {
       // 解码音频为 PCM 数据
       const arrayBuffer = await audioBlob.arrayBuffer();
       const audioContext = new AudioContext({ sampleRate: 16000 });
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      let audioBuffer: AudioBuffer;
+      try {
+        audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      } finally {
+        await audioContext.close();
+      }
 
       // 转换为 16-bit PCM mono
       const pcmData = audioBuffer.getChannelData(0); // Get mono channel
@@ -178,7 +187,14 @@ export class AzureSpeechService {
               recognizer.close();
 
               // 递归重试（只重试一次）
-              resolve(this.analyzePronunciation(audioBlob, referenceText, 1));
+              resolve(
+                this.analyzePronunciation(
+                  audioBlob,
+                  referenceText,
+                  1,
+                  granularity,
+                ),
+              );
             }
             // 其他错误
             else {
@@ -201,7 +217,14 @@ export class AzureSpeechService {
             // 401 错误 - 自动 retry
             if (error.includes("401") && retryCount === 0) {
               this.tokenCache = null;
-              resolve(this.analyzePronunciation(audioBlob, referenceText, 1));
+              resolve(
+                this.analyzePronunciation(
+                  audioBlob,
+                  referenceText,
+                  1,
+                  granularity,
+                ),
+              );
             } else {
               reject(new Error(`分析失败: ${error}`));
             }

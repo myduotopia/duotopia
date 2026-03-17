@@ -4,7 +4,22 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
 // Azure SDK response type definitions
-// 🎯 Issue #118: 簡化類型定義，移除 Phoneme/Syllable 層級（加快分析速度）
+// 🎯 Issue #450: 恢復 Phoneme/Syllable 層級型別，供單字朗讀使用
+interface AzurePhonemeData {
+  Phoneme: string;
+  PronunciationAssessment?: {
+    AccuracyScore?: number;
+  };
+}
+
+interface AzureSyllableData {
+  Syllable: string;
+  PronunciationAssessment?: {
+    AccuracyScore?: number;
+  };
+  Phonemes?: AzurePhonemeData[];
+}
+
 interface AzurePronunciationAssessment {
   AccuracyScore?: number;
   ErrorType?: string;
@@ -13,6 +28,8 @@ interface AzurePronunciationAssessment {
 interface AzureWordData {
   Word: string;
   PronunciationAssessment?: AzurePronunciationAssessment;
+  Syllables?: AzureSyllableData[];
+  Phonemes?: AzurePhonemeData[];
 }
 
 interface AzurePrivPronJson {
@@ -24,18 +41,32 @@ interface AzureAnalysisResult {
   [key: string]: unknown;
 }
 
-// 🎯 Issue #118: 簡化 DetailedWord，只保留 Word 層級資訊
+// 🎯 Issue #450: 音素分析結果型別
+export interface PhonemeDetail {
+  phoneme: string;
+  accuracy_score: number;
+}
+
+export interface SyllableDetail {
+  syllable: string;
+  accuracy_score: number;
+  phonemes: PhonemeDetail[];
+}
+
 interface DetailedWord {
   index: number;
   word: string;
   accuracy_score: number;
   error_type?: string;
+  // 🎯 Issue #450: 音素層級資料（僅單字朗讀模式）
+  syllables?: SyllableDetail[];
+  phonemes?: PhonemeDetail[];
 }
 
 // 🎯 Issue #118: Upload status for retry mechanism
 export type UploadStatus = "success" | "pending_retry" | "failed";
 
-interface PronunciationResult {
+export interface PronunciationResult {
   pronunciationScore: number;
   accuracyScore: number;
   fluencyScore: number;
@@ -46,7 +77,6 @@ interface PronunciationResult {
     errorType: string;
   }>;
   detailed_words?: DetailedWord[];
-  // 🎯 Issue #118: 簡化 analysis_summary，移除 low_score_phonemes
   analysis_summary?: {
     total_words: number;
     problematic_words: string[];
@@ -67,22 +97,28 @@ export function useAzurePronunciation() {
    * Analyze pronunciation using Azure Speech Service
    * @param audioBlob - The recorded audio blob
    * @param referenceText - The reference text to compare against
+   * @param granularity - "Phoneme" for word reading, "Word" for sentence reading (default)
    * @returns The analysis result or null if failed
    */
   const analyzePronunciation = async (
     audioBlob: Blob,
     referenceText: string,
+    granularity: "Word" | "Phoneme" = "Word",
   ): Promise<PronunciationResult | null> => {
     setIsAnalyzing(true);
     setError(null);
 
     try {
-      // Call Azure Speech Service directly - fast!
+      // Call Azure Speech Service — pass granularity through
       const { result: analysisResult } =
-        await azureSpeechService.analyzePronunciation(audioBlob, referenceText);
+        await azureSpeechService.analyzePronunciation(
+          audioBlob,
+          referenceText,
+          0,
+          granularity,
+        );
 
       // Convert Azure result to our format
-      // 🎯 Issue #118: 簡化類型，只保留 Word 層級
       const azureResult = analysisResult as unknown as {
         pronunciationScore: number;
         accuracyScore: number;
@@ -95,30 +131,52 @@ export function useAzurePronunciation() {
         }>;
       };
 
-      // 🎯 Issue #118: 簡化解析邏輯，只處理 Word 層級（不解析 Syllables/Phonemes）
+      // Parse detailed word data from Azure SDK internal JSON
       const detailed_words: DetailedWord[] = [];
       const privPronJson = (analysisResult as unknown as AzureAnalysisResult)
         .privPronJson;
 
-      // Azure SDK stores Words directly in privPronJson
       const wordsData = privPronJson?.Words || [];
 
       if (wordsData.length > 0) {
         wordsData.forEach((wordData: AzureWordData, idx: number) => {
-          detailed_words.push({
+          const detailedWord: DetailedWord = {
             index: idx,
             word: wordData.Word,
             accuracy_score:
               wordData.PronunciationAssessment?.AccuracyScore || 0,
             error_type: wordData.PronunciationAssessment?.ErrorType || "None",
-          });
+          };
+
+          // 🎯 Issue #450: 解析音素層級資料（僅 Phoneme granularity 時有值）
+          if (granularity === "Phoneme") {
+            // Parse syllables
+            if (wordData.Syllables && wordData.Syllables.length > 0) {
+              detailedWord.syllables = wordData.Syllables.map((syl) => ({
+                syllable: syl.Syllable,
+                accuracy_score: syl.PronunciationAssessment?.AccuracyScore || 0,
+                phonemes: (syl.Phonemes || []).map((ph) => ({
+                  phoneme: ph.Phoneme,
+                  accuracy_score:
+                    ph.PronunciationAssessment?.AccuracyScore || 0,
+                })),
+              }));
+            }
+
+            // Parse phonemes (flat list at word level)
+            if (wordData.Phonemes && wordData.Phonemes.length > 0) {
+              detailedWord.phonemes = wordData.Phonemes.map((ph) => ({
+                phoneme: ph.Phoneme,
+                accuracy_score: ph.PronunciationAssessment?.AccuracyScore || 0,
+              }));
+            }
+          }
+
+          detailed_words.push(detailedWord);
         });
       }
 
-      // 🔧 Issue #118 Fix: Removed uploadWithRetry here because:
-      // 1. This hook doesn't have progressId, so uploads go to GCS but don't update DB
-      // 2. Component-level uploadAnalysisInBackground() has progressId and handles upload correctly
-      // 3. Having both caused duplicate uploads (2 API calls per recording)
+      // 🔧 Issue #118 Fix: Upload handled at component level (not here)
 
       const pronunciationResult: PronunciationResult = {
         pronunciationScore: azureResult.pronunciationScore,
