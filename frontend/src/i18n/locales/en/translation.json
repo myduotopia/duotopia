@@ -4139,7 +4139,13 @@
       "translationLanguage": "Translation Language",
       "otherLanguage": "Other language...",
       "enterLanguage": "Enter language name, e.g. Thai, Tiếng Việt...",
-      "selectLanguage": "Select language"
+      "selectLanguage": "Select language",
+      "pause": "Pause",
+      "batchPaused": "Paused",
+      "selectExampleLanguage": "Please select a translation language for example sentences",
+      "enterCustomLanguage": "Please enter a custom language name",
+      "removedInternalDupes": "Removed {{count}} duplicate(s)",
+      "removedExistingDupes": "Skipped {{count}} existing word(s)"
     },
     "placeholders": {
       "enterContentTitle": "Enter content title",
@@ -4154,7 +4160,8 @@
       "processing": "Processing...",
       "startRecording": "Start Recording",
       "stopRecording": "Stop Recording",
-      "rerecord": "Re-record"
+      "rerecord": "Re-record",
+      "pause": "Pause"
     },
     "modals": {
       "audioSettings": "Audio Settings",

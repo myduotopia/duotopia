@@ -4152,7 +4152,13 @@
       "translationLanguage": "翻譯語言",
       "otherLanguage": "其他語言...",
       "enterLanguage": "輸入語言名稱，如 Thai、Tiếng Việt...",
-      "selectLanguage": "請選擇語言"
+      "selectLanguage": "請選擇語言",
+      "pause": "暫停",
+      "batchPaused": "已暫停",
+      "selectExampleLanguage": "請選擇例句翻譯語言",
+      "enterCustomLanguage": "請輸入自訂語言名稱",
+      "removedInternalDupes": "已去除 {{count}} 個重複單字",
+      "removedExistingDupes": "已跳過 {{count}} 個已存在的單字"
     },
     "placeholders": {
       "enterContentTitle": "請輸入內容標題",
@@ -4167,7 +4173,8 @@
       "processing": "處理中...",
       "startRecording": "開始錄音",
       "stopRecording": "停止錄音",
-      "rerecord": "重新錄製"
+      "rerecord": "重新錄製",
+      "pause": "暫停"
     },
     "modals": {
       "audioSettings": "音檔設定",

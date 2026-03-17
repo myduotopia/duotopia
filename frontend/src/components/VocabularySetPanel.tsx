@@ -1023,6 +1023,8 @@ interface SortableRowInnerProps {
   isAssignmentCopy?: boolean; // 是否為作業副本（顯示干擾項編輯）
   duplicateReasons?: string[]; // 重複的原因
   customTranslationLang?: string; // 自訂翻譯語言名稱
+  sentenceTranslationLang?: string; // 例句翻譯語言
+  customSentenceTranslationLang?: string; // 自訂例句翻譯語言
 }
 
 function SortableRowInner({
@@ -1048,6 +1050,8 @@ function SortableRowInner({
   isAssignmentCopy = false,
   duplicateReasons,
   customTranslationLang = "",
+  sentenceTranslationLang = "",
+  customSentenceTranslationLang: customSentenceLang = "",
 }: SortableRowInnerProps) {
   const { t } = useTranslation();
   const {
@@ -1122,7 +1126,7 @@ function SortableRowInner({
           <span className="text-sm font-medium text-gray-600">{index + 1}</span>
           {duplicateReasons && duplicateReasons.length > 0 && (
             <span className="text-xs text-red-500 font-medium">
-              {t("contentEditor.messages.duplicateWord", { defaultValue: "重複" })}: {duplicateReasons.join(", ")}
+              {t("contentEditor.messages.duplicateWord")}: {duplicateReasons.join(", ")}
             </span>
           )}
         </div>
@@ -1390,40 +1394,12 @@ function SortableRowInner({
           })}
           maxLength={500}
         />
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center space-x-1">
-          <select
-            value={row.selectedSentenceLanguage || "chinese"}
-            onChange={(e) => {
-              const newLang = e.target.value as SentenceTranslationLanguage;
-              handleUpdateRow(index, "selectedSentenceLanguage", newLang);
-              // Auto-generate when switching language if example sentence exists
-              if (row.example_sentence && row.example_sentence.trim()) {
-                setTimeout(() => {
-                  handleGenerateExampleTranslationWithLang(index, newLang);
-                }, 100);
-              }
-            }}
-            className="px-1 py-0.5 border rounded text-xs bg-white"
-          >
-            {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
-              <option key={lang.value} value={lang.value}>
-                {lang.label}
-              </option>
-            ))}
-          </select>
-          {row.example_sentence && row.example_sentence.trim() && (
-            <button
-              onClick={() => handleGenerateExampleTranslation(index)}
-              className="p-1 rounded hover:bg-gray-200 text-gray-600"
-              title={t("vocabularySet.tooltips.generateExampleTranslation", {
-                lang: t(
-                  `contentEditor.translationLanguages.${SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === (row.selectedSentenceLanguage || "chinese"))?.value || "chinese"}`,
-                ),
-              })}
-            >
-              <Globe className="h-4 w-4" />
-            </button>
-          )}
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+          <span className="text-xs text-gray-400">
+            {sentenceTranslationLang === "other"
+              ? customSentenceLang || "..."
+              : SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === sentenceTranslationLang)?.label || ""}
+          </span>
         </div>
       </div>
 
@@ -1538,6 +1514,8 @@ export default function VocabularySetPanel({
   const [batchPasteAutoTTS, setBatchPasteAutoTTS] = useState(true);
   const [batchPasteAutoTranslate, setBatchPasteAutoTranslate] = useState(true);
   const [isBatchPasting, setIsBatchPasting] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+  const batchPauseRef = useRef(false);
   const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(new Map());
 
   // Sync sentence translation language from word translation language
@@ -2980,18 +2958,57 @@ export default function VocabularySetPanel({
   };
 
   const handleBatchPaste = async (autoTTS: boolean, autoTranslate: boolean) => {
-    // 分割文字，每行一個項目
-    const lines = batchPasteText
+    // 分割文字，去重
+    const rawLines = batchPasteText
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
+
+    // 1. 貼上框內部去重
+    const uniqueLines = [...new Set(rawLines.map((l) => l.toLowerCase()))];
+    const deduped = uniqueLines.map((lower) => rawLines.find((l) => l.toLowerCase() === lower)!);
+    const internalDupes = rawLines.length - deduped.length;
+
+    // 2. 跟右側已有單字去重
+    const existingWords = new Set(
+      rows.filter((r) => r.text && r.text.trim()).map((r) => r.text.trim().toLowerCase())
+    );
+    const lines = deduped.filter((l) => !existingWords.has(l.toLowerCase()));
+    const existingDupes = deduped.length - lines.length;
+
+    // 提醒去重結果
+    if (internalDupes > 0 || existingDupes > 0) {
+      const msgs: string[] = [];
+      if (internalDupes > 0) msgs.push(t("contentEditor.messages.removedInternalDupes", { count: internalDupes }));
+      if (existingDupes > 0) msgs.push(t("contentEditor.messages.removedExistingDupes", { count: existingDupes }));
+      toast.info(msgs.join("、"));
+    }
 
     if (lines.length === 0) {
       toast.error(t("contentEditor.messages.enterContent"));
       return;
     }
 
+    // 檢查：勾選翻譯但選了「其他」卻沒輸入語言
+    if (autoTranslate && lastSelectedWordLang === "other" && !customTranslationLang.trim()) {
+      toast.error(t("contentEditor.labels.enterCustomLanguage"));
+      return;
+    }
+
+    // 檢查：勾選 AI 例句但沒選翻譯語言
+    if (aiGenerateExpanded && !aiGenerateTranslateLang) {
+      toast.error(t("contentEditor.labels.selectExampleLanguage"));
+      return;
+    }
+
+    // 檢查：AI 例句選了「其他」卻沒輸入語言
+    if (aiGenerateExpanded && aiGenerateTranslateLang === "other" && !customSentenceTranslationLang.trim()) {
+      toast.error(t("contentEditor.labels.enterCustomLanguage"));
+      return;
+    }
+
     setIsBatchPasting(true);
+    batchPauseRef.current = false;
 
     try {
       // 清除空白 items
@@ -3011,140 +3028,155 @@ export default function VocabularySetPanel({
       // 只取剩餘空間能容納的數量，剩下的留在輸入框
       const linesToPaste = lines.slice(0, remaining);
       const leftoverLines = lines.slice(remaining);
-      setBatchPasteText(leftoverLines.join("\n"));
-
-    toast.info(
-      t("contentEditor.messages.processingItems", { count: linesToPaste.length }),
-    );
-
-      // 建立新 items
-      let newItems: ContentRow[] = linesToPaste.map((text, index) => ({
-        id: `batch-${Date.now()}-${index}`,
-        text,
-        definition: "",
-        translation: "",
-        selectedWordLanguage: lastSelectedWordLang,
-        example_sentence: "",
-        example_sentence_translation: "",
-      }));
 
       const batchLang = lastSelectedWordLang;
       const batchLangCode =
         WORD_TRANSLATION_LANGUAGES.find((l) => l.value === batchLang)?.code ||
         "zh-TW";
 
-      // 批次處理 TTS 和翻譯
-      if (autoTTS || autoTranslate) {
-        try {
-          if (autoTTS) {
-            // Get voice and rate from selected TTS settings (Issue #121)
-            const { voice, rate } = getVoiceAndRate(
-              batchTTSAccent,
-              batchTTSGender,
-              batchTTSSpeed,
-            );
-            // Save settings for next time
-            saveBatchTTSSettings();
+      // TTS settings
+      let voice = "";
+      let rate = "";
+      if (autoTTS) {
+        const ttsSettings = getVoiceAndRate(batchTTSAccent, batchTTSGender, batchTTSSpeed);
+        voice = ttsSettings.voice;
+        rate = ttsSettings.rate;
+        saveBatchTTSSettings();
+      }
 
-            const ttsResult = await apiClient.batchGenerateTTS(
-              lines,
-              voice,
-              rate,
-              "+0%",
-            );
-            if (
-              ttsResult &&
-              typeof ttsResult === "object" &&
-              "audio_urls" in ttsResult
-            ) {
-              const audioUrls = (ttsResult as { audio_urls: string[] })
-                .audio_urls;
-              newItems = newItems.map((item, i) => ({
-                ...item,
-                audioUrl: audioUrls[i]?.startsWith("http")
-                  ? audioUrls[i]
-                  : `${import.meta.env.VITE_API_URL}${audioUrls[i]}`,
-                audio_url: audioUrls[i]?.startsWith("http")
-                  ? audioUrls[i]
-                  : `${import.meta.env.VITE_API_URL}${audioUrls[i]}`,
-              }));
-            }
-          }
-
-          if (autoTranslate) {
-            if (batchLang === "chinese") {
-              // 中文：使用 batchTranslateWithPos 同時取得翻譯和詞性
-              const posResponse = await apiClient.batchTranslateWithPos(
-                lines,
-                batchLangCode,
-              );
-              const results = posResponse.results || [];
-              newItems = newItems.map((item, i) => {
-                const parsed = extractFirstDefinition(
-                  results[i]?.translation || "",
-                );
-                return {
-                  ...item,
-                  definition: parsed.text,
-                  partsOfSpeech:
-                    results[i]?.parts_of_speech?.length > 0
-                      ? convertAbbreviatedPOS(results[i].parts_of_speech)
-                      : parsed.pos
-                        ? convertAbbreviatedPOS([parsed.pos])
-                        : [],
-                };
-              });
-            } else {
-              // 英/日/韓：使用 batchTranslate
-              const translateResponse = await apiClient.batchTranslate(
-                lines,
-                batchLangCode,
-              );
-              const translations =
-                (translateResponse as { translations?: string[] })
-                  .translations || [];
-              newItems = newItems.map((item, i) => {
-                const parsed = extractFirstDefinition(translations[i] || "");
-                const updated: Partial<ContentRow> = {
-                  partsOfSpeech: parsed.pos
-                    ? convertAbbreviatedPOS([parsed.pos])
-                    : item.partsOfSpeech,
-                };
-                if (batchLang === "english") updated.translation = parsed.text;
-                else if (batchLang === "japanese")
-                  updated.japanese_translation = parsed.text;
-                else if (batchLang === "korean")
-                  updated.korean_translation = parsed.text;
-                return { ...item, ...updated };
-              });
-            }
-          }
-        } catch (error) {
-          console.error("Batch processing error:", error);
-          toast.error(t("contentEditor.messages.batchProcessingFailed"));
-          return;
+      // AI 例句設定
+      const shouldGenerateExamples = aiGenerateExpanded;
+      let exampleTargetLang = "";
+      if (shouldGenerateExamples) {
+        if (aiGenerateTranslateLang === "other") {
+          exampleTargetLang = customSentenceTranslationLang || "";
+        } else if (aiGenerateTranslateLang) {
+          exampleTargetLang =
+            SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === aiGenerateTranslateLang)?.code || "";
         }
       }
 
-      // 合併新舊項目
-      const updatedRows = [...nonEmptyRows, ...newItems];
+      let currentRows = [...nonEmptyRows];
+      let processedCount = 0;
 
-      // 只更新前端狀態，不直接儲存到資料庫
-      // 使用者需要按最終的「儲存」按鈕才會執行 POST/PUT
-      setRows(updatedRows);
+      setBatchProgress({ current: 0, total: linesToPaste.length });
 
-      toast.success(
-        t("vocabularySet.messages.itemsAdded", {
-          added: linesToPaste.length,
-          total: updatedRows.length,
-        }),
-      );
+      for (let i = 0; i < linesToPaste.length; i++) {
+        // 檢查是否暫停
+        if (batchPauseRef.current) {
+          // 將未處理的行放回輸入框
+          const unprocessed = linesToPaste.slice(i);
+          setBatchPasteText([...unprocessed, ...leftoverLines].join("\n"));
+          toast.info(`${t("contentEditor.messages.batchPaused")} (${processedCount}/${linesToPaste.length})`);
+          break;
+        }
 
-      if (leftoverLines.length === 0) {
-        setBatchPasteDialogOpen(false);
+        const text = linesToPaste[i];
+        setBatchProgress({ current: i + 1, total: linesToPaste.length });
+
+        // 建立新 item
+        const newItem: ContentRow = {
+          id: `batch-${Date.now()}-${i}`,
+          text,
+          definition: "",
+          translation: "",
+          selectedWordLanguage: lastSelectedWordLang,
+          example_sentence: "",
+          example_sentence_translation: "",
+        };
+
+        try {
+          // Step 1: 翻譯
+          if (autoTranslate) {
+            if (batchLang === "chinese") {
+              const posResponse = await apiClient.batchTranslateWithPos([text], batchLangCode);
+              const results = posResponse.results || [];
+              if (results[0]) {
+                const parsed = extractFirstDefinition(results[0].translation || "");
+                newItem.definition = parsed.text;
+                if (results[0].parts_of_speech?.length > 0) {
+                  newItem.partsOfSpeech = convertAbbreviatedPOS(results[0].parts_of_speech);
+                } else if (parsed.pos) {
+                  newItem.partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
+                }
+              }
+            } else if (batchLang !== "other") {
+              const translateResponse = await apiClient.batchTranslate([text], batchLangCode);
+              const translations = (translateResponse as { translations?: string[] }).translations || [];
+              if (translations[0]) {
+                const parsed = extractFirstDefinition(translations[0]);
+                if (batchLang === "english") newItem.translation = parsed.text;
+                else if (batchLang === "japanese") newItem.japanese_translation = parsed.text;
+                else if (batchLang === "korean") newItem.korean_translation = parsed.text;
+                if (parsed.pos) newItem.partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
+              }
+            } else {
+              // 自訂語言：使用 batchTranslate with custom lang
+              const customCode = customTranslationLang || "zh-TW";
+              const translateResponse = await apiClient.batchTranslate([text], customCode);
+              const translations = (translateResponse as { translations?: string[] }).translations || [];
+              if (translations[0]) {
+                newItem.definition = translations[0];
+              }
+            }
+          }
+
+          // Step 2: TTS
+          if (autoTTS) {
+            const ttsResult = await apiClient.generateTTS(text, voice, rate, "+0%");
+            if (ttsResult && typeof ttsResult === "object" && "audio_url" in ttsResult) {
+              const audioUrl = (ttsResult as { audio_url: string }).audio_url;
+              const fullUrl = audioUrl?.startsWith("http") ? audioUrl : `${import.meta.env.VITE_API_URL}${audioUrl}`;
+              newItem.audioUrl = fullUrl;
+              newItem.audio_url = fullUrl;
+            }
+          }
+
+          // Step 3: AI 例句
+          if (shouldGenerateExamples) {
+            const response = await apiClient.generateSentences({
+              words: [{
+                word: text,
+                definition: newItem.definition || "",
+                partsOfSpeech: newItem.partsOfSpeech || [],
+              }],
+              level: aiGenerateLevel,
+              prompt: aiGeneratePrompt || undefined,
+              target_language: exampleTargetLang || undefined,
+            });
+            const results = (response as { results?: Array<{ sentence?: string; translation?: string }> }).results || [];
+            if (results[0]) {
+              newItem.example_sentence = results[0].sentence || "";
+              newItem.example_sentence_translation = results[0].translation || "";
+            }
+          }
+        } catch (error) {
+          console.error(`Error processing word "${text}":`, error);
+          // 繼續處理下一個單字
+        }
+
+        // 即時更新 UI
+        currentRows = [...currentRows, newItem];
+        setRows(currentRows);
+        processedCount++;
+      }
+
+      // 處理完成或暫停後
+      if (!batchPauseRef.current) {
+        setBatchPasteText(leftoverLines.join("\n"));
+        toast.success(
+          t("vocabularySet.messages.itemsAdded", {
+            added: processedCount,
+            total: currentRows.length,
+          }),
+        );
+        if (leftoverLines.length === 0) {
+          setBatchPasteDialogOpen(false);
+        }
       }
     } finally {
       setIsBatchPasting(false);
+      setBatchProgress(null);
     }
   };
 
@@ -3303,7 +3335,7 @@ export default function VocabularySetPanel({
               {batchPasteAutoTranslate && (
                 <div className="px-3 pb-3 space-y-2">
                   <label className="text-xs text-gray-600 mb-1 block">
-                    {t("contentEditor.labels.translationLanguage", { defaultValue: "翻譯語言" })}
+                    {t("contentEditor.labels.translationLanguage")}
                   </label>
                   <select
                     value={lastSelectedWordLang}
@@ -3319,7 +3351,7 @@ export default function VocabularySetPanel({
                   >
                     {WORD_TRANSLATION_LANGUAGES.map((lang) => (
                       <option key={lang.value} value={lang.value}>
-                        {lang.value === "other" ? t("contentEditor.labels.otherLanguage", { defaultValue: "其他語言..." }) : lang.label}
+                        {lang.value === "other" ? t("contentEditor.labels.otherLanguage") : lang.label}
                       </option>
                     ))}
                   </select>
@@ -3328,7 +3360,7 @@ export default function VocabularySetPanel({
                       type="text"
                       value={customTranslationLang}
                       onChange={(e) => setCustomTranslationLang(e.target.value)}
-                      placeholder={t("contentEditor.placeholders.enterLanguage", { defaultValue: "輸入語言名稱，如 Thai、Việt Nam..." })}
+                      placeholder={t("contentEditor.labels.enterLanguage")}
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     />
                   )}
@@ -3472,7 +3504,7 @@ export default function VocabularySetPanel({
                     }}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   >
-                    <option value="">{t("contentEditor.labels.selectLanguage", { defaultValue: "請選擇語言" })}</option>
+                    <option value="">{t("contentEditor.labels.selectLanguage")}</option>
                     {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
                       <option key={lang.value} value={lang.value}>
                         {lang.label}
@@ -3485,7 +3517,7 @@ export default function VocabularySetPanel({
                       type="text"
                       value={customSentenceTranslationLang}
                       onChange={(e) => setCustomSentenceTranslationLang(e.target.value)}
-                      placeholder={t("contentEditor.placeholders.enterLanguage")}
+                      placeholder={t("contentEditor.labels.enterLanguage")}
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     />
                   )}
@@ -3495,18 +3527,29 @@ export default function VocabularySetPanel({
             )}
           </div>
 
-            {/* Do the Magic Button */}
-            <Button
-              onClick={() =>
-                handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)
-              }
-              disabled={isBatchPasting}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              {isBatchPasting
-                ? "Working... 工作中"
-                : t("contentEditor.buttons.confirmPaste")}
-            </Button>
+            {/* Do the Magic + Pause Button */}
+            <div className="flex gap-2">
+              <Button
+                onClick={() =>
+                  handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)
+                }
+                disabled={isBatchPasting}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {isBatchPasting && batchProgress
+                  ? `${t("contentEditor.buttons.confirmPaste")} (${batchProgress.current}/${batchProgress.total})`
+                  : t("contentEditor.buttons.confirmPaste")}
+              </Button>
+              {isBatchPasting && (
+                <Button
+                  onClick={() => { batchPauseRef.current = true; }}
+                  className="bg-red-500 hover:bg-red-600 text-white px-4"
+                >
+                  {t("contentEditor.buttons.pause")}
+                  {batchProgress && ` (${batchProgress.current}/${batchProgress.total})`}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -3559,6 +3602,8 @@ export default function VocabularySetPanel({
                   isAssignmentCopy={isAssignmentCopy}
                   duplicateReasons={duplicateMap.get(index)}
                   customTranslationLang={customTranslationLang}
+                  sentenceTranslationLang={aiGenerateTranslateLang}
+                  customSentenceTranslationLang={customSentenceTranslationLang}
                 />
               );
             })}
