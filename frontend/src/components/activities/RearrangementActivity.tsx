@@ -126,7 +126,6 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   // 追蹤是否已播放第一題音檔
   const hasPlayedFirstAudioRef = useRef(false);
 
-
   // 載入題目
   const lastLoadedAssignmentRef = useRef<number | null>(null);
   useEffect(() => {
@@ -764,7 +763,11 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     const currentQuestion = questions[currentQuestionIndex];
     if (!currentQuestion) return;
     const currentState = questionStates.get(currentQuestion.content_item_id);
-    if (currentState?.challengeFailed && !currentState.completed && !resultModalOpen) {
+    if (
+      currentState?.challengeFailed &&
+      !currentState.completed &&
+      !resultModalOpen
+    ) {
       setResultModalOpen(true);
     }
   }, [questionStates, currentQuestionIndex, questions, resultModalOpen]);

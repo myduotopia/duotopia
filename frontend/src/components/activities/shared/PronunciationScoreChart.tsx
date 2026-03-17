@@ -132,12 +132,7 @@ const PronunciationScoreChart: React.FC<PronunciationScoreChartProps> = ({
     <div className="p-2 max-w-[280px] mx-auto md:mx-0">
       <div style={{ height: 200 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <RadarChart
-            data={radarData}
-            cx="50%"
-            cy="50%"
-            outerRadius="65%"
-          >
+          <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="65%">
             <PolarGrid stroke="#e5e7eb" />
             <PolarAngleAxis dataKey="dimension" tick={false} />
             <Radar
@@ -160,8 +155,7 @@ const PronunciationScoreChart: React.FC<PronunciationScoreChartProps> = ({
             <span
               className="inline-block w-2.5 h-2.5 rounded-full"
               style={{
-                backgroundColor:
-                  DIMENSION_COLORS[i % DIMENSION_COLORS.length],
+                backgroundColor: DIMENSION_COLORS[i % DIMENSION_COLORS.length],
               }}
             />
             <span className="text-xs text-gray-600">
@@ -193,10 +187,7 @@ const PronunciationScoreChart: React.FC<PronunciationScoreChartProps> = ({
             >
               <span className="text-sm text-gray-600">{d.label}</span>
               <span
-                className={cn(
-                  "text-lg font-bold",
-                  getScoreTextClass(d.score),
-                )}
+                className={cn("text-lg font-bold", getScoreTextClass(d.score))}
               >
                 {Math.round(d.score)}
               </span>

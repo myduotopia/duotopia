@@ -269,18 +269,36 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
           3,
       );
     const dimensions = [
-      { label: t("pronunciationChart.shortLabels.overall"), score: overallScore },
-      result.accuracy_score != null && { label: t("pronunciationChart.shortLabels.accuracy"), score: result.accuracy_score },
-      result.fluency_score != null && { label: t("pronunciationChart.shortLabels.fluency"), score: result.fluency_score },
-      result.completeness_score != null && { label: t("pronunciationChart.shortLabels.completeness"), score: result.completeness_score },
-      result.prosody_score != null && { label: t("pronunciationChart.shortLabels.prosody"), score: result.prosody_score },
+      {
+        label: t("pronunciationChart.shortLabels.overall"),
+        score: overallScore,
+      },
+      result.accuracy_score != null && {
+        label: t("pronunciationChart.shortLabels.accuracy"),
+        score: result.accuracy_score,
+      },
+      result.fluency_score != null && {
+        label: t("pronunciationChart.shortLabels.fluency"),
+        score: result.fluency_score,
+      },
+      result.completeness_score != null && {
+        label: t("pronunciationChart.shortLabels.completeness"),
+        score: result.completeness_score,
+      },
+      result.prosody_score != null && {
+        label: t("pronunciationChart.shortLabels.prosody"),
+        score: result.prosody_score,
+      },
     ].filter(Boolean) as Array<{ label: string; score: number }>;
-    const wordsData = result.detailed_words || result.word_details || result.words || [];
-    const details = wordsData.map((w: { word: string; accuracy_score?: number; error_type?: string }) => ({
-      label: w.word,
-      score: w.accuracy_score || 0,
-      errorType: w.error_type,
-    }));
+    const wordsData =
+      result.detailed_words || result.word_details || result.words || [];
+    const details = wordsData.map(
+      (w: { word: string; accuracy_score?: number; error_type?: string }) => ({
+        label: w.word,
+        score: w.accuracy_score || 0,
+        errorType: w.error_type,
+      }),
+    );
     return { overallScore, dimensions, details };
   }, [assessmentResults, currentQuestionIndex, t]);
 
@@ -1029,67 +1047,66 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
           )}
 
           {/* 手機版：分析按鈕 / 查看結果按鈕 */}
-          {canUseAiAnalysis &&
-            items[currentQuestionIndex]?.recording_url && (
-              <div className="flex justify-center py-4 md:hidden">
-                {assessmentResults[currentQuestionIndex] ? (
-                  <Button
-                    size="lg"
-                    onClick={() => setScoreModalOpen(true)}
-                    variant="outline"
-                    className="h-14 px-8 text-lg font-bold rounded-2xl border-2 border-indigo-400 text-indigo-600 hover:bg-indigo-50"
-                  >
-                    <Brain className="w-5 h-5 mr-2" />
-                    {t("groupedQuestionsTemplate.labels.viewAnalysis")}
-                  </Button>
-                ) : (
-                  <Button
-                    size="lg"
-                    onClick={handleAssessment}
-                    disabled={
+          {canUseAiAnalysis && items[currentQuestionIndex]?.recording_url && (
+            <div className="flex justify-center py-4 md:hidden">
+              {assessmentResults[currentQuestionIndex] ? (
+                <Button
+                  size="lg"
+                  onClick={() => setScoreModalOpen(true)}
+                  variant="outline"
+                  className="h-14 px-8 text-lg font-bold rounded-2xl border-2 border-indigo-400 text-indigo-600 hover:bg-indigo-50"
+                >
+                  <Brain className="w-5 h-5 mr-2" />
+                  {t("groupedQuestionsTemplate.labels.viewAnalysis")}
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  onClick={handleAssessment}
+                  disabled={
+                    isAssessing || itemAnalysisState?.status === "analyzing"
+                  }
+                  className={`relative h-14 px-8 text-lg font-bold rounded-2xl shadow-xl transition-all ${
+                    itemAnalysisState?.status === "analyzing"
+                      ? "bg-gradient-to-r from-purple-600 to-purple-700 cursor-not-allowed opacity-70"
+                      : itemAnalysisState?.status === "analyzed"
+                        ? "bg-gradient-to-r from-green-600 to-green-700 cursor-not-allowed"
+                        : itemAnalysisState?.status === "failed"
+                          ? "bg-gradient-to-r from-red-600 to-red-700"
+                          : "bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                  }`}
+                  style={{
+                    animation:
                       isAssessing || itemAnalysisState?.status === "analyzing"
-                    }
-                    className={`relative h-14 px-8 text-lg font-bold rounded-2xl shadow-xl transition-all ${
-                      itemAnalysisState?.status === "analyzing"
-                        ? "bg-gradient-to-r from-purple-600 to-purple-700 cursor-not-allowed opacity-70"
-                        : itemAnalysisState?.status === "analyzed"
-                          ? "bg-gradient-to-r from-green-600 to-green-700 cursor-not-allowed"
-                          : itemAnalysisState?.status === "failed"
-                            ? "bg-gradient-to-r from-red-600 to-red-700"
-                            : "bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
-                    }`}
-                    style={{
-                      animation:
-                        isAssessing || itemAnalysisState?.status === "analyzing"
-                          ? "none"
-                          : "pulse-scale 1.5s ease-in-out infinite",
-                    }}
-                  >
-                    {itemAnalysisState?.status === "analyzing" || isAssessing ? (
-                      <>
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        {t("groupedQuestionsTemplate.labels.analyzing")}
-                      </>
-                    ) : itemAnalysisState?.status === "analyzed" ? (
-                      <>
-                        <CheckCircle2 className="w-5 h-5 mr-2" />
-                        {t("groupedQuestionsTemplate.labels.analyzed")}
-                      </>
-                    ) : itemAnalysisState?.status === "failed" ? (
-                      <>
-                        <XCircle className="w-5 h-5 mr-2" />
-                        {t("groupedQuestionsTemplate.labels.analysisFailed")}
-                      </>
-                    ) : (
-                      <>
-                        <Brain className="w-5 h-5 mr-2 animate-pulse" />
-                        {t("groupedQuestionsTemplate.labels.analyze")}
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-            )}
+                        ? "none"
+                        : "pulse-scale 1.5s ease-in-out infinite",
+                  }}
+                >
+                  {itemAnalysisState?.status === "analyzing" || isAssessing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      {t("groupedQuestionsTemplate.labels.analyzing")}
+                    </>
+                  ) : itemAnalysisState?.status === "analyzed" ? (
+                    <>
+                      <CheckCircle2 className="w-5 h-5 mr-2" />
+                      {t("groupedQuestionsTemplate.labels.analyzed")}
+                    </>
+                  ) : itemAnalysisState?.status === "failed" ? (
+                    <>
+                      <XCircle className="w-5 h-5 mr-2" />
+                      {t("groupedQuestionsTemplate.labels.analysisFailed")}
+                    </>
+                  ) : (
+                    <>
+                      <Brain className="w-5 h-5 mr-2 animate-pulse" />
+                      {t("groupedQuestionsTemplate.labels.analyze")}
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* AI分析 - 手機版用 modal 顯示，桌面版 inline */}

@@ -444,7 +444,9 @@ export default function WordSelectionActivity({
   const handleOverlayComplete = () => {
     if (nextQuestionCalledRef.current) return;
     nextQuestionCalledRef.current = true;
-    setTimeout(() => { nextQuestionCalledRef.current = false; }, 300);
+    setTimeout(() => {
+      nextQuestionCalledRef.current = false;
+    }, 300);
 
     setScoreOverlayOpen(false);
     setSelectedAnswer(null);
@@ -745,11 +747,16 @@ export default function WordSelectionActivity({
                   "rounded-2xl border-2 shadow-md select-none",
                   "transition-all duration-200",
                   "whitespace-normal text-center break-words",
-                  !showResult && "hover:shadow-lg hover:-translate-y-0.5 active:scale-95",
+                  !showResult &&
+                    "hover:shadow-lg hover:-translate-y-0.5 active:scale-95",
                   !showResult && optionColors[index % 4],
-                  showCorrect && "bg-green-100 border-green-500 text-green-800 shadow-green-200",
-                  showIncorrect && "bg-red-100 border-red-500 text-red-800 shadow-red-200",
-                  isSelected && !showResult && "ring-2 ring-indigo-400 scale-95",
+                  showCorrect &&
+                    "bg-green-100 border-green-500 text-green-800 shadow-green-200",
+                  showIncorrect &&
+                    "bg-red-100 border-red-500 text-red-800 shadow-red-200",
+                  isSelected &&
+                    !showResult &&
+                    "ring-2 ring-indigo-400 scale-95",
                   showResult && !showCorrect && !showIncorrect && "opacity-50",
                 )}
                 onClick={() => handleSelectAnswer(option)}
@@ -766,7 +773,6 @@ export default function WordSelectionActivity({
             );
           })}
         </div>
-
       </div>
 
       {/* 答對/答錯動畫 overlay → 動畫結束自動下一題 */}
