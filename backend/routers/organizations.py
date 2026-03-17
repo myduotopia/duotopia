@@ -15,7 +15,7 @@ from datetime import datetime
 import uuid
 
 from database import get_db
-from models import Teacher, Organization, TeacherOrganization, TeacherSchool, School
+from models import Teacher, Organization, TeacherOrganization, TeacherSchool, School, StudentSchool
 from auth import verify_token, get_password_hash
 from services.casbin_service import get_casbin_service
 from services.email_service import email_service
@@ -481,8 +481,18 @@ async def get_organization_stats(
         .scalar()
     ) or 0
 
-    # TODO: Count students when student model is available
-    total_students = 0
+    # Count unique active students across all schools in these organizations
+    if school_id_list:
+        total_students = (
+            db.query(func.count(distinct(StudentSchool.student_id)))
+            .filter(
+                StudentSchool.school_id.in_(school_id_list),
+                StudentSchool.is_active.is_(True),
+            )
+            .scalar()
+        ) or 0
+    else:
+        total_students = 0
 
     return OrganizationStatsResponse(
         total_organizations=total_orgs or 0,
