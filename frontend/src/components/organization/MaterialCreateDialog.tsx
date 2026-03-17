@@ -226,7 +226,9 @@ export function MaterialCreateDialog({
           <div className="space-y-2">
             <Label>
               標籤{" "}
-              <span className="text-gray-500 text-xs">（最多 {MAX_TAGS} 個）</span>
+              <span className="text-gray-500 text-xs">
+                （最多 {MAX_TAGS} 個）
+              </span>
             </Label>
             <div className="flex gap-2">
               <Input

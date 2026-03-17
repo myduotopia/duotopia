@@ -504,10 +504,7 @@ export function ProgramDialogs({
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      status: e.target.value as
-                        | "active"
-                        | "draft"
-                        | "archived",
+                      status: e.target.value as "active" | "draft" | "archived",
                     })
                   }
                   className="w-full mt-1 px-3 py-2 border rounded-md"

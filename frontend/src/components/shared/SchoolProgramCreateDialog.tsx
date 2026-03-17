@@ -355,10 +355,7 @@ export function SchoolProgramCreateDialog({
             </div>
             <div className="space-y-2">
               <Label htmlFor="school-program-level">程度</Label>
-              <Select
-                value={customLevel}
-                onValueChange={setCustomLevel}
-              >
+              <Select value={customLevel} onValueChange={setCustomLevel}>
                 <SelectTrigger id="school-program-level">
                   <SelectValue placeholder="選擇程度" />
                 </SelectTrigger>
