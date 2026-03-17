@@ -370,7 +370,9 @@ export function ProgramTreeView({
     const program = item as ProgramTreeProgram;
     setProgramEditDialog({ open: true, program });
     setProgramLevel(program.level || "");
-    setProgramTags((program as ProgramTreeProgram & { tags?: string[] }).tags || []);
+    setProgramTags(
+      (program as ProgramTreeProgram & { tags?: string[] }).tags || [],
+    );
     setProgramTagInput("");
   };
 
@@ -1163,9 +1165,7 @@ export function ProgramTreeView({
                       <button
                         type="button"
                         onClick={() =>
-                          setProgramTags(
-                            programTags.filter((t) => t !== tag),
-                          )
+                          setProgramTags(programTags.filter((t) => t !== tag))
                         }
                         className="ml-2 text-blue-500 hover:text-blue-700"
                       >
