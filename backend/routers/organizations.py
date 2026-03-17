@@ -15,7 +15,14 @@ from datetime import datetime
 import uuid
 
 from database import get_db
-from models import Teacher, Organization, TeacherOrganization, TeacherSchool, School, StudentSchool
+from models import (
+    Teacher,
+    Organization,
+    TeacherOrganization,
+    TeacherSchool,
+    School,
+    StudentSchool,
+)
 from auth import verify_token, get_password_hash
 from services.casbin_service import get_casbin_service
 from services.email_service import email_service
