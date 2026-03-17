@@ -37,6 +37,8 @@ interface Question {
   example_sentence?: string;
   example_sentence_translation?: string;
   example_sentence_definition?: string;
+  recording_url?: string;
+  id?: string | number;
   [key: string]: unknown;
 }
 

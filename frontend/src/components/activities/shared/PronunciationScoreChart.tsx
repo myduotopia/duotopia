@@ -90,7 +90,7 @@ function renderRadarDot(props: any) {
 }
 
 const PronunciationScoreChart: React.FC<PronunciationScoreChartProps> = ({
-  overallScore,
+  overallScore: _overallScore,
   dimensions,
   details,
   detailsTitle,
