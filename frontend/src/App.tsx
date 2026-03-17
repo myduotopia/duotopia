@@ -44,6 +44,7 @@ import PricingPage from "./pages/PricingPage";
 import TestSubscription from "./pages/TestSubscription";
 import DemoAssignmentPage from "./pages/DemoAssignmentPage";
 import { Toaster } from "sonner";
+import { useCrossTabAuthSync } from "./hooks/useCrossTabAuthSync";
 
 /**
  * Custom hook to detect mobile screen size
@@ -73,6 +74,8 @@ function useIsMobile() {
 function App() {
   // Issue #142: Use bottom-center on mobile to avoid blocking question numbers
   const isMobile = useIsMobile();
+  // Issue #472: Cross-tab auth sync
+  useCrossTabAuthSync();
 
   return (
     <>
