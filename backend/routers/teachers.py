@@ -2891,24 +2891,15 @@ async def get_content_detail(
     db: Session = Depends(get_db),
 ):
     """獲取內容詳情"""
-    # Verify the content belongs to the teacher
-    content = (
-        db.query(Content)
-        .join(Lesson)
-        .join(Program)
-        .filter(
-            Content.id == content_id,
-            Program.teacher_id == current_teacher.id,
-            Content.is_active.is_(True),
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .options(selectinload(Content.content_items))  # 🔥 避免 N+1：Eager load items
-        .first()
+    from utils.permissions import check_content_access
+
+    # check_content_access handles personal, org, template, and assignment copy access
+    _program, _lesson, content = check_content_access(
+        db, content_id, current_teacher
     )
 
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
+    # Eager load content_items to avoid N+1
+    db.refresh(content, ["content_items"])
 
     # 檢查每個 ContentItem 是否有學生進度
     item_ids = (
