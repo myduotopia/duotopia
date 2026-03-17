@@ -56,6 +56,7 @@ import {
   openPrintWindow,
 } from "@/lib/stickyNotePrint";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useSidebar } from "@/contexts/SidebarContext";
 import {
   Content,
   Assignment,
@@ -100,6 +101,7 @@ export default function ClassroomDetail({
   const navigate = useNavigate();
   const location = useLocation();
   const { mode } = useWorkspace();
+  const { sidebarWidth } = useSidebar();
   const isOrgMode = mode === "organization";
   const [classroom, setClassroom] = useState<ClassroomInfo | null>(null);
   const [templateProgram, setTemplateProgram] = useState<Program | null>(null);
@@ -3057,10 +3059,11 @@ export default function ClassroomDetail({
 
       {/* Reading Assessment Editor */}
       {showReadingEditor && editorLessonId && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="relative w-full max-w-7xl max-h-[90vh] bg-white rounded-lg p-6 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => { setShowReadingEditor(false); setEditorLessonId(null); setEditorContentId(null); }} />
+          <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
+            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold">
                 {t("classroomDetail.labels.readingAssessmentSettings")}
               </h2>
               <Button
@@ -3075,7 +3078,7 @@ export default function ClassroomDetail({
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+            <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
               <ReadingAssessmentPanel
                 content={undefined}
                 editingContent={{ id: editorContentId || undefined }}
@@ -3099,15 +3102,16 @@ export default function ClassroomDetail({
               />
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Sentence Making Editor */}
       {showVocabularySetEditor && vocabularySetLessonId && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="relative w-full max-w-7xl max-h-[90vh] bg-white rounded-lg p-6 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => { setShowVocabularySetEditor(false); setVocabularySetLessonId(null); setVocabularySetContentId(null); }} />
+          <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
+            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold">
                 {t("vocabularySet.dialogTitle")}
               </h2>
               <Button
@@ -3122,7 +3126,7 @@ export default function ClassroomDetail({
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+            <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
               <VocabularySetPanel
                 content={undefined}
                 editingContent={{ id: vocabularySetContentId ?? undefined }}
@@ -3184,7 +3188,7 @@ export default function ClassroomDetail({
               />
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Batch Grading Modal */}

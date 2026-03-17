@@ -1,4 +1,5 @@
 import { ReactNode, useMemo, useCallback, useRef } from "react";
+import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import DigitalTeachingToolbar from "@/components/teachingTools/DigitalTeachingToolbar";
@@ -69,7 +70,7 @@ function TeacherLayoutInner({
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { sidebarCollapsed, setSidebarCollapsed } = useSidebar();
   const [config, setConfig] = useState<SystemConfig | null>(null);
 
   // Get user role and roles from auth store
@@ -495,10 +496,12 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
   }
 
   return (
-    <WorkspaceProvider teacherId={teacherProfile.id}>
-      <TeacherLayoutInner teacherProfile={teacherProfile}>
-        {children}
-      </TeacherLayoutInner>
-    </WorkspaceProvider>
+    <SidebarProvider>
+      <WorkspaceProvider teacherId={teacherProfile.id}>
+        <TeacherLayoutInner teacherProfile={teacherProfile}>
+          {children}
+        </TeacherLayoutInner>
+      </WorkspaceProvider>
+    </SidebarProvider>
   );
 }
