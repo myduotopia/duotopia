@@ -70,7 +70,7 @@ function TeacherLayoutInner({
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
-  const { sidebarCollapsed, setSidebarCollapsed } = useSidebar();
+  const { sidebarCollapsed, setSidebarCollapsed, sidebarDisabled } = useSidebar();
   const [config, setConfig] = useState<SystemConfig | null>(null);
 
   // Get user role and roles from auth store
@@ -423,7 +423,7 @@ function TeacherLayoutInner({
       <div className="flex">
         {/* Desktop Sidebar */}
         <div
-          className={`hidden md:flex bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 ${sidebarCollapsed ? "w-16" : "w-64"} flex-col h-screen sticky top-0`}
+          className={`hidden md:flex bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 ${sidebarCollapsed ? "w-16" : "w-64"} flex-col h-screen sticky top-0 ${sidebarDisabled ? "pointer-events-none opacity-50" : ""}`}
         >
           <SidebarContent />
         </div>

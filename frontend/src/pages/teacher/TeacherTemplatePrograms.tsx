@@ -31,7 +31,7 @@ export default function TeacherTemplatePrograms() {
 // Inner component - 「我的教材」不需要 workspace context
 function TeacherTemplateProgramsInner() {
   const { t } = useTranslation();
-  const { sidebarWidth } = useSidebar();
+  const { sidebarWidth, setSidebarDisabled } = useSidebar();
   const user = useTeacherAuthStore((s) => s.user);
   const isResourceAccount = user?.email === RESOURCE_ACCOUNT_EMAIL;
   const { updateVisibility } = useResourceMaterialsAPI();
@@ -112,6 +112,12 @@ function TeacherTemplateProgramsInner() {
 
   // Sentence Making Editor state
   const [showVocabularySetEditor, setShowVocabularySetEditor] = useState(false);
+
+  // Disable sidebar when editor panels are open
+  useEffect(() => {
+    setSidebarDisabled(showReadingEditor || showVocabularySetEditor);
+    return () => setSidebarDisabled(false);
+  }, [showReadingEditor, showVocabularySetEditor, setSidebarDisabled]);
   const [vocabularySetLessonId, setVocabularySetLessonId] = useState<
     number | null
   >(null);
@@ -570,7 +576,6 @@ function TeacherTemplateProgramsInner() {
       {/* Reading Assessment Modal (新增模式) */}
       {showReadingEditor && editorLessonId && editorContentId === null && (
         <>
-          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => { setShowReadingEditor(false); setEditorLessonId(null); setEditorContentId(null); setSelectedContent(null); }} />
           <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold">
@@ -580,6 +585,7 @@ function TeacherTemplateProgramsInner() {
                 variant="ghost"
                 size="icon"
                 onClick={() => {
+                  if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                   setShowReadingEditor(false);
                   setEditorLessonId(null);
                   setEditorContentId(null);
@@ -649,23 +655,18 @@ function TeacherTemplateProgramsInner() {
           <>
             {/* Backdrop */}
             <div
-              className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity"
-              onClick={() => {
-                setShowReadingEditor(false);
-                setEditorLessonId(null);
-                setEditorContentId(null);
-                setSelectedContent(null);
-              }}
+              className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity pointer-events-none"
             />
 
             {/* Panel */}
-            <div className="fixed top-0 right-0 h-screen w-full md:w-1/2 bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300">
+            <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-lg font-semibold text-gray-900">
                   {t("teacherTemplatePrograms.dialogs.editContentTitle")}
                 </h2>
                 <button
                   onClick={() => {
+                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                     setShowReadingEditor(false);
                     setEditorLessonId(null);
                     setEditorContentId(null);
@@ -749,8 +750,7 @@ function TeacherTemplateProgramsInner() {
         vocabularySetLessonId &&
         !vocabularySetContentId && (
           <>
-            <div className="fixed inset-0 bg-black/30 z-40" onClick={() => { setShowVocabularySetEditor(false); setVocabularySetLessonId(null); setVocabularySetContentId(null); }} />
-            <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
+              <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
               <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
                   {t("vocabularySet.dialogTitle")}
@@ -759,6 +759,7 @@ function TeacherTemplateProgramsInner() {
                   variant="ghost"
                   size="icon"
                   onClick={() => {
+                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                     setShowVocabularySetEditor(false);
                     setVocabularySetLessonId(null);
                     setVocabularySetContentId(null);
@@ -827,22 +828,18 @@ function TeacherTemplateProgramsInner() {
           <>
             {/* Backdrop */}
             <div
-              className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity"
-              onClick={() => {
-                setShowVocabularySetEditor(false);
-                setVocabularySetLessonId(null);
-                setVocabularySetContentId(null);
-              }}
+              className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity pointer-events-none"
             />
 
             {/* Panel */}
-            <div className="fixed top-0 right-0 h-screen w-full md:w-1/2 bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300">
+            <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-lg font-semibold text-gray-900">
                   {t("vocabularySet.editTitle")}
                 </h2>
                 <button
                   onClick={() => {
+                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                     setShowVocabularySetEditor(false);
                     setVocabularySetLessonId(null);
                     setVocabularySetContentId(null);

@@ -4158,7 +4158,8 @@
       "selectExampleLanguage": "請選擇例句翻譯語言",
       "enterCustomLanguage": "請輸入自訂語言名稱",
       "removedInternalDupes": "已去除 {{count}} 個重複單字",
-      "removedExistingDupes": "已跳過 {{count}} 個已存在的單字"
+      "removedExistingDupes": "已跳過 {{count}} 個已存在的單字",
+      "unsavedChangesConfirm": "尚未儲存，確定要關閉嗎？"
     },
     "placeholders": {
       "enterContentTitle": "請輸入內容標題",

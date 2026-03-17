@@ -4,17 +4,26 @@ interface SidebarContextType {
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
   sidebarWidth: number;
+  sidebarDisabled: boolean;
+  setSidebarDisabled: (disabled: boolean) => void;
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarDisabled, setSidebarDisabled] = useState(false);
   const sidebarWidth = sidebarCollapsed ? 64 : 256;
 
   return (
     <SidebarContext.Provider
-      value={{ sidebarCollapsed, setSidebarCollapsed, sidebarWidth }}
+      value={{
+        sidebarCollapsed,
+        setSidebarCollapsed,
+        sidebarWidth,
+        sidebarDisabled,
+        setSidebarDisabled,
+      }}
     >
       {children}
     </SidebarContext.Provider>

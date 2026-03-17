@@ -4145,7 +4145,8 @@
       "selectExampleLanguage": "Please select a translation language for example sentences",
       "enterCustomLanguage": "Please enter a custom language name",
       "removedInternalDupes": "Removed {{count}} duplicate(s)",
-      "removedExistingDupes": "Skipped {{count}} existing word(s)"
+      "removedExistingDupes": "Skipped {{count}} existing word(s)",
+      "unsavedChangesConfirm": "You have unsaved changes. Are you sure you want to close?"
     },
     "placeholders": {
       "enterContentTitle": "Enter content title",

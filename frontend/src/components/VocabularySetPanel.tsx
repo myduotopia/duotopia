@@ -3451,6 +3451,9 @@ export default function VocabularySetPanel({
               <span className="text-sm font-semibold text-gray-800">
                 {t("vocabularySet.modals.aiGenerateExamplesTitle")}
               </span>
+              <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">
+                Beta
+              </span>
             </div>
             {aiGenerateExpanded && (
               <div className="px-3 pb-3 space-y-3">

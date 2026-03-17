@@ -101,7 +101,7 @@ export default function ClassroomDetail({
   const navigate = useNavigate();
   const location = useLocation();
   const { mode } = useWorkspace();
-  const { sidebarWidth } = useSidebar();
+  const { sidebarWidth, setSidebarDisabled } = useSidebar();
   const isOrgMode = mode === "organization";
   const [classroom, setClassroom] = useState<ClassroomInfo | null>(null);
   const [templateProgram, setTemplateProgram] = useState<Program | null>(null);
@@ -162,6 +162,12 @@ export default function ClassroomDetail({
 
   // Vocabulary Set Editor state
   const [showVocabularySetEditor, setShowVocabularySetEditor] = useState(false);
+
+  // Disable sidebar when editor panels are open
+  useEffect(() => {
+    setSidebarDisabled(showReadingEditor || showVocabularySetEditor);
+    return () => setSidebarDisabled(false);
+  }, [showReadingEditor, showVocabularySetEditor, setSidebarDisabled]);
   const [vocabularySetLessonId, setVocabularySetLessonId] = useState<
     number | null
   >(null);
@@ -2569,9 +2575,10 @@ export default function ClassroomDetail({
 
         {/* Right Sliding Panel */}
         <div
-          className={`fixed right-0 top-0 h-full w-full md:w-1/2 bg-white shadow-xl border-l transform transition-transform duration-300 z-50 ${
+          className={`fixed right-0 top-0 h-full bg-white shadow-xl border-l transform transition-transform duration-300 z-50 ${
             isPanelOpen ? "translate-x-0" : "translate-x-full"
           }`}
+          style={{ left: `${sidebarWidth}px` }}
         >
           {selectedContent && (
             <div className="h-full flex flex-col">
@@ -3060,7 +3067,6 @@ export default function ClassroomDetail({
       {/* Reading Assessment Editor */}
       {showReadingEditor && editorLessonId && (
         <>
-          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => { setShowReadingEditor(false); setEditorLessonId(null); setEditorContentId(null); }} />
           <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold">
@@ -3070,6 +3076,7 @@ export default function ClassroomDetail({
                 variant="ghost"
                 size="icon"
                 onClick={() => {
+                  if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                   setShowReadingEditor(false);
                   setEditorLessonId(null);
                   setEditorContentId(null);
@@ -3108,7 +3115,6 @@ export default function ClassroomDetail({
       {/* Sentence Making Editor */}
       {showVocabularySetEditor && vocabularySetLessonId && (
         <>
-          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => { setShowVocabularySetEditor(false); setVocabularySetLessonId(null); setVocabularySetContentId(null); }} />
           <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold">
@@ -3118,6 +3124,7 @@ export default function ClassroomDetail({
                 variant="ghost"
                 size="icon"
                 onClick={() => {
+                  if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                   setShowVocabularySetEditor(false);
                   setVocabularySetLessonId(null);
                   setVocabularySetContentId(null);
