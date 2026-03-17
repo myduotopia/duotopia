@@ -134,7 +134,12 @@ export class AzureSpeechService {
       // 解码音频为 PCM 数据
       const arrayBuffer = await audioBlob.arrayBuffer();
       const audioContext = new AudioContext({ sampleRate: 16000 });
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      let audioBuffer: AudioBuffer;
+      try {
+        audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      } finally {
+        await audioContext.close();
+      }
 
       // 转换为 16-bit PCM mono
       const pcmData = audioBuffer.getChannelData(0); // Get mono channel
