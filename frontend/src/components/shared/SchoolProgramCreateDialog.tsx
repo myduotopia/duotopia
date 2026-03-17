@@ -32,6 +32,8 @@ interface OrganizationProgram {
   estimated_hours?: number;
 }
 
+const MAX_TAGS = 5;
+
 interface SchoolProgramCreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -157,8 +159,6 @@ export function SchoolProgramCreateDialog({
       setSaving(false);
     }
   };
-
-  const MAX_TAGS = 5;
 
   const handleAddCustomTag = () => {
     const tag = customTagInput.trim();

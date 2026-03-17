@@ -49,6 +49,8 @@ interface ProgramDialogsProps {
   classrooms?: Array<{ id: number; name: string }>;
 }
 
+const MAX_TAGS = 5;
+
 export function ProgramDialogs({
   program,
   dialogType,
@@ -170,8 +172,6 @@ export function ProgramDialogs({
       setLoading(false);
     }
   };
-
-  const MAX_TAGS = 5;
 
   const handleAddTag = () => {
     const tag = tagInput.trim();

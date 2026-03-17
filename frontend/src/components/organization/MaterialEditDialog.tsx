@@ -129,9 +129,7 @@ export function MaterialEditDialog({
         requestData.level = formData.level;
       }
 
-      if (formData.tags.length > 0) {
-        requestData.tags = formData.tags;
-      }
+      requestData.tags = formData.tags;
 
       const response = await fetch(
         `${API_URL}/api/organizations/${organizationId}/programs/${program.id}`,
