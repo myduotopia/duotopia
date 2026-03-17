@@ -20,10 +20,18 @@ export function useCrossTabAuthSync() {
         return;
       }
 
-      const prev = e.oldValue ? JSON.parse(e.oldValue) : null;
-      const next = e.newValue ? JSON.parse(e.newValue) : null;
-      const wasAuthenticated = prev?.state?.isAuthenticated;
-      const isAuthenticated = next?.state?.isAuthenticated;
+      let prev = null;
+      let next = null;
+      try {
+        prev = e.oldValue ? JSON.parse(e.oldValue) : null;
+        next = e.newValue ? JSON.parse(e.newValue) : null;
+      } catch {
+        // localStorage 值非合法 JSON，忽略此次事件
+        return;
+      }
+
+      const wasAuthenticated = !!prev?.state?.isAuthenticated;
+      const isAuthenticated = !!next?.state?.isAuthenticated;
 
       if (wasAuthenticated !== isAuthenticated) {
         window.location.href = "/";
