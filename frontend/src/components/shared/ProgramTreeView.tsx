@@ -1225,7 +1225,7 @@ export function ProgramTreeView({
                       name: programEditDialog.program.name,
                       description: programEditDialog.program.description,
                       level: programLevel || undefined,
-                      tags: programTags.length > 0 ? programTags : undefined,
+                      tags: programTags,
                     });
                     toast.success("教材建立成功");
 
