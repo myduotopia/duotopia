@@ -4355,6 +4355,7 @@
     "fluency": "流暢度",
     "completeness": "完整度",
     "pronunciation": "發音",
+    "phonemeAnalysis": "音素分析",
     "teacherFeedback": "老師評語",
     "passed": "通過",
     "needsCorrection": "需訂正",

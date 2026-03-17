@@ -4342,6 +4342,7 @@
     "fluency": "Fluency",
     "completeness": "Completeness",
     "pronunciation": "Pronunciation",
+    "phonemeAnalysis": "Phoneme Analysis",
     "teacherFeedback": "Teacher Feedback",
     "passed": "Passed",
     "needsCorrection": "Needs Correction",
