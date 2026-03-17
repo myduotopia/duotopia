@@ -100,7 +100,6 @@ export default function CreateProgramDialog({
     name: "",
     description: "",
     level: "A1",
-    estimated_hours: "",
     tags: [] as string[],
   });
 
@@ -209,7 +208,6 @@ export default function CreateProgramDialog({
       name: "",
       description: "",
       level: "A1",
-      estimated_hours: "",
       tags: [],
     });
     setSearchTerm("");
@@ -450,9 +448,6 @@ export default function CreateProgramDialog({
         name: customForm.name,
         description: customForm.description,
         level: customForm.level,
-        estimated_hours: customForm.estimated_hours
-          ? Number(customForm.estimated_hours)
-          : undefined,
         tags: customForm.tags,
       });
       toast.success(t("dialogs.createProgramDialog.success.customCreated"));
@@ -1098,62 +1093,40 @@ export default function CreateProgramDialog({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="custom-level">
-                    {t("createProgramDialog.custom.levelLabel")}
-                  </Label>
-                  <Select
-                    value={customForm.level}
-                    onValueChange={(value) =>
-                      setCustomForm({ ...customForm, level: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="A1">
-                        {t("createProgramDialog.custom.levels.a1")}
-                      </SelectItem>
-                      <SelectItem value="A2">
-                        {t("createProgramDialog.custom.levels.a2")}
-                      </SelectItem>
-                      <SelectItem value="B1">
-                        {t("createProgramDialog.custom.levels.b1")}
-                      </SelectItem>
-                      <SelectItem value="B2">
-                        {t("createProgramDialog.custom.levels.b2")}
-                      </SelectItem>
-                      <SelectItem value="C1">
-                        {t("createProgramDialog.custom.levels.c1")}
-                      </SelectItem>
-                      <SelectItem value="C2">
-                        {t("createProgramDialog.custom.levels.c2")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="custom-hours">
-                    {t("createProgramDialog.custom.hoursLabel")}
-                  </Label>
-                  <Input
-                    id="custom-hours"
-                    type="number"
-                    value={customForm.estimated_hours}
-                    onChange={(e) =>
-                      setCustomForm({
-                        ...customForm,
-                        estimated_hours: e.target.value,
-                      })
-                    }
-                    placeholder={t(
-                      "createProgramDialog.custom.hoursPlaceholder",
-                    )}
-                  />
-                </div>
+              <div>
+                <Label htmlFor="custom-level">
+                  {t("createProgramDialog.custom.levelLabel")}
+                </Label>
+                <Select
+                  value={customForm.level}
+                  onValueChange={(value) =>
+                    setCustomForm({ ...customForm, level: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="A1">
+                      {t("createProgramDialog.custom.levels.a1")}
+                    </SelectItem>
+                    <SelectItem value="A2">
+                      {t("createProgramDialog.custom.levels.a2")}
+                    </SelectItem>
+                    <SelectItem value="B1">
+                      {t("createProgramDialog.custom.levels.b1")}
+                    </SelectItem>
+                    <SelectItem value="B2">
+                      {t("createProgramDialog.custom.levels.b2")}
+                    </SelectItem>
+                    <SelectItem value="C1">
+                      {t("createProgramDialog.custom.levels.c1")}
+                    </SelectItem>
+                    <SelectItem value="C2">
+                      {t("createProgramDialog.custom.levels.c2")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">

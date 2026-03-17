@@ -48,7 +48,6 @@ export function ProgramDialog({
     name: "",
     description: "",
     level: "A1",
-    estimated_hours: 20,
     classroom_id: classroomId,
     tags: [],
   });
@@ -63,7 +62,6 @@ export function ProgramDialog({
         name: program.name,
         description: program.description || "",
         level: program.level || "A1",
-        estimated_hours: program.estimated_hours || 20,
         classroom_id: program.classroom_id || classroomId,
         tags: program.tags || [],
       });
@@ -72,7 +70,6 @@ export function ProgramDialog({
         name: "",
         description: "",
         level: "A1",
-        estimated_hours: 20,
         classroom_id: classroomId,
         tags: [],
       });
@@ -143,7 +140,6 @@ export function ProgramDialog({
           classroom_id: isTemplate
             ? undefined
             : formData.classroom_id || classroomId,
-          estimated_hours: formData.estimated_hours,
           tags: formData.tags,
           is_template: isTemplate,
         });
@@ -160,7 +156,6 @@ export function ProgramDialog({
           name: formData.name,
           description: formData.description,
           level: formData.level,
-          estimated_hours: formData.estimated_hours,
           tags: formData.tags,
         });
         // Ensure the updated program has all required Program properties
@@ -258,68 +253,46 @@ export function ProgramDialog({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="level" className="text-sm font-medium">
-                  {t("dialogs.programDialog.form.levelLabel")}{" "}
-                  <span className="text-red-500">
-                    {t("dialogs.programDialog.form.levelRequired")}
-                  </span>
-                </label>
-                <select
-                  id="level"
-                  value={formData.level}
-                  onChange={(e) =>
-                    setFormData({ ...formData, level: e.target.value })
-                  }
-                  className={`w-full mt-1 px-3 py-2 border rounded-md ${errors.level ? "border-red-500" : ""}`}
-                >
-                  <option value="PREA">
-                    {t("dialogs.programDialog.form.levels.PREA")}
-                  </option>
-                  <option value="A1">
-                    {t("dialogs.programDialog.form.levels.A1")}
-                  </option>
-                  <option value="A2">
-                    {t("dialogs.programDialog.form.levels.A2")}
-                  </option>
-                  <option value="B1">
-                    {t("dialogs.programDialog.form.levels.B1")}
-                  </option>
-                  <option value="B2">
-                    {t("dialogs.programDialog.form.levels.B2")}
-                  </option>
-                  <option value="C1">
-                    {t("dialogs.programDialog.form.levels.C1")}
-                  </option>
-                  <option value="C2">
-                    {t("dialogs.programDialog.form.levels.C2")}
-                  </option>
-                </select>
-                {errors.level && (
-                  <p className="text-xs text-red-500 mt-1">{errors.level}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="hours" className="text-sm font-medium">
-                  {t("dialogs.programDialog.form.hoursLabel")}
-                </label>
-                <input
-                  id="hours"
-                  type="number"
-                  value={formData.estimated_hours}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      estimated_hours: parseInt(e.target.value) || 0,
-                    })
-                  }
-                  className="w-full mt-1 px-3 py-2 border rounded-md"
-                  placeholder={t("dialogs.programDialog.form.hoursPlaceholder")}
-                  min="1"
-                />
-              </div>
+            <div>
+              <label htmlFor="level" className="text-sm font-medium">
+                {t("dialogs.programDialog.form.levelLabel")}{" "}
+                <span className="text-red-500">
+                  {t("dialogs.programDialog.form.levelRequired")}
+                </span>
+              </label>
+              <select
+                id="level"
+                value={formData.level}
+                onChange={(e) =>
+                  setFormData({ ...formData, level: e.target.value })
+                }
+                className={`w-full mt-1 px-3 py-2 border rounded-md ${errors.level ? "border-red-500" : ""}`}
+              >
+                <option value="preA">
+                  {t("dialogs.programDialog.form.levels.PREA")}
+                </option>
+                <option value="A1">
+                  {t("dialogs.programDialog.form.levels.A1")}
+                </option>
+                <option value="A2">
+                  {t("dialogs.programDialog.form.levels.A2")}
+                </option>
+                <option value="B1">
+                  {t("dialogs.programDialog.form.levels.B1")}
+                </option>
+                <option value="B2">
+                  {t("dialogs.programDialog.form.levels.B2")}
+                </option>
+                <option value="C1">
+                  {t("dialogs.programDialog.form.levels.C1")}
+                </option>
+                <option value="C2">
+                  {t("dialogs.programDialog.form.levels.C2")}
+                </option>
+              </select>
+              {errors.level && (
+                <p className="text-xs text-red-500 mt-1">{errors.level}</p>
+              )}
             </div>
 
             {/* Tags Input */}
