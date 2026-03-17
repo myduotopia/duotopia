@@ -35,7 +35,11 @@ import {
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
+import {
+  useAzurePronunciation,
+  type PronunciationResult,
+} from "@/hooks/useAzurePronunciation";
+import type { PhonemeDetail } from "@/hooks/useAzurePronunciation";
 import { useDemoAzurePronunciation } from "@/hooks/useDemoAzurePronunciation";
 import {
   Dialog,
@@ -110,6 +114,57 @@ interface WordReadingTemplateProps {
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
 }
 
+/**
+ * 🎯 Issue #450: 音素分析視覺化元件
+ * 顯示每個音素的準確度，以顏色標示（綠 ≥80 / 黃 ≥60 / 紅 <60）
+ */
+function PhonemeVisualization({ phonemes }: { phonemes: PhonemeDetail[] }) {
+  const getPhonemeColor = (score: number) => {
+    if (score >= 80) return "bg-green-100 text-green-700 border-green-300";
+    if (score >= 60) return "bg-yellow-100 text-yellow-700 border-yellow-300";
+    return "bg-red-100 text-red-700 border-red-300";
+  };
+
+  const getScoreBarColor = (score: number) => {
+    if (score >= 80) return "bg-green-500";
+    if (score >= 60) return "bg-yellow-500";
+    return "bg-red-500";
+  };
+
+  return (
+    <div className="bg-white rounded-lg p-3">
+      <div className="text-xs text-gray-500 mb-2 font-medium">音素分析</div>
+      <div className="flex flex-wrap gap-1.5 justify-center">
+        {phonemes.map((ph, idx) => (
+          <div
+            key={idx}
+            className={cn(
+              "flex flex-col items-center rounded-lg border px-2.5 py-1.5 min-w-[40px] transition-all",
+              getPhonemeColor(ph.accuracy_score),
+            )}
+          >
+            <span className="text-base font-mono font-semibold leading-tight">
+              {ph.phoneme}
+            </span>
+            <div className="w-full h-1 rounded-full bg-gray-200 mt-1">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all",
+                  getScoreBarColor(ph.accuracy_score),
+                )}
+                style={{ width: `${ph.accuracy_score}%` }}
+              />
+            </div>
+            <span className="text-[10px] font-medium mt-0.5 leading-tight">
+              {Math.round(ph.accuracy_score)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function WordReadingTemplate({
   currentItem,
   currentIndex: _currentIndex,
@@ -154,6 +209,10 @@ export default function WordReadingTemplate({
 
   // Playback rate
   const [playbackRate, setPlaybackRate] = useState(1.0);
+
+  // 🎯 Issue #450: 儲存音素分析結果
+  const [phonemeResult, setPhonemeResult] =
+    useState<PronunciationResult | null>(null);
 
   // Azure Speech Service hook for direct API calls
   // Use demo hook when in demo mode (no authentication required)
@@ -230,6 +289,7 @@ export default function WordReadingTemplate({
   useEffect(() => {
     setAudioUrl(existingAudioUrl || undefined);
     setAssessmentResult(null);
+    setPhonemeResult(null);
     setTimeRemaining(timeLimit);
     setImageError(false);
     setIsPlaying(false);
@@ -455,6 +515,7 @@ export default function WordReadingTemplate({
     setDuration(0);
     setAudioUrl(undefined);
     setAssessmentResult(null);
+    setPhonemeResult(null);
   };
 
   // Upload analysis in background
@@ -541,10 +602,11 @@ export default function WordReadingTemplate({
         return;
       }
 
-      // Use Azure Speech Service for analysis
+      // 🎯 Issue #450: 單字朗讀使用 Phoneme 層級分析
       const azureResult = await analyzePronunciation(
         audioBlob,
         currentItem.text,
+        "Phoneme",
       );
 
       if (!azureResult) {
@@ -561,6 +623,8 @@ export default function WordReadingTemplate({
       };
 
       setAssessmentResult(result);
+      // 🎯 Issue #450: 儲存音素分析結果
+      setPhonemeResult(azureResult);
       toast.success(t("wordReading.toast.aiComplete") || "AI 評估完成");
 
       // Background upload
@@ -1025,6 +1089,16 @@ export default function WordReadingTemplate({
                           </div>
                         </div>
                       </div>
+
+                      {/* 🎯 Issue #450: 音素分析視覺化 */}
+                      {phonemeResult?.detailed_words?.[0]?.phonemes &&
+                        phonemeResult.detailed_words[0].phonemes.length > 0 && (
+                          <PhonemeVisualization
+                            phonemes={
+                              phonemeResult.detailed_words[0].phonemes
+                            }
+                          />
+                        )}
 
                       {/* Re-assess Button */}
                       {!readOnly && (
