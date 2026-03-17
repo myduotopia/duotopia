@@ -101,7 +101,14 @@ export default function MaterialsPage() {
     }
   }, [effectiveOrgId, token]);
 
-  const fetchPrograms = useCallback(async () => {
+  useEffect(() => {
+    if (effectiveOrgId) {
+      fetchPrograms();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- api recreated each render; only refetch on orgId change
+  }, [effectiveOrgId]);
+
+  const fetchPrograms = async () => {
     if (!effectiveOrgId) return;
 
     try {
@@ -117,13 +124,7 @@ export default function MaterialsPage() {
     } finally {
       setLoading(false);
     }
-  }, [effectiveOrgId, api]);
-
-  useEffect(() => {
-    if (effectiveOrgId) {
-      fetchPrograms();
-    }
-  }, [effectiveOrgId, fetchPrograms]);
+  };
 
   // Check if current user can manage materials
   const canManageMaterials =
