@@ -59,6 +59,19 @@
     "tapToContinue": "Tap anywhere to continue",
     "tapToRetry": "Tap anywhere to retry"
   },
+  "pronunciationChart": {
+    "overallScore": "Overall",
+    "dimensionScores": "Score Dimensions",
+    "wordDetails": "Pronunciation Details",
+    "phonemeDetails": "Phoneme Details",
+    "shortLabels": {
+      "overall": "Overall",
+      "accuracy": "Accuracy",
+      "fluency": "Fluency",
+      "completeness": "Completeness",
+      "prosody": "Prosody"
+    }
+  },
   "rearrangement": {
     "loading": "Loading questions...",
     "noQuestions": "No questions available",
@@ -3946,6 +3959,7 @@
       "analyzing": "Analyzing...",
       "analyzed": "Analyzed",
       "analysisFailed": "Analysis Failed (Click to Retry)",
+      "viewAnalysis": "View Analysis",
       "aiAnalyzing": "AI is analyzing...",
       "pleaseWait": "Please wait a moment",
       "clickToAssess": "Click button above to assess",

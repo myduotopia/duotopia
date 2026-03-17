@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
+import ScoreOverlay from "./shared/ScoreOverlay";
 
 interface WordOption {
   content_item_id: number;
@@ -82,6 +83,8 @@ export default function WordSelectionActivity({
   const [isCorrect, setIsCorrect] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [scoreOverlayOpen, setScoreOverlayOpen] = useState(false);
+  const nextQuestionCalledRef = useRef(false);
 
   // Settings
   const [showWord, setShowWord] = useState(true);
@@ -356,6 +359,7 @@ export default function WordSelectionActivity({
     setSelectedAnswer(null); // No selection made
     setIsCorrect(false);
     setShowResult(true);
+    setScoreOverlayOpen(true);
     setSubmitting(true);
 
     // Skip API call in preview mode and demo mode, but track local stats (SM-2 simulation)
@@ -399,6 +403,7 @@ export default function WordSelectionActivity({
     setSelectedAnswer(answer);
     setIsCorrect(correct);
     setShowResult(true);
+    setScoreOverlayOpen(true);
     setSubmitting(true);
 
     // Skip API call in preview mode and demo mode, but track local stats (SM-2 simulation)
@@ -435,12 +440,18 @@ export default function WordSelectionActivity({
     }
   };
 
-  // Handle next word
-  const handleNext = () => {
+  // ScoreOverlay 動畫結束後自動跳下一題
+  const handleOverlayComplete = () => {
+    if (nextQuestionCalledRef.current) return;
+    nextQuestionCalledRef.current = true;
+    setTimeout(() => {
+      nextQuestionCalledRef.current = false;
+    }, 300);
+
+    setScoreOverlayOpen(false);
     setSelectedAnswer(null);
     setShowResult(false);
     // Reset timer immediately to prevent timeout effect from triggering on next question
-    // This fixes race condition where timeRemaining is still 0 when showResult becomes false
     if (timeLimit) {
       setTimeRemaining(timeLimit);
     }
@@ -448,7 +459,6 @@ export default function WordSelectionActivity({
     if (currentIndex < words.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      // Round completed
       setRoundCompleted(true);
     }
   };
@@ -609,31 +619,30 @@ export default function WordSelectionActivity({
 
   return (
     <div className="space-y-6">
-      {/* Simplified header: [單字選擇] 第 N 題 + 熟悉度 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">
-            {t("wordSelection.wordSelection") || "Word Selection"}
-          </Badge>
-          <span className="text-sm text-gray-600">
-            {t("wordSelection.questionProgress", {
-              current: currentIndex + 1,
-              total: words.length,
-            }) || `第 ${currentIndex + 1}/${words.length} 題`}
+      {/* Header: 題號 + 進度條 */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">
+              {t("wordSelection.wordSelection") || "Word Selection"}
+            </Badge>
+            <span className="text-sm text-gray-600">
+              {t("wordSelection.questionProgress", {
+                current: currentIndex + 1,
+                total: words.length,
+              }) || `第 ${currentIndex + 1}/${words.length} 題`}
+            </span>
+          </div>
+          <span className="text-sm font-medium text-indigo-600">
+            {displayProficiency.toFixed(0)}% / {proficiency.target_mastery}%
           </span>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-gray-600">
-            {t("wordSelection.proficiency") || "Proficiency"}:
-          </span>
-          <span className="font-medium text-blue-600">
-            {displayProficiency.toFixed(1)}%
-          </span>
-        </div>
+        <Progress
+          value={displayProficiency}
+          max={100}
+          className="h-2.5 [&>div]:bg-gradient-to-r [&>div]:from-indigo-500 [&>div]:to-purple-500"
+        />
       </div>
-
-      {/* Separator line */}
-      <hr className="border-gray-200" />
 
       {/* Question content */}
       <div className="space-y-6">
@@ -651,7 +660,7 @@ export default function WordSelectionActivity({
         {/* Word Text - hide when in audio mode */}
         {!playAudio && (
           <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-800">
+            <h2 className="text-3xl font-bold text-gray-800 select-none">
               {currentWord.text}
             </h2>
           </div>
@@ -711,7 +720,7 @@ export default function WordSelectionActivity({
           </div>
         )}
 
-        {/* Answer Options - grid-rows-2 + 1fr ensures all 4 buttons are equal height */}
+        {/* Answer Options */}
         <div
           className="grid grid-cols-2 grid-rows-2 gap-3 sm:gap-4"
           style={{ gridAutoRows: "1fr" }}
@@ -719,70 +728,60 @@ export default function WordSelectionActivity({
           {currentWord.options.map((option, index) => {
             const isSelected = selectedAnswer === option;
             const isCorrectAnswer = option === currentWord.translation;
-            // Only show correct highlight if user answered correctly
             const showCorrect = showResult && isCorrectAnswer && isCorrect;
-            // Show incorrect highlight only for the selected wrong option
             const showIncorrect = showResult && isSelected && !isCorrectAnswer;
 
+            // 四個選項各用不同淺色
+            const optionColors = [
+              "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-400",
+              "bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-400",
+              "bg-amber-50 border-amber-200 hover:bg-amber-100 hover:border-amber-400",
+              "bg-teal-50 border-teal-200 hover:bg-teal-100 hover:border-teal-400",
+            ];
+
             return (
-              <Button
+              <button
                 key={index}
-                variant="outline"
                 className={cn(
-                  "h-full min-h-16 py-3 px-4 text-base sm:text-lg font-medium transition-all whitespace-normal text-center break-words",
-                  !showResult && "hover:bg-blue-50 hover:border-blue-400",
-                  showCorrect && "bg-green-100 border-green-500 text-green-800",
-                  showIncorrect && "bg-red-100 border-red-500 text-red-800",
-                  isSelected && !showResult && "border-blue-500 bg-blue-50",
+                  "h-full min-h-16 py-3 px-4 text-base sm:text-lg font-medium",
+                  "rounded-2xl border-2 shadow-md select-none",
+                  "transition-all duration-200",
+                  "whitespace-normal text-center break-words",
+                  !showResult &&
+                    "hover:shadow-lg hover:-translate-y-0.5 active:scale-95",
+                  !showResult && optionColors[index % 4],
+                  showCorrect &&
+                    "bg-green-100 border-green-500 text-green-800 shadow-green-200",
+                  showIncorrect &&
+                    "bg-red-100 border-red-500 text-red-800 shadow-red-200",
+                  isSelected &&
+                    !showResult &&
+                    "ring-2 ring-indigo-400 scale-95",
+                  showResult && !showCorrect && !showIncorrect && "opacity-50",
                 )}
                 onClick={() => handleSelectAnswer(option)}
                 disabled={showResult || submitting}
               >
                 {showCorrect && (
-                  <CheckCircle className="h-5 w-5 mr-2 shrink-0 text-green-600" />
+                  <CheckCircle className="h-5 w-5 mr-2 shrink-0 text-green-600 inline" />
                 )}
                 {showIncorrect && (
-                  <XCircle className="h-5 w-5 mr-2 shrink-0 text-red-600" />
+                  <XCircle className="h-5 w-5 mr-2 shrink-0 text-red-600 inline" />
                 )}
                 {option}
-              </Button>
+              </button>
             );
           })}
         </div>
-
-        {/* Result Feedback */}
-        {showResult && (
-          <div
-            className={cn(
-              "text-center p-4 rounded-lg",
-              isCorrect ? "bg-green-50" : "bg-red-50",
-            )}
-          >
-            <p
-              className={cn(
-                "font-medium text-lg",
-                isCorrect ? "text-green-700" : "text-red-700",
-              )}
-            >
-              {isCorrect
-                ? t("wordSelection.correct") || "Correct!"
-                : t("wordSelection.incorrect") || "Incorrect"}
-            </p>
-            {/* Note: Correct answer is intentionally NOT shown when wrong to encourage learning */}
-          </div>
-        )}
-
-        {/* Next Button */}
-        {showResult && (
-          <div className="flex justify-center pt-4">
-            <Button onClick={handleNext} size="lg">
-              {currentIndex < words.length - 1
-                ? t("wordSelection.next") || "Next"
-                : t("wordSelection.finishRound") || "Finish Round"}
-            </Button>
-          </div>
-        )}
       </div>
+
+      {/* 答對/答錯動畫 overlay → 動畫結束自動下一題 */}
+      <ScoreOverlay
+        open={scoreOverlayOpen}
+        score={isCorrect ? 100 : 0}
+        isError={!isCorrect}
+        onComplete={handleOverlayComplete}
+      />
 
       {/* Achievement Dialog */}
       <Dialog
