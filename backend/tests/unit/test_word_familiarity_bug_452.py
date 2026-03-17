@@ -37,9 +37,9 @@ class TestFirstIncorrectAnswer:
     def test_first_incorrect_answer_gives_zero_memory_strength(self):
         """Bug #452: first incorrect answer must NOT inflate the word's memory_strength."""
         strength = simulate_memory_strength_on_first_answer(is_correct=False)
-        assert strength == 0.0, (
-            f"Expected memory_strength=0.0 for first incorrect answer, got {strength}"
-        )
+        assert (
+            strength == 0.0
+        ), f"Expected memory_strength=0.0 for first incorrect answer, got {strength}"
 
     def test_first_correct_answer_gives_nonzero_memory_strength(self):
         """Control: first correct answer should still start at 0.5."""
@@ -52,9 +52,9 @@ class TestFirstIncorrectAnswer:
         After a wrong answer the stored value must be <= 0, otherwise the average rises.
         """
         strength = simulate_memory_strength_on_first_answer(is_correct=False)
-        assert strength <= 0.0, (
-            "Familiarity must not increase when answering a new word incorrectly"
-        )
+        assert (
+            strength <= 0.0
+        ), "Familiarity must not increase when answering a new word incorrectly"
 
 
 class TestSubsequentIncorrectAnswers:
