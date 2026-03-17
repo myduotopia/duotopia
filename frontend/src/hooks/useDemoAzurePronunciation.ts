@@ -101,6 +101,7 @@ interface UseDemoAzurePronunciationResult {
   analyzePronunciation: (
     audioBlob: Blob,
     referenceText: string,
+    _granularity?: "Word" | "Phoneme",
   ) => Promise<PronunciationResult | null>;
   reset: () => void;
   clearLimitError: () => void;
@@ -127,6 +128,7 @@ export function useDemoAzurePronunciation(): UseDemoAzurePronunciationResult {
   const analyzePronunciation = async (
     audioBlob: Blob,
     referenceText: string,
+    _granularity: "Word" | "Phoneme" = "Word",
   ): Promise<PronunciationResult | null> => {
     setIsAnalyzing(true);
     setError(null);

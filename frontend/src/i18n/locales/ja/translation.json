@@ -262,5 +262,8 @@
       "willActivate": "パスワード設定後、アカウントがすぐに有効化されます",
       "useAllFeatures": "Duotopiaのすべての機能を利用開始できます"
     }
+  },
+  "wordReading": {
+    "phonemeAnalysis": "音素分析"
   }
 }
