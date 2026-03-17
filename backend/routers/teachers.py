@@ -2894,7 +2894,9 @@ async def get_content_detail(
     from utils.permissions import check_content_access
 
     # check_content_access handles personal, org, template, and assignment copy access
-    _program, _lesson, content = check_content_access(db, content_id, current_teacher)
+    _program, _lesson, content = check_content_access(
+        db, content_id, current_teacher, require_owner=False
+    )
 
     # Eager load content_items to avoid N+1
     db.refresh(content, ["content_items"])
