@@ -371,61 +371,84 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       actualScore = Math.max(cappedScore, minimumScore); // ✅ 套用保底分
     }
 
-    // 🚀 直接更新本地狀態（不等待 API）
-    setQuestionStates((prev) => {
-      const newStates = new Map(prev);
-      const stateInMap = newStates.get(contentItemId);
-      if (stateInMap) {
-        newStates.set(contentItemId, {
-          ...stateInMap,
-          completed: true,
-          timeRemaining: 0,
-          expectedScore: actualScore, // 更新為實際分數
-        });
-      }
-      return newStates;
-    });
+    // 判斷是否已完成全部單字
+    const isFullyCompleted = correctWordCount >= totalWordCount;
 
-    // 計算並更新分數（使用實際分數）
-    setTotalScore((prev) => {
-      totalScoreRef.current = prev + actualScore;
-      return prev + actualScore;
-    });
-    setCompletedQuestions((prev) => prev + 1);
-    setResultModalOpen(true); // 打開結果 Modal（時間到也顯示結果）
+    if (isFullyCompleted) {
+      // 邊界情況：時間到但剛好完成全部 → 正常完成流程
+      setQuestionStates((prev) => {
+        const newStates = new Map(prev);
+        const stateInMap = newStates.get(contentItemId);
+        if (stateInMap) {
+          newStates.set(contentItemId, {
+            ...stateInMap,
+            completed: true,
+            timeRemaining: 0,
+            expectedScore: actualScore,
+          });
+        }
+        return newStates;
+      });
 
-    // 學生模式：呼叫 API 儲存 timeout 分數（練習模式不存）
-    if (!isPreviewMode && !isDemoMode && !isPracticeMode) {
-      try {
-        await apiClient.post(
-          `/api/students/assignments/${studentAssignmentId}/rearrangement-complete`,
-          {
-            content_item_id: contentItemId,
-            timeout: true,
-            expected_score: actualScore,
-            error_count: errorCount,
-          },
-        );
-      } catch (error) {
-        console.error("Failed to save timeout completion:", error);
-        toast.warning(t("rearrangement.messages.saveFailed"));
+      setTotalScore((prev) => {
+        totalScoreRef.current = prev + actualScore;
+        return prev + actualScore;
+      });
+      setCompletedQuestions((prev) => prev + 1);
+      setResultModalOpen(true);
+
+      // 呼叫 API 儲存完成分數
+      if (!isPreviewMode && !isDemoMode && !isPracticeMode) {
+        try {
+          await apiClient.post(
+            `/api/students/assignments/${studentAssignmentId}/rearrangement-complete`,
+            {
+              content_item_id: contentItemId,
+              timeout: true,
+              expected_score: actualScore,
+              error_count: errorCount,
+            },
+          );
+        } catch (error) {
+          console.error("Failed to save timeout completion:", error);
+          toast.warning(t("rearrangement.messages.saveFailed"));
+        }
+      } else if (isDemoMode) {
+        try {
+          await apiClient.post(
+            `/api/demo/assignments/${studentAssignmentId}/preview/rearrangement-complete`,
+            {
+              content_item_id: contentItemId,
+              timeout: true,
+              expected_score: actualScore,
+              error_count: errorCount,
+            },
+          );
+        } catch (error) {
+          console.error("Failed to save demo timeout completion:", error);
+        }
       }
-    } else if (isDemoMode) {
-      // Demo 模式：呼叫 demo API
-      try {
-        await apiClient.post(
-          `/api/demo/assignments/${studentAssignmentId}/preview/rearrangement-complete`,
-          {
-            content_item_id: contentItemId,
-            timeout: true,
-            expected_score: actualScore,
-            error_count: errorCount,
-          },
-        );
-      } catch (error) {
-        console.error("Failed to save demo timeout completion:", error);
-        // 不影響 UI，靜默失敗
-      }
+    } else {
+      // 時間到但未完成 → 視為 challengeFailed，允許重試，滿分從 60 開始
+      setQuestionStates((prev) => {
+        const newStates = new Map(prev);
+        const stateInMap = newStates.get(contentItemId);
+        if (stateInMap) {
+          newStates.set(contentItemId, {
+            ...stateInMap,
+            completed: false,
+            challengeFailed: true,
+            timeRemaining: 0,
+            expectedScore: actualScore,
+            hasSeenAnswer: true,
+            maxScore: 60,
+          });
+        }
+        return newStates;
+      });
+
+      // 不加入 totalScore、不增加 completedQuestions（學生需要重試）
+      setResultModalOpen(true); // 觸發錯誤 Overlay → 自動重試
     }
   };
 

@@ -456,28 +456,9 @@ export function AssignmentDialog({
       const params = new URLSearchParams();
       params.append("is_template", "true");
 
-      console.log("[DEBUG] loadTemplatePrograms called with:", {
-        mode: workspace?.mode,
-        selectedSchool: workspace?.selectedSchool?.id,
-        params: params.toString(),
-        url: `/api/teachers/programs?${params.toString()}`,
-      });
-
       const response = await apiClient.get<Program[]>(
         `/api/teachers/programs?${params.toString()}`,
       );
-
-      console.log("[DEBUG] loadTemplatePrograms response:", {
-        count: response.length,
-        programs: response.map((p) => ({
-          id: p.id,
-          name: p.name,
-          school_id: p.school_id,
-          organization_id: p.organization_id,
-          teacher_id: p.teacher_id,
-          is_template: p.is_template,
-        })),
-      });
 
       setTemplatePrograms(response);
     } catch (error) {
