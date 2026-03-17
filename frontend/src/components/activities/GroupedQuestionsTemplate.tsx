@@ -1173,20 +1173,6 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                     </>
                   )}
                 </Button>
-                <style
-                  dangerouslySetInnerHTML={{
-                    __html: `
-                    @keyframes pulse-scale {
-                      0%, 100% {
-                        transform: scale(1);
-                      }
-                      50% {
-                        transform: scale(1.08);
-                      }
-                    }
-                  `,
-                  }}
-                />
               </div>
             ) : null}
             {assessmentResults[currentQuestionIndex] ? (

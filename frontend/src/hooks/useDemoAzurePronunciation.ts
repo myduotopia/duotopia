@@ -4,6 +4,10 @@
  * Same functionality as useAzurePronunciation but for demo mode.
  * Uses demoSpeechService which doesn't require authentication.
  * Throws DemoLimitExceededError when daily quota is exceeded.
+ *
+ * Note: Demo mode always uses Word-level granularity (no phoneme analysis).
+ * Phoneme-level analysis is only available in the real useAzurePronunciation hook
+ * for word reading activities (Issue #450).
  */
 
 import { useState } from "react";
