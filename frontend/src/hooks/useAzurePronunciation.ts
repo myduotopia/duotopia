@@ -154,8 +154,7 @@ export function useAzurePronunciation() {
             if (wordData.Syllables && wordData.Syllables.length > 0) {
               detailedWord.syllables = wordData.Syllables.map((syl) => ({
                 syllable: syl.Syllable,
-                accuracy_score:
-                  syl.PronunciationAssessment?.AccuracyScore || 0,
+                accuracy_score: syl.PronunciationAssessment?.AccuracyScore || 0,
                 phonemes: (syl.Phonemes || []).map((ph) => ({
                   phoneme: ph.Phoneme,
                   accuracy_score:
@@ -168,8 +167,7 @@ export function useAzurePronunciation() {
             if (wordData.Phonemes && wordData.Phonemes.length > 0) {
               detailedWord.phonemes = wordData.Phonemes.map((ph) => ({
                 phoneme: ph.Phoneme,
-                accuracy_score:
-                  ph.PronunciationAssessment?.AccuracyScore || 0,
+                accuracy_score: ph.PronunciationAssessment?.AccuracyScore || 0,
               }));
             }
           }

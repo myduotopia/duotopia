@@ -1094,9 +1094,7 @@ export default function WordReadingTemplate({
                       {phonemeResult?.detailed_words?.[0]?.phonemes &&
                         phonemeResult.detailed_words[0].phonemes.length > 0 && (
                           <PhonemeVisualization
-                            phonemes={
-                              phonemeResult.detailed_words[0].phonemes
-                            }
+                            phonemes={phonemeResult.detailed_words[0].phonemes}
                           />
                         )}
 

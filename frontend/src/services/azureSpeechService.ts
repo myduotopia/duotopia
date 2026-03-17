@@ -182,7 +182,14 @@ export class AzureSpeechService {
               recognizer.close();
 
               // 递归重试（只重试一次）
-              resolve(this.analyzePronunciation(audioBlob, referenceText, 1, granularity));
+              resolve(
+                this.analyzePronunciation(
+                  audioBlob,
+                  referenceText,
+                  1,
+                  granularity,
+                ),
+              );
             }
             // 其他错误
             else {
@@ -205,7 +212,14 @@ export class AzureSpeechService {
             // 401 错误 - 自动 retry
             if (error.includes("401") && retryCount === 0) {
               this.tokenCache = null;
-              resolve(this.analyzePronunciation(audioBlob, referenceText, 1, granularity));
+              resolve(
+                this.analyzePronunciation(
+                  audioBlob,
+                  referenceText,
+                  1,
+                  granularity,
+                ),
+              );
             } else {
               reject(new Error(`分析失败: ${error}`));
             }
