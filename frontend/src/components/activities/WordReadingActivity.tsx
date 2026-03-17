@@ -349,6 +349,8 @@ export default function WordReadingActivity({
     // 🎯 Issue #227: 切換到下一題時，背景分析當前未分析的題目
     if (canUseAiAnalysis && !isPreviewMode && !isDemoMode) {
       const currentItem = items[currentIndex];
+      // 🔧 Review fix: 捕獲 index 避免 async 回調中使用 stale closure
+      const capturedIndex = currentIndex;
       const hasRecording =
         currentItem?.recording_url && currentItem.recording_url !== "";
       if (hasRecording && !currentItem?.ai_assessment && currentItem.text) {
@@ -372,8 +374,8 @@ export default function WordReadingActivity({
 
             setItems((prev) => {
               const updated = [...prev];
-              updated[currentIndex] = {
-                ...updated[currentIndex],
+              updated[capturedIndex] = {
+                ...updated[capturedIndex],
                 ai_assessment: assessment,
               };
               return updated;

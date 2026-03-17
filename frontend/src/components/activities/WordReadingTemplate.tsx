@@ -35,6 +35,8 @@ import {
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { useStudentAuthStore } from "@/stores/studentAuthStore"; // used via .getState()
+import { useTeacherAuthStore } from "@/stores/teacherAuthStore"; // used via .getState()
 import {
   useAzurePronunciation,
   type PronunciationResult,
@@ -119,6 +121,8 @@ interface WordReadingTemplateProps {
  * 顯示每個音素的準確度，以顏色標示（綠 ≥80 / 黃 ≥60 / 紅 <60）
  */
 function PhonemeVisualization({ phonemes }: { phonemes: PhonemeDetail[] }) {
+  const { t } = useTranslation();
+
   const getPhonemeColor = (score: number) => {
     if (score >= 80) return "bg-green-100 text-green-700 border-green-300";
     if (score >= 60) return "bg-yellow-100 text-yellow-700 border-yellow-300";
@@ -133,11 +137,13 @@ function PhonemeVisualization({ phonemes }: { phonemes: PhonemeDetail[] }) {
 
   return (
     <div className="bg-white rounded-lg p-3">
-      <div className="text-xs text-gray-500 mb-2 font-medium">音素分析</div>
+      <div className="text-xs text-gray-500 mb-2 font-medium">
+        {t("wordReading.phonemeAnalysis") || "音素分析"}
+      </div>
       <div className="flex flex-wrap gap-1.5 justify-center">
         {phonemes.map((ph, idx) => (
           <div
-            key={idx}
+            key={`${ph.phoneme}-${idx}`}
             className={cn(
               "flex flex-col items-center rounded-lg border px-2.5 py-1.5 min-w-[40px] transition-all",
               getPhonemeColor(ph.accuracy_score),
@@ -553,10 +559,15 @@ export default function WordReadingTemplate({
       const analysisId = crypto.randomUUID();
       formData.append("analysis_id", analysisId);
 
+      // 🔧 Review fix: 使用正確的 auth token（非 env var）
+      const studentToken = useStudentAuthStore.getState().token;
+      const teacherToken = useTeacherAuthStore.getState().token;
+      const authToken = studentToken || teacherToken || "";
+
       fetch(`${apiUrl}/api/speech/upload-analysis`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_STUDENT_TOKEN || ""}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: formData,
       })
@@ -587,11 +598,16 @@ export default function WordReadingTemplate({
       const audioBlob = await response.blob();
 
       // Check recording duration (max 10 seconds)
+      // 🔧 Review fix: 確保 AudioContext 在 error path 也會 close
       const audioContext = new AudioContext();
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      const audioDuration = audioBuffer.duration;
-      audioContext.close();
+      let audioDuration: number;
+      try {
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        audioDuration = audioBuffer.duration;
+      } finally {
+        audioContext.close();
+      }
 
       if (audioDuration > 10) {
         toast.error(
@@ -1090,7 +1106,9 @@ export default function WordReadingTemplate({
                         </div>
                       </div>
 
-                      {/* 🎯 Issue #450: 音素分析視覺化 */}
+                      {/* 🎯 Issue #450: 音素分析視覺化
+                          注意：只取 detailed_words[0]，因為單字朗讀模式
+                          每次只分析一個單字，Azure 回傳的 Words 陣列長度為 1 */}
                       {phonemeResult?.detailed_words?.[0]?.phonemes &&
                         phonemeResult.detailed_words[0].phonemes.length > 0 && (
                           <PhonemeVisualization
