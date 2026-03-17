@@ -360,7 +360,7 @@ export function SchoolProgramCreateDialog({
                   <SelectValue placeholder="選擇程度" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="PREA">PRE-A</SelectItem>
+                  <SelectItem value="preA">Pre-A</SelectItem>
                   <SelectItem value="A1">A1</SelectItem>
                   <SelectItem value="A2">A2</SelectItem>
                   <SelectItem value="B1">B1</SelectItem>

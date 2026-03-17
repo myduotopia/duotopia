@@ -1115,7 +1115,7 @@ export function ProgramTreeView({
                   <SelectValue placeholder="選擇等級（選填）" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="PreA">Pre-A</SelectItem>
+                  <SelectItem value="preA">Pre-A</SelectItem>
                   <SelectItem value="A1">A1</SelectItem>
                   <SelectItem value="A2">A2</SelectItem>
                   <SelectItem value="B1">B1</SelectItem>

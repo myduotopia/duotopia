@@ -34,6 +34,8 @@ import {
 } from "@/components/ui/select";
 import { X } from "lucide-react";
 
+const MAX_TAGS = 5;
+
 /**
  * MaterialsPage - Manage organization-level educational programs/materials
  */
@@ -57,7 +59,6 @@ export default function MaterialsPage() {
   const [newProgramTagInput, setNewProgramTagInput] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const creatingRef = useRef(false);
-  const MAX_TAGS = 5;
 
   const effectiveOrgId =
     orgId ||
@@ -100,13 +101,7 @@ export default function MaterialsPage() {
     }
   }, [effectiveOrgId, token]);
 
-  useEffect(() => {
-    if (effectiveOrgId) {
-      fetchPrograms();
-    }
-  }, [effectiveOrgId]);
-
-  const fetchPrograms = async () => {
+  const fetchPrograms = useCallback(async () => {
     if (!effectiveOrgId) return;
 
     try {
@@ -122,7 +117,13 @@ export default function MaterialsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [effectiveOrgId, api]);
+
+  useEffect(() => {
+    if (effectiveOrgId) {
+      fetchPrograms();
+    }
+  }, [effectiveOrgId, fetchPrograms]);
 
   // Check if current user can manage materials
   const canManageMaterials =
@@ -294,7 +295,7 @@ export default function MaterialsPage() {
                   <SelectValue placeholder="選擇等級（選填）" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="PreA">Pre-A</SelectItem>
+                  <SelectItem value="preA">Pre-A</SelectItem>
                   <SelectItem value="A1">A1</SelectItem>
                   <SelectItem value="A2">A2</SelectItem>
                   <SelectItem value="B1">B1</SelectItem>

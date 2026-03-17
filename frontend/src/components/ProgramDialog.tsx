@@ -268,7 +268,7 @@ export function ProgramDialog({
                 }
                 className={`w-full mt-1 px-3 py-2 border rounded-md ${errors.level ? "border-red-500" : ""}`}
               >
-                <option value="PREA">
+                <option value="preA">
                   {t("dialogs.programDialog.form.levels.PREA")}
                 </option>
                 <option value="A1">

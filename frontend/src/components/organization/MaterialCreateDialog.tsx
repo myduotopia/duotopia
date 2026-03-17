@@ -32,7 +32,7 @@ interface MaterialCreateDialogProps {
 }
 
 const CEFR_LEVELS = [
-  { value: "PreA", label: "Pre-A" },
+  { value: "preA", label: "Pre-A" },
   { value: "A1", label: "A1" },
   { value: "A2", label: "A2" },
   { value: "B1", label: "B1" },
