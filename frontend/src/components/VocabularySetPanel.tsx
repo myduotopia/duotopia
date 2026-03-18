@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { useSidebar } from "@/contexts/SidebarContext";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -1473,6 +1474,7 @@ export default function VocabularySetPanel({
   isAssignmentCopy = false,
 }: VocabularySetPanelProps) {
   const { t } = useTranslation();
+  const { setEditorBusy } = useSidebar();
 
   const [title, setTitle] = useState("");
   // 記住用戶最後選擇的翻譯語言，批次翻譯時使用
@@ -1521,8 +1523,9 @@ export default function VocabularySetPanel({
   const [batchPasteText, setBatchPasteText] = useState("");
   const [batchPasteAutoTTS, setBatchPasteAutoTTS] = useState(true);
   const [batchPasteAutoTranslate, setBatchPasteAutoTranslate] = useState(true);
-  const [isBatchPasting, setIsBatchPasting] = useState(false);
-  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+  const [isBatchPasting, _setIsBatchPasting] = useState(false);
+  const setIsBatchPasting = (v: boolean) => { _setIsBatchPasting(v); setEditorBusy(v); };
+  const [batchProgress, setBatchProgress] = useState<{ completedItems: number; totalItems: number; completedSteps: number; totalSteps: number } | null>(null);
   const batchPauseRef = useRef(false);
   const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(new Map());
 
@@ -2992,9 +2995,15 @@ export default function VocabularySetPanel({
       toast.info(msgs.join("、"));
     }
 
-    if (lines.length === 0) {
-      toast.error(t("contentEditor.messages.enterContent"));
-      return;
+    // 貼上框空白時，改為對右側已有單字補齊缺少的項目
+    const isBackfillMode = lines.length === 0 && rawLines.length === 0;
+
+    if (isBackfillMode) {
+      const existingRows = rows.filter((r) => r.text && r.text.trim());
+      if (existingRows.length === 0) {
+        toast.error(t("contentEditor.messages.enterContent"));
+        return;
+      }
     }
 
     // 檢查：勾選翻譯但選了「其他」卻沒輸入語言
@@ -3015,10 +3024,204 @@ export default function VocabularySetPanel({
       return;
     }
 
+    // 檢查：單字翻譯語言一致性（已有翻譯的單字不可更改語言）
+    if (autoTranslate) {
+      const existingWithTranslation = rows.find((r) => {
+        if (!r.text?.trim()) return false;
+        return r.selectedWordLanguage && r.selectedWordLanguage !== lastSelectedWordLang && (
+          r.definition || r.translation || r.japanese_translation || r.korean_translation
+        );
+      });
+      if (existingWithTranslation) {
+        const existingLangLabel = WORD_TRANSLATION_LANGUAGES.find((l) => l.value === existingWithTranslation.selectedWordLanguage)?.label || existingWithTranslation.selectedWordLanguage;
+        toast.error(t("contentEditor.labels.translationLanguageMismatch", { lang: existingLangLabel }));
+        return;
+      }
+    }
+
+    // 檢查：例句翻譯語言一致性（已有例句翻譯的不可更改語言）
+    if (aiGenerateExpanded) {
+      const existingWithExampleTranslation = rows.find((r) => {
+        if (!r.text?.trim() || !r.example_sentence_translation?.trim()) return false;
+        const existingSentenceLang = r.selectedSentenceLanguage || "chinese";
+        return existingSentenceLang !== aiGenerateTranslateLang;
+      });
+      if (existingWithExampleTranslation) {
+        const existingLangLabel = SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === (existingWithExampleTranslation.selectedSentenceLanguage || "chinese"))?.label || existingWithExampleTranslation.selectedSentenceLanguage;
+        toast.error(t("contentEditor.labels.exampleTranslationLanguageMismatch", { lang: existingLangLabel }));
+        return;
+      }
+    }
+
     setIsBatchPasting(true);
     batchPauseRef.current = false;
 
     try {
+      // === 補齊模式：對右側已有單字補齊缺少的項目 ===
+      if (isBackfillMode) {
+        const existingRows = rows.filter((r) => r.text && r.text.trim());
+        const batchLang = lastSelectedWordLang;
+        const batchLangCode =
+          WORD_TRANSLATION_LANGUAGES.find((l) => l.value === batchLang)?.code || "zh-TW";
+
+        let voice = "";
+        let rate = "";
+        if (autoTTS) {
+          const ttsSettings = getVoiceAndRate(batchTTSAccent, batchTTSGender, batchTTSSpeed);
+          voice = ttsSettings.voice;
+          rate = ttsSettings.rate;
+          saveBatchTTSSettings();
+        }
+
+        const shouldGenerateExamples = aiGenerateExpanded;
+        let exampleTargetLang = "";
+        if (shouldGenerateExamples) {
+          if (aiGenerateTranslateLang === "other") {
+            exampleTargetLang = customSentenceTranslationLang || "";
+          } else if (aiGenerateTranslateLang) {
+            exampleTargetLang =
+              SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === aiGenerateTranslateLang)?.code || "";
+          }
+        }
+
+        const currentRows = [...rows];
+        let completedItems = 0;
+        let completedSteps = 0;
+        const itemsToProcess = existingRows.map((r) => rows.indexOf(r));
+
+        // 計算每個單字的實際步驟數
+        const getStepsForRow = (row: ContentRow) => {
+          let steps = 0;
+          if (autoTranslate) {
+            const hasTranslation = (() => {
+              if (batchLang === "chinese") return !!row.definition;
+              if (batchLang === "english") return !!row.translation;
+              if (batchLang === "japanese") return !!row.japanese_translation;
+              if (batchLang === "korean") return !!row.korean_translation;
+              return !!row.definition;
+            })();
+            if (!hasTranslation) steps++;
+          }
+          if (autoTTS && !row.audioUrl && !row.audio_url) steps++;
+          if (shouldGenerateExamples && !row.example_sentence?.trim()) steps++;
+          return steps;
+        };
+
+        const totalSteps = itemsToProcess.reduce((sum, idx) => sum + getStepsForRow(currentRows[idx]), 0);
+        const totalItems = itemsToProcess.filter((idx) => getStepsForRow(currentRows[idx]) > 0).length;
+
+        if (totalSteps === 0) {
+          toast.info(t("contentEditor.messages.noItemsNeedProcessing", { defaultValue: "所有項目已完成，無需補齊" }));
+          setIsBatchPasting(false);
+          return;
+        }
+
+        setBatchProgress({ completedItems: 0, totalItems, completedSteps: 0, totalSteps });
+
+        for (let i = 0; i < itemsToProcess.length; i++) {
+          if (batchPauseRef.current) {
+            toast.info(`${t("contentEditor.messages.batchPaused")} (${completedItems}/${totalItems})`);
+            break;
+          }
+
+          const idx = itemsToProcess[i];
+          const row = currentRows[idx];
+          const text = row.text;
+          const rowSteps = getStepsForRow(row);
+          if (rowSteps === 0) continue;
+
+          try {
+            // 補齊翻譯（如果缺少）
+            if (autoTranslate) {
+              const hasTranslation = (() => {
+                if (batchLang === "chinese") return !!row.definition;
+                if (batchLang === "english") return !!row.translation;
+                if (batchLang === "japanese") return !!row.japanese_translation;
+                if (batchLang === "korean") return !!row.korean_translation;
+                return !!row.definition;
+              })();
+
+              if (!hasTranslation) {
+                if (batchLang === "chinese") {
+                  const posResponse = await apiClient.batchTranslateWithPos([text], batchLangCode);
+                  const results = posResponse.results || [];
+                  if (results[0]) {
+                    const parsed = extractFirstDefinition(results[0].translation || "");
+                    currentRows[idx].definition = parsed.text;
+                    if (results[0].parts_of_speech?.length > 0) {
+                      currentRows[idx].partsOfSpeech = convertAbbreviatedPOS(results[0].parts_of_speech);
+                    } else if (parsed.pos) {
+                      currentRows[idx].partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
+                    }
+                  }
+                } else if (batchLang !== "other") {
+                  const translateResponse = await apiClient.batchTranslate([text], batchLangCode);
+                  const translations = (translateResponse as { translations?: string[] }).translations || [];
+                  if (translations[0]) {
+                    const parsed = extractFirstDefinition(translations[0]);
+                    if (batchLang === "english") currentRows[idx].translation = parsed.text;
+                    else if (batchLang === "japanese") currentRows[idx].japanese_translation = parsed.text;
+                    else if (batchLang === "korean") currentRows[idx].korean_translation = parsed.text;
+                    if (parsed.pos) currentRows[idx].partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
+                  }
+                }
+                completedSteps++;
+                setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+                setRows([...currentRows]);
+              }
+            }
+
+            // 補齊 TTS（如果缺少）
+            if (autoTTS && !row.audioUrl && !row.audio_url) {
+              const ttsResult = await apiClient.generateTTS(text, voice, rate, "+0%");
+              if (ttsResult && typeof ttsResult === "object" && "audio_url" in ttsResult) {
+                const audioUrl = (ttsResult as { audio_url: string }).audio_url;
+                const fullUrl = audioUrl?.startsWith("http") ? audioUrl : `${import.meta.env.VITE_API_URL}${audioUrl}`;
+                currentRows[idx].audioUrl = fullUrl;
+                currentRows[idx].audio_url = fullUrl;
+              }
+              completedSteps++;
+              setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+              setRows([...currentRows]);
+            }
+
+            // 補齊例句（如果缺少）
+            if (shouldGenerateExamples && !row.example_sentence?.trim()) {
+              const response = await apiClient.generateSentences({
+                words: [text],
+                definitions: [currentRows[idx].definition || ""],
+                lesson_id: lessonId,
+                level: aiGenerateLevel,
+                prompt: aiGeneratePrompt || undefined,
+                translate_to: exampleTargetLang || undefined,
+                parts_of_speech: [currentRows[idx].partsOfSpeech || []],
+              });
+              const sentencesData = (response as { sentences?: Array<{ sentence?: string; translation?: string }> }).sentences || [];
+              if (sentencesData[0]) {
+                currentRows[idx].example_sentence = sentencesData[0].sentence || "";
+                if (sentencesData[0].translation) {
+                  currentRows[idx].example_sentence_translation = sentencesData[0].translation;
+                }
+              }
+              completedSteps++;
+              setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+              setRows([...currentRows]);
+            }
+          } catch (error) {
+            console.error(`Error backfilling word "${text}":`, error);
+          }
+
+          completedItems++;
+          setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+        }
+
+        toast.success(t("vocabularySet.messages.itemsAdded", { added: completedItems, total: totalItems }));
+        setIsBatchPasting(false);
+        setBatchProgress(null);
+        return;
+      }
+
+      // === 貼上模式 ===
       // 清除空白 items
       const nonEmptyRows = rows.filter((row) => row.text && row.text.trim());
       const remaining = BATCH_PASTE_MAX - nonEmptyRows.length;
@@ -3065,22 +3268,26 @@ export default function VocabularySetPanel({
       }
 
       let currentRows = [...nonEmptyRows];
-      let processedCount = 0;
+      let completedItems = 0;
+      let completedSteps = 0;
 
-      setBatchProgress({ current: 0, total: linesToPaste.length });
+      // 每個新單字的步驟數
+      const stepsPerItem = (autoTranslate ? 1 : 0) + (autoTTS ? 1 : 0) + (shouldGenerateExamples ? 1 : 0);
+      const totalSteps = linesToPaste.length * stepsPerItem;
+      const totalItems = linesToPaste.length;
+
+      setBatchProgress({ completedItems: 0, totalItems, completedSteps: 0, totalSteps });
 
       for (let i = 0; i < linesToPaste.length; i++) {
         // 檢查是否暫停
         if (batchPauseRef.current) {
-          // 將未處理的行放回輸入框
           const unprocessed = linesToPaste.slice(i);
           setBatchPasteText([...unprocessed, ...leftoverLines].join("\n"));
-          toast.info(`${t("contentEditor.messages.batchPaused")} (${processedCount}/${linesToPaste.length})`);
+          toast.info(`${t("contentEditor.messages.batchPaused")} (${completedItems}/${totalItems})`);
           break;
         }
 
         const text = linesToPaste[i];
-        setBatchProgress({ current: i + 1, total: linesToPaste.length });
 
         // 建立新 item
         const newItem: ContentRow = {
@@ -3127,6 +3334,8 @@ export default function VocabularySetPanel({
                 newItem.definition = translations[0];
               }
             }
+            completedSteps++;
+            setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
           }
 
           // Step 2: TTS
@@ -3138,13 +3347,17 @@ export default function VocabularySetPanel({
               newItem.audioUrl = fullUrl;
               newItem.audio_url = fullUrl;
             }
+            completedSteps++;
+            setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
           }
 
           // Step 3: AI 例句
           if (shouldGenerateExamples) {
+            console.log("[Do the Magic] AI例句參數:", { exampleTargetLang, aiGenerateTranslateLang, lessonId });
             const response = await apiClient.generateSentences({
               words: [text],
               definitions: [newItem.definition || ""],
+              lesson_id: lessonId,
               level: aiGenerateLevel,
               prompt: aiGeneratePrompt || undefined,
               translate_to: exampleTargetLang || undefined,
@@ -3157,16 +3370,18 @@ export default function VocabularySetPanel({
                 newItem.example_sentence_translation = sentencesData[0].translation;
               }
             }
+            completedSteps++;
+            setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
           }
         } catch (error) {
           console.error(`Error processing word "${text}":`, error);
-          // 繼續處理下一個單字
         }
 
         // 即時更新 UI
         currentRows = [...currentRows, newItem];
         setRows(currentRows);
-        processedCount++;
+        completedItems++;
+        setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
       }
 
       // 處理完成或暫停後
@@ -3174,7 +3389,7 @@ export default function VocabularySetPanel({
         setBatchPasteText(leftoverLines.join("\n"));
         toast.success(
           t("vocabularySet.messages.itemsAdded", {
-            added: processedCount,
+            added: completedItems,
             total: currentRows.length,
           }),
         );
@@ -3272,7 +3487,7 @@ export default function VocabularySetPanel({
       {/* Desktop: Side-by-side layout / Mobile: Editor only */}
       <div className="flex flex-1 gap-4 min-h-0 overflow-y-auto">
         {/* Left: Batch Work Area (Desktop only) */}
-        <div className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4">
+        <div className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4 sticky top-0 self-start">
           {/* Batch Paste */}
           <div className="space-y-3 flex-1 flex flex-col">
             <label className="text-sm font-semibold text-gray-800">
@@ -3284,10 +3499,10 @@ export default function VocabularySetPanel({
               const overLimit = lineCount > BATCH_PASTE_MAX;
               return (
                 <>
-                  <div className="flex-1 min-h-[160px] max-h-[calc(1.625rem*10+1rem)] border border-gray-300 rounded-lg focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all overflow-y-auto">
-                    <div className="flex min-h-full">
+                  <div className="flex-1 min-h-[calc(1.625rem*8+1rem)] max-h-[calc(1.625rem*10+1rem)] border border-gray-300 rounded-lg focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all overflow-y-auto cursor-text" onClick={(e) => { const ta = (e.currentTarget as HTMLElement).querySelector('textarea'); if (ta) ta.focus(); }}>
+                    <div className="flex">
                       {/* Line numbers */}
-                      <div className="flex flex-col py-2 px-2 bg-gray-100 text-gray-400 font-mono text-sm select-none border-r border-gray-300 min-w-[2rem] text-right sticky left-0">
+                      <div className="flex flex-col py-2 px-2 text-gray-300 font-mono text-sm select-none min-w-[2rem] text-right sticky left-0">
                         {Array.from({ length: Math.max(lines.length, 1) }, (_, i) => (
                           <div key={i} className="leading-[1.625rem]">
                             {i + 1}
@@ -3297,23 +3512,23 @@ export default function VocabularySetPanel({
                       <textarea
                         value={batchPasteText}
                         onChange={(e) => {
-                          const newLines = e.target.value.split("\n");
-                          if (newLines.length > BATCH_PASTE_MAX) {
+                          const newValue = e.target.value;
+                          const newLines = newValue.split("\n");
+                          const prevLineCount = batchPasteText.split("\n").length;
+                          const isPaste = newLines.length - prevLineCount > 1;
+
+                          if (isPaste) {
+                            const filtered = newLines.filter((l: string) => l.trim()).slice(0, BATCH_PASTE_MAX);
+                            setBatchPasteText(filtered.join("\n"));
+                          } else if (newLines.length > BATCH_PASTE_MAX) {
                             setBatchPasteText(newLines.slice(0, BATCH_PASTE_MAX).join("\n"));
                           } else {
-                            setBatchPasteText(e.target.value);
+                            setBatchPasteText(newValue);
                           }
-                        }}
-                        onPaste={(e) => {
-                          e.preventDefault();
-                          const pasted = e.clipboardData.getData("text");
-                          const current = batchPasteText.split("\n").filter((l: string) => l.trim());
-                          const incoming = pasted.split("\n").filter((l: string) => l.trim());
-                          const combined = [...current, ...incoming].slice(0, BATCH_PASTE_MAX);
-                          setBatchPasteText(combined.join("\n"));
                         }}
                         placeholder="apple&#10;banana&#10;orange"
                         className="flex-1 px-3 py-2 font-mono text-sm resize-none outline-none leading-[1.625rem] overflow-hidden"
+                        style={{ height: `${Math.max(lines.length, 8) * 1.625 + 1}rem` }}
                       />
                     </div>
                   </div>
@@ -3547,9 +3762,7 @@ export default function VocabularySetPanel({
                 disabled={isBatchPasting}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
               >
-                {isBatchPasting && batchProgress
-                  ? `${t("contentEditor.buttons.confirmPaste")} (${batchProgress.current}/${batchProgress.total})`
-                  : t("contentEditor.buttons.confirmPaste")}
+                {t("contentEditor.buttons.confirmPaste")}
               </Button>
               {isBatchPasting && (
                 <Button
@@ -3557,10 +3770,23 @@ export default function VocabularySetPanel({
                   className="bg-red-500 hover:bg-red-600 text-white px-4"
                 >
                   {t("contentEditor.buttons.pause")}
-                  {batchProgress && ` (${batchProgress.current}/${batchProgress.total})`}
                 </Button>
               )}
             </div>
+            {/* Progress Bar */}
+            {isBatchPasting && batchProgress && (
+              <div className="space-y-1">
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div
+                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                    style={{ width: `${batchProgress.totalSteps > 0 ? (batchProgress.completedSteps / batchProgress.totalSteps) * 100 : 0}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 text-center">
+                  {Math.round(batchProgress.totalSteps > 0 ? (batchProgress.completedSteps / batchProgress.totalSteps) * 100 : 0)}% ({batchProgress.completedItems}/{batchProgress.totalItems})
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

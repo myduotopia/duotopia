@@ -18,7 +18,7 @@ import { useSidebar } from "@/contexts/SidebarContext";
 export default function OrgMaterialsPage() {
   const { t } = useTranslation();
   const { selectedOrganization } = useWorkspace();
-  const { sidebarWidth, setSidebarDisabled } = useSidebar();
+  const { sidebarWidth, setSidebarDisabled, editorBusy } = useSidebar();
   const canManage =
     selectedOrganization?.role === "org_owner" ||
     selectedOrganization?.role === "org_admin";
@@ -565,6 +565,7 @@ export default function OrgMaterialsPage() {
                   variant="ghost"
                   size="icon"
                   onClick={() => {
+                    if (editorBusy) return;
                     if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                     setShowReadingEditor(false);
                     setEditorLessonId(null);
@@ -642,7 +643,8 @@ export default function OrgMaterialsPage() {
                   </h2>
                   <button
                     onClick={() => {
-                      if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                      if (editorBusy) return;
+                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                       setShowReadingEditor(false);
                       setEditorLessonId(null);
                       setEditorContentId(null);
@@ -731,7 +733,8 @@ export default function OrgMaterialsPage() {
                     variant="ghost"
                     size="icon"
                     onClick={() => {
-                      if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                      if (editorBusy) return;
+                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                       setShowVocabularySetEditor(false);
                       setVocabularySetLessonId(null);
                       setVocabularySetContentId(null);
@@ -807,7 +810,8 @@ export default function OrgMaterialsPage() {
                   </h2>
                   <button
                     onClick={() => {
-                      if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                      if (editorBusy) return;
+                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                       setShowVocabularySetEditor(false);
                       setVocabularySetLessonId(null);
                       setVocabularySetContentId(null);

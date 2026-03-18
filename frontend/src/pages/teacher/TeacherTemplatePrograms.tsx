@@ -31,7 +31,7 @@ export default function TeacherTemplatePrograms() {
 // Inner component - 「我的教材」不需要 workspace context
 function TeacherTemplateProgramsInner() {
   const { t } = useTranslation();
-  const { sidebarWidth, setSidebarDisabled } = useSidebar();
+  const { sidebarWidth, setSidebarDisabled, editorBusy } = useSidebar();
   const user = useTeacherAuthStore((s) => s.user);
   const isResourceAccount = user?.email === RESOURCE_ACCOUNT_EMAIL;
   const { updateVisibility } = useResourceMaterialsAPI();
@@ -585,6 +585,7 @@ function TeacherTemplateProgramsInner() {
                 variant="ghost"
                 size="icon"
                 onClick={() => {
+                  if (editorBusy) return;
                   if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                   setShowReadingEditor(false);
                   setEditorLessonId(null);
@@ -666,7 +667,8 @@ function TeacherTemplateProgramsInner() {
                 </h2>
                 <button
                   onClick={() => {
-                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                    if (editorBusy) return;
+                  if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                     setShowReadingEditor(false);
                     setEditorLessonId(null);
                     setEditorContentId(null);
@@ -759,7 +761,8 @@ function TeacherTemplateProgramsInner() {
                   variant="ghost"
                   size="icon"
                   onClick={() => {
-                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                    if (editorBusy) return;
+                  if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                     setShowVocabularySetEditor(false);
                     setVocabularySetLessonId(null);
                     setVocabularySetContentId(null);
@@ -839,7 +842,8 @@ function TeacherTemplateProgramsInner() {
                 </h2>
                 <button
                   onClick={() => {
-                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                    if (editorBusy) return;
+                  if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                     setShowVocabularySetEditor(false);
                     setVocabularySetLessonId(null);
                     setVocabularySetContentId(null);

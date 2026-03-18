@@ -101,7 +101,7 @@ export default function ClassroomDetail({
   const navigate = useNavigate();
   const location = useLocation();
   const { mode } = useWorkspace();
-  const { sidebarWidth, setSidebarDisabled } = useSidebar();
+  const { sidebarWidth, setSidebarDisabled, editorBusy } = useSidebar();
   const isOrgMode = mode === "organization";
   const [classroom, setClassroom] = useState<ClassroomInfo | null>(null);
   const [templateProgram, setTemplateProgram] = useState<Program | null>(null);
@@ -3076,6 +3076,7 @@ export default function ClassroomDetail({
                 variant="ghost"
                 size="icon"
                 onClick={() => {
+                  if (editorBusy) return;
                   if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                   setShowReadingEditor(false);
                   setEditorLessonId(null);
@@ -3124,6 +3125,7 @@ export default function ClassroomDetail({
                 variant="ghost"
                 size="icon"
                 onClick={() => {
+                  if (editorBusy) return;
                   if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                   setShowVocabularySetEditor(false);
                   setVocabularySetLessonId(null);

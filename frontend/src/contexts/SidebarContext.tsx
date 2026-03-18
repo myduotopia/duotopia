@@ -6,6 +6,8 @@ interface SidebarContextType {
   sidebarWidth: number;
   sidebarDisabled: boolean;
   setSidebarDisabled: (disabled: boolean) => void;
+  editorBusy: boolean;
+  setEditorBusy: (busy: boolean) => void;
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
@@ -13,6 +15,7 @@ const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 export function SidebarProvider({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarDisabled, setSidebarDisabled] = useState(false);
+  const [editorBusy, setEditorBusy] = useState(false);
   const sidebarWidth = sidebarCollapsed ? 64 : 256;
 
   return (
@@ -23,6 +26,8 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
         sidebarWidth,
         sidebarDisabled,
         setSidebarDisabled,
+        editorBusy,
+        setEditorBusy,
       }}
     >
       {children}

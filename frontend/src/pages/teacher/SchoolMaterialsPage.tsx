@@ -18,7 +18,7 @@ import { useSidebar } from "@/contexts/SidebarContext";
 export default function SchoolMaterialsPage() {
   const { t } = useTranslation();
   const { selectedSchool, selectedOrganization, mode } = useWorkspace();
-  const { sidebarWidth, setSidebarDisabled } = useSidebar();
+  const { sidebarWidth, setSidebarDisabled, editorBusy } = useSidebar();
   const isOrgMode = mode === "organization";
 
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -576,6 +576,7 @@ export default function SchoolMaterialsPage() {
                   variant="ghost"
                   size="icon"
                   onClick={() => {
+                    if (editorBusy) return;
                     if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                     setShowReadingEditor(false);
                     setEditorLessonId(null);
@@ -653,7 +654,8 @@ export default function SchoolMaterialsPage() {
                   </h2>
                   <button
                     onClick={() => {
-                      if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                      if (editorBusy) return;
+                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                       setShowReadingEditor(false);
                       setEditorLessonId(null);
                       setEditorContentId(null);
@@ -742,7 +744,8 @@ export default function SchoolMaterialsPage() {
                     variant="ghost"
                     size="icon"
                     onClick={() => {
-                      if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                      if (editorBusy) return;
+                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                       setShowVocabularySetEditor(false);
                       setVocabularySetLessonId(null);
                       setVocabularySetContentId(null);
@@ -818,7 +821,8 @@ export default function SchoolMaterialsPage() {
                   </h2>
                   <button
                     onClick={() => {
-                      if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                      if (editorBusy) return;
+                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
                       setShowVocabularySetEditor(false);
                       setVocabularySetLessonId(null);
                       setVocabularySetContentId(null);
