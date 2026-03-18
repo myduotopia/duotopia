@@ -45,6 +45,13 @@ interface WordItem {
     fluency_score?: number;
     completeness_score?: number;
     pronunciation_score?: number;
+    detailed_words?: Array<{
+      index: number;
+      word: string;
+      accuracy_score: number;
+      error_type?: string;
+      phonemes?: Array<{ phoneme: string; accuracy_score: number }>;
+    }>;
   };
   teacher_feedback?: string;
   teacher_passed?: boolean;
@@ -61,6 +68,7 @@ interface WordReadingActivityProps {
   showImage?: boolean;
   onComplete?: () => void;
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
+  readOnly?: boolean; // 已提交/已完成/已訂正時禁止修改
 }
 
 export default function WordReadingActivity({
@@ -71,6 +79,7 @@ export default function WordReadingActivity({
   showTranslation: _showTranslationProp = true, // 保留 prop 但使用 API 返回的值
   showImage: _showImageProp = true, // 保留 prop 但使用 API 返回的值
   onComplete,
+  readOnly = false,
   canUseAiAnalysis: canUseAiAnalysisProp,
 }: WordReadingActivityProps) {
   const { t } = useTranslation();
@@ -112,6 +121,9 @@ export default function WordReadingActivity({
         fluency_score: azureResult.fluencyScore,
         completeness_score: azureResult.completenessScore,
         pronunciation_score: azureResult.pronunciationScore,
+        // 🎯 音素詳細資料（重開時可還原圖表）
+        detailed_words: azureResult.detailed_words || [],
+        reference_text: text,
       };
 
       setItems((prev) => {
@@ -155,6 +167,8 @@ export default function WordReadingActivity({
             fluency_score: azureResult.fluencyScore,
             completeness_score: azureResult.completenessScore,
             overall_score: azureResult.pronunciationScore,
+            detailed_words: azureResult.detailed_words || [],
+            reference_text: text,
           }),
         );
         analysisForm.append("progress_id", progressId.toString());
@@ -318,10 +332,17 @@ export default function WordReadingActivity({
     fluencyScore: number;
     completenessScore: number;
     pronunciationScore: number;
+    detailed_words?: Array<{
+      index: number;
+      word: string;
+      accuracy_score: number;
+      error_type?: string;
+      phonemes?: Array<{ phoneme: string; accuracy_score: number }>;
+    }>;
   }) => {
     const currentItem = items[currentIndex];
 
-    // Update local state
+    // Update local state（含音素詳細資料，切換題目時可還原）
     setItems((prev) => {
       const updated = [...prev];
       updated[currentIndex] = {
@@ -331,6 +352,7 @@ export default function WordReadingActivity({
           fluency_score: result.fluencyScore,
           completeness_score: result.completenessScore,
           pronunciation_score: result.pronunciationScore,
+          detailed_words: result.detailed_words,
         },
       };
       return updated;
@@ -356,6 +378,8 @@ export default function WordReadingActivity({
                 fluency_score: result.fluencyScore,
                 completeness_score: result.completenessScore,
                 pronunciation_score: result.pronunciationScore,
+                detailed_words: result.detailed_words || [],
+                reference_text: items[currentIndex]?.text || "",
               },
             }),
           },
@@ -405,6 +429,35 @@ export default function WordReadingActivity({
       setCurrentIndex(currentIndex - 1);
     }
   };
+
+  // Handle clear recording — 同步刪除後端錄音和評估
+  const handleClearRecording = useCallback(async () => {
+    const currentItem = items[currentIndex];
+    if (!currentItem?.progress_id) return;
+
+    // 清除本地 state（題號按鈕立即變白）
+    setItems((prev) => {
+      const updated = [...prev];
+      updated[currentIndex] = {
+        ...updated[currentIndex],
+        recording_url: undefined,
+        ai_assessment: undefined,
+      };
+      return updated;
+    });
+
+    // 背景呼叫後端 DELETE API
+    if (!isPreviewMode && !isDemoMode) {
+      const apiUrl = import.meta.env.VITE_API_URL || "";
+      fetch(
+        `${apiUrl}/api/speech/assessment/${assignmentId}/item/${currentIndex}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      ).catch((err) => console.error("Clear recording failed:", err));
+    }
+  }, [items, currentIndex, assignmentId, token, isPreviewMode, isDemoMode]);
 
   // Handle skip
   const handleSkip = () => {
@@ -607,7 +660,7 @@ export default function WordReadingActivity({
       <Progress value={progress} className="h-2" />
 
       {/* Item Navigation Dots */}
-      <div className="flex gap-1 overflow-x-auto justify-center pb-1">
+      <div className="flex gap-1 overflow-x-auto pb-1 mx-auto w-fit max-w-full">
         {items.map((item, index) => {
           const isActive = index === currentIndex;
           const isCompleted = !!item.recording_url;
@@ -650,11 +703,12 @@ export default function WordReadingActivity({
         existingAudioUrl={currentItem.recording_url}
         onRecordingComplete={handleRecordingComplete}
         progressId={currentItem.progress_id}
-        readOnly={false}
+        readOnly={readOnly}
         isDemoMode={isDemoMode}
         timeLimit={timeLimitPerQuestion}
         onSkip={handleSkip}
         onAssessmentComplete={handleAssessmentComplete}
+        onClearRecording={handleClearRecording}
         canUseAiAnalysis={canUseAiAnalysisProp ?? canUseAiAnalysisFromApi}
       />
 
