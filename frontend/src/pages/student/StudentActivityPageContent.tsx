@@ -2158,6 +2158,7 @@ export default function StudentActivityPageContent({
             isDemoMode={isDemoMode}
             authToken={authToken}
             canUseAiAnalysis={canUseAiAnalysis}
+            readOnly={isReadOnly}
             onComplete={async () => {
               if (onSubmit) {
                 try {
