@@ -36,16 +36,12 @@ async def get_lesson_contents(
     db: Session = Depends(get_db),
 ):
     """取得單元的內容列表"""
-    # Verify the lesson belongs to the teacher
-    lesson = (
-        db.query(Lesson)
-        .join(Program)
-        .filter(Lesson.id == lesson_id, Program.teacher_id == current_teacher.id)
-        .first()
-    )
+    from utils.permissions import check_lesson_access
 
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found")
+    # check_lesson_access handles personal, org, and template lesson access
+    _program, lesson = check_lesson_access(
+        db, lesson_id, current_teacher, require_owner=False
+    )
 
     contents = (
         db.query(Content)
@@ -111,26 +107,12 @@ async def create_content(
     db: Session = Depends(get_db),
 ):
     """建立新內容"""
-    # Verify the lesson belongs to the teacher or is a template program
-    lesson = (
-        db.query(Lesson)
-        .join(Program)
-        .filter(
-            Lesson.id == lesson_id,
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .filter(
-            # Either: lesson belongs to teacher's program
-            # Or: lesson belongs to a template program (公版課程)
-            (Program.teacher_id == current_teacher.id)
-            | (Program.is_template.is_(True))
-        )
-        .first()
-    )
+    from utils.permissions import check_lesson_access
 
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found")
+    # check_lesson_access handles personal, org, and template lesson access
+    _program, lesson = check_lesson_access(
+        db, lesson_id, current_teacher, require_owner=True
+    )
 
     # 如果沒有提供 order_index，自動設為最後一個位置
     if content_data.order_index is None:
@@ -307,23 +289,15 @@ async def get_content_detail(
     db: Session = Depends(get_db),
 ):
     """獲取內容詳情"""
-    # Verify the content belongs to the teacher
-    content = (
-        db.query(Content)
-        .join(Lesson)
-        .join(Program)
-        .filter(
-            Content.id == content_id,
-            Program.teacher_id == current_teacher.id,
-            Content.is_active.is_(True),
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .first()
+    from utils.permissions import check_content_access
+
+    # check_content_access handles personal, org, template, and assignment copy access
+    _program, _lesson, content = check_content_access(
+        db, content_id, current_teacher, require_owner=False
     )
 
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
+    # Eager load content_items to avoid N+1
+    db.refresh(content, ["content_items"])
 
     return {
         "id": content.id,
@@ -408,28 +382,12 @@ async def update_content(
     db: Session = Depends(get_db),
 ):
     """更新內容"""
-    # Verify the content belongs to the teacher or is a template program
-    content = (
-        db.query(Content)
-        .join(Lesson)
-        .join(Program)
-        .filter(
-            Content.id == content_id,
-            Content.is_active.is_(True),
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .filter(
-            # Either: content belongs to teacher's program
-            # Or: content belongs to a template program (公版課程)
-            (Program.teacher_id == current_teacher.id)
-            | (Program.is_template.is_(True))
-        )
-        .first()
-    )
+    from utils.permissions import check_content_access
 
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
+    # check_content_access handles personal, org, template, and assignment copy access
+    _program, _lesson, content = check_content_access(
+        db, content_id, current_teacher, require_owner=True
+    )
 
     # 引入音檔管理器
     from services.audio_manager import get_audio_manager
@@ -691,23 +649,12 @@ async def delete_content(
     db: Session = Depends(get_db),
 ):
     """刪除內容（軟刪除）"""
-    # Verify the content belongs to the teacher
-    content = (
-        db.query(Content)
-        .join(Lesson)
-        .join(Program)
-        .filter(
-            Content.id == content_id,
-            Program.teacher_id == current_teacher.id,
-            Content.is_active.is_(True),
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .first()
-    )
+    from utils.permissions import check_content_access
 
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
+    # check_content_access handles personal, org, template, and assignment copy access
+    _program, _lesson, content = check_content_access(
+        db, content_id, current_teacher, require_owner=True, allow_assignment_copy=False
+    )
 
     # 檢查是否有相關的作業
 

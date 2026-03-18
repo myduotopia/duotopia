@@ -120,13 +120,13 @@ export default function WordSelectionActivity({
   ): number => {
     if (currentStrength === undefined) {
       // 第一次作答
-      return isCorrect ? 0.5 : 0.2;
+      return isCorrect ? 0.5 : 0.0;
     }
-    // 後續作答：答對 +0.15，答錯 -0.2（但不低於 0.1）
+    // 後續作答：答對 +0.15，答錯 -0.2（可降至 0）
     if (isCorrect) {
       return Math.min(1.0, currentStrength + 0.15);
     } else {
-      return Math.max(0.1, currentStrength - 0.2);
+      return Math.max(0.0, currentStrength - 0.2);
     }
   };
 
