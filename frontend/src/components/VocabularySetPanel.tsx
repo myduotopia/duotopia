@@ -1247,11 +1247,19 @@ function SortableRowInner({
             maxLength={200}
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
-            <span className="text-xs text-gray-400">
+            <button
+              onClick={() => handleGenerateSingleDefinition(index)}
+              className="text-xs text-gray-400 hover:text-blue-500 hover:underline cursor-pointer transition-colors"
+              title={t("vocabularySet.tooltips.generateTranslation", {
+                lang: row.selectedWordLanguage === "other"
+                  ? customTranslationLang || "..."
+                  : WORD_TRANSLATION_LANGUAGES.find((l) => l.value === (row.selectedWordLanguage || "chinese"))?.label,
+              })}
+            >
               {row.selectedWordLanguage === "other"
                 ? customTranslationLang || "..."
                 : WORD_TRANSLATION_LANGUAGES.find((l) => l.value === (row.selectedWordLanguage || "chinese"))?.label}
-            </span>
+            </button>
           </div>
         </div>
       </div>
@@ -2810,16 +2818,18 @@ export default function VocabularySetPanel({
   // 打開 AI 生成例句對話框
   const handleOpenAIGenerateModal = (index: number | null) => {
     setAiGenerateTargetIndex(index);
-    // 🔥 階段2：每次打開 modal 都重設為 Program level
+    // 每次打開 modal 都重設為 Program level
     setAiGenerateLevel(programLevel || "A1");
-    // 使用用戶最後選擇的翻譯語言作為預設，english 回退到中文
-    const langMap: Record<string, string> = {
-      chinese: "中文",
-      japanese: "日文",
-      korean: "韓文",
-      english: "中文",
-    };
-    setAiGenerateTranslateLang(langMap[lastSelectedWordLang] || "中文");
+    // 預選左側 AI Generate Examples 的翻譯語言
+    // 英英翻譯時不預選
+    if (lastSelectedWordLang === "english") {
+      setAiGenerateTranslateLang("");
+    } else if (lastSelectedWordLang === "other") {
+      setAiGenerateTranslateLang("other");
+      setCustomSentenceTranslationLang(customTranslationLang);
+    } else {
+      setAiGenerateTranslateLang(lastSelectedWordLang);
+    }
     setAiGenerateModalOpen(true);
   };
 
@@ -2930,10 +2940,8 @@ export default function VocabularySetPanel({
 
         if (matchedResult) {
           newRows[idx].example_sentence = matchedResult.sentence;
-          // 只有勾選翻譯且 API 有返回翻譯時才填入
-          if (aiGenerateTranslate && matchedResult.translation) {
-            newRows[idx].example_sentence_translation =
-              matchedResult.translation;
+          if (matchedResult.translation) {
+            newRows[idx].example_sentence_translation = matchedResult.translation;
           }
         } else {
           console.warn(
@@ -3135,19 +3143,19 @@ export default function VocabularySetPanel({
           // Step 3: AI 例句
           if (shouldGenerateExamples) {
             const response = await apiClient.generateSentences({
-              words: [{
-                word: text,
-                definition: newItem.definition || "",
-                partsOfSpeech: newItem.partsOfSpeech || [],
-              }],
+              words: [text],
+              definitions: [newItem.definition || ""],
               level: aiGenerateLevel,
               prompt: aiGeneratePrompt || undefined,
-              target_language: exampleTargetLang || undefined,
+              translate_to: exampleTargetLang || undefined,
+              parts_of_speech: [newItem.partsOfSpeech || []],
             });
-            const results = (response as { results?: Array<{ sentence?: string; translation?: string }> }).results || [];
-            if (results[0]) {
-              newItem.example_sentence = results[0].sentence || "";
-              newItem.example_sentence_translation = results[0].translation || "";
+            const sentencesData = (response as { sentences?: Array<{ sentence?: string; translation?: string }> }).sentences || [];
+            if (sentencesData[0]) {
+              newItem.example_sentence = sentencesData[0].sentence || "";
+              if (sentencesData[0].translation) {
+                newItem.example_sentence_translation = sentencesData[0].translation;
+              }
             }
           }
         } catch (error) {
@@ -3893,36 +3901,36 @@ export default function VocabularySetPanel({
             </div>
 
             {/* 翻譯選項 */}
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={aiGenerateTranslate}
-                  onChange={(e) => setAiGenerateTranslate(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium text-gray-700">
-                  {t("vocabularySet.labels.translateTo")}
-                </span>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                {t("vocabularySet.labels.translateTo")}
               </label>
               <select
                 value={aiGenerateTranslateLang}
-                onChange={(e) => setAiGenerateTranslateLang(e.target.value)}
-                disabled={!aiGenerateTranslate}
-                className={`px-3 py-1.5 border rounded-md text-sm ${
-                  !aiGenerateTranslate ? "bg-gray-100 text-gray-400" : ""
-                }`}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAiGenerateTranslateLang(val);
+                  if (val !== "other") setCustomSentenceTranslationLang("");
+                }}
+                className="w-full px-3 py-1.5 border rounded-md text-sm"
               >
-                <option value="中文">
-                  {t("contentEditor.translationLanguages.chinese")}
-                </option>
-                <option value="日文">
-                  {t("contentEditor.translationLanguages.japanese")}
-                </option>
-                <option value="韓文">
-                  {t("contentEditor.translationLanguages.korean")}
-                </option>
+                <option value="">{t("contentEditor.labels.selectLanguage")}</option>
+                {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
+                  <option key={lang.value} value={lang.value}>
+                    {lang.label}
+                  </option>
+                ))}
+                <option value="other">{t("contentEditor.labels.otherLanguage")}</option>
               </select>
+              {aiGenerateTranslateLang === "other" && (
+                <input
+                  type="text"
+                  value={customSentenceTranslationLang}
+                  onChange={(e) => setCustomSentenceTranslationLang(e.target.value)}
+                  placeholder={t("contentEditor.labels.enterLanguage")}
+                  className="w-full px-3 py-1.5 border rounded-md text-sm"
+                />
+              )}
             </div>
 
             {/* 生成目標提示 */}
