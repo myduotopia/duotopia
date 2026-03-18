@@ -567,7 +567,10 @@ export default function SchoolMaterialsPage() {
         {/* Reading Assessment Modal (新增模式) */}
         {showReadingEditor && editorLessonId && editorContentId === null && (
           <>
-            <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
+            <div
+              className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+              style={{ left: `${sidebarWidth}px` }}
+            >
               <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
                   {t("teacherTemplatePrograms.dialogs.addReadingTitle")}
@@ -577,7 +580,12 @@ export default function SchoolMaterialsPage() {
                   size="icon"
                   onClick={() => {
                     if (editorBusy) return;
-                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                    if (
+                      !window.confirm(
+                        t("contentEditor.labels.unsavedChangesConfirm"),
+                      )
+                    )
+                      return;
                     setShowReadingEditor(false);
                     setEditorLessonId(null);
                     setEditorContentId(null);
@@ -642,12 +650,13 @@ export default function SchoolMaterialsPage() {
           selectedContent && (
             <>
               {/* Backdrop */}
-              <div
-                className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity pointer-events-none"
-              />
+              <div className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity pointer-events-none" />
 
               {/* Panel */}
-              <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
+              <div
+                className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
+                style={{ left: `${sidebarWidth}px` }}
+              >
                 <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                   <h2 className="text-lg font-semibold text-gray-900">
                     {t("teacherTemplatePrograms.dialogs.editContentTitle")}
@@ -655,7 +664,12 @@ export default function SchoolMaterialsPage() {
                   <button
                     onClick={() => {
                       if (editorBusy) return;
-                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                      if (
+                        !window.confirm(
+                          t("contentEditor.labels.unsavedChangesConfirm"),
+                        )
+                      )
+                        return;
                       setShowReadingEditor(false);
                       setEditorLessonId(null);
                       setEditorContentId(null);
@@ -735,7 +749,10 @@ export default function SchoolMaterialsPage() {
           vocabularySetLessonId &&
           !vocabularySetContentId && (
             <>
-                <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
+              <div
+                className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+                style={{ left: `${sidebarWidth}px` }}
+              >
                 <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
                   <h2 className="text-lg font-semibold">
                     {t("vocabularySet.dialogTitle")}
@@ -745,7 +762,12 @@ export default function SchoolMaterialsPage() {
                     size="icon"
                     onClick={() => {
                       if (editorBusy) return;
-                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                      if (
+                        !window.confirm(
+                          t("contentEditor.labels.unsavedChangesConfirm"),
+                        )
+                      )
+                        return;
                       setShowVocabularySetEditor(false);
                       setVocabularySetLessonId(null);
                       setVocabularySetContentId(null);
@@ -809,12 +831,13 @@ export default function SchoolMaterialsPage() {
           vocabularySetContentId && (
             <>
               {/* Backdrop */}
-              <div
-                className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity pointer-events-none"
-              />
+              <div className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity pointer-events-none" />
 
               {/* Panel */}
-              <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
+              <div
+                className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
+                style={{ left: `${sidebarWidth}px` }}
+              >
                 <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                   <h2 className="text-lg font-semibold text-gray-900">
                     {t("vocabularySet.editTitle")}
@@ -822,7 +845,12 @@ export default function SchoolMaterialsPage() {
                   <button
                     onClick={() => {
                       if (editorBusy) return;
-                    if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                      if (
+                        !window.confirm(
+                          t("contentEditor.labels.unsavedChangesConfirm"),
+                        )
+                      )
+                        return;
                       setShowVocabularySetEditor(false);
                       setVocabularySetLessonId(null);
                       setVocabularySetContentId(null);

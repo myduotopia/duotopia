@@ -515,11 +515,15 @@ Only reply with JSON array, no other text."""
             words_json = json.dumps(words_info, ensure_ascii=False)
 
             # 計算翻譯語言名稱（用於 system prompt）
-            translation_lang_name = {
-                "zh-TW": "Traditional Chinese (繁體中文)",
-                "ja": "Japanese",
-                "ko": "Korean",
-            }.get(translate_to, translate_to) if translate_to else None
+            translation_lang_name = (
+                {
+                    "zh-TW": "Traditional Chinese (繁體中文)",
+                    "ja": "Japanese",
+                    "ko": "Korean",
+                }.get(translate_to, translate_to)
+                if translate_to
+                else None
+            )
 
             # 動態構建第 2 條 CRITICAL REQUIREMENT
             if not translate_to or translate_to == "zh-TW":

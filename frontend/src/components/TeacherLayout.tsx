@@ -70,7 +70,8 @@ function TeacherLayoutInner({
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
-  const { sidebarCollapsed, setSidebarCollapsed, sidebarDisabled } = useSidebar();
+  const { sidebarCollapsed, setSidebarCollapsed, sidebarDisabled } =
+    useSidebar();
   const [config, setConfig] = useState<SystemConfig | null>(null);
 
   // Get user role and roles from auth store

@@ -160,7 +160,12 @@ const extractFirstDefinition = (
 };
 
 // 單字翻譯語言選項（含英文）
-type WordTranslationLanguage = "chinese" | "english" | "japanese" | "korean" | "other";
+type WordTranslationLanguage =
+  | "chinese"
+  | "english"
+  | "japanese"
+  | "korean"
+  | "other";
 
 const WORD_TRANSLATION_LANGUAGES = [
   { value: "chinese" as const, label: "中文", code: "zh-TW" },
@@ -186,7 +191,9 @@ const BATCH_PASTE_MAX = 20;
  * 檢測重複的行 index（單字完全相同 或 翻譯完全相同）
  * 回傳 Map<index, reasons[]>，例如 { 0: ["單字重複: zebra"], 1: ["單字重複: zebra"] }
  */
-function findDuplicates(rows: { text: string; definition: string }[]): Map<number, string[]> {
+function findDuplicates(
+  rows: { text: string; definition: string }[],
+): Map<number, string[]> {
   const dupes = new Map<number, string[]>();
   const textMap = new Map<string, number[]>();
   const defMap = new Map<string, number[]>();
@@ -1127,7 +1134,8 @@ function SortableRowInner({
           <span className="text-sm font-medium text-gray-600">{index + 1}</span>
           {duplicateReasons && duplicateReasons.length > 0 && (
             <span className="text-xs text-red-500 font-medium">
-              {t("contentEditor.messages.duplicateWord")}: {duplicateReasons.join(", ")}
+              {t("contentEditor.messages.duplicateWord")}:{" "}
+              {duplicateReasons.join(", ")}
             </span>
           )}
         </div>
@@ -1252,14 +1260,20 @@ function SortableRowInner({
               onClick={() => handleGenerateSingleDefinition(index)}
               className="text-xs text-gray-400 hover:text-blue-500 hover:underline cursor-pointer transition-colors"
               title={t("vocabularySet.tooltips.generateTranslation", {
-                lang: row.selectedWordLanguage === "other"
-                  ? customTranslationLang || "..."
-                  : WORD_TRANSLATION_LANGUAGES.find((l) => l.value === (row.selectedWordLanguage || "chinese"))?.label,
+                lang:
+                  row.selectedWordLanguage === "other"
+                    ? customTranslationLang || "..."
+                    : WORD_TRANSLATION_LANGUAGES.find(
+                        (l) =>
+                          l.value === (row.selectedWordLanguage || "chinese"),
+                      )?.label,
               })}
             >
               {row.selectedWordLanguage === "other"
                 ? customTranslationLang || "..."
-                : WORD_TRANSLATION_LANGUAGES.find((l) => l.value === (row.selectedWordLanguage || "chinese"))?.label}
+                : WORD_TRANSLATION_LANGUAGES.find(
+                    (l) => l.value === (row.selectedWordLanguage || "chinese"),
+                  )?.label}
             </button>
           </div>
         </div>
@@ -1407,7 +1421,9 @@ function SortableRowInner({
           <span className="text-xs text-gray-400">
             {sentenceTranslationLang === "other"
               ? customSentenceLang || "..."
-              : SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === sentenceTranslationLang)?.label || ""}
+              : SENTENCE_TRANSLATION_LANGUAGES.find(
+                  (l) => l.value === sentenceTranslationLang,
+                )?.label || ""}
           </span>
         </div>
       </div>
@@ -1524,10 +1540,20 @@ export default function VocabularySetPanel({
   const [batchPasteAutoTTS, setBatchPasteAutoTTS] = useState(true);
   const [batchPasteAutoTranslate, setBatchPasteAutoTranslate] = useState(true);
   const [isBatchPasting, _setIsBatchPasting] = useState(false);
-  const setIsBatchPasting = (v: boolean) => { _setIsBatchPasting(v); setEditorBusy(v); };
-  const [batchProgress, setBatchProgress] = useState<{ completedItems: number; totalItems: number; completedSteps: number; totalSteps: number } | null>(null);
+  const setIsBatchPasting = (v: boolean) => {
+    _setIsBatchPasting(v);
+    setEditorBusy(v);
+  };
+  const [batchProgress, setBatchProgress] = useState<{
+    completedItems: number;
+    totalItems: number;
+    completedSteps: number;
+    totalSteps: number;
+  } | null>(null);
   const batchPauseRef = useRef(false);
-  const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(new Map());
+  const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(
+    new Map(),
+  );
 
   // Sync sentence translation language from word translation language
   useEffect(() => {
@@ -1572,8 +1598,10 @@ export default function VocabularySetPanel({
   ); // 🔥 階段2：預設使用 Program level
   const [aiGeneratePrompt, setAiGeneratePrompt] = useState("");
   const [aiGenerateTranslate, setAiGenerateTranslate] = useState(true);
-  const [aiGenerateTranslateLang, setAiGenerateTranslateLang] = useState<string>("chinese");
-  const [customSentenceTranslationLang, setCustomSentenceTranslationLang] = useState("");
+  const [aiGenerateTranslateLang, setAiGenerateTranslateLang] =
+    useState<string>("chinese");
+  const [customSentenceTranslationLang, setCustomSentenceTranslationLang] =
+    useState("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   // dnd-kit sensors
@@ -2874,7 +2902,9 @@ export default function VocabularySetPanel({
         targetLanguage = customSentenceTranslationLang || "";
       } else if (aiGenerateTranslateLang) {
         targetLanguage =
-          SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === aiGenerateTranslateLang)?.code || "";
+          SENTENCE_TRANSLATION_LANGUAGES.find(
+            (l) => l.value === aiGenerateTranslateLang,
+          )?.code || "";
       }
 
       toast.info(
@@ -2944,7 +2974,8 @@ export default function VocabularySetPanel({
         if (matchedResult) {
           newRows[idx].example_sentence = matchedResult.sentence;
           if (matchedResult.translation) {
-            newRows[idx].example_sentence_translation = matchedResult.translation;
+            newRows[idx].example_sentence_translation =
+              matchedResult.translation;
           }
         } else {
           console.warn(
@@ -2977,12 +3008,16 @@ export default function VocabularySetPanel({
 
     // 1. 貼上框內部去重
     const uniqueLines = [...new Set(rawLines.map((l) => l.toLowerCase()))];
-    const deduped = uniqueLines.map((lower) => rawLines.find((l) => l.toLowerCase() === lower)!);
+    const deduped = uniqueLines.map(
+      (lower) => rawLines.find((l) => l.toLowerCase() === lower)!,
+    );
     const internalDupes = rawLines.length - deduped.length;
 
     // 2. 跟右側已有單字去重
     const existingWords = new Set(
-      rows.filter((r) => r.text && r.text.trim()).map((r) => r.text.trim().toLowerCase())
+      rows
+        .filter((r) => r.text && r.text.trim())
+        .map((r) => r.text.trim().toLowerCase()),
     );
     const lines = deduped.filter((l) => !existingWords.has(l.toLowerCase()));
     const existingDupes = deduped.length - lines.length;
@@ -2990,8 +3025,18 @@ export default function VocabularySetPanel({
     // 提醒去重結果
     if (internalDupes > 0 || existingDupes > 0) {
       const msgs: string[] = [];
-      if (internalDupes > 0) msgs.push(t("contentEditor.messages.removedInternalDupes", { count: internalDupes }));
-      if (existingDupes > 0) msgs.push(t("contentEditor.messages.removedExistingDupes", { count: existingDupes }));
+      if (internalDupes > 0)
+        msgs.push(
+          t("contentEditor.messages.removedInternalDupes", {
+            count: internalDupes,
+          }),
+        );
+      if (existingDupes > 0)
+        msgs.push(
+          t("contentEditor.messages.removedExistingDupes", {
+            count: existingDupes,
+          }),
+        );
       toast.info(msgs.join("、"));
     }
 
@@ -3007,7 +3052,11 @@ export default function VocabularySetPanel({
     }
 
     // 檢查：勾選翻譯但選了「其他」卻沒輸入語言
-    if (autoTranslate && lastSelectedWordLang === "other" && !customTranslationLang.trim()) {
+    if (
+      autoTranslate &&
+      lastSelectedWordLang === "other" &&
+      !customTranslationLang.trim()
+    ) {
       toast.error(t("contentEditor.labels.enterCustomLanguage"));
       return;
     }
@@ -3019,7 +3068,11 @@ export default function VocabularySetPanel({
     }
 
     // 檢查：AI 例句選了「其他」卻沒輸入語言
-    if (aiGenerateExpanded && aiGenerateTranslateLang === "other" && !customSentenceTranslationLang.trim()) {
+    if (
+      aiGenerateExpanded &&
+      aiGenerateTranslateLang === "other" &&
+      !customSentenceTranslationLang.trim()
+    ) {
       toast.error(t("contentEditor.labels.enterCustomLanguage"));
       return;
     }
@@ -3028,13 +3081,25 @@ export default function VocabularySetPanel({
     if (autoTranslate) {
       const existingWithTranslation = rows.find((r) => {
         if (!r.text?.trim()) return false;
-        return r.selectedWordLanguage && r.selectedWordLanguage !== lastSelectedWordLang && (
-          r.definition || r.translation || r.japanese_translation || r.korean_translation
+        return (
+          r.selectedWordLanguage &&
+          r.selectedWordLanguage !== lastSelectedWordLang &&
+          (r.definition ||
+            r.translation ||
+            r.japanese_translation ||
+            r.korean_translation)
         );
       });
       if (existingWithTranslation) {
-        const existingLangLabel = WORD_TRANSLATION_LANGUAGES.find((l) => l.value === existingWithTranslation.selectedWordLanguage)?.label || existingWithTranslation.selectedWordLanguage;
-        toast.error(t("contentEditor.labels.translationLanguageMismatch", { lang: existingLangLabel }));
+        const existingLangLabel =
+          WORD_TRANSLATION_LANGUAGES.find(
+            (l) => l.value === existingWithTranslation.selectedWordLanguage,
+          )?.label || existingWithTranslation.selectedWordLanguage;
+        toast.error(
+          t("contentEditor.labels.translationLanguageMismatch", {
+            lang: existingLangLabel,
+          }),
+        );
         return;
       }
     }
@@ -3042,13 +3107,24 @@ export default function VocabularySetPanel({
     // 檢查：例句翻譯語言一致性（已有例句翻譯的不可更改語言）
     if (aiGenerateExpanded) {
       const existingWithExampleTranslation = rows.find((r) => {
-        if (!r.text?.trim() || !r.example_sentence_translation?.trim()) return false;
+        if (!r.text?.trim() || !r.example_sentence_translation?.trim())
+          return false;
         const existingSentenceLang = r.selectedSentenceLanguage || "chinese";
         return existingSentenceLang !== aiGenerateTranslateLang;
       });
       if (existingWithExampleTranslation) {
-        const existingLangLabel = SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === (existingWithExampleTranslation.selectedSentenceLanguage || "chinese"))?.label || existingWithExampleTranslation.selectedSentenceLanguage;
-        toast.error(t("contentEditor.labels.exampleTranslationLanguageMismatch", { lang: existingLangLabel }));
+        const existingLangLabel =
+          SENTENCE_TRANSLATION_LANGUAGES.find(
+            (l) =>
+              l.value ===
+              (existingWithExampleTranslation.selectedSentenceLanguage ||
+                "chinese"),
+          )?.label || existingWithExampleTranslation.selectedSentenceLanguage;
+        toast.error(
+          t("contentEditor.labels.exampleTranslationLanguageMismatch", {
+            lang: existingLangLabel,
+          }),
+        );
         return;
       }
     }
@@ -3062,12 +3138,17 @@ export default function VocabularySetPanel({
         const existingRows = rows.filter((r) => r.text && r.text.trim());
         const batchLang = lastSelectedWordLang;
         const batchLangCode =
-          WORD_TRANSLATION_LANGUAGES.find((l) => l.value === batchLang)?.code || "zh-TW";
+          WORD_TRANSLATION_LANGUAGES.find((l) => l.value === batchLang)?.code ||
+          "zh-TW";
 
         let voice = "";
         let rate = "";
         if (autoTTS) {
-          const ttsSettings = getVoiceAndRate(batchTTSAccent, batchTTSGender, batchTTSSpeed);
+          const ttsSettings = getVoiceAndRate(
+            batchTTSAccent,
+            batchTTSGender,
+            batchTTSSpeed,
+          );
           voice = ttsSettings.voice;
           rate = ttsSettings.rate;
           saveBatchTTSSettings();
@@ -3080,7 +3161,9 @@ export default function VocabularySetPanel({
             exampleTargetLang = customSentenceTranslationLang || "";
           } else if (aiGenerateTranslateLang) {
             exampleTargetLang =
-              SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === aiGenerateTranslateLang)?.code || "";
+              SENTENCE_TRANSLATION_LANGUAGES.find(
+                (l) => l.value === aiGenerateTranslateLang,
+              )?.code || "";
           }
         }
 
@@ -3107,20 +3190,36 @@ export default function VocabularySetPanel({
           return steps;
         };
 
-        const totalSteps = itemsToProcess.reduce((sum, idx) => sum + getStepsForRow(currentRows[idx]), 0);
-        const totalItems = itemsToProcess.filter((idx) => getStepsForRow(currentRows[idx]) > 0).length;
+        const totalSteps = itemsToProcess.reduce(
+          (sum, idx) => sum + getStepsForRow(currentRows[idx]),
+          0,
+        );
+        const totalItems = itemsToProcess.filter(
+          (idx) => getStepsForRow(currentRows[idx]) > 0,
+        ).length;
 
         if (totalSteps === 0) {
-          toast.info(t("contentEditor.messages.noItemsNeedProcessing", { defaultValue: "所有項目已完成，無需補齊" }));
+          toast.info(
+            t("contentEditor.messages.noItemsNeedProcessing", {
+              defaultValue: "所有項目已完成，無需補齊",
+            }),
+          );
           setIsBatchPasting(false);
           return;
         }
 
-        setBatchProgress({ completedItems: 0, totalItems, completedSteps: 0, totalSteps });
+        setBatchProgress({
+          completedItems: 0,
+          totalItems,
+          completedSteps: 0,
+          totalSteps,
+        });
 
         for (let i = 0; i < itemsToProcess.length; i++) {
           if (batchPauseRef.current) {
-            toast.info(`${t("contentEditor.messages.batchPaused")} (${completedItems}/${totalItems})`);
+            toast.info(
+              `${t("contentEditor.messages.batchPaused")} (${completedItems}/${totalItems})`,
+            );
             break;
           }
 
@@ -3143,45 +3242,86 @@ export default function VocabularySetPanel({
 
               if (!hasTranslation) {
                 if (batchLang === "chinese") {
-                  const posResponse = await apiClient.batchTranslateWithPos([text], batchLangCode);
+                  const posResponse = await apiClient.batchTranslateWithPos(
+                    [text],
+                    batchLangCode,
+                  );
                   const results = posResponse.results || [];
                   if (results[0]) {
-                    const parsed = extractFirstDefinition(results[0].translation || "");
+                    const parsed = extractFirstDefinition(
+                      results[0].translation || "",
+                    );
                     currentRows[idx].definition = parsed.text;
                     if (results[0].parts_of_speech?.length > 0) {
-                      currentRows[idx].partsOfSpeech = convertAbbreviatedPOS(results[0].parts_of_speech);
+                      currentRows[idx].partsOfSpeech = convertAbbreviatedPOS(
+                        results[0].parts_of_speech,
+                      );
                     } else if (parsed.pos) {
-                      currentRows[idx].partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
+                      currentRows[idx].partsOfSpeech = convertAbbreviatedPOS([
+                        parsed.pos,
+                      ]);
                     }
                   }
                 } else if (batchLang !== "other") {
-                  const translateResponse = await apiClient.batchTranslate([text], batchLangCode);
-                  const translations = (translateResponse as { translations?: string[] }).translations || [];
+                  const translateResponse = await apiClient.batchTranslate(
+                    [text],
+                    batchLangCode,
+                  );
+                  const translations =
+                    (translateResponse as { translations?: string[] })
+                      .translations || [];
                   if (translations[0]) {
                     const parsed = extractFirstDefinition(translations[0]);
-                    if (batchLang === "english") currentRows[idx].translation = parsed.text;
-                    else if (batchLang === "japanese") currentRows[idx].japanese_translation = parsed.text;
-                    else if (batchLang === "korean") currentRows[idx].korean_translation = parsed.text;
-                    if (parsed.pos) currentRows[idx].partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
+                    if (batchLang === "english")
+                      currentRows[idx].translation = parsed.text;
+                    else if (batchLang === "japanese")
+                      currentRows[idx].japanese_translation = parsed.text;
+                    else if (batchLang === "korean")
+                      currentRows[idx].korean_translation = parsed.text;
+                    if (parsed.pos)
+                      currentRows[idx].partsOfSpeech = convertAbbreviatedPOS([
+                        parsed.pos,
+                      ]);
                   }
                 }
                 completedSteps++;
-                setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+                setBatchProgress({
+                  completedItems,
+                  totalItems,
+                  completedSteps,
+                  totalSteps,
+                });
                 setRows([...currentRows]);
               }
             }
 
             // 補齊 TTS（如果缺少）
             if (autoTTS && !row.audioUrl && !row.audio_url) {
-              const ttsResult = await apiClient.generateTTS(text, voice, rate, "+0%");
-              if (ttsResult && typeof ttsResult === "object" && "audio_url" in ttsResult) {
+              const ttsResult = await apiClient.generateTTS(
+                text,
+                voice,
+                rate,
+                "+0%",
+              );
+              if (
+                ttsResult &&
+                typeof ttsResult === "object" &&
+                "audio_url" in ttsResult
+              ) {
                 const audioUrl = (ttsResult as { audio_url: string }).audio_url;
-                const fullUrl = audioUrl?.startsWith("http") ? audioUrl : `${import.meta.env.VITE_API_URL}${audioUrl}`;
+                const fullUrl = audioUrl?.startsWith("http")
+                  ? audioUrl
+                  : `${import.meta.env.VITE_API_URL}${audioUrl}`;
                 currentRows[idx].audioUrl = fullUrl;
                 currentRows[idx].audio_url = fullUrl;
               }
               completedSteps++;
-              setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+              setBatchProgress({
+                completedItems,
+                totalItems,
+                completedSteps,
+                totalSteps,
+              });
               setRows([...currentRows]);
             }
 
@@ -3196,15 +3336,30 @@ export default function VocabularySetPanel({
                 translate_to: exampleTargetLang || undefined,
                 parts_of_speech: [currentRows[idx].partsOfSpeech || []],
               });
-              const sentencesData = (response as { sentences?: Array<{ sentence?: string; translation?: string }> }).sentences || [];
+              const sentencesData =
+                (
+                  response as {
+                    sentences?: Array<{
+                      sentence?: string;
+                      translation?: string;
+                    }>;
+                  }
+                ).sentences || [];
               if (sentencesData[0]) {
-                currentRows[idx].example_sentence = sentencesData[0].sentence || "";
+                currentRows[idx].example_sentence =
+                  sentencesData[0].sentence || "";
                 if (sentencesData[0].translation) {
-                  currentRows[idx].example_sentence_translation = sentencesData[0].translation;
+                  currentRows[idx].example_sentence_translation =
+                    sentencesData[0].translation;
                 }
               }
               completedSteps++;
-              setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+              setBatchProgress({
+                completedItems,
+                totalItems,
+                completedSteps,
+                totalSteps,
+              });
               setRows([...currentRows]);
             }
           } catch (error) {
@@ -3212,10 +3367,20 @@ export default function VocabularySetPanel({
           }
 
           completedItems++;
-          setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+          setBatchProgress({
+            completedItems,
+            totalItems,
+            completedSteps,
+            totalSteps,
+          });
         }
 
-        toast.success(t("vocabularySet.messages.itemsAdded", { added: completedItems, total: totalItems }));
+        toast.success(
+          t("vocabularySet.messages.itemsAdded", {
+            added: completedItems,
+            total: totalItems,
+          }),
+        );
         setIsBatchPasting(false);
         setBatchProgress(null);
         return;
@@ -3249,7 +3414,11 @@ export default function VocabularySetPanel({
       let voice = "";
       let rate = "";
       if (autoTTS) {
-        const ttsSettings = getVoiceAndRate(batchTTSAccent, batchTTSGender, batchTTSSpeed);
+        const ttsSettings = getVoiceAndRate(
+          batchTTSAccent,
+          batchTTSGender,
+          batchTTSSpeed,
+        );
         voice = ttsSettings.voice;
         rate = ttsSettings.rate;
         saveBatchTTSSettings();
@@ -3263,7 +3432,9 @@ export default function VocabularySetPanel({
           exampleTargetLang = customSentenceTranslationLang || "";
         } else if (aiGenerateTranslateLang) {
           exampleTargetLang =
-            SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === aiGenerateTranslateLang)?.code || "";
+            SENTENCE_TRANSLATION_LANGUAGES.find(
+              (l) => l.value === aiGenerateTranslateLang,
+            )?.code || "";
         }
       }
 
@@ -3272,18 +3443,28 @@ export default function VocabularySetPanel({
       let completedSteps = 0;
 
       // 每個新單字的步驟數
-      const stepsPerItem = (autoTranslate ? 1 : 0) + (autoTTS ? 1 : 0) + (shouldGenerateExamples ? 1 : 0);
+      const stepsPerItem =
+        (autoTranslate ? 1 : 0) +
+        (autoTTS ? 1 : 0) +
+        (shouldGenerateExamples ? 1 : 0);
       const totalSteps = linesToPaste.length * stepsPerItem;
       const totalItems = linesToPaste.length;
 
-      setBatchProgress({ completedItems: 0, totalItems, completedSteps: 0, totalSteps });
+      setBatchProgress({
+        completedItems: 0,
+        totalItems,
+        completedSteps: 0,
+        totalSteps,
+      });
 
       for (let i = 0; i < linesToPaste.length; i++) {
         // 檢查是否暫停
         if (batchPauseRef.current) {
           const unprocessed = linesToPaste.slice(i);
           setBatchPasteText([...unprocessed, ...leftoverLines].join("\n"));
-          toast.info(`${t("contentEditor.messages.batchPaused")} (${completedItems}/${totalItems})`);
+          toast.info(
+            `${t("contentEditor.messages.batchPaused")} (${completedItems}/${totalItems})`,
+          );
           break;
         }
 
@@ -3304,56 +3485,101 @@ export default function VocabularySetPanel({
           // Step 1: 翻譯
           if (autoTranslate) {
             if (batchLang === "chinese") {
-              const posResponse = await apiClient.batchTranslateWithPos([text], batchLangCode);
+              const posResponse = await apiClient.batchTranslateWithPos(
+                [text],
+                batchLangCode,
+              );
               const results = posResponse.results || [];
               if (results[0]) {
-                const parsed = extractFirstDefinition(results[0].translation || "");
+                const parsed = extractFirstDefinition(
+                  results[0].translation || "",
+                );
                 newItem.definition = parsed.text;
                 if (results[0].parts_of_speech?.length > 0) {
-                  newItem.partsOfSpeech = convertAbbreviatedPOS(results[0].parts_of_speech);
+                  newItem.partsOfSpeech = convertAbbreviatedPOS(
+                    results[0].parts_of_speech,
+                  );
                 } else if (parsed.pos) {
                   newItem.partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
                 }
               }
             } else if (batchLang !== "other") {
-              const translateResponse = await apiClient.batchTranslate([text], batchLangCode);
-              const translations = (translateResponse as { translations?: string[] }).translations || [];
+              const translateResponse = await apiClient.batchTranslate(
+                [text],
+                batchLangCode,
+              );
+              const translations =
+                (translateResponse as { translations?: string[] })
+                  .translations || [];
               if (translations[0]) {
                 const parsed = extractFirstDefinition(translations[0]);
                 if (batchLang === "english") newItem.translation = parsed.text;
-                else if (batchLang === "japanese") newItem.japanese_translation = parsed.text;
-                else if (batchLang === "korean") newItem.korean_translation = parsed.text;
-                if (parsed.pos) newItem.partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
+                else if (batchLang === "japanese")
+                  newItem.japanese_translation = parsed.text;
+                else if (batchLang === "korean")
+                  newItem.korean_translation = parsed.text;
+                if (parsed.pos)
+                  newItem.partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
               }
             } else {
               // 自訂語言：使用 batchTranslate with custom lang
               const customCode = customTranslationLang || "zh-TW";
-              const translateResponse = await apiClient.batchTranslate([text], customCode);
-              const translations = (translateResponse as { translations?: string[] }).translations || [];
+              const translateResponse = await apiClient.batchTranslate(
+                [text],
+                customCode,
+              );
+              const translations =
+                (translateResponse as { translations?: string[] })
+                  .translations || [];
               if (translations[0]) {
                 newItem.definition = translations[0];
               }
             }
             completedSteps++;
-            setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+            setBatchProgress({
+              completedItems,
+              totalItems,
+              completedSteps,
+              totalSteps,
+            });
           }
 
           // Step 2: TTS
           if (autoTTS) {
-            const ttsResult = await apiClient.generateTTS(text, voice, rate, "+0%");
-            if (ttsResult && typeof ttsResult === "object" && "audio_url" in ttsResult) {
+            const ttsResult = await apiClient.generateTTS(
+              text,
+              voice,
+              rate,
+              "+0%",
+            );
+            if (
+              ttsResult &&
+              typeof ttsResult === "object" &&
+              "audio_url" in ttsResult
+            ) {
               const audioUrl = (ttsResult as { audio_url: string }).audio_url;
-              const fullUrl = audioUrl?.startsWith("http") ? audioUrl : `${import.meta.env.VITE_API_URL}${audioUrl}`;
+              const fullUrl = audioUrl?.startsWith("http")
+                ? audioUrl
+                : `${import.meta.env.VITE_API_URL}${audioUrl}`;
               newItem.audioUrl = fullUrl;
               newItem.audio_url = fullUrl;
             }
             completedSteps++;
-            setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+            setBatchProgress({
+              completedItems,
+              totalItems,
+              completedSteps,
+              totalSteps,
+            });
           }
 
           // Step 3: AI 例句
           if (shouldGenerateExamples) {
-            console.log("[Do the Magic] AI例句參數:", { exampleTargetLang, aiGenerateTranslateLang, lessonId });
+            console.log("[Do the Magic] AI例句參數:", {
+              exampleTargetLang,
+              aiGenerateTranslateLang,
+              lessonId,
+            });
             const response = await apiClient.generateSentences({
               words: [text],
               definitions: [newItem.definition || ""],
@@ -3363,15 +3589,29 @@ export default function VocabularySetPanel({
               translate_to: exampleTargetLang || undefined,
               parts_of_speech: [newItem.partsOfSpeech || []],
             });
-            const sentencesData = (response as { sentences?: Array<{ sentence?: string; translation?: string }> }).sentences || [];
+            const sentencesData =
+              (
+                response as {
+                  sentences?: Array<{
+                    sentence?: string;
+                    translation?: string;
+                  }>;
+                }
+              ).sentences || [];
             if (sentencesData[0]) {
               newItem.example_sentence = sentencesData[0].sentence || "";
               if (sentencesData[0].translation) {
-                newItem.example_sentence_translation = sentencesData[0].translation;
+                newItem.example_sentence_translation =
+                  sentencesData[0].translation;
               }
             }
             completedSteps++;
-            setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+            setBatchProgress({
+              completedItems,
+              totalItems,
+              completedSteps,
+              totalSteps,
+            });
           }
         } catch (error) {
           console.error(`Error processing word "${text}":`, error);
@@ -3381,7 +3621,12 @@ export default function VocabularySetPanel({
         currentRows = [...currentRows, newItem];
         setRows(currentRows);
         completedItems++;
-        setBatchProgress({ completedItems, totalItems, completedSteps, totalSteps });
+        setBatchProgress({
+          completedItems,
+          totalItems,
+          completedSteps,
+          totalSteps,
+        });
       }
 
       // 處理完成或暫停後
@@ -3495,47 +3740,70 @@ export default function VocabularySetPanel({
             </label>
             {(() => {
               const lines = batchPasteText.split("\n");
-              const lineCount = lines.filter((line: string) => line.trim()).length;
+              const lineCount = lines.filter((line: string) =>
+                line.trim(),
+              ).length;
               const overLimit = lineCount > BATCH_PASTE_MAX;
               return (
                 <>
-                  <div className="flex-1 min-h-[calc(1.625rem*8+1rem)] max-h-[calc(1.625rem*10+1rem)] border border-gray-300 rounded-lg focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all overflow-y-auto cursor-text" onClick={(e) => { const ta = (e.currentTarget as HTMLElement).querySelector('textarea'); if (ta) ta.focus(); }}>
+                  <div
+                    className="flex-1 min-h-[calc(1.625rem*8+1rem)] max-h-[calc(1.625rem*10+1rem)] border border-gray-300 rounded-lg focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all overflow-y-auto cursor-text"
+                    onClick={(e) => {
+                      const ta = (e.currentTarget as HTMLElement).querySelector(
+                        "textarea",
+                      );
+                      if (ta) ta.focus();
+                    }}
+                  >
                     <div className="flex">
                       {/* Line numbers */}
                       <div className="flex flex-col py-2 px-2 text-gray-300 font-mono text-sm select-none min-w-[2rem] text-right sticky left-0">
-                        {Array.from({ length: Math.max(lines.length, 1) }, (_, i) => (
-                          <div key={i} className="leading-[1.625rem]">
-                            {i + 1}
-                          </div>
-                        ))}
+                        {Array.from(
+                          { length: Math.max(lines.length, 1) },
+                          (_, i) => (
+                            <div key={i} className="leading-[1.625rem]">
+                              {i + 1}
+                            </div>
+                          ),
+                        )}
                       </div>
                       <textarea
                         value={batchPasteText}
                         onChange={(e) => {
                           const newValue = e.target.value;
                           const newLines = newValue.split("\n");
-                          const prevLineCount = batchPasteText.split("\n").length;
+                          const prevLineCount =
+                            batchPasteText.split("\n").length;
                           const isPaste = newLines.length - prevLineCount > 1;
 
                           if (isPaste) {
-                            const filtered = newLines.filter((l: string) => l.trim()).slice(0, BATCH_PASTE_MAX);
+                            const filtered = newLines
+                              .filter((l: string) => l.trim())
+                              .slice(0, BATCH_PASTE_MAX);
                             setBatchPasteText(filtered.join("\n"));
                           } else if (newLines.length > BATCH_PASTE_MAX) {
-                            setBatchPasteText(newLines.slice(0, BATCH_PASTE_MAX).join("\n"));
+                            setBatchPasteText(
+                              newLines.slice(0, BATCH_PASTE_MAX).join("\n"),
+                            );
                           } else {
                             setBatchPasteText(newValue);
                           }
                         }}
                         placeholder="apple&#10;banana&#10;orange"
                         className="flex-1 px-3 py-2 font-mono text-sm resize-none outline-none leading-[1.625rem] overflow-hidden"
-                        style={{ height: `${Math.max(lines.length, 8) * 1.625 + 1}rem` }}
+                        style={{
+                          height: `${Math.max(lines.length, 8) * 1.625 + 1}rem`,
+                        }}
                       />
                     </div>
                   </div>
-                  <div className={`text-xs ${overLimit ? "text-red-500 font-medium" : "text-gray-500"}`}>
+                  <div
+                    className={`text-xs ${overLimit ? "text-red-500 font-medium" : "text-gray-500"}`}
+                  >
                     {lineCount || 0} {t("contentEditor.messages.items")}
                     {` / ${BATCH_PASTE_MAX}`}
-                    {overLimit && ` (${t("contentEditor.messages.batchPasteLimitShort", { count: BATCH_PASTE_MAX })})`}
+                    {overLimit &&
+                      ` (${t("contentEditor.messages.batchPasteLimitShort", { count: BATCH_PASTE_MAX })})`}
                   </div>
                 </>
               );
@@ -3574,7 +3842,9 @@ export default function VocabularySetPanel({
                   >
                     {WORD_TRANSLATION_LANGUAGES.map((lang) => (
                       <option key={lang.value} value={lang.value}>
-                        {lang.value === "other" ? t("contentEditor.labels.otherLanguage") : lang.label}
+                        {lang.value === "other"
+                          ? t("contentEditor.labels.otherLanguage")
+                          : lang.label}
                       </option>
                     ))}
                   </select>
@@ -3662,96 +3932,104 @@ export default function VocabularySetPanel({
             </div>
 
             {/* AI Generate Examples */}
-          <div className="mt-4 bg-purple-50 rounded-lg border border-purple-200 overflow-hidden">
-            <div className="flex items-center gap-2 p-3">
-              <input
-                type="checkbox"
-                checked={aiGenerateExpanded}
-                onChange={(e) => setAiGenerateExpanded(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <Sparkles className="h-4 w-4" />
-              <span className="text-sm font-semibold text-gray-800">
-                {t("vocabularySet.modals.aiGenerateExamplesTitle")}
-              </span>
-              <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">
-                Beta
-              </span>
-            </div>
-            {aiGenerateExpanded && (
-              <div className="px-3 pb-3 space-y-3">
-                {/* Difficulty Level */}
-                <div>
-                  <label className="text-xs text-gray-600 mb-1 block">
-                    {t("vocabularySet.labels.difficultyLevel")}
-                  </label>
-                  <div className="flex flex-wrap gap-1">
-                    {["A1", "A2", "B1", "B2", "C1", "C2"].map((level) => (
-                      <button
-                        key={level}
-                        onClick={() => setAiGenerateLevel(level)}
-                        className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-                          aiGenerateLevel === level
-                            ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
-                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                        }`}
-                      >
-                        {level}
-                      </button>
-                    ))}
+            <div className="mt-4 bg-purple-50 rounded-lg border border-purple-200 overflow-hidden">
+              <div className="flex items-center gap-2 p-3">
+                <input
+                  type="checkbox"
+                  checked={aiGenerateExpanded}
+                  onChange={(e) => setAiGenerateExpanded(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <Sparkles className="h-4 w-4" />
+                <span className="text-sm font-semibold text-gray-800">
+                  {t("vocabularySet.modals.aiGenerateExamplesTitle")}
+                </span>
+                <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">
+                  Beta
+                </span>
+              </div>
+              {aiGenerateExpanded && (
+                <div className="px-3 pb-3 space-y-3">
+                  {/* Difficulty Level */}
+                  <div>
+                    <label className="text-xs text-gray-600 mb-1 block">
+                      {t("vocabularySet.labels.difficultyLevel")}
+                    </label>
+                    <div className="flex flex-wrap gap-1">
+                      {["A1", "A2", "B1", "B2", "C1", "C2"].map((level) => (
+                        <button
+                          key={level}
+                          onClick={() => setAiGenerateLevel(level)}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                            aiGenerateLevel === level
+                              ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
+                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                          }`}
+                        >
+                          {level}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* AI Prompt */}
+                  <div>
+                    <label className="text-xs text-gray-600 mb-1 block">
+                      {t("vocabularySet.labels.aiPrompt")}
+                    </label>
+                    <textarea
+                      value={aiGeneratePrompt}
+                      onChange={(e) => setAiGeneratePrompt(e.target.value)}
+                      placeholder={t(
+                        "vocabularySet.placeholders.aiPromptExample",
+                      )}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-none"
+                      rows={2}
+                    />
+                  </div>
+
+                  {/* Sentence translation language selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-gray-600 block">
+                      {t("vocabularySet.labels.translateTo")}
+                    </label>
+                    <select
+                      value={aiGenerateTranslateLang}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAiGenerateTranslateLang(val);
+                        if (val !== "other")
+                          setCustomSentenceTranslationLang("");
+                      }}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">
+                        {t("contentEditor.labels.selectLanguage")}
+                      </option>
+                      {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
+                        <option key={lang.value} value={lang.value}>
+                          {lang.label}
+                        </option>
+                      ))}
+                      <option value="other">
+                        {t("contentEditor.labels.otherLanguage")}
+                      </option>
+                    </select>
+                    {aiGenerateTranslateLang === "other" && (
+                      <input
+                        type="text"
+                        value={customSentenceTranslationLang}
+                        onChange={(e) =>
+                          setCustomSentenceTranslationLang(e.target.value)
+                        }
+                        placeholder={t("contentEditor.labels.enterLanguage")}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      />
+                    )}
                   </div>
                 </div>
-
-                {/* AI Prompt */}
-                <div>
-                  <label className="text-xs text-gray-600 mb-1 block">
-                    {t("vocabularySet.labels.aiPrompt")}
-                  </label>
-                  <textarea
-                    value={aiGeneratePrompt}
-                    onChange={(e) => setAiGeneratePrompt(e.target.value)}
-                    placeholder={t("vocabularySet.placeholders.aiPromptExample")}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-none"
-                    rows={2}
-                  />
-                </div>
-
-                {/* Sentence translation language selector */}
-                <div className="space-y-1.5">
-                  <label className="text-xs text-gray-600 block">
-                    {t("vocabularySet.labels.translateTo")}
-                  </label>
-                  <select
-                    value={aiGenerateTranslateLang}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setAiGenerateTranslateLang(val);
-                      if (val !== "other") setCustomSentenceTranslationLang("");
-                    }}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  >
-                    <option value="">{t("contentEditor.labels.selectLanguage")}</option>
-                    {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
-                      <option key={lang.value} value={lang.value}>
-                        {lang.label}
-                      </option>
-                    ))}
-                    <option value="other">{t("contentEditor.labels.otherLanguage")}</option>
-                  </select>
-                  {aiGenerateTranslateLang === "other" && (
-                    <input
-                      type="text"
-                      value={customSentenceTranslationLang}
-                      onChange={(e) => setCustomSentenceTranslationLang(e.target.value)}
-                      placeholder={t("contentEditor.labels.enterLanguage")}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    />
-                  )}
-                </div>
-
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
             {/* Do the Magic + Pause Button */}
             <div className="flex gap-2">
@@ -3766,7 +4044,9 @@ export default function VocabularySetPanel({
               </Button>
               {isBatchPasting && (
                 <Button
-                  onClick={() => { batchPauseRef.current = true; }}
+                  onClick={() => {
+                    batchPauseRef.current = true;
+                  }}
                   className="bg-red-500 hover:bg-red-600 text-white px-4"
                 >
                   {t("contentEditor.buttons.pause")}
@@ -3779,11 +4059,20 @@ export default function VocabularySetPanel({
                 <div className="w-full bg-gray-200 rounded-full h-2.5">
                   <div
                     className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-                    style={{ width: `${batchProgress.totalSteps > 0 ? (batchProgress.completedSteps / batchProgress.totalSteps) * 100 : 0}%` }}
+                    style={{
+                      width: `${batchProgress.totalSteps > 0 ? (batchProgress.completedSteps / batchProgress.totalSteps) * 100 : 0}%`,
+                    }}
                   />
                 </div>
                 <p className="text-xs text-gray-500 text-center">
-                  {Math.round(batchProgress.totalSteps > 0 ? (batchProgress.completedSteps / batchProgress.totalSteps) * 100 : 0)}% ({batchProgress.completedItems}/{batchProgress.totalItems})
+                  {Math.round(
+                    batchProgress.totalSteps > 0
+                      ? (batchProgress.completedSteps /
+                          batchProgress.totalSteps) *
+                          100
+                      : 0,
+                  )}
+                  % ({batchProgress.completedItems}/{batchProgress.totalItems})
                 </p>
               </div>
             )}
@@ -3792,73 +4081,77 @@ export default function VocabularySetPanel({
 
         {/* Right: Word Editor Area */}
         <div className="flex-1 flex flex-col min-h-0">
-      {/* Scrollable Content Rows with dnd-kit */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={rows.map((row) => row.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          <div className="flex-1 space-y-3 pr-2">
-            {rows.map((row, index) => {
-              // useSortable must be called inside the component that's in SortableContext
-              // so we'll use a nested component
-              return (
-                <SortableRowInner
-                  key={row.id}
-                  row={row}
-                  index={index}
-                  handleUpdateRow={handleUpdateRow}
-                  handleRemoveRow={handleDeleteRow}
-                  handleDuplicateRow={handleCopyRow}
-                  handleOpenTTSModal={handleOpenTTSModal}
-                  handleRemoveAudio={handleRemoveAudio}
-                  handleImageUpload={handleImageUpload}
-                  handleRemoveImage={handleRemoveImage}
-                  handleGenerateSingleDefinition={
-                    handleGenerateSingleDefinition
-                  }
-                  handleGenerateSingleDefinitionWithLang={
-                    handleGenerateSingleDefinitionWithLang
-                  }
-                  handleGenerateExampleTranslation={
-                    handleGenerateExampleTranslation
-                  }
-                  handleGenerateExampleTranslationWithLang={
-                    handleGenerateExampleTranslationWithLang
-                  }
-                  handleOpenAIGenerateModal={handleOpenAIGenerateModal}
-                  rowsLength={rows.length}
-                  imageUploading={imageUploading}
-                  isActive={activeRowIndex === index}
-                  onRowFocus={() => setActiveRowIndex(index)}
-                  onWordLanguageChange={setLastSelectedWordLang}
-                  isAssignmentCopy={isAssignmentCopy}
-                  duplicateReasons={duplicateMap.get(index)}
-                  customTranslationLang={customTranslationLang}
-                  sentenceTranslationLang={aiGenerateTranslateLang}
-                  customSentenceTranslationLang={customSentenceTranslationLang}
-                />
-              );
-            })}
-
-            {/* Add Row Button */}
-            <button
-              onClick={handleAddRow}
-              className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600"
-              disabled={rows.length >= 15}
+          {/* Scrollable Content Rows with dnd-kit */}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={rows.map((row) => row.id)}
+              strategy={verticalListSortingStrategy}
             >
-              <Plus className="h-5 w-5" />
-              {t("contentEditor.buttons.addItem")}
-            </button>
-          </div>
-        </SortableContext>
-      </DndContext>
-        </div>{/* End Right: Word Editor Area */}
-      </div>{/* End Desktop side-by-side / Mobile layout */}
+              <div className="flex-1 space-y-3 pr-2">
+                {rows.map((row, index) => {
+                  // useSortable must be called inside the component that's in SortableContext
+                  // so we'll use a nested component
+                  return (
+                    <SortableRowInner
+                      key={row.id}
+                      row={row}
+                      index={index}
+                      handleUpdateRow={handleUpdateRow}
+                      handleRemoveRow={handleDeleteRow}
+                      handleDuplicateRow={handleCopyRow}
+                      handleOpenTTSModal={handleOpenTTSModal}
+                      handleRemoveAudio={handleRemoveAudio}
+                      handleImageUpload={handleImageUpload}
+                      handleRemoveImage={handleRemoveImage}
+                      handleGenerateSingleDefinition={
+                        handleGenerateSingleDefinition
+                      }
+                      handleGenerateSingleDefinitionWithLang={
+                        handleGenerateSingleDefinitionWithLang
+                      }
+                      handleGenerateExampleTranslation={
+                        handleGenerateExampleTranslation
+                      }
+                      handleGenerateExampleTranslationWithLang={
+                        handleGenerateExampleTranslationWithLang
+                      }
+                      handleOpenAIGenerateModal={handleOpenAIGenerateModal}
+                      rowsLength={rows.length}
+                      imageUploading={imageUploading}
+                      isActive={activeRowIndex === index}
+                      onRowFocus={() => setActiveRowIndex(index)}
+                      onWordLanguageChange={setLastSelectedWordLang}
+                      isAssignmentCopy={isAssignmentCopy}
+                      duplicateReasons={duplicateMap.get(index)}
+                      customTranslationLang={customTranslationLang}
+                      sentenceTranslationLang={aiGenerateTranslateLang}
+                      customSentenceTranslationLang={
+                        customSentenceTranslationLang
+                      }
+                    />
+                  );
+                })}
+
+                {/* Add Row Button */}
+                <button
+                  onClick={handleAddRow}
+                  className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600"
+                  disabled={rows.length >= 15}
+                >
+                  <Plus className="h-5 w-5" />
+                  {t("contentEditor.buttons.addItem")}
+                </button>
+              </div>
+            </SortableContext>
+          </DndContext>
+        </div>
+        {/* End Right: Word Editor Area */}
+      </div>
+      {/* End Desktop side-by-side / Mobile layout */}
 
       {/* TTS Modal */}
       {selectedRow && (
@@ -4140,19 +4433,25 @@ export default function VocabularySetPanel({
                 }}
                 className="w-full px-3 py-1.5 border rounded-md text-sm"
               >
-                <option value="">{t("contentEditor.labels.selectLanguage")}</option>
+                <option value="">
+                  {t("contentEditor.labels.selectLanguage")}
+                </option>
                 {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
                   <option key={lang.value} value={lang.value}>
                     {lang.label}
                   </option>
                 ))}
-                <option value="other">{t("contentEditor.labels.otherLanguage")}</option>
+                <option value="other">
+                  {t("contentEditor.labels.otherLanguage")}
+                </option>
               </select>
               {aiGenerateTranslateLang === "other" && (
                 <input
                   type="text"
                   value={customSentenceTranslationLang}
-                  onChange={(e) => setCustomSentenceTranslationLang(e.target.value)}
+                  onChange={(e) =>
+                    setCustomSentenceTranslationLang(e.target.value)
+                  }
                   placeholder={t("contentEditor.labels.enterLanguage")}
                   className="w-full px-3 py-1.5 border rounded-md text-sm"
                 />
