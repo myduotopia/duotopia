@@ -789,6 +789,89 @@ class TestE2EOrganizationMaterials:
         assert response.json()["title"] == "基本問候語"
         assert len(response.json()["items"]) == 3
 
+    def test_org_member_can_list_lesson_contents(self):
+        """
+        Regression test for issue #410 v2: org member gets 404 on lesson contents listing.
+
+        The old code in GET /api/teachers/lessons/{lesson_id}/contents filtered by
+        Program.teacher_id == current_teacher.id, which excluded org lessons
+        where teacher_id is the org_owner, not the requesting member.
+
+        After the fix, check_lesson_access() handles org membership correctly.
+        """
+        hierarchy = self._create_organization_hierarchy()
+        org = hierarchy["org"]
+        org_owner = hierarchy["org_owner"]
+        teacher = hierarchy["teacher"]
+
+        # Create org material owned by org_owner with organization_id set
+        material = self._create_organization_material(org, org_owner)
+        material.organization_id = org.id
+        self.db.commit()
+        self.db.refresh(material)
+
+        lesson = self.db.query(Lesson).filter(Lesson.program_id == material.id).first()
+        assert lesson is not None
+
+        # org_owner can list lesson contents
+        owner_headers = self._get_auth_headers(org_owner)
+        response = self.client.get(
+            f"/api/teachers/lessons/{lesson.id}/contents",
+            headers=owner_headers,
+        )
+        assert response.status_code == 200
+        assert len(response.json()) == 1  # One content: "基本問候語"
+
+        # Regular org member teacher can also list lesson contents (was 404 before fix)
+        teacher_headers = self._get_auth_headers(teacher)
+        response = self.client.get(
+            f"/api/teachers/lessons/{lesson.id}/contents",
+            headers=teacher_headers,
+        )
+        assert response.status_code == 200
+        assert len(response.json()) == 1
+
+    def test_org_owner_can_update_and_delete_org_content(self):
+        """
+        Regression test for issue #410 v2: org owner gets 404 on content update/delete.
+
+        The old code in PUT/DELETE /api/teachers/contents/{content_id} filtered by
+        Program.teacher_id == current_teacher.id (PUT also allowed templates).
+        After the fix, check_content_access() handles org ownership correctly.
+        """
+        hierarchy = self._create_organization_hierarchy()
+        org = hierarchy["org"]
+        org_owner = hierarchy["org_owner"]
+
+        # Create org material owned by org_owner with organization_id set
+        material = self._create_organization_material(org, org_owner)
+        material.organization_id = org.id
+        self.db.commit()
+        self.db.refresh(material)
+
+        lesson = self.db.query(Lesson).filter(Lesson.program_id == material.id).first()
+        content = self.db.query(Content).filter(Content.lesson_id == lesson.id).first()
+        assert content is not None
+
+        owner_headers = self._get_auth_headers(org_owner)
+
+        # org_owner can update content
+        response = self.client.put(
+            f"/api/teachers/contents/{content.id}",
+            json={"title": "更新後的問候語"},
+            headers=owner_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["title"] == "更新後的問候語"
+
+        # org_owner can delete (soft-delete) content
+        response = self.client.delete(
+            f"/api/teachers/contents/{content.id}",
+            headers=owner_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["details"]["deactivated"] is True
+
 
 # ============================================================================
 # Test Summary
