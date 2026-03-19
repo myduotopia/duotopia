@@ -217,6 +217,7 @@
       "passwordMismatch": "비밀번호가 일치하지 않습니다",
       "setupFailed": "비밀번호 설정에 실패했습니다",
       "passwordTooShort": "비밀번호는 8자 이상이어야 합니다",
+      "containsSpaces": "비밀번호에 공백을 포함할 수 없습니다",
       "missingUppercase": "비밀번호에 대문자를 1자 이상 포함해야 합니다",
       "missingLowercase": "비밀번호에 소문자를 1자 이상 포함해야 합니다",
       "missingNumber": "비밀번호에 숫자를 1자 이상 포함해야 합니다",
