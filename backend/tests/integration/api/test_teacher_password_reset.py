@@ -77,7 +77,7 @@ class TestTeacherPasswordReset:
         )
 
         assert response.status_code == 400
-        assert "at least 6 characters" in response.json()["detail"]
+        assert "at least 8 characters" in response.json()["detail"]
 
     def test_update_password_without_auth(self, test_client):
         """Test password update without authentication"""
@@ -208,5 +208,5 @@ class TestTeacherProfileUpdate:
         assert "is_demo" in data
         assert "is_admin" in data
         assert data["name"] == "Updated Teacher"
-        assert data["email"] == "teacher@test.com"
+        assert data["email"] == test_teacher.email
         assert data["is_active"] is True
