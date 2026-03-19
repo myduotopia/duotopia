@@ -26,7 +26,6 @@ import {
   X,
   Loader2,
   Sparkles,
-  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
@@ -1046,15 +1045,15 @@ function SortableRowInner({
   handleImageUpload,
   handleRemoveImage,
   handleGenerateSingleDefinition,
-  handleGenerateSingleDefinitionWithLang,
-  handleGenerateExampleTranslation,
-  handleGenerateExampleTranslationWithLang,
+  handleGenerateSingleDefinitionWithLang: _handleGenerateSingleDefinitionWithLang,
+  handleGenerateExampleTranslation: _handleGenerateExampleTranslation,
+  handleGenerateExampleTranslationWithLang: _handleGenerateExampleTranslationWithLang,
   handleOpenAIGenerateModal,
   rowsLength,
   imageUploading,
   isActive = false,
   onRowFocus,
-  onWordLanguageChange,
+  onWordLanguageChange: _onWordLanguageChange,
   isAssignmentCopy = false,
   duplicateReasons,
   customTranslationLang = "",
@@ -1597,7 +1596,6 @@ export default function VocabularySetPanel({
     programLevel || "A1",
   ); // 🔥 階段2：預設使用 Program level
   const [aiGeneratePrompt, setAiGeneratePrompt] = useState("");
-  const [aiGenerateTranslate, setAiGenerateTranslate] = useState(true);
   const [aiGenerateTranslateLang, setAiGenerateTranslateLang] =
     useState<string>("chinese");
   const [customSentenceTranslationLang, setCustomSentenceTranslationLang] =

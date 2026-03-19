@@ -527,9 +527,16 @@ Only reply with JSON array, no other text."""
 
             # 動態構建第 2 條 CRITICAL REQUIREMENT
             if not translate_to or translate_to == "zh-TW":
-                critical_2 = "2. If translating to Chinese, you MUST use Traditional Chinese (繁體中文), NOT Simplified Chinese."
+                critical_2 = (
+                    "2. If translating to Chinese, you MUST use "
+                    "Traditional Chinese (繁體中文), NOT Simplified Chinese."
+                )
             else:
-                critical_2 = f"2. When translating, you MUST translate to {translation_lang_name} only. Do NOT translate to Chinese or any other language."
+                critical_2 = (
+                    f"2. When translating, you MUST translate to "
+                    f"{translation_lang_name} only. Do NOT translate "
+                    f"to Chinese or any other language."
+                )
 
             # 構建 system prompt
             system_prompt = f"""You are an English teacher creating example sentences for language learners.
@@ -622,7 +629,10 @@ IMPORTANT: If a word has a "definition" field, you MUST use that specific meanin
 Where translation MUST be in {translation_lang_name}.
 IMPORTANT: Each English sentence MUST contain the exact target word."""
                 if translate_to == "zh-TW":
-                    user_prompt += "\nTranslation to Chinese MUST use Traditional Chinese (繁體中文), NOT Simplified Chinese."
+                    user_prompt += (
+                        "\nTranslation to Chinese MUST use Traditional "
+                        "Chinese (繁體中文), NOT Simplified Chinese."
+                    )
             else:
                 user_prompt += """Return as JSON array with this format:
 [{"sentence": "..."}]"""
