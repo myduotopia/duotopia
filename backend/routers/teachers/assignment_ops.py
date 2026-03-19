@@ -38,6 +38,9 @@ from services.preview_service import (
     check_rearrangement_answer,
     handle_rearrangement_retry,
     handle_rearrangement_complete,
+    WordSelectionAnswerRequest,
+    RearrangementAnswerRequest,
+    RearrangementCompleteRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,15 +128,15 @@ async def preview_word_selection_start(
 @router.post("/assignments/{assignment_id}/preview/word-selection-answer")
 async def preview_word_selection_answer(
     assignment_id: int,
-    request: dict,
+    data: WordSelectionAnswerRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """Preview mode: Submit word selection answer (not saved)."""
     assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
     return check_word_selection_answer(
-        request.get("content_item_id"),
-        request.get("selected_answer"),
+        data.content_item_id,
+        data.selected_answer,
         assignment,
         db,
     )
@@ -153,16 +156,16 @@ async def preview_rearrangement_questions(
 @router.post("/assignments/{assignment_id}/preview/rearrangement-answer")
 async def preview_rearrangement_answer(
     assignment_id: int,
-    request: dict,
+    data: RearrangementAnswerRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """Preview mode: Submit rearrangement answer (not saved)."""
     _get_teacher_assignment(assignment_id, current_teacher, db)
     return check_rearrangement_answer(
-        request.get("content_item_id"),
-        request.get("selected_word", ""),
-        request.get("current_position", 0),
+        data.content_item_id,
+        data.selected_word,
+        data.current_position,
         db,
     )
 
@@ -170,7 +173,6 @@ async def preview_rearrangement_answer(
 @router.post("/assignments/{assignment_id}/preview/rearrangement-retry")
 async def preview_rearrangement_retry(
     assignment_id: int,
-    request: dict,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
@@ -182,13 +184,13 @@ async def preview_rearrangement_retry(
 @router.post("/assignments/{assignment_id}/preview/rearrangement-complete")
 async def preview_rearrangement_complete(
     assignment_id: int,
-    request: dict,
+    data: RearrangementCompleteRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """Preview mode: Complete rearrangement question (simulated)."""
     _get_teacher_assignment(assignment_id, current_teacher, db)
     return handle_rearrangement_complete(
-        expected_score=request.get("expected_score", 100.0),
-        timeout=request.get("timeout", False),
+        expected_score=data.expected_score,
+        timeout=data.timeout,
     )

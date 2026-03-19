@@ -13,7 +13,6 @@ Includes:
 import logging
 import os
 from typing import Optional
-from pydantic import BaseModel
 from fastapi import (
     APIRouter,
     Depends,
@@ -51,31 +50,12 @@ from services.preview_service import (
     check_rearrangement_answer,
     handle_rearrangement_retry,
     handle_rearrangement_complete,
+    WordSelectionAnswerRequest,
+    RearrangementAnswerRequest,
+    RearrangementCompleteRequest,
 )
 
 logger = logging.getLogger(__name__)
-
-
-# ============================================================================
-# Request Models
-# ============================================================================
-
-
-class WordSelectionAnswerRequest(BaseModel):
-    content_item_id: int
-    selected_answer: str
-
-
-class RearrangementAnswerRequest(BaseModel):
-    content_item_id: int
-    selected_word: str
-    current_position: int = 0
-
-
-class RearrangementCompleteRequest(BaseModel):
-    expected_score: float = 100.0
-    timeout: bool = False
-
 
 router = APIRouter(prefix="/api/demo", tags=["demo"])
 
