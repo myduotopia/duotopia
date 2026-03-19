@@ -433,9 +433,7 @@ class TestCheckRearrangementAnswer:
             practice_mode="rearrangement",
         )
         item = shared_test_session.query(ContentItem).first()
-        result = check_rearrangement_answer(
-            item.id, "WRONG", 0, shared_test_session
-        )
+        result = check_rearrangement_answer(item.id, "WRONG", 0, shared_test_session)
         assert result["is_correct"] is False
         assert result["correct_word"] is not None
 

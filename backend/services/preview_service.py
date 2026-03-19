@@ -80,9 +80,7 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
             "title": content.title,
             "duration": content.time_limit_seconds or 60,
             "points": (
-                100 // len(assignment_contents)
-                if len(assignment_contents) > 0
-                else 100
+                100 // len(assignment_contents) if len(assignment_contents) > 0 else 100
             ),
             "status": "NOT_STARTED",
             "score": None,
