@@ -1045,9 +1045,11 @@ function SortableRowInner({
   handleImageUpload,
   handleRemoveImage,
   handleGenerateSingleDefinition,
-  handleGenerateSingleDefinitionWithLang: _handleGenerateSingleDefinitionWithLang,
+  handleGenerateSingleDefinitionWithLang:
+    _handleGenerateSingleDefinitionWithLang,
   handleGenerateExampleTranslation: _handleGenerateExampleTranslation,
-  handleGenerateExampleTranslationWithLang: _handleGenerateExampleTranslationWithLang,
+  handleGenerateExampleTranslationWithLang:
+    _handleGenerateExampleTranslationWithLang,
   handleOpenAIGenerateModal,
   rowsLength,
   imageUploading,
