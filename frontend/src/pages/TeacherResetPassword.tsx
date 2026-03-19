@@ -15,6 +15,7 @@ import { Loader2, Lock, CheckCircle, XCircle, Eye, EyeOff } from "lucide-react";
 import { apiClient } from "../lib/api";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useTranslation } from "react-i18next";
+import { validatePasswordStrength } from "@/utils/passwordValidation";
 
 export default function TeacherResetPassword() {
   const { t } = useTranslation();
@@ -94,8 +95,9 @@ export default function TeacherResetPassword() {
       return;
     }
 
-    if (trimmedPassword.length < 6) {
-      setError(t("passwordReset.errors.passwordTooShort"));
+    const validation = validatePasswordStrength(trimmedPassword);
+    if (!validation.valid && validation.errorKey) {
+      setError(t(`passwordReset.errors.${validation.errorKey}`));
       return;
     }
 
