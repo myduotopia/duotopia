@@ -352,7 +352,8 @@ export default function WordReadingTemplate({
   // effect to pick up the new ai_assessment data.
   useEffect(() => {
     const ai = currentItem.ai_assessment;
-    if (ai && !assessmentResult) {
+    // Guard: don't re-apply stale data when user has cleared recording (retry)
+    if (ai && !assessmentResult && audioUrl) {
       setAssessmentResult({
         overallScore: ai.pronunciation_score || 0,
         accuracyScore: ai.accuracy_score || 0,

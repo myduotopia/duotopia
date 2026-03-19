@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
@@ -13,6 +14,7 @@ import { toast } from "sonner";
  * @param isPreviewMode 是否為預覽模式（預覽模式不上傳到 GCS）
  */
 export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
+  const { t } = useTranslation();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzingMessage, setAnalyzingMessage] = useState("");
   const { analyzePronunciation } = useAzurePronunciation();
@@ -189,8 +191,11 @@ export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
       };
     } catch (error) {
       console.error("自動分析失敗:", error);
-      toast.error("自動分析失敗", {
-        description: error instanceof Error ? error.message : "請稍後重試",
+      toast.error(t("wordReading.toast.autoAnalysisFailed") || "自動分析失敗", {
+        description:
+          error instanceof Error
+            ? error.message
+            : t("wordReading.toast.retryLater") || "請稍後重試",
       });
       return null;
     } finally {
