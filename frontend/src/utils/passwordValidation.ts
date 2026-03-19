@@ -20,6 +20,11 @@ export function validatePasswordStrength(
     return { valid: false, errorKey: "passwordTooShort" };
   }
 
+  // Check for spaces
+  if (/\s/.test(password)) {
+    return { valid: false, errorKey: "containsSpaces" };
+  }
+
   // Check for uppercase letter
   if (!/[A-Z]/.test(password)) {
     return { valid: false, errorKey: "missingUppercase" };

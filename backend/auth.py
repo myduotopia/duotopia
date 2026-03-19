@@ -72,6 +72,10 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     if len(password) < 8:
         return False, "Password must be at least 8 characters"
 
+    # 檢查是否包含空白
+    if " " in password:
+        return False, "Password must not contain spaces"
+
     # 檢查是否包含大寫字母
     if not any(c.isupper() for c in password):
         return False, "Password must contain at least one uppercase letter"
