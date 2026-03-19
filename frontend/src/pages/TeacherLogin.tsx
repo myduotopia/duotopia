@@ -53,7 +53,10 @@ export default function TeacherLogin() {
     setError("");
 
     try {
-      const result = await apiClient.teacherLogin(formData);
+      const result = await apiClient.teacherLogin({
+        ...formData,
+        password: formData.password.trim(),
+      });
 
       useTeacherAuthStore.getState().login(result.access_token, {
         id: result.user.id,

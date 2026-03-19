@@ -217,6 +217,7 @@
       "passwordMismatch": "パスワードが一致しません",
       "setupFailed": "パスワードの設定に失敗しました",
       "passwordTooShort": "パスワードは8文字以上必要です",
+      "containsSpaces": "パスワードにスペースを含めることはできません",
       "missingUppercase": "パスワードには大文字を1文字以上含めてください",
       "missingLowercase": "パスワードには小文字を1文字以上含めてください",
       "missingNumber": "パスワードには数字を1文字以上含めてください",

@@ -6,6 +6,44 @@
 from datetime import datetime, date
 import bcrypt
 from models import Student
+from auth import validate_password_strength
+
+
+class TestValidatePasswordStrength:
+    """直接測試 auth.validate_password_strength"""
+
+    def test_valid_password(self):
+        valid, msg = validate_password_strength("SecurePass1!")
+        assert valid is True
+
+    def test_too_short(self):
+        valid, msg = validate_password_strength("Ab1!")
+        assert valid is False
+        assert "8" in msg
+
+    def test_contains_space(self):
+        valid, msg = validate_password_strength("Secure Pass1!")
+        assert valid is False
+
+    def test_contains_tab(self):
+        valid, msg = validate_password_strength("Secure\tPass1!")
+        assert valid is False
+
+    def test_contains_newline(self):
+        valid, msg = validate_password_strength("Secure\nPass1!")
+        assert valid is False
+
+    def test_missing_uppercase(self):
+        valid, msg = validate_password_strength("securepass1!")
+        assert valid is False
+
+    def test_missing_lowercase(self):
+        valid, msg = validate_password_strength("SECUREPASS1!")
+        assert valid is False
+
+    def test_missing_digit(self):
+        valid, msg = validate_password_strength("SecurePass!")
+        assert valid is False
 
 
 class TestPasswordHashing:

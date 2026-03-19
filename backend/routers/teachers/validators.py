@@ -1,7 +1,7 @@
 """
 Pydantic models/schemas for teachers API validation.
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import date
 
@@ -27,6 +27,11 @@ class UpdateTeacherProfileRequest(BaseModel):
 class UpdatePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+    @field_validator("current_password", "new_password")
+    @classmethod
+    def strip_password(cls, v: str) -> str:
+        return v.strip()
 
 
 class ClassroomSummary(BaseModel):

@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime, timedelta  # noqa: F401
 from typing import Optional, Dict, Any  # noqa: F401
 from jose import JWTError, jwt
@@ -71,6 +72,10 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     """
     if len(password) < 8:
         return False, "Password must be at least 8 characters"
+
+    # 檢查是否包含空白（包含 tab、換行等 Unicode 空白字元）
+    if re.search(r"\s", password):
+        return False, "Password must not contain spaces"
 
     # 檢查是否包含大寫字母
     if not any(c.isupper() for c in password):

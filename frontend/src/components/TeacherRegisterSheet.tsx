@@ -54,12 +54,16 @@ export default function TeacherRegisterSheet({
     e.preventDefault();
     setError("");
 
-    if (formData.password !== formData.confirmPassword) {
+    // 先 trim 再驗證，確保驗證的是實際儲存的值
+    const trimmedPassword = formData.password.trim();
+    const trimmedConfirm = formData.confirmPassword.trim();
+
+    if (trimmedPassword !== trimmedConfirm) {
       setError(t("teacherRegister.errors.passwordMismatch"));
       return;
     }
 
-    const validation = validatePasswordStrength(formData.password);
+    const validation = validatePasswordStrength(trimmedPassword);
     if (!validation.valid && validation.errorKey) {
       setError(t(`teacherRegister.errors.${validation.errorKey}`));
       return;
@@ -75,7 +79,7 @@ export default function TeacherRegisterSheet({
       }
       const response = (await apiClient.teacherRegister({
         email: formData.email,
-        password: formData.password,
+        password: trimmedPassword,
         name: formData.name,
         phone: formData.phone || undefined,
       })) as RegisterResponse;
