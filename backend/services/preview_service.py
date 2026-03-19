@@ -8,9 +8,11 @@ code are affected by this refactoring.
 
 import logging
 import random
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import HTTPException, UploadFile
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 
 from models import (
@@ -20,6 +22,28 @@ from models import (
     ContentItem,
     ContentType,
 )
+
+
+# ---------------------------------------------------------------------------
+# Shared Pydantic request models (used by both demo.py and assignment_ops.py)
+# ---------------------------------------------------------------------------
+
+
+class WordSelectionAnswerRequest(BaseModel):
+    content_item_id: int
+    selected_answer: str
+
+
+class RearrangementAnswerRequest(BaseModel):
+    content_item_id: int
+    selected_word: str
+    current_position: int = 0
+
+
+class RearrangementCompleteRequest(BaseModel):
+    expected_score: float = 100.0
+    timeout: bool = False
+
 
 logger = logging.getLogger(__name__)
 
@@ -507,11 +531,9 @@ def handle_rearrangement_complete(
     timeout: bool = False,
 ) -> dict:
     """Return a simulated completion response (preview — no DB writes)."""
-    from datetime import datetime
-
     return {
         "success": True,
         "final_score": expected_score,
         "timeout": timeout,
-        "completed_at": datetime.now().isoformat(),
+        "completed_at": datetime.now(timezone.utc).isoformat(),
     }

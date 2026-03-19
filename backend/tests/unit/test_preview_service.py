@@ -5,6 +5,9 @@ Verifies that the shared preview service functions produce the expected
 output structure, so that both demo.py and assignment_ops.py stay in sync.
 """
 
+import io
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from datetime import datetime, timedelta
 
@@ -21,6 +24,7 @@ from models import (
 )
 from auth import get_password_hash
 from services.preview_service import (
+    assess_speech_preview,
     build_assignment_preview,
     get_vocabulary_activities,
     get_word_selection_start,
@@ -30,6 +34,8 @@ from services.preview_service import (
     handle_rearrangement_retry,
     handle_rearrangement_complete,
     _parse_exclude_ids,
+    ALLOWED_AUDIO_FORMATS,
+    MAX_AUDIO_FILE_SIZE,
 )
 
 
@@ -459,3 +465,48 @@ class TestRearrangementRetryAndComplete:
         assert result["final_score"] == 75.0
         assert result["timeout"] is True
         assert "completed_at" in result
+
+
+# ---------------------------------------------------------------------------
+# Tests: assess_speech_preview validation guards
+# ---------------------------------------------------------------------------
+
+
+class TestAssessSpeechPreview:
+    @pytest.mark.asyncio
+    async def test_rejects_unsupported_audio_format(self):
+        mock_file = MagicMock()
+        mock_file.content_type = "text/plain"
+        mock_file.read = AsyncMock(return_value=b"not audio")
+
+        with pytest.raises(Exception) as exc_info:
+            await assess_speech_preview(mock_file, "hello")
+        assert exc_info.value.status_code == 400
+        assert "Unsupported audio format" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_rejects_oversized_file(self):
+        mock_file = MagicMock()
+        mock_file.content_type = "audio/wav"
+        # Return data larger than MAX_AUDIO_FILE_SIZE
+        mock_file.read = AsyncMock(return_value=b"x" * (MAX_AUDIO_FILE_SIZE + 1))
+
+        with pytest.raises(Exception) as exc_info:
+            await assess_speech_preview(mock_file, "hello")
+        assert exc_info.value.status_code == 413
+        assert "File too large" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_accepts_valid_audio_formats(self):
+        """Verify all declared formats pass the content-type check."""
+        for fmt in ALLOWED_AUDIO_FORMATS:
+            mock_file = MagicMock()
+            mock_file.content_type = fmt
+            # Return oversized data so we hit the *size* guard, not the format guard.
+            # This proves the format guard passed.
+            mock_file.read = AsyncMock(return_value=b"x" * (MAX_AUDIO_FILE_SIZE + 1))
+
+            with pytest.raises(Exception) as exc_info:
+                await assess_speech_preview(mock_file, "hello")
+            # If we get 413 (too large), that means format check passed
+            assert exc_info.value.status_code == 413
