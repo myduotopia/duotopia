@@ -337,6 +337,13 @@ export default function WordReadingTemplate({
         });
       }
     }
+
+    // Start timer for new item without existing audio.
+    // Must be done here because the timer init useEffect (line 280) reads
+    // stale audioUrl from closure when both effects fire in the same render.
+    if (!readOnly && !existingAudioUrl && timeLimit > 0) {
+      startTimer();
+    }
   }, [currentItem.id]); // Only run when item changes, not when existingAudioUrl/timeLimit changes
 
   // Auto-play example audio when entering a new question
