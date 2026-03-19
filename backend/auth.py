@@ -95,6 +95,18 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     return True, ""
 
 
+def validate_student_password_strength(password: str) -> tuple[bool, str]:
+    """
+    驗證學生密碼強度（寬鬆版）
+    規則：最少 6 字元，可以是純數字
+    Returns: (is_valid, error_message)
+    """
+    if len(password) < 6:
+        return False, "Password must be at least 6 characters"
+
+    return True, ""
+
+
 def get_password_hash(password: str) -> str:
     """密碼雜湊"""
     # Ensure password is encoded properly and truncated if needed

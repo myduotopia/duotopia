@@ -18,7 +18,7 @@ from models.organization import ClassroomSchool, School, Organization
 from auth import (
     verify_password,
     get_password_hash,
-    validate_password_strength,
+    validate_student_password_strength,
 )
 from .dependencies import get_current_student, get_student_id
 from .validators import UpdateStudentProfileRequest, UpdatePasswordRequest
@@ -208,8 +208,8 @@ async def update_student_password(
             detail="New password must be different from current password",
         )
 
-    # Validate new password strength (same as registration)
-    is_valid, error_msg = validate_password_strength(request.new_password)
+    # Validate new password strength (student: min 6 chars, digits-only OK)
+    is_valid, error_msg = validate_student_password_strength(request.new_password)
     if not is_valid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 

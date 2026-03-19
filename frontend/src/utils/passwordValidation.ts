@@ -42,3 +42,18 @@ export function validatePasswordStrength(
 
   return { valid: true };
 }
+
+/**
+ * Validate student password strength (relaxed rules)
+ * Students only need minimum 6 characters, digits-only is OK
+ * Matches backend: auth.py:validate_student_password_strength()
+ */
+export function validateStudentPasswordStrength(
+  password: string,
+): PasswordValidationResult {
+  if (password.length < 6) {
+    return { valid: false, errorKey: "passwordTooShort" };
+  }
+
+  return { valid: true };
+}
