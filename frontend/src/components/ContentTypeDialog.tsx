@@ -53,7 +53,8 @@ export default function ContentTypeDialog({
         "dialogs.contentTypeDialog.types.example_sentences.description",
       ),
       icon: "📝",
-      image: "https://storage.googleapis.com/duotopia-social-media-videos/website/add2-sentencepattern.png",
+      image:
+        "https://storage.googleapis.com/duotopia-social-media-videos/website/add2-sentencepattern.png",
       disabled: false,
     },
     // ===== Phase 2 - 啟用 =====
@@ -64,7 +65,8 @@ export default function ContentTypeDialog({
         "dialogs.contentTypeDialog.types.vocabulary_set.description",
       ),
       icon: "📚",
-      image: "https://storage.googleapis.com/duotopia-social-media-videos/website/add1-vocabularyset.png",
+      image:
+        "https://storage.googleapis.com/duotopia-social-media-videos/website/add1-vocabularyset.png",
       isNew: true,
       disabled: false,
     },
@@ -75,7 +77,8 @@ export default function ContentTypeDialog({
         "dialogs.contentTypeDialog.types.scenario_dialogue.description",
       ),
       icon: "💬",
-      image: "https://storage.googleapis.com/duotopia-social-media-videos/website/add3-output.png",
+      image:
+        "https://storage.googleapis.com/duotopia-social-media-videos/website/add3-output.png",
       disabled: true,
     },
   ];

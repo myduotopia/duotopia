@@ -3067,7 +3067,10 @@ export default function ClassroomDetail({
       {/* Reading Assessment Editor */}
       {showReadingEditor && editorLessonId && (
         <>
-          <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
+          <div
+            className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+            style={{ left: `${sidebarWidth}px` }}
+          >
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold">
                 {t("classroomDetail.labels.readingAssessmentSettings")}
@@ -3077,7 +3080,12 @@ export default function ClassroomDetail({
                 size="icon"
                 onClick={() => {
                   if (editorBusy) return;
-                  if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                  if (
+                    !window.confirm(
+                      t("contentEditor.labels.unsavedChangesConfirm"),
+                    )
+                  )
+                    return;
                   setShowReadingEditor(false);
                   setEditorLessonId(null);
                   setEditorContentId(null);
@@ -3116,7 +3124,10 @@ export default function ClassroomDetail({
       {/* Sentence Making Editor */}
       {showVocabularySetEditor && vocabularySetLessonId && (
         <>
-          <div className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300" style={{ left: `${sidebarWidth}px` }}>
+          <div
+            className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+            style={{ left: `${sidebarWidth}px` }}
+          >
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold">
                 {t("vocabularySet.dialogTitle")}
@@ -3126,7 +3137,12 @@ export default function ClassroomDetail({
                 size="icon"
                 onClick={() => {
                   if (editorBusy) return;
-                  if (!window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))) return;
+                  if (
+                    !window.confirm(
+                      t("contentEditor.labels.unsavedChangesConfirm"),
+                    )
+                  )
+                    return;
                   setShowVocabularySetEditor(false);
                   setVocabularySetLessonId(null);
                   setVocabularySetContentId(null);

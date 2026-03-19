@@ -229,9 +229,10 @@ export default function WordReadingTemplate({
     // 音素詳情 → 長條圖（加 index 避免同名音素被去重）
     const phonemes = phonemeResult?.detailed_words?.[0]?.phonemes || [];
     const details = phonemes.map((ph, i) => ({
-      label: phonemes.filter((p) => p.phoneme === ph.phoneme).length > 1
-        ? `${ph.phoneme}(${i + 1})`
-        : ph.phoneme,
+      label:
+        phonemes.filter((p) => p.phoneme === ph.phoneme).length > 1
+          ? `${ph.phoneme}(${i + 1})`
+          : ph.phoneme,
       score: ph.accuracy_score,
     }));
 
