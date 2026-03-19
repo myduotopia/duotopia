@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from typing import Optional  # noqa: F401
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from database import get_db
 from models import (
     Teacher,
@@ -40,10 +40,20 @@ class TeacherLoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+    @field_validator("password")
+    @classmethod
+    def strip_password(cls, v: str) -> str:
+        return v.strip()
+
 
 class StudentLoginRequest(BaseModel):
     id: int  # 學生資料庫主鍵 ID
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def strip_password(cls, v: str) -> str:
+        return v.strip()
 
 
 class TeacherRegisterRequest(BaseModel):
@@ -51,6 +61,11 @@ class TeacherRegisterRequest(BaseModel):
     password: str
     name: str
     phone: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def strip_password(cls, v: str) -> str:
+        return v.strip()
 
 
 class TokenResponse(BaseModel):
@@ -580,6 +595,7 @@ async def reset_password(
     token: str = Body(...), new_password: str = Body(...), db: Session = Depends(get_db)
 ):
     """使用 token 重設密碼"""
+    new_password = new_password.strip()
     # 查找擁有此 token 的教師
     teacher = db.query(Teacher).filter(Teacher.password_reset_token == token).first()
 

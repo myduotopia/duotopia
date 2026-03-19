@@ -225,8 +225,8 @@ export default function StudentProfile() {
     setIsUpdatingPassword(true);
     try {
       await apiClient.updateStudentPassword({
-        current_password: currentPassword,
-        new_password: newPassword,
+        current_password: currentPassword.trim(),
+        new_password: newPassword.trim(),
       });
       toast.success(t("studentProfile.password.success.passwordUpdated"));
       setShowPasswordEdit(false);

@@ -119,7 +119,7 @@ export default function TeacherSetupPassword() {
         "/api/auth/teacher/reset-password",
         {
           token,
-          new_password: formData.newPassword,
+          new_password: formData.newPassword.trim(),
         },
       );
 

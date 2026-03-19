@@ -103,7 +103,7 @@ export default function TeacherResetPassword() {
         "/api/auth/teacher/reset-password",
         {
           token,
-          new_password: formData.newPassword,
+          new_password: formData.newPassword.trim(),
         },
       );
 
