@@ -293,6 +293,12 @@ export default function WordReadingActivity({
 
       const result = await response.json();
 
+      // Revoke blob URL before replacing with server URL to prevent memory leak
+      const oldUrl = items[capturedIndex]?.recording_url;
+      if (oldUrl && oldUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(oldUrl);
+      }
+
       // Update with server URL
       setItems((prev) => {
         const updated = [...prev];
@@ -340,8 +346,6 @@ export default function WordReadingActivity({
       phonemes?: Array<{ phoneme: string; accuracy_score: number }>;
     }>;
   }) => {
-    const currentItem = items[currentIndex];
-
     // Update local state（含音素詳細資料，切換題目時可還原）
     setItems((prev) => {
       const updated = [...prev];
@@ -358,36 +362,9 @@ export default function WordReadingActivity({
       return updated;
     });
 
-    // Save to server (skip in preview and demo mode)
-    if (!isPreviewMode && !isDemoMode && currentItem.progress_id) {
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || "";
-
-        await fetch(
-          `${apiUrl}/api/students/assignments/${assignmentId}/vocabulary/save-assessment`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              progress_id: currentItem.progress_id,
-              ai_assessment: {
-                accuracy_score: result.accuracyScore,
-                fluency_score: result.fluencyScore,
-                completeness_score: result.completenessScore,
-                pronunciation_score: result.pronunciationScore,
-                detailed_words: result.detailed_words || [],
-                reference_text: items[currentIndex]?.text || "",
-              },
-            }),
-          },
-        );
-      } catch (error) {
-        console.error("Failed to save assessment:", error);
-      }
-    }
+    // Note: Assessment is already persisted by the template's
+    // uploadAnalysisInBackground (upload-analysis endpoint).
+    // No need to call save-assessment here to avoid double DB write.
   };
 
   // Navigate to next item
@@ -446,16 +423,17 @@ export default function WordReadingActivity({
       return updated;
     });
 
-    // 背景呼叫後端 DELETE API
+    // 背景呼叫後端 DELETE API（優先使用 progress_id，避免 index 排序問題）
     if (!isPreviewMode && !isDemoMode) {
       const apiUrl = import.meta.env.VITE_API_URL || "";
-      fetch(
-        `${apiUrl}/api/speech/assessment/${assignmentId}/item/${currentIndex}`,
-        {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      ).catch((err) => console.error("Clear recording failed:", err));
+      const progressId = currentItem?.progress_id;
+      const deleteUrl = progressId
+        ? `${apiUrl}/api/speech/assessment/${assignmentId}/progress/${progressId}`
+        : `${apiUrl}/api/speech/assessment/${assignmentId}/item/${currentIndex}`;
+      fetch(deleteUrl, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch((err) => console.error("Clear recording failed:", err));
     }
   }, [items, currentIndex, assignmentId, token, isPreviewMode, isDemoMode]);
 

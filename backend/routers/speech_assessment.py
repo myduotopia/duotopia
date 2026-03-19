@@ -1302,6 +1302,84 @@ async def delete_item_recording_and_assessment(
     }
 
 
+@router.delete("/assessment/{assignment_id}/progress/{progress_id}")
+async def delete_recording_by_progress_id(
+    assignment_id: int,
+    progress_id: int,
+    db: Session = Depends(get_db),
+    current_student: Student = Depends(get_current_student),
+):
+    """
+    刪除學生作業的某個 item 的錄音和評估結果（使用 progress_id）
+
+    比 item_index 更穩定，不受排序變更影響。
+    """
+    logger.info(
+        f"Student {current_student.id} deleting recording for "
+        f"assignment {assignment_id}, progress {progress_id}"
+    )
+
+    # 1. 查找 StudentAssignment（確認權限）
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == current_student.id,
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=404,
+            detail="Assignment not found or you don't have permission",
+        )
+
+    # 2. 查找 StudentItemProgress（確認屬於此作業）
+    progress = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.id == progress_id,
+            StudentItemProgress.student_assignment_id == student_assignment.id,
+        )
+        .first()
+    )
+
+    if not progress:
+        return {
+            "message": "No recording or assessment to delete",
+            "deleted": False,
+        }
+
+    # 3. 清空所有錄音和評估相關欄位
+    progress.recording_url = None
+    progress.answer_text = None
+    progress.transcription = None
+    progress.accuracy_score = None
+    progress.fluency_score = None
+    progress.pronunciation_score = None
+    progress.completeness_score = None
+    progress.ai_feedback = None
+    progress.ai_assessed_at = None
+    progress.submitted_at = None
+
+    # 4. 重置狀態為未開始
+    progress.status = "NOT_STARTED"
+
+    db.commit()
+
+    logger.info(
+        f"Successfully cleared recording for assignment {assignment_id}, "
+        f"progress {progress_id}"
+    )
+
+    return {
+        "message": "Recording and assessment deleted successfully",
+        "deleted": True,
+        "progress_id": progress.id,
+    }
+
+
 # ===== 測試 Endpoint：驗證 Thread Pool 並發 =====
 
 

@@ -962,6 +962,9 @@ async def get_vocabulary_activities(
         "practice_mode": "word_reading",
         "show_translation": show_translation,
         "show_image": show_image,
+        "time_limit_per_question": (
+            assignment.time_limit_per_question if assignment else None
+        ),
         "total_items": len(items),
         "items": items,
         "can_use_ai_analysis": can_use_ai_analysis,  # 根據工作區判斷的 AI 分析額度

@@ -298,6 +298,10 @@ export default function WordReadingTemplate({
 
   // Reset state when item changes (only triggered by currentItem.id change)
   useEffect(() => {
+    // Revoke previous blob URL to prevent memory leak
+    if (audioUrl && audioUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(audioUrl);
+    }
     setAudioUrl(existingAudioUrl || undefined);
     setAssessmentResult(null);
     setPhonemeResult(null);
@@ -437,6 +441,10 @@ export default function WordReadingTemplate({
         const audioBlob = new Blob(audioChunksRef.current, {
           type: "audio/webm",
         });
+        // Revoke previous blob URL to prevent memory leak
+        if (audioUrl && audioUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(audioUrl);
+        }
         const url = URL.createObjectURL(audioBlob);
         setAudioUrl(url);
         onRecordingComplete?.(audioBlob, url);
@@ -474,6 +482,10 @@ export default function WordReadingTemplate({
 
   // Handle file upload
   const handleFileUpload = (file: File) => {
+    // Revoke previous blob URL to prevent memory leak
+    if (audioUrl && audioUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(audioUrl);
+    }
     const url = URL.createObjectURL(file);
     setAudioUrl(url);
 
@@ -535,6 +547,10 @@ export default function WordReadingTemplate({
   const clearRecording = () => {
     if (recordedAudioRef.current) {
       recordedAudioRef.current.pause();
+    }
+    // Revoke blob URL to prevent memory leak
+    if (audioUrl && audioUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(audioUrl);
     }
     setIsPlaying(false);
     setCurrentTime(0);
@@ -603,7 +619,7 @@ export default function WordReadingTemplate({
           if (!response.ok) {
             throw new Error(`Upload failed: ${response.status}`);
           }
-          console.log("Background upload completed for word reading");
+          // Background upload completed successfully
         })
         .catch((error) => {
           console.error("Background upload failed:", error);
