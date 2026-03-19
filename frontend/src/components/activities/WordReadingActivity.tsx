@@ -357,6 +357,12 @@ export default function WordReadingActivity({
         (async () => {
           try {
             const resp = await fetch(currentItem.recording_url!);
+            if (!resp.ok) {
+              console.warn(
+                `Audio fetch failed (${resp.status}), skipping background analysis`,
+              );
+              return;
+            }
             const audioBlob = await resp.blob();
             await performAnalysisAndSave({
               audioBlob,
@@ -448,6 +454,7 @@ export default function WordReadingActivity({
         .filter(({ item }) => item.recording_url?.startsWith("blob:"));
 
       if (blobItems.length > 0) {
+        let uploadFailures = 0;
         for (const { item, index } of blobItems) {
           try {
             const resp = await fetch(item.recording_url!);
@@ -490,11 +497,22 @@ export default function WordReadingActivity({
               return updated;
             });
           } catch (error) {
+            uploadFailures++;
             console.error(
               `Failed to upload blob for item ${index + 1}:`,
               error,
             );
           }
+        }
+
+        if (uploadFailures > 0) {
+          toast.error(
+            t("wordReading.toast.uploadFailedCount", {
+              count: uploadFailures,
+            }) || `${uploadFailures} recording(s) failed to upload`,
+          );
+          setSubmitting(false);
+          return;
         }
       }
 
@@ -513,6 +531,12 @@ export default function WordReadingActivity({
           for (const { item, index } of unanalyzedItems) {
             try {
               const audioResp = await fetch(item.recording_url!);
+              if (!audioResp.ok) {
+                console.warn(
+                  `Audio fetch failed for item ${index + 1} (${audioResp.status})`,
+                );
+                continue;
+              }
               const audioBlob = await audioResp.blob();
               await performAnalysisAndSave({
                 audioBlob,

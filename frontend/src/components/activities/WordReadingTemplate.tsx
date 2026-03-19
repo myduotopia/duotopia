@@ -373,7 +373,7 @@ export default function WordReadingTemplate({
         });
       }
     }
-  }, [currentItem.ai_assessment, assessmentResult]);
+  }, [currentItem.ai_assessment, assessmentResult, audioUrl]);
 
   // Auto-play example audio when entering a new question
   useEffect(() => {
