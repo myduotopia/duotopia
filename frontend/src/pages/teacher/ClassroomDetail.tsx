@@ -56,6 +56,7 @@ import {
   openPrintWindow,
 } from "@/lib/stickyNotePrint";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useSidebar } from "@/contexts/SidebarContext";
 import {
   Content,
   Assignment,
@@ -100,6 +101,7 @@ export default function ClassroomDetail({
   const navigate = useNavigate();
   const location = useLocation();
   const { mode } = useWorkspace();
+  const { sidebarWidth, setSidebarDisabled, editorBusy } = useSidebar();
   const isOrgMode = mode === "organization";
   const [classroom, setClassroom] = useState<ClassroomInfo | null>(null);
   const [templateProgram, setTemplateProgram] = useState<Program | null>(null);
@@ -160,6 +162,12 @@ export default function ClassroomDetail({
 
   // Vocabulary Set Editor state
   const [showVocabularySetEditor, setShowVocabularySetEditor] = useState(false);
+
+  // Disable sidebar when editor panels are open
+  useEffect(() => {
+    setSidebarDisabled(showReadingEditor || showVocabularySetEditor);
+    return () => setSidebarDisabled(false);
+  }, [showReadingEditor, showVocabularySetEditor, setSidebarDisabled]);
   const [vocabularySetLessonId, setVocabularySetLessonId] = useState<
     number | null
   >(null);
@@ -2567,9 +2575,10 @@ export default function ClassroomDetail({
 
         {/* Right Sliding Panel */}
         <div
-          className={`fixed right-0 top-0 h-full w-full md:w-1/2 bg-white shadow-xl border-l transform transition-transform duration-300 z-50 ${
+          className={`fixed right-0 top-0 h-full bg-white shadow-xl border-l transform transition-transform duration-300 z-50 ${
             isPanelOpen ? "translate-x-0" : "translate-x-full"
           }`}
+          style={{ left: `${sidebarWidth}px` }}
         >
           {selectedContent && (
             <div className="h-full flex flex-col">
@@ -3057,16 +3066,27 @@ export default function ClassroomDetail({
 
       {/* Reading Assessment Editor */}
       {showReadingEditor && editorLessonId && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="relative w-full max-w-7xl max-h-[90vh] bg-white rounded-lg p-6 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">
+        <>
+          <div
+            className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+            style={{ left: `${sidebarWidth}px` }}
+          >
+            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold">
                 {t("classroomDetail.labels.readingAssessmentSettings")}
               </h2>
               <Button
                 variant="ghost"
                 size="icon"
+                disabled={editorBusy}
                 onClick={() => {
+                  if (editorBusy) return;
+                  if (
+                    !window.confirm(
+                      t("contentEditor.labels.unsavedChangesConfirm"),
+                    )
+                  )
+                    return;
                   setShowReadingEditor(false);
                   setEditorLessonId(null);
                   setEditorContentId(null);
@@ -3075,7 +3095,7 @@ export default function ClassroomDetail({
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+            <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
               <ReadingAssessmentPanel
                 content={undefined}
                 editingContent={{ id: editorContentId || undefined }}
@@ -3099,21 +3119,32 @@ export default function ClassroomDetail({
               />
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Sentence Making Editor */}
       {showVocabularySetEditor && vocabularySetLessonId && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="relative w-full max-w-7xl max-h-[90vh] bg-white rounded-lg p-6 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">
+        <>
+          <div
+            className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+            style={{ left: `${sidebarWidth}px` }}
+          >
+            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold">
                 {t("vocabularySet.dialogTitle")}
               </h2>
               <Button
                 variant="ghost"
                 size="icon"
+                disabled={editorBusy}
                 onClick={() => {
+                  if (editorBusy) return;
+                  if (
+                    !window.confirm(
+                      t("contentEditor.labels.unsavedChangesConfirm"),
+                    )
+                  )
+                    return;
                   setShowVocabularySetEditor(false);
                   setVocabularySetLessonId(null);
                   setVocabularySetContentId(null);
@@ -3122,7 +3153,7 @@ export default function ClassroomDetail({
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+            <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
               <VocabularySetPanel
                 content={undefined}
                 editingContent={{ id: vocabularySetContentId ?? undefined }}
@@ -3184,7 +3215,7 @@ export default function ClassroomDetail({
               />
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Batch Grading Modal */}

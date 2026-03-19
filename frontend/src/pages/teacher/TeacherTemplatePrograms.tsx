@@ -17,6 +17,7 @@ import { apiClient } from "@/lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useResourceMaterialsAPI } from "@/hooks/useResourceMaterialsAPI";
 import { toast } from "sonner";
+import { useSidebar } from "@/contexts/SidebarContext";
 import { Program, Lesson, Content } from "@/types";
 import { getProgramLevelByLessonId } from "@/hooks/useProgramTree";
 
@@ -30,6 +31,7 @@ export default function TeacherTemplatePrograms() {
 // Inner component - 「我的教材」不需要 workspace context
 function TeacherTemplateProgramsInner() {
   const { t } = useTranslation();
+  const { sidebarWidth, setSidebarDisabled, editorBusy } = useSidebar();
   const user = useTeacherAuthStore((s) => s.user);
   const isResourceAccount = user?.email === RESOURCE_ACCOUNT_EMAIL;
   const { updateVisibility } = useResourceMaterialsAPI();
@@ -110,6 +112,12 @@ function TeacherTemplateProgramsInner() {
 
   // Sentence Making Editor state
   const [showVocabularySetEditor, setShowVocabularySetEditor] = useState(false);
+
+  // Disable sidebar when editor panels are open
+  useEffect(() => {
+    setSidebarDisabled(showReadingEditor || showVocabularySetEditor);
+    return () => setSidebarDisabled(false);
+  }, [showReadingEditor, showVocabularySetEditor, setSidebarDisabled]);
   const [vocabularySetLessonId, setVocabularySetLessonId] = useState<
     number | null
   >(null);
@@ -567,38 +575,36 @@ function TeacherTemplateProgramsInner() {
 
       {/* Reading Assessment Modal (新增模式) */}
       {showReadingEditor && editorLessonId && editorContentId === null && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="relative w-full max-w-7xl max-h-[90vh] bg-white rounded-lg p-6 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">
+        <>
+          <div
+            className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+            style={{ left: `${sidebarWidth}px` }}
+          >
+            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold">
                 {t("teacherTemplatePrograms.dialogs.addReadingTitle")}
               </h2>
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => {
+                  if (editorBusy) return;
+                  if (
+                    !window.confirm(
+                      t("contentEditor.labels.unsavedChangesConfirm"),
+                    )
+                  )
+                    return;
                   setShowReadingEditor(false);
                   setEditorLessonId(null);
                   setEditorContentId(null);
                   setSelectedContent(null);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                aria-label="關閉"
               >
-                <svg
-                  className="w-5 h-5 text-gray-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
+                <X className="h-5 w-5" />
+              </Button>
             </div>
-            <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+            <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
               <ReadingAssessmentPanel
                 lessonId={editorLessonId}
                 programLevel={getProgramLevelByLessonId(
@@ -647,7 +653,7 @@ function TeacherTemplateProgramsInner() {
               />
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Reading Assessment Panel (編輯模式 - 側邊欄) */}
@@ -657,24 +663,26 @@ function TeacherTemplateProgramsInner() {
         selectedContent && (
           <>
             {/* Backdrop */}
-            <div
-              className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity"
-              onClick={() => {
-                setShowReadingEditor(false);
-                setEditorLessonId(null);
-                setEditorContentId(null);
-                setSelectedContent(null);
-              }}
-            />
+            <div className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity pointer-events-none" />
 
             {/* Panel */}
-            <div className="fixed top-0 right-0 h-screen w-full md:w-1/2 bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300">
+            <div
+              className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
+              style={{ left: `${sidebarWidth}px` }}
+            >
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-lg font-semibold text-gray-900">
                   {t("teacherTemplatePrograms.dialogs.editContentTitle")}
                 </h2>
                 <button
                   onClick={() => {
+                    if (editorBusy) return;
+                    if (
+                      !window.confirm(
+                        t("contentEditor.labels.unsavedChangesConfirm"),
+                      )
+                    )
+                      return;
                     setShowReadingEditor(false);
                     setEditorLessonId(null);
                     setEditorContentId(null);
@@ -753,20 +761,30 @@ function TeacherTemplateProgramsInner() {
           </>
         )}
 
-      {/* Sentence Making Editor (新增模式 - 彈窗) */}
+      {/* Sentence Making Editor (新增模式 - 側滑) */}
       {showVocabularySetEditor &&
         vocabularySetLessonId &&
         !vocabularySetContentId && (
-          <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="relative w-full max-w-7xl max-h-[90vh] bg-white rounded-lg p-6 flex flex-col">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">
+          <>
+            <div
+              className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+              style={{ left: `${sidebarWidth}px` }}
+            >
+              <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold">
                   {t("vocabularySet.dialogTitle")}
                 </h2>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => {
+                    if (editorBusy) return;
+                    if (
+                      !window.confirm(
+                        t("contentEditor.labels.unsavedChangesConfirm"),
+                      )
+                    )
+                      return;
                     setShowVocabularySetEditor(false);
                     setVocabularySetLessonId(null);
                     setVocabularySetContentId(null);
@@ -775,7 +793,7 @@ function TeacherTemplateProgramsInner() {
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-auto p-6">
                 <VocabularySetPanel
                   content={undefined}
                   editingContent={{
@@ -825,7 +843,7 @@ function TeacherTemplateProgramsInner() {
                 />
               </div>
             </div>
-          </div>
+          </>
         )}
 
       {/* Sentence Making Editor (編輯模式 - 側邊欄) */}
@@ -834,23 +852,26 @@ function TeacherTemplateProgramsInner() {
         vocabularySetContentId && (
           <>
             {/* Backdrop */}
-            <div
-              className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity"
-              onClick={() => {
-                setShowVocabularySetEditor(false);
-                setVocabularySetLessonId(null);
-                setVocabularySetContentId(null);
-              }}
-            />
+            <div className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity pointer-events-none" />
 
             {/* Panel */}
-            <div className="fixed top-0 right-0 h-screen w-full md:w-1/2 bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300">
+            <div
+              className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
+              style={{ left: `${sidebarWidth}px` }}
+            >
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-lg font-semibold text-gray-900">
                   {t("vocabularySet.editTitle")}
                 </h2>
                 <button
                   onClick={() => {
+                    if (editorBusy) return;
+                    if (
+                      !window.confirm(
+                        t("contentEditor.labels.unsavedChangesConfirm"),
+                      )
+                    )
+                      return;
                     setShowVocabularySetEditor(false);
                     setVocabularySetLessonId(null);
                     setVocabularySetContentId(null);
