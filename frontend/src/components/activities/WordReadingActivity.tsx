@@ -141,21 +141,6 @@ export default function WordReadingActivity({
 
       const apiUrl = import.meta.env.VITE_API_URL || "";
       if (progressId) {
-        fetch(
-          `${apiUrl}/api/students/assignments/${assignmentId}/vocabulary/save-assessment`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              progress_id: progressId,
-              ai_assessment: assessment,
-            }),
-          },
-        ).catch((err) => console.error("Save assessment failed:", err));
-
         const ext = audioBlob.type.includes("mp4")
           ? "recording.mp4"
           : audioBlob.type.includes("webm")
@@ -315,18 +300,6 @@ export default function WordReadingActivity({
       });
 
       toast.success(t("wordReading.toast.uploaded") || "Recording uploaded");
-
-      // 🎯 Issue #227: 上傳成功後，有額度時自動背景分析
-      if (canUseAiAnalysis && currentItem.text) {
-        performAnalysisAndSave({
-          audioBlob: blob,
-          text: currentItem.text,
-          itemIndex: capturedIndex,
-          progressId: result.progress_id,
-        }).catch((err) =>
-          console.error("Background analysis after upload failed:", err),
-        );
-      }
     } catch (error) {
       console.error("Upload error:", error);
       toast.error(t("wordReading.toast.uploadFailed") || "Upload failed");
@@ -366,9 +339,8 @@ export default function WordReadingActivity({
       return updated;
     });
 
-    // Note: Assessment is already persisted by the template's
-    // uploadAnalysisInBackground (upload-analysis endpoint).
-    // No need to call save-assessment here to avoid double DB write.
+    // Assessment is persisted by the template's uploadAnalysisInBackground
+    // or by background performAnalysisAndSave (both use upload-analysis endpoint).
   };
 
   // Navigate to next item

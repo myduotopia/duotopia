@@ -1736,8 +1736,69 @@ async def upload_pronunciation_analysis(
             if "completeness_score" in analysis:
                 progress.completeness_score = analysis["completeness_score"]
 
-            # 存储完整分析结果（包含 metadata）
-            progress.ai_feedback = json.dumps(analysis)
+            # 構建結構化 ai_feedback（與 save_assessment_result 一致）
+            words = analysis.get("detailed_words", [])
+            # 若前端傳的是簡化 word_details 而非 detailed_words，使用 word_details
+            if not words:
+                words = analysis.get("word_details", [])
+
+            ai_feedback = {
+                # 總體分數
+                "accuracy_score": analysis.get("accuracy_score"),
+                "fluency_score": analysis.get("fluency_score"),
+                "pronunciation_score": analysis.get("pronunciation_score"),
+                "completeness_score": analysis.get("completeness_score"),
+                # 文本資訊
+                "reference_text": analysis.get("reference_text", ""),
+                "recognized_text": analysis.get("recognized_text", ""),
+                # 舊版相容（簡化的單字詳情）
+                "word_details": [
+                    {
+                        "word": w.get("word", ""),
+                        "accuracy_score": w.get(
+                            "accuracy_score", w.get("accuracyScore", 0)
+                        ),
+                        "error_type": w.get("error_type", w.get("errorType", "None")),
+                    }
+                    for w in words
+                ],
+                # 新版詳細資訊（包含音節和音素）
+                "detailed_words": words,
+                # 分析摘要
+                "analysis_summary": {
+                    "total_words": len(words),
+                    "problematic_words": [
+                        w.get("word", "")
+                        for w in words
+                        if w.get("accuracy_score", w.get("accuracyScore", 100)) < 80
+                    ],
+                    "low_score_phonemes": [],
+                    "assessment_time": datetime.now().isoformat(),
+                },
+                # 保留前端 metadata
+                "_metadata": analysis.get("_metadata", {}),
+            }
+
+            # 收集低分音素用於教學建議
+            for word in words:
+                for phoneme in word.get("phonemes", []):
+                    score = phoneme.get(
+                        "accuracy_score", phoneme.get("accuracyScore", 100)
+                    )
+                    if score < 70:
+                        ai_feedback["analysis_summary"]["low_score_phonemes"].append(
+                            {
+                                "phoneme": phoneme.get("phoneme", ""),
+                                "score": score,
+                                "in_word": word.get("word", ""),
+                            }
+                        )
+
+            # 如果有韻律分數，加入
+            if "prosody_score" in analysis:
+                ai_feedback["prosody_score"] = analysis["prosody_score"]
+
+            progress.ai_feedback = json.dumps(ai_feedback)
             progress.ai_assessed_at = datetime.now()
 
             # 更新状态
