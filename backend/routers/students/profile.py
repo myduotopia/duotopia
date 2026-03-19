@@ -186,10 +186,10 @@ async def update_student_password(
             status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
         )
 
-    # 取得有效密碼：有 identity_id 就用 Identity 密碼，否則用本地密碼
+    # 取得有效密碼：已遷移至 Identity 就用 Identity 密碼，否則用本地密碼
     effective_hash = student.password_hash
     identity = None
-    if student.identity_id:
+    if student.password_migrated_to_identity and student.identity_id:
         identity = db.query(Identity).filter(Identity.id == student.identity_id).first()
         if identity and identity.password_hash:
             effective_hash = identity.password_hash
