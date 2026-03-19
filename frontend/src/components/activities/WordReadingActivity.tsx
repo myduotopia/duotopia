@@ -113,7 +113,11 @@ export default function WordReadingActivity({
       progressId?: number;
     }) => {
       const { audioBlob, text, itemIndex, progressId } = params;
-      const azureResult = await analyzePronunciation(audioBlob, text, "Phoneme");
+      const azureResult = await analyzePronunciation(
+        audioBlob,
+        text,
+        "Phoneme",
+      );
       if (!azureResult) return;
 
       const assessment = {
