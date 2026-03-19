@@ -45,6 +45,13 @@ interface WordItem {
     fluency_score?: number;
     completeness_score?: number;
     pronunciation_score?: number;
+    detailed_words?: Array<{
+      index: number;
+      word: string;
+      accuracy_score: number;
+      error_type?: string;
+      phonemes?: Array<{ phoneme: string; accuracy_score: number }>;
+    }>;
   };
   teacher_feedback?: string;
   teacher_passed?: boolean;
@@ -61,6 +68,7 @@ interface WordReadingActivityProps {
   showImage?: boolean;
   onComplete?: () => void;
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
+  readOnly?: boolean; // 已提交/已完成/已訂正時禁止修改
 }
 
 export default function WordReadingActivity({
@@ -71,6 +79,7 @@ export default function WordReadingActivity({
   showTranslation: _showTranslationProp = true, // 保留 prop 但使用 API 返回的值
   showImage: _showImageProp = true, // 保留 prop 但使用 API 返回的值
   onComplete,
+  readOnly = false,
   canUseAiAnalysis: canUseAiAnalysisProp,
 }: WordReadingActivityProps) {
   const { t } = useTranslation();
@@ -104,7 +113,11 @@ export default function WordReadingActivity({
       progressId?: number;
     }) => {
       const { audioBlob, text, itemIndex, progressId } = params;
-      const azureResult = await analyzePronunciation(audioBlob, text);
+      const azureResult = await analyzePronunciation(
+        audioBlob,
+        text,
+        "Phoneme",
+      );
       if (!azureResult) return;
 
       const assessment = {
@@ -112,6 +125,9 @@ export default function WordReadingActivity({
         fluency_score: azureResult.fluencyScore,
         completeness_score: azureResult.completenessScore,
         pronunciation_score: azureResult.pronunciationScore,
+        // 🎯 音素詳細資料（重開時可還原圖表）
+        detailed_words: azureResult.detailed_words || [],
+        reference_text: text,
       };
 
       setItems((prev) => {
@@ -125,21 +141,6 @@ export default function WordReadingActivity({
 
       const apiUrl = import.meta.env.VITE_API_URL || "";
       if (progressId) {
-        fetch(
-          `${apiUrl}/api/students/assignments/${assignmentId}/vocabulary/save-assessment`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              progress_id: progressId,
-              ai_assessment: assessment,
-            }),
-          },
-        ).catch((err) => console.error("Save assessment failed:", err));
-
         const ext = audioBlob.type.includes("mp4")
           ? "recording.mp4"
           : audioBlob.type.includes("webm")
@@ -155,6 +156,8 @@ export default function WordReadingActivity({
             fluency_score: azureResult.fluencyScore,
             completeness_score: azureResult.completenessScore,
             overall_score: azureResult.pronunciationScore,
+            detailed_words: azureResult.detailed_words || [],
+            reference_text: text,
           }),
         );
         analysisForm.append("progress_id", progressId.toString());
@@ -279,6 +282,12 @@ export default function WordReadingActivity({
 
       const result = await response.json();
 
+      // Revoke blob URL before replacing with server URL to prevent memory leak
+      const oldUrl = items[capturedIndex]?.recording_url;
+      if (oldUrl && oldUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(oldUrl);
+      }
+
       // Update with server URL
       setItems((prev) => {
         const updated = [...prev];
@@ -291,18 +300,6 @@ export default function WordReadingActivity({
       });
 
       toast.success(t("wordReading.toast.uploaded") || "Recording uploaded");
-
-      // 🎯 Issue #227: 上傳成功後，有額度時自動背景分析
-      if (canUseAiAnalysis && currentItem.text) {
-        performAnalysisAndSave({
-          audioBlob: blob,
-          text: currentItem.text,
-          itemIndex: capturedIndex,
-          progressId: result.progress_id,
-        }).catch((err) =>
-          console.error("Background analysis after upload failed:", err),
-        );
-      }
     } catch (error) {
       console.error("Upload error:", error);
       toast.error(t("wordReading.toast.uploadFailed") || "Upload failed");
@@ -318,10 +315,15 @@ export default function WordReadingActivity({
     fluencyScore: number;
     completenessScore: number;
     pronunciationScore: number;
+    detailed_words?: Array<{
+      index: number;
+      word: string;
+      accuracy_score: number;
+      error_type?: string;
+      phonemes?: Array<{ phoneme: string; accuracy_score: number }>;
+    }>;
   }) => {
-    const currentItem = items[currentIndex];
-
-    // Update local state
+    // Update local state（含音素詳細資料，切換題目時可還原）
     setItems((prev) => {
       const updated = [...prev];
       updated[currentIndex] = {
@@ -331,39 +333,14 @@ export default function WordReadingActivity({
           fluency_score: result.fluencyScore,
           completeness_score: result.completenessScore,
           pronunciation_score: result.pronunciationScore,
+          detailed_words: result.detailed_words,
         },
       };
       return updated;
     });
 
-    // Save to server (skip in preview and demo mode)
-    if (!isPreviewMode && !isDemoMode && currentItem.progress_id) {
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || "";
-
-        await fetch(
-          `${apiUrl}/api/students/assignments/${assignmentId}/vocabulary/save-assessment`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              progress_id: currentItem.progress_id,
-              ai_assessment: {
-                accuracy_score: result.accuracyScore,
-                fluency_score: result.fluencyScore,
-                completeness_score: result.completenessScore,
-                pronunciation_score: result.pronunciationScore,
-              },
-            }),
-          },
-        );
-      } catch (error) {
-        console.error("Failed to save assessment:", error);
-      }
-    }
+    // Assessment is persisted by the template's uploadAnalysisInBackground
+    // or by background performAnalysisAndSave (both use upload-analysis endpoint).
   };
 
   // Navigate to next item
@@ -380,6 +357,12 @@ export default function WordReadingActivity({
         (async () => {
           try {
             const resp = await fetch(currentItem.recording_url!);
+            if (!resp.ok) {
+              console.warn(
+                `Audio fetch failed (${resp.status}), skipping background analysis`,
+              );
+              return;
+            }
             const audioBlob = await resp.blob();
             await performAnalysisAndSave({
               audioBlob,
@@ -405,6 +388,36 @@ export default function WordReadingActivity({
       setCurrentIndex(currentIndex - 1);
     }
   };
+
+  // Handle clear recording — 同步刪除後端錄音和評估
+  const handleClearRecording = useCallback(async () => {
+    const currentItem = items[currentIndex];
+    if (!currentItem?.progress_id) return;
+
+    // 清除本地 state（題號按鈕立即變白）
+    setItems((prev) => {
+      const updated = [...prev];
+      updated[currentIndex] = {
+        ...updated[currentIndex],
+        recording_url: undefined,
+        ai_assessment: undefined,
+      };
+      return updated;
+    });
+
+    // 背景呼叫後端 DELETE API（優先使用 progress_id，避免 index 排序問題）
+    if (!isPreviewMode && !isDemoMode) {
+      const apiUrl = import.meta.env.VITE_API_URL || "";
+      const progressId = currentItem?.progress_id;
+      const deleteUrl = progressId
+        ? `${apiUrl}/api/speech/assessment/${assignmentId}/progress/${progressId}`
+        : `${apiUrl}/api/speech/assessment/${assignmentId}/item/${currentIndex}`;
+      fetch(deleteUrl, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch((err) => console.error("Clear recording failed:", err));
+    }
+  }, [items, currentIndex, assignmentId, token, isPreviewMode, isDemoMode]);
 
   // Handle skip
   const handleSkip = () => {
@@ -441,6 +454,7 @@ export default function WordReadingActivity({
         .filter(({ item }) => item.recording_url?.startsWith("blob:"));
 
       if (blobItems.length > 0) {
+        let uploadFailures = 0;
         for (const { item, index } of blobItems) {
           try {
             const resp = await fetch(item.recording_url!);
@@ -483,11 +497,22 @@ export default function WordReadingActivity({
               return updated;
             });
           } catch (error) {
+            uploadFailures++;
             console.error(
               `Failed to upload blob for item ${index + 1}:`,
               error,
             );
           }
+        }
+
+        if (uploadFailures > 0) {
+          toast.error(
+            t("wordReading.toast.uploadFailedCount", {
+              count: uploadFailures,
+            }) || `${uploadFailures} recording(s) failed to upload`,
+          );
+          setSubmitting(false);
+          return;
         }
       }
 
@@ -506,6 +531,12 @@ export default function WordReadingActivity({
           for (const { item, index } of unanalyzedItems) {
             try {
               const audioResp = await fetch(item.recording_url!);
+              if (!audioResp.ok) {
+                console.warn(
+                  `Audio fetch failed for item ${index + 1} (${audioResp.status})`,
+                );
+                continue;
+              }
               const audioBlob = await audioResp.blob();
               await performAnalysisAndSave({
                 audioBlob,
@@ -607,7 +638,7 @@ export default function WordReadingActivity({
       <Progress value={progress} className="h-2" />
 
       {/* Item Navigation Dots */}
-      <div className="flex gap-1 overflow-x-auto justify-center pb-1">
+      <div className="flex gap-1 overflow-x-auto pb-1 mx-auto w-fit max-w-full">
         {items.map((item, index) => {
           const isActive = index === currentIndex;
           const isCompleted = !!item.recording_url;
@@ -650,11 +681,12 @@ export default function WordReadingActivity({
         existingAudioUrl={currentItem.recording_url}
         onRecordingComplete={handleRecordingComplete}
         progressId={currentItem.progress_id}
-        readOnly={false}
+        readOnly={readOnly}
         isDemoMode={isDemoMode}
         timeLimit={timeLimitPerQuestion}
         onSkip={handleSkip}
         onAssessmentComplete={handleAssessmentComplete}
+        onClearRecording={handleClearRecording}
         canUseAiAnalysis={canUseAiAnalysisProp ?? canUseAiAnalysisFromApi}
       />
 

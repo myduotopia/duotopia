@@ -887,7 +887,7 @@ async def get_vocabulary_activities(
 
                 # AI Assessment scores
                 if progress.ai_assessed_at:
-                    item_data["ai_assessment"] = {
+                    ai_assessment_data = {
                         "accuracy_score": (
                             float(progress.accuracy_score)
                             if progress.accuracy_score
@@ -909,6 +909,27 @@ async def get_vocabulary_activities(
                             else None
                         ),
                     }
+
+                    # 🎯 從 ai_feedback 取出音素詳細資料（重開時還原圖表）
+                    if progress.ai_feedback:
+                        try:
+                            ai_fb = (
+                                json.loads(progress.ai_feedback)
+                                if isinstance(progress.ai_feedback, str)
+                                else progress.ai_feedback
+                            )
+                            if ai_fb.get("detailed_words"):
+                                ai_assessment_data["detailed_words"] = ai_fb[
+                                    "detailed_words"
+                                ]
+                            if ai_fb.get("reference_text"):
+                                ai_assessment_data["reference_text"] = ai_fb[
+                                    "reference_text"
+                                ]
+                        except (json.JSONDecodeError, AttributeError):
+                            pass
+
+                    item_data["ai_assessment"] = ai_assessment_data
 
                 # Teacher review
                 if progress.teacher_reviewed_at:
@@ -941,6 +962,9 @@ async def get_vocabulary_activities(
         "practice_mode": "word_reading",
         "show_translation": show_translation,
         "show_image": show_image,
+        "time_limit_per_question": (
+            assignment.time_limit_per_question if assignment else None
+        ),
         "total_items": len(items),
         "items": items,
         "can_use_ai_analysis": can_use_ai_analysis,  # 根據工作區判斷的 AI 分析額度
@@ -1053,6 +1077,7 @@ async def submit_vocabulary_assignment(
     if student_assignment.status in [
         AssignmentStatus.SUBMITTED,
         AssignmentStatus.GRADED,
+        AssignmentStatus.RESUBMITTED,
     ]:
         return {
             "success": True,
@@ -1061,7 +1086,11 @@ async def submit_vocabulary_assignment(
         }
 
     # Update assignment status
-    student_assignment.status = AssignmentStatus.SUBMITTED
+    # 待訂正（RETURNED）提交後為已訂正（RESUBMITTED），其他為已提交（SUBMITTED）
+    if student_assignment.status == AssignmentStatus.RETURNED:
+        student_assignment.status = AssignmentStatus.RESUBMITTED
+    else:
+        student_assignment.status = AssignmentStatus.SUBMITTED
     student_assignment.submitted_at = datetime.now(timezone.utc)
 
     # Update all item progress to SUBMITTED status
@@ -1074,7 +1103,7 @@ async def submit_vocabulary_assignment(
     return {
         "success": True,
         "message": "Assignment submitted successfully",
-        "status": "SUBMITTED",
+        "status": student_assignment.status.value,
         "submitted_at": student_assignment.submitted_at.isoformat(),
     }
 

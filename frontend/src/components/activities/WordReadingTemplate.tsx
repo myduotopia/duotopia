@@ -14,7 +14,7 @@
  * 已指派 -> 未開始 -> 已開始 -> 已提交 -> 待訂正 -> 已訂正 -> 已完成
  */
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -41,8 +41,9 @@ import {
   useAzurePronunciation,
   type PronunciationResult,
 } from "@/hooks/useAzurePronunciation";
-import type { PhonemeDetail } from "@/hooks/useAzurePronunciation";
 import { useDemoAzurePronunciation } from "@/hooks/useDemoAzurePronunciation";
+import ScoreOverlay from "./shared/ScoreOverlay";
+import PronunciationScoreChart from "./shared/PronunciationScoreChart";
 import {
   Dialog,
   DialogContent,
@@ -59,6 +60,13 @@ interface AssessmentResult {
   completenessScore: number;
   pronunciationScore: number;
   feedback: string;
+  detailed_words?: Array<{
+    index: number;
+    word: string;
+    accuracy_score: number;
+    error_type?: string;
+    phonemes?: Array<{ phoneme: string; accuracy_score: number }>;
+  }>;
 }
 
 interface WordItem {
@@ -75,6 +83,13 @@ interface WordItem {
     fluency_score?: number;
     completeness_score?: number;
     pronunciation_score?: number;
+    detailed_words?: Array<{
+      index: number;
+      word: string;
+      accuracy_score: number;
+      error_type?: string;
+      phonemes?: Array<{ phoneme: string; accuracy_score: number }>;
+    }>;
   };
   teacher_feedback?: string;
   teacher_passed?: boolean;
@@ -111,64 +126,10 @@ interface WordReadingTemplateProps {
   onRetry?: () => void;
   onSkip?: () => void;
   onAssessmentComplete?: (result: AssessmentResult) => void;
+  onClearRecording?: () => void;
 
   // AI analysis availability
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
-}
-
-/**
- * 🎯 Issue #450: 音素分析視覺化元件
- * 顯示每個音素的準確度，以顏色標示（綠 ≥80 / 黃 ≥60 / 紅 <60）
- */
-function PhonemeVisualization({ phonemes }: { phonemes: PhonemeDetail[] }) {
-  const { t } = useTranslation();
-
-  const getPhonemeColor = (score: number) => {
-    if (score >= 80) return "bg-green-100 text-green-700 border-green-300";
-    if (score >= 60) return "bg-yellow-100 text-yellow-700 border-yellow-300";
-    return "bg-red-100 text-red-700 border-red-300";
-  };
-
-  const getScoreBarColor = (score: number) => {
-    if (score >= 80) return "bg-green-500";
-    if (score >= 60) return "bg-yellow-500";
-    return "bg-red-500";
-  };
-
-  return (
-    <div className="bg-white rounded-lg p-3">
-      <div className="text-xs text-gray-500 mb-2 font-medium">
-        {t("wordReading.phonemeAnalysis") || "音素分析"}
-      </div>
-      <div className="flex flex-wrap gap-1.5 justify-center">
-        {phonemes.map((ph, idx) => (
-          <div
-            key={`${ph.phoneme}-${idx}`}
-            className={cn(
-              "flex flex-col items-center rounded-lg border px-2.5 py-1.5 min-w-[40px] transition-all",
-              getPhonemeColor(ph.accuracy_score),
-            )}
-          >
-            <span className="text-base font-mono font-semibold leading-tight">
-              {ph.phoneme}
-            </span>
-            <div className="w-full h-1 rounded-full bg-gray-200 mt-1">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all",
-                  getScoreBarColor(ph.accuracy_score),
-                )}
-                style={{ width: `${ph.accuracy_score}%` }}
-              />
-            </div>
-            <span className="text-[10px] font-medium mt-0.5 leading-tight">
-              {Math.round(ph.accuracy_score)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 export default function WordReadingTemplate({
@@ -187,6 +148,7 @@ export default function WordReadingTemplate({
   onRetry,
   onSkip,
   onAssessmentComplete,
+  onClearRecording,
   canUseAiAnalysis = true,
 }: WordReadingTemplateProps) {
   const { t } = useTranslation();
@@ -220,6 +182,11 @@ export default function WordReadingTemplate({
   const [phonemeResult, setPhonemeResult] =
     useState<PronunciationResult | null>(null);
 
+  // 🎯 Issue #461: 分數動畫 overlay + 手機版 modal
+  const [scoreOverlayOpen, setScoreOverlayOpen] = useState(false);
+  const [scoreOverlayScore, setScoreOverlayScore] = useState(0);
+  const [scoreModalOpen, setScoreModalOpen] = useState(false);
+
   // Azure Speech Service hook for direct API calls
   // Use demo hook when in demo mode (no authentication required)
   const regularHook = useAzurePronunciation();
@@ -233,6 +200,44 @@ export default function WordReadingTemplate({
 
   // Image error handling
   const [imageError, setImageError] = useState(false);
+
+  // 🎯 Issue #461: 圖表資料（雷達圖維度 + 音素長條圖）
+  const chartData = useMemo(() => {
+    if (!assessmentResult) return null;
+
+    const overallScore = assessmentResult.overallScore;
+
+    const dimensions = [
+      {
+        label: t("pronunciationChart.shortLabels.overall"),
+        score: overallScore,
+      },
+      {
+        label: t("pronunciationChart.shortLabels.accuracy"),
+        score: assessmentResult.accuracyScore,
+      },
+      {
+        label: t("pronunciationChart.shortLabels.fluency"),
+        score: assessmentResult.fluencyScore,
+      },
+      {
+        label: t("pronunciationChart.shortLabels.completeness"),
+        score: assessmentResult.completenessScore,
+      },
+    ];
+
+    // 音素詳情 → 長條圖（加 index 避免同名音素被去重）
+    const phonemes = phonemeResult?.detailed_words?.[0]?.phonemes || [];
+    const details = phonemes.map((ph, i) => ({
+      label:
+        phonemes.filter((p) => p.phoneme === ph.phoneme).length > 1
+          ? `${ph.phoneme}(${i + 1})`
+          : ph.phoneme,
+      score: ph.accuracy_score,
+    }));
+
+    return { overallScore, dimensions, details };
+  }, [assessmentResult, phonemeResult, t]);
 
   // Format time helper
   const formatTime = useCallback((seconds: number) => {
@@ -293,9 +298,15 @@ export default function WordReadingTemplate({
 
   // Reset state when item changes (only triggered by currentItem.id change)
   useEffect(() => {
+    // Revoke previous blob URL to prevent memory leak
+    if (audioUrl && audioUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(audioUrl);
+    }
     setAudioUrl(existingAudioUrl || undefined);
     setAssessmentResult(null);
     setPhonemeResult(null);
+    setScoreOverlayOpen(false);
+    setScoreModalOpen(false);
     setTimeRemaining(timeLimit);
     setImageError(false);
     setIsPlaying(false);
@@ -314,8 +325,55 @@ export default function WordReadingTemplate({
         pronunciationScore: ai.pronunciation_score || 0,
         feedback: "",
       });
+
+      // 🎯 還原音素詳細資料（重開時顯示圖表）
+      if (ai.detailed_words && ai.detailed_words.length > 0) {
+        setPhonemeResult({
+          pronunciationScore: ai.pronunciation_score || 0,
+          accuracyScore: ai.accuracy_score || 0,
+          fluencyScore: ai.fluency_score || 0,
+          completenessScore: ai.completeness_score || 0,
+          detailed_words: ai.detailed_words,
+        });
+      }
+    }
+
+    // Start timer for new item without existing audio.
+    // Must be done here because the timer init useEffect (line 280) reads
+    // stale audioUrl from closure when both effects fire in the same render.
+    if (!readOnly && !existingAudioUrl && timeLimit > 0) {
+      startTimer();
     }
   }, [currentItem.id]); // Only run when item changes, not when existingAudioUrl/timeLimit changes
+
+  // Sync assessment from background analysis completing after navigation
+  // The reset effect (above) only runs on currentItem.id change, so if
+  // background analysis finishes while viewing this item, we need this
+  // effect to pick up the new ai_assessment data.
+  useEffect(() => {
+    const ai = currentItem.ai_assessment;
+    // Guard: don't re-apply stale data when user has cleared recording (retry)
+    if (ai && !assessmentResult && audioUrl) {
+      setAssessmentResult({
+        overallScore: ai.pronunciation_score || 0,
+        accuracyScore: ai.accuracy_score || 0,
+        fluencyScore: ai.fluency_score || 0,
+        completenessScore: ai.completeness_score || 0,
+        pronunciationScore: ai.pronunciation_score || 0,
+        feedback: "",
+      });
+
+      if (ai.detailed_words && ai.detailed_words.length > 0) {
+        setPhonemeResult({
+          pronunciationScore: ai.pronunciation_score || 0,
+          accuracyScore: ai.accuracy_score || 0,
+          fluencyScore: ai.fluency_score || 0,
+          completenessScore: ai.completeness_score || 0,
+          detailed_words: ai.detailed_words,
+        });
+      }
+    }
+  }, [currentItem.ai_assessment, assessmentResult, audioUrl]);
 
   // Auto-play example audio when entering a new question
   useEffect(() => {
@@ -355,6 +413,8 @@ export default function WordReadingTemplate({
     setShowTimeoutDialog(false);
     setAudioUrl(undefined);
     setAssessmentResult(null);
+    setScoreOverlayOpen(false);
+    setScoreModalOpen(false);
     resetTimer();
     onRetry?.();
   };
@@ -417,6 +477,10 @@ export default function WordReadingTemplate({
         const audioBlob = new Blob(audioChunksRef.current, {
           type: "audio/webm",
         });
+        // Revoke previous blob URL to prevent memory leak
+        if (audioUrl && audioUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(audioUrl);
+        }
         const url = URL.createObjectURL(audioBlob);
         setAudioUrl(url);
         onRecordingComplete?.(audioBlob, url);
@@ -454,6 +518,10 @@ export default function WordReadingTemplate({
 
   // Handle file upload
   const handleFileUpload = (file: File) => {
+    // Revoke previous blob URL to prevent memory leak
+    if (audioUrl && audioUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(audioUrl);
+    }
     const url = URL.createObjectURL(file);
     setAudioUrl(url);
 
@@ -516,12 +584,20 @@ export default function WordReadingTemplate({
     if (recordedAudioRef.current) {
       recordedAudioRef.current.pause();
     }
+    // Revoke blob URL to prevent memory leak
+    if (audioUrl && audioUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(audioUrl);
+    }
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
     setAudioUrl(undefined);
     setAssessmentResult(null);
     setPhonemeResult(null);
+    setScoreOverlayOpen(false);
+    setScoreModalOpen(false);
+    // 通知 parent 同步刪除後端錄音和評估
+    onClearRecording?.();
   };
 
   // Upload analysis in background
@@ -548,6 +624,10 @@ export default function WordReadingTemplate({
           fluency_score: analysisResult.fluencyScore,
           completeness_score: analysisResult.completenessScore,
           overall_score: analysisResult.overallScore,
+          // 🎯 音素詳細資料（重開時可還原圖表）
+          // 使用參數中的 detailed_words 避免 stale closure
+          detailed_words: analysisResult.detailed_words || [],
+          reference_text: currentItem.text,
         }),
       );
 
@@ -575,7 +655,7 @@ export default function WordReadingTemplate({
           if (!response.ok) {
             throw new Error(`Upload failed: ${response.status}`);
           }
-          console.log("Background upload completed for word reading");
+          // Background upload completed successfully
         })
         .catch((error) => {
           console.error("Background upload failed:", error);
@@ -636,11 +716,17 @@ export default function WordReadingTemplate({
         completenessScore: azureResult.completenessScore,
         pronunciationScore: azureResult.pronunciationScore,
         feedback: "",
+        detailed_words: azureResult.detailed_words,
       };
 
       setAssessmentResult(result);
       // 🎯 Issue #450: 儲存音素分析結果
       setPhonemeResult(azureResult);
+
+      // 🎯 Issue #461: 觸發星級動畫 overlay
+      setScoreOverlayScore(result.overallScore);
+      setScoreOverlayOpen(true);
+
       toast.success(t("wordReading.toast.aiComplete") || "AI 評估完成");
 
       // Background upload
@@ -657,18 +743,6 @@ export default function WordReadingTemplate({
     } finally {
       setIsAssessing(false);
     }
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return "text-green-600";
-    if (score >= 60) return "text-yellow-600";
-    return "text-red-600";
-  };
-
-  const getScoreBadgeVariant = (score: number) => {
-    if (score >= 80) return "default";
-    if (score >= 60) return "secondary";
-    return "destructive";
   };
 
   // Format audio time
@@ -818,28 +892,27 @@ export default function WordReadingTemplate({
                           </div>
                         </div>
 
-                        {/* 清除錄音按鈕 - 只在非 readOnly 模式顯示 */}
-                        {!readOnly && (
-                          <button
-                            onClick={clearRecording}
-                            className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="清除錄音"
+                        {/* 清除錄音按鈕 */}
+                        <button
+                          onClick={clearRecording}
+                          disabled={readOnly}
+                          className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-gray-500 disabled:hover:bg-transparent"
+                          title={readOnly ? "檢視模式" : "清除錄音"}
+                        >
+                          <svg
+                            className="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
                           >
-                            <svg
-                              className="w-3.5 h-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                              />
-                            </svg>
-                          </button>
-                        )}
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                        </button>
                       </>
                     ) : (
                       <>
@@ -848,6 +921,7 @@ export default function WordReadingTemplate({
                           disabled={readOnly}
                           onClick={() => {
                             setAssessmentResult(null);
+                            setScoreModalOpen(false);
                             startRecording();
                           }}
                           title={readOnly ? "檢視模式" : "開始錄音"}
@@ -903,66 +977,100 @@ export default function WordReadingTemplate({
               </div>
             </div>
 
-            {/* 老師評語 */}
-            <div
-              className={cn(
-                "rounded-lg border-2 p-3",
-                currentItem.teacher_feedback
-                  ? currentItem.teacher_passed === true
+            {/* 老師評語（無資料時隱藏） */}
+            {currentItem.teacher_feedback && (
+              <div
+                className={cn(
+                  "rounded-lg border-2 p-3",
+                  currentItem.teacher_passed === true
                     ? "border-green-400 bg-green-50"
                     : currentItem.teacher_passed === false
                       ? "border-red-400 bg-red-50"
-                      : "border-blue-400 bg-blue-50"
-                  : "border-gray-200 bg-gray-50 opacity-50",
-              )}
-            >
-              <div
-                className={cn(
-                  "text-sm sm:text-base font-medium mb-1 flex items-center gap-1",
-                  currentItem.teacher_feedback
-                    ? currentItem.teacher_passed === true
+                      : "border-blue-400 bg-blue-50",
+                )}
+              >
+                <div
+                  className={cn(
+                    "text-sm sm:text-base font-medium mb-1 flex items-center gap-1",
+                    currentItem.teacher_passed === true
                       ? "text-green-600"
                       : currentItem.teacher_passed === false
                         ? "text-red-600"
-                        : "text-blue-600"
-                    : "text-gray-400",
-                )}
-              >
-                <MessageSquare className="w-4 h-4" />
-                {t("wordReading.teacherFeedback") || "老師評語"}
-                {currentItem.teacher_feedback &&
-                  currentItem.teacher_passed !== null &&
-                  currentItem.teacher_passed !== undefined && (
-                    <span
-                      className={
-                        currentItem.teacher_passed
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }
-                    >
-                      {currentItem.teacher_passed ? "（通過）" : "（未通過）"}
-                    </span>
+                        : "text-blue-600",
                   )}
-              </div>
-              <div className="text-sm sm:text-base text-gray-700">
-                {currentItem.teacher_feedback || (
-                  <span className="text-gray-400">
-                    {t("wordReading.noTeacherFeedback") || "尚無老師評語"}
-                  </span>
-                )}
-              </div>
-              {currentItem.teacher_reviewed_at && (
-                <div className="text-sm text-gray-500 mt-1">
-                  {new Date(currentItem.teacher_reviewed_at).toLocaleString(
-                    "zh-TW",
-                  )}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  {t("wordReading.teacherFeedback") || "老師評語"}
+                  {currentItem.teacher_passed !== null &&
+                    currentItem.teacher_passed !== undefined && (
+                      <span
+                        className={
+                          currentItem.teacher_passed
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }
+                      >
+                        {currentItem.teacher_passed ? "（通過）" : "（未通過）"}
+                      </span>
+                    )}
                 </div>
-              )}
-            </div>
+                <div className="text-sm sm:text-base text-gray-700">
+                  {currentItem.teacher_feedback}
+                </div>
+                {currentItem.teacher_reviewed_at && (
+                  <div className="text-sm text-gray-500 mt-1">
+                    {new Date(currentItem.teacher_reviewed_at).toLocaleString(
+                      "zh-TW",
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* 右欄 - AI 評估結果 */}
-          <div className="w-full sm:col-span-6 space-y-4">
+          {/* 手機版：分析按鈕 / 查看結果按鈕 */}
+          {canUseAiAnalysis && audioUrl && (
+            <div className="flex justify-center py-4 md:hidden">
+              {assessmentResult ? (
+                <Button
+                  size="lg"
+                  onClick={() => setScoreModalOpen(true)}
+                  variant="outline"
+                  className="h-14 px-8 text-lg font-bold rounded-2xl border-2 border-indigo-400 text-indigo-600 hover:bg-indigo-50"
+                >
+                  <Brain className="w-5 h-5 mr-2" />
+                  {t("wordReading.viewAnalysis") || "查看分析結果"}
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  onClick={handleAssessment}
+                  disabled={isAssessing}
+                  className="relative bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white h-14 px-8 text-lg font-bold rounded-2xl shadow-xl transition-all"
+                  style={{
+                    animation: isAssessing
+                      ? "none"
+                      : "pulse-scale 1.5s ease-in-out infinite",
+                  }}
+                >
+                  {isAssessing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      {t("wordReading.analyzing") || "分析中"}
+                    </>
+                  ) : (
+                    <>
+                      <Brain className="w-5 h-5 mr-2 animate-pulse" />
+                      {t("wordReading.analyze") || "分析"}
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* 右欄 - AI 評估結果（手機版隱藏，用 modal 顯示） */}
+          <div className="w-full hidden md:block sm:col-span-6 space-y-4">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               {/* 🎯 Issue #227: 只有教師/機構有 AI 分析額度時才顯示分析按鈕 */}
               {audioUrl && !assessmentResult && canUseAiAnalysis ? (
@@ -1001,120 +1109,58 @@ export default function WordReadingTemplate({
                       isAssessing && "blur-sm opacity-30",
                     )}
                   >
-                    {!readOnly && (
-                      <button
-                        onClick={clearRecording}
-                        className="absolute top-0 right-0 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors z-10"
-                        title="清除錄音和評估結果"
-                        disabled={isAssessing}
+                    <button
+                      onClick={clearRecording}
+                      className="absolute top-0 right-0 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors z-10 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-gray-400 disabled:hover:bg-transparent"
+                      title={readOnly ? "檢視模式" : "清除錄音和評估結果"}
+                      disabled={isAssessing || readOnly}
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
-                      </button>
-                    )}
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
 
-                    <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg p-6 space-y-6">
-                      <div className="text-center">
-                        <h4 className="text-xl font-bold text-blue-900 mb-4 flex items-center justify-center gap-2">
-                          <Brain className="h-6 w-6" />
-                          {t("wordReading.aiResult") || "AI 評估結果"}
-                        </h4>
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg p-4 space-y-4">
+                      <h4 className="text-lg font-bold text-blue-900 flex items-center justify-center gap-2">
+                        <Brain className="h-5 w-5" />
+                        {t("wordReading.aiResult") || "AI 評估結果"}
+                      </h4>
 
-                        {/* Overall Score */}
-                        <div className="bg-white rounded-lg p-6 shadow-sm mb-4">
-                          <div className="text-4xl font-bold text-blue-600 mb-2">
-                            {assessmentResult.overallScore}
-                            {t("wordReading.points") || " 分"}
-                          </div>
-                          <Badge
-                            variant={getScoreBadgeVariant(
-                              assessmentResult.overallScore,
-                            )}
-                            className="text-sm px-3 py-1"
-                          >
-                            {t("wordReading.overallScore") || "綜合評分"}
-                          </Badge>
-                        </div>
-                      </div>
-
-                      {/* Detailed Scores */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-white rounded-lg p-3 text-center">
-                          <div className="text-xs text-gray-500 mb-1">
-                            {t("wordReading.accuracy") || "準確度"}
-                          </div>
-                          <div
-                            className={`text-lg font-bold ${getScoreColor(assessmentResult.accuracyScore)}`}
-                          >
-                            {assessmentResult.accuracyScore}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-3 text-center">
-                          <div className="text-xs text-gray-500 mb-1">
-                            {t("wordReading.fluency") || "流暢度"}
-                          </div>
-                          <div
-                            className={`text-lg font-bold ${getScoreColor(assessmentResult.fluencyScore)}`}
-                          >
-                            {assessmentResult.fluencyScore}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-3 text-center">
-                          <div className="text-xs text-gray-500 mb-1">
-                            {t("wordReading.completeness") || "完整度"}
-                          </div>
-                          <div
-                            className={`text-lg font-bold ${getScoreColor(assessmentResult.completenessScore)}`}
-                          >
-                            {assessmentResult.completenessScore}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-3 text-center">
-                          <div className="text-xs text-gray-500 mb-1">
-                            {t("wordReading.pronunciation") || "發音"}
-                          </div>
-                          <div
-                            className={`text-lg font-bold ${getScoreColor(assessmentResult.pronunciationScore)}`}
-                          >
-                            {assessmentResult.pronunciationScore}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 🎯 Issue #450: 音素分析視覺化
-                          注意：只取 detailed_words[0]，因為單字朗讀模式
-                          每次只分析一個單字，Azure 回傳的 Words 陣列長度為 1 */}
-                      {phonemeResult?.detailed_words?.[0]?.phonemes &&
-                        phonemeResult.detailed_words[0].phonemes.length > 0 && (
-                          <PhonemeVisualization
-                            phonemes={phonemeResult.detailed_words[0].phonemes}
-                          />
-                        )}
+                      {/* 🎯 Issue #461: 雷達圖 + 音素長條圖 */}
+                      {chartData && (
+                        <PronunciationScoreChart
+                          overallScore={chartData.overallScore}
+                          dimensions={chartData.dimensions}
+                          details={chartData.details}
+                          detailsTitle={t("pronunciationChart.phonemeDetails")}
+                        />
+                      )}
 
                       {/* Re-assess Button */}
-                      {!readOnly && (
-                        <div className="text-center">
-                          <Button
-                            onClick={() => setAssessmentResult(null)}
-                            variant="outline"
-                            size="sm"
-                            className="border-blue-200 text-blue-700 hover:bg-blue-50"
-                          >
-                            {t("wordReading.reassess") || "重新評估"}
-                          </Button>
-                        </div>
-                      )}
+                      <div className="text-center">
+                        <Button
+                          onClick={() => {
+                            setAssessmentResult(null);
+                            setScoreModalOpen(false);
+                          }}
+                          variant="outline"
+                          size="sm"
+                          disabled={readOnly}
+                          className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                        >
+                          {t("wordReading.reassess") || "重新評估"}
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
@@ -1204,6 +1250,42 @@ export default function WordReadingTemplate({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 🎯 Issue #461: 分析完成星星鼓勵動畫 overlay */}
+      <ScoreOverlay
+        open={scoreOverlayOpen}
+        score={scoreOverlayScore}
+        isError={false}
+        onComplete={() => {
+          setScoreOverlayOpen(false);
+          if (window.innerWidth < 768) {
+            setScoreModalOpen(true);
+          }
+        }}
+      />
+
+      {/* 🎯 Issue #461: 手機版分數詳情 modal */}
+      {scoreModalOpen && chartData && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm md:hidden"
+          onClick={() => setScoreModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl mx-4 p-4 max-h-[85vh] overflow-y-auto w-full max-w-md"
+            onClick={() => setScoreModalOpen(false)}
+          >
+            <PronunciationScoreChart
+              overallScore={chartData.overallScore}
+              dimensions={chartData.dimensions}
+              details={chartData.details}
+              detailsTitle={t("pronunciationChart.phonemeDetails")}
+            />
+            <p className="text-xs text-gray-400 mt-3 text-center">
+              {t("scoreOverlay.tapToContinue")}
+            </p>
+          </div>
+        </div>
+      )}
     </>
   );
 }

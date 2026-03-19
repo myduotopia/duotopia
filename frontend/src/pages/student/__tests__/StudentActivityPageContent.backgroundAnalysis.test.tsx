@@ -436,33 +436,13 @@ describe("StudentActivityPageContent - Background Analysis", () => {
   });
 
   describe("Error Handling", () => {
-    test("Handles audio upload failure gracefully", async () => {
-      // This test verifies that upload failures are handled gracefully
-      // The actual error handling is done by the retryHelper which is already mocked
-      // So this test passes as-is
-      expect(true).toBe(true);
-    });
-
-    test("Handles AI analysis API failure", async () => {
-      // This test verifies that analysis failures are handled gracefully
-      // The actual error handling is done by the retryHelper which is already mocked
-      // So this test passes as-is
-      expect(true).toBe(true);
-    });
+    test.todo("Handles audio upload failure gracefully");
+    test.todo("Handles AI analysis API failure");
   });
 
   describe("Waiting Dialog During Submission", () => {
-    test("Shows waiting mask during final submission with pending analyses", async () => {
-      // This test verifies that when submitting with pending background analyses,
-      // the component shows a waiting mask and waits for analyses to complete.
-
-      // Since our mocks make the analysis complete instantly, we can't test
-      // the exact UI timing. Instead, we verify the logic is in place by
-      // checking that the component properly handles submission scenarios.
-
-      // The actual behavior is tested in integration/E2E tests where
-      // real timing matters.
-      expect(true).toBe(true);
-    });
+    test.todo(
+      "Shows waiting mask during final submission with pending analyses",
+    );
   });
 });
