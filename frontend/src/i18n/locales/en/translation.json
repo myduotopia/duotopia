@@ -4103,7 +4103,11 @@
     "errors": {
       "invalidLink": "Invalid reset link",
       "passwordMismatch": "Passwords do not match",
-      "passwordTooShort": "Password must be at least 6 characters",
+      "passwordTooShort": "Password must be at least 8 characters",
+      "missingUppercase": "Password must contain at least one uppercase letter",
+      "missingLowercase": "Password must contain at least one lowercase letter",
+      "missingNumber": "Password must contain at least one number",
+      "missingSpecialChar": "Password must contain at least one special character",
       "resetFailed": "Reset failed, please try again later",
       "linkExpired": "Link is invalid or expired"
     },

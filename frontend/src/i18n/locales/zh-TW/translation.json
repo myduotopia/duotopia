@@ -4116,7 +4116,11 @@
     "errors": {
       "invalidLink": "無效的重設連結",
       "passwordMismatch": "密碼不一致",
-      "passwordTooShort": "密碼至少需要6個字元",
+      "passwordTooShort": "密碼至少需要8個字元",
+      "missingUppercase": "密碼需包含至少一個大寫字母",
+      "missingLowercase": "密碼需包含至少一個小寫字母",
+      "missingNumber": "密碼需包含至少一個數字",
+      "missingSpecialChar": "密碼需包含至少一個特殊字元",
       "resetFailed": "重設失敗，請稍後再試",
       "linkExpired": "連結無效或已過期"
     },
