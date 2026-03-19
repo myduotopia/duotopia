@@ -85,13 +85,16 @@ export default function TeacherResetPassword() {
     e.preventDefault();
     setError("");
 
-    // 驗證密碼
-    if (formData.newPassword !== formData.confirmPassword) {
+    // 驗證密碼（先 trim 再驗證，確保驗證的是實際儲存的值）
+    const trimmedPassword = formData.newPassword.trim();
+    const trimmedConfirm = formData.confirmPassword.trim();
+
+    if (trimmedPassword !== trimmedConfirm) {
       setError(t("passwordReset.errors.passwordMismatch"));
       return;
     }
 
-    if (formData.newPassword.length < 6) {
+    if (trimmedPassword.length < 6) {
       setError(t("passwordReset.errors.passwordTooShort"));
       return;
     }
@@ -103,7 +106,7 @@ export default function TeacherResetPassword() {
         "/api/auth/teacher/reset-password",
         {
           token,
-          new_password: formData.newPassword.trim(),
+          new_password: trimmedPassword,
         },
       );
 

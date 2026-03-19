@@ -75,7 +75,7 @@ export default function TeacherRegisterSheet({
       }
       const response = (await apiClient.teacherRegister({
         email: formData.email,
-        password: formData.password,
+        password: formData.password.trim(),
         name: formData.name,
         phone: formData.phone || undefined,
       })) as RegisterResponse;
