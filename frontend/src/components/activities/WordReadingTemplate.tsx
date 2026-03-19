@@ -346,6 +346,34 @@ export default function WordReadingTemplate({
     }
   }, [currentItem.id]); // Only run when item changes, not when existingAudioUrl/timeLimit changes
 
+  // Sync assessment from background analysis completing after navigation
+  // The reset effect (above) only runs on currentItem.id change, so if
+  // background analysis finishes while viewing this item, we need this
+  // effect to pick up the new ai_assessment data.
+  useEffect(() => {
+    const ai = currentItem.ai_assessment;
+    if (ai && !assessmentResult) {
+      setAssessmentResult({
+        overallScore: ai.pronunciation_score || 0,
+        accuracyScore: ai.accuracy_score || 0,
+        fluencyScore: ai.fluency_score || 0,
+        completenessScore: ai.completeness_score || 0,
+        pronunciationScore: ai.pronunciation_score || 0,
+        feedback: "",
+      });
+
+      if (ai.detailed_words && ai.detailed_words.length > 0) {
+        setPhonemeResult({
+          pronunciationScore: ai.pronunciation_score || 0,
+          accuracyScore: ai.accuracy_score || 0,
+          fluencyScore: ai.fluency_score || 0,
+          completenessScore: ai.completeness_score || 0,
+          detailed_words: ai.detailed_words,
+        });
+      }
+    }
+  }, [currentItem.ai_assessment, assessmentResult]);
+
   // Auto-play example audio when entering a new question
   useEffect(() => {
     // Clean up previous audio
