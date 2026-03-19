@@ -3078,6 +3078,7 @@ export default function ClassroomDetail({
               <Button
                 variant="ghost"
                 size="icon"
+                disabled={editorBusy}
                 onClick={() => {
                   if (editorBusy) return;
                   if (
@@ -3135,6 +3136,7 @@ export default function ClassroomDetail({
               <Button
                 variant="ghost"
                 size="icon"
+                disabled={editorBusy}
                 onClick={() => {
                   if (editorBusy) return;
                   if (

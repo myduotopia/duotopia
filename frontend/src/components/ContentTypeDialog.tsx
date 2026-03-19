@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { X, Send, MessageSquare } from "lucide-react";
@@ -103,13 +103,13 @@ export default function ContentTypeDialog({
     }
   };
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setIsClosing(true);
     setTimeout(() => {
       setIsClosing(false);
       onClose();
     }, 300);
-  };
+  }, [onClose]);
 
   // Close on Escape key
   useEffect(() => {
@@ -119,7 +119,7 @@ export default function ContentTypeDialog({
     };
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
-  }, [open]);
+  }, [open, handleClose]);
 
   if (!open) return null;
 

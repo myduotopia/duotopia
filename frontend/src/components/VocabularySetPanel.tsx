@@ -3109,6 +3109,8 @@ export default function VocabularySetPanel({
       const existingWithExampleTranslation = rows.find((r) => {
         if (!r.text?.trim() || !r.example_sentence_translation?.trim())
           return false;
+        // Skip check when "other" is selected — custom languages can't be compared
+        if (aiGenerateTranslateLang === "other") return false;
         const existingSentenceLang = r.selectedSentenceLanguage || "chinese";
         return existingSentenceLang !== aiGenerateTranslateLang;
       });
@@ -3135,11 +3137,12 @@ export default function VocabularySetPanel({
     try {
       // === 補齊模式：對右側已有單字補齊缺少的項目 ===
       if (isBackfillMode) {
-        const existingRows = rows.filter((r) => r.text && r.text.trim());
         const batchLang = lastSelectedWordLang;
         const batchLangCode =
-          WORD_TRANSLATION_LANGUAGES.find((l) => l.value === batchLang)?.code ||
-          "zh-TW";
+          batchLang === "other"
+            ? customTranslationLang || ""
+            : WORD_TRANSLATION_LANGUAGES.find((l) => l.value === batchLang)
+                ?.code || "zh-TW";
 
         let voice = "";
         let rate = "";
@@ -3170,7 +3173,10 @@ export default function VocabularySetPanel({
         const currentRows = [...rows];
         let completedItems = 0;
         let completedSteps = 0;
-        const itemsToProcess = existingRows.map((r) => rows.indexOf(r));
+        const itemsToProcess = rows
+          .map((r, idx) => ({ r, idx }))
+          .filter(({ r }) => r.text && r.text.trim())
+          .map(({ idx }) => idx);
 
         // 計算每個單字的實際步驟數
         const getStepsForRow = (row: ContentRow) => {
@@ -3190,13 +3196,16 @@ export default function VocabularySetPanel({
           return steps;
         };
 
-        const totalSteps = itemsToProcess.reduce(
-          (sum, idx) => sum + getStepsForRow(currentRows[idx]),
-          0,
+        const { totalSteps, totalItems } = itemsToProcess.reduce(
+          (acc, idx) => {
+            const steps = getStepsForRow(currentRows[idx]);
+            return {
+              totalSteps: acc.totalSteps + steps,
+              totalItems: acc.totalItems + (steps > 0 ? 1 : 0),
+            };
+          },
+          { totalSteps: 0, totalItems: 0 },
         );
-        const totalItems = itemsToProcess.filter(
-          (idx) => getStepsForRow(currentRows[idx]) > 0,
-        ).length;
 
         if (totalSteps === 0) {
           toast.info(
@@ -3407,8 +3416,10 @@ export default function VocabularySetPanel({
 
       const batchLang = lastSelectedWordLang;
       const batchLangCode =
-        WORD_TRANSLATION_LANGUAGES.find((l) => l.value === batchLang)?.code ||
-        "zh-TW";
+        batchLang === "other"
+          ? customTranslationLang || ""
+          : WORD_TRANSLATION_LANGUAGES.find((l) => l.value === batchLang)
+              ?.code || "zh-TW";
 
       // TTS settings
       let voice = "";
