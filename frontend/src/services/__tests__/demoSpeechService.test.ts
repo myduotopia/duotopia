@@ -37,6 +37,7 @@ vi.mock("microsoft-cognitiveservices-speech-sdk", () => ({
     HundredMark: 1,
   },
   PronunciationAssessmentGranularity: {
+    Phoneme: 1,
     Word: 2,
   },
 }));

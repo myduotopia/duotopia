@@ -729,8 +729,8 @@ export default function WordReadingTemplate({
 
       toast.success(t("wordReading.toast.aiComplete") || "AI 評估完成");
 
-      // Background upload
-      if (!readOnly && audioUrl.startsWith("blob:")) {
+      // Background upload (skip in demo mode — no auth token available)
+      if (!readOnly && !isDemoMode && audioUrl.startsWith("blob:")) {
         uploadAnalysisInBackground(audioBlob, result);
       }
 
