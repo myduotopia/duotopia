@@ -537,4 +537,3 @@ def handle_rearrangement_complete(
         "timeout": timeout,
         "completed_at": datetime.now(timezone.utc).isoformat(),
     }
-
