@@ -32,7 +32,7 @@ interface InstantPracticeDialogProps {
   contentId: number;
   contentTitle: string;
   contentType?: string;
-  classroomId: number;
+  classroomId?: number;
   onStartPractice: (assignmentId: number) => void;
 }
 
@@ -107,7 +107,7 @@ export function InstantPracticeDialog({
         assignment_id: number;
       }>("/api/teachers/instant-practice/create", {
         content_id: contentId,
-        classroom_id: classroomId,
+        ...(classroomId ? { classroom_id: classroomId } : {}),
         practice_mode: effectiveMode,
       });
 

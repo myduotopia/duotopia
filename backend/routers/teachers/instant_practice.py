@@ -39,7 +39,7 @@ class InstantPracticeRequest(BaseModel):
     """即刻練習請求"""
 
     content_id: int
-    classroom_id: int
+    classroom_id: Optional[int] = None
     practice_mode: str = (
         "reading"  # reading, rearrangement, word_reading, word_selection
     )
@@ -67,23 +67,25 @@ async def create_instant_practice(
     - 不建立 StudentAssignment（老師使用 preview API 練習）
     - 回傳 assignment_id，前端導向 preview 頁面
     """
-    # 驗證班級存在且教師有權限
-    classroom = (
-        db.query(Classroom)
-        .filter(
-            Classroom.id == request.classroom_id,
-            Classroom.is_active.is_(True),
+    # 驗證班級存在且教師有權限（classroom_id 為 optional，我的教材不需要班級）
+    if request.classroom_id:
+        classroom = (
+            db.query(Classroom)
+            .filter(
+                Classroom.id == request.classroom_id,
+                Classroom.is_active.is_(True),
+            )
+            .first()
         )
-        .first()
-    )
 
-    if not classroom:
-        raise HTTPException(status_code=404, detail="Classroom not found")
+        if not classroom:
+            raise HTTPException(status_code=404, detail="Classroom not found")
 
-    if classroom.teacher_id != current_teacher.id:
-        raise HTTPException(
-            status_code=403, detail="You don't have permission for this classroom"
-        )
+        if classroom.teacher_id != current_teacher.id:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission for this classroom",
+            )
 
     # 驗證 Content 存在
     content = (
@@ -221,7 +223,7 @@ async def create_instant_practice(
     assignment = Assignment(
         title=f"{content.title} - 即刻練習",
         description=None,
-        classroom_id=request.classroom_id,
+        classroom_id=request.classroom_id,  # None when from 我的教材
         teacher_id=current_teacher.id,
         is_active=True,
         is_instant_practice=True,
