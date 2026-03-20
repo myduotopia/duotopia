@@ -209,8 +209,7 @@ export function useDemoAzurePronunciation(): UseDemoAzurePronunciationResult {
             if (wordData.Syllables && wordData.Syllables.length > 0) {
               detailedWord.syllables = wordData.Syllables.map((syl) => ({
                 syllable: syl.Syllable,
-                accuracy_score:
-                  syl.PronunciationAssessment?.AccuracyScore || 0,
+                accuracy_score: syl.PronunciationAssessment?.AccuracyScore || 0,
                 phonemes: (syl.Phonemes || []).map((ph) => ({
                   phoneme: ph.Phoneme,
                   accuracy_score:

@@ -232,7 +232,14 @@ class DemoSpeechService {
               // Token may have expired - retry once
               this.clearCache();
               recognizer.close();
-              resolve(this.analyzePronunciation(audioBlob, referenceText, 1, granularity));
+              resolve(
+                this.analyzePronunciation(
+                  audioBlob,
+                  referenceText,
+                  1,
+                  granularity,
+                ),
+              );
             } else {
               console.error("Demo speech recognition failed:", {
                 reason: result.reason,
@@ -251,7 +258,14 @@ class DemoSpeechService {
 
             if (error.includes("401") && retryCount === 0) {
               this.clearCache();
-              resolve(this.analyzePronunciation(audioBlob, referenceText, 1, granularity));
+              resolve(
+                this.analyzePronunciation(
+                  audioBlob,
+                  referenceText,
+                  1,
+                  granularity,
+                ),
+              );
             } else {
               reject(new Error(`分析失敗: ${error}`));
             }
