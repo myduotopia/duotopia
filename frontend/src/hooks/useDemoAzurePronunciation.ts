@@ -5,9 +5,7 @@
  * Uses demoSpeechService which doesn't require authentication.
  * Throws DemoLimitExceededError when daily quota is exceeded.
  *
- * Note: Demo mode always uses Word-level granularity (no phoneme analysis).
- * Phoneme-level analysis is only available in the real useAzurePronunciation hook
- * for word reading activities (Issue #450).
+ * Supports Phoneme-level granularity for word reading activities (Issue #492).
  */
 
 import { useState } from "react";
@@ -22,6 +20,22 @@ import { useTranslation } from "react-i18next";
 export { DemoLimitExceededError };
 
 // Azure SDK response type definitions
+// 🎯 Issue #492: 音素/音節型別，與 useAzurePronunciation 對齊
+interface AzurePhonemeData {
+  Phoneme: string;
+  PronunciationAssessment?: {
+    AccuracyScore?: number;
+  };
+}
+
+interface AzureSyllableData {
+  Syllable: string;
+  PronunciationAssessment?: {
+    AccuracyScore?: number;
+  };
+  Phonemes?: AzurePhonemeData[];
+}
+
 interface AzurePronunciationAssessment {
   AccuracyScore?: number;
   ErrorType?: string;
@@ -30,6 +44,8 @@ interface AzurePronunciationAssessment {
 interface AzureWordData {
   Word: string;
   PronunciationAssessment?: AzurePronunciationAssessment;
+  Syllables?: AzureSyllableData[];
+  Phonemes?: AzurePhonemeData[];
 }
 
 interface AzurePrivPronJson {
@@ -41,11 +57,24 @@ interface AzureAnalysisResult {
   [key: string]: unknown;
 }
 
+interface PhonemeDetail {
+  phoneme: string;
+  accuracy_score: number;
+}
+
+interface SyllableDetail {
+  syllable: string;
+  accuracy_score: number;
+  phonemes: PhonemeDetail[];
+}
+
 interface DetailedWord {
   index: number;
   word: string;
   accuracy_score: number;
   error_type?: string;
+  syllables?: SyllableDetail[];
+  phonemes?: PhonemeDetail[];
 }
 
 interface AzurePronunciationResultShape {
@@ -101,6 +130,7 @@ interface UseDemoAzurePronunciationResult {
   analyzePronunciation: (
     audioBlob: Blob,
     referenceText: string,
+    granularity?: "Word" | "Phoneme",
   ) => Promise<PronunciationResult | null>;
   reset: () => void;
   clearLimitError: () => void;
@@ -127,14 +157,20 @@ export function useDemoAzurePronunciation(): UseDemoAzurePronunciationResult {
   const analyzePronunciation = async (
     audioBlob: Blob,
     referenceText: string,
+    granularity: "Word" | "Phoneme" = "Word",
   ): Promise<PronunciationResult | null> => {
     setIsAnalyzing(true);
     setError(null);
 
     try {
-      // Call Demo Speech Service directly
+      // Call Demo Speech Service directly — pass granularity through
       const { result: analysisResult, latencyMs } =
-        await demoSpeechService.analyzePronunciation(audioBlob, referenceText);
+        await demoSpeechService.analyzePronunciation(
+          audioBlob,
+          referenceText,
+          0,
+          granularity,
+        );
 
       console.log(`Demo pronunciation analysis completed in ${latencyMs}ms`);
 
@@ -160,13 +196,37 @@ export function useDemoAzurePronunciation(): UseDemoAzurePronunciationResult {
 
       if (wordsData.length > 0) {
         wordsData.forEach((wordData: AzureWordData, idx: number) => {
-          detailed_words.push({
+          const detailedWord: DetailedWord = {
             index: idx,
             word: wordData.Word,
             accuracy_score:
               wordData.PronunciationAssessment?.AccuracyScore || 0,
             error_type: wordData.PronunciationAssessment?.ErrorType || "None",
-          });
+          };
+
+          // 🎯 Issue #492: 解析音素層級資料（僅 Phoneme granularity 時有值）
+          if (granularity === "Phoneme") {
+            if (wordData.Syllables && wordData.Syllables.length > 0) {
+              detailedWord.syllables = wordData.Syllables.map((syl) => ({
+                syllable: syl.Syllable,
+                accuracy_score:
+                  syl.PronunciationAssessment?.AccuracyScore || 0,
+                phonemes: (syl.Phonemes || []).map((ph) => ({
+                  phoneme: ph.Phoneme,
+                  accuracy_score:
+                    ph.PronunciationAssessment?.AccuracyScore || 0,
+                })),
+              }));
+            }
+            if (wordData.Phonemes && wordData.Phonemes.length > 0) {
+              detailedWord.phonemes = wordData.Phonemes.map((ph) => ({
+                phoneme: ph.Phoneme,
+                accuracy_score: ph.PronunciationAssessment?.AccuracyScore || 0,
+              }));
+            }
+          }
+
+          detailed_words.push(detailedWord);
         });
       }
 

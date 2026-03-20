@@ -155,6 +155,7 @@ class DemoSpeechService {
     audioBlob: Blob,
     referenceText: string,
     retryCount = 0,
+    granularity: "Word" | "Phoneme" = "Word",
   ): Promise<{
     result: sdk.PronunciationAssessmentResult;
     latencyMs: number;
@@ -173,10 +174,15 @@ class DemoSpeechService {
       speechConfig.speechRecognitionLanguage = "en-US";
 
       // 3. Configure pronunciation assessment
+      // 🎯 Issue #492: 單字朗讀使用 Phoneme 層級，與正式版對齊
+      const sdkGranularity =
+        granularity === "Phoneme"
+          ? sdk.PronunciationAssessmentGranularity.Phoneme
+          : sdk.PronunciationAssessmentGranularity.Word;
       const pronunciationConfig = new sdk.PronunciationAssessmentConfig(
         referenceText,
         sdk.PronunciationAssessmentGradingSystem.HundredMark,
-        sdk.PronunciationAssessmentGranularity.Word,
+        sdkGranularity,
         true, // enableMiscue
       );
 
@@ -226,7 +232,7 @@ class DemoSpeechService {
               // Token may have expired - retry once
               this.clearCache();
               recognizer.close();
-              resolve(this.analyzePronunciation(audioBlob, referenceText, 1));
+              resolve(this.analyzePronunciation(audioBlob, referenceText, 1, granularity));
             } else {
               console.error("Demo speech recognition failed:", {
                 reason: result.reason,
@@ -245,7 +251,7 @@ class DemoSpeechService {
 
             if (error.includes("401") && retryCount === 0) {
               this.clearCache();
-              resolve(this.analyzePronunciation(audioBlob, referenceText, 1));
+              resolve(this.analyzePronunciation(audioBlob, referenceText, 1, granularity));
             } else {
               reject(new Error(`分析失敗: ${error}`));
             }
