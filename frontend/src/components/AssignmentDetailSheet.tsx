@@ -459,7 +459,7 @@ export function AssignmentDetailSheet({
                 )}
 
                 {/* Stats grid */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
                     <div className="text-xs text-gray-500 dark:text-gray-400">
                       {t("classroomDetail.labels.assignedTo")}
@@ -490,6 +490,25 @@ export function AssignmentDetailSheet({
                     </div>
                     <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
                       {completionRate}%
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {t("assignmentDetail.sheet.averageScore", "平均分數")}
+                    </div>
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                      {(() => {
+                        const scoredStudents = studentProgress.filter(
+                          (sp) => sp.score !== undefined && sp.score !== null,
+                        );
+                        if (scoredStudents.length === 0) return "-";
+                        const avg =
+                          scoredStudents.reduce(
+                            (sum, sp) => sum + sp.score!,
+                            0,
+                          ) / scoredStudents.length;
+                        return `${avg.toFixed(1)}${assignment.practice_mode === "word_selection" ? "%" : ""}`;
+                      })()}
                     </div>
                   </div>
                 </div>

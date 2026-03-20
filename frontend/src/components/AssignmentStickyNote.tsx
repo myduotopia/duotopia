@@ -514,7 +514,7 @@ export default function AssignmentStickyNote({
                         }`}
                       >
                         {student.score != null
-                          ? `${student.is_interim_score ? "~" : ""}${student.score}`
+                          ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(1)}`
                           : "-"}
                       </span>
                     )}

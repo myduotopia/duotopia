@@ -44,7 +44,8 @@
       "contentTitle": "作業單元內容",
       "questionCount": "題目數量：",
       "itemCount": "題",
-      "editContentWarning": "注意：此為作業副本。刪除已有學生進度的題目將被阻止。"
+      "editContentWarning": "注意：此為作業副本。刪除已有學生進度的題目將被阻止。",
+      "averageScore": "平均分數"
     },
     "status": {
       "submitted": "已繳交",

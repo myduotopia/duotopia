@@ -2908,7 +2908,8 @@
       "contentTitle": "Assignment Content Units",
       "questionCount": "Questions: ",
       "itemCount": "items",
-      "editContentWarning": "Note: This is an assignment copy. Deleting items with existing student progress will be blocked."
+      "editContentWarning": "Note: This is an assignment copy. Deleting items with existing student progress will be blocked.",
+      "averageScore": "Average Score"
     },
     "status": {
       "submitted": "Submitted",

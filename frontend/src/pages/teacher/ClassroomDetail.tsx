@@ -209,6 +209,9 @@ export default function ClassroomDetail({
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterOverdue, setFilterOverdue] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<
+    "" | "completed" | "in_progress" | "overdue"
+  >("");
 
   // Filter type → practice_mode mapping
   const filterTypeMap: Record<string, string> = {
@@ -244,8 +247,37 @@ export default function ClassroomDetail({
     if (filterOverdue) {
       if (!a.due_date || new Date(a.due_date) >= new Date()) return false;
     }
+    if (filterStatus) {
+      const rate = a.completion_rate ?? 0;
+      const isOverdue = a.due_date && new Date(a.due_date) < new Date();
+      if (filterStatus === "completed" && rate < 100) return false;
+      if (filterStatus === "in_progress" && (rate >= 100 || isOverdue))
+        return false;
+      if (filterStatus === "overdue" && !isOverdue) return false;
+    }
     return true;
   });
+
+  // Assignment status counts (based on completion_rate + due_date)
+  const statusCounts = (() => {
+    const source = showArchived ? archivedAssignments : assignments;
+    let completed = 0;
+    let inProgress = 0;
+    let overdue = 0;
+    for (const a of source) {
+      const rate = a.completion_rate ?? 0;
+      const isOverdue = a.due_date && new Date(a.due_date) < new Date();
+      if (rate >= 100) completed++;
+      else if (isOverdue) overdue++;
+      else inProgress++;
+    }
+    return {
+      total: source.length,
+      completed,
+      inProgress,
+      overdue,
+    };
+  })();
 
   const [batchGradingModal, setBatchGradingModal] = useState({
     open: false,
@@ -277,7 +309,14 @@ export default function ClassroomDetail({
   // Reset to page 1 when filters change
   useEffect(() => {
     setAssignmentPage(1);
-  }, [filterKeyword, filterType, filterDateFrom, filterDateTo, filterOverdue]);
+  }, [
+    filterKeyword,
+    filterType,
+    filterDateFrom,
+    filterDateTo,
+    filterOverdue,
+    filterStatus,
+  ]);
 
   const togglePrintSelection = (assignmentId: number) => {
     setSelectedForPrint((prev) => {
@@ -1739,54 +1778,74 @@ export default function ClassroomDetail({
                       </div>
                     </div>
 
-                    {/* Assignment Stats - Using Real Data (only for active view) */}
+                    {/* Assignment Status Filter Chips */}
                     {!showArchived && (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 sm:p-4 border dark:border-blue-800">
-                          <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                            {t("classroomDetail.stats.totalAssignments")}
-                          </div>
-                          <div className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
-                            {assignments.length}
-                          </div>
-                        </div>
-                        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 sm:p-4 border dark:border-green-800">
-                          <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                            {t("classroomDetail.stats.completedAssignments")}
-                          </div>
-                          <div className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
+                      <div className="flex flex-wrap gap-2">
+                        {(
+                          [
                             {
-                              assignments.filter(
-                                (a) => a.status === "completed",
-                              ).length
-                            }
-                          </div>
-                        </div>
-                        <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 sm:p-4 border dark:border-yellow-800">
-                          <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                            {t("classroomDetail.stats.inProgressAssignments")}
-                          </div>
-                          <div className="text-xl sm:text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                              key: "" as const,
+                              label: t(
+                                "classroomDetail.stats.totalAssignments",
+                              ),
+                              count: statusCounts.total,
+                              colors:
+                                "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-300 dark:border-blue-700",
+                              activeColors:
+                                "bg-blue-600 text-white dark:bg-blue-500 border-blue-600 dark:border-blue-500",
+                            },
                             {
-                              assignments.filter(
-                                (a) =>
-                                  a.status === "in_progress" ||
-                                  a.status === "not_started",
-                              ).length
-                            }
-                          </div>
-                        </div>
-                        <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 sm:p-4 border dark:border-red-800">
-                          <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                            {t("classroomDetail.stats.overdueAssignments")}
-                          </div>
-                          <div className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400">
+                              key: "completed" as const,
+                              label: t(
+                                "classroomDetail.stats.completedAssignments",
+                              ),
+                              count: statusCounts.completed,
+                              colors:
+                                "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border-green-300 dark:border-green-700",
+                              activeColors:
+                                "bg-green-600 text-white dark:bg-green-500 border-green-600 dark:border-green-500",
+                            },
                             {
-                              assignments.filter((a) => a.status === "overdue")
-                                .length
+                              key: "in_progress" as const,
+                              label: t(
+                                "classroomDetail.stats.inProgressAssignments",
+                              ),
+                              count: statusCounts.inProgress,
+                              colors:
+                                "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 border-yellow-300 dark:border-yellow-700",
+                              activeColors:
+                                "bg-yellow-600 text-white dark:bg-yellow-500 border-yellow-600 dark:border-yellow-500",
+                            },
+                            {
+                              key: "overdue" as const,
+                              label: t(
+                                "classroomDetail.stats.overdueAssignments",
+                              ),
+                              count: statusCounts.overdue,
+                              colors:
+                                "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-300 dark:border-red-700",
+                              activeColors:
+                                "bg-red-600 text-white dark:bg-red-500 border-red-600 dark:border-red-500",
+                            },
+                          ] as const
+                        ).map((chip) => (
+                          <button
+                            key={chip.key || "all"}
+                            onClick={() =>
+                              setFilterStatus(
+                                filterStatus === chip.key ? "" : chip.key,
+                              )
                             }
-                          </div>
-                        </div>
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors cursor-pointer ${
+                              filterStatus === chip.key
+                                ? chip.activeColors
+                                : chip.colors
+                            }`}
+                          >
+                            {chip.label}
+                            <span className="font-bold">{chip.count}</span>
+                          </button>
+                        ))}
                       </div>
                     )}
 
@@ -1855,7 +1914,8 @@ export default function ClassroomDetail({
                             filterType ||
                             filterDateFrom ||
                             filterDateTo ||
-                            filterOverdue) && (
+                            filterOverdue ||
+                            filterStatus) && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1866,6 +1926,7 @@ export default function ClassroomDetail({
                                 setFilterDateFrom("");
                                 setFilterDateTo("");
                                 setFilterOverdue(false);
+                                setFilterStatus("");
                               }}
                             >
                               <X className="h-3.5 w-3.5 mr-1" />
@@ -2083,8 +2144,9 @@ export default function ClassroomDetail({
                                     size="sm"
                                     className="flex-1 h-10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-900/20"
                                     onClick={() => {
-                                      navigate(
+                                      window.open(
                                         `/teacher/classroom/${id}/assignment/${assignment.id}/preview`,
+                                        "_blank",
                                       );
                                     }}
                                   >
@@ -2380,8 +2442,9 @@ export default function ClassroomDetail({
                                           size="sm"
                                           className="text-green-600 hover:text-green-700 dark:text-green-400 h-10 min-h-10"
                                           onClick={() => {
-                                            navigate(
+                                            window.open(
                                               `/teacher/classroom/${id}/assignment/${assignment.id}/preview`,
+                                              "_blank",
                                             );
                                           }}
                                         >
