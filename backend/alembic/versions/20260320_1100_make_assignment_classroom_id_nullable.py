@@ -18,13 +18,20 @@ def upgrade() -> None:
     op.execute(
         """
         DO $$ BEGIN
-            ALTER TABLE assignments ALTER COLUMN classroom_id DROP NOT NULL;
-        EXCEPTION
-            WHEN others THEN NULL;
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'assignments'
+                AND column_name = 'classroom_id'
+                AND is_nullable = 'NO'
+            ) THEN
+                ALTER TABLE assignments ALTER COLUMN classroom_id DROP NOT NULL;
+            END IF;
         END $$;
     """
     )
 
 
 def downgrade() -> None:
+    # Intentionally no-op: reverting DROP NOT NULL to NOT NULL would fail
+    # if NULL values already exist in classroom_id column.
     pass
