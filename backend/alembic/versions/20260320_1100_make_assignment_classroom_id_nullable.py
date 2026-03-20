@@ -15,13 +15,15 @@ depends_on = None
 
 def upgrade() -> None:
     # Make classroom_id nullable so instant practice can work without a classroom
-    op.execute("""
+    op.execute(
+        """
         DO $$ BEGIN
             ALTER TABLE assignments ALTER COLUMN classroom_id DROP NOT NULL;
         EXCEPTION
             WHEN others THEN NULL;
         END $$;
-    """)
+    """
+    )
 
 
 def downgrade() -> None:
