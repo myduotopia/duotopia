@@ -10,7 +10,7 @@ Reuses all existing preview APIs for the actual practice experience.
 
 import logging
 import random
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -28,6 +28,7 @@ from models import (
     StudentContentProgress,
     StudentItemProgress,
 )
+from utils.permissions import check_content_access
 from .dependencies import get_current_teacher
 
 logger = logging.getLogger(__name__)
@@ -40,9 +41,9 @@ class InstantPracticeRequest(BaseModel):
 
     content_id: int
     classroom_id: Optional[int] = None
-    practice_mode: str = (
-        "reading"  # reading, rearrangement, word_reading, word_selection
-    )
+    practice_mode: Literal[
+        "reading", "rearrangement", "word_reading", "word_selection"
+    ] = "reading"
     time_limit_per_question: Optional[int] = None
     shuffle_questions: bool = False
     show_answer: bool = False
@@ -87,16 +88,17 @@ async def create_instant_practice(
                 detail="You don't have permission for this classroom",
             )
 
-    # 驗證 Content 存在
+    # 驗證 Content 存在且教師有權限存取
+    _program, _lesson, content = check_content_access(
+        db, request.content_id, current_teacher, require_owner=False
+    )
+    # Eagerly load content_items for copying
     content = (
         db.query(Content)
         .options(selectinload(Content.content_items))
         .filter(Content.id == request.content_id)
         .first()
     )
-
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
 
     # 懶清理：刪除該老師的舊即刻練習作業及相關資料
     old_assignments = (
