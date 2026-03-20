@@ -106,7 +106,9 @@ async def generate_sentences(
         # 如果有 lesson_id，查詢 Lesson 與 Program 取得完整教學情境
         unit_context = None
         lesson_name = None
-        program_context = None
+        program_name = None
+        program_description = None
+        program_tags = None
         if request.lesson_id:
             lesson = (
                 db.query(Lesson)
@@ -119,22 +121,21 @@ async def generate_sentences(
                 if lesson.description:
                     unit_context = lesson.description
                 if lesson.program:
-                    parts = []
                     if lesson.program.name:
-                        parts.append(lesson.program.name)
+                        program_name = lesson.program.name
                     if lesson.program.description:
-                        parts.append(lesson.program.description)
-                    if lesson.program.level:
-                        parts.append(f"CEFR {lesson.program.level.value}")
-                    if parts:
-                        program_context = " — ".join(parts)
+                        program_description = lesson.program.description
+                    if lesson.program.tags:
+                        program_tags = lesson.program.tags
 
         sentences = await translation_service.generate_sentences(
             words=request.words,
             definitions=request.definitions,
             unit_context=unit_context,
             lesson_name=lesson_name,
-            program_context=program_context,
+            program_name=program_name,
+            program_description=program_description,
+            program_tags=program_tags,
             level=request.level,
             prompt=request.prompt,
             translate_to=request.translate_to,
