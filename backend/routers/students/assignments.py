@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload, contains_eager
 from sqlalchemy import text, case, func
 
@@ -1124,7 +1124,7 @@ class WordSelectionStartResponse(BaseModel):
 
 class WordSelectionAnswerRequest(BaseModel):
     content_item_id: int
-    selected_answer: str
+    selected_answer: str = Field(max_length=200)
     is_correct: bool
     time_spent_seconds: int = 0
     session_id: Optional[int] = None  # PracticeSession ID for answer tracking
@@ -1493,6 +1493,10 @@ async def submit_word_selection_answer(
                 ) + 1
 
     # --- Accumulate word_selection_data on StudentItemProgress (#451) ---
+    # Accounting invariant:
+    #   error_count = timeout_count + (non-timeout wrong answers)
+    #   error_selections only tracks non-timeout wrong answers (capped at 20 entries)
+    #   So: error_count >= len(error_selections) always holds
     item_progress = (
         db.query(StudentItemProgress)
         .filter(
@@ -1515,7 +1519,7 @@ async def submit_word_selection_answer(
             if is_timeout:
                 ws_data["timeout_count"] = ws_data.get("timeout_count", 0) + 1
             elif request.selected_answer.strip():
-                # Track which wrong option was selected
+                # Track which wrong option was selected (cap at 20 entries)
                 error_selections = ws_data.get("error_selections", [])
                 found = False
                 for entry in error_selections:
@@ -1523,14 +1527,21 @@ async def submit_word_selection_answer(
                         entry["count"] = entry.get("count", 0) + 1
                         found = True
                         break
-                if not found:
+                if not found and len(error_selections) < 20:
                     error_selections.append(
                         {"selected": request.selected_answer, "count": 1}
                     )
                 ws_data["error_selections"] = error_selections
         ws_data["last_answered_at"] = datetime.now(timezone.utc).isoformat()
-        # Force SQLAlchemy to detect JSONB mutation
+        # Shallow copy is safe: error_selections contains only flat dicts
         item_progress.word_selection_data = dict(ws_data)
+    else:
+        logger.warning(
+            "StudentItemProgress not found for sa_id=%s, item_id=%s — "
+            "word_selection_data not recorded",
+            assignment_id,
+            request.content_item_id,
+        )
 
     # Sync assignment status after each answer
     mastery_result = db.execute(
