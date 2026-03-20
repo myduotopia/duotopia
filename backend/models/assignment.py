@@ -29,7 +29,7 @@ class Assignment(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=False)
     description = Column(Text)
-    classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=False)
+    classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=True)
     teacher_id = Column(Integer, ForeignKey("teachers.id"), nullable=False)
 
     due_date = Column(DateTime(timezone=True))
