@@ -477,7 +477,9 @@ Only reply with JSON array, no other text."""
         definitions: Optional[List[str]] = None,
         unit_context: Optional[str] = None,
         lesson_name: Optional[str] = None,
-        program_context: Optional[str] = None,
+        program_name: Optional[str] = None,
+        program_description: Optional[str] = None,
+        program_tags: Optional[List[str]] = None,
         level: str = "A1",
         prompt: Optional[str] = None,
         translate_to: Optional[str] = None,
@@ -490,6 +492,10 @@ Only reply with JSON array, no other text."""
             words: 單字列表
             definitions: 單字的中文翻譯列表（用於消歧義，如 "put" → "放置"）
             unit_context: 單元描述（教學目標或主題，來自 Lesson.description）
+            lesson_name: 單元名稱
+            program_name: 課程名稱
+            program_description: 課程描述（教學意圖）
+            program_tags: 課程標籤
             level: CEFR 等級 (A1, A2, B1, B2, C1, C2)
             prompt: 使用者自訂 prompt
             translate_to: 翻譯目標語言 (zh-TW, ja, ko)
@@ -586,20 +592,38 @@ This recipe), abstract nouns (Happiness, His decision), gerund phrases \
             # 構建 user prompt
             user_prompt = ""
 
-            # 如果有教學情境，先說明（program + lesson 資訊）
-            context_parts = []
-            if program_context:
-                context_parts.append(f"Course: {program_context}")
-            if lesson_name:
-                context_parts.append(f"Unit: {lesson_name}")
+            # 高優先級：教學指引（課程描述、單元描述、程度）
+            guidelines = []
+            if level:
+                guidelines.append(f"- Course level: {level}")
+            if program_description:
+                guidelines.append(f"- Course description: {program_description}")
             if unit_context:
-                context_parts.append(f"Unit description: {unit_context}")
+                guidelines.append(f"- Unit description: {unit_context}")
 
-            if context_parts:
-                user_prompt += f"""**TEACHING CONTEXT**:
-{chr(10).join(context_parts)}
+            if guidelines:
+                user_prompt += f"""**TEACHING GUIDELINES (SHOULD FOLLOW)**:
+{chr(10).join(guidelines)}
 
-Generate sentences that fit this teaching context. Use vocabulary and topics relevant to the unit theme when possible.
+These are the teacher's pedagogical intentions. You SHOULD follow these \
+guidelines when generating sentences, especially grammar patterns and \
+topics mentioned. Only override if it conflicts with word definition or \
+part of speech requirements above.
+
+"""
+
+            # 低優先級：背景參考（課程名稱、單元名稱、標籤）
+            background = []
+            if program_name:
+                background.append(f"- Course: {program_name}")
+            if lesson_name:
+                background.append(f"- Unit: {lesson_name}")
+            if program_tags:
+                background.append(f"- Tags: {', '.join(program_tags)}")
+
+            if background:
+                user_prompt += f"""**TEACHING BACKGROUND** (for reference):
+{chr(10).join(background)}
 
 """
 
