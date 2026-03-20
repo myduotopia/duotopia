@@ -164,15 +164,13 @@ export function useDemoAzurePronunciation(): UseDemoAzurePronunciationResult {
 
     try {
       // Call Demo Speech Service directly — pass granularity through
-      const { result: analysisResult, latencyMs } =
+      const { result: analysisResult } =
         await demoSpeechService.analyzePronunciation(
           audioBlob,
           referenceText,
           0,
           granularity,
         );
-
-      // latencyMs available for structured logging if needed
 
       // Update remaining quota
       const remaining = demoSpeechService.getRemainingToday();
