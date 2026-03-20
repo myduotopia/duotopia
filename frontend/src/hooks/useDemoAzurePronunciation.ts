@@ -172,7 +172,7 @@ export function useDemoAzurePronunciation(): UseDemoAzurePronunciationResult {
           granularity,
         );
 
-      console.log(`Demo pronunciation analysis completed in ${latencyMs}ms`);
+      // latencyMs available for structured logging if needed
 
       // Update remaining quota
       const remaining = demoSpeechService.getRemainingToday();
