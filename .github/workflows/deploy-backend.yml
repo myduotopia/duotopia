@@ -383,7 +383,14 @@ jobs:
         ENV_VARS="$ENV_VARS,SUPABASE_URL=${{ steps.db_env.outputs.SUPABASE_URL }}"
         ENV_VARS="$ENV_VARS,SUPABASE_KEY=${{ steps.db_env.outputs.SUPABASE_KEY }}"
         ENV_VARS="$ENV_VARS,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
-        ENV_VARS="$ENV_VARS,USE_VERTEX_AI=${{ vars.USE_VERTEX_AI || 'false' }}"
+
+        # Per-environment Vertex AI toggle
+        case "${{ steps.env_vars.outputs.ENV_NAME }}" in
+          staging)  _USE_VERTEX_AI="${{ vars.USE_VERTEX_AI_STAGING || 'false' }}" ;;
+          develop)  _USE_VERTEX_AI="${{ vars.USE_VERTEX_AI_STAGING || 'false' }}" ;;
+          *)        _USE_VERTEX_AI="${{ vars.USE_VERTEX_AI || 'false' }}" ;;
+        esac
+        ENV_VARS="$ENV_VARS,USE_VERTEX_AI=${_USE_VERTEX_AI}"
         ENV_VARS="$ENV_VARS,VERTEX_AI_PROJECT_ID=$PROJECT_ID"
         ENV_VARS="$ENV_VARS,VERTEX_AI_LOCATION=us-central1"
         ENV_VARS="$ENV_VARS,SMTP_HOST=${{ secrets.SMTP_HOST }}"
