@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload, contains_eager
 from sqlalchemy import text, case, func
 
@@ -23,6 +23,7 @@ from models import (
     StudentItemProgress,
     AssignmentStatus,
     PracticeSession,
+    PracticeAnswer,
 )
 from services.quota_service import QuotaService
 from .dependencies import get_current_student
@@ -1123,9 +1124,10 @@ class WordSelectionStartResponse(BaseModel):
 
 class WordSelectionAnswerRequest(BaseModel):
     content_item_id: int
-    selected_answer: str
+    selected_answer: str = Field(max_length=200)
     is_correct: bool
     time_spent_seconds: int = 0
+    session_id: Optional[int] = None  # PracticeSession ID for answer tracking
 
 
 class WordSelectionAnswerResponse(BaseModel):
@@ -1431,6 +1433,7 @@ async def submit_word_selection_answer(
 
     # 伺服器端驗證答案正確性（不信任客戶端的 is_correct）
     is_correct = request.selected_answer.strip() == correct_answer.strip()
+    is_timeout = request.selected_answer.strip() == ""
 
     # Call update_memory_strength PostgreSQL function
     result = db.execute(
@@ -1451,6 +1454,94 @@ async def submit_word_selection_answer(
     ).fetchone()
 
     new_memory_strength = float(result.memory_strength) if result else 0
+
+    # --- Record PracticeAnswer for analytics (#451) ---
+    if request.session_id:
+        practice_session = (
+            db.query(PracticeSession)
+            .filter(
+                PracticeSession.id == request.session_id,
+                PracticeSession.student_id == student_id,
+                PracticeSession.student_assignment_id == assignment_id,
+            )
+            .first()
+        )
+        if practice_session:
+            # Create PracticeAnswer record
+            practice_answer = PracticeAnswer(
+                practice_session_id=practice_session.id,
+                content_item_id=request.content_item_id,
+                is_correct=is_correct,
+                time_spent_seconds=request.time_spent_seconds,
+                answer_data={
+                    "type": "word_selection",
+                    "word_text": content_item.text or "",
+                    "selected_answer": request.selected_answer,
+                    "correct_answer": correct_answer,
+                    "is_timeout": is_timeout,
+                },
+            )
+            db.add(practice_answer)
+
+            # Update PracticeSession stats
+            practice_session.words_practiced = (
+                practice_session.words_practiced or 0
+            ) + 1
+            if is_correct:
+                practice_session.correct_count = (
+                    practice_session.correct_count or 0
+                ) + 1
+
+    # --- Accumulate word_selection_data on StudentItemProgress (#451) ---
+    # Accounting invariant:
+    #   error_count = timeout_count + (non-timeout wrong answers)
+    #   error_selections only tracks non-timeout wrong answers (capped at 20 entries)
+    #   So: error_count >= len(error_selections) always holds
+    item_progress = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == assignment_id,
+            StudentItemProgress.content_item_id == request.content_item_id,
+        )
+        .first()
+    )
+    if item_progress:
+        ws_data = item_progress.word_selection_data or {
+            "correct_count": 0,
+            "error_count": 0,
+            "timeout_count": 0,
+            "error_selections": [],
+        }
+        if is_correct:
+            ws_data["correct_count"] = ws_data.get("correct_count", 0) + 1
+        else:
+            ws_data["error_count"] = ws_data.get("error_count", 0) + 1
+            if is_timeout:
+                ws_data["timeout_count"] = ws_data.get("timeout_count", 0) + 1
+            elif request.selected_answer.strip():
+                # Track which wrong option was selected (cap at 20 entries)
+                error_selections = ws_data.get("error_selections", [])
+                found = False
+                for entry in error_selections:
+                    if entry["selected"] == request.selected_answer:
+                        entry["count"] = entry.get("count", 0) + 1
+                        found = True
+                        break
+                if not found and len(error_selections) < 20:
+                    error_selections.append(
+                        {"selected": request.selected_answer, "count": 1}
+                    )
+                ws_data["error_selections"] = error_selections
+        ws_data["last_answered_at"] = datetime.now(timezone.utc).isoformat()
+        # Shallow copy is safe: error_selections contains only flat dicts
+        item_progress.word_selection_data = dict(ws_data)
+    else:
+        logger.warning(
+            "StudentItemProgress not found for sa_id=%s, item_id=%s — "
+            "word_selection_data not recorded",
+            assignment_id,
+            request.content_item_id,
+        )
 
     # Sync assignment status after each answer
     mastery_result = db.execute(

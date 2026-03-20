@@ -138,7 +138,10 @@ class StudentItemProgress(Base):
     retry_count = Column(Integer, default=0)  # 重試次數
     expected_score = Column(DECIMAL(5, 2), default=0)  # 預期分數
     timeout_ended = Column(Boolean, default=False)  # 是否因超時結束
-    rearrangement_data = Column(JSONB)  # 單字選擇歷史記錄
+    rearrangement_data = Column(JSONB)  # 例句重組選擇歷史記錄
+
+    # Word selection activity fields (單字選擇專用)
+    word_selection_data = Column(JSONB)  # 單字選擇累計統計與答題歷史
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
