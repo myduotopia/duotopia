@@ -69,9 +69,7 @@ class VertexAIService:
 
         if system_instruction:
             # 每次建立新 model，因為 system_instruction 是 constructor 參數
-            return GenerativeModel(
-                model_name, system_instruction=system_instruction
-            )
+            return GenerativeModel(model_name, system_instruction=system_instruction)
 
         # 無 system_instruction 時使用 cached model
         if model_type == "flash":
