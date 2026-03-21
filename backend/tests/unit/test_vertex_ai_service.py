@@ -26,7 +26,10 @@ class TestVertexAIServiceInit:
         assert service._flash_model is None
         assert service._pro_model is None
 
-    @patch.dict("os.environ", {"VERTEX_AI_PROJECT_ID": "test-proj", "VERTEX_AI_LOCATION": "us-west1"})
+    @patch.dict(
+        "os.environ",
+        {"VERTEX_AI_PROJECT_ID": "test-proj", "VERTEX_AI_LOCATION": "us-west1"},
+    )
     def test_custom_config(self):
         service = VertexAIService()
         assert service.project_id == "test-proj"
@@ -77,8 +80,12 @@ class TestGetModel:
             mock_instance = MagicMock()
             MockModel.return_value = mock_instance
 
-            model1 = self.service._get_model("flash", system_instruction="instruction A")
-            model2 = self.service._get_model("flash", system_instruction="instruction B")
+            model1 = self.service._get_model(
+                "flash", system_instruction="instruction A"
+            )
+            model2 = self.service._get_model(
+                "flash", system_instruction="instruction B"
+            )
 
             assert MockModel.call_count == 2
             MockModel.assert_any_call(FLASH_MODEL, system_instruction="instruction A")
@@ -129,10 +136,10 @@ class TestGenerateText:
         mock_model = MagicMock()
         mock_model.generate_content_async = AsyncMock(return_value=mock_response)
 
-        with patch.object(self.service, "_get_model", return_value=mock_model) as mock_get:
-            await self.service.generate_text(
-                "prompt", system_instruction="be helpful"
-            )
+        with patch.object(
+            self.service, "_get_model", return_value=mock_model
+        ) as mock_get:
+            await self.service.generate_text("prompt", system_instruction="be helpful")
 
         mock_get.assert_called_once_with("flash", "be helpful")
 
@@ -144,7 +151,9 @@ class TestGenerateText:
         mock_model = MagicMock()
         mock_model.generate_content_async = AsyncMock(return_value=mock_response)
 
-        with patch.object(self.service, "_get_model", return_value=mock_model) as mock_get:
+        with patch.object(
+            self.service, "_get_model", return_value=mock_model
+        ) as mock_get:
             await self.service.generate_text("prompt", model_type="pro")
 
         mock_get.assert_called_once_with("pro", None)
@@ -153,7 +162,9 @@ class TestGenerateText:
     async def test_generate_text_raises_on_error(self):
         """Errors from model should propagate"""
         mock_model = MagicMock()
-        mock_model.generate_content_async = AsyncMock(side_effect=RuntimeError("API error"))
+        mock_model.generate_content_async = AsyncMock(
+            side_effect=RuntimeError("API error")
+        )
 
         with patch.object(self.service, "_get_model", return_value=mock_model):
             with pytest.raises(RuntimeError, match="API error"):
@@ -209,7 +220,7 @@ class TestGenerateJson:
     @pytest.mark.asyncio
     async def test_json_array_with_prefix(self):
         """JSON array with prefix should be extracted"""
-        mock_model = self._make_mock_model('Result: [1, 2, 3]')
+        mock_model = self._make_mock_model("Result: [1, 2, 3]")
         with patch.object(self.service, "_get_model", return_value=mock_model):
             result = await self.service.generate_json("prompt")
         assert result == [1, 2, 3]
@@ -235,7 +246,9 @@ class TestGenerateJson:
     async def test_passes_system_instruction(self):
         """system_instruction should be forwarded to _get_model"""
         mock_model = self._make_mock_model('{"ok": true}')
-        with patch.object(self.service, "_get_model", return_value=mock_model) as mock_get:
+        with patch.object(
+            self.service, "_get_model", return_value=mock_model
+        ) as mock_get:
             await self.service.generate_json("prompt", system_instruction="be precise")
         mock_get.assert_called_once_with("flash", "be precise")
 
@@ -266,7 +279,9 @@ class TestGenerateTextSync:
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
 
-        with patch.object(self.service, "_get_model", return_value=mock_model) as mock_get:
+        with patch.object(
+            self.service, "_get_model", return_value=mock_model
+        ) as mock_get:
             self.service.generate_text_sync("prompt", system_instruction="be brief")
 
         mock_get.assert_called_once_with("flash", "be brief")

@@ -269,5 +269,3 @@ def get_vertex_ai_service() -> VertexAIService:
     if _vertex_ai_service is None:
         _vertex_ai_service = VertexAIService()
     return _vertex_ai_service
-
-
