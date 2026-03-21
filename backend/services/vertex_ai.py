@@ -271,5 +271,3 @@ def get_vertex_ai_service() -> VertexAIService:
     return _vertex_ai_service
 
 
-# 方便直接導入使用
-vertex_ai_service = get_vertex_ai_service()
