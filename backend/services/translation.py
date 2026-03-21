@@ -645,7 +645,7 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
                     prompt=user_prompt,
                     model_type="flash",
                     max_tokens=2000,
-                    temperature=0.8,
+                    temperature=0.7,  # Match GPT temperature for consistent quality
                     system_instruction=system_prompt,
                 )
             else:

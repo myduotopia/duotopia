@@ -8,7 +8,7 @@ Vertex AI (Gemini) Service
 
 Model 對應：
 - gpt-4o-mini → gemini-2.5-flash（快速、高效能）
-- gpt-4 → gemini-2.5-flash（統一使用）
+- gpt-4 → gemini-2.5-pro（複雜分析）
 """
 
 import os
@@ -19,6 +19,10 @@ from typing import Optional, Literal
 
 logger = logging.getLogger(__name__)
 
+# Model name constants
+FLASH_MODEL = "gemini-2.5-flash"
+PRO_MODEL = "gemini-2.5-pro"
+
 
 class VertexAIService:
     """Vertex AI (Gemini) 服務封裝"""
@@ -27,8 +31,9 @@ class VertexAIService:
         self.project_id = os.getenv("VERTEX_AI_PROJECT_ID", "duotopia-472708")
         self.location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
         self._initialized = False
-        self._flash_model = None  # gemini-2.5-flash
-        self._pro_model = None  # gemini-2.5-flash (統一使用)
+        # Cached models without system_instruction (for reuse)
+        self._flash_model = None
+        self._pro_model = None
 
     def _ensure_initialized(self):
         """Lazy initialization of Vertex AI"""
@@ -46,23 +51,37 @@ class VertexAIService:
                 logger.error(f"Failed to initialize Vertex AI: {e}")
                 raise
 
-    def get_flash_model(self):
-        """取得 Gemini 2.5 Flash (對應 gpt-4o-mini)"""
+    def _get_model(
+        self,
+        model_type: Literal["flash", "pro"] = "flash",
+        system_instruction: Optional[str] = None,
+    ):
+        """
+        取得 GenerativeModel 實例
+
+        當有 system_instruction 時，建立新的 model 實例（Gemini 原生支援）。
+        無 system_instruction 時，使用 cached model 以提升效能。
+        """
         self._ensure_initialized()
-        if self._flash_model is None:
-            from vertexai.generative_models import GenerativeModel
+        from vertexai.generative_models import GenerativeModel
 
-            self._flash_model = GenerativeModel("gemini-2.5-flash")
-        return self._flash_model
+        model_name = FLASH_MODEL if model_type == "flash" else PRO_MODEL
 
-    def get_pro_model(self):
-        """取得 Gemini 2.5 Flash (統一使用，對應 gpt-4)"""
-        self._ensure_initialized()
-        if self._pro_model is None:
-            from vertexai.generative_models import GenerativeModel
+        if system_instruction:
+            # 每次建立新 model，因為 system_instruction 是 constructor 參數
+            return GenerativeModel(
+                model_name, system_instruction=system_instruction
+            )
 
-            self._pro_model = GenerativeModel("gemini-2.5-flash")
-        return self._pro_model
+        # 無 system_instruction 時使用 cached model
+        if model_type == "flash":
+            if self._flash_model is None:
+                self._flash_model = GenerativeModel(model_name)
+            return self._flash_model
+        else:
+            if self._pro_model is None:
+                self._pro_model = GenerativeModel(model_name)
+            return self._pro_model
 
     async def generate_text(
         self,
@@ -80,31 +99,24 @@ class VertexAIService:
             model_type: 模型類型 ("flash" 或 "pro")
             max_tokens: 最大輸出 token 數
             temperature: 溫度參數 (0-1)
-            system_instruction: 系統指令（可選）
+            system_instruction: 系統指令（使用 Gemini 原生 system_instruction）
 
         Returns:
             生成的文字
         """
         from vertexai.generative_models import GenerationConfig
 
-        model = (
-            self.get_flash_model() if model_type == "flash" else self.get_pro_model()
-        )
+        model = self._get_model(model_type, system_instruction)
 
         config = GenerationConfig(
             max_output_tokens=max_tokens,
             temperature=temperature,
         )
 
-        # 如果有系統指令，將其加入到 prompt 中
-        full_prompt = prompt
-        if system_instruction:
-            full_prompt = f"{system_instruction}\n\n{prompt}"
-
         try:
             logger.info(f"Vertex AI generate_text: calling model (type={model_type})")
             response = await model.generate_content_async(
-                full_prompt,
+                prompt,
                 generation_config=config,
             )
             logger.info("Vertex AI generate_text: response received")
@@ -129,16 +141,14 @@ class VertexAIService:
             model_type: 模型類型
             max_tokens: 最大輸出 token 數
             temperature: 溫度參數
-            system_instruction: 系統指令
+            system_instruction: 系統指令（使用 Gemini 原生 system_instruction）
 
         Returns:
             解析後的 JSON dict
         """
         from vertexai.generative_models import GenerationConfig
 
-        model = (
-            self.get_flash_model() if model_type == "flash" else self.get_pro_model()
-        )
+        model = self._get_model(model_type, system_instruction)
 
         config = GenerationConfig(
             max_output_tokens=max_tokens,
@@ -146,14 +156,10 @@ class VertexAIService:
             response_mime_type="application/json",  # 強制 JSON 輸出
         )
 
-        full_prompt = prompt
-        if system_instruction:
-            full_prompt = f"{system_instruction}\n\n{prompt}"
-
         try:
             logger.info(f"Vertex AI generate_json: calling model (type={model_type})")
             response = await model.generate_content_async(
-                full_prompt,
+                prompt,
                 generation_config=config,
             )
             logger.info("Vertex AI generate_json: response received")
@@ -230,29 +236,23 @@ class VertexAIService:
             model_type: 模型類型 ("flash" 或 "pro")
             max_tokens: 最大輸出 token 數
             temperature: 溫度參數 (0-1)
-            system_instruction: 系統指令（可選）
+            system_instruction: 系統指令（使用 Gemini 原生 system_instruction）
 
         Returns:
             生成的文字
         """
         from vertexai.generative_models import GenerationConfig
 
-        model = (
-            self.get_flash_model() if model_type == "flash" else self.get_pro_model()
-        )
+        model = self._get_model(model_type, system_instruction)
 
         config = GenerationConfig(
             max_output_tokens=max_tokens,
             temperature=temperature,
         )
 
-        full_prompt = prompt
-        if system_instruction:
-            full_prompt = f"{system_instruction}\n\n{prompt}"
-
         try:
             response = model.generate_content(
-                full_prompt,
+                prompt,
                 generation_config=config,
             )
             return response.text
