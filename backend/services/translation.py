@@ -471,6 +471,11 @@ Only reply with JSON array, no other text."""
             results = await asyncio.gather(*tasks)
             return results
 
+    # 每批最多處理的單字數量
+    SENTENCE_CHUNK_SIZE = 5
+    # 每個單字預估的輸出 token 數（含 sentence + translation + JSON 格式）
+    TOKENS_PER_WORD = 250
+
     async def generate_sentences(
         self,
         words: List[str],
@@ -486,24 +491,80 @@ Only reply with JSON array, no other text."""
         parts_of_speech: Optional[List[List[str]]] = None,
     ) -> List[Dict[str, str]]:
         """
-        使用 AI 為單字生成例句
+        使用 AI 為單字生成例句（支援自動分塊避免 token 截斷）
 
-        Args:
-            words: 單字列表
-            definitions: 單字的中文翻譯列表（用於消歧義，如 "put" → "放置"）
-            unit_context: 單元描述（教學目標或主題，來自 Lesson.description）
-            lesson_name: 單元名稱
-            program_name: 課程名稱
-            program_description: 課程描述（教學意圖）
-            program_tags: 課程標籤
-            level: CEFR 等級 (A1, A2, B1, B2, C1, C2)
-            prompt: 使用者自訂 prompt
-            translate_to: 翻譯目標語言 (zh-TW, ja, ko)
-            parts_of_speech: 每個單字的詞性列表
-
-        Returns:
-            包含 sentence 和 translation 的字典列表
+        當單字數量超過 SENTENCE_CHUNK_SIZE 時，自動拆成多批處理，
+        每批獨立呼叫 AI 並合併結果，避免大批次因 token 上限導致截斷。
         """
+        if len(words) <= self.SENTENCE_CHUNK_SIZE:
+            return await self._generate_sentences_batch(
+                words=words,
+                definitions=definitions,
+                unit_context=unit_context,
+                lesson_name=lesson_name,
+                program_name=program_name,
+                program_description=program_description,
+                program_tags=program_tags,
+                level=level,
+                prompt=prompt,
+                translate_to=translate_to,
+                parts_of_speech=parts_of_speech,
+            )
+
+        # 分塊處理
+        all_sentences: List[Dict[str, str]] = []
+        for start in range(0, len(words), self.SENTENCE_CHUNK_SIZE):
+            end = start + self.SENTENCE_CHUNK_SIZE
+            chunk_words = words[start:end]
+            chunk_definitions = definitions[start:end] if definitions else None
+            chunk_pos = parts_of_speech[start:end] if parts_of_speech else None
+
+            try:
+                chunk_result = await self._generate_sentences_batch(
+                    words=chunk_words,
+                    definitions=chunk_definitions,
+                    unit_context=unit_context,
+                    lesson_name=lesson_name,
+                    program_name=program_name,
+                    program_description=program_description,
+                    program_tags=program_tags,
+                    level=level,
+                    prompt=prompt,
+                    translate_to=translate_to,
+                    parts_of_speech=chunk_pos,
+                )
+                all_sentences.extend(chunk_result)
+            except Exception as e:
+                logger.error(
+                    "Chunk %d-%d failed: %s", start, end, e
+                )
+                # 該批次失敗時使用 fallback，不影響其他批次
+                for word in chunk_words:
+                    sentence_obj: Dict[str, str] = {
+                        "sentence": f"This is an example with {word}.",
+                        "word": word,
+                    }
+                    if translate_to:
+                        sentence_obj["translation"] = ""
+                    all_sentences.append(sentence_obj)
+
+        return all_sentences
+
+    async def _generate_sentences_batch(
+        self,
+        words: List[str],
+        definitions: Optional[List[str]] = None,
+        unit_context: Optional[str] = None,
+        lesson_name: Optional[str] = None,
+        program_name: Optional[str] = None,
+        program_description: Optional[str] = None,
+        program_tags: Optional[List[str]] = None,
+        level: str = "A1",
+        prompt: Optional[str] = None,
+        translate_to: Optional[str] = None,
+        parts_of_speech: Optional[List[List[str]]] = None,
+    ) -> List[Dict[str, str]]:
+        """單批次 AI 例句生成（內部方法，由 generate_sentences 呼叫）"""
         self._ensure_client()
         import json
 
@@ -663,12 +724,17 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
 
             user_prompt += "\n\nOnly return the JSON array, no other text."
 
+            # 動態計算 max_tokens：根據單字數量，避免大批次被截斷
+            dynamic_max_tokens = max(
+                1000, len(words) * self.TOKENS_PER_WORD
+            )
+
             # Use Vertex AI or OpenAI based on configuration
             if self.use_vertex_ai:
                 sentences = await self.vertex_ai.generate_json(
                     prompt=user_prompt,
                     model_type="flash",
-                    max_tokens=2000,
+                    max_tokens=dynamic_max_tokens,
                     temperature=0.7,  # Match GPT temperature for consistent quality
                     system_instruction=system_prompt,
                 )
@@ -680,7 +746,7 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
                         {"role": "user", "content": user_prompt},
                     ],
                     temperature=0.7,  # 稍高一點讓例句更有變化
-                    max_tokens=2000,
+                    max_tokens=dynamic_max_tokens,
                 )
 
                 # 解析回應
