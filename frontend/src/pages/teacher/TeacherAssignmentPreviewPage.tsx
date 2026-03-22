@@ -33,10 +33,18 @@ interface ActivityResponse {
 export default function TeacherAssignmentPreviewPage() {
   const { t } = useTranslation();
   const { classroomId, assignmentId } = useParams<{
-    classroomId: string;
+    classroomId?: string;
     assignmentId: string;
   }>();
   const navigate = useNavigate();
+
+  const goBack = () => {
+    if (classroomId) {
+      navigate(`/teacher/classroom/${classroomId}?tab=assignments`);
+    } else {
+      navigate(-1);
+    }
+  };
   const { token } = useTeacherAuthStore();
 
   const [activityData, setActivityData] = useState<ActivityResponse | null>(
@@ -100,9 +108,7 @@ export default function TeacherAssignmentPreviewPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() =>
-                navigate(`/teacher/classroom/${classroomId}?tab=assignments`)
-              }
+              onClick={goBack}
               className="gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -130,13 +136,11 @@ export default function TeacherAssignmentPreviewPage() {
         showAnswer={activityData.show_answer || false}
         isPreviewMode={true}
         authToken={token || undefined}
-        onBack={() =>
-          navigate(`/teacher/classroom/${classroomId}?tab=assignments`)
-        }
+        onBack={goBack}
         onSubmit={async () => {
           // 預覽模式完成時，跳回作業列表
           toast.success(t("previewPage.messages.previewComplete"));
-          navigate(`/teacher/classroom/${classroomId}?tab=assignments`);
+          goBack();
         }}
       />
     </div>

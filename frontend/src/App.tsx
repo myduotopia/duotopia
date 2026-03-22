@@ -169,6 +169,14 @@ function App() {
           }
         />
         <Route
+          path="/teacher/assignment/:assignmentId/preview"
+          element={
+            <ProtectedRoute>
+              <TeacherAssignmentPreviewPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/teacher/classroom/:classroomId/assignment/:assignmentId/grading"
           element={
             <ProtectedRoute>

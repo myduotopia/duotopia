@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import {
   RecursiveTreeAccordion,
   TreeNodeConfig,
 } from "@/components/shared/RecursiveTreeAccordion";
+import { InstantPracticeDialog } from "@/components/InstantPracticeDialog";
 import { programTreeConfig } from "@/components/shared/programTreeConfig";
 import { ProgramDialog } from "@/components/ProgramDialog";
 import { LessonDialog } from "@/components/LessonDialog";
@@ -36,9 +38,19 @@ function TeacherTemplateProgramsInner() {
   const isResourceAccount = user?.email === RESOURCE_ACCOUNT_EMAIL;
   const { updateVisibility } = useResourceMaterialsAPI();
 
+  const navigate = useNavigate();
+
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [isReordering, setIsReordering] = useState(false);
+
+  // Instant practice states
+  const [showInstantPractice, setShowInstantPractice] = useState(false);
+  const [instantPracticeContent, setInstantPracticeContent] = useState<{
+    id: number;
+    title: string;
+    type?: string;
+  } | null>(null);
 
   const handleVisibilityChange = useCallback(
     async (programId: number, visibility: string) => {
@@ -570,6 +582,16 @@ function TeacherTemplateProgramsInner() {
             else if (level === 2)
               handleReorderContents(parentId as number, fromIndex, toIndex);
           }}
+          onInstantPractice={(item, level) => {
+            if (level === 2) {
+              setInstantPracticeContent({
+                id: item.id as number,
+                title: (item.title || item.name) as string,
+                type: item.type as string | undefined,
+              });
+              setShowInstantPractice(true);
+            }
+          }}
         />
       </div>
 
@@ -995,6 +1017,23 @@ function TeacherTemplateProgramsInner() {
                 `${t("teacherTemplatePrograms.messages.featureInDevelopment", { type: selection.type })}`,
               );
             }
+          }}
+        />
+      )}
+
+      {/* Instant Practice Dialog */}
+      {instantPracticeContent && (
+        <InstantPracticeDialog
+          open={showInstantPractice}
+          onClose={() => {
+            setShowInstantPractice(false);
+            setInstantPracticeContent(null);
+          }}
+          contentId={instantPracticeContent.id}
+          contentTitle={instantPracticeContent.title}
+          contentType={instantPracticeContent.type}
+          onStartPractice={(assignmentId) => {
+            navigate(`/teacher/assignment/${assignmentId}/preview`);
           }}
         />
       )}
