@@ -59,10 +59,9 @@ def _get_teacher_assignment(
     """Return Assignment owned by *teacher*, or raise 404."""
     assignment = (
         db.query(Assignment)
-        .join(Classroom)
         .filter(
             Assignment.id == assignment_id,
-            Classroom.teacher_id == teacher.id,
+            Assignment.teacher_id == teacher.id,
         )
         .first()
     )
