@@ -88,17 +88,17 @@ async def create_instant_practice(
                 detail="You don't have permission for this classroom",
             )
 
-    # 驗證 Content 存在且教師有權限存取
-    _program, _lesson, content = check_content_access(
-        db, request.content_id, current_teacher, require_owner=False
-    )
-    # Eagerly load content_items for copying
+    # 驗證 Content 存在且教師有權限存取（permission side-effect，回傳值不直接使用）
+    check_content_access(db, request.content_id, current_teacher, require_owner=False)
+    # Re-query with eagerly loaded content_items for copying
     content = (
         db.query(Content)
         .options(selectinload(Content.content_items))
         .filter(Content.id == request.content_id)
         .first()
     )
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
 
     # 懶清理：刪除該老師的舊即刻練習作業及相關資料
     old_assignments = (
@@ -140,10 +140,12 @@ async def create_instant_practice(
             AssignmentContent.assignment_id == old_assignment.id
         ).delete()
 
-        # Delete copied content and items
+        # Delete copied content and items (only copies, not originals)
         for content_id in copied_content_ids:
             db.query(ContentItem).filter(ContentItem.content_id == content_id).delete()
-            db.query(Content).filter(Content.id == content_id).delete()
+            db.query(Content).filter(
+                Content.id == content_id, Content.is_assignment_copy.is_(True)
+            ).delete()
 
         db.delete(old_assignment)
 
