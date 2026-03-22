@@ -46,7 +46,17 @@ class UpdateAssignmentRequest(BaseModel):
     description: Optional[str] = None
     instructions: Optional[str] = None  # Alias for description
     due_date: Optional[datetime] = None
+    start_date: Optional[datetime] = None
     student_ids: Optional[List[int]] = None
+    # 進階設定
+    time_limit_per_question: Optional[int] = None
+    shuffle_questions: Optional[bool] = None
+    show_answer: Optional[bool] = None
+    play_audio: Optional[bool] = None
+    target_proficiency: Optional[int] = None
+    show_word: Optional[bool] = None
+    show_image: Optional[bool] = None
+    show_translation: Optional[bool] = None
 
 
 class AssignmentResponse(BaseModel):

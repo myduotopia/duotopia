@@ -488,6 +488,9 @@ async def get_assignments(
                 "due_date": (
                     assignment.due_date.isoformat() if assignment.due_date else None
                 ),
+                "start_date": (
+                    assignment.start_date.isoformat() if assignment.start_date else None
+                ),
                 "created_at": (
                     assignment.created_at.isoformat() if assignment.created_at else None
                 ),
@@ -609,6 +612,25 @@ async def patch_assignment(
 
     if request.due_date is not None:
         assignment.due_date = request.due_date
+
+    if request.start_date is not None:
+        assignment.start_date = request.start_date
+
+    # 進階設定更新
+    advanced_fields = [
+        "time_limit_per_question",
+        "shuffle_questions",
+        "show_answer",
+        "play_audio",
+        "target_proficiency",
+        "show_word",
+        "show_image",
+        "show_translation",
+    ]
+    for field in advanced_fields:
+        value = getattr(request, field, None)
+        if value is not None:
+            setattr(assignment, field, value)
 
     # 更新 StudentAssignment 記錄
     update_fields = {}

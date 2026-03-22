@@ -45,7 +45,8 @@
       "questionCount": "題目數量：",
       "itemCount": "題",
       "editContentWarning": "注意：此為作業副本。刪除已有學生進度的題目將被阻止。",
-      "averageScore": "平均分數"
+      "averageScore": "平均分數",
+      "startDateLabel": "開始日期"
     },
     "status": {
       "submitted": "已繳交",

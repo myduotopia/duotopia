@@ -22,6 +22,7 @@ import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
 import VocabularySetPanel from "@/components/VocabularySetPanel";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
+import { Label } from "@/components/ui/label";
 import {
   Pencil,
   Save,
@@ -32,6 +33,7 @@ import {
   BookOpen,
   ChevronRight,
   Edit2,
+  Settings2,
 } from "lucide-react";
 import { Assignment } from "@/types";
 
@@ -49,6 +51,17 @@ interface AssignmentContent {
   title: string;
   type?: string;
   order_index: number;
+}
+
+interface AdvancedSettings {
+  time_limit_per_question: number;
+  shuffle_questions: boolean;
+  show_answer: boolean;
+  play_audio: boolean;
+  target_proficiency: number;
+  show_word: boolean;
+  show_image: boolean;
+  show_translation: boolean;
 }
 
 interface ContentDetail {
@@ -106,10 +119,26 @@ export function AssignmentDetailSheet({
   const [editingContentId, setEditingContentId] = useState<number | null>(null);
   const loadingRef = useRef<Set<number>>(new Set());
 
+  // Detail data from API (includes advanced settings)
+  const [detailData, setDetailData] = useState<Record<string, unknown> | null>(
+    null,
+  );
+
   // Edit form state
   const [editTitle, setEditTitle] = useState("");
   const [editInstructions, setEditInstructions] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
+  const [editStartDate, setEditStartDate] = useState("");
+  const [editAdvanced, setEditAdvanced] = useState<AdvancedSettings>({
+    time_limit_per_question: 30,
+    shuffle_questions: false,
+    show_answer: false,
+    play_audio: false,
+    target_proficiency: 80,
+    show_word: true,
+    show_image: true,
+    show_translation: true,
+  });
 
   // Reset state when assignment changes or sheet closes
   useEffect(() => {
@@ -121,7 +150,9 @@ export function AssignmentDetailSheet({
       setEditDueDate(
         assignment.due_date ? assignment.due_date.split("T")[0] : "",
       );
+      setEditStartDate("");
       setIsEditing(false);
+      setDetailData(null);
       setAssignmentContents([]);
       setContentDetails({});
       setExpandedContentId(null);
@@ -141,9 +172,30 @@ export function AssignmentDetailSheet({
           .catch(() => []),
       ]);
 
+      // Store full detail response for advanced settings
+      const detail = detailResponse as Record<string, unknown>;
+      setDetailData(detail);
+
+      // Initialize start_date from detail
+      const startDateStr = detail.start_date as string | null;
+      setEditStartDate(startDateStr ? startDateStr.split("T")[0] : "");
+
+      // Initialize advanced settings from detail
+      setEditAdvanced({
+        time_limit_per_question:
+          (detail.time_limit_per_question as number) ?? 30,
+        shuffle_questions: (detail.shuffle_questions as boolean) ?? false,
+        show_answer: (detail.show_answer as boolean) ?? false,
+        play_audio: (detail.play_audio as boolean) ?? false,
+        target_proficiency: (detail.target_proficiency as number) ?? 80,
+        show_word: (detail.show_word as boolean) ?? true,
+        show_image: (detail.show_image as boolean) ?? true,
+        show_translation: (detail.show_translation as boolean) ?? true,
+      });
+
       // Extract contents from detail response
       const contents =
-        (detailResponse as { contents?: AssignmentContent[] }).contents || [];
+        (detail as { contents?: AssignmentContent[] }).contents || [];
       setAssignmentContents(contents);
 
       // Extract student progress
@@ -195,6 +247,8 @@ export function AssignmentDetailSheet({
         title: editTitle,
         description: editInstructions,
         due_date: editDueDate || null,
+        start_date: editStartDate || null,
+        ...editAdvanced,
       });
       toast.success(t("assignmentDetail.messages.updateSuccess", "已儲存變更"));
       setIsEditing(false);
@@ -207,7 +261,7 @@ export function AssignmentDetailSheet({
   };
 
   const handleCancelEdit = () => {
-    if (!assignment) return;
+    if (!assignment || !detailData) return;
     setEditTitle(assignment.title);
     setEditInstructions(
       assignment.instructions || assignment.description || "",
@@ -215,6 +269,19 @@ export function AssignmentDetailSheet({
     setEditDueDate(
       assignment.due_date ? assignment.due_date.split("T")[0] : "",
     );
+    const startDateStr = detailData.start_date as string | null;
+    setEditStartDate(startDateStr ? startDateStr.split("T")[0] : "");
+    setEditAdvanced({
+      time_limit_per_question:
+        (detailData.time_limit_per_question as number) ?? 30,
+      shuffle_questions: (detailData.shuffle_questions as boolean) ?? false,
+      show_answer: (detailData.show_answer as boolean) ?? false,
+      play_audio: (detailData.play_audio as boolean) ?? false,
+      target_proficiency: (detailData.target_proficiency as number) ?? 80,
+      show_word: (detailData.show_word as boolean) ?? true,
+      show_image: (detailData.show_image as boolean) ?? true,
+      show_translation: (detailData.show_translation as boolean) ?? true,
+    });
     setIsEditing(false);
   };
 
@@ -402,15 +469,335 @@ export function AssignmentDetailSheet({
                     rows={3}
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {t("assignmentDetail.sheet.dueDateLabel", "截止日期")}
-                  </label>
-                  <Input
-                    type="date"
-                    value={editDueDate}
-                    onChange={(e) => setEditDueDate(e.target.value)}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {t("assignmentDetail.sheet.startDateLabel", "開始日期")}
+                    </label>
+                    <Input
+                      type="date"
+                      value={editStartDate}
+                      onChange={(e) => setEditStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {t("assignmentDetail.sheet.dueDateLabel", "截止日期")}
+                    </label>
+                    <Input
+                      type="date"
+                      value={editDueDate}
+                      onChange={(e) => setEditDueDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* 進階設定 */}
+                <div className="border dark:border-gray-700 rounded-lg p-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Settings2 className="h-4 w-4 text-gray-500" />
+                    <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {t(
+                        "dialogs.assignmentDialog.practiceMode.advancedSettings",
+                        "進階設定",
+                      )}
+                    </Label>
+                  </div>
+
+                  {/* 例句重組專用 - 播放音檔 */}
+                  {assignment.practice_mode === "rearrangement" && (
+                    <div>
+                      <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
+                        {t("dialogs.assignmentDialog.practiceMode.playAudio")}
+                      </Label>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditAdvanced((prev) => ({
+                              ...prev,
+                              play_audio: true,
+                            }))
+                          }
+                          className={`flex-1 p-3 rounded-lg border text-sm ${
+                            editAdvanced.play_audio
+                              ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
+                              : "border-gray-200 dark:border-gray-600 hover:border-gray-300"
+                          }`}
+                        >
+                          🔊{" "}
+                          {t(
+                            "dialogs.assignmentDialog.practiceMode.playAudioYes",
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditAdvanced((prev) => ({
+                              ...prev,
+                              play_audio: false,
+                            }))
+                          }
+                          className={`flex-1 p-3 rounded-lg border text-sm ${
+                            !editAdvanced.play_audio
+                              ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
+                              : "border-gray-200 dark:border-gray-600 hover:border-gray-300"
+                          }`}
+                        >
+                          🔇{" "}
+                          {t(
+                            "dialogs.assignmentDialog.practiceMode.playAudioNo",
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 單字選擇專用 - 達標熟悉度 */}
+                  {assignment.practice_mode === "word_selection" && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <Label className="text-xs text-gray-600 dark:text-gray-400">
+                          {t(
+                            "dialogs.assignmentDialog.practiceMode.targetProficiency",
+                          )}
+                        </Label>
+                        <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                          {editAdvanced.target_proficiency}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={50}
+                        max={100}
+                        step={5}
+                        value={editAdvanced.target_proficiency}
+                        onChange={(e) =>
+                          setEditAdvanced((prev) => ({
+                            ...prev,
+                            target_proficiency: Number(e.target.value),
+                          }))
+                        }
+                        className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {t(
+                          "dialogs.assignmentDialog.practiceMode.targetProficiencyDesc",
+                        )}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 單字選擇專用 - 題目呈現方式 */}
+                  {assignment.practice_mode === "word_selection" && (
+                    <div>
+                      <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
+                        {t(
+                          "dialogs.assignmentDialog.practiceMode.questionDisplay",
+                        )}
+                      </Label>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditAdvanced((prev) => ({
+                              ...prev,
+                              show_word: true,
+                              play_audio: false,
+                            }))
+                          }
+                          className={`flex-1 p-3 rounded-lg border text-sm ${
+                            editAdvanced.show_word && !editAdvanced.play_audio
+                              ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
+                              : "border-gray-200 dark:border-gray-600 hover:border-gray-300"
+                          }`}
+                        >
+                          👁️{" "}
+                          {t(
+                            "dialogs.assignmentDialog.practiceMode.displayWord",
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditAdvanced((prev) => ({
+                              ...prev,
+                              show_word: false,
+                              play_audio: true,
+                            }))
+                          }
+                          className={`flex-1 p-3 rounded-lg border text-sm ${
+                            !editAdvanced.show_word && editAdvanced.play_audio
+                              ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
+                              : "border-gray-200 dark:border-gray-600 hover:border-gray-300"
+                          }`}
+                        >
+                          🔊{" "}
+                          {t(
+                            "dialogs.assignmentDialog.practiceMode.playAudioWord",
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* 時間限制 */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-gray-600 dark:text-gray-400">
+                        {t("dialogs.assignmentDialog.practiceMode.timeLimit")}
+                      </Label>
+                      <select
+                        value={editAdvanced.time_limit_per_question}
+                        onChange={(e) =>
+                          setEditAdvanced((prev) => ({
+                            ...prev,
+                            time_limit_per_question: Number(e.target.value),
+                          }))
+                        }
+                        className="w-full h-9 px-3 rounded-md border border-gray-200 dark:border-gray-600 dark:bg-gray-800 text-sm"
+                      >
+                        {(assignment.practice_mode === "rearrangement" ||
+                          assignment.practice_mode === "word_reading" ||
+                          assignment.practice_mode === "word_selection") && (
+                          <option value={0}>
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.unlimited",
+                            )}
+                          </option>
+                        )}
+                        <option value={10}>
+                          10{" "}
+                          {t("dialogs.assignmentDialog.practiceMode.seconds")}
+                        </option>
+                        <option value={20}>
+                          20{" "}
+                          {t("dialogs.assignmentDialog.practiceMode.seconds")}
+                        </option>
+                        <option value={30}>
+                          30{" "}
+                          {t("dialogs.assignmentDialog.practiceMode.seconds")}
+                        </option>
+                        <option value={40}>
+                          40{" "}
+                          {t("dialogs.assignmentDialog.practiceMode.seconds")}
+                        </option>
+                      </select>
+                    </div>
+
+                    {/* 打亂順序 */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-gray-600 dark:text-gray-400">
+                        {t(
+                          "dialogs.assignmentDialog.practiceMode.shuffleQuestions",
+                        )}
+                      </Label>
+                      <div className="flex items-center h-9">
+                        <input
+                          type="checkbox"
+                          checked={editAdvanced.shuffle_questions}
+                          onChange={(e) =>
+                            setEditAdvanced((prev) => ({
+                              ...prev,
+                              shuffle_questions: e.target.checked,
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                          {t(
+                            "dialogs.assignmentDialog.practiceMode.shuffleQuestionsDesc",
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 例句重組專用 - 顯示答案 */}
+                    {assignment.practice_mode === "rearrangement" && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-600 dark:text-gray-400">
+                          {t(
+                            "dialogs.assignmentDialog.practiceMode.showAnswer",
+                          )}
+                        </Label>
+                        <div className="flex items-center h-9">
+                          <input
+                            type="checkbox"
+                            checked={editAdvanced.show_answer}
+                            onChange={(e) =>
+                              setEditAdvanced((prev) => ({
+                                ...prev,
+                                show_answer: e.target.checked,
+                              }))
+                            }
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.showAnswerDesc",
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 單字朗讀專用 - 顯示翻譯 */}
+                    {assignment.practice_mode === "word_reading" && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-600 dark:text-gray-400">
+                          {t(
+                            "dialogs.assignmentDialog.practiceMode.showTranslation",
+                          )}
+                        </Label>
+                        <div className="flex items-center h-9">
+                          <input
+                            type="checkbox"
+                            checked={editAdvanced.show_translation}
+                            onChange={(e) =>
+                              setEditAdvanced((prev) => ({
+                                ...prev,
+                                show_translation: e.target.checked,
+                              }))
+                            }
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.showTranslationDesc",
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 顯示圖片 (word_reading + word_selection) */}
+                    {(assignment.practice_mode === "word_reading" ||
+                      assignment.practice_mode === "word_selection") && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-600 dark:text-gray-400">
+                          {t("dialogs.assignmentDialog.practiceMode.showImage")}
+                        </Label>
+                        <div className="flex items-center h-9">
+                          <input
+                            type="checkbox"
+                            checked={editAdvanced.show_image}
+                            onChange={(e) =>
+                              setEditAdvanced((prev) => ({
+                                ...prev,
+                                show_image: e.target.checked,
+                              }))
+                            }
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.showImageDesc",
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : (

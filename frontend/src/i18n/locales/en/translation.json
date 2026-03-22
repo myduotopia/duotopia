@@ -2909,7 +2909,8 @@
       "questionCount": "Questions: ",
       "itemCount": "items",
       "editContentWarning": "Note: This is an assignment copy. Deleting items with existing student progress will be blocked.",
-      "averageScore": "Average Score"
+      "averageScore": "Average Score",
+      "startDateLabel": "Start Date"
     },
     "status": {
       "submitted": "Submitted",
