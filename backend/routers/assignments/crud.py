@@ -146,6 +146,7 @@ async def create_assignment(
         classroom_id=request.classroom_id,
         teacher_id=current_teacher.id,
         due_date=request.due_date,
+        start_date=request.start_date,
         is_active=True,
         # 作答模式設定
         practice_mode=request.practice_mode,
