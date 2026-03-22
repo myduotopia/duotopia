@@ -535,9 +535,7 @@ Only reply with JSON array, no other text."""
                 )
                 all_sentences.extend(chunk_result)
             except Exception as e:
-                logger.error(
-                    "Chunk %d-%d failed: %s", start, end, e
-                )
+                logger.error("Chunk %d-%d failed: %s", start, end, e)
                 # 該批次失敗時使用 fallback，不影響其他批次
                 for word in chunk_words:
                     sentence_obj: Dict[str, str] = {
@@ -725,9 +723,7 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
             user_prompt += "\n\nOnly return the JSON array, no other text."
 
             # 動態計算 max_tokens：根據單字數量，避免大批次被截斷
-            dynamic_max_tokens = max(
-                1000, len(words) * self.TOKENS_PER_WORD
-            )
+            dynamic_max_tokens = max(1000, len(words) * self.TOKENS_PER_WORD)
 
             # Use Vertex AI or OpenAI based on configuration
             if self.use_vertex_ai:

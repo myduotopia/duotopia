@@ -317,7 +317,9 @@ class TestSentenceGenerationChunking:
 
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = """[
+        mock_response.choices[
+            0
+        ].message.content = """[
             {"sentence": "The cat is sleeping.", "word": "cat"},
             {"sentence": "The dog is barking.", "word": "dog"},
             {"sentence": "The bird is singing.", "word": "bird"}
@@ -349,8 +351,7 @@ class TestSentenceGenerationChunking:
             prompt_content = kwargs["messages"][1]["content"]
             chunk_words = [w for w in words if f'"word": "{w}"' in prompt_content]
             sentences = [
-                {"sentence": f"Good sentence for {w}.", "word": w}
-                for w in chunk_words
+                {"sentence": f"Good sentence for {w}.", "word": w} for w in chunk_words
             ]
             mock_resp = Mock()
             mock_resp.choices = [Mock()]
