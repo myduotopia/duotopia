@@ -6,6 +6,7 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -38,8 +39,8 @@ interface InstantPracticeDialogProps {
 
 interface PracticeModeOption {
   value: string;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: LucideIcon;
   contentTypes: string[];
 }
@@ -47,29 +48,29 @@ interface PracticeModeOption {
 const PRACTICE_MODES: PracticeModeOption[] = [
   {
     value: "reading",
-    label: "例句朗讀",
-    description: "朗讀例句並錄音評分",
+    labelKey: "instantPractice.modes.reading.label",
+    descriptionKey: "instantPractice.modes.reading.description",
     icon: Mic,
     contentTypes: ["EXAMPLE_SENTENCES", "example_sentences"],
   },
   {
     value: "rearrangement",
-    label: "例句重組",
-    description: "將打散的單字重新排列成正確句子",
+    labelKey: "instantPractice.modes.rearrangement.label",
+    descriptionKey: "instantPractice.modes.rearrangement.description",
     icon: Shuffle,
     contentTypes: ["EXAMPLE_SENTENCES", "example_sentences"],
   },
   {
     value: "word_reading",
-    label: "單字朗讀",
-    description: "朗讀單字並錄音評分",
+    labelKey: "instantPractice.modes.wordReading.label",
+    descriptionKey: "instantPractice.modes.wordReading.description",
     icon: BookOpen,
     contentTypes: ["VOCABULARY_SET", "vocabulary_set"],
   },
   {
     value: "word_selection",
-    label: "單字選擇",
-    description: "根據單字選擇正確的翻譯",
+    labelKey: "instantPractice.modes.wordSelection.label",
+    descriptionKey: "instantPractice.modes.wordSelection.description",
     icon: Zap,
     contentTypes: ["VOCABULARY_SET", "vocabulary_set"],
   },
@@ -84,6 +85,7 @@ export function InstantPracticeDialog({
   classroomId,
   onStartPractice,
 }: InstantPracticeDialogProps) {
+  const { t } = useTranslation();
   const [selectedMode, setSelectedMode] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
 
@@ -117,7 +119,7 @@ export function InstantPracticeDialog({
       }
     } catch (error) {
       console.error("Failed to create instant practice:", error);
-      toast.error("建立即刻練習失敗");
+      toast.error(t("instantPractice.error"));
     } finally {
       setIsCreating(false);
     }
@@ -129,7 +131,7 @@ export function InstantPracticeDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-amber-500" />
-            即刻練習
+            {t("instantPractice.title")}
           </DialogTitle>
         </DialogHeader>
 
@@ -141,7 +143,7 @@ export function InstantPracticeDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>練習模式</Label>
+            <Label>{t("instantPractice.modeLabel")}</Label>
             <div className="grid gap-2">
               {availableModes.map((mode) => {
                 const Icon = mode.icon;
@@ -179,10 +181,10 @@ export function InstantPracticeDialog({
                             : "text-gray-900 dark:text-gray-100"
                         }`}
                       >
-                        {mode.label}
+                        {t(mode.labelKey)}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {mode.description}
+                        {t(mode.descriptionKey)}
                       </p>
                     </div>
                   </button>
@@ -194,7 +196,7 @@ export function InstantPracticeDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isCreating}>
-            取消
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleStart}
@@ -204,12 +206,12 @@ export function InstantPracticeDialog({
             {isCreating ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                建立中...
+                {t("instantPractice.creating")}
               </>
             ) : (
               <>
                 <Zap className="h-4 w-4 mr-2" />
-                開始練習
+                {t("instantPractice.start")}
               </>
             )}
           </Button>

@@ -263,5 +263,30 @@
       "willActivate": "비밀번호 설정 후 계정이 즉시 활성화됩니다",
       "useAllFeatures": "Duotopia의 모든 기능을 사용할 수 있습니다"
     }
+  },
+  "instantPractice": {
+    "title": "즉시 연습",
+    "modeLabel": "연습 모드",
+    "creating": "생성 중...",
+    "start": "연습 시작",
+    "error": "즉시 연습 생성에 실패했습니다",
+    "modes": {
+      "reading": {
+        "label": "문장 읽기",
+        "description": "문장을 소리 내어 읽고 발음 평가"
+      },
+      "rearrangement": {
+        "label": "문장 재배열",
+        "description": "흩어진 단어를 올바른 문장으로 재배열"
+      },
+      "wordReading": {
+        "label": "단어 읽기",
+        "description": "단어를 소리 내어 읽고 발음 평가"
+      },
+      "wordSelection": {
+        "label": "단어 선택",
+        "description": "각 단어의 올바른 번역 선택"
+      }
+    }
   }
 }

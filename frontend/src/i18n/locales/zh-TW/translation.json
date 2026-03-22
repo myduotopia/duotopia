@@ -2217,7 +2217,7 @@
     "print": "列印",
     "batchPrint": "批次列印",
     "batchPrintError": "批次列印失敗",
-    "copyright": "由 Duotopia 產生 \u00a9 duotopia.com",
+    "copyright": "由 Duotopia 產生 © duotopia.com",
     "status": {
       "notStarted": "未開始",
       "inProgress": "待完成",
@@ -4626,6 +4626,31 @@
       "copySuccess": "已複製「{{name}}」到我的教材",
       "copySuccessOrg": "已複製「{{name}}」到組織教材",
       "copyFailed": "複製失敗，請稍後再試"
+    }
+  },
+  "instantPractice": {
+    "title": "即刻練習",
+    "modeLabel": "練習模式",
+    "creating": "建立中...",
+    "start": "開始練習",
+    "error": "建立即刻練習失敗",
+    "modes": {
+      "reading": {
+        "label": "例句朗讀",
+        "description": "朗讀例句並錄音評分"
+      },
+      "rearrangement": {
+        "label": "例句重組",
+        "description": "將打散的單字重新排列成正確句子"
+      },
+      "wordReading": {
+        "label": "單字朗讀",
+        "description": "朗讀單字並錄音評分"
+      },
+      "wordSelection": {
+        "label": "單字選擇",
+        "description": "根據單字選擇正確的翻譯"
+      }
     }
   }
 }
