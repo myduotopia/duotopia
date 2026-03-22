@@ -5,6 +5,7 @@ Supports switching between OpenAI and Vertex AI via USE_VERTEX_AI environment va
 """
 
 import os
+import re
 import json as json_module
 import asyncio
 import logging
@@ -511,33 +512,45 @@ Only reply with JSON array, no other text."""
                 parts_of_speech=parts_of_speech,
             )
 
-        # 分塊處理
-        all_sentences: List[Dict[str, str]] = []
+        # 分塊並行處理（asyncio.gather 減少延遲）
+        chunks = []
         for start in range(0, len(words), self.SENTENCE_CHUNK_SIZE):
             end = start + self.SENTENCE_CHUNK_SIZE
-            chunk_words = words[start:end]
-            chunk_definitions = definitions[start:end] if definitions else None
-            chunk_pos = parts_of_speech[start:end] if parts_of_speech else None
+            chunks.append(
+                {
+                    "words": words[start:end],
+                    "definitions": definitions[start:end] if definitions else None,
+                    "parts_of_speech": parts_of_speech[start:end]
+                    if parts_of_speech
+                    else None,
+                }
+            )
 
-            try:
-                chunk_result = await self._generate_sentences_batch(
-                    words=chunk_words,
-                    definitions=chunk_definitions,
-                    unit_context=unit_context,
-                    lesson_name=lesson_name,
-                    program_name=program_name,
-                    program_description=program_description,
-                    program_tags=program_tags,
-                    level=level,
-                    prompt=prompt,
-                    translate_to=translate_to,
-                    parts_of_speech=chunk_pos,
-                )
-                all_sentences.extend(chunk_result)
-            except Exception as e:
-                logger.error("Chunk %d-%d failed: %s", start, end, e)
+        tasks = [
+            self._generate_sentences_batch(
+                words=chunk["words"],
+                definitions=chunk["definitions"],
+                unit_context=unit_context,
+                lesson_name=lesson_name,
+                program_name=program_name,
+                program_description=program_description,
+                program_tags=program_tags,
+                level=level,
+                prompt=prompt,
+                translate_to=translate_to,
+                parts_of_speech=chunk["parts_of_speech"],
+            )
+            for chunk in chunks
+        ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_sentences: List[Dict[str, str]] = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error("Chunk %d failed: %s", i, result)
                 # 該批次失敗時使用 fallback，不影響其他批次
-                for word in chunk_words:
+                for word in chunks[i]["words"]:
                     sentence_obj: Dict[str, str] = {
                         "sentence": f"This is an example with {word}.",
                         "word": word,
@@ -545,6 +558,8 @@ Only reply with JSON array, no other text."""
                     if translate_to:
                         sentence_obj["translation"] = ""
                     all_sentences.append(sentence_obj)
+            else:
+                all_sentences.extend(result)
 
         return all_sentences
 
@@ -564,7 +579,6 @@ Only reply with JSON array, no other text."""
     ) -> List[Dict[str, str]]:
         """單批次 AI 例句生成（內部方法，由 generate_sentences 呼叫）"""
         self._ensure_client()
-        import json
 
         try:
             # 構建單字資訊
@@ -577,7 +591,7 @@ Only reply with JSON array, no other text."""
                     info["pos"] = ", ".join(parts_of_speech[i])
                 words_info.append(info)
 
-            words_json = json.dumps(words_info, ensure_ascii=False)
+            words_json = json_module.dumps(words_info, ensure_ascii=False)
 
             # 計算翻譯語言名稱（用於 system prompt）
             translation_lang_name = (
@@ -722,7 +736,7 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
 
             user_prompt += "\n\nOnly return the JSON array, no other text."
 
-            # 動態計算 max_tokens：根據單字數量，避免大批次被截斷
+            # 動態計算 max_tokens：分塊後每批 ≤5 字，最低 1000 tokens
             dynamic_max_tokens = max(1000, len(words) * self.TOKENS_PER_WORD)
 
             # Use Vertex AI or OpenAI based on configuration
@@ -746,8 +760,6 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
                 )
 
                 # 解析回應
-                import re
-
                 content = response.choices[0].message.content.strip()
 
                 # 移除可能的 markdown 代碼塊標記
@@ -755,7 +767,7 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
                 content = re.sub(r"\s*```$", "", content)
                 content = content.strip()
 
-                sentences = json.loads(content)
+                sentences = json_module.loads(content)
 
             # 確保返回數量正確並添加 word 欄位以防止陣列錯位
             if len(sentences) != len(words):

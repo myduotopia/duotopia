@@ -376,3 +376,34 @@ class TestSentenceGenerationChunking:
         for i in range(5, 10):
             assert "example with" in results[i]["sentence"].lower()
             assert results[i]["word"] == words[i]
+
+    @pytest.mark.asyncio
+    async def test_large_batch_chunked_vertex_ai(self):
+        """Vertex AI path: 10 words should be chunked into 2 batches"""
+        svc = TranslationService()
+        svc.use_vertex_ai = True
+
+        words = [f"word{i}" for i in range(10)]
+        call_count = 0
+
+        async def mock_generate_json(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            prompt = kwargs.get("prompt", "")
+            chunk_words = [w for w in words if f'"word": "{w}"' in prompt]
+            return [
+                {"sentence": f"Vertex example with {w}.", "word": w}
+                for w in chunk_words
+            ]
+
+        mock_vertex = Mock()
+        mock_vertex.generate_json = AsyncMock(side_effect=mock_generate_json)
+        svc.vertex_ai = mock_vertex
+
+        results = await svc.generate_sentences(words=words, level="A1")
+
+        assert len(results) == 10
+        assert call_count == 2, f"Expected 2 Vertex AI calls, got {call_count}"
+        for i, result in enumerate(results):
+            assert result["word"] == words[i]
+            assert "Vertex example" in result["sentence"]
