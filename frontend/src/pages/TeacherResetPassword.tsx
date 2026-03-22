@@ -15,6 +15,7 @@ import { Loader2, Lock, CheckCircle, XCircle, Eye, EyeOff } from "lucide-react";
 import { apiClient } from "../lib/api";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useTranslation } from "react-i18next";
+import { validatePasswordStrength } from "@/utils/passwordValidation";
 
 export default function TeacherResetPassword() {
   const { t } = useTranslation();
@@ -85,14 +86,18 @@ export default function TeacherResetPassword() {
     e.preventDefault();
     setError("");
 
-    // 驗證密碼
-    if (formData.newPassword !== formData.confirmPassword) {
+    // 驗證密碼（先 trim 再驗證，確保驗證的是實際儲存的值）
+    const trimmedPassword = formData.newPassword.trim();
+    const trimmedConfirm = formData.confirmPassword.trim();
+
+    if (trimmedPassword !== trimmedConfirm) {
       setError(t("passwordReset.errors.passwordMismatch"));
       return;
     }
 
-    if (formData.newPassword.length < 6) {
-      setError(t("passwordReset.errors.passwordTooShort"));
+    const validation = validatePasswordStrength(trimmedPassword);
+    if (!validation.valid && validation.errorKey) {
+      setError(t(`passwordReset.errors.${validation.errorKey}`));
       return;
     }
 
@@ -103,7 +108,7 @@ export default function TeacherResetPassword() {
         "/api/auth/teacher/reset-password",
         {
           token,
-          new_password: formData.newPassword,
+          new_password: trimmedPassword,
         },
       );
 

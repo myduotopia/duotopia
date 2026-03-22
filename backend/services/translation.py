@@ -5,6 +5,7 @@ Supports switching between OpenAI and Vertex AI via USE_VERTEX_AI environment va
 """
 
 import os
+import re
 import json as json_module
 import asyncio
 import logging
@@ -169,7 +170,7 @@ class TranslationService:
         self, text: str, target_lang: str = "zh-TW"
     ) -> Dict[str, any]:
         """
-        翻譯單字並辨識詞性
+        翻譯單字並辨識詞性（委託給 batch 版本以獲得更穩定的結果）
 
         Args:
             text: 要翻譯的單字
@@ -178,115 +179,12 @@ class TranslationService:
         Returns:
             包含 translation 和 parts_of_speech 的字典
         """
-        self._ensure_client()
-        import json
-
-        try:
-            # 建立 prompt 要求同時翻譯和辨識詞性
-            if target_lang == "zh-TW":
-                prompt = f"""請分析以下英文單字，提供：
-1. 繁體中文翻譯
-2. 詞性（必須列出所有常見用法的詞性）
-
-單字: {text}
-
-重要提示：
-- 許多英文單字有多種詞性，請列出所有常見的用法
-- 例如：顏色詞（red, blue, green）通常既是形容詞也是名詞
-- 例如：動作詞（run, walk, dance）通常既是動詞也是名詞
-- 例如：材料詞（gold, silver, plastic）通常既是名詞也是形容詞
-- 請勿遺漏任何常見詞性
-
-請以 JSON 格式回覆，格式如下：
-{{"translation": "中文翻譯", "parts_of_speech": ["n.", "adj."]}}
-
-詞性縮寫：n. (名詞), v. (動詞), adj. (形容詞), adv. (副詞),
-pron. (代名詞), prep. (介系詞), conj. (連接詞), interj. (感嘆詞),
-det. (限定詞), aux. (助動詞)
-
-只回覆 JSON，不要其他文字。"""
-            else:
-                prompt = f"""Analyze the following English word and provide:
-1. English definition(s) — only provide multiple if the word has truly distinct \
-meanings (max 3), numbered in a single string
-2. Parts of speech (MUST list ALL common usages)
-
-Word: {text}
-
-DEFINITION RULES:
-- NEVER use the word "{text}" (or any of its forms) in the definition.
-- Each definition MUST be 15 words or fewer.
-- Start with lowercase after POS abbreviation. Do NOT end with a period.
-- Follow this starter by part of speech:
-  Noun: "(n.) a/an ..."  |  Verb: "(v.) to ..."  |  Adjective: "(adj.) describing ..."
-  Adverb: "(adv.) in a way that ..."  |  Preposition: "(prep.) indicating ..."
-- Example for 'apple': "1. (n.) a round fruit with red or green skin"
-
-IMPORTANT:
-- Many English words have multiple parts of speech - list ALL common usages
-- Colors (red, blue, green) are typically both adjectives AND nouns
-- Action words (run, walk, dance) are typically both verbs AND nouns
-- Material words (gold, silver, plastic) are typically both nouns AND adjectives
-- Do NOT omit any common part of speech
-
-Reply in JSON format:
-{{"translation": "1. (n.) definition here", "parts_of_speech": ["n.", "adj."]}}
-
-POS abbreviations: n. (noun), v. (verb), adj. (adjective), adv. (adverb),
-pron. (pronoun), prep. (preposition), conj. (conjunction), interj. (interjection),
-det. (determiner), aux. (auxiliary)
-
-Only reply with JSON, no other text."""
-
-            system_instruction = (
-                "You are a professional linguist specializing in English grammar. "
-                "When identifying parts of speech, you MUST list ALL common usages - "
-                "many English words function as multiple parts of speech. "
-                "CRITICAL: When translating to Chinese, you MUST use Traditional Chinese (繁體中文), "
-                "NOT Simplified Chinese. Always respond with valid JSON only."
-            )
-
-            # Use Vertex AI or OpenAI based on configuration
-            if self.use_vertex_ai:
-                result = await self.vertex_ai.generate_json(
-                    prompt=prompt,
-                    model_type="flash",
-                    max_tokens=200,
-                    temperature=0.2,
-                    system_instruction=system_instruction,
-                )
-            else:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.2,  # Lower temperature for more consistent POS detection
-                    max_tokens=200,
-                )
-
-                # 解析 JSON 回應
-                import re
-
-                content = response.choices[0].message.content.strip()
-                # 移除可能的 markdown 代碼塊標記
-                content = re.sub(r"^```json\s*", "", content)
-                content = re.sub(r"\s*```$", "", content)
-                content = content.strip()
-
-                result = json.loads(content)
-
-            # 確保返回正確的結構
-            return {
-                "translation": result.get("translation", text),
-                "parts_of_speech": result.get("parts_of_speech", []),
-            }
-        except Exception as e:
-            logger.error("Translate with POS error: %s", e)
-            # Fallback: 只返回翻譯
-            translation = await self.translate_text(text, target_lang)
-            return {"translation": translation, "parts_of_speech": []}
+        results = await self.batch_translate_with_pos([text], target_lang)
+        if results and len(results) > 0:
+            return results[0]
+        # Fallback
+        translation = await self.translate_text(text, target_lang)
+        return {"translation": translation, "parts_of_speech": []}
 
     async def batch_translate(
         self, texts: List[str], target_lang: str = "zh-TW"
@@ -574,35 +472,113 @@ Only reply with JSON array, no other text."""
             results = await asyncio.gather(*tasks)
             return results
 
+    # 每批最多處理的單字數量
+    SENTENCE_CHUNK_SIZE = 5
+    # 每個單字預估的輸出 token 數（含 sentence + translation + JSON 格式）
+    TOKENS_PER_WORD = 250
+
     async def generate_sentences(
         self,
         words: List[str],
         definitions: Optional[List[str]] = None,
         unit_context: Optional[str] = None,
         lesson_name: Optional[str] = None,
-        program_context: Optional[str] = None,
+        program_name: Optional[str] = None,
+        program_description: Optional[str] = None,
+        program_tags: Optional[List[str]] = None,
         level: str = "A1",
         prompt: Optional[str] = None,
         translate_to: Optional[str] = None,
         parts_of_speech: Optional[List[List[str]]] = None,
     ) -> List[Dict[str, str]]:
         """
-        使用 AI 為單字生成例句
+        使用 AI 為單字生成例句（支援自動分塊避免 token 截斷）
 
-        Args:
-            words: 單字列表
-            definitions: 單字的中文翻譯列表（用於消歧義，如 "put" → "放置"）
-            unit_context: 單元描述（教學目標或主題，來自 Lesson.description）
-            level: CEFR 等級 (A1, A2, B1, B2, C1, C2)
-            prompt: 使用者自訂 prompt
-            translate_to: 翻譯目標語言 (zh-TW, ja, ko)
-            parts_of_speech: 每個單字的詞性列表
-
-        Returns:
-            包含 sentence 和 translation 的字典列表
+        當單字數量超過 SENTENCE_CHUNK_SIZE 時，自動拆成多批處理，
+        每批獨立呼叫 AI 並合併結果，避免大批次因 token 上限導致截斷。
         """
+        if len(words) <= self.SENTENCE_CHUNK_SIZE:
+            return await self._generate_sentences_batch(
+                words=words,
+                definitions=definitions,
+                unit_context=unit_context,
+                lesson_name=lesson_name,
+                program_name=program_name,
+                program_description=program_description,
+                program_tags=program_tags,
+                level=level,
+                prompt=prompt,
+                translate_to=translate_to,
+                parts_of_speech=parts_of_speech,
+            )
+
+        # 分塊並行處理（asyncio.gather 減少延遲）
+        chunks = []
+        for start in range(0, len(words), self.SENTENCE_CHUNK_SIZE):
+            end = start + self.SENTENCE_CHUNK_SIZE
+            chunks.append(
+                {
+                    "words": words[start:end],
+                    "definitions": definitions[start:end] if definitions else None,
+                    "parts_of_speech": parts_of_speech[start:end]
+                    if parts_of_speech
+                    else None,
+                }
+            )
+
+        tasks = [
+            self._generate_sentences_batch(
+                words=chunk["words"],
+                definitions=chunk["definitions"],
+                unit_context=unit_context,
+                lesson_name=lesson_name,
+                program_name=program_name,
+                program_description=program_description,
+                program_tags=program_tags,
+                level=level,
+                prompt=prompt,
+                translate_to=translate_to,
+                parts_of_speech=chunk["parts_of_speech"],
+            )
+            for chunk in chunks
+        ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_sentences: List[Dict[str, str]] = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error("Chunk %d failed: %s", i, result)
+                # 該批次失敗時使用 fallback，不影響其他批次
+                for word in chunks[i]["words"]:
+                    sentence_obj: Dict[str, str] = {
+                        "sentence": f"This is an example with {word}.",
+                        "word": word,
+                    }
+                    if translate_to:
+                        sentence_obj["translation"] = ""
+                    all_sentences.append(sentence_obj)
+            else:
+                all_sentences.extend(result)
+
+        return all_sentences
+
+    async def _generate_sentences_batch(
+        self,
+        words: List[str],
+        definitions: Optional[List[str]] = None,
+        unit_context: Optional[str] = None,
+        lesson_name: Optional[str] = None,
+        program_name: Optional[str] = None,
+        program_description: Optional[str] = None,
+        program_tags: Optional[List[str]] = None,
+        level: str = "A1",
+        prompt: Optional[str] = None,
+        translate_to: Optional[str] = None,
+        parts_of_speech: Optional[List[List[str]]] = None,
+    ) -> List[Dict[str, str]]:
+        """單批次 AI 例句生成（內部方法，由 generate_sentences 呼叫）"""
         self._ensure_client()
-        import json
 
         try:
             # 構建單字資訊
@@ -615,7 +591,31 @@ Only reply with JSON array, no other text."""
                     info["pos"] = ", ".join(parts_of_speech[i])
                 words_info.append(info)
 
-            words_json = json.dumps(words_info, ensure_ascii=False)
+            words_json = json_module.dumps(words_info, ensure_ascii=False)
+
+            # 計算翻譯語言名稱（用於 system prompt）
+            translation_lang_name = (
+                {
+                    "zh-TW": "Traditional Chinese (繁體中文)",
+                    "ja": "Japanese",
+                    "ko": "Korean",
+                }.get(translate_to, translate_to)
+                if translate_to
+                else None
+            )
+
+            # 動態構建第 2 條 CRITICAL REQUIREMENT
+            if not translate_to or translate_to == "zh-TW":
+                critical_2 = (
+                    "2. If translating to Chinese, you MUST use "
+                    "Traditional Chinese (繁體中文), NOT Simplified Chinese."
+                )
+            else:
+                critical_2 = (
+                    f"2. When translating, you MUST translate to "
+                    f"{translation_lang_name} only. Do NOT translate "
+                    f"to Chinese or any other language."
+                )
 
             # 構建 system prompt
             system_prompt = f"""You are an English teacher creating example sentences for language learners.
@@ -624,7 +624,7 @@ The sentences should be natural, educational, and appropriate for the difficulty
 
 CRITICAL REQUIREMENTS:
 1. Each sentence MUST contain the exact target word (the word being learned). Do NOT use synonyms or derivatives.
-2. If translating to Chinese, you MUST use Traditional Chinese (繁體中文), NOT Simplified Chinese.
+{critical_2}
 3. **IF A WORD HAS A "definition" FIELD, YOU MUST USE THAT SPECIFIC MEANING.**
    - The "definition" field contains the teacher's chosen translation/meaning (may be in any language)
    - Many English words have multiple meanings (e.g., "like" = 喜歡 or 像是, "change" = 改變 or 零錢)
@@ -665,20 +665,38 @@ This recipe), abstract nouns (Happiness, His decision), gerund phrases \
             # 構建 user prompt
             user_prompt = ""
 
-            # 如果有教學情境，先說明（program + lesson 資訊）
-            context_parts = []
-            if program_context:
-                context_parts.append(f"Course: {program_context}")
-            if lesson_name:
-                context_parts.append(f"Unit: {lesson_name}")
+            # 高優先級：教學指引（課程描述、單元描述、程度）
+            guidelines = []
+            if level:
+                guidelines.append(f"- Course level: {level}")
+            if program_description:
+                guidelines.append(f"- Course description: {program_description}")
             if unit_context:
-                context_parts.append(f"Unit description: {unit_context}")
+                guidelines.append(f"- Unit description: {unit_context}")
 
-            if context_parts:
-                user_prompt += f"""**TEACHING CONTEXT**:
-{chr(10).join(context_parts)}
+            if guidelines:
+                user_prompt += f"""**TEACHING GUIDELINES (SHOULD FOLLOW)**:
+{chr(10).join(guidelines)}
 
-Generate sentences that fit this teaching context. Use vocabulary and topics relevant to the unit theme when possible.
+These are the teacher's pedagogical intentions. You SHOULD follow these \
+guidelines when generating sentences, especially grammar patterns and \
+topics mentioned. Only override if it conflicts with word definition or \
+part of speech requirements above.
+
+"""
+
+            # 低優先級：背景參考（課程名稱、單元名稱、標籤）
+            background = []
+            if program_name:
+                background.append(f"- Course: {program_name}")
+            if lesson_name:
+                background.append(f"- Unit: {lesson_name}")
+            if program_tags:
+                background.append(f"- Tags: {', '.join(program_tags)}")
+
+            if background:
+                user_prompt += f"""**TEACHING BACKGROUND** (for reference):
+{chr(10).join(background)}
 
 """
 
@@ -703,29 +721,31 @@ IMPORTANT: If a word has a "definition" field, you MUST use that specific meanin
 """
 
             if translate_to:
-                lang_name = {
-                    "zh-TW": "Traditional Chinese (繁體中文)",
-                    "ja": "Japanese",
-                    "ko": "Korean",
-                }.get(translate_to, translate_to)
                 user_prompt += f"""Return as JSON array with this format:
 [{{"sentence": "...", "translation": "..."}}]
-Where translation is in {lang_name}.
-IMPORTANT: Each English sentence MUST contain the exact target word.
-Translation to Chinese MUST use Traditional Chinese (繁體中文), NOT Simplified Chinese."""
+Where translation MUST be in {translation_lang_name}.
+IMPORTANT: Each English sentence MUST contain the exact target word."""
+                if translate_to == "zh-TW":
+                    user_prompt += (
+                        "\nTranslation to Chinese MUST use Traditional "
+                        "Chinese (繁體中文), NOT Simplified Chinese."
+                    )
             else:
                 user_prompt += """Return as JSON array with this format:
 [{"sentence": "..."}]"""
 
             user_prompt += "\n\nOnly return the JSON array, no other text."
 
+            # 動態計算 max_tokens：分塊後每批 ≤5 字，最低 1000 tokens
+            dynamic_max_tokens = max(1000, len(words) * self.TOKENS_PER_WORD)
+
             # Use Vertex AI or OpenAI based on configuration
             if self.use_vertex_ai:
                 sentences = await self.vertex_ai.generate_json(
                     prompt=user_prompt,
                     model_type="flash",
-                    max_tokens=2000,
-                    temperature=0.8,
+                    max_tokens=dynamic_max_tokens,
+                    temperature=0.7,  # Match GPT temperature for consistent quality
                     system_instruction=system_prompt,
                 )
             else:
@@ -736,12 +756,10 @@ Translation to Chinese MUST use Traditional Chinese (繁體中文), NOT Simplifi
                         {"role": "user", "content": user_prompt},
                     ],
                     temperature=0.7,  # 稍高一點讓例句更有變化
-                    max_tokens=2000,
+                    max_tokens=dynamic_max_tokens,
                 )
 
                 # 解析回應
-                import re
-
                 content = response.choices[0].message.content.strip()
 
                 # 移除可能的 markdown 代碼塊標記
@@ -749,7 +767,7 @@ Translation to Chinese MUST use Traditional Chinese (繁體中文), NOT Simplifi
                 content = re.sub(r"\s*```$", "", content)
                 content = content.strip()
 
-                sentences = json.loads(content)
+                sentences = json_module.loads(content)
 
             # 確保返回數量正確並添加 word 欄位以防止陣列錯位
             if len(sentences) != len(words):

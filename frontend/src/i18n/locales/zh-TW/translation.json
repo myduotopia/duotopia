@@ -1140,6 +1140,7 @@
         "allFieldsRequired": "所有密碼欄位皆為必填",
         "passwordMismatch": "新密碼與確認密碼不相符",
         "passwordTooShort": "密碼至少需要 8 個字元",
+        "containsSpaces": "密碼不可包含空白",
         "passwordSameAsCurrent": "新密碼不能與目前密碼相同",
         "missingUppercase": "密碼必須包含至少一個大寫字母",
         "missingLowercase": "密碼必須包含至少一個小寫字母",
@@ -1391,6 +1392,7 @@
     "errors": {
       "passwordMismatch": "密碼不一致",
       "passwordTooShort": "密碼至少需要 8 個字元",
+      "containsSpaces": "密碼不可包含空白",
       "missingUppercase": "密碼必須包含至少一個大寫字母",
       "missingLowercase": "密碼必須包含至少一個小寫字母",
       "missingNumber": "密碼必須包含至少一個數字",
@@ -1753,7 +1755,7 @@
         },
         "vocabulary_set": {
           "name": "單字集",
-          "description": "建立單字集供學生記憶練習",
+          "description": "快速貼上主題單字，以派發成各種幫助學生練習聽說讀寫及提升字彙量的練習作業。",
           "comingSoon": "即將推出"
         },
         "multiple_choice": {
@@ -2215,7 +2217,7 @@
     "print": "列印",
     "batchPrint": "批次列印",
     "batchPrintError": "批次列印失敗",
-    "copyright": "由 Duotopia 產生 \u00a9 duotopia.com",
+    "copyright": "由 Duotopia 產生 © duotopia.com",
     "status": {
       "notStarted": "未開始",
       "inProgress": "待完成",
@@ -2390,6 +2392,7 @@
         "allFieldsRequired": "所有密碼欄位皆為必填",
         "passwordMismatch": "新密碼與確認密碼不相符",
         "passwordTooShort": "密碼至少需要 8 個字元",
+        "containsSpaces": "密碼不可包含空白",
         "passwordSameAsCurrent": "新密碼不能與目前密碼相同",
         "missingUppercase": "密碼必須包含至少一個大寫字母",
         "missingLowercase": "密碼必須包含至少一個小寫字母",
@@ -2530,7 +2533,7 @@
       "autoGenerateTTS": "自動生成音檔",
       "autoTranslate": "自動翻譯",
       "cancel": "取消",
-      "confirmPaste": "確認貼上",
+      "confirmPaste": "魔術貼上",
       "messages": {
         "noContent": "請輸入內容",
         "processing": "正在處理 {{count}} 個項目...",
@@ -4116,7 +4119,12 @@
     "errors": {
       "invalidLink": "無效的重設連結",
       "passwordMismatch": "密碼不一致",
-      "passwordTooShort": "密碼至少需要6個字元",
+      "passwordTooShort": "密碼至少需要8個字元",
+      "containsSpaces": "密碼不可包含空白",
+      "missingUppercase": "密碼需包含至少一個大寫字母",
+      "missingLowercase": "密碼需包含至少一個小寫字母",
+      "missingNumber": "密碼需包含至少一個數字",
+      "missingSpecialChar": "密碼需包含至少一個特殊字元",
       "resetFailed": "重設失敗，請稍後再試",
       "linkExpired": "連結無效或已過期"
     },
@@ -4145,7 +4153,23 @@
   "contentEditor": {
     "labels": {
       "title": "標題",
-      "pasteContent": "請貼上內容："
+      "pasteContent": "請貼上單字",
+      "batchOperations": "批次操作",
+      "aiGenerateTTS": "AI 生成單字語音",
+      "aiGenerateTranslation": "AI 生成單字翻譯",
+      "translationLanguage": "翻譯語言",
+      "otherLanguage": "其他語言...",
+      "enterLanguage": "輸入語言名稱，如 Thai、Tiếng Việt...",
+      "selectLanguage": "請選擇語言",
+      "pause": "暫停",
+      "batchPaused": "已暫停",
+      "selectExampleLanguage": "請選擇例句翻譯語言",
+      "enterCustomLanguage": "請輸入自訂語言名稱",
+      "translationLanguageMismatch": "此單字集已使用「{{lang}}」翻譯，請保持翻譯語言一致",
+      "exampleTranslationLanguageMismatch": "例句翻譯已使用「{{lang}}」，請保持翻譯語言一致",
+      "removedInternalDupes": "已去除 {{count}} 個重複單字",
+      "removedExistingDupes": "已跳過 {{count}} 個已存在的單字",
+      "unsavedChangesConfirm": "尚未儲存，確定要關閉嗎？"
     },
     "placeholders": {
       "enterContentTitle": "請輸入內容標題",
@@ -4155,12 +4179,13 @@
       "save": "儲存",
       "cancel": "取消",
       "addItem": "新增項目",
-      "confirmPaste": "確認貼上",
+      "confirmPaste": "魔術貼上",
       "generating": "生成中...",
       "processing": "處理中...",
       "startRecording": "開始錄音",
       "stopRecording": "停止錄音",
-      "rerecord": "重新錄製"
+      "rerecord": "重新錄製",
+      "pause": "暫停"
     },
     "modals": {
       "audioSettings": "音檔設定",
@@ -4198,6 +4223,8 @@
       "loadingContentFailed": "載入內容失敗",
       "enterTitle": "請輸入標題",
       "addAtLeastOneItem": "請至少新增一個內容項目",
+      "duplicateItems": "有重複的單字或翻譯，請先處理重複項目",
+      "duplicateWord": "重複",
       "maxRowsReached": "最多只能新增 15 列",
       "minRowsRequired": "至少需要保留 1 列",
       "cannotDeleteWithProgress": "此題目有學生進度，無法刪除",
@@ -4373,6 +4400,7 @@
     "teacherFeedback": "老師評語",
     "passed": "通過",
     "needsCorrection": "需訂正",
+    "viewAnalysis": "查看分析結果",
     "reassess": "重新評估",
     "assessed": "已評估",
     "recorded": "已錄音",
@@ -4495,6 +4523,7 @@
       "passwordMismatch": "密碼確認不符",
       "setupFailed": "密碼設定失敗",
       "passwordTooShort": "密碼至少需要 8 個字元",
+      "containsSpaces": "密碼不可包含空白",
       "missingUppercase": "密碼必須包含至少一個大寫字母",
       "missingLowercase": "密碼必須包含至少一個小寫字母",
       "missingNumber": "密碼必須包含至少一個數字",
@@ -4597,6 +4626,31 @@
       "copySuccess": "已複製「{{name}}」到我的教材",
       "copySuccessOrg": "已複製「{{name}}」到組織教材",
       "copyFailed": "複製失敗，請稍後再試"
+    }
+  },
+  "instantPractice": {
+    "title": "即刻練習",
+    "modeLabel": "練習模式",
+    "creating": "建立中...",
+    "start": "開始練習",
+    "error": "建立即刻練習失敗",
+    "modes": {
+      "reading": {
+        "label": "例句朗讀",
+        "description": "朗讀例句並錄音評分"
+      },
+      "rearrangement": {
+        "label": "例句重組",
+        "description": "將打散的單字重新排列成正確句子"
+      },
+      "wordReading": {
+        "label": "單字朗讀",
+        "description": "朗讀單字並錄音評分"
+      },
+      "wordSelection": {
+        "label": "單字選擇",
+        "description": "根據單字選擇正確的翻譯"
+      }
     }
   }
 }

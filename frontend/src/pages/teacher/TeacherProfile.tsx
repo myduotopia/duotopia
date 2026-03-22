@@ -266,8 +266,8 @@ export default function TeacherProfile() {
     setIsUpdatingPassword(true);
     try {
       await apiClient.updateTeacherPassword({
-        current_password: currentPassword,
-        new_password: newPassword,
+        current_password: currentPassword.trim(),
+        new_password: newPassword.trim(),
       });
       toast.success(t("teacherProfile.password.success.passwordUpdated"));
       setShowPasswordEdit(false);

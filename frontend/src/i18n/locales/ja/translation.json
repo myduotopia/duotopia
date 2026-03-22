@@ -217,6 +217,7 @@
       "passwordMismatch": "パスワードが一致しません",
       "setupFailed": "パスワードの設定に失敗しました",
       "passwordTooShort": "パスワードは8文字以上必要です",
+      "containsSpaces": "パスワードにスペースを含めることはできません",
       "missingUppercase": "パスワードには大文字を1文字以上含めてください",
       "missingLowercase": "パスワードには小文字を1文字以上含めてください",
       "missingNumber": "パスワードには数字を1文字以上含めてください",
@@ -261,6 +262,31 @@
     "footer": {
       "willActivate": "パスワード設定後、アカウントがすぐに有効化されます",
       "useAllFeatures": "Duotopiaのすべての機能を利用開始できます"
+    }
+  },
+  "instantPractice": {
+    "title": "即時練習",
+    "modeLabel": "練習モード",
+    "creating": "作成中...",
+    "start": "練習開始",
+    "error": "即時練習の作成に失敗しました",
+    "modes": {
+      "reading": {
+        "label": "例文朗読",
+        "description": "例文を朗読して発音を評価"
+      },
+      "rearrangement": {
+        "label": "例文並べ替え",
+        "description": "バラバラの単語を正しい文に並べ替え"
+      },
+      "wordReading": {
+        "label": "単語朗読",
+        "description": "単語を朗読して発音を評価"
+      },
+      "wordSelection": {
+        "label": "単語選択",
+        "description": "単語の正しい翻訳を選択"
+      }
     }
   }
 }

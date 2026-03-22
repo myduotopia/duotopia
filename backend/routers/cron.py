@@ -838,6 +838,7 @@ async def recording_error_report_cron(
                         model_type="flash",
                         max_tokens=300,
                         temperature=0.7,
+                        system_instruction="你是 Duotopia 英語學習平台的技術顧問，擅長分析錄音播放錯誤。用繁體中文、專業但易懂的語言回覆，不要使用 Markdown 格式。",
                     )
                 else:
                     # Use OpenAI

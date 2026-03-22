@@ -172,7 +172,7 @@ export default function StudentLogin() {
     try {
       const response = await authService.studentLogin({
         id: selectedStudent.id,
-        password: password,
+        password: password.trim(),
       });
 
       if (response.access_token) {
@@ -204,7 +204,7 @@ export default function StudentLogin() {
     try {
       const response = await authService.studentEmailLogin(
         emailLoginEmail,
-        emailLoginPassword,
+        emailLoginPassword.trim(),
       );
 
       const s = response.student;

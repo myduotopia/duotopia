@@ -25,7 +25,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { validatePasswordStrength } from "@/utils/passwordValidation";
+import { validateStudentPasswordStrength } from "@/utils/passwordValidation";
 import { apiClient } from "@/lib/api";
 
 interface StudentInfo {
@@ -216,7 +216,7 @@ export default function StudentProfile() {
     }
 
     // Validate password strength (comprehensive check)
-    const validation = validatePasswordStrength(newPassword);
+    const validation = validateStudentPasswordStrength(newPassword);
     if (!validation.valid && validation.errorKey) {
       toast.error(t(`studentProfile.password.errors.${validation.errorKey}`));
       return;
@@ -225,8 +225,8 @@ export default function StudentProfile() {
     setIsUpdatingPassword(true);
     try {
       await apiClient.updateStudentPassword({
-        current_password: currentPassword,
-        new_password: newPassword,
+        current_password: currentPassword.trim(),
+        new_password: newPassword.trim(),
       });
       toast.success(t("studentProfile.password.success.passwordUpdated"));
       setShowPasswordEdit(false);

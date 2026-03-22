@@ -387,7 +387,7 @@ jobs:
         # Per-environment Vertex AI toggle
         case "${{ steps.env_vars.outputs.ENV_NAME }}" in
           staging)  _USE_VERTEX_AI="${{ vars.USE_VERTEX_AI_STAGING || 'false' }}" ;;
-          develop)  _USE_VERTEX_AI="${{ vars.USE_VERTEX_AI_STAGING || 'false' }}" ;;
+          develop)  _USE_VERTEX_AI="${{ vars.USE_VERTEX_AI_STAGING || 'false' }}" ;;  # intentionally shares staging toggle
           *)        _USE_VERTEX_AI="${{ vars.USE_VERTEX_AI || 'false' }}" ;;
         esac
         ENV_VARS="$ENV_VARS,USE_VERTEX_AI=${_USE_VERTEX_AI}"
@@ -427,10 +427,10 @@ jobs:
           ENV_VARS="$ENV_VARS,DEMO_ALLOWED_ORIGINS=https://duotopia.co,https://www.duotopia.net"
 
           # 💰 Production: 資源配置（效能調校 2026-03-16）
-          MIN_INSTANCES=1      # 保持 warm instance，避免 cold start
+          MIN_INSTANCES=3      # 3 個 warm instances，30 人上課零 cold start
           MEMORY="512Mi"       # Production 需要更多記憶體
           CPU="1000m"          # 1 CPU
-          CONCURRENCY=20       # 降低單 instance 負載，讓 autoscaler 更早 scale out
+          CONCURRENCY=10       # 降低單 instance 負載，讓 autoscaler 更早 scale out
           MAX_INSTANCES=10     # 支援全班同時使用的高併發場景
           CPU_THROTTLING="--no-cpu-throttling"  # 背景任務不被限制
           CPU_BOOST="--cpu-boost"               # 加速新 instance 啟動

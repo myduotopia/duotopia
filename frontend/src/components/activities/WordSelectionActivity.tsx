@@ -77,7 +77,7 @@ export default function WordSelectionActivity({
   const [loading, setLoading] = useState(true);
   const [words, setWords] = useState<WordOption[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [_sessionId, setSessionId] = useState<number | null>(null); // Kept for future session tracking
+  const [sessionId, setSessionId] = useState<number | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
@@ -381,6 +381,7 @@ export default function WordSelectionActivity({
           selected_answer: "", // Empty answer for timeout
           is_correct: false,
           time_spent_seconds: timeLimit || 0,
+          session_id: sessionId,
         },
       );
 
@@ -425,6 +426,7 @@ export default function WordSelectionActivity({
           selected_answer: answer,
           is_correct: correct,
           time_spent_seconds: 0,
+          session_id: sessionId,
         },
       );
 

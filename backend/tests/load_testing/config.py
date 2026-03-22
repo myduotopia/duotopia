@@ -6,6 +6,9 @@ Supports PROD (VM) and Staging (Cloud Run) environments
 import os
 from typing import Literal
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 @dataclass

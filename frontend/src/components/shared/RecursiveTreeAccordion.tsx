@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Accordion,
   AccordionContent,
@@ -17,6 +18,7 @@ import {
   GripVertical,
   LucideIcon,
   MoreHorizontal,
+  Zap,
 } from "lucide-react";
 
 // Level-based color system - flat design with colored left accent
@@ -130,6 +132,11 @@ interface RecursiveTreeNodeProps {
     level: number,
     parentId?: string | number,
   ) => void;
+  onInstantPractice?: (
+    item: Record<string, unknown>,
+    level: number,
+    parentId?: string | number,
+  ) => void;
 
   // Accordion state
   expandedValue: string;
@@ -151,9 +158,11 @@ function RecursiveTreeNode({
   onClick,
   onCreate,
   onReorder,
+  onInstantPractice,
   disableActions = false,
   disableReason = "",
 }: RecursiveTreeNodeProps) {
+  const { t } = useTranslation();
   const itemId = data[config.idKey];
   const itemName = data[config.nameKey];
   const itemDescription = config.descriptionKey
@@ -435,6 +444,7 @@ function RecursiveTreeNode({
                               onClick={onClick}
                               onCreate={onCreate}
                               onReorder={onReorder}
+                              onInstantPractice={onInstantPractice}
                               expandedValue={childExpandedValue}
                               onExpandedChange={setChildExpandedValue}
                               disableActions={disableActions}
@@ -549,6 +559,23 @@ function RecursiveTreeNode({
                 </span>
               ))}
 
+              {/* Instant practice button - hover on desktop, always visible on mobile (icon only) */}
+              {onInstantPractice && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onInstantPractice(data, level, parentId);
+                  }}
+                  className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity h-7 w-7 sm:h-auto sm:w-auto sm:px-2.5 sm:py-1 inline-flex items-center justify-center sm:gap-1.5 rounded-md bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                  title={t("instantPractice.title")}
+                >
+                  <Zap className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5 fill-current" />
+                  <span className="hidden sm:inline text-xs font-medium">
+                    {t("instantPractice.title")}
+                  </span>
+                </button>
+              )}
+
               {/* More menu (⋯) with delete */}
               {config.canDelete && onDelete && (
                 <DropdownMenu>
@@ -607,6 +634,11 @@ interface RecursiveTreeAccordionProps {
     level: number,
     parentId?: string | number,
   ) => void;
+  onInstantPractice?: (
+    item: Record<string, unknown>,
+    level: number,
+    parentId?: string | number,
+  ) => void;
   disableActions?: boolean;
   disableReason?: string;
 }
@@ -623,6 +655,7 @@ export function RecursiveTreeAccordion({
   onClick,
   onCreate,
   onReorder,
+  onInstantPractice,
   disableActions = false,
   disableReason = "",
 }: RecursiveTreeAccordionProps) {
@@ -650,20 +683,9 @@ export function RecursiveTreeAccordion({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
-    console.log("[RecursiveTreeAccordion] Drag End:", {
-      activeId: active.id,
-      overId: over?.id,
-      hasOnReorder: !!onReorder,
-    });
-
     if (over && active.id !== over.id && onReorder) {
       const activeData = active.data.current;
       const overData = over.data.current;
-
-      console.log("[RecursiveTreeAccordion] Active/Over Data:", {
-        active: activeData,
-        over: overData,
-      });
 
       // Only reorder if they're at the same level and same parent
       if (
@@ -680,23 +702,8 @@ export function RecursiveTreeAccordion({
         const newIndex = overData.index;
 
         if (oldIndex !== undefined && newIndex !== undefined) {
-          console.log("[RecursiveTreeAccordion] Calling onReorder:", {
-            oldIndex,
-            newIndex,
-            level,
-            parentId,
-          });
           onReorder(oldIndex, newIndex, level, parentId);
-        } else {
-          console.warn("[RecursiveTreeAccordion] Invalid indices:", {
-            oldIndex,
-            newIndex,
-          });
         }
-      } else {
-        console.warn(
-          "[RecursiveTreeAccordion] Reorder rejected - different level or parent",
-        );
       }
     }
 
@@ -775,6 +782,7 @@ export function RecursiveTreeAccordion({
                   onClick={onClick}
                   onCreate={onCreate}
                   onReorder={onReorder}
+                  onInstantPractice={onInstantPractice}
                   expandedValue={expandedValue}
                   onExpandedChange={setExpandedValue}
                   disableActions={disableActions}

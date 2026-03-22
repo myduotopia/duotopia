@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
@@ -13,6 +14,7 @@ import { toast } from "sonner";
  * @param isPreviewMode 是否為預覽模式（預覽模式不上傳到 GCS）
  */
 export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
+  const { t } = useTranslation();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzingMessage, setAnalyzingMessage] = useState("");
   const { analyzePronunciation } = useAzurePronunciation();
@@ -69,10 +71,6 @@ export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
 
         // Issue #141 Fix: 如果沒有 progressId，先上傳錄音取得 progressId
         if (!currentProgressId) {
-          console.log(
-            "No progressId, uploading recording first to get progressId...",
-          );
-
           const uploadFormData = new FormData();
           uploadFormData.append("assignment_id", assignmentId.toString());
           uploadFormData.append("content_item_id", contentItemId.toString());
@@ -100,12 +98,11 @@ export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
               return await uploadResponse.json();
             },
             (attempt, error) => {
-              console.log(`錄音上傳重試 (${attempt}):`, error);
+              console.warn(`錄音上傳重試 (${attempt}):`, error);
             },
           );
 
           currentProgressId = uploadResult?.progress_id;
-          console.log("Got progressId from upload:", currentProgressId);
         }
 
         if (!currentProgressId) {
@@ -163,11 +160,9 @@ export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
             return await uploadResponse.json();
           },
           (attempt, error) => {
-            console.log(`分析結果上傳重試 (${attempt}):`, error);
+            console.warn(`分析結果上傳重試 (${attempt}):`, error);
           },
         );
-
-        console.log("✅ Analysis result uploaded successfully");
       }
 
       // 4. 回傳分析結果
@@ -189,8 +184,11 @@ export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
       };
     } catch (error) {
       console.error("自動分析失敗:", error);
-      toast.error("自動分析失敗", {
-        description: error instanceof Error ? error.message : "請稍後重試",
+      toast.error(t("wordReading.toast.autoAnalysisFailed") || "自動分析失敗", {
+        description:
+          error instanceof Error
+            ? error.message
+            : t("wordReading.toast.retryLater") || "請稍後重試",
       });
       return null;
     } finally {
