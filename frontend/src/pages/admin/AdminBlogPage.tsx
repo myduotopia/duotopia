@@ -22,7 +22,7 @@ export default function AdminBlogPage() {
     setLoading(true);
     try {
       const res = await blogAdminApi.getPosts(page, 20, token);
-      setPosts(res.data.items);
+      setPosts(res.data.posts);
       setTotalPages(res.data.total_pages);
     } catch {
       toast.error(t("common.error"));

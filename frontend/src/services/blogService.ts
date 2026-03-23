@@ -39,7 +39,7 @@ export interface BlogPostInput {
 }
 
 export interface PaginatedResponse<T> {
-  items: T[];
+  posts: T[];
   total: number;
   page: number;
   per_page: number;
