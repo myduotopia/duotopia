@@ -60,17 +60,13 @@ def upgrade() -> None:
     )
 
     # Indexes
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_blog_posts_slug "
-        "ON blog_posts (slug)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_slug " "ON blog_posts (slug)")
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_blog_posts_published "
         "ON blog_posts (is_published, published_at DESC)"
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_blog_posts_author "
-        "ON blog_posts (author_id)"
+        "CREATE INDEX IF NOT EXISTS idx_blog_posts_author " "ON blog_posts (author_id)"
     )
 
 
