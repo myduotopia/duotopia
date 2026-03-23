@@ -729,9 +729,7 @@ async def copy_content(
         db.refresh(new_content)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=409, detail="複製內容衝突，請重試"
-        )
+        raise HTTPException(status_code=409, detail="複製內容衝突，請重試")
 
     return {
         "id": new_content.id,
