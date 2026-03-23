@@ -190,9 +190,7 @@ const TTSModal = ({
             : "en-US-JennyNeural";
       } else if (resolvedAccent === "British English") {
         voice =
-          resolvedGender === "Male"
-            ? "en-GB-RyanNeural"
-            : "en-GB-SoniaNeural";
+          resolvedGender === "Male" ? "en-GB-RyanNeural" : "en-GB-SoniaNeural";
       } else if (resolvedAccent === "Indian English") {
         voice =
           resolvedGender === "Male"
@@ -1239,9 +1237,7 @@ export default function ReadingAssessmentPanel({
           : "en-US-JennyNeural";
     } else if (resolvedAccent === "British English") {
       voice =
-        resolvedGender === "Male"
-          ? "en-GB-RyanNeural"
-          : "en-GB-SoniaNeural";
+        resolvedGender === "Male" ? "en-GB-RyanNeural" : "en-GB-SoniaNeural";
     } else if (resolvedAccent === "Indian English") {
       voice =
         resolvedGender === "Male"
