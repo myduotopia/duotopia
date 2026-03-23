@@ -641,9 +641,7 @@ async def reset_student_password(
             date_source = enrollment.classroom.created_at
 
     if not date_source:
-        raise HTTPException(
-            status_code=400, detail="無法取得預設密碼日期來源"
-        )
+        raise HTTPException(status_code=400, detail="無法取得預設密碼日期來源")
 
     # Reset password to date in Taiwan timezone (YYYYMMDD format)
     date_tw = (

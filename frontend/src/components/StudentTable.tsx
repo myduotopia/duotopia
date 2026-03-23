@@ -435,10 +435,7 @@ export default function StudentTable({
                       const toTaiwanYMD = (isoStr: string) => {
                         const d = new Date(isoStr);
                         const tw = new Date(d.getTime() + 8 * 60 * 60 * 1000);
-                        return tw
-                          .toISOString()
-                          .split("T")[0]
-                          .replace(/-/g, "");
+                        return tw.toISOString().split("T")[0].replace(/-/g, "");
                       };
                       // Priority: student.created_at > classroom_created_at
                       const getDefaultPwd = () => {
