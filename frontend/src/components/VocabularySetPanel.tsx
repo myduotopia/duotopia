@@ -1493,6 +1493,11 @@ export default function VocabularySetPanel({
   const { t } = useTranslation();
   const { setEditorBusy } = useSidebar();
 
+  // Reset editorBusy on unmount to prevent lock-out if panel closes mid-operation
+  useEffect(() => {
+    return () => setEditorBusy(false);
+  }, [setEditorBusy]);
+
   const [title, setTitle] = useState("");
   // 記住用戶最後選擇的翻譯語言，批次翻譯時使用
   const [lastSelectedWordLang, setLastSelectedWordLang] =
@@ -4379,7 +4384,7 @@ export default function VocabularySetPanel({
               className="px-6 py-2 text-base bg-blue-600 hover:bg-blue-700"
             >
               {isBatchPasting
-                ? "Working... 工作中"
+                ? t("contentEditor.buttons.generating")
                 : t("contentEditor.buttons.confirmPaste")}
             </Button>
           </DialogFooter>
