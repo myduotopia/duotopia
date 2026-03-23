@@ -40,6 +40,7 @@ export interface Student {
   school_name?: string;
   organization_id?: string;
   created_at?: string;
+  classroom_created_at?: string;
 }
 
 interface StudentTableProps {
@@ -430,18 +431,19 @@ export default function StudentTable({
                 <TableCell className="whitespace-nowrap">
                   <div className="inline-flex items-center space-x-1">
                     {(() => {
-                      // Convert UTC created_at to Taiwan date (UTC+8)
+                      // Convert UTC date to Taiwan date (UTC+8) YYYYMMDD
+                      const toTaiwanYMD = (isoStr: string) => {
+                        const d = new Date(isoStr);
+                        const tw = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+                        return tw.toISOString().split("T")[0].replace(/-/g, "");
+                      };
+                      // Priority: student.created_at > classroom_created_at
                       const getDefaultPwd = () => {
                         if (student.created_at) {
-                          const d = new Date(student.created_at);
-                          const tw = new Date(d.getTime() + 8 * 60 * 60 * 1000);
-                          return tw
-                            .toISOString()
-                            .split("T")[0]
-                            .replace(/-/g, "");
+                          return toTaiwanYMD(student.created_at);
                         }
-                        if (student.birthdate) {
-                          return student.birthdate.replace(/-/g, "");
+                        if (student.classroom_created_at) {
+                          return toTaiwanYMD(student.classroom_created_at);
                         }
                         return null;
                       };
