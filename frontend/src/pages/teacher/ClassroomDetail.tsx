@@ -2162,7 +2162,10 @@ export default function ClassroomDetail({
                                         <MoreVertical className="h-4 w-4" />
                                       </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="bg-white dark:bg-gray-800">
+                                    <DropdownMenuContent
+                                      align="end"
+                                      className="bg-white dark:bg-gray-800"
+                                    >
                                       <DropdownMenuItem
                                         onClick={() =>
                                           setStickyNoteModal({
