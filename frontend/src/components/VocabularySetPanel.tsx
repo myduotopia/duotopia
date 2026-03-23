@@ -30,6 +30,12 @@ import {
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { retryAudioUpload } from "@/utils/retryHelper";
+import {
+  TTS_ACCENTS,
+  TTS_GENDERS,
+  TTS_SPEEDS,
+  getVoiceAndRate,
+} from "@/utils/ttsVoiceResolver";
 // dnd-kit imports
 import {
   DndContext,
@@ -311,15 +317,9 @@ const TTSModal = ({
   const audioBlobRef = useRef<Blob | null>(null);
   const recordingDurationRef = useRef<number>(0);
 
-  const accents = [
-    "Random",
-    "American English",
-    "British English",
-    "Indian English",
-    "Australian English",
-  ];
-  const genders = ["Random", "Male", "Female"];
-  const speeds = ["Slow x0.75", "Normal x1", "Fast x1.5"];
+  const accents = TTS_ACCENTS;
+  const genders = TTS_GENDERS;
+  const speeds = TTS_SPEEDS;
 
   // 當 modal 打開或 row.text 改變時，更新 text state
   useEffect(() => {
@@ -328,63 +328,10 @@ const TTSModal = ({
     }
   }, [open, row.text]);
 
-  // 解析 Random 選項，回傳實際的 accent/gender（每次呼叫都重新隨機）
-  const resolveRandomOptions = (
-    accentVal: string,
-    genderVal: string,
-  ): { resolvedAccent: string; resolvedGender: string } => {
-    const accentChoices = [
-      "American English",
-      "British English",
-      "Indian English",
-      "Australian English",
-    ];
-    const genderChoices = ["Male", "Female"];
-    const resolvedAccent =
-      accentVal === "Random"
-        ? accentChoices[Math.floor(Math.random() * accentChoices.length)]
-        : accentVal;
-    const resolvedGender =
-      genderVal === "Random"
-        ? genderChoices[Math.floor(Math.random() * genderChoices.length)]
-        : genderVal;
-    return { resolvedAccent, resolvedGender };
-  };
-
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      const { resolvedAccent, resolvedGender } = resolveRandomOptions(
-        accent,
-        gender,
-      );
-      // 根據選擇的口音和性別選擇適當的語音
-      let voice = "en-US-JennyNeural"; // 預設美國女聲
-
-      if (resolvedAccent === "American English") {
-        voice =
-          resolvedGender === "Male"
-            ? "en-US-ChristopherNeural"
-            : "en-US-JennyNeural";
-      } else if (resolvedAccent === "British English") {
-        voice =
-          resolvedGender === "Male" ? "en-GB-RyanNeural" : "en-GB-SoniaNeural";
-      } else if (resolvedAccent === "Indian English") {
-        voice =
-          resolvedGender === "Male"
-            ? "en-IN-PrabhatNeural"
-            : "en-IN-NeerjaNeural";
-      } else if (resolvedAccent === "Australian English") {
-        voice =
-          resolvedGender === "Male"
-            ? "en-AU-WilliamNeural"
-            : "en-AU-NatashaNeural";
-      }
-
-      // 轉換速度設定
-      let rate = "+0%";
-      if (speed === "Slow x0.75") rate = "-25%";
-      else if (speed === "Fast x1.5") rate = "+50%";
+      const { voice, rate } = getVoiceAndRate(accent, gender, speed);
 
       const result = await apiClient.generateTTS(text, voice, rate, "+0%");
 
@@ -714,7 +661,9 @@ const TTSModal = ({
             </div>
 
             <div>
-              <label className="text-sm font-medium">Accent</label>
+              <label className="text-sm font-medium">
+                {t("contentEditor.generate.accent")}
+              </label>
               <select
                 value={accent}
                 onChange={(e) => setAccent(e.target.value)}
@@ -730,7 +679,9 @@ const TTSModal = ({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Gender</label>
+                <label className="text-sm font-medium">
+                  {t("contentEditor.generate.gender")}
+                </label>
                 <select
                   value={gender}
                   onChange={(e) => setGender(e.target.value)}
@@ -745,7 +696,9 @@ const TTSModal = ({
               </div>
 
               <div>
-                <label className="text-sm font-medium">Speed</label>
+                <label className="text-sm font-medium">
+                  {t("contentEditor.generate.speed")}
+                </label>
                 <select
                   value={speed}
                   onChange={(e) => setSpeed(e.target.value)}
@@ -767,7 +720,9 @@ const TTSModal = ({
                 className="flex-1 bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-400 dark:hover:bg-yellow-500 text-black"
                 title={t("contentEditor.tooltips.ttsMicrosoftEdge")}
               >
-                {isGenerating ? "Generating..." : "Generate"}
+                {isGenerating
+                  ? t("contentEditor.generate.generating")
+                  : t("contentEditor.generate.generate")}
               </Button>
               {audioUrl && (
                 <Button
@@ -1660,15 +1615,9 @@ export default function VocabularySetPanel({
   );
 
   // TTS options for batch paste (Issue #121)
-  const batchTTSAccents = [
-    "Random",
-    "American English",
-    "British English",
-    "Indian English",
-    "Australian English",
-  ];
-  const batchTTSGenders = ["Random", "Male", "Female"];
-  const batchTTSSpeeds = ["Slow x0.75", "Normal x1", "Fast x1.5"];
+  const batchTTSAccents = TTS_ACCENTS;
+  const batchTTSGenders = TTS_GENDERS;
+  const batchTTSSpeeds = TTS_SPEEDS;
 
   // Load saved TTS settings from localStorage (Issue #121)
   useEffect(() => {
@@ -1684,54 +1633,6 @@ export default function VocabularySetPanel({
       }
     }
   }, []);
-
-  // Helper function to get voice and rate from TTS settings (Issue #121)
-  // 每次呼叫都會重新解析 Random，確保批次中每題不同
-  const getVoiceAndRate = (accent: string, gender: string, speed: string) => {
-    const accentChoices = [
-      "American English",
-      "British English",
-      "Indian English",
-      "Australian English",
-    ];
-    const genderChoices = ["Male", "Female"];
-    const resolvedAccent =
-      accent === "Random"
-        ? accentChoices[Math.floor(Math.random() * accentChoices.length)]
-        : accent;
-    const resolvedGender =
-      gender === "Random"
-        ? genderChoices[Math.floor(Math.random() * genderChoices.length)]
-        : gender;
-
-    let voice = "en-US-JennyNeural"; // default
-
-    if (resolvedAccent === "American English") {
-      voice =
-        resolvedGender === "Male"
-          ? "en-US-ChristopherNeural"
-          : "en-US-JennyNeural";
-    } else if (resolvedAccent === "British English") {
-      voice =
-        resolvedGender === "Male" ? "en-GB-RyanNeural" : "en-GB-SoniaNeural";
-    } else if (resolvedAccent === "Indian English") {
-      voice =
-        resolvedGender === "Male"
-          ? "en-IN-PrabhatNeural"
-          : "en-IN-NeerjaNeural";
-    } else if (resolvedAccent === "Australian English") {
-      voice =
-        resolvedGender === "Male"
-          ? "en-AU-WilliamNeural"
-          : "en-AU-NatashaNeural";
-    }
-
-    let rate = "+0%";
-    if (speed === "Slow x0.75") rate = "-25%";
-    else if (speed === "Fast x1.5") rate = "+50%";
-
-    return { voice, rate };
-  };
 
   // Save TTS settings to localStorage (Issue #121)
   const saveBatchTTSSettings = () => {
@@ -3648,11 +3549,6 @@ export default function VocabularySetPanel({
 
           // Step 3: AI 例句
           if (shouldGenerateExamples) {
-            console.log("[Do the Magic] AI例句參數:", {
-              exampleTargetLang,
-              aiGenerateTranslateLang,
-              lessonId,
-            });
             const response = await apiClient.generateSentences({
               words: [text],
               definitions: [newItem.definition || ""],
