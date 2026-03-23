@@ -65,7 +65,6 @@ def upgrade() -> None:
         """
     )
 
-
     # Add partial index on password_reset_token for efficient token lookups
     op.execute(
         """
