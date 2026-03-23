@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -259,14 +259,15 @@ export default function ClassroomDetail({
   });
 
   // Assignment status counts (based on completion_rate + due_date)
-  const statusCounts = (() => {
+  const statusCounts = useMemo(() => {
     const source = showArchived ? archivedAssignments : assignments;
+    const now = new Date();
     let completed = 0;
     let inProgress = 0;
     let overdue = 0;
     for (const a of source) {
       const rate = a.completion_rate ?? 0;
-      const isOverdue = a.due_date && new Date(a.due_date) < new Date();
+      const isOverdue = a.due_date && new Date(a.due_date) < now;
       if (rate >= 100) completed++;
       else if (isOverdue) overdue++;
       else inProgress++;
@@ -277,7 +278,7 @@ export default function ClassroomDetail({
       inProgress,
       overdue,
     };
-  })();
+  }, [assignments, archivedAssignments, showArchived]);
 
   const [batchGradingModal, setBatchGradingModal] = useState({
     open: false,

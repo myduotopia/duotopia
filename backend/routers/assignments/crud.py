@@ -601,19 +601,21 @@ async def patch_assignment(
             status_code=404, detail="Assignment not found or you don't have permission"
         )
 
-    # 只更新提供的欄位
-    if request.title is not None:
+    # 只更新提供的欄位（使用 model_fields_set 區分「未提供」和「明確傳 null」）
+    provided = request.model_fields_set
+
+    if "title" in provided:
         assignment.title = request.title
 
-    if request.description is not None:
+    if "description" in provided:
         assignment.description = request.description
-    elif request.instructions is not None:  # Support 'instructions' as alias
+    elif "instructions" in provided:
         assignment.description = request.instructions
 
-    if request.due_date is not None:
+    if "due_date" in provided:
         assignment.due_date = request.due_date
 
-    if request.start_date is not None:
+    if "start_date" in provided:
         assignment.start_date = request.start_date
 
     # 進階設定更新
@@ -634,11 +636,11 @@ async def patch_assignment(
 
     # 更新 StudentAssignment 記錄
     update_fields = {}
-    if request.title is not None:
+    if "title" in provided:
         update_fields["title"] = request.title
-    if request.description is not None or request.instructions is not None:
+    if "description" in provided or "instructions" in provided:
         update_fields["instructions"] = request.description or request.instructions
-    if request.due_date is not None:
+    if "due_date" in provided:
         update_fields["due_date"] = request.due_date
 
     if update_fields:

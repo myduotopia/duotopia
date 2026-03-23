@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Sheet,
@@ -140,27 +140,7 @@ export function AssignmentDetailSheet({
     show_translation: true,
   });
 
-  // Reset state when assignment changes or sheet closes
-  useEffect(() => {
-    if (assignment && open) {
-      setEditTitle(assignment.title);
-      setEditInstructions(
-        assignment.instructions || assignment.description || "",
-      );
-      setEditDueDate(
-        assignment.due_date ? assignment.due_date.split("T")[0] : "",
-      );
-      setEditStartDate("");
-      setIsEditing(false);
-      setDetailData(null);
-      setAssignmentContents([]);
-      setContentDetails({});
-      setExpandedContentId(null);
-      fetchAssignmentData();
-    }
-  }, [assignment?.id, open]);
-
-  const fetchAssignmentData = async () => {
+  const fetchAssignmentData = useCallback(async () => {
     if (!assignment) return;
     setLoading(true);
     try {
@@ -220,7 +200,38 @@ export function AssignmentDetailSheet({
     } finally {
       setLoading(false);
     }
-  };
+  }, [assignment]);
+
+  // Reset state when assignment changes or sheet closes
+  useEffect(() => {
+    if (assignment && open) {
+      setEditTitle(assignment.title);
+      setEditInstructions(
+        assignment.instructions || assignment.description || "",
+      );
+      setEditDueDate(
+        assignment.due_date ? assignment.due_date.split("T")[0] : "",
+      );
+      setEditStartDate("");
+      setIsEditing(false);
+      setDetailData(null);
+      setAssignmentContents([]);
+      setContentDetails({});
+      setExpandedContentId(null);
+      fetchAssignmentData();
+    }
+  }, [assignment?.id, open, fetchAssignmentData]);
+
+  const averageScoreDisplay = useMemo(() => {
+    const scoredStudents = studentProgress.filter(
+      (sp) => sp.score !== undefined && sp.score !== null,
+    );
+    if (scoredStudents.length === 0) return "-";
+    const avg =
+      scoredStudents.reduce((sum, sp) => sum + sp.score!, 0) /
+      scoredStudents.length;
+    return `${avg.toFixed(1)}${assignment?.practice_mode === "word_selection" ? "%" : ""}`;
+  }, [studentProgress, assignment?.practice_mode]);
 
   const loadContentDetail = async (contentId: number, forceReload = false) => {
     if (!forceReload && contentDetails[contentId]) return;
@@ -246,8 +257,10 @@ export function AssignmentDetailSheet({
       await apiClient.patch(`/api/teachers/assignments/${assignment.id}`, {
         title: editTitle,
         description: editInstructions,
-        due_date: editDueDate ? `${editDueDate}T23:59:59` : null,
-        start_date: editStartDate ? `${editStartDate}T00:00:00` : null,
+        due_date: editDueDate ? `${editDueDate}T23:59:59+08:00` : null,
+        start_date: editStartDate
+          ? `${editStartDate}T00:00:00+08:00`
+          : null,
         ...editAdvanced,
       });
       toast.success(t("assignmentDetail.messages.updateSuccess", "已儲存變更"));
@@ -884,18 +897,7 @@ export function AssignmentDetailSheet({
                       {t("assignmentDetail.sheet.averageScore", "平均分數")}
                     </div>
                     <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
-                      {(() => {
-                        const scoredStudents = studentProgress.filter(
-                          (sp) => sp.score !== undefined && sp.score !== null,
-                        );
-                        if (scoredStudents.length === 0) return "-";
-                        const avg =
-                          scoredStudents.reduce(
-                            (sum, sp) => sum + sp.score!,
-                            0,
-                          ) / scoredStudents.length;
-                        return `${avg.toFixed(1)}${assignment.practice_mode === "word_selection" ? "%" : ""}`;
-                      })()}
+                      {averageScoreDisplay}
                     </div>
                   </div>
                 </div>
