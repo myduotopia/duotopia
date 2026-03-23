@@ -613,6 +613,12 @@ async def reset_student_password(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
+    if student.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無法重設已驗證信箱的學生密碼",
+        )
+
     if not student.created_at:
         raise HTTPException(
             status_code=400, detail="Student creation date not available"

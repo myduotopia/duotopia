@@ -25,6 +25,8 @@ import ResourceMaterialsPage from "./pages/teacher/ResourceMaterialsPage";
 import TeacherSubscription from "./pages/teacher/TeacherSubscription";
 import TeacherProfile from "./pages/teacher/TeacherProfile";
 import StudentLogin from "./pages/StudentLogin";
+import StudentForgotPassword from "./pages/StudentForgotPassword";
+import StudentResetPassword from "./pages/StudentResetPassword";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentAssignmentList from "./pages/student/StudentAssignmentList";
 import StudentAssignmentDetail from "./pages/student/StudentAssignmentDetail";
@@ -270,6 +272,14 @@ function App() {
 
         {/* Student Routes */}
         <Route path="/student/login" element={<StudentLogin />} />
+        <Route
+          path="/student/forgot-password"
+          element={<StudentForgotPassword />}
+        />
+        <Route
+          path="/student/reset-password"
+          element={<StudentResetPassword />}
+        />
 
         {/* Email Verification */}
         <Route path="/verify-email" element={<EmailVerification />} />

@@ -1245,6 +1245,8 @@
       "selectOther": "Select Another Student",
       "passwordHint": "Your default password is the date you were added to the class (format: YYYYMMDD, e.g. 20260501)",
       "forgotPassword": "Forgot password? Contact your teacher to reset it",
+      "forgotPasswordText": "Forgot password?",
+      "forgotPasswordLink": "Reset it here",
       "verifiedEmailHint": "If you've verified your email, please use the password you set during verification",
       "demoHint": "💡 Test Hint",
       "demoPassword": "Default demo password:",
@@ -1261,7 +1263,8 @@
       "passwordPlaceholder": "Enter your password",
       "login": "Login",
       "loggingIn": "Logging in...",
-      "error": "Login failed. Please check your email and password."
+      "error": "Login failed. Please check your email and password.",
+      "forgotPassword": "Forgot password?"
     },
     "errors": {
       "teacherNotFound": "Teacher account not found",
@@ -4135,6 +4138,33 @@
     },
     "messages": {
       "linkExpiredDetail": "The password reset link has expired or is invalid, please request a new one"
+    }
+  },
+  "studentForgotPassword": {
+    "title": "Forgot Password",
+    "subtitle": "AI-Powered English Learning Platform",
+    "description": "Enter your verified email address and we'll send you a password reset link",
+    "placeholder": "student@example.com",
+    "verifiedOnly": "This feature is only available for students with verified email",
+    "linkExpiry": "Password reset link will expire in 2 hours",
+    "buttons": {
+      "send": "Send Reset Link",
+      "sending": "Sending...",
+      "backToLogin": "Back to Login"
+    },
+    "errors": {
+      "tooFrequent": "Please try again later. Password reset emails can only be sent once every 5 minutes.",
+      "notVerified": "This account has not verified its email. Please contact your teacher to reset your password.",
+      "sendFailed": "Failed to send. Please try again later."
+    },
+    "success": {
+      "title": "Email Sent",
+      "description": "Please check your email inbox",
+      "checkInbox": "If {{email}} is a verified student account, you will receive a password reset link. Please check your inbox and spam folder.",
+      "nextStepsTitle": "Next steps:",
+      "step1": "Check your email inbox",
+      "step2": "Click the reset link in the email",
+      "step3": "Set a new password"
     }
   },
   "contentEditor": {

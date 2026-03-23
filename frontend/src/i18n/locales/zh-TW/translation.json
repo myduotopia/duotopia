@@ -1242,6 +1242,8 @@
       "selectOther": "選擇其他學生",
       "passwordHint": "首次登入請輸入加入班級當天的日期，格式為 YYYYMMDD，如: 20260501",
       "forgotPassword": "若忘記密碼，請聯繫教師恢復預設密碼",
+      "forgotPasswordText": "忘記密碼？",
+      "forgotPasswordLink": "點此重設密碼",
       "verifiedEmailHint": "若已驗證過 Email，請使用驗證時設定的密碼登入",
       "demoHint": "💡 測試提示",
       "demoPassword": "Demo 學生預設密碼：",
@@ -1258,7 +1260,8 @@
       "passwordPlaceholder": "請輸入密碼",
       "login": "登入",
       "loggingIn": "登入中...",
-      "error": "登入失敗，請確認 Email 和密碼是否正確"
+      "error": "登入失敗，請確認 Email 和密碼是否正確",
+      "forgotPassword": "忘記密碼？"
     },
     "errors": {
       "teacherNotFound": "找不到此教師帳號",
@@ -4148,6 +4151,33 @@
     },
     "messages": {
       "linkExpiredDetail": "密碼重設連結已過期或無效，請重新申請"
+    }
+  },
+  "studentForgotPassword": {
+    "title": "忘記密碼",
+    "subtitle": "AI 驅動的英語學習平台",
+    "description": "輸入您驗證過的 Email 地址，我們會發送密碼重設連結給您",
+    "placeholder": "student@example.com",
+    "verifiedOnly": "此功能僅限已驗證 Email 的學生使用",
+    "linkExpiry": "密碼重設連結將在 2 小時後失效",
+    "buttons": {
+      "send": "發送重設連結",
+      "sending": "發送中...",
+      "backToLogin": "返回登入頁面"
+    },
+    "errors": {
+      "tooFrequent": "請稍後再試，密碼重設郵件每5分鐘只能發送一次",
+      "notVerified": "此帳號尚未驗證 Email，請聯繫教師恢復預設密碼",
+      "sendFailed": "發送失敗，請稍後再試"
+    },
+    "success": {
+      "title": "郵件已發送",
+      "description": "請檢查您的郵件信箱",
+      "checkInbox": "如果 {{email}} 是已驗證的學生帳號，您將會收到密碼重設連結。請檢查您的收件匣和垃圾郵件資料夾。",
+      "nextStepsTitle": "接下來的步驟：",
+      "step1": "檢查您的郵件信箱",
+      "step2": "點擊郵件中的重設連結",
+      "step3": "設定新密碼"
     }
   },
   "contentEditor": {

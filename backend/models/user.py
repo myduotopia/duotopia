@@ -325,6 +325,12 @@ class Student(Base):
     email_verified_at = Column(DateTime(timezone=True))
     email_verification_token = Column(String(100))
     email_verification_sent_at = Column(DateTime(timezone=True))
+
+    # 密碼重設字段
+    password_reset_token = Column(String(100))
+    password_reset_sent_at = Column(DateTime(timezone=True))
+    password_reset_expires_at = Column(DateTime(timezone=True))
+
     parent_phone = Column(String(20))
     avatar_url = Column(String(500))
     is_active = Column(Boolean, default=True)
