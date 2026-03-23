@@ -4739,5 +4739,41 @@
         "description": "根據單字選擇正確的翻譯"
       }
     }
+  },
+  "blog": {
+    "title": "Duotopia Blog",
+    "subtitle": "教學心得、產品更新、英語學習資源",
+    "allCategories": "全部",
+    "readMore": "閱讀更多",
+    "backToBlog": "← 返回 Blog",
+    "publishedOn": "發布於",
+    "readingTime": "分鐘閱讀",
+    "noPosts": "目前還沒有文章",
+    "admin": {
+      "title": "Blog 管理",
+      "newPost": "新增文章",
+      "editPost": "編輯文章",
+      "postTitle": "標題",
+      "slug": "網址代稱",
+      "summary": "摘要",
+      "content": "內容",
+      "categories": "分類",
+      "coverImage": "封面圖片",
+      "seoSettings": "SEO 設定",
+      "metaTitle": "Meta 標題",
+      "metaDescription": "Meta 描述",
+      "saveDraft": "儲存草稿",
+      "publish": "發布",
+      "unpublish": "取消發布",
+      "delete": "刪除",
+      "confirmDelete": "確定要刪除這篇文章嗎？",
+      "status": "狀態",
+      "published": "已發布",
+      "draft": "草稿",
+      "preview": "預覽",
+      "edit": "編輯",
+      "uploadImage": "上傳圖片",
+      "back": "返回"
+    }
   }
 }

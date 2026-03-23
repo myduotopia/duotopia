@@ -101,6 +101,15 @@ export default function Home() {
           className="h-8 sm:h-10"
         />
         <div className="flex items-center gap-1.5 sm:gap-3">
+          <Link to="/blog">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs sm:text-sm px-2 sm:px-3 h-8 sm:h-9"
+            >
+              Blog
+            </Button>
+          </Link>
           <Button
             variant="outline"
             size="sm"

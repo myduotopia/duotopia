@@ -4,12 +4,14 @@ Public API endpoints for student login flow
 """
 
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import Response, HTMLResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional  # noqa: F401
 from pydantic import BaseModel, EmailStr
 from database import get_db
 from models import Teacher, Classroom, Student, ClassroomStudent
+from services.blog_service import BlogService
 import os
 
 router = APIRouter(prefix="/api/public", tags=["public"])
@@ -168,3 +170,99 @@ def get_config():
     environment = os.getenv("ENVIRONMENT", "development")
 
     return ConfigResponse(enablePayment=enable_payment, environment=environment)
+
+
+# ============ Blog Public Endpoints ============
+
+
+@router.get("/blog")
+def get_blog_posts(
+    page: int = 1,
+    per_page: int = 12,
+    category: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Get published blog posts (public)."""
+    result = BlogService.get_published_posts(db, page, per_page, category)
+    posts = []
+    for p in result["posts"]:
+        posts.append(
+            {
+                "id": p.id,
+                "title": p.title,
+                "slug": p.slug,
+                "summary": p.summary,
+                "cover_image_url": p.cover_image_url,
+                "is_published": p.is_published,
+                "published_at": (
+                    p.published_at.isoformat() if p.published_at else None
+                ),
+                "author": (
+                    {"id": p.author.id, "name": p.author.name} if p.author else None
+                ),
+                "categories": [
+                    {"id": c.id, "name": c.name, "slug": c.slug}
+                    for c in (p.categories or [])
+                ],
+            }
+        )
+    return {
+        "posts": posts,
+        "total": result["total"],
+        "page": result["page"],
+        "per_page": result["per_page"],
+        "total_pages": result["total_pages"],
+    }
+
+
+@router.get("/blog/categories")
+def get_blog_categories(db: Session = Depends(get_db)):
+    """Get all blog categories (public)."""
+    categories = BlogService.get_categories(db)
+    return [{"id": c.id, "name": c.name, "slug": c.slug} for c in categories]
+
+
+@router.get("/blog/sitemap.xml")
+def get_blog_sitemap(db: Session = Depends(get_db)):
+    """Generate blog sitemap XML."""
+    xml = BlogService.generate_sitemap(db)
+    return Response(content=xml, media_type="application/xml")
+
+
+@router.get("/blog/{slug}")
+def get_blog_post(slug: str, db: Session = Depends(get_db)):
+    """Get a single published blog post by slug (public)."""
+    post = BlogService.get_post_by_slug(db, slug)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return {
+        "id": post.id,
+        "title": post.title,
+        "slug": post.slug,
+        "summary": post.summary,
+        "content": post.content,
+        "cover_image_url": post.cover_image_url,
+        "meta_title": post.meta_title,
+        "meta_description": post.meta_description,
+        "og_image_url": post.og_image_url,
+        "is_published": post.is_published,
+        "published_at": (post.published_at.isoformat() if post.published_at else None),
+        "author": (
+            {"id": post.author.id, "name": post.author.name} if post.author else None
+        ),
+        "categories": [
+            {"id": c.id, "name": c.name, "slug": c.slug}
+            for c in (post.categories or [])
+        ],
+        "created_at": (post.created_at.isoformat() if post.created_at else None),
+        "updated_at": (post.updated_at.isoformat() if post.updated_at else None),
+    }
+
+
+@router.get("/blog/{slug}/meta")
+def get_blog_post_meta(slug: str, db: Session = Depends(get_db)):
+    """Return minimal HTML with OG meta tags for prerender/crawlers."""
+    html = BlogService.get_post_meta_html(db, slug)
+    if not html:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return HTMLResponse(content=html)
