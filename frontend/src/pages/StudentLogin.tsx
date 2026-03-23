@@ -378,6 +378,15 @@ export default function StudentLogin() {
                 </Button>
               </div>
 
+              <div className="text-center">
+                <Link
+                  to="/student/forgot-password"
+                  className="text-sm text-emerald-600 hover:underline"
+                >
+                  {t("studentLogin.emailLogin.forgotPassword")}
+                </Link>
+              </div>
+
               {error && (
                 <p className="text-red-500 text-center mt-4">{error}</p>
               )}
@@ -580,7 +589,15 @@ export default function StudentLogin() {
                   <div className="text-sm text-gray-600 space-y-1 px-1">
                     <p>💡 {t("studentLogin.step4.passwordHint")}</p>
                     <p>📧 {t("studentLogin.step4.verifiedEmailHint")}</p>
-                    <p>🔑 {t("studentLogin.step4.forgotPassword")}</p>
+                    <p>
+                      🔑 {t("studentLogin.step4.forgotPasswordText")}{" "}
+                      <Link
+                        to="/student/forgot-password"
+                        className="text-emerald-600 hover:underline"
+                      >
+                        {t("studentLogin.step4.forgotPasswordLink")}
+                      </Link>
+                    </p>
                   </div>
                 </div>
 

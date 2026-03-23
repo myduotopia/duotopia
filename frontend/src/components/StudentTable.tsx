@@ -29,6 +29,7 @@ export interface Student {
   student_number?: string;
   birthdate?: string;
   password_changed?: boolean;
+  email_verified?: boolean;
   last_login?: string | null;
   status?: string;
   classroom_id?: number;
@@ -226,19 +227,40 @@ export default function StudentTable({
                   <span className="text-gray-600 dark:text-gray-400">
                     {t("studentTable.info.password")}{" "}
                   </span>
-                  {student.password_changed ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-                      {t("studentTable.passwordStatus.changed")}
-                    </span>
-                  ) : student.birthdate ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 font-mono">
-                      {student.birthdate?.replace(/-/g, "")}
-                    </span>
-                  ) : (
-                    <span className="text-gray-500 dark:text-gray-400">
-                      {t("studentTable.passwordStatus.notSet")}
-                    </span>
-                  )}
+                  {(() => {
+                    const getDefaultPwd = () => {
+                      if (student.created_at) {
+                        const d = new Date(student.created_at);
+                        const tw = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+                        return tw.toISOString().split("T")[0].replace(/-/g, "");
+                      }
+                      if (student.birthdate) {
+                        return student.birthdate.replace(/-/g, "");
+                      }
+                      return null;
+                    };
+                    const defaultPwd = getDefaultPwd();
+
+                    if (student.password_changed) {
+                      return (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                          {t("studentTable.passwordStatus.changed")}
+                        </span>
+                      );
+                    }
+                    if (defaultPwd) {
+                      return (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 font-mono">
+                          {defaultPwd}
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="text-gray-500 dark:text-gray-400">
+                        {t("studentTable.passwordStatus.notSet")}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div>
                   <span className="text-gray-600 dark:text-gray-400">
@@ -431,7 +453,7 @@ export default function StudentTable({
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 whitespace-nowrap">
                               {t("studentTable.passwordStatus.changed")}
                             </span>
-                            {onResetPassword && (
+                            {onResetPassword && !student.email_verified && (
                               <Button
                                 variant="ghost"
                                 size="sm"
