@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Copy,
   Edit,
   Trash2,
   GripVertical,
@@ -137,6 +138,8 @@ interface RecursiveTreeNodeProps {
     level: number,
     parentId?: string | number,
   ) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onCopy?: (item: any, level: number, parentId?: string | number) => void;
 
   // Accordion state
   expandedValue: string;
@@ -159,6 +162,7 @@ function RecursiveTreeNode({
   onCreate,
   onReorder,
   onInstantPractice,
+  onCopy,
   disableActions = false,
   disableReason = "",
 }: RecursiveTreeNodeProps) {
@@ -445,6 +449,7 @@ function RecursiveTreeNode({
                               onCreate={onCreate}
                               onReorder={onReorder}
                               onInstantPractice={onInstantPractice}
+                              onCopy={onCopy}
                               expandedValue={childExpandedValue}
                               onExpandedChange={setChildExpandedValue}
                               disableActions={disableActions}
@@ -576,8 +581,8 @@ function RecursiveTreeNode({
                 </button>
               )}
 
-              {/* More menu (⋯) with delete */}
-              {config.canDelete && onDelete && (
+              {/* More menu (⋯) with copy/delete */}
+              {(config.canDelete || onCopy) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     onClick={(e) => e.stopPropagation()}
@@ -589,16 +594,30 @@ function RecursiveTreeNode({
                     align="end"
                     className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
                   >
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete(data, level, parentId);
-                      }}
-                      className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 focus:text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      刪除
-                    </DropdownMenuItem>
+                    {onCopy && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCopy(data, level, parentId);
+                        }}
+                        className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        複製到...
+                      </DropdownMenuItem>
+                    )}
+                    {config.canDelete && onDelete && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(data, level, parentId);
+                        }}
+                        className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 focus:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        刪除
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -639,6 +658,8 @@ interface RecursiveTreeAccordionProps {
     level: number,
     parentId?: string | number,
   ) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onCopy?: (item: any, level: number, parentId?: string | number) => void;
   disableActions?: boolean;
   disableReason?: string;
 }
@@ -656,6 +677,7 @@ export function RecursiveTreeAccordion({
   onCreate,
   onReorder,
   onInstantPractice,
+  onCopy,
   disableActions = false,
   disableReason = "",
 }: RecursiveTreeAccordionProps) {
@@ -783,6 +805,7 @@ export function RecursiveTreeAccordion({
                   onCreate={onCreate}
                   onReorder={onReorder}
                   onInstantPractice={onInstantPractice}
+                  onCopy={onCopy}
                   expandedValue={expandedValue}
                   onExpandedChange={setExpandedValue}
                   disableActions={disableActions}

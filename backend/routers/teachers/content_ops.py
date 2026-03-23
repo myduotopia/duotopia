@@ -680,6 +680,68 @@ async def delete_content(
     }
 
 
+@router.post("/contents/{content_id}/copy")
+async def copy_content(
+    content_id: int,
+    copy_data: ContentCopy,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """複製內容到指定的單元"""
+    from utils.permissions import check_content_access, check_lesson_access
+    from services.program_service import _copy_content_with_items
+
+    # 驗證來源 content 存取權限
+    _program, _lesson, content = check_content_access(
+        db, content_id, current_teacher, require_owner=False
+    )
+
+    # 驗證目標 lesson 存取權限
+    _target_program, target_lesson = check_lesson_access(
+        db, copy_data.target_lesson_id, current_teacher, require_owner=True
+    )
+
+    # 計算目標 lesson 中的最大 order_index
+    max_order = (
+        db.query(func.max(Content.order_index))
+        .filter(
+            Content.lesson_id == copy_data.target_lesson_id,
+            Content.is_active.is_(True),
+        )
+        .scalar()
+    )
+
+    # Eager load content_items
+    db.refresh(content, ["content_items"])
+
+    # 複製 content 及所有 items
+    new_content = _copy_content_with_items(
+        content, copy_data.target_lesson_id, db
+    )
+
+    # 設定複製後的標題和 order_index
+    new_content.title = f"{content.title}(copy)"
+    new_content.order_index = (max_order or 0) + 1
+    new_content.source_content_id = content.id
+
+    db.commit()
+    db.refresh(new_content)
+
+    return {
+        "id": new_content.id,
+        "type": new_content.type.value if new_content.type else "EXAMPLE_SENTENCES",
+        "title": new_content.title,
+        "items_count": len(new_content.content_items),
+        "target_wpm": new_content.target_wpm,
+        "target_accuracy": new_content.target_accuracy,
+        "order_index": new_content.order_index,
+        "level": new_content.level if hasattr(new_content, "level") else "A1",
+        "tags": new_content.tags if hasattr(new_content, "tags") else [],
+        "source_content_id": content.id,
+        "target_lesson_id": copy_data.target_lesson_id,
+    }
+
+
 # ============ Image Upload Endpoints ============
 @router.post("/upload/image")
 async def upload_image(

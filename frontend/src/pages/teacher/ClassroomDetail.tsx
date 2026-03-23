@@ -21,6 +21,7 @@ import CreateProgramDialog from "@/components/CreateProgramDialog";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
 import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
 import VocabularySetPanel from "@/components/VocabularySetPanel";
+import ContentCopyDialog from "@/components/ContentCopyDialog";
 import { AssignmentDialog } from "@/components/AssignmentDialog";
 import { InstantPracticeDialog } from "@/components/InstantPracticeDialog";
 import BatchGradingModal from "@/components/BatchGradingModal";
@@ -175,6 +176,13 @@ export default function ClassroomDetail({
   const [vocabularySetContentId, setVocabularySetContentId] = useState<
     number | null
   >(null);
+
+  // Content copy dialog state
+  const [showContentCopyDialog, setShowContentCopyDialog] = useState(false);
+  const [copyContentInfo, setCopyContentInfo] = useState<{
+    id: number;
+    title: string;
+  } | null>(null);
 
   // Instant practice states
   const [showInstantPractice, setShowInstantPractice] = useState(false);
@@ -1625,6 +1633,15 @@ export default function ClassroomDetail({
                         }
                       : undefined
                   }
+                  onCopy={(item, level) => {
+                    if (level === 2) {
+                      setCopyContentInfo({
+                        id: item.id as number,
+                        title: (item.title || item.name) as string,
+                      });
+                      setShowContentCopyDialog(true);
+                    }
+                  }}
                 />
               </TabsContent>
 
@@ -3287,6 +3304,23 @@ export default function ClassroomDetail({
         initialAssignmentIndex={stickyNoteModal.assignmentIndex}
         classroomId={Number(id)}
       />
+
+      {/* Content Copy Dialog */}
+      {copyContentInfo && (
+        <ContentCopyDialog
+          open={showContentCopyDialog}
+          onClose={() => {
+            setShowContentCopyDialog(false);
+            setCopyContentInfo(null);
+          }}
+          onSuccess={() => {
+            refreshPrograms();
+          }}
+          contentId={copyContentInfo.id}
+          contentTitle={copyContentInfo.title}
+          programs={programs}
+        />
+      )}
     </>
   );
 }
