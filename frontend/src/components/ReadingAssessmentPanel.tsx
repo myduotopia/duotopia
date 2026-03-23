@@ -134,13 +134,37 @@ const TTSModal = ({
   const recordingDurationRef = useRef<number>(0);
 
   const accents = [
+    "Random",
     "American English",
     "British English",
     "Indian English",
     "Australian English",
   ];
-  const genders = ["Male", "Female"];
+  const genders = ["Random", "Male", "Female"];
   const speeds = ["Slow x0.75", "Normal x1", "Fast x1.5"];
+
+  // 解析 Random 選項，回傳實際的 accent/gender（每次呼叫都重新隨機）
+  const resolveRandomOptions = (
+    accentVal: string,
+    genderVal: string,
+  ): { resolvedAccent: string; resolvedGender: string } => {
+    const accentChoices = [
+      "American English",
+      "British English",
+      "Indian English",
+      "Australian English",
+    ];
+    const genderChoices = ["Male", "Female"];
+    const resolvedAccent =
+      accentVal === "Random"
+        ? accentChoices[Math.floor(Math.random() * accentChoices.length)]
+        : accentVal;
+    const resolvedGender =
+      genderVal === "Random"
+        ? genderChoices[Math.floor(Math.random() * genderChoices.length)]
+        : genderVal;
+    return { resolvedAccent, resolvedGender };
+  };
 
   // 當 modal 打開或 row.text 改變時，更新 text state
   useEffect(() => {
@@ -152,17 +176,33 @@ const TTSModal = ({
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
+      const { resolvedAccent, resolvedGender } = resolveRandomOptions(
+        accent,
+        gender,
+      );
       // 根據選擇的口音和性別選擇適當的語音
       let voice = "en-US-JennyNeural"; // 預設美國女聲
 
-      if (accent === "American English") {
+      if (resolvedAccent === "American English") {
         voice =
-          gender === "Male" ? "en-US-ChristopherNeural" : "en-US-JennyNeural";
-      } else if (accent === "British English") {
-        voice = gender === "Male" ? "en-GB-RyanNeural" : "en-GB-SoniaNeural";
-      } else if (accent === "Australian English") {
+          resolvedGender === "Male"
+            ? "en-US-ChristopherNeural"
+            : "en-US-JennyNeural";
+      } else if (resolvedAccent === "British English") {
         voice =
-          gender === "Male" ? "en-AU-WilliamNeural" : "en-AU-NatashaNeural";
+          resolvedGender === "Male"
+            ? "en-GB-RyanNeural"
+            : "en-GB-SoniaNeural";
+      } else if (resolvedAccent === "Indian English") {
+        voice =
+          resolvedGender === "Male"
+            ? "en-IN-PrabhatNeural"
+            : "en-IN-NeerjaNeural";
+      } else if (resolvedAccent === "Australian English") {
+        voice =
+          resolvedGender === "Male"
+            ? "en-AU-WilliamNeural"
+            : "en-AU-NatashaNeural";
       }
 
       // 轉換速度設定
@@ -1147,12 +1187,13 @@ export default function ReadingAssessmentPanel({
 
   // TTS options for batch paste (Issue #121)
   const batchTTSAccents = [
+    "Random",
     "American English",
     "British English",
     "Indian English",
     "Australian English",
   ];
-  const batchTTSGenders = ["Male", "Female"];
+  const batchTTSGenders = ["Random", "Male", "Female"];
   const batchTTSSpeeds = ["Slow x0.75", "Normal x1", "Fast x1.5"];
 
   // Load saved TTS settings from localStorage (Issue #121)
@@ -1171,18 +1212,46 @@ export default function ReadingAssessmentPanel({
   }, []);
 
   // Helper function to get voice and rate from TTS settings (Issue #121)
+  // 每次呼叫都會重新解析 Random，確保批次中每題不同
   const getVoiceAndRate = (accent: string, gender: string, speed: string) => {
+    const accentChoices = [
+      "American English",
+      "British English",
+      "Indian English",
+      "Australian English",
+    ];
+    const genderChoices = ["Male", "Female"];
+    const resolvedAccent =
+      accent === "Random"
+        ? accentChoices[Math.floor(Math.random() * accentChoices.length)]
+        : accent;
+    const resolvedGender =
+      gender === "Random"
+        ? genderChoices[Math.floor(Math.random() * genderChoices.length)]
+        : gender;
+
     let voice = "en-US-JennyNeural"; // default
 
-    if (accent === "American English") {
+    if (resolvedAccent === "American English") {
       voice =
-        gender === "Male" ? "en-US-ChristopherNeural" : "en-US-JennyNeural";
-    } else if (accent === "British English") {
-      voice = gender === "Male" ? "en-GB-RyanNeural" : "en-GB-SoniaNeural";
-    } else if (accent === "Indian English") {
-      voice = gender === "Male" ? "en-IN-PrabhatNeural" : "en-IN-NeerjaNeural";
-    } else if (accent === "Australian English") {
-      voice = gender === "Male" ? "en-AU-WilliamNeural" : "en-AU-NatashaNeural";
+        resolvedGender === "Male"
+          ? "en-US-ChristopherNeural"
+          : "en-US-JennyNeural";
+    } else if (resolvedAccent === "British English") {
+      voice =
+        resolvedGender === "Male"
+          ? "en-GB-RyanNeural"
+          : "en-GB-SoniaNeural";
+    } else if (resolvedAccent === "Indian English") {
+      voice =
+        resolvedGender === "Male"
+          ? "en-IN-PrabhatNeural"
+          : "en-IN-NeerjaNeural";
+    } else if (resolvedAccent === "Australian English") {
+      voice =
+        resolvedGender === "Male"
+          ? "en-AU-WilliamNeural"
+          : "en-AU-NatashaNeural";
     }
 
     let rate = "+0%";
@@ -1905,37 +1974,66 @@ export default function ReadingAssessmentPanel({
     if (autoTTS || autoTranslate) {
       try {
         if (autoTTS) {
-          // Get voice and rate from selected TTS settings (Issue #121)
-          const { voice, rate } = getVoiceAndRate(
-            batchTTSAccent,
-            batchTTSGender,
-            batchTTSSpeed,
-          );
-          // Save settings for next time
           saveBatchTTSSettings();
 
-          const ttsResult = await apiClient.batchGenerateTTS(
-            lines,
-            voice,
-            rate,
-            "+0%",
-          );
-          if (
-            ttsResult &&
-            typeof ttsResult === "object" &&
-            "audio_urls" in ttsResult
-          ) {
-            const audioUrls = (ttsResult as { audio_urls: string[] })
-              .audio_urls;
-            newItems = newItems.map((item, i) => ({
-              ...item,
-              audioUrl: audioUrls[i]?.startsWith("http")
-                ? audioUrls[i]
-                : `${import.meta.env.VITE_API_URL}${audioUrls[i]}`,
-              audio_url: audioUrls[i]?.startsWith("http")
-                ? audioUrls[i]
-                : `${import.meta.env.VITE_API_URL}${audioUrls[i]}`,
-            }));
+          const isRandom =
+            batchTTSAccent === "Random" || batchTTSGender === "Random";
+
+          if (isRandom) {
+            // Random 模式：每題個別生成，確保口音/性別不同
+            for (let i = 0; i < newItems.length; i++) {
+              const { voice, rate } = getVoiceAndRate(
+                batchTTSAccent,
+                batchTTSGender,
+                batchTTSSpeed,
+              );
+              const ttsResult = await apiClient.generateTTS(
+                newItems[i].text,
+                voice,
+                rate,
+                "+0%",
+              );
+              if (ttsResult?.audio_url) {
+                const fullUrl = ttsResult.audio_url.startsWith("http")
+                  ? ttsResult.audio_url
+                  : `${import.meta.env.VITE_API_URL}${ttsResult.audio_url}`;
+                newItems[i] = {
+                  ...newItems[i],
+                  audioUrl: fullUrl,
+                  audio_url: fullUrl,
+                };
+              }
+            }
+          } else {
+            // 固定口音/性別：批次生成
+            const { voice, rate } = getVoiceAndRate(
+              batchTTSAccent,
+              batchTTSGender,
+              batchTTSSpeed,
+            );
+            const ttsResult = await apiClient.batchGenerateTTS(
+              lines,
+              voice,
+              rate,
+              "+0%",
+            );
+            if (
+              ttsResult &&
+              typeof ttsResult === "object" &&
+              "audio_urls" in ttsResult
+            ) {
+              const audioUrls = (ttsResult as { audio_urls: string[] })
+                .audio_urls;
+              newItems = newItems.map((item, i) => ({
+                ...item,
+                audioUrl: audioUrls[i]?.startsWith("http")
+                  ? audioUrls[i]
+                  : `${import.meta.env.VITE_API_URL}${audioUrls[i]}`,
+                audio_url: audioUrls[i]?.startsWith("http")
+                  ? audioUrls[i]
+                  : `${import.meta.env.VITE_API_URL}${audioUrls[i]}`,
+              }));
+            }
           }
         }
 

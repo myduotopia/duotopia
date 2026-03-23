@@ -312,12 +312,13 @@ const TTSModal = ({
   const recordingDurationRef = useRef<number>(0);
 
   const accents = [
+    "Random",
     "American English",
     "British English",
     "Indian English",
     "Australian English",
   ];
-  const genders = ["Male", "Female"];
+  const genders = ["Random", "Male", "Female"];
   const speeds = ["Slow x0.75", "Normal x1", "Fast x1.5"];
 
   // 當 modal 打開或 row.text 改變時，更新 text state
@@ -327,20 +328,59 @@ const TTSModal = ({
     }
   }, [open, row.text]);
 
+  // 解析 Random 選項，回傳實際的 accent/gender（每次呼叫都重新隨機）
+  const resolveRandomOptions = (
+    accentVal: string,
+    genderVal: string,
+  ): { resolvedAccent: string; resolvedGender: string } => {
+    const accentChoices = [
+      "American English",
+      "British English",
+      "Indian English",
+      "Australian English",
+    ];
+    const genderChoices = ["Male", "Female"];
+    const resolvedAccent =
+      accentVal === "Random"
+        ? accentChoices[Math.floor(Math.random() * accentChoices.length)]
+        : accentVal;
+    const resolvedGender =
+      genderVal === "Random"
+        ? genderChoices[Math.floor(Math.random() * genderChoices.length)]
+        : genderVal;
+    return { resolvedAccent, resolvedGender };
+  };
+
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
+      const { resolvedAccent, resolvedGender } = resolveRandomOptions(
+        accent,
+        gender,
+      );
       // 根據選擇的口音和性別選擇適當的語音
       let voice = "en-US-JennyNeural"; // 預設美國女聲
 
-      if (accent === "American English") {
+      if (resolvedAccent === "American English") {
         voice =
-          gender === "Male" ? "en-US-ChristopherNeural" : "en-US-JennyNeural";
-      } else if (accent === "British English") {
-        voice = gender === "Male" ? "en-GB-RyanNeural" : "en-GB-SoniaNeural";
-      } else if (accent === "Australian English") {
+          resolvedGender === "Male"
+            ? "en-US-ChristopherNeural"
+            : "en-US-JennyNeural";
+      } else if (resolvedAccent === "British English") {
         voice =
-          gender === "Male" ? "en-AU-WilliamNeural" : "en-AU-NatashaNeural";
+          resolvedGender === "Male"
+            ? "en-GB-RyanNeural"
+            : "en-GB-SoniaNeural";
+      } else if (resolvedAccent === "Indian English") {
+        voice =
+          resolvedGender === "Male"
+            ? "en-IN-PrabhatNeural"
+            : "en-IN-NeerjaNeural";
+      } else if (resolvedAccent === "Australian English") {
+        voice =
+          resolvedGender === "Male"
+            ? "en-AU-WilliamNeural"
+            : "en-AU-NatashaNeural";
       }
 
       // 轉換速度設定
@@ -1623,12 +1663,13 @@ export default function VocabularySetPanel({
 
   // TTS options for batch paste (Issue #121)
   const batchTTSAccents = [
+    "Random",
     "American English",
     "British English",
     "Indian English",
     "Australian English",
   ];
-  const batchTTSGenders = ["Male", "Female"];
+  const batchTTSGenders = ["Random", "Male", "Female"];
   const batchTTSSpeeds = ["Slow x0.75", "Normal x1", "Fast x1.5"];
 
   // Load saved TTS settings from localStorage (Issue #121)
@@ -1647,18 +1688,46 @@ export default function VocabularySetPanel({
   }, []);
 
   // Helper function to get voice and rate from TTS settings (Issue #121)
+  // 每次呼叫都會重新解析 Random，確保批次中每題不同
   const getVoiceAndRate = (accent: string, gender: string, speed: string) => {
+    const accentChoices = [
+      "American English",
+      "British English",
+      "Indian English",
+      "Australian English",
+    ];
+    const genderChoices = ["Male", "Female"];
+    const resolvedAccent =
+      accent === "Random"
+        ? accentChoices[Math.floor(Math.random() * accentChoices.length)]
+        : accent;
+    const resolvedGender =
+      gender === "Random"
+        ? genderChoices[Math.floor(Math.random() * genderChoices.length)]
+        : gender;
+
     let voice = "en-US-JennyNeural"; // default
 
-    if (accent === "American English") {
+    if (resolvedAccent === "American English") {
       voice =
-        gender === "Male" ? "en-US-ChristopherNeural" : "en-US-JennyNeural";
-    } else if (accent === "British English") {
-      voice = gender === "Male" ? "en-GB-RyanNeural" : "en-GB-SoniaNeural";
-    } else if (accent === "Indian English") {
-      voice = gender === "Male" ? "en-IN-PrabhatNeural" : "en-IN-NeerjaNeural";
-    } else if (accent === "Australian English") {
-      voice = gender === "Male" ? "en-AU-WilliamNeural" : "en-AU-NatashaNeural";
+        resolvedGender === "Male"
+          ? "en-US-ChristopherNeural"
+          : "en-US-JennyNeural";
+    } else if (resolvedAccent === "British English") {
+      voice =
+        resolvedGender === "Male"
+          ? "en-GB-RyanNeural"
+          : "en-GB-SoniaNeural";
+    } else if (resolvedAccent === "Indian English") {
+      voice =
+        resolvedGender === "Male"
+          ? "en-IN-PrabhatNeural"
+          : "en-IN-NeerjaNeural";
+    } else if (resolvedAccent === "Australian English") {
+      voice =
+        resolvedGender === "Male"
+          ? "en-AU-WilliamNeural"
+          : "en-AU-NatashaNeural";
     }
 
     let rate = "+0%";
@@ -3149,16 +3218,7 @@ export default function VocabularySetPanel({
             : WORD_TRANSLATION_LANGUAGES.find((l) => l.value === batchLang)
                 ?.code || "zh-TW";
 
-        let voice = "";
-        let rate = "";
         if (autoTTS) {
-          const ttsSettings = getVoiceAndRate(
-            batchTTSAccent,
-            batchTTSGender,
-            batchTTSSpeed,
-          );
-          voice = ttsSettings.voice;
-          rate = ttsSettings.rate;
           saveBatchTTSSettings();
         }
 
@@ -3309,8 +3369,13 @@ export default function VocabularySetPanel({
               }
             }
 
-            // 補齊 TTS（如果缺少）
+            // 補齊 TTS（如果缺少）— 每題重新解析 Random
             if (autoTTS && !row.audioUrl && !row.audio_url) {
+              const { voice, rate } = getVoiceAndRate(
+                batchTTSAccent,
+                batchTTSGender,
+                batchTTSSpeed,
+              );
               const ttsResult = await apiClient.generateTTS(
                 text,
                 voice,
@@ -3426,17 +3491,8 @@ export default function VocabularySetPanel({
           : WORD_TRANSLATION_LANGUAGES.find((l) => l.value === batchLang)
               ?.code || "zh-TW";
 
-      // TTS settings
-      let voice = "";
-      let rate = "";
+      // TTS settings — 每題在迴圈內重新解析 Random
       if (autoTTS) {
-        const ttsSettings = getVoiceAndRate(
-          batchTTSAccent,
-          batchTTSGender,
-          batchTTSSpeed,
-        );
-        voice = ttsSettings.voice;
-        rate = ttsSettings.rate;
         saveBatchTTSSettings();
       }
 
@@ -3560,8 +3616,13 @@ export default function VocabularySetPanel({
             });
           }
 
-          // Step 2: TTS
+          // Step 2: TTS — 每題重新解析 Random
           if (autoTTS) {
+            const { voice, rate } = getVoiceAndRate(
+              batchTTSAccent,
+              batchTTSGender,
+              batchTTSSpeed,
+            );
             const ttsResult = await apiClient.generateTTS(
               text,
               voice,
