@@ -190,6 +190,10 @@ class ContentCreate(BaseModel):
     is_public: Optional[bool] = False
 
 
+class ContentCopy(BaseModel):
+    target_lesson_id: int
+
+
 class ContentUpdate(BaseModel):
     title: Optional[str] = None
     items: Optional[List[Dict[str, Any]]] = None

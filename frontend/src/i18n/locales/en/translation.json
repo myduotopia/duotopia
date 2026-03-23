@@ -1811,6 +1811,25 @@
       "error": "Copy failed, please try again later",
       "loadError": "Failed to load programs"
     },
+    "contentCopyDialog": {
+      "title": "Copy Content",
+      "description": "Copy \"{{title}}\" to a target lesson",
+      "targetProgram": "Target Program",
+      "targetLesson": "Target Lesson",
+      "selectProgram": "Select a program",
+      "selectLesson": "Select a lesson",
+      "selectProgramFirst": "Select a program first",
+      "searchProgram": "Search programs...",
+      "searchLesson": "Search lessons...",
+      "noProgramMatch": "No matching programs",
+      "noLessons": "No lessons in this program",
+      "noLessonMatch": "No matching lessons",
+      "cancel": "Cancel",
+      "copy": "Copy",
+      "copying": "Copying...",
+      "success": "Copied \"{{title}}\" to target lesson",
+      "error": "Failed to copy content, please try again"
+    },
     "createProgramDialog": {
       "title": "Create Program for \"{{classroomName}}\"",
       "description": "Choose how to create the program",
@@ -4644,6 +4663,9 @@
       "copySuccessOrg": "Copied \"{{name}}\" to Organization Materials",
       "copyFailed": "Copy failed. Please try again later."
     }
+  },
+  "contentCopy": {
+    "button": "Copy to..."
   },
   "instantPractice": {
     "title": "Instant Practice",

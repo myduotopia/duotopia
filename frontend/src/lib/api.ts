@@ -1046,6 +1046,13 @@ class ApiClient {
     });
   }
 
+  async copyContent(contentId: number, targetLessonId: number) {
+    return this.request(`/api/teachers/contents/${contentId}/copy`, {
+      method: "POST",
+      body: JSON.stringify({ target_lesson_id: targetLessonId }),
+    });
+  }
+
   // ============ Translation Methods ============
   async translateText(text: string, targetLang: string = "zh-TW") {
     return this.request("/api/teachers/translate", {
