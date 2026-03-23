@@ -15,10 +15,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Idempotent: ALTER COLUMN ... DROP NOT NULL is safe to repeat
     op.execute(
         """
-        ALTER TABLE students ALTER COLUMN password_hash DROP NOT NULL;
+        DO $$ BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'students'
+                AND column_name = 'password_hash'
+                AND is_nullable = 'NO'
+            ) THEN
+                ALTER TABLE students ALTER COLUMN password_hash DROP NOT NULL;
+            END IF;
+        END $$;
     """
     )
 

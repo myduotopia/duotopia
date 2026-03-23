@@ -9,6 +9,7 @@ Handles:
 
 import asyncio
 import logging
+import re
 import time
 from typing import Optional
 
@@ -16,6 +17,10 @@ import httpx
 
 from utils.http_client import get_http_client
 from core.config import settings
+
+# Validation patterns for URL-interpolated parameters
+_DSNS_RE = re.compile(r"^[a-zA-Z0-9._-]{1,100}$")
+_CODE_RE = re.compile(r"^[a-zA-Z0-9_-]{1,200}$")
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +93,11 @@ class OneCampusService:
         Returns dict with keys: account, roleType, student/teacher/parent, schoolDsns, etc.
         Raises httpx.HTTPStatusError on 404 (not found), 410 (expired), 500.
         """
+        if not _DSNS_RE.match(school_dsns):
+            raise ValueError(f"Invalid schoolDsns format: {school_dsns!r}")
+        if not _CODE_RE.match(code):
+            raise ValueError(f"Invalid identity code format")
+
         client = get_http_client()
         resp = await client.get(
             f"{ONE_CAMPUS_API_BASE}/{school_dsns}/identity/{code}",

@@ -11,7 +11,7 @@ import hmac
 import json
 import logging
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -96,7 +96,7 @@ def _verify_merge_token(token: str) -> dict:
 
     try:
         payload_dict = json.loads(base64.urlsafe_b64decode(payload_b64))
-    except (json.JSONDecodeError, Exception) as e:
+    except (json.JSONDecodeError, UnicodeDecodeError, KeyError) as e:
         raise ValueError(f"Invalid merge token payload: {e}")
 
     if payload_dict.get("exp", 0) < int(time.time()):
@@ -163,6 +163,8 @@ async def one_campus_callback(
     # Step 1: Exchange identity code
     try:
         identity_data = await OneCampusService.exchange_identity_code(schoolDsns, code)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except OneCampusCodeNotFoundError:
         raise HTTPException(
             status_code=404,
@@ -249,8 +251,6 @@ async def one_campus_callback(
     )
 
     # Update last_login
-    from datetime import datetime, timezone
-
     student.last_login = datetime.now(timezone.utc)
     db.commit()
 
