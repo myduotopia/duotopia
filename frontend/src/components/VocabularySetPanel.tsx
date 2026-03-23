@@ -4546,7 +4546,7 @@ export default function VocabularySetPanel({
           <Button
             size="lg"
             className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
-            disabled={isSaving}
+            disabled={isSaving || isBatchPasting}
             onClick={async () => {
               // 過濾掉空白項目
               let validRows = rows.filter((row) => row.text && row.text.trim());
