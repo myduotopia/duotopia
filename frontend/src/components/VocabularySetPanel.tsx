@@ -1574,8 +1574,8 @@ export default function VocabularySetPanel({
   }, [rows]);
 
   // TTS settings for batch paste (Issue #121)
-  const [batchTTSAccent, setBatchTTSAccent] = useState("American English");
-  const [batchTTSGender, setBatchTTSGender] = useState("Male");
+  const [batchTTSAccent, setBatchTTSAccent] = useState("Random");
+  const [batchTTSGender, setBatchTTSGender] = useState("Random");
   const [batchTTSSpeed, setBatchTTSSpeed] = useState("Normal x1");
 
   // 多義 Picker 狀態（英英釋義 / 中文翻譯皆可）
@@ -2348,43 +2348,81 @@ export default function VocabularySetPanel({
     }
 
     try {
-      // 批次生成 TTS（使用預設美國女聲）
-      const result = await apiClient.batchGenerateTTS(
-        textsToGenerate,
-        "en-US-JennyNeural",
-        "+0%",
-        "+0%",
-      );
+      const isRandom =
+        batchTTSAccent === "Random" || batchTTSGender === "Random";
+      const newRows = [...currentRows];
 
-      if (
-        result &&
-        typeof result === "object" &&
-        "audio_urls" in result &&
-        Array.isArray(result.audio_urls)
-      ) {
-        const newRows = [...currentRows];
-        let audioIndex = 0;
-
+      if (isRandom) {
+        // Per-item TTS with different random voices
         for (let i = 0; i < newRows.length; i++) {
           if (
             newRows[i].text &&
             newRows[i].text.trim() &&
             !newRows[i].audioUrl
           ) {
-            const audioUrl = (result as { audio_urls: string[] }).audio_urls[
-              audioIndex
-            ];
-            newRows[i].audioUrl = audioUrl.startsWith("http")
-              ? audioUrl
-              : `${import.meta.env.VITE_API_URL}${audioUrl}`;
-            audioIndex++;
+            const { voice, rate } = getVoiceAndRate(
+              batchTTSAccent,
+              batchTTSGender,
+              batchTTSSpeed,
+            );
+            const ttsResult = await apiClient.generateTTS(
+              newRows[i].text.trim(),
+              voice,
+              rate,
+              "+0%",
+            );
+            if (
+              ttsResult &&
+              typeof ttsResult === "object" &&
+              "audio_url" in ttsResult
+            ) {
+              const audioUrl = (ttsResult as { audio_url: string }).audio_url;
+              newRows[i].audioUrl = audioUrl.startsWith("http")
+                ? audioUrl
+                : `${import.meta.env.VITE_API_URL}${audioUrl}`;
+            }
           }
         }
+      } else {
+        // Batch TTS with single voice
+        const { voice, rate } = getVoiceAndRate(
+          batchTTSAccent,
+          batchTTSGender,
+          batchTTSSpeed,
+        );
+        const result = await apiClient.batchGenerateTTS(
+          textsToGenerate,
+          voice,
+          rate,
+          "+0%",
+        );
 
-        return { success: true, updatedRows: newRows };
+        if (
+          result &&
+          typeof result === "object" &&
+          "audio_urls" in result &&
+          Array.isArray(result.audio_urls)
+        ) {
+          let audioIndex = 0;
+          for (let i = 0; i < newRows.length; i++) {
+            if (
+              newRows[i].text &&
+              newRows[i].text.trim() &&
+              !newRows[i].audioUrl
+            ) {
+              const audioUrl = (result as { audio_urls: string[] }).audio_urls[
+                audioIndex
+              ];
+              newRows[i].audioUrl = audioUrl.startsWith("http")
+                ? audioUrl
+                : `${import.meta.env.VITE_API_URL}${audioUrl}`;
+              audioIndex++;
+            }
+          }
+        }
       }
 
-      return { success: true, updatedRows: currentRows };
+      return { success: true, updatedRows: newRows };
     } catch (error) {
       console.error("Auto TTS generation failed:", error);
       toast.error(t("contentEditor.messages.batchGenerationFailed"));
@@ -2412,49 +2450,111 @@ export default function VocabularySetPanel({
         }),
       );
 
-      // 批次生成 TTS
-      const result = await apiClient.batchGenerateTTS(
-        textsToGenerate,
-        "en-US-JennyNeural", // 預設使用美國女聲
-        "+0%",
-        "+0%",
-      );
+      // 批次生成 TTS — Random 時每題不同語音
+      const isRandom =
+        batchTTSAccent === "Random" || batchTTSGender === "Random";
+      const newRows = [...rows];
 
-      if (
-        result &&
-        typeof result === "object" &&
-        "audio_urls" in result &&
-        Array.isArray(result.audio_urls)
-      ) {
-        // 更新 rows 的 audioUrl（單字音檔）
-        const newRows = [...rows];
-        let audioIndex = 0;
-
+      if (isRandom) {
+        // Per-item TTS with different random voices
         for (let i = 0; i < newRows.length; i++) {
           if (
             newRows[i].text &&
             newRows[i].text.trim() &&
             !newRows[i].audioUrl
           ) {
-            const audioUrl = (result as { audio_urls: string[] }).audio_urls[
-              audioIndex
-            ];
-            // 如果是相對路徑，加上 API base URL
-            newRows[i].audioUrl = audioUrl.startsWith("http")
-              ? audioUrl
-              : `${import.meta.env.VITE_API_URL}${audioUrl}`;
-            audioIndex++;
+            const { voice, rate } = getVoiceAndRate(
+              batchTTSAccent,
+              batchTTSGender,
+              batchTTSSpeed,
+            );
+            const ttsResult = await apiClient.generateTTS(
+              newRows[i].text.trim(),
+              voice,
+              rate,
+              "+0%",
+            );
+            if (
+              ttsResult &&
+              typeof ttsResult === "object" &&
+              "audio_url" in ttsResult
+            ) {
+              const audioUrl = (ttsResult as { audio_url: string }).audio_url;
+              newRows[i].audioUrl = audioUrl.startsWith("http")
+                ? audioUrl
+                : `${import.meta.env.VITE_API_URL}${audioUrl}`;
+            }
           }
         }
+      } else {
+        // Batch TTS with single voice
+        const { voice, rate } = getVoiceAndRate(
+          batchTTSAccent,
+          batchTTSGender,
+          batchTTSSpeed,
+        );
+        const result = await apiClient.batchGenerateTTS(
+          textsToGenerate,
+          voice,
+          rate,
+          "+0%",
+        );
 
-        setRows(newRows);
+        if (
+          result &&
+          typeof result === "object" &&
+          "audio_urls" in result &&
+          Array.isArray(result.audio_urls)
+        ) {
+          let audioIndex = 0;
+          for (let i = 0; i < newRows.length; i++) {
+            if (
+              newRows[i].text &&
+              newRows[i].text.trim() &&
+              !newRows[i].audioUrl
+            ) {
+              const audioUrl = (result as { audio_urls: string[] }).audio_urls[
+                audioIndex
+              ];
+              newRows[i].audioUrl = audioUrl.startsWith("http")
+                ? audioUrl
+                : `${import.meta.env.VITE_API_URL}${audioUrl}`;
+              audioIndex++;
+            }
+          }
+        }
+      }
 
-        // 立即更新 content 並儲存到後端（不要用 onSave 避免關閉 panel）
-        const items = newRows.map(buildItemPayload);
+      setRows(newRows);
 
-        // 新增模式：只更新本地狀態，不呼叫 API
-        if (isCreating) {
-          // 更新本地狀態
+      // 立即更新 content 並儲存到後端（不要用 onSave 避免關閉 panel）
+      const items = newRows.map(buildItemPayload);
+
+      // 新增模式：只更新本地狀態，不呼叫 API
+      if (isCreating) {
+        if (onUpdateContent) {
+          onUpdateContent({
+            ...editingContent,
+            title,
+            items,
+          });
+        }
+
+        toast.success(
+          t("contentEditor.messages.audioGeneratedSuccessfully", {
+            count: textsToGenerate.length,
+          }),
+        );
+      } else if (editingContent?.id) {
+        // 編輯模式：直接呼叫 API 更新
+        try {
+          const updateData = {
+            title: title || editingContent?.title,
+            items,
+          };
+
+          await apiClient.updateContent(editingContent.id, updateData);
+
           if (onUpdateContent) {
             onUpdateContent({
               ...editingContent,
@@ -2464,48 +2564,22 @@ export default function VocabularySetPanel({
           }
 
           toast.success(
-            t("contentEditor.messages.audioGeneratedSuccessfully", {
+            t("contentEditor.messages.audioGeneratedAndSaved", {
               count: textsToGenerate.length,
             }),
           );
-        } else if (editingContent?.id) {
-          // 編輯模式：直接呼叫 API 更新
-          try {
-            const updateData = {
-              title: title || editingContent?.title,
-              items,
-            };
-
-            await apiClient.updateContent(editingContent.id, updateData);
-
-            // 更新本地狀態
-            if (onUpdateContent) {
-              onUpdateContent({
-                ...editingContent,
-                title,
-                items,
-              });
-            }
-
-            toast.success(
-              t("contentEditor.messages.audioGeneratedAndSaved", {
-                count: textsToGenerate.length,
-              }),
-            );
-          } catch (error) {
-            console.error("Failed to save TTS:", error);
-            toast.error(
-              t("contentEditor.messages.savingFailedButAudioGenerated"),
-            );
-          }
-        } else {
-          // 沒有 content ID，只是本地更新
-          toast.success(
-            t("contentEditor.messages.audioGeneratedSuccessfully", {
-              count: textsToGenerate.length,
-            }),
+        } catch (error) {
+          console.error("Failed to save TTS:", error);
+          toast.error(
+            t("contentEditor.messages.savingFailedButAudioGenerated"),
           );
         }
+      } else {
+        toast.success(
+          t("contentEditor.messages.audioGeneratedSuccessfully", {
+            count: textsToGenerate.length,
+          }),
+        );
       }
     } catch (error) {
       console.error("Batch TTS generation failed:", error);
