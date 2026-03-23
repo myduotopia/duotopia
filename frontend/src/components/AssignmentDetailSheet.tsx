@@ -260,11 +260,22 @@ export function AssignmentDetailSheet({
 
   const handleSave = async () => {
     if (!assignment) return;
+    // Validate date order
+    if (editStartDate && editDueDate && editStartDate > editDueDate) {
+      toast.error(
+        t(
+          "assignmentDetail.messages.startDateAfterDueDate",
+          "開始日期不可晚於截止日期",
+        ),
+      );
+      return;
+    }
     setSaving(true);
     try {
       await apiClient.patch(`/api/teachers/assignments/${assignment.id}`, {
         title: editTitle,
         description: editInstructions,
+        // Taiwan-only product: hardcode TST (+08:00) for TIMESTAMPTZ columns
         due_date: editDueDate ? `${editDueDate}T23:59:59+08:00` : null,
         start_date: editStartDate ? `${editStartDate}T00:00:00+08:00` : null,
         ...editAdvanced,
@@ -451,6 +462,7 @@ export function AssignmentDetailSheet({
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={loading}
                   onClick={() => setIsEditing(true)}
                   className="gap-1.5 mr-6"
                 >

@@ -2837,6 +2837,7 @@
       "titleRequired": "Please enter assignment title",
       "updateSuccess": "Assignment information updated",
       "updateFailed": "Update failed, please try again later",
+      "startDateAfterDueDate": "Start date cannot be after due date",
       "assignSuccess": "Successfully assigned to student",
       "assignFailed": "Assignment failed, please try again later",
       "unassignSuccess": "Unassigned student \"{{name}}\"",

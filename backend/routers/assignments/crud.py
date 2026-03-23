@@ -630,9 +630,8 @@ async def patch_assignment(
         "show_translation",
     ]
     for field in advanced_fields:
-        value = getattr(request, field, None)
-        if value is not None:
-            setattr(assignment, field, value)
+        if field in provided:
+            setattr(assignment, field, getattr(request, field))
 
     # 更新 StudentAssignment 記錄
     update_fields = {}

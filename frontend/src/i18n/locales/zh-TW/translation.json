@@ -59,7 +59,8 @@
     },
     "messages": {
       "updateSuccess": "已儲存變更",
-      "updateError": "儲存失敗"
+      "updateError": "儲存失敗",
+      "startDateAfterDueDate": "開始日期不可晚於截止日期"
     }
   },
   "demo": {
