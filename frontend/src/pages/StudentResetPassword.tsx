@@ -11,14 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Loader2,
-  Lock,
-  CheckCircle,
-  XCircle,
-  Eye,
-  EyeOff,
-} from "lucide-react";
+import { Loader2, Lock, CheckCircle, XCircle, Eye, EyeOff } from "lucide-react";
 import { apiClient } from "../lib/api";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useTranslation } from "react-i18next";

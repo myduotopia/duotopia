@@ -232,10 +232,7 @@ export default function StudentTable({
                       if (student.created_at) {
                         const d = new Date(student.created_at);
                         const tw = new Date(d.getTime() + 8 * 60 * 60 * 1000);
-                        return tw
-                          .toISOString()
-                          .split("T")[0]
-                          .replace(/-/g, "");
+                        return tw.toISOString().split("T")[0].replace(/-/g, "");
                       }
                       if (student.birthdate) {
                         return student.birthdate.replace(/-/g, "");
