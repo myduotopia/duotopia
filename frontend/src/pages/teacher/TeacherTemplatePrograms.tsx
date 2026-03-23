@@ -143,6 +143,7 @@ function TeacherTemplateProgramsInner() {
   const [copyContentInfo, setCopyContentInfo] = useState<{
     id: number;
     title: string;
+    lessonId: number;
   } | null>(null);
 
   useEffect(() => {
@@ -600,11 +601,12 @@ function TeacherTemplateProgramsInner() {
               setShowInstantPractice(true);
             }
           }}
-          onCopy={(item, level) => {
+          onCopy={(item, level, parentId) => {
             if (level === 2) {
               setCopyContentInfo({
                 id: item.id as number,
                 title: (item.title || item.name) as string,
+                lessonId: parentId as number,
               });
               setShowCopyDialog(true);
             }
@@ -1072,6 +1074,7 @@ function TeacherTemplateProgramsInner() {
           }}
           contentId={copyContentInfo.id}
           contentTitle={copyContentInfo.title}
+          currentLessonId={copyContentInfo.lessonId}
           programs={programs}
         />
       )}

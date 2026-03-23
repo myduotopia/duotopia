@@ -20,6 +20,8 @@ interface ContentCopyDialogProps {
   onSuccess: () => void;
   contentId: number;
   contentTitle: string;
+  /** Current lesson ID (to exclude from target selection) */
+  currentLessonId?: number;
   /** Programs to show in target selection */
   programs: Program[];
 }
@@ -30,6 +32,7 @@ export default function ContentCopyDialog({
   onSuccess,
   contentId,
   contentTitle,
+  currentLessonId,
   programs,
 }: ContentCopyDialogProps) {
   const [selectedProgramId, setSelectedProgramId] = useState<number | null>(
@@ -84,8 +87,10 @@ export default function ContentCopyDialog({
     p.name.toLowerCase().includes(programSearch.toLowerCase()),
   );
 
-  const filteredLessons = lessons.filter((l) =>
-    l.name.toLowerCase().includes(lessonSearch.toLowerCase()),
+  const filteredLessons = lessons.filter(
+    (l) =>
+      l.id !== currentLessonId &&
+      l.name.toLowerCase().includes(lessonSearch.toLowerCase()),
   );
 
   const handleSelectProgram = (programId: number) => {
@@ -123,10 +128,7 @@ export default function ContentCopyDialog({
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent
-        className="bg-white max-w-md"
-        style={{ backgroundColor: "white" }}
-      >
+      <DialogContent className="bg-white max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <Copy className="h-5 w-5" />
