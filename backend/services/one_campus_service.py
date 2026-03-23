@@ -7,6 +7,7 @@ Handles:
 - getUserRole for cross-school identity data (idNumberHash)
 """
 
+import asyncio
 import logging
 import time
 from typing import Optional
@@ -26,44 +27,52 @@ ONE_CAMPUS_API_BASE = (
 ONE_CAMPUS_CLIENT_ID = getattr(settings, "ONE_CAMPUS_CLIENT_ID", None)
 ONE_CAMPUS_CLIENT_SECRET = getattr(settings, "ONE_CAMPUS_CLIENT_SECRET", None)
 
-# Token cache (module-level singleton)
+# Token cache (module-level singleton) with asyncio.Lock to prevent race conditions
 _token_cache: dict = {"access_token": None, "expires_at": 0}
+_token_lock = asyncio.Lock()
 
 
 async def _get_access_token() -> str:
     """Get 1Campus data API access_token via client_credentials.
 
     Caches the token and refreshes 2 minutes before expiry.
+    Uses asyncio.Lock to prevent concurrent token fetches.
     """
     now = time.time()
     if _token_cache["access_token"] and _token_cache["expires_at"] > now:
         return _token_cache["access_token"]
 
-    if not ONE_CAMPUS_CLIENT_ID or not ONE_CAMPUS_CLIENT_SECRET:
-        raise RuntimeError(
-            "ONE_CAMPUS_CLIENT_ID and ONE_CAMPUS_CLIENT_SECRET must be set"
+    async with _token_lock:
+        # Double-check after acquiring lock
+        now = time.time()
+        if _token_cache["access_token"] and _token_cache["expires_at"] > now:
+            return _token_cache["access_token"]
+
+        if not ONE_CAMPUS_CLIENT_ID or not ONE_CAMPUS_CLIENT_SECRET:
+            raise RuntimeError(
+                "ONE_CAMPUS_CLIENT_ID and ONE_CAMPUS_CLIENT_SECRET must be set"
+            )
+
+        client = get_http_client()
+        resp = await client.post(
+            f"{ONE_CAMPUS_API_BASE}/oauth/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": ONE_CAMPUS_CLIENT_ID,
+                "client_secret": ONE_CAMPUS_CLIENT_SECRET,
+                "scope": "jasmine,jasmine.idNumberHash,jasmine.profile",
+            },
         )
+        resp.raise_for_status()
+        data = resp.json()
 
-    client = get_http_client()
-    resp = await client.get(
-        f"{ONE_CAMPUS_API_BASE}/oauth/token",
-        params={
-            "grant_type": "client_credentials",
-            "client_id": ONE_CAMPUS_CLIENT_ID,
-            "client_secret": ONE_CAMPUS_CLIENT_SECRET,
-            "scope": "jasmine,jasmine.idNumberHash,jasmine.profile",
-        },
-    )
-    resp.raise_for_status()
-    data = resp.json()
+        expires_in = data.get("expires_in", 3600)
+        _token_cache["access_token"] = data["access_token"]
+        # Refresh 2 minutes early
+        _token_cache["expires_at"] = now + expires_in - 120
 
-    expires_in = data.get("expires_in", 3600)
-    _token_cache["access_token"] = data["access_token"]
-    # Refresh 2 minutes early
-    _token_cache["expires_at"] = now + expires_in - 120
-
-    logger.info("1Campus access_token acquired (expires_in=%s)", expires_in)
-    return data["access_token"]
+        logger.info("1Campus access_token acquired (expires_in=%s)", expires_in)
+        return data["access_token"]
 
 
 class OneCampusService:

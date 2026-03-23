@@ -1,12 +1,14 @@
 """1Campus SSO authentication endpoints.
 
 Provides:
-- GET /api/auth/1campus/authorize — redirect URL to 1Campus login
 - GET /api/auth/1campus/callback — handle code exchange + account matching
-- POST /api/auth/1campus/merge-confirm — confirm account merge
+- POST /api/auth/1campus/merge-confirm — confirm account merge (requires signed token)
 """
 
+import hashlib
+import hmac
 import logging
+import time
 from datetime import timedelta
 from typing import Optional
 
@@ -15,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from auth import create_access_token
+from core.config import settings
 from database import get_db
 from models.user import Student
 from routers.students.auth import (
@@ -26,6 +29,9 @@ from services.one_campus_service import (
     OneCampusCodeExpiredError,
 )
 from services.one_campus_account_service import OneCampusAccountService
+
+# Merge token validity: 10 minutes
+MERGE_TOKEN_TTL = 600
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +50,49 @@ class OneCampusCallbackResponse(BaseModel):
 
 
 class MergeConfirmRequest(BaseModel):
-    source_identity_id: int
-    target_identity_id: int
-    one_campus_student_id: str
-    one_campus_account: str
+    merge_token: str
 
 
 # --- Helpers ---
+
+
+def _create_merge_token(
+    existing_identity_id: int,
+    one_campus_student_id: str,
+    one_campus_account: str,
+) -> str:
+    """Create an HMAC-signed merge token encoding identity IDs + expiry."""
+    expires_at = int(time.time()) + MERGE_TOKEN_TTL
+    payload = f"{existing_identity_id}:{one_campus_student_id}:{one_campus_account}:{expires_at}"
+    sig = hmac.new(
+        settings.JWT_SECRET.encode(), payload.encode(), hashlib.sha256
+    ).hexdigest()
+    return f"{payload}:{sig}"
+
+
+def _verify_merge_token(token: str) -> dict:
+    """Verify and decode a merge token. Raises ValueError on failure."""
+    parts = token.split(":")
+    if len(parts) != 5:
+        raise ValueError("Invalid merge token format")
+
+    existing_id_str, oc_student_id, oc_account, expires_str, sig = parts
+    payload = f"{existing_id_str}:{oc_student_id}:{oc_account}:{expires_str}"
+    expected_sig = hmac.new(
+        settings.JWT_SECRET.encode(), payload.encode(), hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(sig, expected_sig):
+        raise ValueError("Invalid merge token signature")
+
+    if int(expires_str) < int(time.time()):
+        raise ValueError("Merge token expired")
+
+    return {
+        "existing_identity_id": int(existing_id_str),
+        "one_campus_student_id": oc_student_id,
+        "one_campus_account": oc_account,
+    }
 
 
 def _build_student_response(db: Session, student: Student) -> dict:
@@ -168,12 +210,16 @@ async def one_campus_callback(
     # Step 4: Handle result
     if action == "merge_prompt":
         # Don't issue token yet — frontend needs to confirm merge
+        merge_token = _create_merge_token(
+            existing_identity_id=identity.id,
+            one_campus_student_id=one_campus_student_id,
+            one_campus_account=account,
+        )
         return OneCampusCallbackResponse(
             action="merge_prompt",
             merge_info={
-                "existing_identity_id": identity.id,
+                "merge_token": merge_token,
                 "existing_student_name": student.name if student else None,
-                "new_one_campus_student_id": one_campus_student_id,
                 "new_one_campus_account": account,
                 "new_student_name": student_name,
                 "message": (
@@ -207,14 +253,21 @@ async def merge_confirm(
     request: MergeConfirmRequest,
     db: Session = Depends(get_db),
 ):
-    """Confirm account merge after duplicate detection."""
+    """Confirm account merge after duplicate detection.
+
+    Requires a signed merge_token issued by the callback endpoint.
+    """
+    try:
+        token_data = _verify_merge_token(request.merge_token)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     try:
         target_identity, primary_student = OneCampusAccountService.merge_accounts(
             db=db,
-            source_identity_id=request.source_identity_id,
-            target_identity_id=request.target_identity_id,
-            one_campus_student_id=request.one_campus_student_id,
-            one_campus_account=request.one_campus_account,
+            target_identity_id=token_data["existing_identity_id"],
+            one_campus_student_id=token_data["one_campus_student_id"],
+            one_campus_account=token_data["one_campus_account"],
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

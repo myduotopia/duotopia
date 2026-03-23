@@ -12,7 +12,6 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from auth import get_password_hash
 from models.user import Identity, Student
 
 logger = logging.getLogger(__name__)
@@ -119,15 +118,6 @@ class OneCampusAccountService:
                 return existing_identity, student, "merge_prompt"
 
         # Step 3: Create new Identity + Student
-        from datetime import datetime, timezone
-
-        now = datetime.now(timezone.utc)
-        # Generate a default password from today's date (YYYYMMDD)
-        from zoneinfo import ZoneInfo
-
-        taipei_tz = ZoneInfo("Asia/Taipei")
-        default_password = now.astimezone(taipei_tz).strftime("%Y%m%d")
-
         identity = Identity(
             one_campus_student_id=one_campus_student_id,
             one_campus_account=one_campus_account,
@@ -138,10 +128,12 @@ class OneCampusAccountService:
         db.add(identity)
         db.flush()  # Get identity.id
 
+        # SSO-only accounts: no password set (has_password=False)
         student = Student(
             name=student_name,
             student_number=student_number,
-            password_hash=get_password_hash(default_password),
+            password_hash=None,
+            has_password=False,
             identity_id=identity.id,
             is_primary_account=True,
             is_active=True,
@@ -162,38 +154,24 @@ class OneCampusAccountService:
     @staticmethod
     def merge_accounts(
         db: Session,
-        source_identity_id: int,
         target_identity_id: int,
         one_campus_student_id: str,
         one_campus_account: str,
     ) -> tuple:
-        """Merge source identity's 1Campus fields into target identity.
+        """Link 1Campus fields to an existing identity.
 
-        Moves all students from source to target, then deactivates source.
+        The target identity is the existing account matched by national_id_hash.
+        We add the 1Campus student ID and account to it.
         Returns: (target_identity, primary_student)
         """
-        source = db.query(Identity).get(source_identity_id)
-        target = db.query(Identity).get(target_identity_id)
+        target = db.get(Identity, target_identity_id)
 
-        if not source or not target:
-            raise ValueError("Source or target identity not found")
+        if not target:
+            raise ValueError("Target identity not found")
 
         # Update target with 1Campus fields
         target.one_campus_student_id = one_campus_student_id
         target.one_campus_account = one_campus_account
-        if source.national_id_hash and not target.national_id_hash:
-            target.national_id_hash = source.national_id_hash
-
-        # Move students from source to target
-        source_students = (
-            db.query(Student).filter(Student.identity_id == source.id).all()
-        )
-        for s in source_students:
-            s.identity_id = target.id
-            s.is_primary_account = False
-
-        # Deactivate source identity
-        source.is_active = False
 
         db.commit()
 
@@ -209,8 +187,8 @@ class OneCampusAccountService:
         )
 
         logger.info(
-            "1Campus SSO: merged identity %s → %s",
-            source_identity_id,
+            "1Campus SSO: merged 1campus_id=%s into identity_id=%s",
+            one_campus_student_id,
             target_identity_id,
         )
         return target, primary_student

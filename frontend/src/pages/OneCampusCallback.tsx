@@ -24,9 +24,8 @@ export default function OneCampusCallback() {
   );
   const [errorMessage, setErrorMessage] = useState("");
   const [mergeInfo, setMergeInfo] = useState<{
-    existing_identity_id: number;
+    merge_token: string;
     existing_student_name: string | null;
-    new_one_campus_student_id: string;
     new_one_campus_account: string;
     new_student_name: string;
     message: string;
@@ -112,10 +111,7 @@ export default function OneCampusCallback() {
     setMerging(true);
     try {
       const response = await api.post("/api/auth/1campus/merge-confirm", {
-        source_identity_id: mergeInfo.existing_identity_id,
-        target_identity_id: mergeInfo.existing_identity_id,
-        one_campus_student_id: mergeInfo.new_one_campus_student_id,
-        one_campus_account: mergeInfo.new_one_campus_account,
+        merge_token: mergeInfo.merge_token,
       });
       const data = response.data;
 
