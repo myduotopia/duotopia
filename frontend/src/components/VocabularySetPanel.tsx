@@ -4238,7 +4238,9 @@ export default function VocabularySetPanel({
       {/* Batch Paste Dialog (Mobile only - desktop uses inline left panel) */}
       <Dialog
         open={batchPasteDialogOpen}
-        onOpenChange={setBatchPasteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isBatchPasting) setBatchPasteDialogOpen(open);
+        }}
       >
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
           <DialogHeader className="pb-4 flex-shrink-0">
