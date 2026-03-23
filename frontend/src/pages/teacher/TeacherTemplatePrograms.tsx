@@ -609,6 +609,7 @@ function TeacherTemplateProgramsInner() {
               <Button
                 variant="ghost"
                 size="icon"
+                disabled={editorBusy}
                 onClick={() => {
                   if (editorBusy) return;
                   if (
@@ -697,6 +698,7 @@ function TeacherTemplateProgramsInner() {
                   {t("teacherTemplatePrograms.dialogs.editContentTitle")}
                 </h2>
                 <button
+                  disabled={editorBusy}
                   onClick={() => {
                     if (editorBusy) return;
                     if (
@@ -799,6 +801,7 @@ function TeacherTemplateProgramsInner() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  disabled={editorBusy}
                   onClick={() => {
                     if (editorBusy) return;
                     if (
@@ -886,6 +889,7 @@ function TeacherTemplateProgramsInner() {
                   {t("vocabularySet.editTitle")}
                 </h2>
                 <button
+                  disabled={editorBusy}
                   onClick={() => {
                     if (editorBusy) return;
                     if (

@@ -567,6 +567,7 @@ export default function OrgMaterialsPage() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  disabled={editorBusy}
                   onClick={() => {
                     if (editorBusy) return;
                     if (
@@ -651,6 +652,7 @@ export default function OrgMaterialsPage() {
                     {t("teacherTemplatePrograms.dialogs.editContentTitle")}
                   </h2>
                   <button
+                    disabled={editorBusy}
                     onClick={() => {
                       if (editorBusy) return;
                       if (
@@ -749,6 +751,7 @@ export default function OrgMaterialsPage() {
                   <Button
                     variant="ghost"
                     size="icon"
+                    disabled={editorBusy}
                     onClick={() => {
                       if (editorBusy) return;
                       if (
@@ -832,6 +835,7 @@ export default function OrgMaterialsPage() {
                     {t("vocabularySet.editTitle")}
                   </h2>
                   <button
+                    disabled={editorBusy}
                     onClick={() => {
                       if (editorBusy) return;
                       if (

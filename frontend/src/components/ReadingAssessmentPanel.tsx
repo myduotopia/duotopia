@@ -2341,7 +2341,9 @@ export default function ReadingAssessmentPanel({
       {/* Batch Paste Dialog */}
       <Dialog
         open={batchPasteDialogOpen}
-        onOpenChange={setBatchPasteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isPasting) setBatchPasteDialogOpen(open);
+        }}
       >
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
           <DialogHeader className="pb-4 flex-shrink-0">
@@ -2469,6 +2471,7 @@ export default function ReadingAssessmentPanel({
             <Button
               variant="outline"
               onClick={() => setBatchPasteDialogOpen(false)}
+              disabled={isPasting}
               className="px-6 py-2 text-base"
             >
               {t("contentEditor.buttons.cancel")}
