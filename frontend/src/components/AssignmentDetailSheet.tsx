@@ -258,9 +258,7 @@ export function AssignmentDetailSheet({
         title: editTitle,
         description: editInstructions,
         due_date: editDueDate ? `${editDueDate}T23:59:59+08:00` : null,
-        start_date: editStartDate
-          ? `${editStartDate}T00:00:00+08:00`
-          : null,
+        start_date: editStartDate ? `${editStartDate}T00:00:00+08:00` : null,
         ...editAdvanced,
       });
       toast.success(t("assignmentDetail.messages.updateSuccess", "已儲存變更"));
