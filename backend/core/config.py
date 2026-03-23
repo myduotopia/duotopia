@@ -57,6 +57,13 @@ class Settings:
     GOOGLE_CLIENT_ID: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET: Optional[str] = os.getenv("GOOGLE_CLIENT_SECRET")
 
+    # 1Campus SSO (optional)
+    ONE_CAMPUS_CLIENT_ID: Optional[str] = os.getenv("ONE_CAMPUS_CLIENT_ID")
+    ONE_CAMPUS_CLIENT_SECRET: Optional[str] = os.getenv("ONE_CAMPUS_CLIENT_SECRET")
+    ONE_CAMPUS_API_BASE_URL: str = os.getenv(
+        "ONE_CAMPUS_API_BASE_URL", "https://devapi.1campus.net"
+    )
+
     # OpenAI (optional)
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
 

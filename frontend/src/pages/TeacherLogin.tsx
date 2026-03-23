@@ -236,6 +236,29 @@ export default function TeacherLogin() {
               </div>
             </form>
 
+            {/* 1Campus SSO Login */}
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">
+                  {t("teacherLogin.oneCampus.separator", "or")}
+                </span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full py-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-green-200 text-green-700 font-medium"
+              onClick={() => {
+                window.location.href = "https://1campus.net";
+              }}
+            >
+              🏫 {t("teacherLogin.oneCampus.button", "Log in with School Account (1Campus)")}
+            </Button>
+
             {/* Quick Login Buttons - 只在非 production 或有 ?is_demo=true 時顯示 */}
             {showDemoBlocks && (
               <>

@@ -28,6 +28,7 @@ import TeacherProfile from "./pages/teacher/TeacherProfile";
 import StudentLogin from "./pages/StudentLogin";
 import StudentForgotPassword from "./pages/StudentForgotPassword";
 import StudentResetPassword from "./pages/StudentResetPassword";
+import OneCampusCallback from "./pages/OneCampusCallback";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentAssignmentList from "./pages/student/StudentAssignmentList";
 import StudentAssignmentDetail from "./pages/student/StudentAssignmentDetail";
@@ -288,6 +289,9 @@ function App() {
         />
         {/* ✅ Phase 4: 組織管理路由已移至 /organization/* */}
         {/* Teacher Profile is now integrated in TeacherLayout sidebar */}
+
+        {/* 1Campus SSO Callback */}
+        <Route path="/auth/1campus/callback" element={<OneCampusCallback />} />
 
         {/* Student Routes */}
         <Route path="/student/login" element={<StudentLogin />} />
