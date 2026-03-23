@@ -3,6 +3,7 @@ Content Ops operations for teachers.
 """
 from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
 from sqlalchemy.orm import Session, selectinload, joinedload
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, text
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
