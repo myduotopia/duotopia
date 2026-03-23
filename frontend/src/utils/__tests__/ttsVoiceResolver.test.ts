@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   TTS_ACCENTS,
   TTS_GENDERS,
@@ -151,6 +151,26 @@ describe("ttsVoiceResolver", () => {
       }
       // With 50 iterations, we should see more than 1 unique voice
       expect(voices.size).toBeGreaterThan(1);
+    });
+
+    describe("deterministic Random resolution (spied Math.random)", () => {
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it("picks first accent and Male when Math.random returns 0", () => {
+        vi.spyOn(Math, "random").mockReturnValue(0);
+        const { voice } = getVoiceAndRate("Random", "Random", "Normal x1");
+        // ACCENT_CHOICES[0] = "American English", GENDER_CHOICES[0] = "Male"
+        expect(voice).toBe("en-US-ChristopherNeural");
+      });
+
+      it("picks last accent and Female when Math.random returns 0.9999", () => {
+        vi.spyOn(Math, "random").mockReturnValue(0.9999);
+        const { voice } = getVoiceAndRate("Random", "Random", "Normal x1");
+        // ACCENT_CHOICES[3] = "Australian English", GENDER_CHOICES[1] = "Female"
+        expect(voice).toBe("en-AU-NatashaNeural");
+      });
     });
   });
 });
