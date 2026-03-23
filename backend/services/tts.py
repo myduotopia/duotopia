@@ -26,6 +26,7 @@ class TTSService:
             },
             "en-GB": {"male": "en-GB-RyanNeural", "female": "en-GB-SoniaNeural"},
             "en-AU": {"male": "en-AU-WilliamNeural", "female": "en-AU-NatashaNeural"},
+            "en-IN": {"male": "en-IN-PrabhatNeural", "female": "en-IN-NeerjaNeural"},
         }
 
         # Azure Speech 設定
@@ -370,6 +371,18 @@ class TTSService:
                 "display_name": "William (AU Male)",
                 "gender": "Male",
                 "locale": "en-AU",
+            },
+            {
+                "name": "en-IN-NeerjaNeural",
+                "display_name": "Neerja (IN Female)",
+                "gender": "Female",
+                "locale": "en-IN",
+            },
+            {
+                "name": "en-IN-PrabhatNeural",
+                "display_name": "Prabhat (IN Male)",
+                "gender": "Male",
+                "locale": "en-IN",
             },
         ]
 

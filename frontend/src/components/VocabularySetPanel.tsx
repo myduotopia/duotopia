@@ -1635,6 +1635,8 @@ export default function VocabularySetPanel({
   }, []);
 
   // Save TTS settings to localStorage (Issue #121)
+  // Note: "Random" is intentionally persisted as the user's preference,
+  // so re-opening the panel preserves their intent to randomize.
   const saveBatchTTSSettings = () => {
     localStorage.setItem(
       "duotopia_batch_tts_settings",

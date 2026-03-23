@@ -13,14 +13,9 @@ export const TTS_GENDERS = ["Random", "Male", "Female"] as const;
 /** TTS speed options */
 export const TTS_SPEEDS = ["Slow x0.75", "Normal x1", "Fast x1.5"] as const;
 
-const ACCENT_CHOICES = [
-  "American English",
-  "British English",
-  "Indian English",
-  "Australian English",
-] as const;
-
-const GENDER_CHOICES = ["Male", "Female"] as const;
+// Derived from TTS_ACCENTS/TTS_GENDERS — no manual sync needed
+const ACCENT_CHOICES = TTS_ACCENTS.filter((a) => a !== "Random");
+const GENDER_CHOICES = TTS_GENDERS.filter((g) => g !== "Random");
 
 const VOICE_MAP: Record<string, Record<string, string>> = {
   "American English": {
