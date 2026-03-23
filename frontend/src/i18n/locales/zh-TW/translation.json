@@ -1248,6 +1248,10 @@
       "failed": "發送失敗，請稍後再試",
       "cooldown": "請等待 {{seconds}} 秒後再重新發送",
       "noEmail": "沒有收到郵件？"
+    },
+    "oneCampus": {
+      "separator": "或",
+      "button": "學校帳號登入 (1Campus)"
     }
   },
   "studentLogin": {
@@ -1298,6 +1302,9 @@
       "error": "登入失敗，請確認 Email 和密碼是否正確",
       "forgotPassword": "忘記密碼？"
     },
+    "oneCampus": {
+      "button": "學校帳號登入 (1Campus)"
+    },
     "errors": {
       "teacherNotFound": "找不到此教師帳號",
       "teacherValidationFailed": "無法驗證教師帳號，請稍後再試",
@@ -1346,7 +1353,28 @@
     "switchSuccess": "已切換至 {{name}}（{{org}}）",
     "switchError": "切換帳號失敗，請稍後再試"
   },
+  "oneCampus": {
+    "loading": "正在使用學校帳號登入...",
+    "errors": {
+      "title": "登入失敗",
+      "missingParams": "缺少必要參數，請重新登入。",
+      "generic": "登入失敗，請重試。",
+      "backToLogin": "返回登入頁",
+      "mergeFailed": "帳號合併失敗，請重試。"
+    },
+    "merge": {
+      "title": "找到現有帳號",
+      "existingAccount": "現有帳號",
+      "newAccount": "學校帳號",
+      "confirm": "合併帳號",
+      "skip": "先跳過"
+    }
+  },
   "studentDashboard": {
+    "noClassroom": {
+      "title": "歡迎來到 Duotopia！",
+      "description": "目前還沒有加入任何班級，請等待老師將你加入班級。"
+    },
     "welcome": {
       "greeting": "你好，{{name}}！歡迎回到 Duotopia 🚀",
       "subtitle": "繼續你的英語學習之旅吧"

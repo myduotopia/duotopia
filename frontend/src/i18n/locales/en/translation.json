@@ -1218,6 +1218,10 @@
       "failed": "Failed to send, please try again later",
       "cooldown": "Please wait {{seconds}} seconds before resending",
       "noEmail": "Didn't receive the email?"
+    },
+    "oneCampus": {
+      "separator": "or",
+      "button": "Log in with School Account (1Campus)"
     }
   },
   "studentLogin": {
@@ -1267,6 +1271,9 @@
       "loggingIn": "Logging in...",
       "error": "Login failed. Please check your email and password.",
       "forgotPassword": "Forgot password?"
+    },
+    "oneCampus": {
+      "button": "Log in with School Account (1Campus)"
     },
     "errors": {
       "teacherNotFound": "Teacher account not found",
@@ -1370,6 +1377,27 @@
     "success": {
       "verificationSent": "Verification email sent! Please check your inbox",
       "emailUpdated": "Email updated successfully"
+    },
+    "noClassroom": {
+      "title": "Welcome to Duotopia!",
+      "description": "You haven't joined any classes yet. Please ask your teacher for help."
+    }
+  },
+  "oneCampus": {
+    "loading": "Logging in with school account...",
+    "errors": {
+      "title": "Login Failed",
+      "missingParams": "Missing required parameters. Please try logging in again.",
+      "generic": "Login failed. Please try again.",
+      "backToLogin": "Back to Login",
+      "mergeFailed": "Account merge failed. Please try again."
+    },
+    "merge": {
+      "title": "Account Found",
+      "existingAccount": "Existing account",
+      "newAccount": "School account",
+      "confirm": "Merge Accounts",
+      "skip": "Skip for now"
     }
   },
   "teacherRegister": {
