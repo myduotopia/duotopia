@@ -246,8 +246,8 @@ export function AssignmentDetailSheet({
       await apiClient.patch(`/api/teachers/assignments/${assignment.id}`, {
         title: editTitle,
         description: editInstructions,
-        due_date: editDueDate || null,
-        start_date: editStartDate || null,
+        due_date: editDueDate ? `${editDueDate}T23:59:59` : null,
+        start_date: editStartDate ? `${editStartDate}T00:00:00` : null,
         ...editAdvanced,
       });
       toast.success(t("assignmentDetail.messages.updateSuccess", "已儲存變更"));
@@ -433,7 +433,7 @@ export function AssignmentDetailSheet({
                   variant="outline"
                   size="sm"
                   onClick={() => setIsEditing(true)}
-                  className="gap-1.5"
+                  className="gap-1.5 mr-6"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                   {t("assignmentDetail.sheet.editButton", "編輯")}
