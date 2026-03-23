@@ -182,7 +182,6 @@ export default function ClassroomDetail({
   const [copyContentInfo, setCopyContentInfo] = useState<{
     id: number;
     title: string;
-    lessonId: number;
   } | null>(null);
 
   // Instant practice states
@@ -1634,12 +1633,11 @@ export default function ClassroomDetail({
                         }
                       : undefined
                   }
-                  onCopy={(item, level, parentId) => {
+                  onCopy={(item, level) => {
                     if (level === 2) {
                       setCopyContentInfo({
                         id: item.id as number,
                         title: (item.title || item.name) as string,
-                        lessonId: parentId as number,
                       });
                       setShowContentCopyDialog(true);
                     }
@@ -3320,7 +3318,6 @@ export default function ClassroomDetail({
           }}
           contentId={copyContentInfo.id}
           contentTitle={copyContentInfo.title}
-          currentLessonId={copyContentInfo.lessonId}
           programs={programs}
         />
       )}

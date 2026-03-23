@@ -21,8 +21,6 @@ interface ContentCopyDialogProps {
   onSuccess: () => void;
   contentId: number;
   contentTitle: string;
-  /** Current lesson ID (to exclude from target selection) */
-  currentLessonId?: number;
   /** Programs to show in target selection */
   programs: Program[];
 }
@@ -33,7 +31,6 @@ export default function ContentCopyDialog({
   onSuccess,
   contentId,
   contentTitle,
-  currentLessonId,
   programs,
 }: ContentCopyDialogProps) {
   const { t } = useTranslation();
@@ -89,10 +86,8 @@ export default function ContentCopyDialog({
     p.name.toLowerCase().includes(programSearch.toLowerCase()),
   );
 
-  const filteredLessons = lessons.filter(
-    (l) =>
-      l.id !== currentLessonId &&
-      l.name.toLowerCase().includes(lessonSearch.toLowerCase()),
+  const filteredLessons = lessons.filter((l) =>
+    l.name.toLowerCase().includes(lessonSearch.toLowerCase()),
   );
 
   const handleSelectProgram = (programId: number) => {

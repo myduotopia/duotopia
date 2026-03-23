@@ -77,7 +77,6 @@ export default function OrgMaterialsPage() {
   const [copyContentInfo, setCopyContentInfo] = useState<{
     id: number;
     title: string;
-    lessonId: number;
   } | null>(null);
 
   useEffect(() => {
@@ -559,12 +558,11 @@ export default function OrgMaterialsPage() {
               else if (level === 2)
                 handleReorderContents(parentId as number, fromIndex, toIndex);
             }}
-            onCopy={(item, level, parentId) => {
+            onCopy={(item, level) => {
               if (level === 2) {
                 setCopyContentInfo({
                   id: item.id as number,
                   title: (item.title || item.name) as string,
-                  lessonId: parentId as number,
                 });
                 setShowCopyDialog(true);
               }
@@ -1000,7 +998,6 @@ export default function OrgMaterialsPage() {
           }}
           contentId={copyContentInfo.id}
           contentTitle={copyContentInfo.title}
-          currentLessonId={copyContentInfo.lessonId}
           programs={programs}
         />
       )}

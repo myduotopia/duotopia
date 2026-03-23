@@ -4677,6 +4677,9 @@
       "copyFailed": "複製失敗，請稍後再試"
     }
   },
+  "contentCopy": {
+    "button": "複製到..."
+  },
   "instantPractice": {
     "title": "即刻練習",
     "modeLabel": "練習模式",

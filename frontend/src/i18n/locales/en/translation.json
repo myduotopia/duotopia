@@ -4664,6 +4664,9 @@
       "copyFailed": "Copy failed. Please try again later."
     }
   },
+  "contentCopy": {
+    "button": "Copy to..."
+  },
   "instantPractice": {
     "title": "Instant Practice",
     "modeLabel": "Practice Mode",

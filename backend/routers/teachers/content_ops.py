@@ -702,13 +702,6 @@ async def copy_content(
         db, copy_data.target_lesson_id, current_teacher, require_owner=True
     )
 
-    # 防止複製到同一個 lesson
-    if content.lesson_id == copy_data.target_lesson_id:
-        raise HTTPException(
-            status_code=400,
-            detail="無法複製到同一個單元，請選擇不同的目標單元",
-        )
-
     # 計算目標 lesson 中的最大 order_index
     max_order = (
         db.query(func.max(Content.order_index))
