@@ -724,8 +724,14 @@ async def copy_content(
     # Teacher-initiated copy: track source but keep is_assignment_copy=False (default)
     new_content.source_content_id = content.id
 
-    db.commit()
-    db.refresh(new_content)
+    try:
+        db.commit()
+        db.refresh(new_content)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="複製內容衝突，請重試"
+        )
 
     return {
         "id": new_content.id,

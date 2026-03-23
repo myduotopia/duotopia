@@ -126,7 +126,7 @@ export default function ContentCopyDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={() => onClose()}>
+    <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="bg-white max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
