@@ -318,7 +318,7 @@ class Student(Base):
     name = Column(String(100), nullable=False)
     student_number = Column(String(50))
     email = Column(String(255), nullable=True, index=True)
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=True)  # nullable for SSO-only accounts
     birthdate = Column(Date, nullable=True)
     password_changed = Column(Boolean, default=False)
     email_verified = Column(Boolean, default=False)
