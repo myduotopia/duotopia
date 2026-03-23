@@ -18,7 +18,7 @@ from models import (
     School,
 )
 from .dependencies import get_current_teacher
-from .validators import *
+from .validators import ContentCreate, ContentUpdate, ContentCopy
 from .utils import TEST_SUBSCRIPTION_WHITELIST, parse_birthdate
 from models import ContentType
 
@@ -727,6 +727,7 @@ async def copy_content(
     # 設定複製後的標題和 order_index
     new_content.title = f"{content.title}(copy)"
     new_content.order_index = (max_order or 0) + 1
+    # Teacher-initiated copy: track source but keep is_assignment_copy=False (default)
     new_content.source_content_id = content.id
 
     db.commit()
@@ -810,5 +811,5 @@ async def upload_image(
     except HTTPException as e:
         raise e
     except Exception as e:
-        print(f"Image upload error: {e}")
+        logger.error("Image upload error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Image upload failed")

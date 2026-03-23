@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,6 +36,7 @@ export default function ContentCopyDialog({
   currentLessonId,
   programs,
 }: ContentCopyDialogProps) {
+  const { t } = useTranslation();
   const [selectedProgramId, setSelectedProgramId] = useState<number | null>(
     null,
   );
@@ -114,12 +116,14 @@ export default function ContentCopyDialog({
     setCopying(true);
     try {
       await apiClient.copyContent(contentId, selectedLessonId);
-      toast.success(`已複製「${contentTitle}」到目標單元`);
+      toast.success(
+        t("dialogs.contentCopyDialog.success", { title: contentTitle }),
+      );
       onSuccess();
       onClose();
     } catch (error) {
       logError("Failed to copy content:", error);
-      toast.error("複製內容失敗，請重試");
+      toast.error(t("dialogs.contentCopyDialog.error"));
     } finally {
       copyingRef.current = false;
       setCopying(false);
@@ -132,10 +136,12 @@ export default function ContentCopyDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <Copy className="h-5 w-5" />
-            <span>複製內容</span>
+            <span>{t("dialogs.contentCopyDialog.title")}</span>
           </DialogTitle>
           <DialogDescription>
-            將「{contentTitle}」複製到指定的教材單元中
+            {t("dialogs.contentCopyDialog.description", {
+              title: contentTitle,
+            })}
           </DialogDescription>
         </DialogHeader>
 
@@ -143,7 +149,7 @@ export default function ContentCopyDialog({
           {/* Program selector */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              目標教材
+              {t("dialogs.contentCopyDialog.targetProgram")}
             </label>
             <div className="relative" ref={programDropdownRef}>
               <button
@@ -159,7 +165,8 @@ export default function ContentCopyDialog({
                     selectedProgram ? "text-gray-900" : "text-gray-400"
                   }
                 >
-                  {selectedProgram?.name || "請選擇教材"}
+                  {selectedProgram?.name ||
+                    t("dialogs.contentCopyDialog.selectProgram")}
                 </span>
                 <ChevronDown className="h-4 w-4 text-gray-400" />
               </button>
@@ -171,7 +178,9 @@ export default function ContentCopyDialog({
                       <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                       <input
                         type="text"
-                        placeholder="搜尋教材..."
+                        placeholder={t(
+                          "dialogs.contentCopyDialog.searchProgram",
+                        )}
                         value={programSearch}
                         onChange={(e) => setProgramSearch(e.target.value)}
                         className="w-full pl-7 pr-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -182,7 +191,7 @@ export default function ContentCopyDialog({
                   <div className="overflow-y-auto max-h-48">
                     {filteredPrograms.length === 0 ? (
                       <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                        找不到符合的教材
+                        {t("dialogs.contentCopyDialog.noProgramMatch")}
                       </div>
                     ) : (
                       filteredPrograms.map((program) => (
@@ -212,7 +221,7 @@ export default function ContentCopyDialog({
           {/* Lesson selector */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              目標單元
+              {t("dialogs.contentCopyDialog.targetLesson")}
             </label>
             <div className="relative" ref={lessonDropdownRef}>
               <button
@@ -237,7 +246,9 @@ export default function ContentCopyDialog({
                   }
                 >
                   {lessons.find((l) => l.id === selectedLessonId)?.name ||
-                    (selectedProgramId ? "請選擇單元" : "請先選擇教材")}
+                    (selectedProgramId
+                      ? t("dialogs.contentCopyDialog.selectLesson")
+                      : t("dialogs.contentCopyDialog.selectProgramFirst"))}
                 </span>
                 <ChevronDown className="h-4 w-4 text-gray-400" />
               </button>
@@ -249,7 +260,9 @@ export default function ContentCopyDialog({
                       <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                       <input
                         type="text"
-                        placeholder="搜尋單元..."
+                        placeholder={t(
+                          "dialogs.contentCopyDialog.searchLesson",
+                        )}
                         value={lessonSearch}
                         onChange={(e) => setLessonSearch(e.target.value)}
                         className="w-full pl-7 pr-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -261,8 +274,8 @@ export default function ContentCopyDialog({
                     {filteredLessons.length === 0 ? (
                       <div className="px-3 py-2 text-sm text-gray-500 text-center">
                         {lessons.length === 0
-                          ? "此教材沒有單元"
-                          : "找不到符合的單元"}
+                          ? t("dialogs.contentCopyDialog.noLessons")
+                          : t("dialogs.contentCopyDialog.noLessonMatch")}
                       </div>
                     ) : (
                       filteredLessons.map((lesson) => (
@@ -292,18 +305,18 @@ export default function ContentCopyDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={copying}>
-            取消
+            {t("dialogs.contentCopyDialog.cancel")}
           </Button>
           <Button onClick={handleCopy} disabled={!selectedLessonId || copying}>
             {copying ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                複製中...
+                {t("dialogs.contentCopyDialog.copying")}
               </>
             ) : (
               <>
                 <Copy className="h-4 w-4 mr-2" />
-                複製
+                {t("dialogs.contentCopyDialog.copy")}
               </>
             )}
           </Button>

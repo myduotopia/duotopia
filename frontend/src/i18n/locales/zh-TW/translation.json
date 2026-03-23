@@ -1808,6 +1808,25 @@
       "error": "複製失敗，請稍後再試",
       "loadError": "載入課程失敗"
     },
+    "contentCopyDialog": {
+      "title": "複製內容",
+      "description": "將「{{title}}」複製到指定的教材單元中",
+      "targetProgram": "目標教材",
+      "targetLesson": "目標單元",
+      "selectProgram": "請選擇教材",
+      "selectLesson": "請選擇單元",
+      "selectProgramFirst": "請先選擇教材",
+      "searchProgram": "搜尋教材...",
+      "searchLesson": "搜尋單元...",
+      "noProgramMatch": "找不到符合的教材",
+      "noLessons": "此教材沒有單元",
+      "noLessonMatch": "找不到符合的單元",
+      "cancel": "取消",
+      "copy": "複製",
+      "copying": "複製中...",
+      "success": "已複製「{{title}}」到目標單元",
+      "error": "複製內容失敗，請重試"
+    },
     "createProgramDialog": {
       "title": "建立課程到「{{classroomName}}」",
       "description": "選擇建立課程的方式",
