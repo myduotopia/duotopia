@@ -256,7 +256,11 @@ export default function TeacherLogin() {
                 window.location.href = "https://1campus.net";
               }}
             >
-              🏫 {t("teacherLogin.oneCampus.button", "Log in with School Account (1Campus)")}
+              🏫{" "}
+              {t(
+                "teacherLogin.oneCampus.button",
+                "Log in with School Account (1Campus)",
+              )}
             </Button>
 
             {/* Quick Login Buttons - 只在非 production 或有 ?is_demo=true 時顯示 */}

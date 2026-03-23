@@ -19,9 +19,9 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 # 1Campus API base URL
-ONE_CAMPUS_API_BASE = getattr(
-    settings, "ONE_CAMPUS_API_BASE_URL", None
-) or "https://devapi.1campus.net"
+ONE_CAMPUS_API_BASE = (
+    getattr(settings, "ONE_CAMPUS_API_BASE_URL", None) or "https://devapi.1campus.net"
+)
 
 ONE_CAMPUS_CLIENT_ID = getattr(settings, "ONE_CAMPUS_CLIENT_ID", None)
 ONE_CAMPUS_CLIENT_SECRET = getattr(settings, "ONE_CAMPUS_CLIENT_SECRET", None)
@@ -70,9 +70,7 @@ class OneCampusService:
     """1Campus API client."""
 
     @staticmethod
-    async def exchange_identity_code(
-        school_dsns: str, code: str
-    ) -> dict:
+    async def exchange_identity_code(school_dsns: str, code: str) -> dict:
         """Exchange a one-time identity code for user info.
 
         GET /{schoolDsns}/identity/{code}
@@ -86,13 +84,9 @@ class OneCampusService:
             f"{ONE_CAMPUS_API_BASE}/{school_dsns}/identity/{code}",
         )
         if resp.status_code == 404:
-            raise OneCampusCodeNotFoundError(
-                "Identity code not found or already used"
-            )
+            raise OneCampusCodeNotFoundError("Identity code not found or already used")
         if resp.status_code == 410:
-            raise OneCampusCodeExpiredError(
-                "Identity code expired (30s limit)"
-            )
+            raise OneCampusCodeExpiredError("Identity code expired (30s limit)")
         resp.raise_for_status()
         return resp.json()
 

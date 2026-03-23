@@ -94,10 +94,8 @@ class OneCampusAccountService:
 
         # Step 2: Check national_id_hash for potential duplicate
         if national_id_hash:
-            existing_identity = (
-                OneCampusAccountService.find_by_national_id_hash(
-                    db, national_id_hash
-                )
+            existing_identity = OneCampusAccountService.find_by_national_id_hash(
+                db, national_id_hash
             )
             if existing_identity and (
                 existing_identity.one_campus_student_id != one_campus_student_id
@@ -109,9 +107,7 @@ class OneCampusAccountService:
                         Student.identity_id == existing_identity.id,
                         Student.is_active.is_(True),
                     )
-                    .order_by(
-                        Student.is_primary_account.desc().nulls_last()
-                    )
+                    .order_by(Student.is_primary_account.desc().nulls_last())
                     .first()
                 )
                 logger.info(
@@ -156,8 +152,7 @@ class OneCampusAccountService:
         db.refresh(student)
 
         logger.info(
-            "1Campus SSO: created new student_id=%s, identity_id=%s, "
-            "1campus_id=%s",
+            "1Campus SSO: created new student_id=%s, identity_id=%s, " "1campus_id=%s",
             student.id,
             identity.id,
             one_campus_student_id,
@@ -191,9 +186,7 @@ class OneCampusAccountService:
 
         # Move students from source to target
         source_students = (
-            db.query(Student)
-            .filter(Student.identity_id == source.id)
-            .all()
+            db.query(Student).filter(Student.identity_id == source.id).all()
         )
         for s in source_students:
             s.identity_id = target.id

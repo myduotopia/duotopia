@@ -79,12 +79,8 @@ def _build_student_response(db: Session, student: Student) -> dict:
         "classroom_name": first_cr["name"] if first_cr else None,
         "school_id": first_cr.get("school_id") if first_cr else None,
         "school_name": first_cr.get("school_name") if first_cr else None,
-        "organization_id": (
-            first_cr.get("organization_id") if first_cr else None
-        ),
-        "organization_name": (
-            first_cr.get("organization_name") if first_cr else None
-        ),
+        "organization_id": (first_cr.get("organization_id") if first_cr else None),
+        "organization_name": (first_cr.get("organization_name") if first_cr else None),
         "has_linked_accounts": linked_accounts_count > 0,
         "linked_accounts_count": linked_accounts_count,
         "classrooms": classrooms_list,
@@ -111,9 +107,7 @@ async def one_campus_callback(
     """
     # Step 1: Exchange identity code
     try:
-        identity_data = await OneCampusService.exchange_identity_code(
-            schoolDsns, code
-        )
+        identity_data = await OneCampusService.exchange_identity_code(schoolDsns, code)
     except OneCampusCodeNotFoundError:
         raise HTTPException(
             status_code=404,
@@ -158,9 +152,7 @@ async def one_campus_callback(
                 break
     except Exception as e:
         # Non-fatal: we can still login without idNumberHash
-        logger.warning(
-            "1Campus getUserRole failed (non-fatal): %s", e
-        )
+        logger.warning("1Campus getUserRole failed (non-fatal): %s", e)
 
     # Step 3: Match or create account
     identity, student, action = OneCampusAccountService.find_or_create_student(
@@ -217,14 +209,12 @@ async def merge_confirm(
 ):
     """Confirm account merge after duplicate detection."""
     try:
-        target_identity, primary_student = (
-            OneCampusAccountService.merge_accounts(
-                db=db,
-                source_identity_id=request.source_identity_id,
-                target_identity_id=request.target_identity_id,
-                one_campus_student_id=request.one_campus_student_id,
-                one_campus_account=request.one_campus_account,
-            )
+        target_identity, primary_student = OneCampusAccountService.merge_accounts(
+            db=db,
+            source_identity_id=request.source_identity_id,
+            target_identity_id=request.target_identity_id,
+            one_campus_student_id=request.one_campus_student_id,
+            one_campus_account=request.one_campus_account,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

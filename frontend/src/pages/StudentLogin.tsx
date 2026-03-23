@@ -484,7 +484,11 @@ export default function StudentLogin() {
                     window.location.href = "https://1campus.net";
                   }}
                 >
-                  🏫 {t("studentLogin.oneCampus.button", "Log in with School Account (1Campus)")}
+                  🏫{" "}
+                  {t(
+                    "studentLogin.oneCampus.button",
+                    "Log in with School Account (1Campus)",
+                  )}
                 </Button>
 
                 <div className="text-center">

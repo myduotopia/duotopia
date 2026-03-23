@@ -19,9 +19,9 @@ export default function OneCampusCallback() {
   const navigate = useNavigate();
   const { login } = useStudentAuthStore();
 
-  const [status, setStatus] = useState<
-    "loading" | "error" | "merge_prompt"
-  >("loading");
+  const [status, setStatus] = useState<"loading" | "error" | "merge_prompt">(
+    "loading",
+  );
   const [errorMessage, setErrorMessage] = useState("");
   const [mergeInfo, setMergeInfo] = useState<{
     existing_identity_id: number;
@@ -140,7 +140,10 @@ export default function OneCampusCallback() {
       }
     } catch {
       setErrorMessage(
-        t("oneCampus.errors.mergeFailed", "Account merge failed. Please try again."),
+        t(
+          "oneCampus.errors.mergeFailed",
+          "Account merge failed. Please try again.",
+        ),
       );
       setStatus("error");
     } finally {
@@ -195,12 +198,8 @@ export default function OneCampusCallback() {
         <Card className="max-w-md w-full">
           <CardHeader className="text-center">
             <MergeIcon className="h-12 w-12 text-amber-500 mx-auto mb-2" />
-            <CardTitle>
-              {t("oneCampus.merge.title", "Account Found")}
-            </CardTitle>
-            <CardDescription>
-              {mergeInfo.message}
-            </CardDescription>
+            <CardTitle>{t("oneCampus.merge.title", "Account Found")}</CardTitle>
+            <CardDescription>{mergeInfo.message}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
@@ -210,7 +209,8 @@ export default function OneCampusCallback() {
               </p>
               <p className="text-amber-700 mt-1">
                 {t("oneCampus.merge.newAccount", "School account")}:{" "}
-                {mergeInfo.new_student_name} ({mergeInfo.new_one_campus_account})
+                {mergeInfo.new_student_name} ({mergeInfo.new_one_campus_account}
+                )
               </p>
             </div>
 
