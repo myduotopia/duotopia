@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import VocabularySetPanel from "@/components/VocabularySetPanel";
 import ContentCopyDialog from "@/components/ContentCopyDialog";
 import { AssignmentDialog } from "@/components/AssignmentDialog";
 import { InstantPracticeDialog } from "@/components/InstantPracticeDialog";
+import { AssignmentDetailSheet } from "@/components/AssignmentDetailSheet";
 import BatchGradingModal from "@/components/BatchGradingModal";
 import { StudentCompletionDashboard } from "@/components/StudentCompletionDashboard";
 import { RecursiveTreeAccordion } from "@/components/shared/RecursiveTreeAccordion";
@@ -48,11 +49,18 @@ import {
   Printer,
   ChevronLeft,
   ChevronRight,
+  MoreVertical,
 } from "lucide-react";
 import { getContentTypeIcon } from "@/lib/contentTypeIcon";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import AssignmentStickyNote from "@/components/AssignmentStickyNote";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   buildStickyNotePageHtml,
   openPrintWindow,
@@ -198,12 +206,20 @@ export default function ClassroomDetail({
   const [assignmentsLoaded, setAssignmentsLoaded] = useState(false);
   const [selectedAssignment] = useState<Assignment | null>(null);
   const [showAssignmentDetails, setShowAssignmentDetails] = useState(false);
+  // Assignment detail sheet state
+  const [sheetAssignment, setSheetAssignment] = useState<Assignment | null>(
+    null,
+  );
+  const [showAssignmentSheet, setShowAssignmentSheet] = useState(false);
   // Filter states
   const [filterKeyword, setFilterKeyword] = useState("");
   const [filterType, setFilterType] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterOverdue, setFilterOverdue] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<
+    "" | "completed" | "in_progress" | "overdue"
+  >("");
 
   // Filter type → practice_mode mapping
   const filterTypeMap: Record<string, string> = {
@@ -239,8 +255,38 @@ export default function ClassroomDetail({
     if (filterOverdue) {
       if (!a.due_date || new Date(a.due_date) >= new Date()) return false;
     }
+    if (filterStatus) {
+      const rate = a.completion_rate ?? 0;
+      const isOverdue = a.due_date && new Date(a.due_date) < new Date();
+      if (filterStatus === "completed" && rate < 100) return false;
+      if (filterStatus === "in_progress" && (rate >= 100 || isOverdue))
+        return false;
+      if (filterStatus === "overdue" && !isOverdue) return false;
+    }
     return true;
   });
+
+  // Assignment status counts (based on completion_rate + due_date)
+  const statusCounts = useMemo(() => {
+    const source = showArchived ? archivedAssignments : assignments;
+    const now = new Date();
+    let completed = 0;
+    let inProgress = 0;
+    let overdue = 0;
+    for (const a of source) {
+      const rate = a.completion_rate ?? 0;
+      const isOverdue = a.due_date && new Date(a.due_date) < now;
+      if (rate >= 100) completed++;
+      else if (isOverdue) overdue++;
+      else inProgress++;
+    }
+    return {
+      total: source.length,
+      completed,
+      inProgress,
+      overdue,
+    };
+  }, [assignments, archivedAssignments, showArchived]);
 
   const [batchGradingModal, setBatchGradingModal] = useState({
     open: false,
@@ -272,7 +318,14 @@ export default function ClassroomDetail({
   // Reset to page 1 when filters change
   useEffect(() => {
     setAssignmentPage(1);
-  }, [filterKeyword, filterType, filterDateFrom, filterDateTo, filterOverdue]);
+  }, [
+    filterKeyword,
+    filterType,
+    filterDateFrom,
+    filterDateTo,
+    filterOverdue,
+    filterStatus,
+  ]);
 
   const togglePrintSelection = (assignmentId: number) => {
     setSelectedForPrint((prev) => {
@@ -1743,54 +1796,74 @@ export default function ClassroomDetail({
                       </div>
                     </div>
 
-                    {/* Assignment Stats - Using Real Data (only for active view) */}
+                    {/* Assignment Status Filter Chips */}
                     {!showArchived && (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 sm:p-4 border dark:border-blue-800">
-                          <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                            {t("classroomDetail.stats.totalAssignments")}
-                          </div>
-                          <div className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
-                            {assignments.length}
-                          </div>
-                        </div>
-                        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 sm:p-4 border dark:border-green-800">
-                          <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                            {t("classroomDetail.stats.completedAssignments")}
-                          </div>
-                          <div className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
+                      <div className="flex flex-wrap gap-2">
+                        {(
+                          [
                             {
-                              assignments.filter(
-                                (a) => a.status === "completed",
-                              ).length
-                            }
-                          </div>
-                        </div>
-                        <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 sm:p-4 border dark:border-yellow-800">
-                          <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                            {t("classroomDetail.stats.inProgressAssignments")}
-                          </div>
-                          <div className="text-xl sm:text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                              key: "" as const,
+                              label: t(
+                                "classroomDetail.stats.totalAssignments",
+                              ),
+                              count: statusCounts.total,
+                              colors:
+                                "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-300 dark:border-blue-700",
+                              activeColors:
+                                "bg-blue-600 text-white dark:bg-blue-500 border-blue-600 dark:border-blue-500",
+                            },
                             {
-                              assignments.filter(
-                                (a) =>
-                                  a.status === "in_progress" ||
-                                  a.status === "not_started",
-                              ).length
-                            }
-                          </div>
-                        </div>
-                        <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 sm:p-4 border dark:border-red-800">
-                          <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                            {t("classroomDetail.stats.overdueAssignments")}
-                          </div>
-                          <div className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400">
+                              key: "completed" as const,
+                              label: t(
+                                "classroomDetail.stats.completedAssignments",
+                              ),
+                              count: statusCounts.completed,
+                              colors:
+                                "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border-green-300 dark:border-green-700",
+                              activeColors:
+                                "bg-green-600 text-white dark:bg-green-500 border-green-600 dark:border-green-500",
+                            },
                             {
-                              assignments.filter((a) => a.status === "overdue")
-                                .length
+                              key: "in_progress" as const,
+                              label: t(
+                                "classroomDetail.stats.inProgressAssignments",
+                              ),
+                              count: statusCounts.inProgress,
+                              colors:
+                                "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 border-yellow-300 dark:border-yellow-700",
+                              activeColors:
+                                "bg-yellow-600 text-white dark:bg-yellow-500 border-yellow-600 dark:border-yellow-500",
+                            },
+                            {
+                              key: "overdue" as const,
+                              label: t(
+                                "classroomDetail.stats.overdueAssignments",
+                              ),
+                              count: statusCounts.overdue,
+                              colors:
+                                "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-300 dark:border-red-700",
+                              activeColors:
+                                "bg-red-600 text-white dark:bg-red-500 border-red-600 dark:border-red-500",
+                            },
+                          ] as const
+                        ).map((chip) => (
+                          <button
+                            key={chip.key || "all"}
+                            onClick={() =>
+                              setFilterStatus(
+                                filterStatus === chip.key ? "" : chip.key,
+                              )
                             }
-                          </div>
-                        </div>
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors cursor-pointer ${
+                              filterStatus === chip.key
+                                ? chip.activeColors
+                                : chip.colors
+                            }`}
+                          >
+                            {chip.label}
+                            <span className="font-bold">{chip.count}</span>
+                          </button>
+                        ))}
                       </div>
                     )}
 
@@ -1859,7 +1932,8 @@ export default function ClassroomDetail({
                             filterType ||
                             filterDateFrom ||
                             filterDateTo ||
-                            filterOverdue) && (
+                            filterOverdue ||
+                            filterStatus) && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1870,6 +1944,7 @@ export default function ClassroomDetail({
                                 setFilterDateFrom("");
                                 setFilterDateTo("");
                                 setFilterOverdue(false);
+                                setFilterStatus("");
                               }}
                             >
                               <X className="h-3.5 w-3.5 mr-1" />
@@ -2020,106 +2095,52 @@ export default function ClassroomDetail({
                                   {assignment.practice_mode !==
                                     "rearrangement" &&
                                     assignment.practice_mode !==
-                                      "word_selection" && (
+                                      "word_selection" &&
+                                    canUseAiGrading && (
                                       <div className="flex flex-col items-end flex-shrink-0">
-                                        {canUseAiGrading ? (
-                                          <Button
-                                            variant="default"
-                                            size="sm"
-                                            className="h-11 px-3 gap-1.5 bg-purple-600 hover:bg-purple-700 text-white"
-                                            onClick={() => {
-                                              setBatchGradingModal({
-                                                open: true,
-                                                assignmentId: assignment.id,
-                                                classroomId: Number(id),
-                                              });
-                                            }}
-                                          >
-                                            <Sparkles className="w-5 h-5" />
-                                            <span className="text-sm font-medium">
-                                              {t(
-                                                "assignmentDetail.buttons.batchGrade",
-                                              )}
-                                            </span>
-                                          </Button>
-                                        ) : (
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-11 px-3 gap-1.5"
-                                            onClick={() => {
-                                              navigate(
-                                                `/teacher/classroom/${id}/assignment/${assignment.id}`,
-                                              );
-                                            }}
-                                          >
-                                            <Eye className="w-5 h-5" />
-                                            <span className="text-sm font-medium">
-                                              {t(
-                                                "classroomDetail.buttons.viewDetails",
-                                              )}
-                                            </span>
-                                          </Button>
-                                        )}
+                                        <Button
+                                          variant="default"
+                                          size="sm"
+                                          className="h-11 px-3 gap-1.5 bg-purple-600 hover:bg-purple-700 text-white"
+                                          onClick={() => {
+                                            setBatchGradingModal({
+                                              open: true,
+                                              assignmentId: assignment.id,
+                                              classroomId: Number(id),
+                                            });
+                                          }}
+                                        >
+                                          <Sparkles className="w-5 h-5" />
+                                          <span className="text-sm font-medium">
+                                            {t(
+                                              "assignmentDetail.buttons.batchGrade",
+                                            )}
+                                          </span>
+                                        </Button>
                                       </div>
                                     )}
                                 </div>
 
-                                {/* Description */}
-                                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                                  {assignment.instructions ||
-                                    t("classroomDetail.labels.noDescription")}
-                                </p>
-
-                                {/* Details Grid */}
-                                <div className="grid grid-cols-2 gap-3 text-sm">
-                                  <div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                                      {t("classroomDetail.labels.assignedTo")}
-                                    </div>
-                                    <div className="font-medium text-gray-900 dark:text-gray-100 mt-1">
-                                      {assignment.student_count
-                                        ? t(
-                                            "classroomDetail.labels.studentCountWithUnit",
-                                            { count: assignment.student_count },
-                                          )
-                                        : t("classroomDetail.labels.allClass")}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                                      {t("classroomDetail.labels.dueDate")}
-                                    </div>
-                                    <div className="font-medium text-gray-900 dark:text-gray-100 mt-1">
-                                      {assignment.due_date
-                                        ? new Date(
-                                            assignment.due_date,
-                                          ).toLocaleDateString("zh-TW")
-                                        : t(
-                                            "classroomDetail.labels.noDeadline",
-                                          )}
-                                    </div>
-                                  </div>
+                                {/* Metadata row: due date + completion */}
+                                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                                  <span>
+                                    {assignment.due_date
+                                      ? new Date(
+                                          assignment.due_date,
+                                        ).toLocaleDateString("zh-TW")
+                                      : t("classroomDetail.labels.noDeadline")}
+                                  </span>
+                                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                                    {completionRate}%
+                                  </span>
                                 </div>
 
                                 {/* Progress Bar */}
-                                <div>
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                                      {t(
-                                        "classroomDetail.labels.completionProgress",
-                                      )}
-                                    </span>
-                                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                      {completionRate}%
-                                    </span>
-                                  </div>
-                                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                                    <div
-                                      className="bg-green-500 dark:bg-green-600 h-2 rounded-full transition-all"
-                                      style={{ width: `${completionRate}%` }}
-                                    ></div>
-                                  </div>
+                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                                  <div
+                                    className="bg-green-500 dark:bg-green-600 h-1.5 rounded-full transition-all"
+                                    style={{ width: `${completionRate}%` }}
+                                  />
                                 </div>
 
                                 {/* Action Buttons */}
@@ -2127,71 +2148,86 @@ export default function ClassroomDetail({
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="flex-1 h-12 min-h-12 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                    className="flex-1 h-10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                                     onClick={() => {
-                                      navigate(
-                                        `/teacher/classroom/${id}/assignment/${assignment.id}`,
-                                      );
+                                      setSheetAssignment(assignment);
+                                      setShowAssignmentSheet(true);
                                     }}
                                   >
+                                    <Eye className="w-4 h-4 mr-1.5" />
                                     {t("classroomDetail.buttons.viewDetails")}
                                   </Button>
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="flex-1 h-12 min-h-12 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-900/20"
+                                    className="flex-1 h-10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-900/20"
                                     onClick={() => {
-                                      navigate(
+                                      window.open(
                                         `/teacher/classroom/${id}/assignment/${assignment.id}/preview`,
+                                        "_blank",
                                       );
                                     }}
                                   >
                                     {t("classroomDetail.buttons.previewDemo")}
                                   </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-12 min-h-12 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                                    onClick={() =>
-                                      setStickyNoteModal({
-                                        open: true,
-                                        assignmentIndex: assignments.findIndex(
-                                          (a) => a.id === assignment.id,
-                                        ),
-                                      })
-                                    }
-                                  >
-                                    <StickyNote className="h-5 w-5" />
-                                  </Button>
-                                  {showArchived ? (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-12 min-h-12 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-50 dark:hover:bg-orange-900/20"
-                                      onClick={() =>
-                                        handleUnarchiveAssignment(assignment)
-                                      }
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-10 w-10 p-0"
+                                      >
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                      align="end"
+                                      className="bg-white dark:bg-gray-800"
                                     >
-                                      <ArchiveRestore className="w-4 h-4 mr-1" />
-                                      {t(
-                                        "classroomDetail.buttons.unarchiveAssignment",
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          setStickyNoteModal({
+                                            open: true,
+                                            assignmentIndex:
+                                              assignments.findIndex(
+                                                (a) => a.id === assignment.id,
+                                              ),
+                                          })
+                                        }
+                                      >
+                                        <StickyNote className="h-4 w-4 mr-2" />
+                                        {t(
+                                          "classroomDetail.buttons.stickyNote",
+                                          "便利貼",
+                                        )}
+                                      </DropdownMenuItem>
+                                      {showArchived ? (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            handleUnarchiveAssignment(
+                                              assignment,
+                                            )
+                                          }
+                                        >
+                                          <ArchiveRestore className="h-4 w-4 mr-2" />
+                                          {t(
+                                            "classroomDetail.buttons.unarchiveAssignment",
+                                          )}
+                                        </DropdownMenuItem>
+                                      ) : (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            handleArchiveAssignment(assignment)
+                                          }
+                                        >
+                                          <Archive className="h-4 w-4 mr-2" />
+                                          {t(
+                                            "classroomDetail.buttons.archiveAssignment",
+                                          )}
+                                        </DropdownMenuItem>
                                       )}
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-12 min-h-12 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                                      onClick={() =>
-                                        handleArchiveAssignment(assignment)
-                                      }
-                                    >
-                                      <Archive className="w-4 h-4 mr-1" />
-                                      {t(
-                                        "classroomDetail.buttons.archiveAssignment",
-                                      )}
-                                    </Button>
-                                  )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </div>
                               </div>
                             );
@@ -2216,23 +2252,17 @@ export default function ClassroomDetail({
                                   </th>
                                 )}
                                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200">
-                                  {t("classroomDetail.labels.assignmentTitle")}
+                                  {t(
+                                    "classroomDetail.labels.assignmentInfo",
+                                    "作業資訊",
+                                  )}
                                 </th>
-                                <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200">
-                                  {t("classroomDetail.labels.contentType")}
-                                </th>
-                                <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200">
-                                  {t("classroomDetail.labels.assignedTo")}
-                                </th>
-                                <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200">
-                                  {t("classroomDetail.labels.dueDate")}
-                                </th>
-                                <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200">
+                                <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 w-28">
                                   {t(
                                     "classroomDetail.labels.completionProgress",
                                   )}
                                 </th>
-                                <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200">
+                                <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 w-36">
                                   {t("common.actions", "操作")}
                                 </th>
                               </tr>
@@ -2399,32 +2429,6 @@ export default function ClassroomDetail({
                                       </div>
                                     </td>
                                     <td className="px-4 py-3">
-                                      <span
-                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${typeInfo.color}`}
-                                      >
-                                        {typeInfo.label}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm dark:text-gray-300">
-                                      {assignment.student_count
-                                        ? t(
-                                            "classroomDetail.labels.studentCountWithUnit",
-                                            {
-                                              count: assignment.student_count,
-                                            },
-                                          )
-                                        : t("classroomDetail.labels.allClass")}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm dark:text-gray-300">
-                                      {assignment.due_date
-                                        ? new Date(
-                                            assignment.due_date,
-                                          ).toLocaleDateString("zh-TW")
-                                        : t(
-                                            "classroomDetail.labels.noDeadline",
-                                          )}
-                                    </td>
-                                    <td className="px-4 py-3">
                                       <div className="flex items-center gap-2">
                                         <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                                           <div
@@ -2446,9 +2450,8 @@ export default function ClassroomDetail({
                                           size="sm"
                                           className="text-blue-600 hover:text-blue-700 dark:text-blue-400 h-10 min-h-10"
                                           onClick={() => {
-                                            navigate(
-                                              `/teacher/classroom/${id}/assignment/${assignment.id}`,
-                                            );
+                                            setSheetAssignment(assignment);
+                                            setShowAssignmentSheet(true);
                                           }}
                                         >
                                           {t(
@@ -2460,8 +2463,9 @@ export default function ClassroomDetail({
                                           size="sm"
                                           className="text-green-600 hover:text-green-700 dark:text-green-400 h-10 min-h-10"
                                           onClick={() => {
-                                            navigate(
+                                            window.open(
                                               `/teacher/classroom/${id}/assignment/${assignment.id}/preview`,
+                                              "_blank",
                                             );
                                           }}
                                         >
@@ -2474,7 +2478,7 @@ export default function ClassroomDetail({
                                           "rearrangement" &&
                                           assignment.practice_mode !==
                                             "word_selection" &&
-                                          (canUseAiGrading ? (
+                                          canUseAiGrading && (
                                             <Button
                                               variant="default"
                                               size="sm"
@@ -2492,23 +2496,7 @@ export default function ClassroomDetail({
                                                 "assignmentDetail.buttons.batchGrade",
                                               )}
                                             </Button>
-                                          ) : (
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className="h-10 min-h-10"
-                                              onClick={() => {
-                                                navigate(
-                                                  `/teacher/classroom/${id}/assignment/${assignment.id}`,
-                                                );
-                                              }}
-                                            >
-                                              <Eye className="w-4 h-4 mr-1" />
-                                              {t(
-                                                "classroomDetail.buttons.viewDetails",
-                                              )}
-                                            </Button>
-                                          ))}
+                                          )}
                                         <Button
                                           variant="ghost"
                                           size="sm"
@@ -3277,6 +3265,30 @@ export default function ClassroomDetail({
           </div>
         </>
       )}
+
+      {/* Assignment Detail Sheet */}
+      <AssignmentDetailSheet
+        open={showAssignmentSheet}
+        onOpenChange={setShowAssignmentSheet}
+        assignment={sheetAssignment}
+        classroomId={id || ""}
+        canUseAiGrading={canUseAiGrading}
+        onGradeClick={(assignmentId) =>
+          window.open(
+            `/teacher/classroom/${id}/assignment/${assignmentId}/grading`,
+            "_blank",
+          )
+        }
+        onBatchGradeClick={(assignmentId) => {
+          setShowAssignmentSheet(false);
+          setBatchGradingModal({
+            open: true,
+            assignmentId,
+            classroomId: Number(id),
+          });
+        }}
+        onAssignmentUpdated={() => fetchAssignments()}
+      />
 
       {/* Batch Grading Modal */}
       <BatchGradingModal

@@ -380,7 +380,7 @@ export default function StudentAssignmentDetail() {
 
               {progress.score !== undefined && progress.status === "GRADED" && (
                 <div className="text-sm font-medium text-green-600">
-                  {progress.score}
+                  {progress.score.toFixed(1)}
                   {t("studentAssignmentDetail.scoring.scoreUnit")}
                 </div>
               )}

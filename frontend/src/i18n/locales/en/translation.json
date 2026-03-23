@@ -2666,7 +2666,8 @@
       "cancel": "Cancel",
       "saveChanges": "Save Changes",
       "addItem": "Add Item",
-      "record": "Record"
+      "record": "Record",
+      "stickyNote": "Sticky Note"
     },
     "stats": {
       "studentCount": "Students",
@@ -2694,6 +2695,7 @@
       "assignmentList": "Assignment List"
     },
     "labels": {
+      "assignmentInfo": "Assignment Info",
       "assignedTo": "Assigned To",
       "dueDate": "Due Date",
       "completionProgress": "Completion Progress",
@@ -2854,6 +2856,7 @@
       "titleRequired": "Please enter assignment title",
       "updateSuccess": "Assignment information updated",
       "updateFailed": "Update failed, please try again later",
+      "startDateAfterDueDate": "Start date cannot be after due date",
       "assignSuccess": "Successfully assigned to student",
       "assignFailed": "Assignment failed, please try again later",
       "unassignSuccess": "Unassigned student \"{{name}}\"",
@@ -2911,6 +2914,32 @@
       "noInstructions": "No instructions",
       "notSet": "Not set",
       "people": "people"
+    },
+    "sheet": {
+      "viewTitle": "Assignment Details",
+      "editTitle": "Edit Assignment",
+      "editButton": "Edit",
+      "titleLabel": "Title",
+      "instructionsLabel": "Instructions",
+      "dueDateLabel": "Due Date",
+      "studentProgress": "Student Progress",
+      "noStudents": "No student data",
+      "save": "Save Changes",
+      "contentTitle": "Assignment Content Units",
+      "questionCount": "Questions: ",
+      "itemCount": "items",
+      "editContentWarning": "Note: This is an assignment copy. Deleting items with existing student progress will be blocked.",
+      "averageScore": "Average Score",
+      "startDateLabel": "Start Date",
+      "lockedSettingHint": "Students have started this assignment. This setting cannot be changed."
+    },
+    "status": {
+      "submitted": "Submitted",
+      "graded": "Graded",
+      "inProgress": "In Progress",
+      "notStarted": "Not Started",
+      "returned": "Returned",
+      "resubmitted": "Resubmitted"
     },
     "contentTypes": {
       "readingAssessment": "Example Sentences",

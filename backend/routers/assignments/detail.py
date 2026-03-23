@@ -263,6 +263,9 @@ async def get_assignment_detail(
         "description": assignment.description,
         "classroom_id": assignment.classroom_id,
         "due_date": assignment.due_date.isoformat() if assignment.due_date else None,
+        "start_date": assignment.start_date.isoformat()
+        if assignment.start_date
+        else None,
         "created_at": (
             assignment.created_at.isoformat() if assignment.created_at else None
         ),

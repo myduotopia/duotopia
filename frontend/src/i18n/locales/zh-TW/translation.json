@@ -30,6 +30,39 @@
     "no": "否",
     "retry": "重試"
   },
+  "assignmentDetail": {
+    "sheet": {
+      "viewTitle": "作業詳情",
+      "editTitle": "編輯作業",
+      "editButton": "編輯",
+      "titleLabel": "作業標題",
+      "instructionsLabel": "作業說明",
+      "dueDateLabel": "截止日期",
+      "studentProgress": "學生完成狀況",
+      "noStudents": "尚無學生資料",
+      "save": "儲存變更",
+      "contentTitle": "作業單元內容",
+      "questionCount": "題目數量：",
+      "itemCount": "題",
+      "editContentWarning": "注意：此為作業副本。刪除已有學生進度的題目將被阻止。",
+      "averageScore": "平均分數",
+      "startDateLabel": "開始日期",
+      "lockedSettingHint": "已有學生開始作答，無法變更此設定"
+    },
+    "status": {
+      "submitted": "已繳交",
+      "graded": "已批改",
+      "inProgress": "進行中",
+      "notStarted": "未開始",
+      "returned": "已退回",
+      "resubmitted": "已重交"
+    },
+    "messages": {
+      "updateSuccess": "已儲存變更",
+      "updateError": "儲存失敗",
+      "startDateAfterDueDate": "開始日期不可晚於截止日期"
+    }
+  },
   "demo": {
     "banner": "體驗模式 - 進度不會被儲存",
     "mode": "體驗模式",
@@ -2664,7 +2697,8 @@
       "cancel": "取消",
       "saveChanges": "儲存變更",
       "addItem": "新增項目",
-      "record": "錄音"
+      "record": "錄音",
+      "stickyNote": "便利貼"
     },
     "stats": {
       "studentCount": "學生數",
@@ -2692,6 +2726,7 @@
       "assignmentList": "作業列表"
     },
     "labels": {
+      "assignmentInfo": "作業資訊",
       "assignedTo": "指派對象",
       "dueDate": "截止日期",
       "completionProgress": "完成進度",
