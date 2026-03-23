@@ -23,6 +23,7 @@ from auth import (
     get_password_hash,
     verify_token,
     validate_password_strength,
+    validate_student_password_strength,
 )
 from services.email_service import email_service
 from datetime import datetime, timedelta
@@ -742,8 +743,8 @@ async def student_reset_password(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="重設連結已過期，請重新申請"
             )
 
-    # 🔐 Security: 驗證密碼強度
-    is_valid, error_msg = validate_password_strength(new_password)
+    # 🔐 Security: 驗證密碼強度（使用學生版規則：6字元以上）
+    is_valid, error_msg = validate_student_password_strength(new_password)
     if not is_valid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 

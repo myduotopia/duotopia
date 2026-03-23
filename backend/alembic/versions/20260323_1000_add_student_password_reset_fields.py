@@ -66,5 +66,15 @@ def upgrade() -> None:
     )
 
 
+    # Add partial index on password_reset_token for efficient token lookups
+    op.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_students_password_reset_token
+            ON students (password_reset_token)
+            WHERE password_reset_token IS NOT NULL;
+        """
+    )
+
+
 def downgrade() -> None:
     pass

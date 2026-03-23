@@ -15,7 +15,7 @@ import { Loader2, Lock, CheckCircle, XCircle, Eye, EyeOff } from "lucide-react";
 import { apiClient } from "../lib/api";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useTranslation } from "react-i18next";
-import { validatePasswordStrength } from "@/utils/passwordValidation";
+import { validateStudentPasswordStrength } from "@/utils/passwordValidation";
 
 export default function StudentResetPassword() {
   const { t } = useTranslation();
@@ -93,7 +93,7 @@ export default function StudentResetPassword() {
       return;
     }
 
-    const validation = validatePasswordStrength(trimmedPassword);
+    const validation = validateStudentPasswordStrength(trimmedPassword);
     if (!validation.valid && validation.errorKey) {
       setError(t(`passwordReset.errors.${validation.errorKey}`));
       return;
