@@ -292,10 +292,7 @@ export default function ContentCopyDialog({
           <Button variant="outline" onClick={onClose} disabled={copying}>
             取消
           </Button>
-          <Button
-            onClick={handleCopy}
-            disabled={!selectedLessonId || copying}
-          >
+          <Button onClick={handleCopy} disabled={!selectedLessonId || copying}>
             {copying ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />

@@ -715,9 +715,7 @@ async def copy_content(
     db.refresh(content, ["content_items"])
 
     # 複製 content 及所有 items
-    new_content = _copy_content_with_items(
-        content, copy_data.target_lesson_id, db
-    )
+    new_content = _copy_content_with_items(content, copy_data.target_lesson_id, db)
 
     # 設定複製後的標題和 order_index
     new_content.title = f"{content.title}(copy)"
