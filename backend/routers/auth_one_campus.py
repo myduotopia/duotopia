@@ -5,8 +5,10 @@ Provides:
 - POST /api/auth/1campus/merge-confirm — confirm account merge (requires signed token)
 """
 
+import base64
 import hashlib
 import hmac
+import json
 import logging
 import time
 from datetime import timedelta
@@ -61,37 +63,49 @@ def _create_merge_token(
     one_campus_student_id: str,
     one_campus_account: str,
 ) -> str:
-    """Create an HMAC-signed merge token encoding identity IDs + expiry."""
-    expires_at = int(time.time()) + MERGE_TOKEN_TTL
-    payload = f"{existing_identity_id}:{one_campus_student_id}:{one_campus_account}:{expires_at}"
-    sig = hmac.new(
-        settings.JWT_SECRET.encode(), payload.encode(), hashlib.sha256
+    """Create an HMAC-signed merge token encoding identity data + expiry.
+
+    Format: base64(json_payload).signature
+    """
+    payload_dict = {
+        "id": existing_identity_id,
+        "sid": one_campus_student_id,
+        "acc": one_campus_account,
+        "exp": int(time.time()) + MERGE_TOKEN_TTL,
+    }
+    payload_b64 = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode()
+    sig = hmac.HMAC(
+        settings.JWT_SECRET.encode(), payload_b64.encode(), hashlib.sha256
     ).hexdigest()
-    return f"{payload}:{sig}"
+    return f"{payload_b64}.{sig}"
 
 
 def _verify_merge_token(token: str) -> dict:
     """Verify and decode a merge token. Raises ValueError on failure."""
-    parts = token.split(":")
-    if len(parts) != 5:
+    parts = token.split(".", 1)
+    if len(parts) != 2:
         raise ValueError("Invalid merge token format")
 
-    existing_id_str, oc_student_id, oc_account, expires_str, sig = parts
-    payload = f"{existing_id_str}:{oc_student_id}:{oc_account}:{expires_str}"
-    expected_sig = hmac.new(
-        settings.JWT_SECRET.encode(), payload.encode(), hashlib.sha256
+    payload_b64, sig = parts
+    expected_sig = hmac.HMAC(
+        settings.JWT_SECRET.encode(), payload_b64.encode(), hashlib.sha256
     ).hexdigest()
 
     if not hmac.compare_digest(sig, expected_sig):
         raise ValueError("Invalid merge token signature")
 
-    if int(expires_str) < int(time.time()):
+    try:
+        payload_dict = json.loads(base64.urlsafe_b64decode(payload_b64))
+    except (json.JSONDecodeError, Exception) as e:
+        raise ValueError(f"Invalid merge token payload: {e}")
+
+    if payload_dict.get("exp", 0) < int(time.time()):
         raise ValueError("Merge token expired")
 
     return {
-        "existing_identity_id": int(existing_id_str),
-        "one_campus_student_id": oc_student_id,
-        "one_campus_account": oc_account,
+        "existing_identity_id": payload_dict["id"],
+        "one_campus_student_id": payload_dict["sid"],
+        "one_campus_account": payload_dict["acc"],
     }
 
 
@@ -137,7 +151,6 @@ def _build_student_response(db: Session, student: Student) -> dict:
 async def one_campus_callback(
     code: str = Query(..., description="1Campus one-time identity code"),
     schoolDsns: str = Query(..., description="School DSNS identifier"),
-    role: str = Query("student", description="Role: student or teacher"),
     db: Session = Depends(get_db),
 ):
     """Handle 1Campus SSO callback.

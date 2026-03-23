@@ -128,12 +128,11 @@ class OneCampusAccountService:
         db.add(identity)
         db.flush()  # Get identity.id
 
-        # SSO-only accounts: no password set (has_password=False)
+        # SSO-only accounts: no password set (password_hash=None)
         student = Student(
             name=student_name,
             student_number=student_number,
             password_hash=None,
-            has_password=False,
             identity_id=identity.id,
             is_primary_account=True,
             is_active=True,

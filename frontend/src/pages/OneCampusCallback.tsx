@@ -53,7 +53,7 @@ export default function OneCampusCallback() {
   async function handleCallback(code: string, schoolDsns: string) {
     try {
       const response = await api.get("/api/auth/1campus/callback", {
-        params: { code, schoolDsns, role: "student" },
+        params: { code, schoolDsns },
       });
       const data = response.data;
 
