@@ -2910,7 +2910,8 @@
       "itemCount": "items",
       "editContentWarning": "Note: This is an assignment copy. Deleting items with existing student progress will be blocked.",
       "averageScore": "Average Score",
-      "startDateLabel": "Start Date"
+      "startDateLabel": "Start Date",
+      "lockedSettingHint": "Students have started this assignment. This setting cannot be changed."
     },
     "status": {
       "submitted": "Submitted",

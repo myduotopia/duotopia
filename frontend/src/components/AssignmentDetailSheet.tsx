@@ -212,7 +212,9 @@ export function AssignmentDetailSheet({
       setEditDueDate(
         assignment.due_date ? assignment.due_date.split("T")[0] : "",
       );
-      setEditStartDate("");
+      setEditStartDate(
+        assignment.start_date ? assignment.start_date.split("T")[0] : "",
+      );
       setIsEditing(false);
       setDetailData(null);
       setAssignmentContents([]);
@@ -232,6 +234,12 @@ export function AssignmentDetailSheet({
       scoredStudents.length;
     return `${avg.toFixed(1)}${assignment?.practice_mode === "word_selection" ? "%" : ""}`;
   }, [studentProgress, assignment?.practice_mode]);
+
+  // 是否有學生已開始作答（用於鎖定影響計分的設定）
+  const hasStudentsStarted = useMemo(
+    () => studentProgress.some((sp) => sp.status !== "NOT_STARTED"),
+    [studentProgress],
+  );
 
   const loadContentDetail = async (contentId: number, forceReload = false) => {
     if (!forceReload && contentDetails[contentId]) return;
@@ -521,9 +529,18 @@ export function AssignmentDetailSheet({
                       <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
                         {t("dialogs.assignmentDialog.practiceMode.playAudio")}
                       </Label>
+                      {hasStudentsStarted && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+                          {t(
+                            "assignmentDetail.sheet.lockedSettingHint",
+                            "已有學生開始作答，無法變更此設定",
+                          )}
+                        </p>
+                      )}
                       <div className="flex gap-3">
                         <button
                           type="button"
+                          disabled={hasStudentsStarted}
                           onClick={() =>
                             setEditAdvanced((prev) => ({
                               ...prev,
@@ -531,6 +548,10 @@ export function AssignmentDetailSheet({
                             }))
                           }
                           className={`flex-1 p-3 rounded-lg border text-sm ${
+                            hasStudentsStarted
+                              ? "opacity-50 cursor-not-allowed"
+                              : ""
+                          } ${
                             editAdvanced.play_audio
                               ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
                               : "border-gray-200 dark:border-gray-600 hover:border-gray-300"
@@ -543,6 +564,7 @@ export function AssignmentDetailSheet({
                         </button>
                         <button
                           type="button"
+                          disabled={hasStudentsStarted}
                           onClick={() =>
                             setEditAdvanced((prev) => ({
                               ...prev,
@@ -550,6 +572,10 @@ export function AssignmentDetailSheet({
                             }))
                           }
                           className={`flex-1 p-3 rounded-lg border text-sm ${
+                            hasStudentsStarted
+                              ? "opacity-50 cursor-not-allowed"
+                              : ""
+                          } ${
                             !editAdvanced.play_audio
                               ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
                               : "border-gray-200 dark:border-gray-600 hover:border-gray-300"
@@ -607,9 +633,18 @@ export function AssignmentDetailSheet({
                           "dialogs.assignmentDialog.practiceMode.questionDisplay",
                         )}
                       </Label>
+                      {hasStudentsStarted && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+                          {t(
+                            "assignmentDetail.sheet.lockedSettingHint",
+                            "已有學生開始作答，無法變更此設定",
+                          )}
+                        </p>
+                      )}
                       <div className="flex gap-3">
                         <button
                           type="button"
+                          disabled={hasStudentsStarted}
                           onClick={() =>
                             setEditAdvanced((prev) => ({
                               ...prev,
@@ -618,6 +653,10 @@ export function AssignmentDetailSheet({
                             }))
                           }
                           className={`flex-1 p-3 rounded-lg border text-sm ${
+                            hasStudentsStarted
+                              ? "opacity-50 cursor-not-allowed"
+                              : ""
+                          } ${
                             editAdvanced.show_word && !editAdvanced.play_audio
                               ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
                               : "border-gray-200 dark:border-gray-600 hover:border-gray-300"
@@ -630,6 +669,7 @@ export function AssignmentDetailSheet({
                         </button>
                         <button
                           type="button"
+                          disabled={hasStudentsStarted}
                           onClick={() =>
                             setEditAdvanced((prev) => ({
                               ...prev,
@@ -638,6 +678,10 @@ export function AssignmentDetailSheet({
                             }))
                           }
                           className={`flex-1 p-3 rounded-lg border text-sm ${
+                            hasStudentsStarted
+                              ? "opacity-50 cursor-not-allowed"
+                              : ""
+                          } ${
                             !editAdvanced.show_word && editAdvanced.play_audio
                               ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
                               : "border-gray-200 dark:border-gray-600 hover:border-gray-300"

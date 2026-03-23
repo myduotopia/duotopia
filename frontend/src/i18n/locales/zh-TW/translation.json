@@ -46,7 +46,8 @@
       "itemCount": "題",
       "editContentWarning": "注意：此為作業副本。刪除已有學生進度的題目將被阻止。",
       "averageScore": "平均分數",
-      "startDateLabel": "開始日期"
+      "startDateLabel": "開始日期",
+      "lockedSettingHint": "已有學生開始作答，無法變更此設定"
     },
     "status": {
       "submitted": "已繳交",
