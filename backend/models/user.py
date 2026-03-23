@@ -13,9 +13,13 @@ from sqlalchemy import (
     Float,
     select,
 )
-from sqlalchemy.orm import relationship, Session
+import re
+
+from sqlalchemy.orm import relationship, Session, validates
 from sqlalchemy.sql import func
 from database import Base
+
+_SHA256_HEX_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 class Identity(Base):
@@ -23,14 +27,15 @@ class Identity(Base):
 
     統一管理老師和學生的登入身分，
     以 email 為唯一識別，支援密碼統一管理和 OAuth 擴展。
+    1Campus SSO 帳號可能沒有 email，此時 email 為 null。
     """
 
     __tablename__ = "identities"
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # 統一 Email（唯一）
-    email = Column(String(255), unique=True, nullable=False, index=True)
+    # 統一 Email（唯一，SSO-only 帳號可為 null）
+    email = Column(String(255), unique=True, nullable=True, index=True)
 
     # 密碼管理
     password_hash = Column(String(255), nullable=True)
@@ -40,6 +45,11 @@ class Identity(Base):
     # Email 驗證
     email_verified = Column(Boolean, default=False, nullable=False)
     email_verified_at = Column(DateTime(timezone=True), nullable=True)
+
+    # 1Campus SSO 欄位
+    one_campus_student_id = Column(String(100), nullable=True, index=True)
+    one_campus_account = Column(String(255), nullable=True)
+    national_id_hash = Column(String(64), nullable=True, index=True)
 
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -56,6 +66,14 @@ class Identity(Base):
         back_populates="identity",
         foreign_keys="Teacher.identity_id",
     )
+
+    @validates("national_id_hash")
+    def _validate_national_id_hash(self, key, value):
+        if value is not None and not _SHA256_HEX_RE.match(value):
+            raise ValueError(
+                "national_id_hash must be a 64-char lowercase hex SHA256 digest"
+            )
+        return value
 
     def __repr__(self):
         return f"<Identity {self.email}>"
