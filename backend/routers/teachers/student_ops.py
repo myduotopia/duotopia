@@ -635,6 +635,7 @@ async def reset_student_password(
             )
             .join(Classroom)
             .filter(Classroom.teacher_id == current_teacher.id)
+            .order_by(Classroom.created_at.asc())
             .first()
         )
         if enrollment and enrollment.classroom and enrollment.classroom.created_at:
