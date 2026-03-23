@@ -564,6 +564,23 @@ function RecursiveTreeNode({
                 </span>
               ))}
 
+              {/* Copy button - hover on desktop, always visible on mobile (icon only) */}
+              {onCopy && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCopy(data, level, parentId);
+                  }}
+                  className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity h-7 w-7 sm:h-auto sm:w-auto sm:px-2.5 sm:py-1 inline-flex items-center justify-center sm:gap-1.5 rounded-md bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800"
+                  title="複製到..."
+                >
+                  <Copy className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
+                  <span className="hidden sm:inline text-xs font-medium">
+                    複製到...
+                  </span>
+                </button>
+              )}
+
               {/* Instant practice button - hover on desktop, always visible on mobile (icon only) */}
               {onInstantPractice && (
                 <button
@@ -581,8 +598,8 @@ function RecursiveTreeNode({
                 </button>
               )}
 
-              {/* More menu (⋯) with copy/delete */}
-              {(config.canDelete || onCopy) && (
+              {/* More menu (⋯) with delete */}
+              {config.canDelete && onDelete && (
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     onClick={(e) => e.stopPropagation()}
@@ -594,30 +611,16 @@ function RecursiveTreeNode({
                     align="end"
                     className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
                   >
-                    {onCopy && (
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onCopy(data, level, parentId);
-                        }}
-                        className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                      >
-                        <Copy className="h-4 w-4 mr-2" />
-                        複製到...
-                      </DropdownMenuItem>
-                    )}
-                    {config.canDelete && onDelete && (
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDelete(data, level, parentId);
-                        }}
-                        className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 focus:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        刪除
-                      </DropdownMenuItem>
-                    )}
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(data, level, parentId);
+                      }}
+                      className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 focus:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      刪除
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
