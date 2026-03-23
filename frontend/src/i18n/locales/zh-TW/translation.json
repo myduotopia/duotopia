@@ -2390,11 +2390,11 @@
       "updateButton": "更新密碼",
       "updating": "更新中...",
       "cancel": "取消",
-      "requirements": "密碼至少需要 6 個字元",
+      "requirements": "密碼至少需要 8 個字元，並包含大寫字母、小寫字母、數字及特殊字元（!@#$%^&* 等）",
       "errors": {
         "allFieldsRequired": "所有密碼欄位皆為必填",
         "passwordMismatch": "新密碼與確認密碼不相符",
-        "passwordTooShort": "密碼至少需要 6 個字元",
+        "passwordTooShort": "密碼至少需要 8 個字元",
         "containsSpaces": "密碼不可包含空白",
         "passwordSameAsCurrent": "新密碼不能與目前密碼相同",
         "missingUppercase": "密碼必須包含至少一個大寫字母",
