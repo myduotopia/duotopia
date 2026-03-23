@@ -13,9 +13,13 @@ from sqlalchemy import (
     Float,
     select,
 )
-from sqlalchemy.orm import relationship, Session
+import re
+
+from sqlalchemy.orm import relationship, Session, validates
 from sqlalchemy.sql import func
 from database import Base
+
+_SHA256_HEX_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 class Identity(Base):
@@ -62,6 +66,14 @@ class Identity(Base):
         back_populates="identity",
         foreign_keys="Teacher.identity_id",
     )
+
+    @validates("national_id_hash")
+    def _validate_national_id_hash(self, key, value):
+        if value is not None and not _SHA256_HEX_RE.match(value):
+            raise ValueError(
+                "national_id_hash must be a 64-char lowercase hex SHA256 digest"
+            )
+        return value
 
     def __repr__(self):
         return f"<Identity {self.email}>"

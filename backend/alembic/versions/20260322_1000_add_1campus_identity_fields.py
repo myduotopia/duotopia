@@ -138,4 +138,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Intentional no-op: email NOT NULL cannot be safely restored because
+    # SSO-only accounts may have been created with email=NULL after this
+    # migration runs. Reverting would violate those rows.
     pass
