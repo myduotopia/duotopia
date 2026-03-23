@@ -65,6 +65,9 @@ from .progress import (
 # OAuth identity models
 from .oauth_identity import OAuthIdentity
 
+# Blog models
+from .blog import BlogPost, BlogCategory, BlogPostCategory
+
 # Demo models
 from .demo_config import DemoConfig
 
@@ -124,6 +127,10 @@ __all__ = [
     "OrganizationPointsLog",
     # OAuth
     "OAuthIdentity",
+    # Blog
+    "BlogPost",
+    "BlogCategory",
+    "BlogPostCategory",
     # Demo
     "DemoConfig",
 ]
