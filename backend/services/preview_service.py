@@ -47,6 +47,36 @@ class RearrangementCompleteRequest(BaseModel):
 
 logger = logging.getLogger(__name__)
 
+# Content types that represent vocabulary sets (word lists with example sentences)
+_VOCABULARY_CONTENT_TYPES = {
+    ContentType.VOCABULARY_SET,
+    ContentType.SENTENCE_MAKING,  # legacy alias
+}
+
+
+def _is_vocab_type(content_type) -> bool:
+    """Check if a content type is a vocabulary set type."""
+    return content_type in _VOCABULARY_CONTENT_TYPES
+
+
+def get_sentence_fields(item: ContentItem, content_type, practice_mode: str):
+    """Return (text, translation) based on content type and practice mode.
+
+    When using vocabulary set content in sentence practice modes (reading /
+    rearrangement), we use the item's *example_sentence* fields instead of
+    the primary text/translation (which hold the single word).
+
+    Returns ``None`` when the item should be **skipped** (vocab item without
+    an example sentence in a sentence practice mode).
+    """
+    if practice_mode in ("reading", "rearrangement") and _is_vocab_type(content_type):
+        sentence = (item.example_sentence or "").strip()
+        if not sentence:
+            return None  # skip this item
+        return sentence, (item.example_sentence_translation or item.translation or "")
+    return item.text, item.translation
+
+
 # Audio formats accepted for speech assessment
 ALLOWED_AUDIO_FORMATS = [
     "audio/wav",
@@ -115,11 +145,17 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
 
         items_data = []
         for item in content_items:
+            fields = get_sentence_fields(
+                item, content.type, assignment.practice_mode or ""
+            )
+            if fields is None:
+                continue  # skip vocab items without example_sentence
+            q_text, q_translation = fields
             items_data.append(
                 {
                     "id": item.id,
-                    "text": item.text,
-                    "translation": item.translation,
+                    "text": q_text,
+                    "translation": q_translation,
                     "audio_url": item.audio_url,
                     "recording_url": None,
                 }
@@ -433,7 +469,14 @@ def get_rearrangement_questions(assignment: Assignment, db: Session) -> dict:
 
     questions = []
     for item in content_items:
-        words = item.text.strip().split()
+        fields = get_sentence_fields(
+            item, item.content.type if item.content else None, "rearrangement"
+        )
+        if fields is None:
+            continue  # skip vocab items without example_sentence
+        q_text, q_translation = fields
+
+        words = q_text.strip().split()
         shuffled_words = words.copy()
         random.shuffle(shuffled_words)
 
@@ -450,10 +493,13 @@ def get_rearrangement_questions(assignment: Assignment, db: Session) -> dict:
                 ),
                 "play_audio": assignment.play_audio or False,
                 "audio_url": item.audio_url,
-                "translation": item.translation,
-                "original_text": item.text.strip(),
+                "translation": q_translation,
+                "original_text": q_text.strip(),
             }
         )
+
+    if not questions:
+        raise HTTPException(status_code=404, detail="No questions found")
 
     return {
         "student_assignment_id": assignment.id,
@@ -483,7 +529,14 @@ def check_rearrangement_answer(
     if not content_item:
         raise HTTPException(status_code=404, detail="Content item not found")
 
-    correct_words = content_item.text.strip().split()
+    # Use example_sentence for vocab content in rearrangement mode
+    fields = get_sentence_fields(
+        content_item,
+        content_item.content.type if content_item.content else None,
+        "rearrangement",
+    )
+    q_text = fields[0] if fields else content_item.text
+    correct_words = q_text.strip().split()
     word_count = len(correct_words)
 
     if current_position >= word_count:
