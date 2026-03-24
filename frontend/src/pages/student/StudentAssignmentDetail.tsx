@@ -574,11 +574,14 @@ export default function StudentAssignmentDetail() {
                 >
                   <Play className="h-4 w-4 mr-2" />
                   {isGradedWordSelection
-                    ? (t("studentAssignmentDetail.buttons.practice") || "Practice")
+                    ? t("studentAssignmentDetail.buttons.practice") ||
+                      "Practice"
                     : assignment.status === "NOT_STARTED"
                       ? t("studentAssignmentDetail.buttons.startAssignment")
                       : assignment.status === "IN_PROGRESS"
-                        ? t("studentAssignmentDetail.buttons.continueAssignment")
+                        ? t(
+                            "studentAssignmentDetail.buttons.continueAssignment",
+                          )
                         : t("studentAssignmentDetail.buttons.resubmit")}
                 </Button>
               </div>

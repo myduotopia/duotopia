@@ -636,10 +636,7 @@ export default function WordSelectionActivity({
                   <RefreshCw className="h-4 w-4 mr-2" />
                   {t("wordSelection.keepPracticing") || "Keep Practicing"}
                 </Button>
-                <Button
-                  onClick={handleSubmitAssignment}
-                  disabled={completing}
-                >
+                <Button onClick={handleSubmitAssignment} disabled={completing}>
                   {completing ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
@@ -884,8 +881,8 @@ export default function WordSelectionActivity({
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               {isPracticeMode
-                ? (t("wordSelection.continuePractice") || "Continue Practice")
-                : (t("wordSelection.keepPracticing") || "Keep Practicing")}
+                ? t("wordSelection.continuePractice") || "Continue Practice"
+                : t("wordSelection.keepPracticing") || "Keep Practicing"}
             </Button>
             {isPracticeMode ? (
               <Button onClick={handleCompleteAssignment}>
