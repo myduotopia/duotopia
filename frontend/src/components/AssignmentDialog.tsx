@@ -1085,6 +1085,7 @@ export function AssignmentDialog({
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent
         side="right"
+        aria-describedby={undefined}
         className="!w-full !max-w-5xl h-full flex flex-col p-0 sm:!max-w-5xl"
       >
         {/* Compact Header with Clear Steps - 響應式方案 C */}
