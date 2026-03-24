@@ -267,15 +267,15 @@ export default function StudentAssignmentList() {
       assignment.status === "NOT_STARTED" ||
       assignment.status === "IN_PROGRESS";
 
-    // Hide button for completed word_selection
-    if (
+    // Issue #460: Show "Practice" button for GRADED word_selection instead of hiding
+    const isGradedWordSelection =
       assignment.status === "GRADED" &&
-      assignment.practice_mode === "word_selection"
-    ) {
-      return null;
-    }
+      assignment.practice_mode === "word_selection";
 
     const buttonText = (() => {
+      if (isGradedWordSelection) {
+        return t("studentAssignmentList.buttons.practice") || "Practice";
+      }
       switch (assignment.status) {
         case "NOT_STARTED":
           return t("studentAssignmentList.buttons.start");

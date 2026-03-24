@@ -32,6 +32,9 @@ import {
   Trophy,
   RefreshCw,
   Clock,
+  Send,
+  BookOpen,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -100,6 +103,9 @@ export default function WordSelectionActivity({
     total_words: 0,
   });
   const [showAchievementDialog, setShowAchievementDialog] = useState(false);
+
+  // Issue #460: Practice-only mode (assignment already submitted, score locked)
+  const [isPracticeMode, setIsPracticeMode] = useState(false);
 
   // Round tracking
   const [roundCompleted, setRoundCompleted] = useState(false);
@@ -194,6 +200,7 @@ export default function WordSelectionActivity({
         target_proficiency: number;
         words_mastered: number;
         achieved: boolean;
+        is_practice_mode?: boolean;
         show_word: boolean;
         show_image: boolean;
         play_audio: boolean;
@@ -202,6 +209,7 @@ export default function WordSelectionActivity({
 
       setWords(data.words || []);
       setSessionId(data.session_id);
+      setIsPracticeMode(data.is_practice_mode ?? false);
       setShowWord(data.show_word ?? true);
       setShowImage(data.show_image ?? true);
       setPlayAudio(data.play_audio ?? false);
@@ -470,8 +478,8 @@ export default function WordSelectionActivity({
     startPractice();
   };
 
-  // Complete assignment - 呼叫 API 完成作業並更新狀態
-  const handleCompleteAssignment = async () => {
+  // Issue #460: Submit assignment — called when student confirms submission
+  const handleSubmitAssignment = async () => {
     // 預覽模式和 demo 模式不需要呼叫 API
     if (isPreviewMode || isDemoMode) {
       toast.success(
@@ -491,20 +499,27 @@ export default function WordSelectionActivity({
       await apiClient.post(`/api/students/assignments/${assignmentId}/submit`);
 
       toast.success(
-        t("wordSelection.toast.completed") || "Assignment completed!",
+        t("wordSelection.toast.submitted") || "Assignment submitted!",
       );
+      setIsPracticeMode(true); // Now in practice-only mode
       setShowAchievementDialog(false);
-      onComplete?.();
+      setRoundCompleted(false);
+      // Don't call onComplete — student can continue practicing
     } catch (error) {
-      console.error("Error completing assignment:", error);
+      console.error("Error submitting assignment:", error);
       toast.error(
         t("wordSelection.toast.completeFailed") ||
-          "Failed to complete assignment. Please try again.",
+          "Failed to submit assignment. Please try again.",
       );
       // 保持 dialog 開啟，讓使用者可以重試
     } finally {
       setCompleting(false);
     }
+  };
+
+  // Complete and go back to assignment list
+  const handleCompleteAssignment = () => {
+    onComplete?.();
   };
 
   // Continue practice after achievement
@@ -552,6 +567,17 @@ export default function WordSelectionActivity({
             {t("wordSelection.roundComplete") || "Round Complete!"}
           </h2>
 
+          {/* Issue #460: Practice mode banner */}
+          {isPracticeMode && (
+            <div className="flex items-center gap-2 justify-center text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
+              <Info className="h-4 w-4" />
+              <span>
+                {t("wordSelection.practiceModeHint") ||
+                  "Practice mode — your score will not be affected"}
+              </span>
+            </div>
+          )}
+
           {/* Proficiency Progress */}
           <div className="space-y-2 max-w-md mx-auto">
             <div className="flex justify-between text-sm text-gray-600">
@@ -575,7 +601,20 @@ export default function WordSelectionActivity({
             </p>
           </div>
 
-          {proficiency.achieved ? (
+          {isPracticeMode ? (
+            /* Already submitted — practice-only mode */
+            <div className="flex gap-4 justify-center">
+              <Button onClick={handleStartNextRound}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                {t("wordSelection.continuePractice") || "Continue Practice"}
+              </Button>
+              <Button variant="outline" onClick={handleCompleteAssignment}>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                {t("wordSelection.backToList") || "Back to List"}
+              </Button>
+            </div>
+          ) : proficiency.achieved ? (
+            /* Issue #460: Achieved target — ask student whether to submit */
             <div className="space-y-4">
               <div className="flex justify-center">
                 <Trophy className="h-12 w-12 text-yellow-500" />
@@ -584,6 +623,10 @@ export default function WordSelectionActivity({
                 {t("wordSelection.targetReached") ||
                   "Congratulations! You've reached the target proficiency!"}
               </p>
+              <p className="text-gray-500 text-sm">
+                {t("wordSelection.submitPrompt") ||
+                  "Would you like to submit your assignment? You can continue practicing after submission, but your score will be locked."}
+              </p>
               <div className="flex gap-4 justify-center">
                 <Button
                   variant="outline"
@@ -591,18 +634,18 @@ export default function WordSelectionActivity({
                   disabled={completing}
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  {t("wordSelection.continuePractice") || "Continue Practice"}
+                  {t("wordSelection.keepPracticing") || "Keep Practicing"}
                 </Button>
                 <Button
-                  onClick={handleCompleteAssignment}
+                  onClick={handleSubmitAssignment}
                   disabled={completing}
                 >
                   {completing ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
-                    <CheckCircle className="h-4 w-4 mr-2" />
+                    <Send className="h-4 w-4 mr-2" />
                   )}
-                  {t("wordSelection.close") || "Close"}
+                  {t("wordSelection.submitAssignment") || "Submit Assignment"}
                 </Button>
               </div>
             </div>
@@ -621,6 +664,17 @@ export default function WordSelectionActivity({
 
   return (
     <div className="space-y-6">
+      {/* Issue #460: Practice mode banner */}
+      {isPracticeMode && (
+        <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
+          <BookOpen className="h-4 w-4" />
+          <span>
+            {t("wordSelection.practiceModeHeader") ||
+              "Practice mode — your submitted score will not change"}
+          </span>
+        </div>
+      )}
+
       {/* Header: 題號 + 進度條 */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -829,14 +883,25 @@ export default function WordSelectionActivity({
               disabled={completing}
             >
               <RefreshCw className="h-4 w-4 mr-2" />
-              {t("wordSelection.continuePractice") || "Continue Practice"}
+              {isPracticeMode
+                ? (t("wordSelection.continuePractice") || "Continue Practice")
+                : (t("wordSelection.keepPracticing") || "Keep Practicing")}
             </Button>
-            <Button onClick={handleCompleteAssignment} disabled={completing}>
-              {completing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : null}
-              {t("wordSelection.close") || "Close"}
-            </Button>
+            {isPracticeMode ? (
+              <Button onClick={handleCompleteAssignment}>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                {t("wordSelection.backToList") || "Back to List"}
+              </Button>
+            ) : (
+              <Button onClick={handleSubmitAssignment} disabled={completing}>
+                {completing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                {t("wordSelection.submitAssignment") || "Submit Assignment"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

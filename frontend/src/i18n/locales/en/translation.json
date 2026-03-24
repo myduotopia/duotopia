@@ -887,7 +887,8 @@
       "continue": "Continue Assignment",
       "view": "View Assignment",
       "viewResults": "View Results",
-      "resubmit": "Resubmit"
+      "resubmit": "Resubmit",
+      "practice": "Practice"
     },
     "scoreCategory": {
       "speaking": "Speaking",
@@ -951,7 +952,8 @@
       "view": "View Assignment",
       "startAssignment": "Start Assignment",
       "continueAssignment": "Continue Assignment",
-      "resubmit": "Resubmit"
+      "resubmit": "Resubmit",
+      "practice": "Practice"
     },
     "overview": {
       "estimatedTime": "Estimated time: {{time}}",
@@ -4518,6 +4520,12 @@
     "wordsMastered": "{{mastered}} / {{total}} words mastered",
     "targetReached": "Congratulations! You've reached the target proficiency!",
     "continuePractice": "Continue Practice",
+    "keepPracticing": "Keep Practicing",
+    "submitAssignment": "Submit Assignment",
+    "submitPrompt": "Would you like to submit your assignment? You can continue practicing after submission, but your score will be locked.",
+    "practiceModeHint": "Practice mode — your score will not be affected",
+    "practiceModeHeader": "Practice mode — your submitted score will not change",
+    "backToList": "Back to List",
     "close": "Close",
     "nextRound": "Start Next Round",
     "achievementTitle": "Congratulations!",
@@ -4527,7 +4535,8 @@
       "submitFailed": "Failed to submit answer",
       "cannotCompletePreview": "Cannot complete in preview mode",
       "completed": "Assignment completed!",
-      "completeFailed": "Failed to complete assignment"
+      "submitted": "Assignment submitted!",
+      "completeFailed": "Failed to submit assignment"
     }
   },
   "workspace": {
