@@ -458,6 +458,36 @@ CREATE POLICY "invoice_history_insert_own" ON invoice_status_history
   );
 
 -- ======================================
+-- RLS Policies for Blog
+-- ======================================
+
+ALTER TABLE blog_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE blog_posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE blog_post_categories ENABLE ROW LEVEL SECURITY;
+
+-- Anyone can read blog categories
+CREATE POLICY "blog_categories_select_all" ON blog_categories
+  FOR SELECT USING (true);
+
+-- Anyone can read blog posts
+CREATE POLICY "blog_posts_select_published" ON blog_posts
+  FOR SELECT USING (true);
+
+-- Anyone can read blog post categories
+CREATE POLICY "blog_post_categories_select_all" ON blog_post_categories
+  FOR SELECT USING (true);
+
+-- Authors can manage their own blog posts
+CREATE POLICY "blog_posts_insert_author" ON blog_posts
+  FOR INSERT WITH CHECK (author_id::text = auth.uid()::text);
+
+CREATE POLICY "blog_posts_update_author" ON blog_posts
+  FOR UPDATE USING (author_id::text = auth.uid()::text);
+
+CREATE POLICY "blog_posts_delete_author" ON blog_posts
+  FOR DELETE USING (author_id::text = auth.uid()::text);
+
+-- ======================================
 -- 完成！
 -- ======================================
 -- 執行此 SQL 後，Supabase Security Advisor 應該不會再顯示警告
