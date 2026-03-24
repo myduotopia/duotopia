@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1082,8 +1082,12 @@ export function AssignmentDialog({
   ];
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl h-[92vh] flex flex-col p-0">
+    <Sheet open={open} onOpenChange={handleClose}>
+      <SheetContent
+        side="right"
+        aria-describedby={undefined}
+        className="!w-full !max-w-5xl h-full flex flex-col p-0 sm:!max-w-5xl"
+      >
         {/* Compact Header with Clear Steps - 響應式方案 C */}
         <div className="px-6 py-3 border-b bg-gray-50">
           {/* 大螢幕 (≥1024px)：標題 + 步驟同一行 */}
@@ -1091,9 +1095,9 @@ export function AssignmentDialog({
 
           {/* 第一行：標題（小螢幕單獨一行，大螢幕與步驟同行） */}
           <div className="flex items-center justify-between lg:mb-2">
-            <DialogTitle className="text-lg font-semibold">
+            <SheetTitle className="text-lg font-semibold">
               {t("dialogs.assignmentDialog.title")}
-            </DialogTitle>
+            </SheetTitle>
 
             {/* 大螢幕：步驟顯示在標題右側（預留空間給 X 按鈕） */}
             <div className="hidden lg:flex items-center gap-3 pr-8">
@@ -3092,7 +3096,7 @@ export function AssignmentDialog({
         </div>
 
         {/* Footer with Navigation */}
-        <DialogFooter className="px-6 py-3 border-t">
+        <SheetFooter className="flex-row px-6 py-3 border-t sm:flex-row sm:justify-between sm:space-x-0">
           <div className="flex items-center justify-between w-full">
             {/* 左側：返回按鈕 */}
             <Button
@@ -3139,8 +3143,8 @@ export function AssignmentDialog({
               )}
             </div>
           </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
