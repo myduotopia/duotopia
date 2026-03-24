@@ -147,6 +147,7 @@ export interface Assignment {
   classroom_id?: number;
   content_id?: number;
   due_date?: string;
+  start_date?: string;
   created_at?: string;
   submissions?: AssignmentSubmission[];
   // Additional properties used in ClassroomDetail

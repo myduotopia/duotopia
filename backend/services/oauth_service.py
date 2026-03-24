@@ -67,6 +67,9 @@ class OAuthService:
 
         Creates a new OAuthIdentity record linking the external
         provider account to the specified teacher.
+
+        Note: identity_id is not set here — it will be wired in
+        the 1Campus SSO follow-up PR (#341).
         """
         identity = OAuthIdentity(
             teacher_id=teacher_id,

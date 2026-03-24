@@ -7,6 +7,7 @@ import { LessonDialog } from "@/components/LessonDialog";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
 import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
 import VocabularySetPanel from "@/components/VocabularySetPanel";
+import ContentCopyDialog from "@/components/ContentCopyDialog";
 import { Button } from "@/components/ui/button";
 import { X, AlertCircle } from "lucide-react";
 import { apiClient } from "@/lib/api";
@@ -70,6 +71,13 @@ export default function OrgMaterialsPage() {
   const [vocabularySetContentId, setVocabularySetContentId] = useState<
     number | null
   >(null);
+
+  // Content copy dialog state
+  const [showCopyDialog, setShowCopyDialog] = useState(false);
+  const [copyContentInfo, setCopyContentInfo] = useState<{
+    id: number;
+    title: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchOrgPrograms();
@@ -550,6 +558,15 @@ export default function OrgMaterialsPage() {
               else if (level === 2)
                 handleReorderContents(parentId as number, fromIndex, toIndex);
             }}
+            onCopy={(item, level) => {
+              if (level === 2) {
+                setCopyContentInfo({
+                  id: item.id as number,
+                  title: (item.title || item.name) as string,
+                });
+                setShowCopyDialog(true);
+              }
+            }}
           />
         </div>
 
@@ -567,6 +584,7 @@ export default function OrgMaterialsPage() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  disabled={editorBusy}
                   onClick={() => {
                     if (editorBusy) return;
                     if (
@@ -651,6 +669,7 @@ export default function OrgMaterialsPage() {
                     {t("teacherTemplatePrograms.dialogs.editContentTitle")}
                   </h2>
                   <button
+                    disabled={editorBusy}
                     onClick={() => {
                       if (editorBusy) return;
                       if (
@@ -749,6 +768,7 @@ export default function OrgMaterialsPage() {
                   <Button
                     variant="ghost"
                     size="icon"
+                    disabled={editorBusy}
                     onClick={() => {
                       if (editorBusy) return;
                       if (
@@ -832,6 +852,7 @@ export default function OrgMaterialsPage() {
                     {t("vocabularySet.editTitle")}
                   </h2>
                   <button
+                    disabled={editorBusy}
                     onClick={() => {
                       if (editorBusy) return;
                       if (
@@ -963,6 +984,23 @@ export default function OrgMaterialsPage() {
           />
         )}
       </div>
+
+      {/* Content Copy Dialog */}
+      {copyContentInfo && (
+        <ContentCopyDialog
+          open={showCopyDialog}
+          onClose={() => {
+            setShowCopyDialog(false);
+            setCopyContentInfo(null);
+          }}
+          onSuccess={() => {
+            fetchOrgPrograms();
+          }}
+          contentId={copyContentInfo.id}
+          contentTitle={copyContentInfo.title}
+          programs={programs}
+        />
+      )}
     </>
   );
 }

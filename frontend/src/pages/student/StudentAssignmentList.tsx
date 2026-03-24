@@ -404,7 +404,7 @@ export default function StudentAssignmentList() {
                               proficiency: assignment.score.toFixed(1),
                             })
                           : t("studentAssignmentList.score.label", {
-                              score: assignment.score,
+                              score: assignment.score.toFixed(1),
                             })}
                       </span>
                     )}

@@ -1138,11 +1138,11 @@
       "updateButton": "Update Password",
       "updating": "Updating...",
       "cancel": "Cancel",
-      "requirements": "Password must be at least 8 characters and include uppercase, lowercase, number, and special character (!@#$%^&* etc.)",
+      "requirements": "Password must be at least 6 characters",
       "errors": {
         "allFieldsRequired": "All password fields are required",
         "passwordMismatch": "New password and confirmation do not match",
-        "passwordTooShort": "Password must be at least 8 characters",
+        "passwordTooShort": "Password must be at least 6 characters",
         "containsSpaces": "Password must not contain spaces",
         "passwordSameAsCurrent": "New password must be different from current password",
         "missingUppercase": "Password must contain at least one uppercase letter",
@@ -1245,6 +1245,8 @@
       "selectOther": "Select Another Student",
       "passwordHint": "Your default password is the date you were added to the class (format: YYYYMMDD, e.g. 20260501)",
       "forgotPassword": "Forgot password? Contact your teacher to reset it",
+      "forgotPasswordText": "Forgot password?",
+      "forgotPasswordLink": "Reset it here",
       "verifiedEmailHint": "If you've verified your email, please use the password you set during verification",
       "demoHint": "💡 Test Hint",
       "demoPassword": "Default demo password:",
@@ -1261,7 +1263,8 @@
       "passwordPlaceholder": "Enter your password",
       "login": "Login",
       "loggingIn": "Logging in...",
-      "error": "Login failed. Please check your email and password."
+      "error": "Login failed. Please check your email and password.",
+      "forgotPassword": "Forgot password?"
     },
     "errors": {
       "teacherNotFound": "Teacher account not found",
@@ -1807,6 +1810,25 @@
       "success": "Successfully copied {{count}} programs to classroom",
       "error": "Copy failed, please try again later",
       "loadError": "Failed to load programs"
+    },
+    "contentCopyDialog": {
+      "title": "Copy Content",
+      "description": "Copy \"{{title}}\" to a target lesson",
+      "targetProgram": "Target Program",
+      "targetLesson": "Target Lesson",
+      "selectProgram": "Select a program",
+      "selectLesson": "Select a lesson",
+      "selectProgramFirst": "Select a program first",
+      "searchProgram": "Search programs...",
+      "searchLesson": "Search lessons...",
+      "noProgramMatch": "No matching programs",
+      "noLessons": "No lessons in this program",
+      "noLessonMatch": "No matching lessons",
+      "cancel": "Cancel",
+      "copy": "Copy",
+      "copying": "Copying...",
+      "success": "Copied \"{{title}}\" to target lesson",
+      "error": "Failed to copy content, please try again"
     },
     "createProgramDialog": {
       "title": "Create Program for \"{{classroomName}}\"",
@@ -2644,7 +2666,8 @@
       "cancel": "Cancel",
       "saveChanges": "Save Changes",
       "addItem": "Add Item",
-      "record": "Record"
+      "record": "Record",
+      "stickyNote": "Sticky Note"
     },
     "stats": {
       "studentCount": "Students",
@@ -2672,6 +2695,7 @@
       "assignmentList": "Assignment List"
     },
     "labels": {
+      "assignmentInfo": "Assignment Info",
       "assignedTo": "Assigned To",
       "dueDate": "Due Date",
       "completionProgress": "Completion Progress",
@@ -2832,6 +2856,7 @@
       "titleRequired": "Please enter assignment title",
       "updateSuccess": "Assignment information updated",
       "updateFailed": "Update failed, please try again later",
+      "startDateAfterDueDate": "Start date cannot be after due date",
       "assignSuccess": "Successfully assigned to student",
       "assignFailed": "Assignment failed, please try again later",
       "unassignSuccess": "Unassigned student \"{{name}}\"",
@@ -2889,6 +2914,32 @@
       "noInstructions": "No instructions",
       "notSet": "Not set",
       "people": "people"
+    },
+    "sheet": {
+      "viewTitle": "Assignment Details",
+      "editTitle": "Edit Assignment",
+      "editButton": "Edit",
+      "titleLabel": "Title",
+      "instructionsLabel": "Instructions",
+      "dueDateLabel": "Due Date",
+      "studentProgress": "Student Progress",
+      "noStudents": "No student data",
+      "save": "Save Changes",
+      "contentTitle": "Assignment Content Units",
+      "questionCount": "Questions: ",
+      "itemCount": "items",
+      "editContentWarning": "Note: This is an assignment copy. Deleting items with existing student progress will be blocked.",
+      "averageScore": "Average Score",
+      "startDateLabel": "Start Date",
+      "lockedSettingHint": "Students have started this assignment. This setting cannot be changed."
+    },
+    "status": {
+      "submitted": "Submitted",
+      "graded": "Graded",
+      "inProgress": "In Progress",
+      "notStarted": "Not Started",
+      "returned": "Returned",
+      "resubmitted": "Resubmitted"
     },
     "contentTypes": {
       "readingAssessment": "Example Sentences",
@@ -4137,6 +4188,33 @@
       "linkExpiredDetail": "The password reset link has expired or is invalid, please request a new one"
     }
   },
+  "studentForgotPassword": {
+    "title": "Forgot Password",
+    "subtitle": "AI-Powered English Learning Platform",
+    "description": "Enter your verified email address and we'll send you a password reset link",
+    "placeholder": "student@example.com",
+    "verifiedOnly": "This feature is only available for students with verified email",
+    "linkExpiry": "Password reset link will expire in 2 hours",
+    "buttons": {
+      "send": "Send Reset Link",
+      "sending": "Sending...",
+      "backToLogin": "Back to Login"
+    },
+    "errors": {
+      "tooFrequent": "Please try again later. Password reset emails can only be sent once every 5 minutes.",
+      "notVerified": "This account has not verified its email. Please contact your teacher to reset your password.",
+      "sendFailed": "Failed to send. Please try again later."
+    },
+    "success": {
+      "title": "Email Sent",
+      "description": "Please check your email inbox",
+      "checkInbox": "If {{email}} is a verified student account, you will receive a password reset link. Please check your inbox and spam folder.",
+      "nextStepsTitle": "Next steps:",
+      "step1": "Check your email inbox",
+      "step2": "Click the reset link in the email",
+      "step3": "Set a new password"
+    }
+  },
   "contentEditor": {
     "labels": {
       "title": "Title",
@@ -4614,6 +4692,9 @@
       "copySuccessOrg": "Copied \"{{name}}\" to Organization Materials",
       "copyFailed": "Copy failed. Please try again later."
     }
+  },
+  "contentCopy": {
+    "button": "Copy to..."
   },
   "instantPractice": {
     "title": "Instant Practice",

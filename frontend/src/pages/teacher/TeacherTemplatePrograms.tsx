@@ -12,6 +12,7 @@ import { LessonDialog } from "@/components/LessonDialog";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
 import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
 import VocabularySetPanel from "@/components/VocabularySetPanel";
+import ContentCopyDialog from "@/components/ContentCopyDialog";
 import { ProgramVisibilitySelector } from "@/components/ProgramVisibilitySelector";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
@@ -136,6 +137,13 @@ function TeacherTemplateProgramsInner() {
   const [vocabularySetContentId, setVocabularySetContentId] = useState<
     number | null
   >(null);
+
+  // Content copy dialog state
+  const [showCopyDialog, setShowCopyDialog] = useState(false);
+  const [copyContentInfo, setCopyContentInfo] = useState<{
+    id: number;
+    title: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchTemplatePrograms();
@@ -592,6 +600,15 @@ function TeacherTemplateProgramsInner() {
               setShowInstantPractice(true);
             }
           }}
+          onCopy={(item, level) => {
+            if (level === 2) {
+              setCopyContentInfo({
+                id: item.id as number,
+                title: (item.title || item.name) as string,
+              });
+              setShowCopyDialog(true);
+            }
+          }}
         />
       </div>
 
@@ -609,6 +626,7 @@ function TeacherTemplateProgramsInner() {
               <Button
                 variant="ghost"
                 size="icon"
+                disabled={editorBusy}
                 onClick={() => {
                   if (editorBusy) return;
                   if (
@@ -697,6 +715,7 @@ function TeacherTemplateProgramsInner() {
                   {t("teacherTemplatePrograms.dialogs.editContentTitle")}
                 </h2>
                 <button
+                  disabled={editorBusy}
                   onClick={() => {
                     if (editorBusy) return;
                     if (
@@ -799,6 +818,7 @@ function TeacherTemplateProgramsInner() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  disabled={editorBusy}
                   onClick={() => {
                     if (editorBusy) return;
                     if (
@@ -886,6 +906,7 @@ function TeacherTemplateProgramsInner() {
                   {t("vocabularySet.editTitle")}
                 </h2>
                 <button
+                  disabled={editorBusy}
                   onClick={() => {
                     if (editorBusy) return;
                     if (
@@ -1035,6 +1056,23 @@ function TeacherTemplateProgramsInner() {
           onStartPractice={(assignmentId) => {
             navigate(`/teacher/assignment/${assignmentId}/preview`);
           }}
+        />
+      )}
+
+      {/* Content Copy Dialog */}
+      {copyContentInfo && (
+        <ContentCopyDialog
+          open={showCopyDialog}
+          onClose={() => {
+            setShowCopyDialog(false);
+            setCopyContentInfo(null);
+          }}
+          onSuccess={() => {
+            fetchTemplatePrograms();
+          }}
+          contentId={copyContentInfo.id}
+          contentTitle={copyContentInfo.title}
+          programs={programs}
         />
       )}
     </div>

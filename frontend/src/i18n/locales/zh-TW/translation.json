@@ -30,6 +30,39 @@
     "no": "否",
     "retry": "重試"
   },
+  "assignmentDetail": {
+    "sheet": {
+      "viewTitle": "作業詳情",
+      "editTitle": "編輯作業",
+      "editButton": "編輯",
+      "titleLabel": "作業標題",
+      "instructionsLabel": "作業說明",
+      "dueDateLabel": "截止日期",
+      "studentProgress": "學生完成狀況",
+      "noStudents": "尚無學生資料",
+      "save": "儲存變更",
+      "contentTitle": "作業單元內容",
+      "questionCount": "題目數量：",
+      "itemCount": "題",
+      "editContentWarning": "注意：此為作業副本。刪除已有學生進度的題目將被阻止。",
+      "averageScore": "平均分數",
+      "startDateLabel": "開始日期",
+      "lockedSettingHint": "已有學生開始作答，無法變更此設定"
+    },
+    "status": {
+      "submitted": "已繳交",
+      "graded": "已批改",
+      "inProgress": "進行中",
+      "notStarted": "未開始",
+      "returned": "已退回",
+      "resubmitted": "已重交"
+    },
+    "messages": {
+      "updateSuccess": "已儲存變更",
+      "updateError": "儲存失敗",
+      "startDateAfterDueDate": "開始日期不可晚於截止日期"
+    }
+  },
   "demo": {
     "banner": "體驗模式 - 進度不會被儲存",
     "mode": "體驗模式",
@@ -1135,11 +1168,11 @@
       "updateButton": "更新密碼",
       "updating": "更新中...",
       "cancel": "取消",
-      "requirements": "密碼至少需要 8 個字元，並包含大寫字母、小寫字母、數字及特殊字元（!@#$%^&* 等）",
+      "requirements": "密碼至少需要 6 個字元",
       "errors": {
         "allFieldsRequired": "所有密碼欄位皆為必填",
         "passwordMismatch": "新密碼與確認密碼不相符",
-        "passwordTooShort": "密碼至少需要 8 個字元",
+        "passwordTooShort": "密碼至少需要 6 個字元",
         "containsSpaces": "密碼不可包含空白",
         "passwordSameAsCurrent": "新密碼不能與目前密碼相同",
         "missingUppercase": "密碼必須包含至少一個大寫字母",
@@ -1242,6 +1275,8 @@
       "selectOther": "選擇其他學生",
       "passwordHint": "首次登入請輸入加入班級當天的日期，格式為 YYYYMMDD，如: 20260501",
       "forgotPassword": "若忘記密碼，請聯繫教師恢復預設密碼",
+      "forgotPasswordText": "忘記密碼？",
+      "forgotPasswordLink": "點此重設密碼",
       "verifiedEmailHint": "若已驗證過 Email，請使用驗證時設定的密碼登入",
       "demoHint": "💡 測試提示",
       "demoPassword": "Demo 學生預設密碼：",
@@ -1258,7 +1293,8 @@
       "passwordPlaceholder": "請輸入密碼",
       "login": "登入",
       "loggingIn": "登入中...",
-      "error": "登入失敗，請確認 Email 和密碼是否正確"
+      "error": "登入失敗，請確認 Email 和密碼是否正確",
+      "forgotPassword": "忘記密碼？"
     },
     "errors": {
       "teacherNotFound": "找不到此教師帳號",
@@ -1804,6 +1840,25 @@
       "success": "成功複製 {{count}} 個課程到班級",
       "error": "複製失敗，請稍後再試",
       "loadError": "載入課程失敗"
+    },
+    "contentCopyDialog": {
+      "title": "複製內容",
+      "description": "將「{{title}}」複製到指定的教材單元中",
+      "targetProgram": "目標教材",
+      "targetLesson": "目標單元",
+      "selectProgram": "請選擇教材",
+      "selectLesson": "請選擇單元",
+      "selectProgramFirst": "請先選擇教材",
+      "searchProgram": "搜尋教材...",
+      "searchLesson": "搜尋單元...",
+      "noProgramMatch": "找不到符合的教材",
+      "noLessons": "此教材沒有單元",
+      "noLessonMatch": "找不到符合的單元",
+      "cancel": "取消",
+      "copy": "複製",
+      "copying": "複製中...",
+      "success": "已複製「{{title}}」到目標單元",
+      "error": "複製內容失敗，請重試"
     },
     "createProgramDialog": {
       "title": "建立課程到「{{classroomName}}」",
@@ -2642,7 +2697,8 @@
       "cancel": "取消",
       "saveChanges": "儲存變更",
       "addItem": "新增項目",
-      "record": "錄音"
+      "record": "錄音",
+      "stickyNote": "便利貼"
     },
     "stats": {
       "studentCount": "學生數",
@@ -2670,6 +2726,7 @@
       "assignmentList": "作業列表"
     },
     "labels": {
+      "assignmentInfo": "作業資訊",
       "assignedTo": "指派對象",
       "dueDate": "截止日期",
       "completionProgress": "完成進度",
@@ -4150,6 +4207,33 @@
       "linkExpiredDetail": "密碼重設連結已過期或無效，請重新申請"
     }
   },
+  "studentForgotPassword": {
+    "title": "忘記密碼",
+    "subtitle": "AI 驅動的英語學習平台",
+    "description": "輸入您驗證過的 Email 地址，我們會發送密碼重設連結給您",
+    "placeholder": "student@example.com",
+    "verifiedOnly": "此功能僅限已驗證 Email 的學生使用",
+    "linkExpiry": "密碼重設連結將在 2 小時後失效",
+    "buttons": {
+      "send": "發送重設連結",
+      "sending": "發送中...",
+      "backToLogin": "返回登入頁面"
+    },
+    "errors": {
+      "tooFrequent": "請稍後再試，密碼重設郵件每5分鐘只能發送一次",
+      "notVerified": "此帳號尚未驗證 Email，請聯繫教師恢復預設密碼",
+      "sendFailed": "發送失敗，請稍後再試"
+    },
+    "success": {
+      "title": "郵件已發送",
+      "description": "請檢查您的郵件信箱",
+      "checkInbox": "如果 {{email}} 是已驗證的學生帳號，您將會收到密碼重設連結。請檢查您的收件匣和垃圾郵件資料夾。",
+      "nextStepsTitle": "接下來的步驟：",
+      "step1": "檢查您的郵件信箱",
+      "step2": "點擊郵件中的重設連結",
+      "step3": "設定新密碼"
+    }
+  },
   "contentEditor": {
     "labels": {
       "title": "標題",
@@ -4627,6 +4711,9 @@
       "copySuccessOrg": "已複製「{{name}}」到組織教材",
       "copyFailed": "複製失敗，請稍後再試"
     }
+  },
+  "contentCopy": {
+    "button": "複製到..."
   },
   "instantPractice": {
     "title": "即刻練習",

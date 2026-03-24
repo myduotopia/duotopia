@@ -578,6 +578,7 @@ export default function SchoolMaterialsPage() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  disabled={editorBusy}
                   onClick={() => {
                     if (editorBusy) return;
                     if (
@@ -662,6 +663,7 @@ export default function SchoolMaterialsPage() {
                     {t("teacherTemplatePrograms.dialogs.editContentTitle")}
                   </h2>
                   <button
+                    disabled={editorBusy}
                     onClick={() => {
                       if (editorBusy) return;
                       if (
@@ -760,6 +762,7 @@ export default function SchoolMaterialsPage() {
                   <Button
                     variant="ghost"
                     size="icon"
+                    disabled={editorBusy}
                     onClick={() => {
                       if (editorBusy) return;
                       if (
@@ -843,6 +846,7 @@ export default function SchoolMaterialsPage() {
                     {t("vocabularySet.editTitle")}
                   </h2>
                   <button
+                    disabled={editorBusy}
                     onClick={() => {
                       if (editorBusy) return;
                       if (
