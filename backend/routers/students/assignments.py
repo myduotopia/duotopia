@@ -250,7 +250,9 @@ async def get_assignment_activities(
             .filter(Assignment.id == student_assignment.assignment_id)
             .first()
         )
-        _practice_mode = _parent_assignment.practice_mode if _parent_assignment else None
+        _practice_mode = (
+            _parent_assignment.practice_mode if _parent_assignment else None
+        )
 
         # 優化：批次查詢所有 content，避免 N+1 問題
         content_ids = [progress.content_id for progress in progress_records]

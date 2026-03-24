@@ -2187,9 +2187,7 @@ export function AssignmentDialog({
                         <span className="text-4xl">🎙️</span>
                         <div className="text-center">
                           <div className="font-semibold text-lg">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.reading",
-                            )}
+                            {t("dialogs.assignmentDialog.practiceMode.reading")}
                           </div>
                           <div className="text-sm text-gray-500 mt-1">
                             {t(
@@ -2491,245 +2489,245 @@ export function AssignmentDialog({
                   {/* ===== 單字集細節設定 (word_reading / word_selection) ===== */}
                   {(formData.practice_mode === "word_reading" ||
                     formData.practice_mode === "word_selection") && (
-                      <Card className="p-4 border-gray-200">
-                        <h4 className="text-sm font-medium mb-3 text-gray-700">
-                          {t(
-                            "dialogs.assignmentDialog.practiceMode.advancedSettings",
-                          )}
-                        </h4>
-
-                        {/* 單字選擇專用 - 達標熟悉度 */}
-                        {formData.practice_mode === "word_selection" && (
-                          <div className="mb-4 pb-4 border-b">
-                            <div className="flex items-center justify-between mb-2">
-                              <Label className="text-xs text-gray-600">
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.targetProficiency",
-                                )}
-                              </Label>
-                              <span className="text-sm font-medium text-blue-600">
-                                {formData.target_proficiency}%
-                              </span>
-                            </div>
-                            <input
-                              type="range"
-                              min={50}
-                              max={100}
-                              step={5}
-                              value={formData.target_proficiency}
-                              onChange={(e) =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  target_proficiency: Number(e.target.value),
-                                }))
-                              }
-                              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.targetProficiencyDesc",
-                              )}
-                            </p>
-                          </div>
+                    <Card className="p-4 border-gray-200">
+                      <h4 className="text-sm font-medium mb-3 text-gray-700">
+                        {t(
+                          "dialogs.assignmentDialog.practiceMode.advancedSettings",
                         )}
+                      </h4>
 
-                        {/* 單字選擇專用 - 題目呈現方式 (顯示單字 vs 播放音檔 二擇一) */}
-                        {formData.practice_mode === "word_selection" && (
-                          <div className="mb-4 pb-4 border-b">
-                            <Label className="text-xs text-gray-600 mb-2 block">
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.questionDisplay",
-                              )}
-                            </Label>
-                            <div className="flex gap-3">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    show_word: true,
-                                    play_audio: false,
-                                  }))
-                                }
-                                className={`flex-1 p-3 rounded-lg border text-sm ${
-                                  formData.show_word && !formData.play_audio
-                                    ? "border-blue-500 bg-blue-50 text-blue-700"
-                                    : "border-gray-200 hover:border-gray-300"
-                                }`}
-                              >
-                                👁️{" "}
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.displayWord",
-                                )}
-                                <span className="block text-xs text-gray-500 mt-0.5">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.displayWordDesc",
-                                  )}
-                                </span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    show_word: false,
-                                    play_audio: true,
-                                  }))
-                                }
-                                className={`flex-1 p-3 rounded-lg border text-sm ${
-                                  !formData.show_word && formData.play_audio
-                                    ? "border-blue-500 bg-blue-50 text-blue-700"
-                                    : "border-gray-200 hover:border-gray-300"
-                                }`}
-                              >
-                                🔊{" "}
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.playAudioWord",
-                                )}
-                                <span className="block text-xs text-gray-500 mt-0.5">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.playAudioWordDesc",
-                                  )}
-                                </span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* 時間限制 */}
-                          <div className="space-y-1.5">
+                      {/* 單字選擇專用 - 達標熟悉度 */}
+                      {formData.practice_mode === "word_selection" && (
+                        <div className="mb-4 pb-4 border-b">
+                          <div className="flex items-center justify-between mb-2">
                             <Label className="text-xs text-gray-600">
                               {t(
-                                "dialogs.assignmentDialog.practiceMode.timeLimit",
+                                "dialogs.assignmentDialog.practiceMode.targetProficiency",
                               )}
                             </Label>
-                            <select
-                              value={formData.time_limit_per_question}
-                              onChange={(e) =>
+                            <span className="text-sm font-medium text-blue-600">
+                              {formData.target_proficiency}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={50}
+                            max={100}
+                            step={5}
+                            value={formData.target_proficiency}
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                target_proficiency: Number(e.target.value),
+                              }))
+                            }
+                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.targetProficiencyDesc",
+                            )}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* 單字選擇專用 - 題目呈現方式 (顯示單字 vs 播放音檔 二擇一) */}
+                      {formData.practice_mode === "word_selection" && (
+                        <div className="mb-4 pb-4 border-b">
+                          <Label className="text-xs text-gray-600 mb-2 block">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.questionDisplay",
+                            )}
+                          </Label>
+                          <div className="flex gap-3">
+                            <button
+                              type="button"
+                              onClick={() =>
                                 setFormData((prev) => ({
                                   ...prev,
-                                  time_limit_per_question: Number(
-                                    e.target.value,
-                                  ) as 0 | 20 | 30 | 40,
+                                  show_word: true,
+                                  play_audio: false,
                                 }))
                               }
-                              className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm"
+                              className={`flex-1 p-3 rounded-lg border text-sm ${
+                                formData.show_word && !formData.play_audio
+                                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                                  : "border-gray-200 hover:border-gray-300"
+                              }`}
                             >
-                              <option value={0}>
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.unlimited",
-                                )}
-                                {formData.practice_mode === "word_reading" &&
-                                  ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
-                              </option>
-                              <option value={20}>
-                                20{" "}
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.seconds",
-                                )}
-                              </option>
-                              <option value={30}>
-                                30{" "}
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.seconds",
-                                )}
-                                {formData.practice_mode === "word_selection" &&
-                                  ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
-                              </option>
-                              <option value={40}>
-                                40{" "}
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.seconds",
-                                )}
-                              </option>
-                            </select>
-                          </div>
-
-                          {/* 打亂順序 */}
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-gray-600">
+                              👁️{" "}
                               {t(
-                                "dialogs.assignmentDialog.practiceMode.shuffleQuestions",
+                                "dialogs.assignmentDialog.practiceMode.displayWord",
                               )}
-                            </Label>
-                            <div className="flex items-center h-9">
-                              <input
-                                type="checkbox"
-                                checked={formData.shuffle_questions}
-                                onChange={(e) =>
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    shuffle_questions: e.target.checked,
-                                  }))
-                                }
-                                className="h-4 w-4 rounded border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-600">
+                              <span className="block text-xs text-gray-500 mt-0.5">
                                 {t(
-                                  "dialogs.assignmentDialog.practiceMode.shuffleQuestionsDesc",
+                                  "dialogs.assignmentDialog.practiceMode.displayWordDesc",
                                 )}
                               </span>
-                            </div>
-                          </div>
-
-                          {/* 單字朗讀專用 - 顯示翻譯 */}
-                          {formData.practice_mode === "word_reading" && (
-                            <div className="space-y-1.5">
-                              <Label className="text-xs text-gray-600">
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.showTranslation",
-                                )}
-                              </Label>
-                              <div className="flex items-center h-9">
-                                <input
-                                  type="checkbox"
-                                  checked={formData.show_translation}
-                                  onChange={(e) =>
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      show_translation: e.target.checked,
-                                    }))
-                                  }
-                                  className="h-4 w-4 rounded border-gray-300"
-                                />
-                                <span className="ml-2 text-sm text-gray-600">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.showTranslationDesc",
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 顯示圖片 */}
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-gray-600">
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  show_word: false,
+                                  play_audio: true,
+                                }))
+                              }
+                              className={`flex-1 p-3 rounded-lg border text-sm ${
+                                !formData.show_word && formData.play_audio
+                                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                                  : "border-gray-200 hover:border-gray-300"
+                              }`}
+                            >
+                              🔊{" "}
                               {t(
-                                "dialogs.assignmentDialog.practiceMode.showImage",
+                                "dialogs.assignmentDialog.practiceMode.playAudioWord",
                               )}
-                            </Label>
-                            <div className="flex items-center h-9">
-                              <input
-                                type="checkbox"
-                                checked={formData.show_image}
-                                onChange={(e) =>
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    show_image: e.target.checked,
-                                  }))
-                                }
-                                className="h-4 w-4 rounded border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-600">
+                              <span className="block text-xs text-gray-500 mt-0.5">
                                 {t(
-                                  "dialogs.assignmentDialog.practiceMode.showImageDesc",
+                                  "dialogs.assignmentDialog.practiceMode.playAudioWordDesc",
                                 )}
                               </span>
-                            </div>
+                            </button>
                           </div>
                         </div>
-                      </Card>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* 時間限制 */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-gray-600">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.timeLimit",
+                            )}
+                          </Label>
+                          <select
+                            value={formData.time_limit_per_question}
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                time_limit_per_question: Number(
+                                  e.target.value,
+                                ) as 0 | 20 | 30 | 40,
+                              }))
+                            }
+                            className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm"
+                          >
+                            <option value={0}>
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.unlimited",
+                              )}
+                              {formData.practice_mode === "word_reading" &&
+                                ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
+                            </option>
+                            <option value={20}>
+                              20{" "}
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.seconds",
+                              )}
+                            </option>
+                            <option value={30}>
+                              30{" "}
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.seconds",
+                              )}
+                              {formData.practice_mode === "word_selection" &&
+                                ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
+                            </option>
+                            <option value={40}>
+                              40{" "}
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.seconds",
+                              )}
+                            </option>
+                          </select>
+                        </div>
+
+                        {/* 打亂順序 */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-gray-600">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.shuffleQuestions",
+                            )}
+                          </Label>
+                          <div className="flex items-center h-9">
+                            <input
+                              type="checkbox"
+                              checked={formData.shuffle_questions}
+                              onChange={(e) =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  shuffle_questions: e.target.checked,
+                                }))
+                              }
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                            <span className="ml-2 text-sm text-gray-600">
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.shuffleQuestionsDesc",
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 單字朗讀專用 - 顯示翻譯 */}
+                        {formData.practice_mode === "word_reading" && (
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-gray-600">
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.showTranslation",
+                              )}
+                            </Label>
+                            <div className="flex items-center h-9">
+                              <input
+                                type="checkbox"
+                                checked={formData.show_translation}
+                                onChange={(e) =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    show_translation: e.target.checked,
+                                  }))
+                                }
+                                className="h-4 w-4 rounded border-gray-300"
+                              />
+                              <span className="ml-2 text-sm text-gray-600">
+                                {t(
+                                  "dialogs.assignmentDialog.practiceMode.showTranslationDesc",
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 顯示圖片 */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-gray-600">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.showImage",
+                            )}
+                          </Label>
+                          <div className="flex items-center h-9">
+                            <input
+                              type="checkbox"
+                              checked={formData.show_image}
+                              onChange={(e) =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  show_image: e.target.checked,
+                                }))
+                              }
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                            <span className="ml-2 text-sm text-gray-600">
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.showImageDesc",
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
                   )}
                 </div>
               </div>
