@@ -313,6 +313,7 @@ jobs:
               'demo_config',
               'identities',
               'oauth_identities',
+              'blog_posts', 'blog_categories', 'blog_post_categories',
               -- n8n 系統表（外部服務，不適用 RLS）
               'annotation_tag_entity', 'auth_identity', 'auth_provider_sync_history', 'binary_data',
               'chat_hub_agents', 'chat_hub_messages', 'chat_hub_sessions', 'credentials_entity',
