@@ -34,8 +34,8 @@ export default function BlogListPage() {
       setLoading(true);
       try {
         const res = await blogPublicApi.getPosts(page, 12, selectedCategory);
-        setPosts(res.data.posts);
-        setTotalPages(res.data.total_pages);
+        setPosts(res.data.posts ?? []);
+        setTotalPages(res.data.total_pages ?? 1);
       } catch {
         setPosts([]);
       } finally {

@@ -22,8 +22,8 @@ export default function AdminBlogPage() {
     setLoading(true);
     try {
       const res = await blogAdminApi.getPosts(page, 20, token);
-      setPosts(res.data.posts);
-      setTotalPages(res.data.total_pages);
+      setPosts(res.data.posts ?? []);
+      setTotalPages(res.data.total_pages ?? 1);
     } catch {
       toast.error(t("common.error"));
     } finally {
