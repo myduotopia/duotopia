@@ -1083,7 +1083,10 @@ export function AssignmentDialog({
 
   return (
     <Sheet open={open} onOpenChange={handleClose}>
-      <SheetContent side="right" className="!w-full !max-w-5xl h-full flex flex-col p-0 sm:!max-w-5xl">
+      <SheetContent
+        side="right"
+        className="!w-full !max-w-5xl h-full flex flex-col p-0 sm:!max-w-5xl"
+      >
         {/* Compact Header with Clear Steps - 響應式方案 C */}
         <div className="px-6 py-3 border-b bg-gray-50">
           {/* 大螢幕 (≥1024px)：標題 + 步驟同一行 */}
