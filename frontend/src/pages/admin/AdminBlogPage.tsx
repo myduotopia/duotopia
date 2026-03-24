@@ -52,8 +52,7 @@ export default function AdminBlogPage() {
       description="Blog 文章管理"
       icon={FileText}
     >
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold">{t("blog.admin.title")}</h2>
+      <div className="flex justify-end mb-6">
         <Link to="/admin/blog/new">
           <Button>{t("blog.admin.newPost")}</Button>
         </Link>
