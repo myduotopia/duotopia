@@ -37,6 +37,7 @@ class BlogService:
         page: int = 1,
         per_page: int = 12,
         category_slug: Optional[str] = None,
+        locale: Optional[str] = None,
     ) -> dict:
         """Get paginated published posts, ordered by published_at DESC."""
         if category_slug:
@@ -57,6 +58,9 @@ class BlogService:
                 .options(joinedload(BlogPost.author))
                 .filter(BlogPost.is_published.is_(True))
             )
+
+        if locale:
+            query = query.filter(BlogPost.locale == locale)
 
         total = query.count()
         posts = (
@@ -144,6 +148,8 @@ class BlogService:
             meta_description=data.get("meta_description"),
             og_image_url=data.get("og_image_url"),
             is_published=data.get("is_published", False),
+            locale=data.get("locale", "zh-TW"),
+            linked_post_id=data.get("linked_post_id"),
             author_id=author_id,
         )
 
@@ -235,6 +241,72 @@ class BlogService:
             post.is_published,
         )
         return post
+
+    # ============ Translation Methods ============
+
+    @staticmethod
+    def create_translated_post(
+        db: Session,
+        source_post_id: int,
+        target_locale: str,
+        translated_data: dict,
+        author_id: int,
+    ) -> Optional[BlogPost]:
+        """Create a translated version of a post and link them together."""
+        source = db.query(BlogPost).filter(BlogPost.id == source_post_id).first()
+        if not source:
+            return None
+
+        # Build slug: source slug + locale suffix
+        locale_suffix = target_locale.split("-")[0]  # "en" from "en"
+        target_slug = f"{source.slug}-{locale_suffix}"
+
+        # Ensure slug uniqueness
+        existing = db.query(BlogPost).filter(BlogPost.slug == target_slug).first()
+        if existing:
+            target_slug = f"{target_slug}-{int(datetime.now().timestamp())}"
+
+        translated_post = BlogPost(
+            title=translated_data.get("title", source.title),
+            slug=target_slug,
+            summary=translated_data.get("summary", source.summary),
+            content=translated_data.get("content", source.content),
+            cover_image_url=source.cover_image_url,
+            meta_title=translated_data.get("meta_title"),
+            meta_description=translated_data.get("meta_description"),
+            og_image_url=source.og_image_url,
+            is_published=False,  # Always start as draft
+            locale=target_locale,
+            linked_post_id=source.id,
+            author_id=author_id,
+        )
+        db.add(translated_post)
+        db.flush()
+
+        # Link source back to translated post
+        source.linked_post_id = translated_post.id
+
+        # Copy categories
+        source_cats = (
+            db.query(BlogPostCategory)
+            .filter(BlogPostCategory.post_id == source.id)
+            .all()
+        )
+        for cat in source_cats:
+            assoc = BlogPostCategory(
+                post_id=translated_post.id, category_id=cat.category_id
+            )
+            db.add(assoc)
+
+        db.commit()
+        db.refresh(translated_post)
+        logger.info(
+            "Translated post created: id=%s locale=%s from=%s",
+            translated_post.id,
+            target_locale,
+            source.id,
+        )
+        return translated_post
 
     # ============ Category Methods ============
 

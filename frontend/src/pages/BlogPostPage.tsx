@@ -114,13 +114,23 @@ export default function BlogPostPage() {
       <BlogHeader />
 
       <main className="container mx-auto max-w-3xl px-4 py-8">
-        {/* Back link */}
-        <Link
-          to="/blog"
-          className="text-sm text-muted-foreground hover:text-primary mb-6 inline-block"
-        >
-          {t("blog.backToBlog")}
-        </Link>
+        {/* Back link + Language toggle */}
+        <div className="flex items-center justify-between mb-6">
+          <Link
+            to="/blog"
+            className="text-sm text-muted-foreground hover:text-primary"
+          >
+            {t("blog.backToBlog")}
+          </Link>
+          {post.linked_post_slug && (
+            <Link
+              to={`/blog/${post.linked_post_slug}`}
+              className="text-sm text-primary hover:underline"
+            >
+              {post.locale === "zh-TW" ? "Read in English" : "閱讀中文版"}
+            </Link>
+          )}
+        </div>
 
         {/* Category badges */}
         {post.categories.length > 0 && (

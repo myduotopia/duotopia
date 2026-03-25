@@ -41,6 +41,7 @@ export default function AdminBlogEditorPage() {
     meta_title: "",
     meta_description: "",
     og_image_url: "",
+    locale: "zh-TW",
     category_ids: [],
   });
   const [categories, setCategories] = useState<BlogCategory[]>([]);
@@ -282,6 +283,69 @@ export default function AdminBlogEditorPage() {
               ))}
             </div>
           </div>
+          {/* Locale & Translation */}
+          {isEdit && post && (
+            <div className="flex items-center gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  {t("blog.admin.locale")}
+                </label>
+                <span className="inline-block px-3 py-1 text-sm rounded-full bg-gray-100">
+                  {post.locale === "zh-TW" ? "🇹🇼 中文" : "🇺🇸 English"}
+                </span>
+              </div>
+              {post.linked_post_slug ? (
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    {t("blog.admin.linkedPost")}
+                  </label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      navigate(`/admin/blog/${post.linked_post_id}/edit`)
+                    }
+                  >
+                    {post.locale === "zh-TW"
+                      ? "Edit English version"
+                      : "編輯中文版"}
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    {t("blog.admin.translate")}
+                  </label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        const targetLocale =
+                          post.locale === "zh-TW" ? "en" : "zh-TW";
+                        const res = await blogAdminApi.translatePost(
+                          post.id,
+                          {
+                            title: `[${targetLocale.toUpperCase()}] ${post.title}`,
+                            target_locale: targetLocale,
+                          },
+                          token,
+                        );
+                        toast.success(t("common.success"));
+                        navigate(`/admin/blog/${res.data.id}/edit`);
+                      } catch {
+                        toast.error(t("common.error"));
+                      }
+                    }}
+                  >
+                    {post.locale === "zh-TW"
+                      ? "Create English draft"
+                      : "建立中文草稿"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium mb-1">
               {t("blog.admin.coverImage")}

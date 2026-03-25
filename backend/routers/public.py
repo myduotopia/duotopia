@@ -180,10 +180,11 @@ def get_blog_posts(
     page: int = 1,
     per_page: int = 12,
     category: Optional[str] = None,
+    locale: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """Get published blog posts (public)."""
-    result = BlogService.get_published_posts(db, page, per_page, category)
+    result = BlogService.get_published_posts(db, page, per_page, category, locale)
     posts = []
     for p in result["posts"]:
         posts.append(
@@ -196,6 +197,10 @@ def get_blog_posts(
                 "is_published": p.is_published,
                 "published_at": (
                     p.published_at.isoformat() if p.published_at else None
+                ),
+                "locale": getattr(p, "locale", "zh-TW"),
+                "linked_post_slug": (
+                    p.linked_post.slug if getattr(p, "linked_post", None) else None
                 ),
                 "author": (
                     {"id": p.author.id, "name": p.author.name} if p.author else None
@@ -247,6 +252,10 @@ def get_blog_post(slug: str, db: Session = Depends(get_db)):
         "og_image_url": post.og_image_url,
         "is_published": post.is_published,
         "published_at": (post.published_at.isoformat() if post.published_at else None),
+        "locale": getattr(post, "locale", "zh-TW"),
+        "linked_post_slug": (
+            post.linked_post.slug if getattr(post, "linked_post", None) else None
+        ),
         "author": (
             {"id": post.author.id, "name": post.author.name} if post.author else None
         ),

@@ -14,6 +14,9 @@ export interface BlogPost {
   og_image_url: string | null;
   is_published: boolean;
   published_at: string | null;
+  locale: string;
+  linked_post_id: number | null;
+  linked_post_slug: string | null;
   author: { id: number; name: string } | null;
   categories: BlogCategory[];
   created_at: string;
@@ -35,7 +38,18 @@ export interface BlogPostInput {
   meta_title?: string;
   meta_description?: string;
   og_image_url?: string;
+  locale?: string;
+  linked_post_id?: number;
   category_ids?: number[];
+}
+
+export interface TranslatePostInput {
+  title: string;
+  summary?: string;
+  content?: string;
+  meta_title?: string;
+  meta_description?: string;
+  target_locale: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -48,9 +62,9 @@ export interface PaginatedResponse<T> {
 
 // Public APIs (no auth)
 export const blogPublicApi = {
-  getPosts: (page = 1, perPage = 12, category?: string) =>
+  getPosts: (page = 1, perPage = 12, category?: string, locale?: string) =>
     axios.get<PaginatedResponse<BlogPost>>(`${API_BASE}/public/blog`, {
-      params: { page, per_page: perPage, category },
+      params: { page, per_page: perPage, category, locale },
     }),
   getPost: (slug: string) =>
     axios.get<BlogPost>(`${API_BASE}/public/blog/${slug}`),
@@ -95,6 +109,10 @@ export const blogAdminApi = {
     }),
   deleteCategory: (id: number, token: string) =>
     axios.delete(`${API_BASE}/blog/categories/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  translatePost: (id: number, data: TranslatePostInput, token: string) =>
+    axios.post<BlogPost>(`${API_BASE}/blog/${id}/translate`, data, {
       headers: { Authorization: `Bearer ${token}` },
     }),
   uploadImage: (file: File, token: string) => {

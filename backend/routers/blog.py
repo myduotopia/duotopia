@@ -70,6 +70,9 @@ class BlogPostResponse(BaseModel):
     og_image_url: Optional[str] = None
     is_published: bool
     published_at: Optional[str] = None
+    locale: str = "zh-TW"
+    linked_post_id: Optional[int] = None
+    linked_post_slug: Optional[str] = None
     author: Optional[AuthorResponse] = None
     categories: List[CategoryResponse] = []
     created_at: Optional[str] = None
@@ -97,7 +100,18 @@ class CreatePostRequest(BaseModel):
     meta_description: Optional[str] = None
     og_image_url: Optional[str] = None
     is_published: bool = False
+    locale: str = "zh-TW"
+    linked_post_id: Optional[int] = None
     category_ids: List[int] = []
+
+
+class TranslatePostRequest(BaseModel):
+    title: str
+    summary: Optional[str] = None
+    content: Optional[str] = None
+    meta_title: Optional[str] = None
+    meta_description: Optional[str] = None
+    target_locale: str = "en"
 
 
 class UpdatePostRequest(BaseModel):
@@ -143,6 +157,11 @@ def _serialize_post(post) -> dict:
         "og_image_url": post.og_image_url,
         "is_published": post.is_published,
         "published_at": (post.published_at.isoformat() if post.published_at else None),
+        "locale": getattr(post, "locale", "zh-TW"),
+        "linked_post_id": getattr(post, "linked_post_id", None),
+        "linked_post_slug": (
+            post.linked_post.slug if getattr(post, "linked_post", None) else None
+        ),
         "author": (
             {"id": post.author.id, "name": post.author.name} if post.author else None
         ),
@@ -258,14 +277,14 @@ async def upload_image(
     file: UploadFile = File(...),
     _admin: Teacher = Depends(get_current_admin),
 ):
-    """Upload an image for blog posts. Max 5MB."""
-    # Validate file size (5MB)
-    max_size = 5 * 1024 * 1024
+    """Upload an image for blog posts. Max 20MB."""
+    # Validate file size (20MB)
+    max_size = 20 * 1024 * 1024
     content = await file.read()
     if len(content) > max_size:
         raise HTTPException(
             status_code=400,
-            detail="File too large. Maximum size: 5MB",
+            detail="File too large. Maximum size: 20MB",
         )
     # Reset file position after reading
     await file.seek(0)
@@ -365,3 +384,23 @@ def publish_post(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     return _serialize_post(post)
+
+
+@router.post("/{post_id}/translate", response_model=BlogPostResponse)
+def translate_post(
+    post_id: int,
+    request: TranslatePostRequest,
+    db: Session = Depends(get_db),
+    admin: Teacher = Depends(get_current_admin),
+):
+    """Create a translated version of a post."""
+    translated = BlogService.create_translated_post(
+        db,
+        source_post_id=post_id,
+        target_locale=request.target_locale,
+        translated_data=request.model_dump(exclude={"target_locale"}),
+        author_id=admin.id,
+    )
+    if not translated:
+        raise HTTPException(status_code=404, detail="Source post not found")
+    return _serialize_post(translated)

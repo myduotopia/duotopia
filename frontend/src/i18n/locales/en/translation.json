@@ -4754,7 +4754,10 @@
       "preview": "Preview",
       "edit": "Edit",
       "uploadImage": "Upload Image",
-      "back": "Back"
+      "back": "Back",
+      "locale": "Language",
+      "linkedPost": "Translation",
+      "translate": "Create Translation"
     }
   }
 }

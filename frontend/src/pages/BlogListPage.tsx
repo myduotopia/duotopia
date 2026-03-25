@@ -7,7 +7,8 @@ import { blogPublicApi } from "@/services/blogService";
 import type { BlogPost, BlogCategory } from "@/services/blogService";
 
 export default function BlogListPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const blogLocale = i18n.language.startsWith("zh") ? "zh-TW" : "en";
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>(
@@ -33,7 +34,12 @@ export default function BlogListPage() {
     const fetchPosts = async () => {
       setLoading(true);
       try {
-        const res = await blogPublicApi.getPosts(page, 12, selectedCategory);
+        const res = await blogPublicApi.getPosts(
+          page,
+          12,
+          selectedCategory,
+          blogLocale,
+        );
         setPosts(res.data.posts ?? []);
         setTotalPages(res.data.total_pages ?? 1);
       } catch {
@@ -43,7 +49,7 @@ export default function BlogListPage() {
       }
     };
     fetchPosts();
-  }, [page, selectedCategory]);
+  }, [page, selectedCategory, blogLocale]);
 
   const handleCategoryChange = (slug?: string) => {
     setSelectedCategory(slug);

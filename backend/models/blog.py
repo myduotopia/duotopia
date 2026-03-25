@@ -58,6 +58,12 @@ class BlogPost(Base):
     is_published = Column(Boolean, default=False)
     published_at = Column(DateTime(timezone=True), nullable=True)
 
+    # i18n
+    locale = Column(String(10), nullable=False, default="zh-TW")
+    linked_post_id = Column(
+        Integer, ForeignKey("blog_posts.id", ondelete="SET NULL"), nullable=True
+    )
+
     # Author
     author_id = Column(Integer, ForeignKey("teachers.id"), nullable=True)
 
@@ -66,6 +72,9 @@ class BlogPost(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
+    linked_post = relationship(
+        "BlogPost", remote_side="BlogPost.id", foreign_keys=[linked_post_id]
+    )
     author = relationship("Teacher", foreign_keys=[author_id])
     categories = relationship(
         "BlogCategory",
