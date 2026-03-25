@@ -183,6 +183,22 @@ def create_post(
     admin: Teacher = Depends(get_current_admin),
 ):
     """Create a new blog post."""
+    # Validate category IDs exist
+    if request.category_ids:
+        from models.blog import BlogCategory
+
+        existing = (
+            db.query(BlogCategory.id)
+            .filter(BlogCategory.id.in_(request.category_ids))
+            .all()
+        )
+        existing_ids = {row.id for row in existing}
+        invalid = set(request.category_ids) - existing_ids
+        if invalid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid category IDs: {sorted(invalid)}",
+            )
     post = BlogService.create_post(db, request.model_dump(), admin.id)
     return _serialize_post(post)
 

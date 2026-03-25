@@ -120,11 +120,15 @@ export default function AdminBlogEditorPage() {
       if (isEdit && id) {
         await blogAdminApi.updatePost(Number(id), form, token);
         if (publish !== undefined) {
-          if (publish) {
+          if (publish && !post?.is_published) {
+            await blogAdminApi.publishPost(Number(id), token);
+          } else if (!publish && post?.is_published) {
             await blogAdminApi.publishPost(Number(id), token);
           }
-          // For unpublish, update with is_published via updatePost is handled by backend
         }
+        // Refresh post state to reflect publish toggle
+        const updated = await blogAdminApi.getPost(Number(id), token);
+        setPost(updated.data);
         toast.success(t("common.success"));
       } else {
         const res = await blogAdminApi.createPost(form, token);

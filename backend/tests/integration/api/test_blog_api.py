@@ -310,11 +310,8 @@ class TestBlogCategories:
             },
             headers=headers,
         )
-        # Should fail with 500 (FK violation) or 400
-        assert response.status_code in (
-            status.HTTP_400_BAD_REQUEST,
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Invalid category IDs" in response.json()["detail"]
 
 
 class TestBlogPublicAPI:
