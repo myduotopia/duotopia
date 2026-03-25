@@ -185,10 +185,10 @@ export default function AdminBlogPage() {
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition border ${
                 statusFilter === s
-                  ? "bg-primary text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  ? "bg-blue-50 text-blue-700 border-blue-300"
+                  : "bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200"
               }`}
             >
               {s === "all"
