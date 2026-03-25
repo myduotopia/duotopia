@@ -232,7 +232,7 @@ export function AssignmentDetailSheet({
     const avg =
       scoredStudents.reduce((sum, sp) => sum + sp.score!, 0) /
       scoredStudents.length;
-    return `${avg.toFixed(1)}${assignment?.practice_mode === "word_selection" ? "%" : ""}`;
+    return `${avg.toFixed(1)}`;
   }, [studentProgress, assignment?.practice_mode]);
 
   // 是否有學生已開始作答（用於鎖定影響計分的設定）
@@ -1130,8 +1130,6 @@ export function AssignmentDetailSheet({
                               }`}
                             >
                               {sp.score!.toFixed(1)}
-                              {assignment.practice_mode === "word_selection" &&
-                                "%"}
                             </span>
                           )}
                           <span

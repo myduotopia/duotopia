@@ -683,7 +683,7 @@ async def submit_assignment(
             ).fetchone()
             if result:
                 current_mastery = float(result.current_mastery) * 100
-                student_assignment.score = min(100, int(current_mastery))
+                student_assignment.score = min(100, round(current_mastery))
             else:
                 student_assignment.score = 0
     else:
@@ -1576,7 +1576,7 @@ async def submit_word_selection_answer(
         if student_assignment.status != AssignmentStatus.GRADED:
             # Auto-submit only when mastery = 100%
             if current_mastery >= 1.0:
-                student_assignment.score = min(100.0, current_mastery * 100)
+                student_assignment.score = min(100, round(current_mastery * 100))
                 student_assignment.status = AssignmentStatus.GRADED
                 student_assignment.submitted_at = datetime.now(timezone.utc)
         # If already GRADED, score is locked — do not update
@@ -1726,7 +1726,7 @@ async def complete_word_selection_assignment(
 
     # Calculate final score based on mastery — lock score at submission time
     # Issue #165: Fix - use 'score' column instead of non-existent 'final_score'
-    student_assignment.score = min(100, int(current_mastery))
+    student_assignment.score = min(100, round(current_mastery))
 
     db.commit()
 
