@@ -2,12 +2,13 @@
 Blog service: business logic for blog posts and categories.
 """
 
+import html as html_lib
 import logging
 import re
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, contains_eager, joinedload
 from sqlalchemy import desc
 
 from models.blog import BlogPost, BlogCategory, BlogPostCategory
@@ -38,16 +39,23 @@ class BlogService:
         category_slug: Optional[str] = None,
     ) -> dict:
         """Get paginated published posts, ordered by published_at DESC."""
-        query = (
-            db.query(BlogPost)
-            .options(joinedload(BlogPost.categories))
-            .options(joinedload(BlogPost.author))
-            .filter(BlogPost.is_published.is_(True))
-        )
-
         if category_slug:
-            query = query.join(BlogPost.categories).filter(
-                BlogCategory.slug == category_slug
+            query = (
+                db.query(BlogPost)
+                .join(BlogPost.categories)
+                .options(contains_eager(BlogPost.categories))
+                .options(joinedload(BlogPost.author))
+                .filter(
+                    BlogPost.is_published.is_(True),
+                    BlogCategory.slug == category_slug,
+                )
+            )
+        else:
+            query = (
+                db.query(BlogPost)
+                .options(joinedload(BlogPost.categories))
+                .options(joinedload(BlogPost.author))
+                .filter(BlogPost.is_published.is_(True))
             )
 
         total = query.count()
@@ -118,7 +126,8 @@ class BlogService:
     @staticmethod
     def create_post(db: Session, data: dict, author_id: int) -> BlogPost:
         """Create a new blog post."""
-        slug = data.get("slug") or _generate_slug(data["title"])
+        raw_slug = data.get("slug")
+        slug = _generate_slug(raw_slug) if raw_slug else _generate_slug(data["title"])
 
         # Ensure slug uniqueness
         existing = db.query(BlogPost).filter(BlogPost.slug == slug).first()
@@ -174,7 +183,10 @@ class BlogService:
         ]
         for field in updatable_fields:
             if field in data:
-                setattr(post, field, data[field])
+                value = data[field]
+                if field == "slug" and value:
+                    value = _generate_slug(value)
+                setattr(post, field, value)
 
         # Handle category update
         if "category_ids" in data:
@@ -331,10 +343,10 @@ class BlogService:
         if not post:
             return None
 
-        title = post.meta_title or post.title
-        description = post.meta_description or post.summary or ""
-        og_image = post.og_image_url or post.cover_image_url or ""
-        url = f"https://duotopia.co/blog/{post.slug}"
+        title = html_lib.escape(post.meta_title or post.title)
+        description = html_lib.escape(post.meta_description or post.summary or "")
+        og_image = html_lib.escape(post.og_image_url or post.cover_image_url or "")
+        url = f"https://duotopia.co/blog/{html_lib.escape(post.slug)}"
 
         html = (
             "<!DOCTYPE html>\n"

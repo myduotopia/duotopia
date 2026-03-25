@@ -298,6 +298,24 @@ class TestBlogCategories:
         assert "Cat 1" in cat_names
         assert "Cat 2" in cat_names
 
+    def test_create_post_with_invalid_category_id(
+        self, test_client, shared_test_session
+    ):
+        _, headers = self._make_admin(shared_test_session)
+        response = test_client.post(
+            "/api/blog",
+            json={
+                "title": "Invalid Cat Post",
+                "category_ids": [99999],
+            },
+            headers=headers,
+        )
+        # Should fail with 500 (FK violation) or 400
+        assert response.status_code in (
+            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
 
 class TestBlogPublicAPI:
     """Test public blog read endpoints."""

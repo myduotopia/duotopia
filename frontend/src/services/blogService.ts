@@ -14,7 +14,7 @@ export interface BlogPost {
   og_image_url: string | null;
   is_published: boolean;
   published_at: string | null;
-  author_name: string | null;
+  author: { id: number; name: string } | null;
   categories: BlogCategory[];
   created_at: string;
   updated_at: string | null;

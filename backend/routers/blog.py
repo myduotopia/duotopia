@@ -1,6 +1,9 @@
 """Blog admin routes for managing blog posts and categories."""
 
 import logging
+import os
+import uuid
+from datetime import datetime as dt
 from typing import List, Optional
 
 from fastapi import (
@@ -258,10 +261,6 @@ async def upload_image(
 
     try:
         # Use the image upload service with blog prefix
-        import os
-        import uuid
-        from datetime import datetime as dt
-
         environment = os.getenv("ENVIRONMENT", "development")
         file_id = str(uuid.uuid4())
         timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
