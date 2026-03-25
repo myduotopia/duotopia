@@ -64,6 +64,7 @@ interface WordSelectionActivityProps {
   assignmentId: number;
   isPreviewMode?: boolean;
   isDemoMode?: boolean; // Demo mode - uses public demo API endpoints
+  initialPracticeMode?: boolean; // True when assignment is already GRADED (re-practice)
   onComplete?: () => void;
 }
 
@@ -71,6 +72,7 @@ export default function WordSelectionActivity({
   assignmentId,
   isPreviewMode = false,
   isDemoMode = false,
+  initialPracticeMode = false,
   onComplete,
 }: WordSelectionActivityProps) {
   const { t } = useTranslation();
@@ -105,7 +107,7 @@ export default function WordSelectionActivity({
   const [showAchievementDialog, setShowAchievementDialog] = useState(false);
 
   // Issue #460: Practice-only mode (assignment already submitted, score locked)
-  const [isPracticeMode, setIsPracticeMode] = useState(false);
+  const [isPracticeMode, setIsPracticeMode] = useState(initialPracticeMode);
 
   // Round tracking
   const [roundCompleted, setRoundCompleted] = useState(false);
