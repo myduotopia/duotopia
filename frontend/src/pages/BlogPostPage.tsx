@@ -166,7 +166,10 @@ export default function BlogPostPage() {
         {/* Content */}
         {post.content && (
           <article className="prose prose-lg max-w-none prose-headings:font-bold prose-a:text-blue-600">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw]}
+            >
               {post.content}
             </ReactMarkdown>
           </article>

@@ -73,7 +73,10 @@ export default function AdminBlogPage() {
   const handleAddCategory = async () => {
     if (!newCatName.trim()) return;
     try {
-      await blogAdminApi.createCategory({ name: newCatName.trim(), slug: "" }, token);
+      await blogAdminApi.createCategory(
+        { name: newCatName.trim(), slug: "" },
+        token,
+      );
       setNewCatName("");
       setShowCatForm(false);
       toast.success(t("common.success"));

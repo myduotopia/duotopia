@@ -374,7 +374,10 @@ export default function AdminBlogEditorPage() {
               }`}
             >
               <article className="prose prose-lg max-w-none prose-headings:font-bold prose-a:text-blue-600">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeRaw]}
+                >
                   {form.content || ""}
                 </ReactMarkdown>
               </article>
