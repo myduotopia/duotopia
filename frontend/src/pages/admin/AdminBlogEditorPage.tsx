@@ -55,7 +55,7 @@ export default function AdminBlogEditorPage() {
     if (!token) return;
     blogAdminApi
       .getCategories(token)
-      .then((res) => setCategories(res.data))
+      .then((res) => setCategories(Array.isArray(res.data) ? res.data : []))
       .catch(() => {});
   }, [token]);
 
@@ -77,7 +77,7 @@ export default function AdminBlogEditorPage() {
           meta_title: p.meta_title ?? "",
           meta_description: p.meta_description ?? "",
           og_image_url: p.og_image_url ?? "",
-          category_ids: p.categories.map((c) => c.id),
+          category_ids: (p.categories ?? []).map((c) => c.id),
         });
         setSlugManuallyEdited(true);
       })

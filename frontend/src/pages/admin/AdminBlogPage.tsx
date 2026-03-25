@@ -115,7 +115,7 @@ export default function AdminBlogPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
-                        {post.categories.map((cat) => (
+                        {(post.categories ?? []).map((cat) => (
                           <span
                             key={cat.id}
                             className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs"
