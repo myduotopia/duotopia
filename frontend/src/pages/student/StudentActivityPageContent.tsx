@@ -1732,9 +1732,15 @@ export default function StudentActivityPageContent({
     const answer = answers.get(activity.id);
 
     // 單字集類型使用新的 SentenceMakingActivity 組件，不要進入舊的 GroupedQuestionsTemplate
-    // 例句集 + rearrangement 模式使用 RearrangementActivity，也不要進入 GroupedQuestionsTemplate
+    // 例句集/單字集 + rearrangement 模式使用 RearrangementActivity，也不要進入 GroupedQuestionsTemplate
     const isRearrangementMode =
-      isExampleSentencesType(activity.type) && practiceMode === "rearrangement";
+      (isExampleSentencesType(activity.type) ||
+        isVocabularySetType(activity.type)) &&
+      practiceMode === "rearrangement";
+    // 單字集 + 例句模式（reading/rearrangement）→ 走例句模式組件
+    const isVocabInSentenceMode =
+      isVocabularySetType(activity.type) &&
+      (practiceMode === "reading" || practiceMode === "rearrangement");
 
     if (
       activity.items &&
@@ -1940,6 +1946,74 @@ export default function StudentActivityPageContent({
 
     // 單字集類型（包含 SENTENCE_MAKING 和 VOCABULARY_SET）
     if (isVocabularySetType(activity.type)) {
+      // 單字集 + 例句模式 → 走例句模式組件（用 example_sentence 出題）
+      if (isVocabInSentenceMode) {
+        if (practiceMode === "rearrangement") {
+          return (
+            <RearrangementActivity
+              studentAssignmentId={assignmentId}
+              isPreviewMode={isPreviewMode}
+              isDemoMode={isDemoMode}
+              showAnswer={showAnswer}
+              isPracticeMode={
+                assignmentStatus === "SUBMITTED" ||
+                assignmentStatus === "RESUBMITTED" ||
+                assignmentStatus === "GRADED"
+              }
+              currentQuestionIndex={rearrangementQuestionIndex}
+              onQuestionIndexChange={setRearrangementQuestionIndex}
+              onQuestionsLoaded={(questions, states) => {
+                setRearrangementQuestions(questions);
+                setRearrangementQuestionStates(states);
+              }}
+              onQuestionStateChange={setRearrangementQuestionStates}
+              onComplete={async (totalScore, totalQuestions) => {
+                if (onSubmit) {
+                  try {
+                    await onSubmit({ answers: [] });
+                    toast.success(
+                      t("rearrangement.messages.allComplete", {
+                        score: totalScore,
+                        total: totalQuestions * 100,
+                      }),
+                    );
+                  } catch (error) {
+                    console.error("Submission failed:", error);
+                  }
+                } else {
+                  toast.success(
+                    t("rearrangement.messages.allComplete", {
+                      score: totalScore,
+                      total: totalQuestions * 100,
+                    }),
+                  );
+                }
+              }}
+            />
+          );
+        }
+        // reading mode: 使用例句朗讀組件
+        return (
+          <ReadingAssessmentTemplate
+            content={activity.content}
+            targetText={activity.target_text}
+            existingAudioUrl={answer?.audioUrl}
+            onRecordingComplete={handleRecordingComplete}
+            exampleAudioUrl={activity.example_audio_url}
+            progressId={activity.id}
+            readOnly={isReadOnly}
+            isDemoMode={isDemoMode}
+            timeLimit={activity.duration || 60}
+            canUseAiAnalysis={canUseAiAnalysis}
+            onSkip={
+              currentActivityIndex < activities.length - 1
+                ? () => handleActivitySelect(currentActivityIndex + 1)
+                : undefined
+            }
+          />
+        );
+      }
+
       // Check practice mode for vocabulary set
       if (practiceMode === "word_reading") {
         // Phase 2-2: 單字朗讀練習
