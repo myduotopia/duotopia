@@ -2183,8 +2183,6 @@ export default function TeacherAssignmentDetailPage() {
                             >
                               {progress.is_interim_score && "~"}
                               {(progress.score || 0).toFixed(1)}
-                              {assignment?.practice_mode === "word_selection" &&
-                                "%"}
                             </span>
                           ) : (
                             <span className="text-gray-300 dark:text-gray-600">
