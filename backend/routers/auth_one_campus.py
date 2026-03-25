@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from auth import create_access_token
 from core.config import settings
 from database import get_db
-from models.user import Student
+from models.user import Student, Teacher, TeacherOrganization, TeacherSchool
 from routers.students.auth import (
     _get_aggregated_classrooms,
 )
@@ -46,7 +46,9 @@ router = APIRouter(prefix="/api/auth/1campus", tags=["auth-1campus"])
 class OneCampusCallbackResponse(BaseModel):
     access_token: Optional[str] = None
     token_type: str = "bearer"
+    role_type: str = "student"  # "student" or "teacher"
     student: Optional[dict] = None
+    user: Optional[dict] = None  # teacher login response
     action: str  # "login", "created", "merge_prompt"
     merge_info: Optional[dict] = None
 
@@ -144,6 +146,53 @@ def _build_student_response(db: Session, student: Student) -> dict:
     }
 
 
+def _build_teacher_response(db: Session, teacher: Teacher) -> dict:
+    """Build the teacher login response payload (same shape as email login)."""
+    # Query organization role
+    teacher_org = (
+        db.query(TeacherOrganization)
+        .filter(
+            TeacherOrganization.teacher_id == teacher.id,
+            TeacherOrganization.is_active.is_(True),
+        )
+        .first()
+    )
+
+    # Query school role
+    teacher_school = (
+        db.query(TeacherSchool)
+        .filter(
+            TeacherSchool.teacher_id == teacher.id,
+            TeacherSchool.is_active.is_(True),
+        )
+        .first()
+    )
+
+    # Determine role (priority: org > school > teacher)
+    role = "teacher"
+    organization_id = None
+    school_id = None
+
+    if teacher_org:
+        role = teacher_org.role
+        organization_id = str(teacher_org.organization_id)
+    elif teacher_school:
+        if teacher_school.roles and len(teacher_school.roles) > 0:
+            role = teacher_school.roles[0]
+        school_id = str(teacher_school.school_id)
+
+    return {
+        "id": teacher.id,
+        "email": teacher.email,
+        "name": teacher.name,
+        "is_demo": teacher.is_demo,
+        "is_admin": teacher.is_admin,
+        "role": role,
+        "organization_id": organization_id,
+        "school_id": school_id,
+    }
+
+
 # --- Endpoints ---
 
 
@@ -185,31 +234,64 @@ async def one_campus_callback(
     role_type = identity_data.get("roleType", "")
     account = identity_data.get("account", "")
 
-    # For now, only handle student role
+    # Step 2: Fetch extended data (idNumberHash) via Data API
+    national_id_hash = None
+    try:
+        user_role_data = await OneCampusService.get_user_role(account=account)
+        for school in user_role_data.get("school", []):
+            # Try student role first, then teacher role
+            for role_key in ("studentRole", "teacherRole"):
+                role_data = school.get(role_key)
+                if role_data and role_data.get("idNumberHash"):
+                    national_id_hash = role_data["idNumberHash"]
+                    break
+            if national_id_hash:
+                break
+    except Exception as e:
+        logger.warning("1Campus getUserRole failed (non-fatal): %s", e)
+
+    # --- Teacher flow ---
+    if role_type == "teacher":
+        teacher_data = identity_data.get("teacher", {})
+        teacher_name = teacher_data.get("teacherName", account)
+
+        identity, teacher, action = OneCampusAccountService.find_or_create_teacher(
+            db=db,
+            one_campus_account=account,
+            teacher_name=teacher_name,
+            national_id_hash=national_id_hash,
+            school_dsns=schoolDsns,
+        )
+
+        access_token = create_access_token(
+            data={
+                "sub": str(teacher.id),
+                "email": teacher.email,
+                "type": "teacher",
+                "name": teacher.name,
+                "role": "teacher",
+            },
+            expires_delta=timedelta(hours=24),
+        )
+
+        return OneCampusCallbackResponse(
+            access_token=access_token,
+            role_type="teacher",
+            user=_build_teacher_response(db, teacher),
+            action=action,
+        )
+
+    # --- Student flow ---
     if role_type != "student" or not identity_data.get("student"):
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported role type: {role_type}. Currently only student SSO is supported.",
+            detail=f"Unsupported role type: {role_type}. Currently only student and teacher SSO are supported.",
         )
 
     student_data = identity_data["student"]
     one_campus_student_id = str(student_data["studentID"])
     student_name = student_data.get("studentName", "")
     student_number = student_data.get("studentNumber")
-
-    # Step 2: Fetch extended data (idNumberHash) via Data API
-    national_id_hash = None
-    try:
-        user_role_data = await OneCampusService.get_user_role(account=account)
-        # Extract idNumberHash from the student role
-        for school in user_role_data.get("school", []):
-            student_role = school.get("studentRole")
-            if student_role and student_role.get("idNumberHash"):
-                national_id_hash = student_role["idNumberHash"]
-                break
-    except Exception as e:
-        # Non-fatal: we can still login without idNumberHash
-        logger.warning("1Campus getUserRole failed (non-fatal): %s", e)
 
     # Step 3: Match or create account
     identity, student, action = OneCampusAccountService.find_or_create_student(
@@ -224,7 +306,6 @@ async def one_campus_callback(
 
     # Step 4: Handle result
     if action == "merge_prompt":
-        # Don't issue token yet — frontend needs to confirm merge
         merge_token = _create_merge_token(
             existing_identity_id=identity.id,
             one_campus_student_id=one_campus_student_id,
@@ -244,18 +325,17 @@ async def one_campus_callback(
             },
         )
 
-    # Issue JWT token
     access_token = create_access_token(
         data={"sub": str(student.id), "type": "student"},
         expires_delta=timedelta(hours=24),
     )
 
-    # Update last_login
     student.last_login = datetime.now(timezone.utc)
     db.commit()
 
     return OneCampusCallbackResponse(
         access_token=access_token,
+        role_type="student",
         student=_build_student_response(db, student),
         action=action,
     )

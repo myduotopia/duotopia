@@ -11,13 +11,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
+import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import api from "@/services/api";
 
 export default function OneCampusCallback() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { login } = useStudentAuthStore();
+  const { login: studentLogin } = useStudentAuthStore();
+  const { login: teacherLogin } = useTeacherAuthStore();
 
   const [status, setStatus] = useState<"loading" | "error" | "merge_prompt">(
     "loading",
@@ -64,24 +66,38 @@ export default function OneCampusCallback() {
       }
 
       // Login success
-      if (data.access_token && data.student) {
-        login(data.access_token, {
-          id: data.student.id,
-          name: data.student.name,
-          email: data.student.email || "",
-          student_number: data.student.student_number || "",
-          classroom_id: data.student.classroom_id,
-          classroom_name: data.student.classroom_name,
-          school_id: data.student.school_id,
-          school_name: data.student.school_name,
-          organization_id: data.student.organization_id,
-          organization_name: data.student.organization_name,
-          has_linked_accounts: data.student.has_linked_accounts,
-          linked_accounts_count: data.student.linked_accounts_count,
-          classrooms: data.student.classrooms,
-          classrooms_count: data.student.classrooms_count,
-        });
-        navigate("/student/dashboard", { replace: true });
+      if (data.access_token) {
+        if (data.role_type === "teacher" && data.user) {
+          teacherLogin(data.access_token, {
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            role: data.user.role,
+            organization_id: data.user.organization_id,
+            school_id: data.user.school_id,
+            is_demo: data.user.is_demo,
+            is_admin: data.user.is_admin,
+          });
+          navigate("/teacher/dashboard", { replace: true });
+        } else if (data.student) {
+          studentLogin(data.access_token, {
+            id: data.student.id,
+            name: data.student.name,
+            email: data.student.email || "",
+            student_number: data.student.student_number || "",
+            classroom_id: data.student.classroom_id,
+            classroom_name: data.student.classroom_name,
+            school_id: data.student.school_id,
+            school_name: data.student.school_name,
+            organization_id: data.student.organization_id,
+            organization_name: data.student.organization_name,
+            has_linked_accounts: data.student.has_linked_accounts,
+            linked_accounts_count: data.student.linked_accounts_count,
+            classrooms: data.student.classrooms,
+            classrooms_count: data.student.classrooms_count,
+          });
+          navigate("/student/dashboard", { replace: true });
+        }
       }
     } catch (err: unknown) {
       setStatus("error");
@@ -116,7 +132,7 @@ export default function OneCampusCallback() {
       const data = response.data;
 
       if (data.access_token && data.student) {
-        login(data.access_token, {
+        studentLogin(data.access_token, {
           id: data.student.id,
           name: data.student.name,
           email: data.student.email || "",

@@ -12,7 +12,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from models.user import Identity, Student
+from models.user import Identity, Student, Teacher
 
 logger = logging.getLogger(__name__)
 
@@ -191,3 +191,108 @@ class OneCampusAccountService:
             target_identity_id,
         )
         return target, primary_student
+
+    @staticmethod
+    def find_or_create_teacher(
+        db: Session,
+        one_campus_account: str,
+        teacher_name: str,
+        national_id_hash: Optional[str] = None,
+        school_dsns: Optional[str] = None,
+    ) -> tuple:
+        """Find existing or create new Identity + Teacher for 1Campus SSO.
+
+        Matching strategy:
+        1. Exact match by one_campus_account on Identity
+        2. Match by national_id_hash (cross-school)
+        3. Create new Identity + Teacher
+
+        Returns: (identity, teacher, action)
+        where action is "existing", "created"
+        """
+        # Step 1: Find Identity by one_campus_account
+        identity = (
+            db.query(Identity)
+            .filter(
+                Identity.one_campus_account == one_campus_account,
+                Identity.is_active.is_(True),
+            )
+            .first()
+        )
+        if identity:
+            teacher = (
+                db.query(Teacher)
+                .filter(
+                    Teacher.identity_id == identity.id,
+                    Teacher.is_active.is_(True),
+                )
+                .first()
+            )
+            if teacher:
+                logger.info(
+                    "1Campus SSO: existing teacher_id=%s, identity_id=%s",
+                    teacher.id,
+                    identity.id,
+                )
+                return identity, teacher, "existing"
+
+        # Step 2: Check national_id_hash for cross-school match
+        if national_id_hash:
+            existing_identity = OneCampusAccountService.find_by_national_id_hash(
+                db, national_id_hash
+            )
+            if existing_identity:
+                # Check if this identity has a linked teacher
+                teacher = (
+                    db.query(Teacher)
+                    .filter(
+                        Teacher.identity_id == existing_identity.id,
+                        Teacher.is_active.is_(True),
+                    )
+                    .first()
+                )
+                if teacher:
+                    # Link 1Campus account to existing identity
+                    existing_identity.one_campus_account = one_campus_account
+                    db.commit()
+                    logger.info(
+                        "1Campus SSO: matched teacher by national_id_hash, "
+                        "teacher_id=%s, identity_id=%s",
+                        teacher.id,
+                        existing_identity.id,
+                    )
+                    return existing_identity, teacher, "existing"
+
+        # Step 3: Create new Identity + Teacher
+        identity = Identity(
+            one_campus_account=one_campus_account,
+            national_id_hash=national_id_hash,
+            email_verified=False,
+            is_active=True,
+        )
+        db.add(identity)
+        db.flush()
+
+        # Generate a placeholder email for Teacher (required NOT NULL)
+        placeholder_email = f"1campus_{one_campus_account}@sso.duotopia.com"
+
+        teacher = Teacher(
+            name=teacher_name,
+            email=placeholder_email,
+            password_hash="!SSO_NO_PASSWORD",
+            has_password=False,
+            identity_id=identity.id,
+            is_active=True,
+        )
+        db.add(teacher)
+        db.commit()
+        db.refresh(identity)
+        db.refresh(teacher)
+
+        logger.info(
+            "1Campus SSO: created new teacher_id=%s, identity_id=%s, account=%s",
+            teacher.id,
+            identity.id,
+            one_campus_account,
+        )
+        return identity, teacher, "created"
