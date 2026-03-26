@@ -1745,7 +1745,7 @@ export default function StudentActivityPageContent({
     if (
       activity.items &&
       activity.items.length > 0 &&
-      !isVocabularySetType(activity.type) &&
+      (!isVocabularySetType(activity.type) || isVocabInSentenceMode) &&
       !isRearrangementMode
     ) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1946,70 +1946,49 @@ export default function StudentActivityPageContent({
 
     // 單字集類型（包含 SENTENCE_MAKING 和 VOCABULARY_SET）
     if (isVocabularySetType(activity.type)) {
-      // 單字集 + 例句模式 → 走例句模式組件（用 example_sentence 出題）
-      if (isVocabInSentenceMode) {
-        if (practiceMode === "rearrangement") {
-          return (
-            <RearrangementActivity
-              studentAssignmentId={assignmentId}
-              isPreviewMode={isPreviewMode}
-              isDemoMode={isDemoMode}
-              showAnswer={showAnswer}
-              isPracticeMode={
-                assignmentStatus === "SUBMITTED" ||
-                assignmentStatus === "RESUBMITTED" ||
-                assignmentStatus === "GRADED"
-              }
-              currentQuestionIndex={rearrangementQuestionIndex}
-              onQuestionIndexChange={setRearrangementQuestionIndex}
-              onQuestionsLoaded={(questions, states) => {
-                setRearrangementQuestions(questions);
-                setRearrangementQuestionStates(states);
-              }}
-              onQuestionStateChange={setRearrangementQuestionStates}
-              onComplete={async (totalScore, totalQuestions) => {
-                if (onSubmit) {
-                  try {
-                    await onSubmit({ answers: [] });
-                    toast.success(
-                      t("rearrangement.messages.allComplete", {
-                        score: totalScore,
-                        total: totalQuestions * 100,
-                      }),
-                    );
-                  } catch (error) {
-                    console.error("Submission failed:", error);
-                  }
-                } else {
+      // 單字集 + 例句重組模式 → 使用 RearrangementActivity
+      // （reading 模式已在上方 guard 進入 GroupedQuestionsTemplate）
+      if (isVocabInSentenceMode && practiceMode === "rearrangement") {
+        return (
+          <RearrangementActivity
+            studentAssignmentId={assignmentId}
+            isPreviewMode={isPreviewMode}
+            isDemoMode={isDemoMode}
+            showAnswer={showAnswer}
+            isPracticeMode={
+              assignmentStatus === "SUBMITTED" ||
+              assignmentStatus === "RESUBMITTED" ||
+              assignmentStatus === "GRADED"
+            }
+            currentQuestionIndex={rearrangementQuestionIndex}
+            onQuestionIndexChange={setRearrangementQuestionIndex}
+            onQuestionsLoaded={(questions, states) => {
+              setRearrangementQuestions(questions);
+              setRearrangementQuestionStates(states);
+            }}
+            onQuestionStateChange={setRearrangementQuestionStates}
+            onComplete={async (totalScore, totalQuestions) => {
+              if (onSubmit) {
+                try {
+                  await onSubmit({ answers: [] });
                   toast.success(
                     t("rearrangement.messages.allComplete", {
                       score: totalScore,
                       total: totalQuestions * 100,
                     }),
                   );
+                } catch (error) {
+                  console.error("Submission failed:", error);
                 }
-              }}
-            />
-          );
-        }
-        // reading mode: 使用例句朗讀組件
-        return (
-          <ReadingAssessmentTemplate
-            content={activity.content}
-            targetText={activity.target_text}
-            existingAudioUrl={answer?.audioUrl}
-            onRecordingComplete={handleRecordingComplete}
-            exampleAudioUrl={activity.example_audio_url}
-            progressId={activity.id}
-            readOnly={isReadOnly}
-            isDemoMode={isDemoMode}
-            timeLimit={activity.duration || 60}
-            canUseAiAnalysis={canUseAiAnalysis}
-            onSkip={
-              currentActivityIndex < activities.length - 1
-                ? () => handleActivitySelect(currentActivityIndex + 1)
-                : undefined
-            }
+              } else {
+                toast.success(
+                  t("rearrangement.messages.allComplete", {
+                    score: totalScore,
+                    total: totalQuestions * 100,
+                  }),
+                );
+              }
+            }}
           />
         );
       }
