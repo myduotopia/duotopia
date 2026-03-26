@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Helmet } from "react-helmet-async";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import BlogHeader from "@/components/blog/BlogHeader";
 import { blogPublicApi } from "@/services/blogService";
@@ -178,7 +179,7 @@ export default function BlogPostPage() {
           <article className="prose prose-lg max-w-none prose-headings:font-bold prose-a:text-blue-600">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeRaw]}
+              rehypePlugins={[rehypeRaw, rehypeSanitize]}
             >
               {post.content}
             </ReactMarkdown>

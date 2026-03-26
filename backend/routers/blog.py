@@ -290,47 +290,41 @@ async def upload_image(
     await file.seek(0)
 
     service = get_image_upload_service()
-    # Override max_file_size for blog images
-    original_max = service.max_file_size
-    service.max_file_size = max_size
 
-    try:
-        # Use the image upload service with blog prefix
-        environment = os.getenv("ENVIRONMENT", "development")
-        file_id = str(uuid.uuid4())
-        timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
+    # Use the image upload service with blog prefix
+    environment = os.getenv("ENVIRONMENT", "development")
+    file_id = str(uuid.uuid4())
+    timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
 
-        content_type = file.content_type or ""
-        base_content_type = content_type.split(";")[0].strip().lower()
-        ext_map = {
-            "image/jpeg": "jpg",
-            "image/jpg": "jpg",
-            "image/png": "png",
-            "image/gif": "gif",
-            "image/webp": "webp",
-        }
-        extension = ext_map.get(base_content_type, "jpg")
-        filename = f"{timestamp}_{file_id}.{extension}"
+    content_type = file.content_type or ""
+    base_content_type = content_type.split(";")[0].strip().lower()
+    ext_map = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/gif": "gif",
+        "image/webp": "webp",
+    }
+    extension = ext_map.get(base_content_type, "jpg")
+    filename = f"{timestamp}_{file_id}.{extension}"
 
-        if service.use_gcs:
-            blob_name = f"blog/{environment}/{filename}"
-            client = service._get_storage_client()
-            if not client:
-                raise HTTPException(
-                    status_code=500,
-                    detail="GCS client initialization failed",
-                )
-            bucket = client.bucket(service.bucket_name)
-            blob = bucket.blob(blob_name)
-            blob.upload_from_string(content, content_type=base_content_type)
-            blob.make_public()
-            image_url = blob.public_url
-        else:
-            image_url = await service.upload_image(file)
+    if service.use_gcs:
+        blob_name = f"blog/{environment}/{filename}"
+        client = service._get_storage_client()
+        if not client:
+            raise HTTPException(
+                status_code=500,
+                detail="GCS client initialization failed",
+            )
+        bucket = client.bucket(service.bucket_name)
+        blob = bucket.blob(blob_name)
+        blob.upload_from_string(content, content_type=base_content_type)
+        blob.make_public()
+        image_url = blob.public_url
+    else:
+        image_url = await service.upload_image(file)
 
-        return {"url": image_url}
-    finally:
-        service.max_file_size = original_max
+    return {"url": image_url}
 
 
 @router.get("/{post_id}", response_model=BlogPostResponse)
