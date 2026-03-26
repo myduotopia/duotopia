@@ -721,7 +721,7 @@ class TestAutoGradedScoreCalculation:
             if total_words == 0:
                 return 0
             current_mastery = (words_mastered / total_words) * 100
-            return min(100, int(current_mastery))
+            return min(100, round(current_mastery))
 
         # 測試完全掌握
         score = calculate_word_selection_score(10, 10)
@@ -742,6 +742,10 @@ class TestAutoGradedScoreCalculation:
         # 測試零總數（邊界情況）
         score = calculate_word_selection_score(0, 0)
         assert score == 0
+
+        # 測試四捨五入（round vs int 行為差異）
+        score = calculate_word_selection_score(757, 1000)  # 75.7% -> rounds to 76
+        assert score == 76
 
     def test_auto_graded_score_recording_logic(self):
         """測試自動批改分數記錄邏輯"""
@@ -775,7 +779,7 @@ class TestAutoGradedScoreCalculation:
                         mastery_data.get("words_mastered", 0)
                         / max(mastery_data.get("total_words", 1), 1)
                     ) * 100
-                    result["score"] = min(100, int(current_mastery))
+                    result["score"] = min(100, round(current_mastery))
                 else:
                     result["score"] = 0
 

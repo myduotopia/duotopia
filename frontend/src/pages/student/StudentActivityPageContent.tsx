@@ -1980,12 +1980,13 @@ export default function StudentActivityPageContent({
             assignmentId={assignmentId}
             isPreviewMode={isPreviewMode}
             isDemoMode={isDemoMode}
+            initialPracticeMode={assignmentStatus === "GRADED"}
             onComplete={() => {
               toast.success(
                 t("wordSelection.toast.completed") || "作業已完成！",
               );
               // 導航回作業列表
-              window.location.href = "/student/assignments";
+              onBack?.();
             }}
           />
         );

@@ -920,7 +920,8 @@
       "continue": "繼續作業",
       "view": "檢視作業",
       "viewResults": "查看結果",
-      "resubmit": "開始訂正"
+      "resubmit": "開始訂正",
+      "practice": "自主練習"
     },
     "scoreCategory": {
       "speaking": "口說",
@@ -984,7 +985,8 @@
       "view": "檢視作業",
       "startAssignment": "開始作業",
       "continueAssignment": "繼續作業",
-      "resubmit": "開始訂正"
+      "resubmit": "開始訂正",
+      "practice": "自主練習"
     },
     "overview": {
       "estimatedTime": "預估時間: {{time}}",
@@ -4537,6 +4539,12 @@
     "wordsMastered": "已熟練 {{mastered}} / {{total}} 個單字",
     "targetReached": "恭喜！您已達到目標熟悉度！",
     "continuePractice": "繼續練習",
+    "keepPracticing": "先不提交，繼續練習",
+    "submitAssignment": "提交作業",
+    "submitPrompt": "是否提交作業？提交後仍可繼續練習，但成績將不再改變。",
+    "practiceModeHint": "自主練習模式 — 不影響已提交的成績",
+    "practiceModeHeader": "自主練習模式 — 已提交的成績不會改變",
+    "backToList": "返回作業列表",
     "close": "關閉",
     "nextRound": "開始下一輪",
     "achievementTitle": "恭喜達標！",
@@ -4546,7 +4554,8 @@
       "submitFailed": "提交答案失敗",
       "cannotCompletePreview": "預覽模式無法完成作業",
       "completed": "作業已完成！",
-      "completeFailed": "完成作業失敗"
+      "submitted": "作業已提交！",
+      "completeFailed": "提交作業失敗"
     }
   },
   "workspace": {
