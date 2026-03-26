@@ -13,7 +13,8 @@ depends_on = None
 
 def upgrade() -> None:
     # Add example_sentence_audio_url column (idempotent)
-    op.execute("""
+    op.execute(
+        """
         DO $$ BEGIN
             IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                           WHERE table_name = 'content_items'
@@ -21,7 +22,8 @@ def upgrade() -> None:
                 ALTER TABLE content_items ADD COLUMN example_sentence_audio_url TEXT;
             END IF;
         END $$;
-    """)
+    """
+    )
 
 
 def downgrade() -> None:

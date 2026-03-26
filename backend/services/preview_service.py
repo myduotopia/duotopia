@@ -74,7 +74,11 @@ def get_sentence_fields(item: ContentItem, content_type, practice_mode: str):
         if not sentence:
             return None  # skip this item
         audio = item.example_sentence_audio_url or item.audio_url
-        return sentence, (item.example_sentence_translation or item.translation or ""), audio
+        return (
+            sentence,
+            (item.example_sentence_translation or item.translation or ""),
+            audio,
+        )
     return item.text, item.translation, item.audio_url
 
 

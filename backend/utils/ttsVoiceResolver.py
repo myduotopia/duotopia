@@ -44,15 +44,10 @@ def get_voice_and_rate(
 
     Resolves "Random" accent/gender on each call.
     """
-    resolved_accent = (
-        random.choice(ACCENT_CHOICES) if accent == "Random" else accent
-    )
-    resolved_gender = (
-        random.choice(GENDER_CHOICES) if gender == "Random" else gender
-    )
+    resolved_accent = random.choice(ACCENT_CHOICES) if accent == "Random" else accent
+    resolved_gender = random.choice(GENDER_CHOICES) if gender == "Random" else gender
     voice = (
-        VOICE_MAP.get(resolved_accent, {}).get(resolved_gender)
-        or "en-US-JennyNeural"
+        VOICE_MAP.get(resolved_accent, {}).get(resolved_gender) or "en-US-JennyNeural"
     )
     rate = RATE_MAP.get(speed, "+0%")
     return voice, rate

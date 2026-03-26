@@ -250,9 +250,7 @@ async def create_content(
                 example_sentence_definition=item_data.get(
                     "example_sentence_definition"
                 ),
-                example_sentence_audio_url=item_data.get(
-                    "example_sentence_audio_url"
-                ),
+                example_sentence_audio_url=item_data.get("example_sentence_audio_url"),
                 word_count=word_count,
                 max_errors=max_errors,
                 # 單字集相關欄位

@@ -1382,9 +1382,7 @@ function SortableRowInner({
             <button
               onClick={() => {
                 const audio = new Audio(row.example_sentence_audio_url);
-                audio.play().catch((err) =>
-                  console.error("Play failed:", err),
-                );
+                audio.play().catch((err) => console.error("Play failed:", err));
               }}
               className="p-1 rounded text-green-600 hover:bg-green-100"
               title={t("contentEditor.tooltips.playAudio")}
@@ -1397,9 +1395,8 @@ function SortableRowInner({
             <button
               onClick={async () => {
                 if (!row.example_sentence) return;
-                const { getVoiceAndRate } = await import(
-                  "@/utils/ttsVoiceResolver"
-                );
+                const { getVoiceAndRate } =
+                  await import("@/utils/ttsVoiceResolver");
                 const { voice, rate } = getVoiceAndRate(
                   row.audioSettings?.accent || "American English",
                   row.audioSettings?.gender || "Male",
@@ -1424,7 +1421,9 @@ function SortableRowInner({
                   }
                 } catch (err) {
                   console.error("TTS generation failed:", err);
-                  toast.error(t("contentEditor.messages.audioGenerationFailed"));
+                  toast.error(
+                    t("contentEditor.messages.audioGenerationFailed"),
+                  );
                 }
               }}
               className={`p-1 rounded ${
@@ -1445,11 +1444,7 @@ function SortableRowInner({
           {row.example_sentence_audio_url && (
             <button
               onClick={() => {
-                handleUpdateRow(
-                  index,
-                  "example_sentence_audio_url",
-                  "",
-                );
+                handleUpdateRow(index, "example_sentence_audio_url", "");
               }}
               className="p-1 rounded text-red-500 hover:bg-red-100"
               title={t("contentEditor.tooltips.removeAudio")}

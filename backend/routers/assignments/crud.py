@@ -297,9 +297,7 @@ async def create_assignment(
                 item.example_sentence_audio_url = audio_url
                 tts_generated += 1
             except Exception as e:
-                logger.warning(
-                    f"TTS generation failed for item {item.id}: {e}"
-                )
+                logger.warning(f"TTS generation failed for item {item.id}: {e}")
         if tts_generated > 0:
             logger.info(
                 f"Auto-generated example sentence TTS for "
