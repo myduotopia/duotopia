@@ -147,6 +147,16 @@ class RearrangementRetryRequest(BaseModel):
     content_item_id: int
 
 
+class RearrangementSelectionRecord(BaseModel):
+    """單次選字記錄"""
+
+    position: int  # 第幾個位置（正確答案的 index）
+    selected: str  # 學生選的字
+    correct: str  # 正確的字
+    is_correct: bool  # 是否正確
+    timestamp: str  # ISO 8601 時間戳
+
+
 class RearrangementCompleteRequest(BaseModel):
     """完成題目請求"""
 
@@ -154,3 +164,4 @@ class RearrangementCompleteRequest(BaseModel):
     timeout: bool = False  # 是否因超時完成
     expected_score: Optional[float] = None  # 最終分數
     error_count: Optional[int] = None  # 錯誤次數
+    selections: Optional[List[RearrangementSelectionRecord]] = None  # 完整答題歷程

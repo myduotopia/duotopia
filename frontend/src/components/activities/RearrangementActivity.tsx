@@ -108,6 +108,19 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   const questionsRef = useRef<RearrangementQuestion[]>([]);
   // 用 ref 存儲 questionStates，確保 timer callback 能獲取最新狀態
   const questionStatesRef = useRef(questionStates);
+  // 累積每題的選字歷程，key = content_item_id
+  const selectionsRef = useRef<
+    Map<
+      number,
+      Array<{
+        position: number;
+        selected: string;
+        correct: string;
+        is_correct: boolean;
+        timestamp: string;
+      }>
+    >
+  >(new Map());
 
   // 使用受控或內部索引
   const currentQuestionIndex = controlledIndex ?? internalQuestionIndex;
@@ -407,6 +420,8 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
               timeout: true,
               expected_score: actualScore,
               error_count: errorCount,
+              selections:
+                selectionsRef.current.get(contentItemId) || [],
             },
           );
         } catch (error) {
@@ -470,6 +485,18 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     const currentPosition = currentState.selectedWords.length;
     const correctWord = correctWords[currentPosition] || "";
     const isCorrect = word.trim() === correctWord.trim();
+
+    // 記錄選字歷程
+    const itemId = currentQuestion.content_item_id;
+    const prevSelections = selectionsRef.current.get(itemId) || [];
+    prevSelections.push({
+      position: currentPosition,
+      selected: word.trim(),
+      correct: correctWord.trim(),
+      is_correct: isCorrect,
+      timestamp: new Date().toISOString(),
+    });
+    selectionsRef.current.set(itemId, prevSelections);
 
     // 計算新的錯誤次數
     const newErrorCount = isCorrect
@@ -566,6 +593,9 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
               content_item_id: currentQuestion.content_item_id,
               expected_score: finalScore,
               error_count: newErrorCount,
+              selections:
+                selectionsRef.current.get(currentQuestion.content_item_id) ||
+                [],
             },
           );
         } catch (error) {
@@ -618,6 +648,9 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       });
       return newStates;
     });
+
+    // 重置該題的選字歷程（新一輪重試）
+    selectionsRef.current.set(currentQuestion.content_item_id, []);
 
     // 重新開始計時
     startTimer(currentQuestion.content_item_id);

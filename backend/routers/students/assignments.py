@@ -2116,6 +2116,13 @@ async def complete_rearrangement(
         .first()
     )
 
+    # 組裝 rearrangement_data（包含完整答題歷程）
+    rearrangement_data = {}
+    if request.selections:
+        rearrangement_data["selections"] = [s.model_dump() for s in request.selections]
+    rearrangement_data["completed_at"] = datetime.now(timezone.utc).isoformat()
+    rearrangement_data["timeout"] = request.timeout
+
     if not progress:
         # 防禦性：建立新記錄（正常情況下應該已存在）
         progress = StudentItemProgress(
@@ -2125,6 +2132,7 @@ async def complete_rearrangement(
             timeout_ended=request.timeout,
             expected_score=request.expected_score or 0,
             error_count=request.error_count or 0,
+            rearrangement_data=rearrangement_data,
         )
         db.add(progress)
     else:
@@ -2137,6 +2145,11 @@ async def complete_rearrangement(
             progress.expected_score = request.expected_score
         if request.error_count is not None:
             progress.error_count = request.error_count
+
+        # 合併答題歷程（保留既有 retries 等資訊）
+        existing_data = progress.rearrangement_data or {}
+        existing_data.update(rearrangement_data)
+        progress.rearrangement_data = existing_data
 
     db.commit()
 
