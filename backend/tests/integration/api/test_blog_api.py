@@ -188,6 +188,117 @@ class TestBlogAdminCRUD:
         assert unpub_res.json()["published_at"] is None
 
 
+class TestBlogAdminFilters:
+    """Test admin list filters (status and category_id)."""
+
+    def _make_admin(self, session):
+        teacher = Teacher(
+            email="admin-filter@duotopia.com",
+            password_hash=get_password_hash("admin123"),
+            name="Filter Admin",
+            is_active=True,
+            is_admin=True,
+            email_verified=True,
+        )
+        session.add(teacher)
+        session.commit()
+        session.refresh(teacher)
+        token = create_access_token(data={"sub": str(teacher.id), "type": "teacher"})
+        return teacher, {"Authorization": f"Bearer {token}"}
+
+    def test_filter_by_status_published(self, test_client, shared_test_session):
+        _, headers = self._make_admin(shared_test_session)
+
+        # Create a draft and a published post
+        test_client.post("/api/blog", json={"title": "Filter Draft"}, headers=headers)
+        pub = test_client.post(
+            "/api/blog", json={"title": "Filter Published"}, headers=headers
+        )
+        test_client.post(f"/api/blog/{pub.json()['id']}/publish", headers=headers)
+
+        res = test_client.get(
+            "/api/blog", params={"status": "published"}, headers=headers
+        )
+        assert res.status_code == status.HTTP_200_OK
+        titles = [p["title"] for p in res.json()["posts"]]
+        assert "Filter Published" in titles
+        assert "Filter Draft" not in titles
+
+    def test_filter_by_status_draft(self, test_client, shared_test_session):
+        _, headers = self._make_admin(shared_test_session)
+
+        res = test_client.get("/api/blog", params={"status": "draft"}, headers=headers)
+        assert res.status_code == status.HTTP_200_OK
+        for p in res.json()["posts"]:
+            assert p["is_published"] is False
+
+    def test_filter_by_category_id(self, test_client, shared_test_session):
+        _, headers = self._make_admin(shared_test_session)
+
+        # Create a category
+        cat_res = test_client.post(
+            "/api/blog/categories",
+            json={"name": "Filter Cat"},
+            headers=headers,
+        )
+        cat_id = cat_res.json()["id"]
+
+        # Create post with category and one without
+        test_client.post(
+            "/api/blog",
+            json={"title": "With Category", "category_ids": [cat_id]},
+            headers=headers,
+        )
+        test_client.post(
+            "/api/blog",
+            json={"title": "Without Category"},
+            headers=headers,
+        )
+
+        res = test_client.get(
+            "/api/blog", params={"category_id": cat_id}, headers=headers
+        )
+        assert res.status_code == status.HTTP_200_OK
+        titles = [p["title"] for p in res.json()["posts"]]
+        assert "With Category" in titles
+        assert "Without Category" not in titles
+
+    def test_combined_filters(self, test_client, shared_test_session):
+        _, headers = self._make_admin(shared_test_session)
+
+        cat_res = test_client.post(
+            "/api/blog/categories",
+            json={"name": "Combo Cat"},
+            headers=headers,
+        )
+        cat_id = cat_res.json()["id"]
+
+        # Published post with category
+        pub = test_client.post(
+            "/api/blog",
+            json={"title": "Pub With Cat", "category_ids": [cat_id]},
+            headers=headers,
+        )
+        test_client.post(f"/api/blog/{pub.json()['id']}/publish", headers=headers)
+
+        # Draft post with same category
+        test_client.post(
+            "/api/blog",
+            json={"title": "Draft With Cat", "category_ids": [cat_id]},
+            headers=headers,
+        )
+
+        res = test_client.get(
+            "/api/blog",
+            params={"status": "published", "category_id": cat_id},
+            headers=headers,
+        )
+        assert res.status_code == status.HTTP_200_OK
+        titles = [p["title"] for p in res.json()["posts"]]
+        assert "Pub With Cat" in titles
+        assert "Draft With Cat" not in titles
+
+
 class TestBlogCategories:
     """Test blog category management."""
 

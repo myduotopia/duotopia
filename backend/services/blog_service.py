@@ -100,7 +100,7 @@ class BlogService:
         category_id: Optional[int] = None,
     ) -> dict:
         """Get all posts including drafts (admin), with optional filters."""
-        if category_id:
+        if category_id is not None:
             query = (
                 db.query(BlogPost)
                 .join(BlogPost.categories)

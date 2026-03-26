@@ -73,7 +73,7 @@ class BlogPost(Base):
 
     # Relationships
     linked_post = relationship(
-        "BlogPost", remote_side="BlogPost.id", foreign_keys=[linked_post_id]
+        "BlogPost", remote_side=[id], foreign_keys=[linked_post_id]
     )
     author = relationship("Teacher", foreign_keys=[author_id])
     categories = relationship(

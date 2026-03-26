@@ -93,7 +93,8 @@ export default function AdminBlogPage() {
   };
 
   const handleDeleteCategory = async (id: number, name: string) => {
-    if (!window.confirm(`確定要刪除分類「${name}」嗎？`)) return;
+    if (!window.confirm(t("blog.admin.confirmDeleteCategory", { name })))
+      return;
     try {
       await blogAdminApi.deleteCategory(id, token);
       toast.success(t("common.success"));
@@ -107,7 +108,7 @@ export default function AdminBlogPage() {
   return (
     <AdminLayout
       title={t("blog.admin.title")}
-      description="Blog 文章管理"
+      description={t("blog.admin.description")}
       icon={FileText}
     >
       {/* Category management */}
@@ -122,7 +123,7 @@ export default function AdminBlogPage() {
             onClick={() => setShowCatForm(!showCatForm)}
           >
             <Plus className="h-4 w-4 mr-1" />
-            新增分類
+            {t("blog.admin.addCategory")}
           </Button>
         </div>
         {showCatForm && (
@@ -130,12 +131,12 @@ export default function AdminBlogPage() {
             <Input
               value={newCatName}
               onChange={(e) => setNewCatName(e.target.value)}
-              placeholder="分類名稱"
+              placeholder={t("blog.admin.categoryName")}
               className="max-w-xs"
               onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
             />
             <Button size="sm" onClick={handleAddCategory}>
-              新增
+              {t("blog.admin.add")}
             </Button>
             <Button
               variant="ghost"
@@ -145,7 +146,7 @@ export default function AdminBlogPage() {
                 setNewCatName("");
               }}
             >
-              取消
+              {t("blog.admin.cancel")}
             </Button>
           </div>
         )}
@@ -159,14 +160,16 @@ export default function AdminBlogPage() {
               <button
                 onClick={() => handleDeleteCategory(cat.id, cat.name)}
                 className="text-blue-400 hover:text-red-500 ml-0.5"
-                title="刪除分類"
+                title={t("blog.admin.delete")}
               >
                 <X className="h-3 w-3" />
               </button>
             </span>
           ))}
           {categories.length === 0 && (
-            <span className="text-xs text-gray-400">尚無分類</span>
+            <span className="text-xs text-gray-400">
+              {t("blog.admin.noCategories")}
+            </span>
           )}
         </div>
       </div>
@@ -189,7 +192,7 @@ export default function AdminBlogPage() {
               }`}
             >
               {s === "all"
-                ? "全部"
+                ? t("blog.admin.all")
                 : s === "published"
                   ? t("blog.admin.published")
                   : t("blog.admin.draft")}
@@ -204,7 +207,7 @@ export default function AdminBlogPage() {
             }}
             className="px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border-0 cursor-pointer"
           >
-            <option value="">所有分類</option>
+            <option value="">{t("blog.admin.allCategories")}</option>
             {categories.map((cat) => (
               <option key={cat.id} value={cat.id}>
                 {cat.name}

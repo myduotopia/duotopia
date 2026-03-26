@@ -181,7 +181,7 @@ def _serialize_post(post) -> dict:
 def list_posts(
     page: int = 1,
     per_page: int = 20,
-    status: Optional[str] = None,
+    status: Optional[Literal["published", "draft"]] = None,
     category_id: Optional[int] = None,
     db: Session = Depends(get_db),
     _admin: Teacher = Depends(get_current_admin),

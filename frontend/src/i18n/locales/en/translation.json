@@ -4762,7 +4762,16 @@
       "linkedPost": "Translation",
       "editLinkedPost": "Edit translation",
       "translate": "Create Translation",
-      "createTranslation": "Create translation draft"
+      "createTranslation": "Create translation draft",
+      "all": "All",
+      "allCategories": "All Categories",
+      "addCategory": "Add Category",
+      "add": "Add",
+      "cancel": "Cancel",
+      "categoryName": "Category name",
+      "noCategories": "No categories yet",
+      "description": "Blog post management",
+      "confirmDeleteCategory": "Are you sure you want to delete category \"{{name}}\"?"
     }
   }
 }
