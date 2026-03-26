@@ -3,7 +3,7 @@ Public API endpoints for student login flow
 不需要認證的公開端點
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import Response, HTMLResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -12,7 +12,10 @@ from pydantic import BaseModel, EmailStr
 from database import get_db
 from models import Teacher, Classroom, Student, ClassroomStudent
 from services.blog_service import BlogService
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/public", tags=["public"])
 
@@ -68,7 +71,7 @@ def validate_teacher(request: ValidateTeacherRequest, db: Session = Depends(get_
         return ValidateTeacherResponse(valid=False)
     except Exception as e:
         # 記錄錯誤但返回友善訊息（不洩漏資料庫細節）
-        print(f"❌ validate_teacher error: {str(e)}")
+        logger.error("validate_teacher error: %s", e)
         raise HTTPException(
             status_code=503,
             detail="Database temporarily unavailable. Please try again.",
@@ -177,8 +180,8 @@ def get_config():
 
 @router.get("/blog")
 def get_blog_posts(
-    page: int = 1,
-    per_page: int = 12,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=12, ge=1, le=100),
     category: Optional[str] = None,
     locale: Optional[str] = None,
     db: Session = Depends(get_db),

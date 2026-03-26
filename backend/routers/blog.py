@@ -10,6 +10,7 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     UploadFile,
     File,
 )
@@ -179,8 +180,8 @@ def _serialize_post(post) -> dict:
 
 @router.get("", response_model=BlogPostListResponse)
 def list_posts(
-    page: int = 1,
-    per_page: int = 20,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
     status: Optional[Literal["published", "draft"]] = None,
     category_id: Optional[int] = None,
     db: Session = Depends(get_db),
@@ -274,6 +275,27 @@ def delete_category(
     return {"message": "Category deleted"}
 
 
+# Magic-byte signatures for allowed image types
+_IMAGE_SIGNATURES = {
+    b"\xff\xd8\xff": ("image/jpeg", "jpg"),
+    b"\x89PNG\r\n\x1a\n": ("image/png", "png"),
+    b"GIF87a": ("image/gif", "gif"),
+    b"GIF89a": ("image/gif", "gif"),
+    b"RIFF": ("image/webp", "webp"),  # RIFF....WEBP (checked with extra logic)
+}
+
+
+def _detect_image_type(content: bytes) -> tuple[str, str] | None:
+    """Detect image type from magic bytes. Returns (mime_type, extension) or None."""
+    for sig, result in _IMAGE_SIGNATURES.items():
+        if content.startswith(sig):
+            # Extra check for WEBP: RIFF header must also contain WEBP
+            if sig == b"RIFF" and content[8:12] != b"WEBP":
+                continue
+            return result
+    return None
+
+
 @router.post("/upload-image", response_model=ImageUploadResponse)
 async def upload_image(
     file: UploadFile = File(...),
@@ -288,8 +310,15 @@ async def upload_image(
             status_code=400,
             detail="File too large. Maximum size: 20MB",
         )
-    # Reset file position after reading
-    await file.seek(0)
+
+    # Validate actual file type via magic bytes (don't trust Content-Type header)
+    detected = _detect_image_type(content)
+    if not detected:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image format. Allowed: JPEG, PNG, GIF, WebP",
+        )
+    detected_mime, extension = detected
 
     service = get_image_upload_service()
 
@@ -297,17 +326,6 @@ async def upload_image(
     environment = os.getenv("ENVIRONMENT", "development")
     file_id = str(uuid.uuid4())
     timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
-
-    content_type = file.content_type or ""
-    base_content_type = content_type.split(";")[0].strip().lower()
-    ext_map = {
-        "image/jpeg": "jpg",
-        "image/jpg": "jpg",
-        "image/png": "png",
-        "image/gif": "gif",
-        "image/webp": "webp",
-    }
-    extension = ext_map.get(base_content_type, "jpg")
     filename = f"{timestamp}_{file_id}.{extension}"
 
     if service.use_gcs:
@@ -320,10 +338,11 @@ async def upload_image(
             )
         bucket = client.bucket(service.bucket_name)
         blob = bucket.blob(blob_name)
-        blob.upload_from_string(content, content_type=base_content_type)
-        blob.make_public()
-        image_url = blob.public_url
+        blob.upload_from_string(content, content_type=detected_mime)
+        # Use bucket-level public access instead of per-object ACL
+        image_url = f"https://storage.googleapis.com/{service.bucket_name}/{blob_name}"
     else:
+        await file.seek(0)
         image_url = await service.upload_image(file)
 
     return {"url": image_url}

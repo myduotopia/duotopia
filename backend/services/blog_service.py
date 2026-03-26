@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session, contains_eager, joinedload
-from sqlalchemy import desc
+from sqlalchemy import desc, func as sa_func
 
 from models.blog import BlogPost, BlogCategory, BlogPostCategory
 
@@ -62,7 +62,13 @@ class BlogService:
         if locale:
             query = query.filter(BlogPost.locale == locale)
 
-        total = query.count()
+        # Use distinct count to avoid inflation from joins
+        if category_slug:
+            total = query.with_entities(
+                sa_func.count(sa_func.distinct(BlogPost.id))
+            ).scalar()
+        else:
+            total = query.count()
         posts = (
             query.order_by(desc(BlogPost.published_at))
             .offset((page - 1) * per_page)
@@ -120,7 +126,13 @@ class BlogService:
         elif status == "draft":
             query = query.filter(BlogPost.is_published.is_(False))
 
-        total = query.count()
+        # Use distinct count to avoid inflation from joins
+        if category_id is not None:
+            total = query.with_entities(
+                sa_func.count(sa_func.distinct(BlogPost.id))
+            ).scalar()
+        else:
+            total = query.count()
         posts = (
             query.order_by(desc(BlogPost.created_at))
             .offset((page - 1) * per_page)
@@ -279,6 +291,15 @@ class BlogService:
         """Create a translated version of a post and link them together."""
         source = db.query(BlogPost).filter(BlogPost.id == source_post_id).first()
         if not source:
+            return None
+
+        # Guard: don't overwrite an existing translation link
+        if source.linked_post_id is not None:
+            logger.warning(
+                "Post %s already has a translation linked (id=%s), skipping",
+                source.id,
+                source.linked_post_id,
+            )
             return None
 
         # Build slug: source slug + locale suffix

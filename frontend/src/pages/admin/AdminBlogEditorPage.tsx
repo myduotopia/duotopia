@@ -19,9 +19,13 @@ import type {
 } from "@/services/blogService";
 
 function slugify(text: string): string {
+  // Match backend _generate_slug: strip non-word chars, collapse hyphens
   return text
     .toLowerCase()
-    .replace(/[^\w\u4e00-\u9fff]+/g, "-")
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_]+/g, "-")
+    .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
 
