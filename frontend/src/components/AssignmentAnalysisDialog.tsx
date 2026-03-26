@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -60,6 +61,7 @@ export function AssignmentAnalysisDialog({
   assignmentId,
   assignmentTitle,
 }: AssignmentAnalysisDialogProps) {
+  const { t } = useTranslation();
   const [phase, setPhase] = useState<Phase>("loading");
   const [estimate, setEstimate] = useState<AnalysisEstimate | null>(null);
   const [report, setReport] = useState<AnalysisReport | null>(null);
@@ -74,7 +76,6 @@ export function AssignmentAnalysisDialog({
   const loadEstimateOrReport = async () => {
     setPhase("loading");
     try {
-      // 先檢查是否已有報告
       const reportRes = (await apiClient.get(
         `/api/teachers/assignments/${assignmentId}/analysis-report`,
       )) as { has_report: boolean; report: AnalysisReport | null };
@@ -84,14 +85,13 @@ export function AssignmentAnalysisDialog({
         return;
       }
 
-      // 沒有報告，取得估算
       const estimateRes = (await apiClient.post(
         `/api/teachers/assignments/${assignmentId}/estimate-analysis`,
       )) as AnalysisEstimate;
       setEstimate(estimateRes);
       setPhase("estimate");
     } catch (err) {
-      setError("無法載入分析資訊");
+      setError(t("analysisDialog.errors.loadFailed"));
       setPhase("error");
     }
   };
@@ -125,12 +125,12 @@ export function AssignmentAnalysisDialog({
         completed_at: result.completed_at,
       });
       setPhase("report");
-      toast.success("分析報告已生成");
+      toast.success(t("analysisDialog.messages.reportGenerated"));
     } catch (err: unknown) {
       const errorMessage =
-        err instanceof Error ? err.message : "生成報告失敗，請稍後再試";
+        err instanceof Error ? err.message : t("analysisDialog.errors.generateFailed");
       if (errorMessage.includes("402") || errorMessage.includes("Insufficient")) {
-        setError("點數不足，請先購買點數包");
+        setError(t("analysisDialog.errors.insufficientQuota"));
       } else {
         setError(errorMessage);
       }
@@ -139,13 +139,7 @@ export function AssignmentAnalysisDialog({
   };
 
   const practiceModeName = (mode: string) => {
-    const names: Record<string, string> = {
-      rearrangement: "例句重組",
-      reading: "例句朗讀",
-      word_selection: "單字選擇",
-      word_reading: "單字朗讀",
-    };
-    return names[mode] || mode;
+    return t(`analysisDialog.practiceMode.${mode}`, mode);
   };
 
   const renderReport = () => {
@@ -155,12 +149,11 @@ export function AssignmentAnalysisDialog({
 
     return (
       <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-        {/* 摘要 */}
         {data.overall_summary && (
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
             <h4 className="font-medium mb-2 flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-blue-600" />
-              整體摘要
+              {t("analysisDialog.report.overallSummary")}
             </h4>
             <p className="text-sm text-gray-700 dark:text-gray-300">
               {String(data.overall_summary)}
@@ -168,10 +161,11 @@ export function AssignmentAnalysisDialog({
           </div>
         )}
 
-        {/* 班級統計 */}
         {data.class_statistics && (
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-            <h4 className="font-medium mb-3">班級統計</h4>
+            <h4 className="font-medium mb-3">
+              {t("analysisDialog.report.classStatistics")}
+            </h4>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {Object.entries(
                 data.class_statistics as Record<string, unknown>,
@@ -191,11 +185,12 @@ export function AssignmentAnalysisDialog({
           </div>
         )}
 
-        {/* 困難句子/單字 */}
         {(data.difficult_sentences ?? data.word_analysis) != null && (
           <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4">
             <h4 className="font-medium mb-3">
-              {data.difficult_sentences ? "困難句子" : "單字分析"}
+              {data.difficult_sentences
+                ? t("analysisDialog.report.difficultSentences")
+                : t("analysisDialog.report.wordAnalysis")}
             </h4>
             <div className="space-y-2">
               {(
@@ -203,7 +198,7 @@ export function AssignmentAnalysisDialog({
                 (data.difficult_sentences || data.word_analysis) as any[]
               )
                 ?.slice(0, 5)
-                .map((item, i) => (
+                .map((item: any, i: number) => (
                   <div
                     key={i}
                     className="text-sm border-l-2 border-orange-400 pl-3"
@@ -213,9 +208,9 @@ export function AssignmentAnalysisDialog({
                     </div>
                     <div className="text-gray-500">
                       {item.error_rate
-                        ? `錯誤率: ${String(item.error_rate)}`
+                        ? `${t("analysisDialog.report.errorRate")}: ${String(item.error_rate)}`
                         : item.correct_rate
-                          ? `正確率: ${String(item.correct_rate)}`
+                          ? `${t("analysisDialog.report.correctRate")}: ${String(item.correct_rate)}`
                           : ""}
                     </div>
                     {item.analysis && (
@@ -229,14 +224,15 @@ export function AssignmentAnalysisDialog({
           </div>
         )}
 
-        {/* 學生洞察 */}
         {data.student_insights && (
           <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-            <h4 className="font-medium mb-3">學生分析</h4>
+            <h4 className="font-medium mb-3">
+              {t("analysisDialog.report.studentInsights")}
+            </h4>
             <div className="space-y-3">
               {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
               {(data.student_insights as any[])?.map(
-                (student, i) => (
+                (student: any, i: number) => (
                   <div
                     key={i}
                     className="text-sm bg-white dark:bg-gray-800 rounded p-3"
@@ -246,17 +242,20 @@ export function AssignmentAnalysisDialog({
                     </div>
                     {student.strength && (
                       <div className="text-green-600">
-                        優勢：{String(student.strength)}
+                        {t("analysisDialog.report.strength")}
+                        {String(student.strength)}
                       </div>
                     )}
                     {student.weakness && (
                       <div className="text-orange-600">
-                        弱點：{String(student.weakness)}
+                        {t("analysisDialog.report.weakness")}
+                        {String(student.weakness)}
                       </div>
                     )}
                     {student.suggestion && (
                       <div className="text-blue-600">
-                        建議：{String(student.suggestion)}
+                        {t("analysisDialog.report.suggestion")}
+                        {String(student.suggestion)}
                       </div>
                     )}
                   </div>
@@ -266,22 +265,28 @@ export function AssignmentAnalysisDialog({
           </div>
         )}
 
-        {/* 教學建議 */}
         {data.teaching_suggestions && (
           <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-            <h4 className="font-medium mb-2">教學建議</h4>
+            <h4 className="font-medium mb-2">
+              {t("analysisDialog.report.teachingSuggestions")}
+            </h4>
             <ul className="list-disc list-inside space-y-1 text-sm">
-              {(data.teaching_suggestions as string[])?.map((suggestion, i) => (
-                <li key={i}>{suggestion}</li>
-              ))}
+              {(data.teaching_suggestions as string[])?.map(
+                (suggestion: string, i: number) => (
+                  <li key={i}>{suggestion}</li>
+                ),
+              )}
             </ul>
           </div>
         )}
 
-        {/* 報告資訊 */}
         <div className="text-xs text-gray-400 text-right">
-          生成時間：{report?.completed_at ? new Date(report.completed_at).toLocaleString("zh-TW") : "-"}{" "}
-          | 消耗點數：{report?.points_deducted || 0}
+          {t("analysisDialog.report.generatedAt")}
+          {report?.completed_at
+            ? new Date(report.completed_at).toLocaleString()
+            : "-"}{" "}
+          | {t("analysisDialog.report.pointsUsed")}
+          {report?.points_deducted || 0}
         </div>
       </div>
     );
@@ -293,7 +298,7 @@ export function AssignmentAnalysisDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            作業分析 - {assignmentTitle}
+            {t("analysisDialog.title")} - {assignmentTitle}
           </DialogTitle>
         </DialogHeader>
 
@@ -307,27 +312,35 @@ export function AssignmentAnalysisDialog({
           <div className="space-y-4">
             <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-3">
               <div className="flex justify-between">
-                <span>作業類型</span>
+                <span>{t("analysisDialog.estimate.practiceMode")}</span>
                 <Badge variant="outline">
                   {practiceModeName(estimate.practice_mode)}
                 </Badge>
               </div>
               <div className="flex justify-between">
-                <span>學生人數</span>
-                <span className="font-medium">{estimate.student_count} 人</span>
-              </div>
-              <div className="flex justify-between">
-                <span>預估消耗點數</span>
-                <span className="font-medium text-orange-600">
-                  {estimate.estimated_points} 點
+                <span>{t("analysisDialog.estimate.studentCount")}</span>
+                <span className="font-medium">
+                  {t("analysisDialog.estimate.studentCountValue", {
+                    count: estimate.student_count,
+                  })}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>目前剩餘點數</span>
+                <span>{t("analysisDialog.estimate.estimatedPoints")}</span>
+                <span className="font-medium text-orange-600">
+                  {t("analysisDialog.estimate.pointsValue", {
+                    count: estimate.estimated_points,
+                  })}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>{t("analysisDialog.estimate.remainingQuota")}</span>
                 <span
                   className={`font-medium ${estimate.has_sufficient_quota ? "text-green-600" : "text-red-600"}`}
                 >
-                  {estimate.quota_remaining} 點
+                  {t("analysisDialog.estimate.pointsValue", {
+                    count: estimate.quota_remaining,
+                  })}
                 </span>
               </div>
             </div>
@@ -335,20 +348,22 @@ export function AssignmentAnalysisDialog({
             {!estimate.has_sufficient_quota && (
               <div className="flex items-center gap-2 text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3 text-sm">
                 <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                點數不足，請先購買點數包
+                {t("analysisDialog.errors.insufficientQuota")}
               </div>
             )}
 
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)}>
-                取消
+                {t("analysisDialog.buttons.cancel")}
               </Button>
               <Button
                 onClick={handleGenerate}
                 disabled={!estimate.has_sufficient_quota}
               >
                 <BarChart3 className="h-4 w-4 mr-2" />
-                確認分析（扣 {estimate.estimated_points} 點）
+                {t("analysisDialog.buttons.confirm", {
+                  points: estimate.estimated_points,
+                })}
               </Button>
             </DialogFooter>
           </div>
@@ -357,7 +372,9 @@ export function AssignmentAnalysisDialog({
         {phase === "generating" && (
           <div className="flex flex-col items-center justify-center py-12 gap-4">
             <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-            <p className="text-gray-500">AI 正在分析學生表現，請稍候...</p>
+            <p className="text-gray-500">
+              {t("analysisDialog.messages.generating")}
+            </p>
           </div>
         )}
 
@@ -371,9 +388,11 @@ export function AssignmentAnalysisDialog({
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)}>
-                關閉
+                {t("analysisDialog.buttons.close")}
               </Button>
-              <Button onClick={loadEstimateOrReport}>重試</Button>
+              <Button onClick={loadEstimateOrReport}>
+                {t("analysisDialog.buttons.retry")}
+              </Button>
             </DialogFooter>
           </div>
         )}

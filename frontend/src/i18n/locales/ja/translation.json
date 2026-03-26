@@ -288,5 +288,52 @@
         "description": "単語の正しい翻訳を選択"
       }
     }
+  },
+  "analysisDialog": {
+    "title": "課題分析",
+    "practiceMode": {
+      "rearrangement": "文の並べ替え",
+      "reading": "文の音読",
+      "word_selection": "単語選択",
+      "word_reading": "単語音読"
+    },
+    "estimate": {
+      "practiceMode": "練習モード",
+      "studentCount": "生徒数",
+      "studentCountValue": "{{count}} 人",
+      "estimatedPoints": "予想消費ポイント",
+      "pointsValue": "{{count}} ポイント",
+      "remainingQuota": "残りポイント"
+    },
+    "buttons": {
+      "cancel": "キャンセル",
+      "confirm": "分析する（{{points}} ポイント）",
+      "close": "閉じる",
+      "retry": "再試行"
+    },
+    "messages": {
+      "generating": "AIが生徒のパフォーマンスを分析中です。しばらくお待ちください...",
+      "reportGenerated": "分析レポートが生成されました"
+    },
+    "errors": {
+      "loadFailed": "分析情報の読み込みに失敗しました",
+      "generateFailed": "レポートの生成に失敗しました。後でもう一度お試しください。",
+      "insufficientQuota": "ポイントが不足しています。クレジットを購入してください。"
+    },
+    "report": {
+      "overallSummary": "全体概要",
+      "classStatistics": "クラス統計",
+      "difficultSentences": "難しい文",
+      "wordAnalysis": "単語分析",
+      "studentInsights": "生徒分析",
+      "teachingSuggestions": "指導提案",
+      "errorRate": "エラー率",
+      "correctRate": "正答率",
+      "strength": "強み：",
+      "weakness": "弱点：",
+      "suggestion": "提案：",
+      "generatedAt": "生成日時：",
+      "pointsUsed": "消費ポイント："
+    }
   }
 }
