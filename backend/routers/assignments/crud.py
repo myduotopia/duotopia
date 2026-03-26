@@ -22,6 +22,7 @@ from models import (
     School,
     Content,
     ContentItem,
+    ContentType,
     Lesson,
     Program,
     Assignment,
@@ -210,6 +211,7 @@ async def create_assignment(
                 example_sentence=original_item.example_sentence,
                 example_sentence_translation=original_item.example_sentence_translation,
                 example_sentence_definition=original_item.example_sentence_definition,
+                example_sentence_audio_url=original_item.example_sentence_audio_url,
                 # Phase 2 欄位
                 image_url=original_item.image_url,
                 part_of_speech=original_item.part_of_speech,
@@ -253,6 +255,55 @@ async def create_assignment(
             logger.info(
                 f"Auto-generated cross-content distractors for "
                 f"{generated_count} items in assignment {assignment.id}"
+            )
+
+    # 例句模式 + 單字集：為缺少例句音檔的 items 自動 TTS 生成
+    _VOCAB_TYPES = {ContentType.VOCABULARY_SET, ContentType.SENTENCE_MAKING}
+    if request.practice_mode in ("reading", "rearrangement"):
+        from services.tts import TTSService
+        from utils.ttsVoiceResolver import get_voice_and_rate
+
+        tts_service = TTSService()
+        all_copy_content_ids = list(content_copy_map.values())
+        vocab_items = (
+            db.query(ContentItem)
+            .join(Content)
+            .filter(
+                ContentItem.content_id.in_(all_copy_content_ids),
+                Content.type.in_(_VOCAB_TYPES),
+                ContentItem.example_sentence.isnot(None),
+                ContentItem.example_sentence != "",
+                ContentItem.example_sentence_audio_url.is_(None),
+            )
+            .all()
+        )
+        tts_generated = 0
+        for item in vocab_items:
+            try:
+                # 從 item_metadata 讀取 audio_settings，用相同 voice 生成例句音檔
+                audio_settings = (
+                    item.item_metadata.get("audio_settings", {})
+                    if item.item_metadata
+                    else {}
+                )
+                voice, rate = get_voice_and_rate(
+                    audio_settings.get("accent", "American English"),
+                    audio_settings.get("gender", "Male"),
+                    audio_settings.get("speed", "Normal x1"),
+                )
+                audio_url = await tts_service.generate_tts(
+                    item.example_sentence, voice, rate
+                )
+                item.example_sentence_audio_url = audio_url
+                tts_generated += 1
+            except Exception as e:
+                logger.warning(
+                    f"TTS generation failed for item {item.id}: {e}"
+                )
+        if tts_generated > 0:
+            logger.info(
+                f"Auto-generated example sentence TTS for "
+                f"{tts_generated} vocab items in assignment {assignment.id}"
             )
 
     # 建立 AssignmentContent 關聯（指向副本）

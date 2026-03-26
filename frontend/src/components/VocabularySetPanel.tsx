@@ -260,6 +260,7 @@ interface ContentRow {
   example_sentence_translation?: string; // 例句中文翻譯
   example_sentence_japanese?: string; // 例句日文翻譯
   example_sentence_korean?: string; // 例句韓文翻譯
+  example_sentence_audio_url?: string; // 例句音檔 URL
   // 干擾項（單字選擇題用）
   distractors?: string[];
 }
@@ -1363,7 +1364,7 @@ function SortableRowInner({
         )}
       </div>
 
-      {/* 第三列：例句輸入（帶 AI 按鈕） */}
+      {/* 第三列：例句輸入（帶 AI 按鈕 + 音檔按鈕） */}
       <div className="relative mb-2">
         <input
           type="text"
@@ -1371,17 +1372,101 @@ function SortableRowInner({
           onChange={(e) =>
             handleUpdateRow(index, "example_sentence", e.target.value)
           }
-          className="w-full px-3 py-2 pr-12 border rounded-md text-sm"
+          className="w-full px-3 py-2 pr-24 border rounded-md text-sm"
           placeholder={t("vocabularySet.placeholders.enterEnglishSentence")}
           maxLength={500}
         />
-        <button
-          onClick={() => handleOpenAIGenerateModal(index)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-blue-100 text-blue-600 border border-blue-300"
-          title={t("vocabularySet.tooltips.generateExampleSentence")}
-        >
-          <span className="text-xs font-medium">AI</span>
-        </button>
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          {/* 例句音檔播放 */}
+          {row.example_sentence_audio_url && (
+            <button
+              onClick={() => {
+                const audio = new Audio(row.example_sentence_audio_url);
+                audio.play().catch((err) =>
+                  console.error("Play failed:", err),
+                );
+              }}
+              className="p-1 rounded text-green-600 hover:bg-green-100"
+              title={t("contentEditor.tooltips.playAudio")}
+            >
+              <Play className="h-3 w-3" />
+            </button>
+          )}
+          {/* 例句 TTS 生成 */}
+          {row.example_sentence && (
+            <button
+              onClick={async () => {
+                if (!row.example_sentence) return;
+                const { getVoiceAndRate } = await import(
+                  "@/utils/ttsVoiceResolver"
+                );
+                const { voice, rate } = getVoiceAndRate(
+                  row.audioSettings?.accent || "American English",
+                  row.audioSettings?.gender || "Male",
+                  row.audioSettings?.speed || "Normal x1",
+                );
+                try {
+                  const result = await apiClient.generateTTS(
+                    row.example_sentence,
+                    voice,
+                    rate,
+                    "+0%",
+                  );
+                  if (result?.audio_url) {
+                    handleUpdateRow(
+                      index,
+                      "example_sentence_audio_url",
+                      result.audio_url,
+                    );
+                    toast.success(
+                      t("contentEditor.messages.audioGeneratedSuccess"),
+                    );
+                  }
+                } catch (err) {
+                  console.error("TTS generation failed:", err);
+                  toast.error(t("contentEditor.messages.audioGenerationFailed"));
+                }
+              }}
+              className={`p-1 rounded ${
+                row.example_sentence_audio_url
+                  ? "text-blue-500 hover:bg-blue-100"
+                  : "text-gray-500 hover:bg-gray-100"
+              }`}
+              title={
+                row.example_sentence_audio_url
+                  ? t("contentEditor.tooltips.rerecordOrGenerate")
+                  : t("contentEditor.tooltips.openTTSRecording")
+              }
+            >
+              <Mic className="h-3 w-3" />
+            </button>
+          )}
+          {/* 例句音檔刪除 */}
+          {row.example_sentence_audio_url && (
+            <button
+              onClick={() => {
+                handleUpdateRow(
+                  index,
+                  "example_sentence_audio_url",
+                  "",
+                );
+              }}
+              className="p-1 rounded text-red-500 hover:bg-red-100"
+              title={t("contentEditor.tooltips.removeAudio")}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          )}
+          <div className="w-px h-3 bg-gray-300" />
+          {/* AI 例句生成 */}
+          <button
+            onClick={() => handleOpenAIGenerateModal(index)}
+            className="p-1 rounded hover:bg-blue-100 text-blue-600 border border-blue-300"
+            title={t("vocabularySet.tooltips.generateExampleSentence")}
+          >
+            <span className="text-xs font-medium">AI</span>
+          </button>
+        </div>
       </div>
 
       {/* 第四列：例句翻譯 */}
@@ -1705,6 +1790,7 @@ export default function VocabularySetPanel({
               korean_translation?: string;
               example_sentence_japanese?: string;
               example_sentence_korean?: string;
+              example_sentence_audio_url?: string;
               selectedSentenceLanguage?: SentenceTranslationLanguage;
             },
             index: number,
@@ -1787,6 +1873,7 @@ export default function VocabularySetPanel({
               example_sentence_translation,
               example_sentence_japanese,
               example_sentence_korean,
+              example_sentence_audio_url: item.example_sentence_audio_url || "",
               partsOfSpeech: item.parts_of_speech || [],
               distractors: item.distractors || undefined,
             };
@@ -1936,7 +2023,9 @@ export default function VocabularySetPanel({
       example_sentence: row.example_sentence || "",
       example_sentence_translation: exampleTranslation,
       example_sentence_translation_lang: sentenceLang,
+      example_sentence_audio_url: row.example_sentence_audio_url || "",
       parts_of_speech: row.partsOfSpeech || [],
+      ...(row.audioSettings ? { audio_settings: row.audioSettings } : {}),
       ...(row.distractors ? { distractors: row.distractors } : {}),
     };
   };

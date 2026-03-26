@@ -216,6 +216,10 @@ async def create_content(
             if "parts_of_speech" in item_data:
                 metadata["parts_of_speech"] = item_data["parts_of_speech"]
 
+            # 儲存 TTS audio settings（accent/gender/speed）供例句 TTS 生成使用
+            if "audio_settings" in item_data:
+                metadata["audio_settings"] = item_data["audio_settings"]
+
             # 根據前端傳來的資料決定存儲到 translation 欄位的內容
             # 優先使用 definition (中文翻譯)，如果沒有則使用 translation
             translation_value = item_data.get("definition") or item_data.get(
@@ -245,6 +249,9 @@ async def create_content(
                 ),
                 example_sentence_definition=item_data.get(
                     "example_sentence_definition"
+                ),
+                example_sentence_audio_url=item_data.get(
+                    "example_sentence_audio_url"
                 ),
                 word_count=word_count,
                 max_errors=max_errors,
@@ -347,6 +354,7 @@ async def get_content_detail(
                 # 單字集相關欄位
                 "example_sentence": item.example_sentence,
                 "example_sentence_translation": item.example_sentence_translation,
+                "example_sentence_audio_url": item.example_sentence_audio_url,
                 "image_url": item.image_url,
                 "part_of_speech": item.part_of_speech,
                 # 前端使用 parts_of_speech (plural, array)
@@ -490,6 +498,10 @@ async def update_content(
                 if "parts_of_speech" in item_data:
                     metadata["parts_of_speech"] = item_data["parts_of_speech"]
 
+                # 儲存 TTS audio settings（accent/gender/speed）供例句 TTS 生成使用
+                if "audio_settings" in item_data:
+                    metadata["audio_settings"] = item_data["audio_settings"]
+
                 # 根據前端傳來的資料決定存儲到 translation 欄位的內容
                 # 優先使用 definition (中文翻譯)，如果沒有則使用 translation
                 translation_value = item_data.get("definition") or item_data.get(
@@ -532,6 +544,9 @@ async def update_content(
                     ),
                     example_sentence_definition=item_data.get(
                         "example_sentence_definition"
+                    ),
+                    example_sentence_audio_url=item_data.get(
+                        "example_sentence_audio_url"
                     ),
                     word_count=word_count,
                     max_errors=max_errors,

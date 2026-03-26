@@ -329,14 +329,14 @@ async def get_assignment_activities(
                         )
                         if fields is None:
                             continue  # skip vocab items without example_sentence
-                        q_text, q_translation = fields
+                        q_text, q_translation, q_audio = fields
 
                         item_progress = progress_by_item.get(ci.id)
                         item_data = {
                             "id": ci.id,  # ContentItem 的 ID！
                             "text": q_text,
                             "translation": q_translation,
-                            "audio_url": ci.audio_url,
+                            "audio_url": q_audio,
                             "order_index": ci.order_index,
                         }
 
@@ -1833,7 +1833,7 @@ async def get_rearrangement_questions(
         )
         if fields is None:
             continue  # skip vocab items without example_sentence
-        q_text, q_translation = fields
+        q_text, q_translation, q_audio = fields
 
         # 打亂單字順序（使用 seeded RNG 確保一致性）
         words = q_text.strip().split()
@@ -1866,7 +1866,7 @@ async def get_rearrangement_questions(
                     else 30
                 ),
                 play_audio=assignment.play_audio or False,
-                audio_url=item.audio_url,
+                audio_url=q_audio,
                 translation=q_translation,
                 original_text=q_text.strip(),  # 正確答案
                 progress_status=progress_status,

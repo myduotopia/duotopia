@@ -187,6 +187,7 @@ async def create_instant_practice(
             example_sentence=original_item.example_sentence,
             example_sentence_translation=original_item.example_sentence_translation,
             example_sentence_definition=original_item.example_sentence_definition,
+            example_sentence_audio_url=original_item.example_sentence_audio_url,
             image_url=original_item.image_url,
             part_of_speech=original_item.part_of_speech,
             distractors=(

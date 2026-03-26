@@ -60,7 +60,7 @@ def _is_vocab_type(content_type) -> bool:
 
 
 def get_sentence_fields(item: ContentItem, content_type, practice_mode: str):
-    """Return (text, translation) based on content type and practice mode.
+    """Return (text, translation, audio_url) based on content type and practice mode.
 
     When using vocabulary set content in sentence practice modes (reading /
     rearrangement), we use the item's *example_sentence* fields instead of
@@ -73,8 +73,9 @@ def get_sentence_fields(item: ContentItem, content_type, practice_mode: str):
         sentence = (item.example_sentence or "").strip()
         if not sentence:
             return None  # skip this item
-        return sentence, (item.example_sentence_translation or item.translation or "")
-    return item.text, item.translation
+        audio = item.example_sentence_audio_url or item.audio_url
+        return sentence, (item.example_sentence_translation or item.translation or ""), audio
+    return item.text, item.translation, item.audio_url
 
 
 # Audio formats accepted for speech assessment
@@ -150,13 +151,13 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
             )
             if fields is None:
                 continue  # skip vocab items without example_sentence
-            q_text, q_translation = fields
+            q_text, q_translation, q_audio = fields
             items_data.append(
                 {
                     "id": item.id,
                     "text": q_text,
                     "translation": q_translation,
-                    "audio_url": item.audio_url,
+                    "audio_url": q_audio,
                     "recording_url": None,
                 }
             )
@@ -474,7 +475,7 @@ def get_rearrangement_questions(assignment: Assignment, db: Session) -> dict:
         )
         if fields is None:
             continue  # skip vocab items without example_sentence
-        q_text, q_translation = fields
+        q_text, q_translation, q_audio = fields
 
         words = q_text.strip().split()
         shuffled_words = words.copy()
@@ -492,7 +493,7 @@ def get_rearrangement_questions(assignment: Assignment, db: Session) -> dict:
                     else 30
                 ),
                 "play_audio": assignment.play_audio or False,
-                "audio_url": item.audio_url,
+                "audio_url": q_audio,
                 "translation": q_translation,
                 "original_text": q_text.strip(),
             }
