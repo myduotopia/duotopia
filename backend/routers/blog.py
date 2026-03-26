@@ -181,11 +181,13 @@ def _serialize_post(post) -> dict:
 def list_posts(
     page: int = 1,
     per_page: int = 20,
+    status: Optional[str] = None,
+    category_id: Optional[int] = None,
     db: Session = Depends(get_db),
     _admin: Teacher = Depends(get_current_admin),
 ):
-    """List all blog posts (admin)."""
-    result = BlogService.get_all_posts(db, page, per_page)
+    """List all blog posts (admin), with optional status/category filters."""
+    result = BlogService.get_all_posts(db, page, per_page, status, category_id)
     return {
         "posts": [_serialize_post(p) for p in result["posts"]],
         "total": result["total"],

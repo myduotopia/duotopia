@@ -92,13 +92,33 @@ class BlogService:
     # ============ Admin Post Methods ============
 
     @staticmethod
-    def get_all_posts(db: Session, page: int = 1, per_page: int = 20) -> dict:
-        """Get all posts including drafts (admin)."""
-        query = (
-            db.query(BlogPost)
-            .options(joinedload(BlogPost.categories))
-            .options(joinedload(BlogPost.author))
-        )
+    def get_all_posts(
+        db: Session,
+        page: int = 1,
+        per_page: int = 20,
+        status: Optional[str] = None,
+        category_id: Optional[int] = None,
+    ) -> dict:
+        """Get all posts including drafts (admin), with optional filters."""
+        if category_id:
+            query = (
+                db.query(BlogPost)
+                .join(BlogPost.categories)
+                .options(contains_eager(BlogPost.categories))
+                .options(joinedload(BlogPost.author))
+                .filter(BlogCategory.id == category_id)
+            )
+        else:
+            query = (
+                db.query(BlogPost)
+                .options(joinedload(BlogPost.categories))
+                .options(joinedload(BlogPost.author))
+            )
+
+        if status == "published":
+            query = query.filter(BlogPost.is_published.is_(True))
+        elif status == "draft":
+            query = query.filter(BlogPost.is_published.is_(False))
 
         total = query.count()
         posts = (

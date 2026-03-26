@@ -33,7 +33,13 @@ export default function AdminBlogPage() {
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await blogAdminApi.getPosts(page, 20, token);
+      const res = await blogAdminApi.getPosts(
+        page,
+        20,
+        token,
+        statusFilter === "all" ? undefined : statusFilter,
+        categoryFilter ?? undefined,
+      );
       setPosts(res.data.posts ?? []);
       setTotalPages(res.data.total_pages ?? 1);
     } catch {
@@ -41,7 +47,7 @@ export default function AdminBlogPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, token, t]);
+  }, [page, token, t, statusFilter, categoryFilter]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -97,18 +103,6 @@ export default function AdminBlogPage() {
       toast.error(t("common.error"));
     }
   };
-
-  // Client-side filtering (API doesn't support filters yet)
-  const filteredPosts = posts.filter((post) => {
-    if (statusFilter === "published" && !post.is_published) return false;
-    if (statusFilter === "draft" && post.is_published) return false;
-    if (
-      categoryFilter &&
-      !(post.categories ?? []).some((c) => c.id === categoryFilter)
-    )
-      return false;
-    return true;
-  });
 
   return (
     <AdminLayout
@@ -184,7 +178,10 @@ export default function AdminBlogPage() {
           {(["all", "published", "draft"] as const).map((s) => (
             <button
               key={s}
-              onClick={() => setStatusFilter(s)}
+              onClick={() => {
+                setStatusFilter(s);
+                setPage(1);
+              }}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition border ${
                 statusFilter === s
                   ? "bg-blue-50 text-blue-700 border-blue-300"
@@ -201,9 +198,10 @@ export default function AdminBlogPage() {
           {/* Category filter */}
           <select
             value={categoryFilter ?? ""}
-            onChange={(e) =>
-              setCategoryFilter(e.target.value ? Number(e.target.value) : null)
-            }
+            onChange={(e) => {
+              setCategoryFilter(e.target.value ? Number(e.target.value) : null);
+              setPage(1);
+            }}
             className="px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border-0 cursor-pointer"
           >
             <option value="">所有分類</option>
@@ -248,7 +246,7 @@ export default function AdminBlogPage() {
                     {t("common.loading")}
                   </td>
                 </tr>
-              ) : filteredPosts.length === 0 ? (
+              ) : posts.length === 0 ? (
                 <tr>
                   <td
                     colSpan={5}
@@ -258,7 +256,7 @@ export default function AdminBlogPage() {
                   </td>
                 </tr>
               ) : (
-                filteredPosts.map((post) => (
+                posts.map((post) => (
                   <tr key={post.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 max-w-xs truncate font-medium">
                       {post.title}

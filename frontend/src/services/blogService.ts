@@ -74,9 +74,15 @@ export const blogPublicApi = {
 
 // Admin APIs (requires auth token)
 export const blogAdminApi = {
-  getPosts: (page = 1, perPage = 20, token: string) =>
+  getPosts: (
+    page = 1,
+    perPage = 20,
+    token: string,
+    status?: string,
+    categoryId?: number,
+  ) =>
     axios.get<PaginatedResponse<BlogPost>>(`${API_BASE}/blog`, {
-      params: { page, per_page: perPage },
+      params: { page, per_page: perPage, status, category_id: categoryId },
       headers: { Authorization: `Bearer ${token}` },
     }),
   getPost: (id: number, token: string) =>
