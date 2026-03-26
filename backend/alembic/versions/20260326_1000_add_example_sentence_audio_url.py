@@ -6,7 +6,7 @@ Revision ID: 20260326_1000
 from alembic import op
 
 revision = "20260326_1000"
-down_revision = "20260323_1200"
+down_revision = "20260325_1400"
 branch_labels = None
 depends_on = None
 
