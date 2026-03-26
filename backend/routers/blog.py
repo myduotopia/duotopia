@@ -4,7 +4,7 @@ import logging
 import os
 import uuid
 from datetime import datetime as dt
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import (
     APIRouter,
@@ -100,7 +100,7 @@ class CreatePostRequest(BaseModel):
     meta_description: Optional[str] = None
     og_image_url: Optional[str] = None
     is_published: bool = False
-    locale: str = "zh-TW"
+    locale: Literal["zh-TW", "en"] = "zh-TW"
     linked_post_id: Optional[int] = None
     category_ids: List[int] = []
 
@@ -111,7 +111,7 @@ class TranslatePostRequest(BaseModel):
     content: Optional[str] = None
     meta_title: Optional[str] = None
     meta_description: Optional[str] = None
-    target_locale: str = "en"
+    target_locale: Literal["zh-TW", "en"] = "en"
 
 
 class UpdatePostRequest(BaseModel):

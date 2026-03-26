@@ -449,6 +449,41 @@ class TestBlogPublicAPI:
         assert "og:title" in html
         assert "og:description" in html
 
+    def test_public_locale_filter(self, test_client, shared_test_session):
+        _, headers = self._setup_published_post(shared_test_session)
+
+        # Create zh-TW post and publish
+        zh_res = test_client.post(
+            "/api/blog",
+            json={"title": "中文文章", "locale": "zh-TW"},
+            headers=headers,
+        )
+        zh_id = zh_res.json()["id"]
+        test_client.post(f"/api/blog/{zh_id}/publish", headers=headers)
+
+        # Create en post and publish
+        en_res = test_client.post(
+            "/api/blog",
+            json={"title": "English Article", "locale": "en"},
+            headers=headers,
+        )
+        en_id = en_res.json()["id"]
+        test_client.post(f"/api/blog/{en_id}/publish", headers=headers)
+
+        # Filter by zh-TW
+        zh_response = test_client.get("/api/public/blog?locale=zh-TW")
+        zh_data = zh_response.json()
+        zh_titles = [p["title"] for p in zh_data["posts"]]
+        assert "中文文章" in zh_titles
+        assert "English Article" not in zh_titles
+
+        # Filter by en
+        en_response = test_client.get("/api/public/blog?locale=en")
+        en_data = en_response.json()
+        en_titles = [p["title"] for p in en_data["posts"]]
+        assert "English Article" in en_titles
+        assert "中文文章" not in en_titles
+
 
 class TestBlogSEOFields:
     """Test SEO-related fields on blog posts."""

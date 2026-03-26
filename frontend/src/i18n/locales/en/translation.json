@@ -4730,6 +4730,7 @@
     "publishedOn": "Published on",
     "readingTime": "min read",
     "noPosts": "No posts yet",
+    "readInOtherLang": "閱讀中文版",
     "admin": {
       "title": "Blog Management",
       "newPost": "New Post",
@@ -4756,8 +4757,12 @@
       "uploadImage": "Upload Image",
       "back": "Back",
       "locale": "Language",
+      "localeZhTW": "🇹🇼 中文",
+      "localeEn": "🇺🇸 English",
       "linkedPost": "Translation",
-      "translate": "Create Translation"
+      "editLinkedPost": "Edit translation",
+      "translate": "Create Translation",
+      "createTranslation": "Create translation draft"
     }
   }
 }

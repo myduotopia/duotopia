@@ -177,6 +177,10 @@ class BlogService:
         if not post:
             return None
 
+        # Guard against self-referencing linked_post_id
+        if "linked_post_id" in data and data["linked_post_id"] == post_id:
+            data.pop("linked_post_id")
+
         updatable_fields = [
             "title",
             "slug",

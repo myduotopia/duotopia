@@ -128,7 +128,7 @@ export default function BlogPostPage() {
               to={`/blog/${post.linked_post_slug}`}
               className="text-sm text-primary hover:underline"
             >
-              {post.locale === "zh-TW" ? "Read in English" : "閱讀中文版"}
+              {t("blog.readInOtherLang")}
             </Link>
           )}
         </div>

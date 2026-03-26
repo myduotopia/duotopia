@@ -4749,6 +4749,7 @@
     "publishedOn": "發布於",
     "readingTime": "分鐘閱讀",
     "noPosts": "目前還沒有文章",
+    "readInOtherLang": "Read in English",
     "admin": {
       "title": "Blog 管理",
       "newPost": "新增文章",
@@ -4775,8 +4776,12 @@
       "uploadImage": "上傳圖片",
       "back": "返回",
       "locale": "語言版本",
+      "localeZhTW": "🇹🇼 中文",
+      "localeEn": "🇺🇸 English",
       "linkedPost": "翻譯版本",
-      "translate": "建立翻譯"
+      "editLinkedPost": "編輯翻譯版本",
+      "translate": "建立翻譯",
+      "createTranslation": "建立翻譯草稿"
     }
   }
 }

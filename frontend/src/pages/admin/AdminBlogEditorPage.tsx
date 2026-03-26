@@ -292,7 +292,9 @@ export default function AdminBlogEditorPage() {
                   {t("blog.admin.locale")}
                 </label>
                 <span className="inline-block px-3 py-1 text-sm rounded-full bg-gray-100">
-                  {post.locale === "zh-TW" ? "🇹🇼 中文" : "🇺🇸 English"}
+                  {post.locale === "zh-TW"
+                    ? t("blog.admin.localeZhTW")
+                    : t("blog.admin.localeEn")}
                 </span>
               </div>
               {post.linked_post_slug ? (
@@ -307,9 +309,7 @@ export default function AdminBlogEditorPage() {
                       navigate(`/admin/blog/${post.linked_post_id}/edit`)
                     }
                   >
-                    {post.locale === "zh-TW"
-                      ? "Edit English version"
-                      : "編輯中文版"}
+                    {t("blog.admin.editLinkedPost")}
                   </Button>
                 </div>
               ) : (
@@ -339,9 +339,7 @@ export default function AdminBlogEditorPage() {
                       }
                     }}
                   >
-                    {post.locale === "zh-TW"
-                      ? "Create English draft"
-                      : "建立中文草稿"}
+                    {t("blog.admin.createTranslation")}
                   </Button>
                 </div>
               )}
