@@ -39,6 +39,10 @@ import DatabaseAdminPage from "./pages/admin/DatabaseAdminPage";
 import AdminMonitoringPage from "./pages/admin/AdminMonitoringPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import CreateOrganization from "./pages/admin/CreateOrganization";
+import BlogListPage from "./pages/BlogListPage";
+import BlogPostPage from "./pages/BlogPostPage";
+import AdminBlogPage from "./pages/admin/AdminBlogPage";
+import AdminBlogEditorPage from "./pages/admin/AdminBlogEditorPage";
 import DebugPage from "./pages/DebugPage";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -94,6 +98,10 @@ function App() {
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/pricing" element={<PricingPage />} />
+
+        {/* Blog Routes - Public */}
+        <Route path="/blog" element={<BlogListPage />} />
+        <Route path="/blog/:slug" element={<BlogPostPage />} />
 
         {/* Demo Route - Public, no authentication required */}
         <Route path="/demo/:assignmentId" element={<DemoAssignmentPage />} />
@@ -294,6 +302,30 @@ function App() {
           }
         />
         <Route path="/admin/database" element={<DatabaseAdminPage />} />
+        <Route
+          path="/admin/blog"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminBlogPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/blog/new"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminBlogEditorPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/blog/:id/edit"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminBlogEditorPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/admin/organizations/create"
           element={
