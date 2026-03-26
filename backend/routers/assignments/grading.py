@@ -55,6 +55,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _check_not_archived(student_assignment: StudentAssignment, db: Session):
+    """封存後禁止修改成績"""
+    if student_assignment.assignment_id:
+        parent = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+        if parent and parent.is_archived:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot modify grades: assignment is archived",
+            )
+
+
 @router.post("/{assignment_id}/ai-grade", response_model=AIGradingResponse)
 @trace_function("AI Grade Assignment")
 async def ai_grade_assignment(
@@ -93,6 +108,7 @@ async def ai_grade_assignment(
 
     # 2. 檢查作業狀態
     with start_span("Validate Assignment Status"):
+        _check_not_archived(assignment, db)
         if assignment.status != AssignmentStatus.SUBMITTED:
             raise HTTPException(
                 status_code=400, detail="Assignment must be submitted before grading"
@@ -820,6 +836,8 @@ async def return_for_revision(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
+    _check_not_archived(assignment, db)
+
     # 確認教師有權限（檢查班級關聯）
     classroom = (
         db.query(Classroom)
@@ -884,6 +902,8 @@ async def manual_grade_assignment(
 
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
+
+    _check_not_archived(assignment, db)
 
     # 驗證教師權限（檢查作業是否屬於教師的班級）
     classroom = (
@@ -985,6 +1005,12 @@ async def batch_grade_assignment(
             raise HTTPException(
                 status_code=404,
                 detail="Assignment not found or you don't have permission",
+            )
+
+        if assignment.is_archived:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot modify grades: assignment is archived",
             )
         perf.checkpoint("Permission Check")
 

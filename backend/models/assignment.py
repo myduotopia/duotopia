@@ -14,6 +14,7 @@ from sqlalchemy import (
     Float,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -185,3 +186,28 @@ class StudentAssignment(Base):
 
     def __repr__(self):
         return f"<Assignment {self.title} for {self.student_id}>"
+
+
+# ============ 作業分析報告 ============
+class AssignmentAnalysisReport(Base):
+    """作業分析報告 - AI 生成的學生表現與能力分析"""
+
+    __tablename__ = "assignment_analysis_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False)
+    teacher_id = Column(Integer, ForeignKey("teachers.id"), nullable=False)
+    practice_mode = Column(String(50), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")  # pending, completed, failed
+    report_data = Column(JSONB)  # 結構化報告內容
+    summary = Column(Text)  # 報告摘要（純文字）
+    student_count = Column(Integer, nullable=False, default=0)
+    tokens_used = Column(Integer, nullable=False, default=0)
+    points_deducted = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True))
+    error_message = Column(Text)
+
+    # Relationships
+    assignment = relationship("Assignment")
+    teacher = relationship("Teacher")

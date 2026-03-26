@@ -52,7 +52,7 @@ from .classroom import Classroom, ClassroomStudent
 from .program import Program, Lesson, Content, ContentItem, ProgramCopyLog
 
 # Assignment models
-from .assignment import Assignment, AssignmentContent, StudentAssignment
+from .assignment import Assignment, AssignmentContent, StudentAssignment, AssignmentAnalysisReport
 
 # Progress models
 from .progress import (
@@ -118,6 +118,7 @@ __all__ = [
     "Assignment",
     "AssignmentContent",
     "StudentAssignment",
+    "AssignmentAnalysisReport",
     # Progress
     "StudentContentProgress",
     "StudentItemProgress",
