@@ -288,5 +288,52 @@
         "description": "각 단어의 올바른 번역 선택"
       }
     }
+  },
+  "analysisDialog": {
+    "title": "과제 분석",
+    "practiceMode": {
+      "rearrangement": "문장 재배열",
+      "reading": "문장 읽기",
+      "word_selection": "단어 선택",
+      "word_reading": "단어 읽기"
+    },
+    "estimate": {
+      "practiceMode": "연습 모드",
+      "studentCount": "학생 수",
+      "studentCountValue": "{{count}} 명",
+      "estimatedPoints": "예상 소모 포인트",
+      "pointsValue": "{{count}} 포인트",
+      "remainingQuota": "남은 포인트"
+    },
+    "buttons": {
+      "cancel": "취소",
+      "confirm": "분석하기 ({{points}} 포인트)",
+      "close": "닫기",
+      "retry": "재시도"
+    },
+    "messages": {
+      "generating": "AI가 학생 성과를 분석 중입니다. 잠시 기다려 주세요...",
+      "reportGenerated": "분석 보고서가 생성되었습니다"
+    },
+    "errors": {
+      "loadFailed": "분석 정보를 불러올 수 없습니다",
+      "generateFailed": "보고서 생성에 실패했습니다. 나중에 다시 시도해 주세요.",
+      "insufficientQuota": "포인트가 부족합니다. 크레딧을 구매해 주세요."
+    },
+    "report": {
+      "overallSummary": "전체 요약",
+      "classStatistics": "반 통계",
+      "difficultSentences": "어려운 문장",
+      "wordAnalysis": "단어 분석",
+      "studentInsights": "학생 분석",
+      "teachingSuggestions": "교수 제안",
+      "errorRate": "오류율",
+      "correctRate": "정답률",
+      "strength": "강점: ",
+      "weakness": "약점: ",
+      "suggestion": "제안: ",
+      "generatedAt": "생성 시간: ",
+      "pointsUsed": "소모 포인트: "
+    }
   }
 }

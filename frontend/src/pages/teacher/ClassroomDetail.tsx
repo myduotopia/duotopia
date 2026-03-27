@@ -50,11 +50,13 @@ import {
   ChevronLeft,
   ChevronRight,
   MoreVertical,
+  BarChart3,
 } from "lucide-react";
 import { getContentTypeIcon } from "@/lib/contentTypeIcon";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import AssignmentStickyNote from "@/components/AssignmentStickyNote";
+import { AssignmentAnalysisDialog } from "@/components/AssignmentAnalysisDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -231,6 +233,8 @@ export default function ClassroomDetail({
 
   // Archive states
   const [showArchived, setShowArchived] = useState(false);
+  // Analysis dialog state
+  const [analysisTarget, setAnalysisTarget] = useState<Assignment | null>(null);
   const [archivedAssignments, setArchivedAssignments] = useState<Assignment[]>(
     [],
   );
@@ -2201,6 +2205,18 @@ export default function ClassroomDetail({
                                           "便利貼",
                                         )}
                                       </DropdownMenuItem>
+                                      {showArchived && (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            setAnalysisTarget(assignment)
+                                          }
+                                        >
+                                          <BarChart3 className="h-4 w-4 mr-2" />
+                                          {t(
+                                            "classroomDetail.buttons.analysisReport",
+                                          )}
+                                        </DropdownMenuItem>
+                                      )}
                                       {showArchived ? (
                                         <DropdownMenuItem
                                           onClick={() =>
@@ -2514,21 +2530,36 @@ export default function ClassroomDetail({
                                           <StickyNote className="h-5 w-5" />
                                         </Button>
                                         {showArchived ? (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="text-orange-600 hover:text-orange-700 dark:text-orange-400 h-10 min-h-10"
-                                            onClick={() =>
-                                              handleUnarchiveAssignment(
-                                                assignment,
-                                              )
-                                            }
-                                          >
-                                            <ArchiveRestore className="w-4 h-4 mr-1" />
-                                            {t(
-                                              "classroomDetail.buttons.unarchiveAssignment",
-                                            )}
-                                          </Button>
+                                          <>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 h-10 min-h-10"
+                                              onClick={() =>
+                                                setAnalysisTarget(assignment)
+                                              }
+                                            >
+                                              <BarChart3 className="w-4 h-4 mr-1" />
+                                              {t(
+                                                "classroomDetail.buttons.analysisReport",
+                                              )}
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="text-orange-600 hover:text-orange-700 dark:text-orange-400 h-10 min-h-10"
+                                              onClick={() =>
+                                                handleUnarchiveAssignment(
+                                                  assignment,
+                                                )
+                                              }
+                                            >
+                                              <ArchiveRestore className="w-4 h-4 mr-1" />
+                                              {t(
+                                                "classroomDetail.buttons.unarchiveAssignment",
+                                              )}
+                                            </Button>
+                                          </>
                                         ) : (
                                           <Button
                                             variant="ghost"
@@ -3331,6 +3362,18 @@ export default function ClassroomDetail({
           contentId={copyContentInfo.id}
           contentTitle={copyContentInfo.title}
           programs={programs}
+        />
+      )}
+
+      {/* 作業分析對話框 */}
+      {analysisTarget && (
+        <AssignmentAnalysisDialog
+          open={!!analysisTarget}
+          onOpenChange={(open) => {
+            if (!open) setAnalysisTarget(null);
+          }}
+          assignmentId={analysisTarget.id}
+          assignmentTitle={analysisTarget.title}
         />
       )}
     </>

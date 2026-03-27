@@ -2700,7 +2700,8 @@
       "saveChanges": "儲存變更",
       "addItem": "新增項目",
       "record": "錄音",
-      "stickyNote": "便利貼"
+      "stickyNote": "便利貼",
+      "analysisReport": "作業分析"
     },
     "stats": {
       "studentCount": "學生數",
@@ -4800,6 +4801,53 @@
       "noCategories": "尚無分類",
       "description": "Blog 文章管理",
       "confirmDeleteCategory": "確定要刪除分類「{{name}}」嗎？"
+    }
+  },
+  "analysisDialog": {
+    "title": "作業分析",
+    "practiceMode": {
+      "rearrangement": "例句重組",
+      "reading": "例句朗讀",
+      "word_selection": "單字選擇",
+      "word_reading": "單字朗讀"
+    },
+    "estimate": {
+      "practiceMode": "作業類型",
+      "studentCount": "學生人數",
+      "studentCountValue": "{{count}} 人",
+      "estimatedPoints": "預估消耗點數",
+      "pointsValue": "{{count}} 點",
+      "remainingQuota": "目前剩餘點數"
+    },
+    "buttons": {
+      "cancel": "取消",
+      "confirm": "確認分析（扣 {{points}} 點）",
+      "close": "關閉",
+      "retry": "重試"
+    },
+    "messages": {
+      "generating": "AI 正在分析學生表現，請稍候...",
+      "reportGenerated": "分析報告已生成"
+    },
+    "errors": {
+      "loadFailed": "無法載入分析資訊",
+      "generateFailed": "生成報告失敗，請稍後再試",
+      "insufficientQuota": "點數不足，請先購買點數包"
+    },
+    "report": {
+      "overallSummary": "整體摘要",
+      "classStatistics": "班級統計",
+      "difficultSentences": "困難句子",
+      "wordAnalysis": "單字分析",
+      "studentInsights": "學生分析",
+      "teachingSuggestions": "教學建議",
+      "errorRate": "錯誤率",
+      "correctRate": "正確率",
+      "strength": "優勢：",
+      "weakness": "弱點：",
+      "suggestion": "建議：",
+      "generatedAt": "生成時間：",
+      "pointsUsed": "消耗點數："
     }
   }
 }

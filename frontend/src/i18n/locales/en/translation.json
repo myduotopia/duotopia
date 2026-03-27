@@ -2669,7 +2669,8 @@
       "saveChanges": "Save Changes",
       "addItem": "Add Item",
       "record": "Record",
-      "stickyNote": "Sticky Note"
+      "stickyNote": "Sticky Note",
+      "analysisReport": "Analysis Report"
     },
     "stats": {
       "studentCount": "Students",
@@ -4781,6 +4782,53 @@
       "noCategories": "No categories yet",
       "description": "Blog post management",
       "confirmDeleteCategory": "Are you sure you want to delete category \"{{name}}\"?"
+    }
+  },
+  "analysisDialog": {
+    "title": "Assignment Analysis",
+    "practiceMode": {
+      "rearrangement": "Sentence Rearrangement",
+      "reading": "Sentence Reading",
+      "word_selection": "Word Selection",
+      "word_reading": "Word Reading"
+    },
+    "estimate": {
+      "practiceMode": "Practice Mode",
+      "studentCount": "Student Count",
+      "studentCountValue": "{{count}} students",
+      "estimatedPoints": "Estimated Points",
+      "pointsValue": "{{count}} pts",
+      "remainingQuota": "Remaining Quota"
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "confirm": "Analyze ({{points}} pts)",
+      "close": "Close",
+      "retry": "Retry"
+    },
+    "messages": {
+      "generating": "AI is analyzing student performance, please wait...",
+      "reportGenerated": "Analysis report generated"
+    },
+    "errors": {
+      "loadFailed": "Failed to load analysis info",
+      "generateFailed": "Failed to generate report. Please try again later.",
+      "insufficientQuota": "Insufficient points. Please purchase more credits."
+    },
+    "report": {
+      "overallSummary": "Overall Summary",
+      "classStatistics": "Class Statistics",
+      "difficultSentences": "Difficult Sentences",
+      "wordAnalysis": "Word Analysis",
+      "studentInsights": "Student Insights",
+      "teachingSuggestions": "Teaching Suggestions",
+      "errorRate": "Error Rate",
+      "correctRate": "Correct Rate",
+      "strength": "Strength: ",
+      "weakness": "Weakness: ",
+      "suggestion": "Suggestion: ",
+      "generatedAt": "Generated: ",
+      "pointsUsed": "Points Used: "
     }
   }
 }
