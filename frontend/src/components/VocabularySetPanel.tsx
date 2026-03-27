@@ -1068,6 +1068,14 @@ function SortableRowInner({
 
   const inlineAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Cleanup audio on unmount to prevent background playback
+  useEffect(() => {
+    return () => {
+      inlineAudioRef.current?.pause();
+      inlineAudioRef.current = null;
+    };
+  }, []);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,

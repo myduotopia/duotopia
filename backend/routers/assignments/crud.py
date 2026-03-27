@@ -258,7 +258,8 @@ async def create_assignment(
             )
 
     # 例句模式 + 單字集：為缺少例句音檔的 items 自動 TTS 生成
-    _VOCAB_TYPES = {ContentType.VOCABULARY_SET, ContentType.SENTENCE_MAKING}
+    from services.preview_service import _VOCABULARY_CONTENT_TYPES
+
     if request.practice_mode in ("reading", "rearrangement"):
         from services.tts import TTSService
         from utils.ttsVoiceResolver import get_voice_and_rate
@@ -270,7 +271,7 @@ async def create_assignment(
             .join(Content)
             .filter(
                 ContentItem.content_id.in_(all_copy_content_ids),
-                Content.type.in_(_VOCAB_TYPES),
+                Content.type.in_(_VOCABULARY_CONTENT_TYPES),
                 ContentItem.example_sentence.isnot(None),
                 ContentItem.example_sentence != "",
                 ContentItem.example_sentence_audio_url.is_(None),

@@ -238,3 +238,11 @@ class BatchTTSRequest(BaseModel):
     voice: Optional[str] = "en-US-JennyNeural"
     rate: Optional[str] = "+0%"
     volume: Optional[str] = "+0%"
+
+    @field_validator("texts")
+    @classmethod
+    def validate_text_lengths(cls, v: List[str]) -> List[str]:
+        for i, text in enumerate(v):
+            if len(text) > 2000:
+                raise ValueError(f"texts[{i}] exceeds max length of 2000 characters")
+        return v
