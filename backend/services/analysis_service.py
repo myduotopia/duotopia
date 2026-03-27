@@ -78,17 +78,35 @@ def _collect_rearrangement_data(
     )
     content_item_map = {ci.id: ci for ci in content_items}
 
+    # Bulk load students and progress to avoid N+1 queries
+    sa_ids = [sa.id for sa in student_assignments]
+    student_ids = [sa.student_id for sa in student_assignments]
+
+    students = (
+        db.query(Student).filter(Student.id.in_(student_ids)).all()
+        if student_ids
+        else []
+    )
+    student_map = {s.id: s for s in students}
+
+    all_progress = (
+        db.query(StudentItemProgress)
+        .filter(StudentItemProgress.student_assignment_id.in_(sa_ids))
+        .all()
+        if sa_ids
+        else []
+    )
+    progress_by_sa = {}
+    for p in all_progress:
+        progress_by_sa.setdefault(p.student_assignment_id, []).append(p)
+
     students_data = []
     for sa in student_assignments:
-        student = db.query(Student).filter(Student.id == sa.student_id).first()
+        student = student_map.get(sa.student_id)
         if not student:
             continue
 
-        items = (
-            db.query(StudentItemProgress)
-            .filter(StudentItemProgress.student_assignment_id == sa.id)
-            .all()
-        )
+        items = progress_by_sa.get(sa.id, [])
 
         item_results = []
         for item in items:
@@ -139,17 +157,35 @@ def _collect_reading_data(
     )
     content_item_map = {ci.id: ci for ci in content_items}
 
+    # Bulk load students and progress to avoid N+1 queries
+    sa_ids = [sa.id for sa in student_assignments]
+    student_ids = [sa.student_id for sa in student_assignments]
+
+    students = (
+        db.query(Student).filter(Student.id.in_(student_ids)).all()
+        if student_ids
+        else []
+    )
+    student_map = {s.id: s for s in students}
+
+    all_progress = (
+        db.query(StudentItemProgress)
+        .filter(StudentItemProgress.student_assignment_id.in_(sa_ids))
+        .all()
+        if sa_ids
+        else []
+    )
+    progress_by_sa = {}
+    for p in all_progress:
+        progress_by_sa.setdefault(p.student_assignment_id, []).append(p)
+
     students_data = []
     for sa in student_assignments:
-        student = db.query(Student).filter(Student.id == sa.student_id).first()
+        student = student_map.get(sa.student_id)
         if not student:
             continue
 
-        items = (
-            db.query(StudentItemProgress)
-            .filter(StudentItemProgress.student_assignment_id == sa.id)
-            .all()
-        )
+        items = progress_by_sa.get(sa.id, [])
 
         item_results = []
         for item in items:
@@ -196,17 +232,35 @@ def _collect_word_selection_data(
     )
     content_item_map = {ci.id: ci for ci in content_items}
 
+    # Bulk load students and progress to avoid N+1 queries
+    sa_ids = [sa.id for sa in student_assignments]
+    student_ids = [sa.student_id for sa in student_assignments]
+
+    students = (
+        db.query(Student).filter(Student.id.in_(student_ids)).all()
+        if student_ids
+        else []
+    )
+    student_map = {s.id: s for s in students}
+
+    all_progress = (
+        db.query(StudentItemProgress)
+        .filter(StudentItemProgress.student_assignment_id.in_(sa_ids))
+        .all()
+        if sa_ids
+        else []
+    )
+    progress_by_sa = {}
+    for p in all_progress:
+        progress_by_sa.setdefault(p.student_assignment_id, []).append(p)
+
     students_data = []
     for sa in student_assignments:
-        student = db.query(Student).filter(Student.id == sa.student_id).first()
+        student = student_map.get(sa.student_id)
         if not student:
             continue
 
-        items = (
-            db.query(StudentItemProgress)
-            .filter(StudentItemProgress.student_assignment_id == sa.id)
-            .all()
-        )
+        items = progress_by_sa.get(sa.id, [])
 
         item_results = []
         for item in items:

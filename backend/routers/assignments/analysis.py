@@ -105,9 +105,27 @@ async def generate_analysis(
     cost = estimate_analysis_cost(db, assignment_id)
     estimated_points = cost["estimated_points"]
 
-    # 扣除點數
+    # 先檢查配額是否足夠（不扣點）
+    quota_info = QuotaService.get_quota_info(current_teacher, db)
+    if quota_info.get("quota_remaining", 0) < estimated_points:
+        raise HTTPException(
+            status_code=402,
+            detail="Insufficient quota for analysis. Please purchase more credits.",
+        )
+
+    # 產生報告
     try:
-        usage_log = QuotaService.deduct_quota(
+        report = await generate_analysis_report(db, assignment, current_teacher.id)
+    except Exception as e:
+        logger.error(f"Analysis generation failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate analysis report. No points were deducted.",
+        )
+
+    # 報告成功後才扣除點數
+    try:
+        QuotaService.deduct_quota(
             db=db,
             teacher=current_teacher,
             student_id=None,
@@ -120,25 +138,12 @@ async def generate_analysis(
                 "practice_mode": assignment.practice_mode,
             },
         )
-    except HTTPException as e:
-        if e.status_code == 402:
-            raise HTTPException(
-                status_code=402,
-                detail="Insufficient quota for analysis. Please purchase more credits.",
-            )
-        raise
-
-    # 產生報告
-    try:
-        report = await generate_analysis_report(db, assignment, current_teacher.id)
         report.points_deducted = estimated_points
         db.commit()
     except Exception as e:
-        logger.error(f"Analysis generation failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate analysis report. Points have been deducted.",
-        )
+        logger.error(f"Quota deduction failed after report generation: {e}")
+        report.points_deducted = 0
+        db.commit()
 
     return {
         "report_id": report.id,
