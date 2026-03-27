@@ -40,6 +40,7 @@ from .validators import (
     ContentResponse,
 )
 from .dependencies import get_current_teacher
+from services.preview_service import _VOCABULARY_CONTENT_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -258,14 +259,13 @@ async def create_assignment(
             )
 
     # 例句模式 + 單字集：為缺少例句音檔的 items 自動 TTS 生成
-    from services.preview_service import _VOCABULARY_CONTENT_TYPES
-
     if request.practice_mode in ("reading", "rearrangement"):
         from services.tts import TTSService
         from utils.ttsVoiceResolver import get_voice_and_rate
 
         tts_service = TTSService()
         all_copy_content_ids = list(content_copy_map.values())
+        db.flush()  # ensure copied items are queryable
         vocab_items = (
             db.query(ContentItem)
             .join(Content)

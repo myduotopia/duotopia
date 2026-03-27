@@ -504,7 +504,16 @@ def get_rearrangement_questions(assignment: Assignment, db: Session) -> dict:
         )
 
     if not questions:
-        raise HTTPException(status_code=404, detail="No questions found")
+        # Return empty response instead of 404 to avoid breaking existing
+        # assignments created before example_sentence data was available
+        return {
+            "student_assignment_id": assignment.id,
+            "practice_mode": "rearrangement",
+            "show_answer": assignment.show_answer or False,
+            "score_category": assignment.score_category,
+            "questions": [],
+            "total_questions": 0,
+        }
 
     return {
         "student_assignment_id": assignment.id,

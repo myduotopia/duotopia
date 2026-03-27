@@ -1411,6 +1411,9 @@ function SortableRowInner({
             <button
               onClick={async () => {
                 if (!row.example_sentence) return;
+                // Stop any currently playing audio before regenerating
+                inlineAudioRef.current?.pause();
+                inlineAudioRef.current = null;
                 const { voice, rate } = getVoiceAndRate(
                   row.audioSettings?.accent || "American English",
                   row.audioSettings?.gender || "Male",
