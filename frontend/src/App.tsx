@@ -44,6 +44,7 @@ import PricingPage from "./pages/PricingPage";
 import TestSubscription from "./pages/TestSubscription";
 import DemoAssignmentPage from "./pages/DemoAssignmentPage";
 import WordSpellingSample from "./pages/sample/WordSpellingSample";
+import WordClozeSample from "./pages/sample/WordClozeSample";
 import { Toaster } from "sonner";
 
 /**
@@ -330,6 +331,10 @@ function App() {
         <Route
           path="/sample/vocabulary-set/word-spelling"
           element={<WordSpellingSample />}
+        />
+        <Route
+          path="/sample/vocabulary-set/word-cloze"
+          element={<WordClozeSample />}
         />
 
         {/* Test Pages */}
