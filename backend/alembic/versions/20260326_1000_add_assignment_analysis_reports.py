@@ -1,7 +1,7 @@
 """Add assignment_analysis_reports table
 
 Revision ID: 20260326_1000
-Revises: 20260323_1200
+Revises: 20260325_1400
 Create Date: 2026-03-26 10:00:00.000000
 
 """
@@ -10,7 +10,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "20260326_1000"
-down_revision = "20260323_1200"
+down_revision = "20260325_1400"
 branch_labels = None
 depends_on = None
 

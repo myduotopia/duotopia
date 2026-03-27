@@ -198,8 +198,8 @@ export function AssignmentAnalysisDialog({
                 : t("analysisDialog.report.wordAnalysis")}
             </h4>
             <div className="space-y-2">
-              {// eslint-disable-next-line @typescript-eslint/no-explicit-any
-              ((data.difficult_sentences || data.word_analysis) as any[])
+              {/* eslint-disable @typescript-eslint/no-explicit-any */}
+              {((data.difficult_sentences || data.word_analysis) as any[])
                 ?.slice(0, 5)
                 .map((item: any, i: number) => (
                   <div
@@ -223,6 +223,7 @@ export function AssignmentAnalysisDialog({
                     )}
                   </div>
                 ))}
+              {/* eslint-enable @typescript-eslint/no-explicit-any */}
             </div>
           </div>
         )}
@@ -233,7 +234,7 @@ export function AssignmentAnalysisDialog({
               {t("analysisDialog.report.studentInsights")}
             </h4>
             <div className="space-y-3">
-              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              {/* eslint-disable @typescript-eslint/no-explicit-any */}
               {(data.student_insights as any[])?.map(
                 (student: any, i: number) => (
                   <div
@@ -264,6 +265,7 @@ export function AssignmentAnalysisDialog({
                   </div>
                 ),
               )}
+              {/* eslint-enable @typescript-eslint/no-explicit-any */}
             </div>
           </div>
         )}
