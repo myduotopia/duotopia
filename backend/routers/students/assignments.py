@@ -25,6 +25,7 @@ from models import (
     PracticeSession,
     PracticeAnswer,
 )
+from services.preview_service import get_sentence_fields
 from services.quota_service import QuotaService
 from .dependencies import get_current_student
 from .validators import (
@@ -176,6 +177,8 @@ async def get_assignment_activities(
 
     # 獲取作業對應的 Assignment（如果有 assignment_id）
     activities = []
+    _parent_assignment = None
+    _practice_mode = None
 
     if student_assignment.assignment_id:
         # 直接查詢這個學生作業的所有進度記錄（這才是正確的數據源）
@@ -240,6 +243,16 @@ async def get_assignment_activities(
                 .order_by(StudentContentProgress.order_index)
                 .all()
             )
+
+        # 提前取得 parent Assignment（需要 practice_mode 來決定欄位映射）
+        _parent_assignment = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+        _practice_mode = (
+            _parent_assignment.practice_mode if _parent_assignment else None
+        )
 
         # 優化：批次查詢所有 content，避免 N+1 問題
         content_ids = [progress.content_id for progress in progress_records]
@@ -310,12 +323,20 @@ async def get_assignment_activities(
                     # 使用 ContentItem 記錄（每個都有 ID）
                     items_with_ids = []
                     for ci in content_items:
+                        # 根據練習模式決定使用哪個欄位
+                        fields = get_sentence_fields(
+                            ci, content.type, _practice_mode or ""
+                        )
+                        if fields is None:
+                            continue  # skip vocab items without example_sentence
+                        q_text, q_translation, q_audio = fields
+
                         item_progress = progress_by_item.get(ci.id)
                         item_data = {
                             "id": ci.id,  # ContentItem 的 ID！
-                            "text": ci.text,
-                            "translation": ci.translation,
-                            "audio_url": ci.audio_url,
+                            "text": q_text,
+                            "translation": q_translation,
+                            "audio_url": q_audio,
                             "order_index": ci.order_index,
                         }
 
@@ -463,20 +484,15 @@ async def get_assignment_activities(
         db.commit()
 
     # 獲取 Assignment 的 practice_mode 和 show_answer（用於前端路由）
+    # 重用前面已查詢的 _parent_assignment（避免重複查詢）
     practice_mode = None
     show_answer = False
     score_category = None
-    parent_assignment = None
-    if student_assignment.assignment_id:
-        parent_assignment = (
-            db.query(Assignment)
-            .filter(Assignment.id == student_assignment.assignment_id)
-            .first()
-        )
-        if parent_assignment:
-            practice_mode = parent_assignment.practice_mode
-            show_answer = parent_assignment.show_answer or False
-            score_category = parent_assignment.score_category
+    parent_assignment = _parent_assignment if student_assignment.assignment_id else None
+    if parent_assignment:
+        practice_mode = parent_assignment.practice_mode
+        show_answer = parent_assignment.show_answer or False
+        score_category = parent_assignment.score_category
 
     # 檢查 AI 分析額度（根據作業所屬班級判斷：機構班級→機構點數，個人班級→個人配額）
     can_use_ai_analysis = (
@@ -1811,8 +1827,16 @@ async def get_rearrangement_questions(
 
     questions = []
     for item in content_items:
+        # 根據內容類型決定使用哪個欄位
+        fields = get_sentence_fields(
+            item, item.content.type if item.content else None, "rearrangement"
+        )
+        if fields is None:
+            continue  # skip vocab items without example_sentence
+        q_text, q_translation, q_audio = fields
+
         # 打亂單字順序（使用 seeded RNG 確保一致性）
-        words = item.text.strip().split()
+        words = q_text.strip().split()
         shuffled_words = words.copy()
         rng.shuffle(shuffled_words)
 
@@ -1842,9 +1866,9 @@ async def get_rearrangement_questions(
                     else 30
                 ),
                 play_audio=assignment.play_audio or False,
-                audio_url=item.audio_url,
-                translation=item.translation,
-                original_text=item.text.strip(),  # 正確答案
+                audio_url=q_audio,
+                translation=q_translation,
+                original_text=q_text.strip(),  # 正確答案
                 progress_status=progress_status,
                 progress_score=progress_score,
                 progress_error_count=progress_error_count,
@@ -1915,8 +1939,14 @@ async def submit_rearrangement_answer(
         db.add(progress)
         db.flush()
 
-    # 解析正確答案
-    correct_words = content_item.text.strip().split()
+    # 解析正確答案（單字集用 example_sentence）
+    fields = get_sentence_fields(
+        content_item,
+        content_item.content.type if content_item.content else None,
+        "rearrangement",
+    )
+    q_text = fields[0] if fields else content_item.text
+    correct_words = q_text.strip().split()
     word_count = len(correct_words)
     max_errors = content_item.max_errors or (3 if word_count <= 10 else 5)
     points_per_word = math.floor(100 / word_count)

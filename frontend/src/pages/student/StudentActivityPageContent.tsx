@@ -1732,14 +1732,20 @@ export default function StudentActivityPageContent({
     const answer = answers.get(activity.id);
 
     // 單字集類型使用新的 SentenceMakingActivity 組件，不要進入舊的 GroupedQuestionsTemplate
-    // 例句集 + rearrangement 模式使用 RearrangementActivity，也不要進入 GroupedQuestionsTemplate
+    // 例句集/單字集 + rearrangement 模式使用 RearrangementActivity，也不要進入 GroupedQuestionsTemplate
     const isRearrangementMode =
-      isExampleSentencesType(activity.type) && practiceMode === "rearrangement";
+      (isExampleSentencesType(activity.type) ||
+        isVocabularySetType(activity.type)) &&
+      practiceMode === "rearrangement";
+    // 單字集 + 例句模式（reading/rearrangement）→ 走例句模式組件
+    const isVocabInSentenceMode =
+      isVocabularySetType(activity.type) &&
+      (practiceMode === "reading" || practiceMode === "rearrangement");
 
     if (
       activity.items &&
       activity.items.length > 0 &&
-      !isVocabularySetType(activity.type) &&
+      (!isVocabularySetType(activity.type) || isVocabInSentenceMode) &&
       !isRearrangementMode
     ) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1940,6 +1946,53 @@ export default function StudentActivityPageContent({
 
     // 單字集類型（包含 SENTENCE_MAKING 和 VOCABULARY_SET）
     if (isVocabularySetType(activity.type)) {
+      // 單字集 + 例句重組模式 → 使用 RearrangementActivity
+      // （reading 模式已在上方 guard 進入 GroupedQuestionsTemplate）
+      if (isVocabInSentenceMode && practiceMode === "rearrangement") {
+        return (
+          <RearrangementActivity
+            studentAssignmentId={assignmentId}
+            isPreviewMode={isPreviewMode}
+            isDemoMode={isDemoMode}
+            showAnswer={showAnswer}
+            isPracticeMode={
+              assignmentStatus === "SUBMITTED" ||
+              assignmentStatus === "RESUBMITTED" ||
+              assignmentStatus === "GRADED"
+            }
+            currentQuestionIndex={rearrangementQuestionIndex}
+            onQuestionIndexChange={setRearrangementQuestionIndex}
+            onQuestionsLoaded={(questions, states) => {
+              setRearrangementQuestions(questions);
+              setRearrangementQuestionStates(states);
+            }}
+            onQuestionStateChange={setRearrangementQuestionStates}
+            onComplete={async (totalScore, totalQuestions) => {
+              if (onSubmit) {
+                try {
+                  await onSubmit({ answers: [] });
+                  toast.success(
+                    t("rearrangement.messages.allComplete", {
+                      score: totalScore,
+                      total: totalQuestions * 100,
+                    }),
+                  );
+                } catch (error) {
+                  console.error("Submission failed:", error);
+                }
+              } else {
+                toast.success(
+                  t("rearrangement.messages.allComplete", {
+                    score: totalScore,
+                    total: totalQuestions * 100,
+                  }),
+                );
+              }
+            }}
+          />
+        );
+      }
+
       // Check practice mode for vocabulary set
       if (practiceMode === "word_reading") {
         // Phase 2-2: 單字朗讀練習
@@ -2197,8 +2250,10 @@ export default function StudentActivityPageContent({
             </div>
           </div>
 
-          {/* Activity navigation - 單字選擇模式不顯示此區塊 */}
-          {!isVocabularySetType(currentActivity?.type || "") && (
+          {/* Activity navigation - 單字選擇模式不顯示此區塊（但單字集+例句模式例外） */}
+          {(!isVocabularySetType(currentActivity?.type || "") ||
+            practiceMode === "reading" ||
+            practiceMode === "rearrangement") && (
             <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 scrollbar-hide">
               {/* 例句重組模式：所有題目合併顯示，不分 activity */}
               {practiceMode === "rearrangement" &&
@@ -2248,10 +2303,15 @@ export default function StudentActivityPageContent({
                     activityIndex === currentActivityIndex;
 
                   // 🎯 Issue #147: 單字選擇模式不顯示題號指示器（練習是輪次制，與 items 不對應）
+                  // 但單字集+例句模式（reading/rearrangement）需要顯示題號
+                  const isVocabSentenceMode =
+                    isVocabularySetType(activity.type) &&
+                    (practiceMode === "reading" ||
+                      practiceMode === "rearrangement");
                   if (
                     activity.items &&
                     activity.items.length > 0 &&
-                    !isVocabularySetType(activity.type)
+                    (!isVocabularySetType(activity.type) || isVocabSentenceMode)
                   ) {
                     return (
                       <div
@@ -2300,13 +2360,15 @@ export default function StudentActivityPageContent({
 
                             // 🎯 Issue #118: 判斷是否為例句朗讀模式（禁止跳題）
                             const isReadingMode =
-                              isExampleSentencesType(activity.type) &&
+                              (isExampleSentencesType(activity.type) ||
+                                isVocabSentenceMode) &&
                               practiceMode !== "rearrangement";
 
                             // 🎯 Issue #147: 判斷是否為單字選擇模式（禁止跳題）
-                            const isWordSelectionMode = isVocabularySetType(
-                              activity.type,
-                            );
+                            // 單字集+例句模式不算單字選擇模式
+                            const isWordSelectionMode =
+                              isVocabularySetType(activity.type) &&
+                              !isVocabSentenceMode;
 
                             // 🎯 Issue #118: 檢查當前題目是否已分析（用於顯示狀態）
                             const hasAssessment = !!item?.ai_assessment;
