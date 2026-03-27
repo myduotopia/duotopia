@@ -2250,8 +2250,10 @@ export default function StudentActivityPageContent({
             </div>
           </div>
 
-          {/* Activity navigation - 單字選擇模式不顯示此區塊 */}
-          {!isVocabularySetType(currentActivity?.type || "") && (
+          {/* Activity navigation - 單字選擇模式不顯示此區塊（但單字集+例句模式例外） */}
+          {(!isVocabularySetType(currentActivity?.type || "") ||
+            practiceMode === "reading" ||
+            practiceMode === "rearrangement") && (
             <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 scrollbar-hide">
               {/* 例句重組模式：所有題目合併顯示，不分 activity */}
               {practiceMode === "rearrangement" &&
@@ -2301,10 +2303,15 @@ export default function StudentActivityPageContent({
                     activityIndex === currentActivityIndex;
 
                   // 🎯 Issue #147: 單字選擇模式不顯示題號指示器（練習是輪次制，與 items 不對應）
+                  // 但單字集+例句模式（reading/rearrangement）需要顯示題號
+                  const isVocabSentenceMode =
+                    isVocabularySetType(activity.type) &&
+                    (practiceMode === "reading" ||
+                      practiceMode === "rearrangement");
                   if (
                     activity.items &&
                     activity.items.length > 0 &&
-                    !isVocabularySetType(activity.type)
+                    (!isVocabularySetType(activity.type) || isVocabSentenceMode)
                   ) {
                     return (
                       <div
@@ -2353,13 +2360,15 @@ export default function StudentActivityPageContent({
 
                             // 🎯 Issue #118: 判斷是否為例句朗讀模式（禁止跳題）
                             const isReadingMode =
-                              isExampleSentencesType(activity.type) &&
+                              (isExampleSentencesType(activity.type) ||
+                                isVocabSentenceMode) &&
                               practiceMode !== "rearrangement";
 
                             // 🎯 Issue #147: 判斷是否為單字選擇模式（禁止跳題）
-                            const isWordSelectionMode = isVocabularySetType(
-                              activity.type,
-                            );
+                            // 單字集+例句模式不算單字選擇模式
+                            const isWordSelectionMode =
+                              isVocabularySetType(activity.type) &&
+                              !isVocabSentenceMode;
 
                             // 🎯 Issue #118: 檢查當前題目是否已分析（用於顯示狀態）
                             const hasAssessment = !!item?.ai_assessment;
