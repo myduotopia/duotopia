@@ -1,14 +1,14 @@
 """Make teacher password_hash nullable and add index on identities.one_campus_account.
 
 Revision ID: 20260327_1000
-Revises: -
+Revises: 20260326_1100
 Create Date: 2026-03-27
 """
 
 from alembic import op
 
 revision = "20260327_1000"
-down_revision = "20260325_1400"
+down_revision = "20260326_1100"
 branch_labels = None
 depends_on = None
 
