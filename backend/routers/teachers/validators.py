@@ -1,7 +1,7 @@
 """
 Pydantic models/schemas for teachers API validation.
 """
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import date
 
@@ -227,14 +227,14 @@ class GenerateSentencesRequest(BaseModel):
 
 
 class TTSRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=2000)
     voice: Optional[str] = "en-US-JennyNeural"
     rate: Optional[str] = "+0%"
     volume: Optional[str] = "+0%"
 
 
 class BatchTTSRequest(BaseModel):
-    texts: List[str]
+    texts: List[str] = Field(..., max_length=50)
     voice: Optional[str] = "en-US-JennyNeural"
     rate: Optional[str] = "+0%"
     volume: Optional[str] = "+0%"

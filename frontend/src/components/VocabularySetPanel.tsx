@@ -1066,6 +1066,8 @@ function SortableRowInner({
     isDragging,
   } = useSortable({ id: row.id });
 
+  const inlineAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -1381,7 +1383,13 @@ function SortableRowInner({
           {row.example_sentence_audio_url && (
             <button
               onClick={() => {
+                // Stop any currently playing audio before starting new one
+                if (inlineAudioRef.current) {
+                  inlineAudioRef.current.pause();
+                  inlineAudioRef.current = null;
+                }
                 const audio = new Audio(row.example_sentence_audio_url);
+                inlineAudioRef.current = audio;
                 audio.play().catch((err) => console.error("Play failed:", err));
               }}
               className="p-1 rounded text-green-600 hover:bg-green-100"
@@ -1395,8 +1403,6 @@ function SortableRowInner({
             <button
               onClick={async () => {
                 if (!row.example_sentence) return;
-                const { getVoiceAndRate } =
-                  await import("@/utils/ttsVoiceResolver");
                 const { voice, rate } = getVoiceAndRate(
                   row.audioSettings?.accent || "American English",
                   row.audioSettings?.gender || "Male",
