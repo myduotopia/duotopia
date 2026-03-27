@@ -14,12 +14,13 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from auth import create_access_token
 from core.config import settings
+from core.limiter import limiter
 from database import get_db
 from models.user import Student, Teacher, TeacherOrganization, TeacherSchool
 from routers.students.auth import (
@@ -197,7 +198,9 @@ def _build_teacher_response(db: Session, teacher: Teacher) -> dict:
 
 
 @router.get("/callback")
+@limiter.limit("10/minute")
 async def one_campus_callback(
+    request: Request,
     code: str = Query(..., description="1Campus one-time identity code"),
     schoolDsns: str = Query(..., description="School DSNS identifier"),
     db: Session = Depends(get_db),
@@ -342,8 +345,10 @@ async def one_campus_callback(
 
 
 @router.post("/merge-confirm")
+@limiter.limit("10/minute")
 async def merge_confirm(
-    request: MergeConfirmRequest,
+    request: Request,
+    body: MergeConfirmRequest,
     db: Session = Depends(get_db),
 ):
     """Confirm account merge after duplicate detection.
@@ -351,7 +356,7 @@ async def merge_confirm(
     Requires a signed merge_token issued by the callback endpoint.
     """
     try:
-        token_data = _verify_merge_token(request.merge_token)
+        token_data = _verify_merge_token(body.merge_token)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

@@ -236,7 +236,11 @@ class OneCampusAccountService:
                 )
                 return identity, teacher, "existing"
 
-        # Step 2: Check national_id_hash for cross-school match
+        # Step 2: Check national_id_hash for cross-school match.
+        # Unlike students, teachers don't get a merge_prompt — we silently link
+        # the 1Campus account to the existing identity. Teachers are unique
+        # individuals (not multi-school students with separate accounts), so
+        # a national_id_hash match is a reliable identity signal.
         if national_id_hash:
             existing_identity = OneCampusAccountService.find_by_national_id_hash(
                 db, national_id_hash
@@ -279,7 +283,7 @@ class OneCampusAccountService:
         teacher = Teacher(
             name=teacher_name,
             email=placeholder_email,
-            password_hash="!SSO_NO_PASSWORD",
+            password_hash=None,
             has_password=False,
             identity_id=identity.id,
             is_active=True,

@@ -50,7 +50,8 @@ export default function OneCampusCallback() {
     }
 
     handleCallback(code, schoolDsns);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   async function handleCallback(code: string, schoolDsns: string) {
     try {
