@@ -420,8 +420,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
               timeout: true,
               expected_score: actualScore,
               error_count: errorCount,
-              selections:
-                selectionsRef.current.get(contentItemId) || [],
+              selections: selectionsRef.current.get(contentItemId) || [],
             },
           );
         } catch (error) {

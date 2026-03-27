@@ -128,8 +128,13 @@ export function AssignmentAnalysisDialog({
       toast.success(t("analysisDialog.messages.reportGenerated"));
     } catch (err: unknown) {
       const errorMessage =
-        err instanceof Error ? err.message : t("analysisDialog.errors.generateFailed");
-      if (errorMessage.includes("402") || errorMessage.includes("Insufficient")) {
+        err instanceof Error
+          ? err.message
+          : t("analysisDialog.errors.generateFailed");
+      if (
+        errorMessage.includes("402") ||
+        errorMessage.includes("Insufficient")
+      ) {
         setError(t("analysisDialog.errors.insufficientQuota"));
       } else {
         setError(errorMessage);
@@ -193,10 +198,8 @@ export function AssignmentAnalysisDialog({
                 : t("analysisDialog.report.wordAnalysis")}
             </h4>
             <div className="space-y-2">
-              {(
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (data.difficult_sentences || data.word_analysis) as any[]
-              )
+              {// eslint-disable-next-line @typescript-eslint/no-explicit-any
+              ((data.difficult_sentences || data.word_analysis) as any[])
                 ?.slice(0, 5)
                 .map((item: any, i: number) => (
                   <div

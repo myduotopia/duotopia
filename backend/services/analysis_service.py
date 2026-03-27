@@ -34,9 +34,7 @@ BASE_TOKENS = 500  # prompt + 系統指令的基礎 token
 TOKENS_TO_SECONDS_RATE = 0.1
 
 
-def estimate_analysis_cost(
-    db: Session, assignment_id: int
-) -> Dict[str, Any]:
+def estimate_analysis_cost(db: Session, assignment_id: int) -> Dict[str, Any]:
     """
     估算分析報告所需的 token 數與點數
 
@@ -426,11 +424,15 @@ async def generate_analysis_report(
     try:
         # 收集數據
         if practice_mode == "rearrangement":
-            collected_data = _collect_rearrangement_data(db, assignment, student_assignments)
+            collected_data = _collect_rearrangement_data(
+                db, assignment, student_assignments
+            )
         elif practice_mode == "reading":
             collected_data = _collect_reading_data(db, assignment, student_assignments)
         elif practice_mode == "word_selection":
-            collected_data = _collect_word_selection_data(db, assignment, student_assignments)
+            collected_data = _collect_word_selection_data(
+                db, assignment, student_assignments
+            )
         else:
             raise ValueError(f"Unsupported practice mode: {practice_mode}")
 
@@ -452,7 +454,9 @@ async def generate_analysis_report(
         report.status = "completed"
         report.completed_at = datetime.now(timezone.utc)
         # 估算 token 使用量（基於 prompt 長度）
-        report.tokens_used = len(prompt) // 4 + len(json.dumps(report_json, ensure_ascii=False)) // 4
+        report.tokens_used = (
+            len(prompt) // 4 + len(json.dumps(report_json, ensure_ascii=False)) // 4
+        )
 
         db.commit()
         logger.info(f"Analysis report generated for assignment {assignment.id}")

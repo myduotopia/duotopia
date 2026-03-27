@@ -2212,7 +2212,9 @@ export default function ClassroomDetail({
                                           }
                                         >
                                           <BarChart3 className="h-4 w-4 mr-2" />
-                                          {t("classroomDetail.buttons.analysisReport")}
+                                          {t(
+                                            "classroomDetail.buttons.analysisReport",
+                                          )}
                                         </DropdownMenuItem>
                                       )}
                                       {showArchived ? (
@@ -2538,7 +2540,9 @@ export default function ClassroomDetail({
                                               }
                                             >
                                               <BarChart3 className="w-4 h-4 mr-1" />
-                                              {t("classroomDetail.buttons.analysisReport")}
+                                              {t(
+                                                "classroomDetail.buttons.analysisReport",
+                                              )}
                                             </Button>
                                             <Button
                                               variant="ghost"

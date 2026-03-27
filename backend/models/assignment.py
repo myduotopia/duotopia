@@ -198,7 +198,9 @@ class AssignmentAnalysisReport(Base):
     assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False)
     teacher_id = Column(Integer, ForeignKey("teachers.id"), nullable=False)
     practice_mode = Column(String(50), nullable=False)
-    status = Column(String(20), nullable=False, default="pending")  # pending, completed, failed
+    status = Column(
+        String(20), nullable=False, default="pending"
+    )  # pending, completed, failed
     report_data = Column(JSONB)  # 結構化報告內容
     summary = Column(Text)  # 報告摘要（純文字）
     student_count = Column(Integer, nullable=False, default=0)
