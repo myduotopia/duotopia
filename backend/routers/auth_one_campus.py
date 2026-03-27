@@ -22,7 +22,8 @@ from auth import create_access_token
 from core.config import settings
 from core.limiter import limiter
 from database import get_db
-from models.user import Student, Teacher, TeacherOrganization, TeacherSchool
+from models.user import Student, Teacher
+from models.organization import TeacherOrganization, TeacherSchool
 from routers.students.auth import (
     _get_aggregated_classrooms,
 )
