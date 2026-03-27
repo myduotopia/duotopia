@@ -212,6 +212,9 @@ class ContentItem(Base):
     example_sentence_definition = Column(
         Text, nullable=True
     )  # English definition of example
+    example_sentence_audio_url = Column(
+        Text, nullable=True
+    )  # TTS audio for example sentence
 
     # ===== 例句重組相關欄位 =====
     # 單字數量（建立時自動計算）
