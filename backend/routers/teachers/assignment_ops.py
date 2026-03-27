@@ -2,6 +2,8 @@
 Assignment Ops operations for teachers.
 """
 import logging
+from datetime import datetime, timezone
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -24,6 +26,10 @@ from models import (
     TeacherSchool,
     Organization,
     School,
+    StudentAssignment,
+    StudentItemProgress,
+    StudentContentProgress,
+    AssignmentStatus,
 )
 from .dependencies import get_current_teacher
 from .validators import *
@@ -73,8 +79,40 @@ def _get_teacher_assignment(
     return assignment
 
 
+def _get_instant_practice_student_assignment(
+    assignment: Assignment, db: Session
+) -> Optional[StudentAssignment]:
+    """Get the teacher's StudentAssignment for an instant practice assignment."""
+    if not assignment.is_instant_practice:
+        return None
+    return (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.assignment_id == assignment.id,
+            StudentAssignment.teacher_id == assignment.teacher_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+
+def _get_item_progress(
+    student_assignment_id: int, content_item_id: int, db: Session
+) -> Optional[StudentItemProgress]:
+    """Get StudentItemProgress for a specific item."""
+    return (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == student_assignment_id,
+            StudentItemProgress.content_item_id == content_item_id,
+        )
+        .first()
+    )
+
+
 # ============================================================================
 # Preview Endpoints — thin wrappers around preview_service
+# For instant practice assignments, also saves progress to DB
 # ============================================================================
 
 
@@ -86,7 +124,16 @@ async def get_assignment_preview(
 ):
     """取得作業的預覽內容（供老師示範用）"""
     assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
-    return build_assignment_preview(assignment, db)
+    result = build_assignment_preview(assignment, db)
+
+    # 即刻練習：加入 student_assignment_id 供前端使用
+    if assignment.is_instant_practice:
+        sa = _get_instant_practice_student_assignment(assignment, db)
+        if sa:
+            result["student_assignment_id"] = sa.id
+            result["is_instant_practice"] = True
+
+    return result
 
 
 @router.post("/assignments/preview/assess-speech")
@@ -131,14 +178,50 @@ async def preview_word_selection_answer(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """Preview mode: Submit word selection answer (not saved)."""
+    """Preview mode: Submit word selection answer.
+    For instant practice: also saves progress to StudentItemProgress.
+    """
     assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
-    return check_word_selection_answer(
+    result = check_word_selection_answer(
         data.content_item_id,
         data.selected_answer,
         assignment,
         db,
     )
+
+    # 即刻練習：儲存答題進度
+    if assignment.is_instant_practice:
+        sa = _get_instant_practice_student_assignment(assignment, db)
+        if sa:
+            item_progress = _get_item_progress(sa.id, data.content_item_id, db)
+            if item_progress:
+                now = datetime.now(timezone.utc)
+                item_progress.status = "COMPLETED"
+                item_progress.submitted_at = now
+                item_progress.attempts = (item_progress.attempts or 0) + 1
+
+                # 累計答題紀錄到 word_selection_data
+                history = item_progress.word_selection_data or {}
+                answers = history.get("answers", [])
+                answers.append(
+                    {
+                        "selected": data.selected_answer,
+                        "is_correct": result["is_correct"],
+                        "answered_at": now.isoformat(),
+                    }
+                )
+                history["answers"] = answers
+                history["last_correct"] = result["is_correct"]
+                item_progress.word_selection_data = history
+
+                # 更新 StudentAssignment 狀態
+                if sa.status == AssignmentStatus.NOT_STARTED:
+                    sa.status = AssignmentStatus.IN_PROGRESS
+                    sa.started_at = now
+
+                db.commit()
+
+    return result
 
 
 @router.get("/assignments/{assignment_id}/preview/rearrangement-questions")
@@ -159,14 +242,42 @@ async def preview_rearrangement_answer(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """Preview mode: Submit rearrangement answer (not saved)."""
-    _get_teacher_assignment(assignment_id, current_teacher, db)
-    return check_rearrangement_answer(
+    """Preview mode: Submit rearrangement answer.
+    For instant practice: also saves progress to StudentItemProgress.
+    """
+    assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
+    result = check_rearrangement_answer(
         data.content_item_id,
         data.selected_word,
         data.current_position,
         db,
     )
+
+    # 即刻練習：儲存答題進度
+    if assignment.is_instant_practice:
+        sa = _get_instant_practice_student_assignment(assignment, db)
+        if sa:
+            item_progress = _get_item_progress(sa.id, data.content_item_id, db)
+            if item_progress:
+                now = datetime.now(timezone.utc)
+                if not result["is_correct"]:
+                    item_progress.error_count = (item_progress.error_count or 0) + 1
+                item_progress.correct_word_count = result["correct_word_count"]
+                item_progress.expected_score = result["expected_score"]
+                item_progress.status = "IN_PROGRESS"
+
+                if result.get("completed"):
+                    item_progress.status = "COMPLETED"
+                    item_progress.submitted_at = now
+
+                # 更新 StudentAssignment 狀態
+                if sa.status == AssignmentStatus.NOT_STARTED:
+                    sa.status = AssignmentStatus.IN_PROGRESS
+                    sa.started_at = now
+
+                db.commit()
+
+    return result
 
 
 @router.post("/assignments/{assignment_id}/preview/rearrangement-retry")
@@ -175,8 +286,23 @@ async def preview_rearrangement_retry(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """Preview mode: Retry rearrangement question (simulated)."""
-    _get_teacher_assignment(assignment_id, current_teacher, db)
+    """Preview mode: Retry rearrangement question."""
+    assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
+
+    # 即刻練習：記錄重試
+    if assignment.is_instant_practice:
+        sa = _get_instant_practice_student_assignment(assignment, db)
+        if sa:
+            # Increment retry count on all in-progress items
+            db.query(StudentItemProgress).filter(
+                StudentItemProgress.student_assignment_id == sa.id,
+                StudentItemProgress.status == "IN_PROGRESS",
+            ).update(
+                {"retry_count": StudentItemProgress.retry_count + 1},
+                synchronize_session=False,
+            )
+            db.commit()
+
     return handle_rearrangement_retry()
 
 
@@ -187,8 +313,31 @@ async def preview_rearrangement_complete(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """Preview mode: Complete rearrangement question (simulated)."""
-    _get_teacher_assignment(assignment_id, current_teacher, db)
+    """Preview mode: Complete rearrangement question.
+    For instant practice: updates StudentAssignment status to SUBMITTED.
+    """
+    assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
+
+    # 即刻練習：標記完成
+    if assignment.is_instant_practice:
+        sa = _get_instant_practice_student_assignment(assignment, db)
+        if sa:
+            now = datetime.now(timezone.utc)
+            sa.status = AssignmentStatus.SUBMITTED
+            sa.submitted_at = now
+
+            # 更新 StudentContentProgress
+            db.query(StudentContentProgress).filter(
+                StudentContentProgress.student_assignment_id == sa.id,
+            ).update(
+                {
+                    "status": AssignmentStatus.SUBMITTED,
+                    "completed_at": now,
+                },
+                synchronize_session=False,
+            )
+            db.commit()
+
     return handle_rearrangement_complete(
         expected_score=data.expected_score,
         timeout=data.timeout,

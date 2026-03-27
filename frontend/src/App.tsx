@@ -14,6 +14,7 @@ import TeacherResetPassword from "./pages/TeacherResetPassword";
 import TeacherSetupPassword from "./pages/TeacherSetupPassword";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import TeacherClassrooms from "./pages/teacher/TeacherClassrooms";
+import AssignmentManagementPage from "./pages/teacher/AssignmentManagementPage";
 import TeacherStudents from "./pages/teacher/TeacherStudents";
 import ClassroomDetail from "./pages/teacher/ClassroomDetail";
 import TeacherAssignmentDetailPage from "./pages/teacher/TeacherAssignmentDetailPage";
@@ -148,6 +149,16 @@ function App() {
             <ProtectedRoute>
               <TeacherLayout>
                 <TeacherClassrooms />
+              </TeacherLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/assignments"
+          element={
+            <ProtectedRoute>
+              <TeacherLayout>
+                <AssignmentManagementPage />
               </TeacherLayout>
             </ProtectedRoute>
           }

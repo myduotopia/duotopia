@@ -424,21 +424,32 @@ async def get_assignments(
     classroom_id: Optional[int] = Query(None, description="Filter by classroom"),
     status: Optional[str] = Query(None, description="Filter by status"),
     is_archived: Optional[bool] = Query(False, description="Filter by archive status"),
+    is_instant_practice: Optional[bool] = Query(
+        None, description="Filter by instant practice (None=all, True=only, False=exclude)"
+    ),
     db: Session = Depends(get_db),
     current_teacher: Teacher = Depends(get_current_teacher),
 ):
     """
     取得作業列表（新架構）
     - 教師看到自己建立的作業
-    - 可依班級和狀態篩選
+    - 可依班級、狀態、即刻練習篩選
     - 預設只顯示未封存作業，is_archived=true 顯示封存作業
+    - is_instant_practice=None 顯示所有，True 只顯示即刻練習，False 排除即刻練習
+    - 不帶 classroom_id 時回傳所有班級的作業（跨班級查詢）
     """
-    # 建立查詢（排除即刻練習暫時作業）
+    # 建立查詢
     query = db.query(Assignment).filter(
         Assignment.teacher_id == current_teacher.id,
         Assignment.is_active.is_(True),
-        Assignment.is_instant_practice.is_(False),
     )
+
+    # 即刻練習篩選（預設 None = 顯示所有）
+    if is_instant_practice is True:
+        query = query.filter(Assignment.is_instant_practice.is_(True))
+    elif is_instant_practice is False:
+        query = query.filter(Assignment.is_instant_practice.is_(False))
+    # is_instant_practice=None → 不篩選，回傳全部
 
     # 封存篩選
     if is_archived:
@@ -451,6 +462,17 @@ async def get_assignments(
         query = query.filter(Assignment.classroom_id == classroom_id)
 
     assignments = query.order_by(Assignment.created_at.desc()).all()
+
+    # Batch-load classroom names (avoid N+1)
+    classroom_ids = list({a.classroom_id for a in assignments if a.classroom_id})
+    classrooms = (
+        db.query(Classroom.id, Classroom.name)
+        .filter(Classroom.id.in_(classroom_ids))
+        .all()
+        if classroom_ids
+        else []
+    )
+    classroom_name_map = {c.id: c.name for c in classrooms}
 
     # Batch-load assignment content counts (avoid N+1)
     assignment_ids = [a.id for a in assignments]
@@ -533,6 +555,8 @@ async def get_assignments(
                 "title": assignment.title,
                 "description": assignment.description,
                 "classroom_id": assignment.classroom_id,
+                "classroom_name": classroom_name_map.get(assignment.classroom_id),
+                "is_instant_practice": assignment.is_instant_practice or False,
                 "content_count": content_count,
                 "student_count": total_students,
                 "due_date": (

@@ -4849,5 +4849,52 @@
       "generatedAt": "生成時間：",
       "pointsUsed": "消耗點數："
     }
+  },
+  "assignmentManagement": {
+    "title": "作業管理",
+    "fetchError": "載入作業列表失敗",
+    "empty": "目前沒有作業",
+    "filters": {
+      "allClassrooms": "所有班級",
+      "noClassroom": "無班級",
+      "allTypes": "所有類型",
+      "regularOnly": "一般作業",
+      "instantOnly": "即刻練習"
+    },
+    "columns": {
+      "title": "標題",
+      "classroom": "班級",
+      "type": "類型",
+      "mode": "練習模式",
+      "students": "學生數",
+      "completion": "完成率",
+      "createdAt": "建立日期",
+      "dueDate": "截止日期"
+    },
+    "labels": {
+      "instantPractice": "即刻練習",
+      "regular": "一般作業",
+      "noClassroom": "無班級"
+    },
+    "actions": {
+      "view": "查看詳情",
+      "archive": "封存",
+      "unarchive": "取消封存",
+      "delete": "刪除"
+    },
+    "confirm": {
+      "archiveTitle": "確認封存",
+      "archiveDescription": "確定要封存「{{title}}」嗎？封存後可在封存區找到。",
+      "unarchiveTitle": "確認取消封存",
+      "unarchiveDescription": "確定要取消封存「{{title}}」嗎？",
+      "deleteTitle": "確認刪除",
+      "deleteDescription": "確定要刪除「{{title}}」嗎？此操作無法復原。"
+    },
+    "archiveSuccess": "作業已封存",
+    "archiveError": "封存失敗",
+    "unarchiveSuccess": "作業已取消封存",
+    "unarchiveError": "取消封存失敗",
+    "deleteSuccess": "作業已刪除",
+    "deleteError": "刪除失敗"
   }
 }
