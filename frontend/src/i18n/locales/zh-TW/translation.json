@@ -920,7 +920,8 @@
       "continue": "繼續作業",
       "view": "檢視作業",
       "viewResults": "查看結果",
-      "resubmit": "開始訂正"
+      "resubmit": "開始訂正",
+      "practice": "自主練習"
     },
     "scoreCategory": {
       "speaking": "口說",
@@ -984,7 +985,8 @@
       "view": "檢視作業",
       "startAssignment": "開始作業",
       "continueAssignment": "繼續作業",
-      "resubmit": "開始訂正"
+      "resubmit": "開始訂正",
+      "practice": "自主練習"
     },
     "overview": {
       "estimatedTime": "預估時間: {{time}}",
@@ -4537,6 +4539,12 @@
     "wordsMastered": "已熟練 {{mastered}} / {{total}} 個單字",
     "targetReached": "恭喜！您已達到目標熟悉度！",
     "continuePractice": "繼續練習",
+    "keepPracticing": "先不提交，繼續練習",
+    "submitAssignment": "提交作業",
+    "submitPrompt": "是否提交作業？提交後仍可繼續練習，但成績將不再改變。",
+    "practiceModeHint": "自主練習模式 — 不影響已提交的成績",
+    "practiceModeHeader": "自主練習模式 — 已提交的成績不會改變",
+    "backToList": "返回作業列表",
     "close": "關閉",
     "nextRound": "開始下一輪",
     "achievementTitle": "恭喜達標！",
@@ -4546,7 +4554,8 @@
       "submitFailed": "提交答案失敗",
       "cannotCompletePreview": "預覽模式無法完成作業",
       "completed": "作業已完成！",
-      "completeFailed": "完成作業失敗"
+      "submitted": "作業已提交！",
+      "completeFailed": "提交作業失敗"
     }
   },
   "workspace": {
@@ -4738,6 +4747,59 @@
         "label": "單字選擇",
         "description": "根據單字選擇正確的翻譯"
       }
+    }
+  },
+  "blog": {
+    "title": "Duotopia Blog",
+    "subtitle": "教學心得、產品更新、英語學習資源",
+    "allCategories": "全部",
+    "readMore": "閱讀更多",
+    "backToBlog": "← 返回 Blog",
+    "publishedOn": "發布於",
+    "readingTime": "分鐘閱讀",
+    "noPosts": "目前還沒有文章",
+    "readInOtherLang": "Read in English",
+    "admin": {
+      "title": "Blog 管理",
+      "newPost": "新增文章",
+      "editPost": "編輯文章",
+      "postTitle": "標題",
+      "slug": "網址代稱",
+      "summary": "摘要",
+      "content": "內容",
+      "categories": "分類",
+      "coverImage": "封面圖片",
+      "seoSettings": "SEO 設定",
+      "metaTitle": "Meta 標題",
+      "metaDescription": "Meta 描述",
+      "saveDraft": "儲存草稿",
+      "publish": "發布",
+      "unpublish": "取消發布",
+      "delete": "刪除",
+      "confirmDelete": "確定要刪除這篇文章嗎？",
+      "status": "狀態",
+      "published": "已發布",
+      "draft": "草稿",
+      "preview": "預覽",
+      "edit": "編輯",
+      "uploadImage": "上傳圖片",
+      "back": "返回",
+      "locale": "語言版本",
+      "localeZhTW": "🇹🇼 中文",
+      "localeEn": "🇺🇸 English",
+      "linkedPost": "翻譯版本",
+      "editLinkedPost": "編輯翻譯版本",
+      "translate": "建立翻譯",
+      "createTranslation": "建立翻譯草稿",
+      "all": "全部",
+      "allCategories": "所有分類",
+      "addCategory": "新增分類",
+      "add": "新增",
+      "cancel": "取消",
+      "categoryName": "分類名稱",
+      "noCategories": "尚無分類",
+      "description": "Blog 文章管理",
+      "confirmDeleteCategory": "確定要刪除分類「{{name}}」嗎？"
     }
   }
 }

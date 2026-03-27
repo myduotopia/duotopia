@@ -600,6 +600,20 @@ async def submit_assignment(
             status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found"
         )
 
+    # Issue #460: If already GRADED, don't re-submit — return current state
+    if student_assignment.status == AssignmentStatus.GRADED:
+        return {
+            "message": "Assignment already submitted",
+            "submitted_at": (
+                student_assignment.submitted_at.isoformat()
+                if student_assignment.submitted_at
+                else None
+            ),
+            "status": student_assignment.status.value,
+            "is_auto_graded": True,
+            "score": student_assignment.score,
+        }
+
     # 取得作業的 practice_mode 來判斷是否為自動批改類型
     # 自動批改類型：rearrangement（例句重組）、word_selection（單字選擇）
     # 手動批改類型：reading（例句朗讀）、word_reading（單字朗讀）
@@ -669,7 +683,7 @@ async def submit_assignment(
             ).fetchone()
             if result:
                 current_mastery = float(result.current_mastery) * 100
-                student_assignment.score = min(100, int(current_mastery))
+                student_assignment.score = min(100, round(current_mastery))
             else:
                 student_assignment.score = 0
     else:
@@ -1186,6 +1200,7 @@ async def start_word_selection_practice(
         )
 
     # Update assignment status to IN_PROGRESS if not started
+    # Issue #460: Allow GRADED assignments to start practice (score won't change)
     if student_assignment.status == AssignmentStatus.NOT_STARTED:
         student_assignment.status = AssignmentStatus.IN_PROGRESS
         student_assignment.started_at = datetime.now(timezone.utc)
@@ -1363,6 +1378,9 @@ async def start_word_selection_practice(
     words_mastered = int(mastery_result.words_mastered) if mastery_result else 0
     achieved = bool(mastery_result.achieved) if mastery_result else False
 
+    # Issue #460: Tell frontend if this is practice-only mode (already submitted)
+    is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
+
     return {
         "session_id": practice_session.id,
         "words": words_with_options,
@@ -1371,6 +1389,7 @@ async def start_word_selection_practice(
         "target_proficiency": target_proficiency,
         "words_mastered": words_mastered,
         "achieved": achieved,
+        "is_practice_mode": is_practice_mode,
         "show_word": assignment.show_word if assignment else True,
         "show_image": assignment.show_image if assignment else True,
         "play_audio": assignment.play_audio if assignment else False,
@@ -1543,7 +1562,9 @@ async def submit_word_selection_answer(
             request.content_item_id,
         )
 
-    # Sync assignment status after each answer
+    # Issue #460: Only auto-submit when mastery reaches 100%.
+    # For other thresholds, the frontend asks the student whether to submit.
+    # If already GRADED (submitted), allow practice but don't update score.
     mastery_result = db.execute(
         text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
         {"sa_id": assignment_id},
@@ -1551,21 +1572,14 @@ async def submit_word_selection_answer(
 
     if mastery_result:
         current_mastery = float(mastery_result.current_mastery)
-        target_mastery = float(mastery_result.target_mastery)
-        achieved = current_mastery >= target_mastery
 
-        # Sync status based on mastery
-        if achieved:
-            student_assignment.score = min(100.0, current_mastery * 100)
-            if student_assignment.status != AssignmentStatus.GRADED:
+        if student_assignment.status != AssignmentStatus.GRADED:
+            # Auto-submit only when mastery = 100%
+            if current_mastery >= 1.0:
+                student_assignment.score = min(100, round(current_mastery * 100))
                 student_assignment.status = AssignmentStatus.GRADED
                 student_assignment.submitted_at = datetime.now(timezone.utc)
-        else:
-            # If was GRADED but now below target, change back to IN_PROGRESS
-            if student_assignment.status == AssignmentStatus.GRADED:
-                student_assignment.status = AssignmentStatus.IN_PROGRESS
-                student_assignment.submitted_at = None
-                student_assignment.score = None
+        # If already GRADED, score is locked — do not update
 
     db.commit()
 
@@ -1694,15 +1708,25 @@ async def complete_word_selection_assignment(
     target_proficiency = assignment.target_proficiency if assignment else 80
     current_mastery = float(result.current_mastery) * 100 if result else 0
 
+    # Issue #460: If already GRADED, don't re-submit — just return current state
+    if student_assignment.status == AssignmentStatus.GRADED:
+        return {
+            "success": True,
+            "message": "作業已提交",
+            "status": "COMPLETED",
+            "final_score": student_assignment.score,
+            "achieved_target": current_mastery >= target_proficiency,
+        }
+
     # Update assignment status to COMPLETED
     student_assignment.status = (
         AssignmentStatus.GRADED
     )  # GRADED = completed for auto-graded
     student_assignment.submitted_at = datetime.now(timezone.utc)
 
-    # Calculate final score based on mastery
+    # Calculate final score based on mastery — lock score at submission time
     # Issue #165: Fix - use 'score' column instead of non-existent 'final_score'
-    student_assignment.score = min(100, int(current_mastery))
+    student_assignment.score = min(100, round(current_mastery))
 
     db.commit()
 
