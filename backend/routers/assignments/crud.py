@@ -425,7 +425,8 @@ async def get_assignments(
     status: Optional[str] = Query(None, description="Filter by status"),
     is_archived: Optional[bool] = Query(False, description="Filter by archive status"),
     is_instant_practice: Optional[bool] = Query(
-        None, description="Filter by instant practice (None=all, True=only, False=exclude)"
+        None,
+        description="Filter by instant practice (None=all, True=only, False=exclude)",
     ),
     db: Session = Depends(get_db),
     current_teacher: Teacher = Depends(get_current_teacher),

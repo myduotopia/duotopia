@@ -152,10 +152,7 @@ export default function AssignmentManagementPage() {
       }
       if (filterType === "regular" && a.is_instant_practice) return false;
       if (filterType === "instant" && !a.is_instant_practice) return false;
-      if (
-        filterPracticeMode &&
-        a.practice_mode !== filterPracticeMode
-      )
+      if (filterPracticeMode && a.practice_mode !== filterPracticeMode)
         return false;
       if (
         filterKeyword &&
@@ -370,8 +367,12 @@ export default function AssignmentManagementPage() {
           onChange={(e) => setFilterClassroom(e.target.value)}
           className="h-9 rounded-md border border-input bg-background px-3 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200"
         >
-          <option value="">{t("assignmentManagement.filters.allClassrooms")}</option>
-          <option value="none">{t("assignmentManagement.filters.noClassroom")}</option>
+          <option value="">
+            {t("assignmentManagement.filters.allClassrooms")}
+          </option>
+          <option value="none">
+            {t("assignmentManagement.filters.noClassroom")}
+          </option>
           {classroomOptions.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -385,8 +386,12 @@ export default function AssignmentManagementPage() {
           className="h-9 rounded-md border border-input bg-background px-3 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200"
         >
           <option value="">{t("assignmentManagement.filters.allTypes")}</option>
-          <option value="regular">{t("assignmentManagement.filters.regularOnly")}</option>
-          <option value="instant">{t("assignmentManagement.filters.instantOnly")}</option>
+          <option value="regular">
+            {t("assignmentManagement.filters.regularOnly")}
+          </option>
+          <option value="instant">
+            {t("assignmentManagement.filters.instantOnly")}
+          </option>
         </select>
 
         <select
@@ -465,14 +470,30 @@ export default function AssignmentManagementPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t("assignmentManagement.columns.title")}</TableHead>
-                  <TableHead>{t("assignmentManagement.columns.classroom")}</TableHead>
-                  <TableHead>{t("assignmentManagement.columns.type")}</TableHead>
-                  <TableHead>{t("assignmentManagement.columns.mode")}</TableHead>
-                  <TableHead>{t("assignmentManagement.columns.students")}</TableHead>
-                  <TableHead>{t("assignmentManagement.columns.completion")}</TableHead>
-                  <TableHead>{t("assignmentManagement.columns.createdAt")}</TableHead>
-                  <TableHead>{t("assignmentManagement.columns.dueDate")}</TableHead>
+                  <TableHead>
+                    {t("assignmentManagement.columns.title")}
+                  </TableHead>
+                  <TableHead>
+                    {t("assignmentManagement.columns.classroom")}
+                  </TableHead>
+                  <TableHead>
+                    {t("assignmentManagement.columns.type")}
+                  </TableHead>
+                  <TableHead>
+                    {t("assignmentManagement.columns.mode")}
+                  </TableHead>
+                  <TableHead>
+                    {t("assignmentManagement.columns.students")}
+                  </TableHead>
+                  <TableHead>
+                    {t("assignmentManagement.columns.completion")}
+                  </TableHead>
+                  <TableHead>
+                    {t("assignmentManagement.columns.createdAt")}
+                  </TableHead>
+                  <TableHead>
+                    {t("assignmentManagement.columns.dueDate")}
+                  </TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -709,7 +730,6 @@ export default function AssignmentManagementPage() {
           </div>
         </>
       )}
-
     </div>
   );
 }
