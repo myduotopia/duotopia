@@ -267,6 +267,7 @@ export default function AssignmentManagementPage() {
 
   const getPracticeModeLabel = (mode?: string) => {
     switch (mode) {
+      // "reading" mode = read aloud (speaking); reuses SPEAKING i18n key for app-wide consistency
       case "reading":
         return t("classroomDetail.contentTypes.SPEAKING");
       case "rearrangement":
