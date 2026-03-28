@@ -9,6 +9,7 @@ import {
   Users,
   BookOpen,
   Package,
+  ClipboardList,
 } from "lucide-react";
 import { SidebarGroup } from "@/types/sidebar";
 
@@ -47,6 +48,12 @@ export const getSidebarGroups = (
         label: t("teacherLayout.nav.myClassrooms"),
         icon: GraduationCap,
         path: "/teacher/classrooms",
+      },
+      {
+        id: "assignments",
+        label: t("assignmentManagement.title"),
+        icon: ClipboardList,
+        path: "/teacher/assignments",
       },
       {
         id: "students",

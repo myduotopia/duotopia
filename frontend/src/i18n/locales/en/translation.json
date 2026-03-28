@@ -4830,5 +4830,52 @@
       "generatedAt": "Generated: ",
       "pointsUsed": "Points Used: "
     }
+  },
+  "assignmentManagement": {
+    "title": "Assignment Management",
+    "fetchError": "Failed to load assignments",
+    "empty": "No assignments yet",
+    "filters": {
+      "allClassrooms": "All Classes",
+      "noClassroom": "No Class",
+      "allTypes": "All Types",
+      "regularOnly": "Regular Only",
+      "instantOnly": "Instant Practice Only"
+    },
+    "columns": {
+      "title": "Title",
+      "classroom": "Class",
+      "type": "Type",
+      "mode": "Practice Mode",
+      "students": "Students",
+      "completion": "Completion",
+      "createdAt": "Created",
+      "dueDate": "Due Date"
+    },
+    "labels": {
+      "instantPractice": "Instant Practice",
+      "regular": "Regular",
+      "noClassroom": "No Class"
+    },
+    "actions": {
+      "view": "View Details",
+      "archive": "Archive",
+      "unarchive": "Unarchive",
+      "delete": "Delete"
+    },
+    "confirm": {
+      "archiveTitle": "Confirm Archive",
+      "archiveDescription": "Are you sure you want to archive \"{{title}}\"? You can find it in the archive.",
+      "unarchiveTitle": "Confirm Unarchive",
+      "unarchiveDescription": "Are you sure you want to unarchive \"{{title}}\"?",
+      "deleteTitle": "Confirm Delete",
+      "deleteDescription": "Are you sure you want to delete \"{{title}}\"? This action cannot be undone."
+    },
+    "archiveSuccess": "Assignment archived",
+    "archiveError": "Failed to archive",
+    "unarchiveSuccess": "Assignment unarchived",
+    "unarchiveError": "Failed to unarchive",
+    "deleteSuccess": "Assignment deleted",
+    "deleteError": "Failed to delete"
   }
 }
