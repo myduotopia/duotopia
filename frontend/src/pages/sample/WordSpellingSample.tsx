@@ -159,7 +159,8 @@ export default function WordSpellingSample() {
   const [forceVirtualKeyboard, setForceVirtualKeyboard] = useState(false);
   // (pointer: coarse) 偵測主要指標裝置是否為觸控（手指），比 maxTouchPoints 更準確
   // Windows 桌機即使支援觸控 API，maxTouchPoints 也可能 > 0，但 pointer 仍為 fine
-  const isTouchDevice = forceVirtualKeyboard || window.matchMedia("(pointer: coarse)").matches;
+  const isTouchDevice =
+    forceVirtualKeyboard || window.matchMedia("(pointer: coarse)").matches;
 
   // === 老師設定（出作業時配置，學生端為接收端） ===
   const [hintMode, setHintMode] = useState<HintMode>("translation");
@@ -174,13 +175,16 @@ export default function WordSpellingSample() {
   // 選擇題模式：選項數量（2-4）
   const [choiceCount, setChoiceCount] = useState(4);
   // 輸入方式：鍵盤（虛擬/原生）或手寫（Chrome Handwriting API）
-  const [inputMethod, setInputMethod] = useState<"keyboard" | "handwriting" | "drawing">("keyboard");
+  const [inputMethod, setInputMethod] = useState<
+    "keyboard" | "handwriting" | "drawing"
+  >("keyboard");
   // 考試結束後是否讓學生看到逐題答案對照
   const [showExamAnswers, setShowExamAnswers] = useState(true);
 
   // 每題限時（null = 不限時，單位：秒）
   const [questionTimeLimit, setQuestionTimeLimit] = useState<number | null>(10);
-  const [questionTimeRemaining, setQuestionTimeRemaining] = useState<number>(10);
+  const [questionTimeRemaining, setQuestionTimeRemaining] =
+    useState<number>(10);
 
   // 列印 PDF sheet 開關
   const [printSheetOpen, setPrintSheetOpen] = useState(false);
@@ -235,9 +239,9 @@ export default function WordSpellingSample() {
   const choiceOptions = useMemo(() => {
     if (hintMode !== "choice") return [];
     const correct = currentWord.text;
-    const others = MOCK_WORDS
-      .filter((_, i) => i !== wordOrder[currentIndex])
-      .map((w) => w.text);
+    const others = MOCK_WORDS.filter(
+      (_, i) => i !== wordOrder[currentIndex],
+    ).map((w) => w.text);
     // Shuffle distractors
     for (let i = others.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -332,7 +336,9 @@ export default function WordSpellingSample() {
     (letter: string) => {
       if (answered || (isExamMode && examSubmitted)) return;
       // showLetterCount 模式下，只填入到實際答案字母數的格子
-      const maxSlots = showLetterCount ? currentWord.text.length : MAX_ANSWER_LENGTH;
+      const maxSlots = showLetterCount
+        ? currentWord.text.length
+        : MAX_ANSWER_LENGTH;
       setSlots((prev) => {
         const next = [...prev];
         const emptyIndex = next.findIndex((s, i) => s === null && i < maxSlots);
@@ -342,7 +348,13 @@ export default function WordSpellingSample() {
         return next;
       });
     },
-    [answered, isExamMode, examSubmitted, showLetterCount, currentWord.text.length],
+    [
+      answered,
+      isExamMode,
+      examSubmitted,
+      showLetterCount,
+      currentWord.text.length,
+    ],
   );
 
   // 點擊答案格中的字母 → 移除（後方字母不補位，空格留在原處）
@@ -400,7 +412,8 @@ export default function WordSpellingSample() {
         setExamAnswers((prev) => ({ ...prev, [currentIndex]: option }));
       } else {
         // 練習：即時判斷
-        const isCorrect = option.toLowerCase() === currentWord.text.toLowerCase();
+        const isCorrect =
+          option.toLowerCase() === currentWord.text.toLowerCase();
         setAnswered(true);
         if (isCorrect) {
           setCorrectCount((prev) => prev + 1);
@@ -429,7 +442,13 @@ export default function WordSpellingSample() {
       }
       setSlots(newSlots);
     },
-    [answered, isExamMode, examSubmitted, showLetterCount, currentWord.text.length],
+    [
+      answered,
+      isExamMode,
+      examSubmitted,
+      showLetterCount,
+      currentWord.text.length,
+    ],
   );
 
   // 考試模式：送出答案（儲存並跳下一題）
@@ -483,7 +502,13 @@ export default function WordSpellingSample() {
 
   // Desktop: 全域鍵盤事件監聽（不用 hidden input，因為 focus 管理在不同瀏覽器行為不一致）
   useEffect(() => {
-    if (isTouchDevice || hintMode === "choice" || inputMethod === "handwriting" || inputMethod === "drawing") return;
+    if (
+      isTouchDevice ||
+      hintMode === "choice" ||
+      inputMethod === "handwriting" ||
+      inputMethod === "drawing"
+    )
+      return;
 
     const handler = (e: KeyboardEvent) => {
       if (answered || showOverlay || (isExamMode && examSubmitted)) return;
@@ -551,8 +576,7 @@ export default function WordSpellingSample() {
   // examAnswers 的 key 是題號位置，需透過 wordOrder 對應到實際單字
   const examScore = useMemo(() => {
     if (!examSubmitted) return null;
-    const pointsPerQuestion =
-      Math.round((100 / MOCK_WORDS.length) * 10) / 10;
+    const pointsPerQuestion = Math.round((100 / MOCK_WORDS.length) * 10) / 10;
     let correct = 0;
     wordOrder.forEach((wordIdx, posIdx) => {
       const word = MOCK_WORDS[wordIdx];
@@ -570,7 +594,12 @@ export default function WordSpellingSample() {
   // 每題倒計時
   useEffect(() => {
     if (questionTimeLimit === null) return;
-    if (answered || (isExamMode && !examStarted) || (isExamMode && examSubmitted)) return;
+    if (
+      answered ||
+      (isExamMode && !examStarted) ||
+      (isExamMode && examSubmitted)
+    )
+      return;
     setQuestionTimeRemaining(questionTimeLimit);
     const interval = setInterval(() => {
       setQuestionTimeRemaining((prev) => (prev <= 1 ? 0 : prev - 1));
@@ -583,9 +612,19 @@ export default function WordSpellingSample() {
         return 0;
       });
     }, questionTimeLimit * 1000);
-    return () => { clearInterval(interval); clearTimeout(timeout); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, questionTimeLimit, answered, isExamMode, examStarted, examSubmitted]);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentIndex,
+    questionTimeLimit,
+    answered,
+    isExamMode,
+    examStarted,
+    examSubmitted,
+  ]);
 
   // 重置考試
   const resetExam = useCallback(() => {
@@ -629,8 +668,7 @@ export default function WordSpellingSample() {
 
   // 考試結果頁
   if (isExamMode && examSubmitted) {
-    const pointsPerQuestion =
-      Math.round((100 / MOCK_WORDS.length) * 10) / 10;
+    const pointsPerQuestion = Math.round((100 / MOCK_WORDS.length) * 10) / 10;
     return (
       <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
         <div className="max-w-2xl mx-auto">
@@ -717,14 +755,9 @@ export default function WordSpellingSample() {
               <div className="space-y-2 text-sm text-gray-600">
                 <p>共 {MOCK_WORDS.length} 題</p>
                 <p>考試時間：{formatTime(examTimeLimit)}</p>
-                <p>
-                  每題 {Math.round((100 / MOCK_WORDS.length) * 10) / 10} 分
-                </p>
+                <p>每題 {Math.round((100 / MOCK_WORDS.length) * 10) / 10} 分</p>
               </div>
-              <Button
-                size="lg"
-                onClick={() => setExamStarted(true)}
-              >
+              <Button size="lg" onClick={() => setExamStarted(true)}>
                 開始考試
               </Button>
             </CardContent>
@@ -831,8 +864,8 @@ export default function WordSpellingSample() {
           onShowExamAnswersChange={setShowExamAnswers}
         />
         <p className="text-xs text-gray-400">
-          ※
-          作業模式、提示方式、圖片、字母數由老師出作業時選擇；考試時間最多 2 小時；觸控裝置自動偵測虛擬鍵盤，老師可強制開啟
+          ※ 作業模式、提示方式、圖片、字母數由老師出作業時選擇；考試時間最多 2
+          小時；觸控裝置自動偵測虛擬鍵盤，老師可強制開啟
         </p>
       </div>
     );
@@ -844,10 +877,7 @@ export default function WordSpellingSample() {
 
       {/* Preview Container */}
       <div
-        className={cn(
-          "mx-auto",
-          viewMode === "mobile" ? "max-w-sm" : "w-full",
-        )}
+        className={cn("mx-auto", viewMode === "mobile" ? "max-w-sm" : "w-full")}
       >
         {/* Header: Progress / Timer */}
         <div className="flex items-center justify-between mb-4">
@@ -866,7 +896,8 @@ export default function WordSpellingSample() {
                   "flex items-center gap-1 text-sm font-medium tabular-nums",
                   questionTimeRemaining <= 3
                     ? "text-red-600"
-                    : questionTimeRemaining <= Math.ceil(questionTimeLimit * 0.4)
+                    : questionTimeRemaining <=
+                        Math.ceil(questionTimeLimit * 0.4)
                       ? "text-yellow-600"
                       : "text-gray-500",
                 )}
@@ -994,7 +1025,9 @@ export default function WordSpellingSample() {
           examSubmitted={examSubmitted}
           showPlaceholder={showPlaceholder}
           placeholderChar={(i) => currentWord.text[i]}
-          placeholderText={showPlaceholder && !isExamMode ? currentWord.text : undefined}
+          placeholderText={
+            showPlaceholder && !isExamMode ? currentWord.text : undefined
+          }
           onSlotClick={handleSlotClick}
           onBackspace={handleBackspace}
           hasInput={hasInput}
@@ -1023,7 +1056,9 @@ export default function WordSpellingSample() {
                     下一題
                   </Button>
                 </div>
-              ) : <></>
+              ) : (
+                <></>
+              )
             ) : hintMode === "choice" ? (
               <MultipleChoiceOptions
                 options={choiceOptions}
@@ -1039,7 +1074,10 @@ export default function WordSpellingSample() {
         />
 
         {/* Virtual Keyboard — 選擇題模式、手寫模式、作畫模式不顯示 */}
-        {isTouchDevice && hintMode !== "choice" && inputMethod !== "handwriting" && inputMethod !== "drawing" ? (
+        {isTouchDevice &&
+        hintMode !== "choice" &&
+        inputMethod !== "handwriting" &&
+        inputMethod !== "drawing" ? (
           <div className="mt-4 select-none">
             {KEYBOARD_ROWS.map((row, rowIndex) => (
               <div key={rowIndex} className="flex justify-center gap-1 mb-1">
@@ -1124,12 +1162,27 @@ export default function WordSpellingSample() {
         <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
           <p className="font-medium mb-1">開發備註</p>
           <ul className="list-disc list-inside space-y-1 text-xs">
-            <li>資料來源：單字集（text, partOfSpeech, translation, image_url, audio_url）</li>
-            <li>老師設定：作業模式、提示方式、圖片、字母數、打亂題目、考後顯示答案</li>
-            <li>作業模式：練習（艾賓浩斯）/ 考試（100分制，每題 = 100/題數 四捨五入）</li>
-            <li>輸入方式：觸控裝置→虛擬鍵盤（防輸入法提示答案）；桌機→原生鍵盤</li>
-            <li>練習：答錯→灰字顯示正確答案；答對→ScoreOverlay 動畫→自動下一題</li>
-            <li>考試：不顯示答案、題號導航（已作答變色）、換題自動儲存、倒計時、時間到自動提交、提前提交需二次確認、最後一題 Enter = 提交</li>
+            <li>
+              資料來源：單字集（text, partOfSpeech, translation, image_url,
+              audio_url）
+            </li>
+            <li>
+              老師設定：作業模式、提示方式、圖片、字母數、打亂題目、考後顯示答案
+            </li>
+            <li>
+              作業模式：練習（艾賓浩斯）/ 考試（100分制，每題 = 100/題數
+              四捨五入）
+            </li>
+            <li>
+              輸入方式：觸控裝置→虛擬鍵盤（防輸入法提示答案）；桌機→原生鍵盤
+            </li>
+            <li>
+              練習：答錯→灰字顯示正確答案；答對→ScoreOverlay 動畫→自動下一題
+            </li>
+            <li>
+              考試：不顯示答案、題號導航（已作答變色）、換題自動儲存、倒計時、時間到自動提交、提前提交需二次確認、最後一題
+              Enter = 提交
+            </li>
             <li>打亂題目：Fisher-Yates shuffle，防止學生抄襲</li>
             <li>考試時間由老師設置（目前：{formatTime(examTimeLimit)}）</li>
           </ul>
@@ -1193,10 +1246,7 @@ export default function WordSpellingSample() {
             >
               繼續作答
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleExamFinish}
-            >
+            <Button variant="destructive" onClick={handleExamFinish}>
               確認提交
             </Button>
           </DialogFooter>

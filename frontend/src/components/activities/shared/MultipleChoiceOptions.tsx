@@ -48,8 +48,7 @@ export function MultipleChoiceOptions({
     <div className="grid grid-cols-2 gap-3">
       {options.map((option, index) => {
         const isSelected = selectedOption === option;
-        const isCorrect =
-          option.toLowerCase() === correctAnswer.toLowerCase();
+        const isCorrect = option.toLowerCase() === correctAnswer.toLowerCase();
 
         let buttonClass: string;
         if (showResult) {

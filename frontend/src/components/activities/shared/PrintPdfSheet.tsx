@@ -25,7 +25,14 @@
  *           （若 showSentenceTranslation）  [sentenceTranslation]
  */
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   Sheet,
   SheetContent,
@@ -97,19 +104,28 @@ const CONTENT_H = PAPER_H - PAPER_PAD_TOP - PAPER_PAD_BOT;
 const Q_GAP = 16;
 const CARD_ROW_GAP = 12; // 單字卡：格線間距（px）
 
-const PAPER_FONT = '"Noto Serif TC", "Noto Serif", "Source Han Serif TC", serif';
+const PAPER_FONT =
+  '"Noto Serif TC", "Noto Serif", "Source Han Serif TC", serif';
 const CHOICE_LABELS = ["A", "B", "C", "D"];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function AnswerSlots({ count, visible }: { count: number; visible: boolean }) {
   if (!visible) {
-    return <span className="inline-block border-b-2 border-gray-700 w-32" style={{ height: 24 }} />;
+    return (
+      <span
+        className="inline-block border-b-2 border-gray-700 w-32"
+        style={{ height: 24 }}
+      />
+    );
   }
   return (
     <span className="inline-flex gap-0.5 align-bottom">
       {Array.from({ length: count }).map((_, i) => (
-        <span key={i} className="inline-block w-5 h-5 border-b-2 border-gray-700" />
+        <span
+          key={i}
+          className="inline-block w-5 h-5 border-b-2 border-gray-700"
+        />
       ))}
     </span>
   );
@@ -162,12 +178,17 @@ function SpellingCard({
         {q.index}.
       </span>
       {/* 圖片 */}
-      {showImage && (
-        q.imageUrl ? (
+      {showImage &&
+        (q.imageUrl ? (
           <img
             src={q.imageUrl}
             alt=""
-            style={{ width: 144, height: 144, objectFit: "cover", borderRadius: 4 }}
+            style={{
+              width: 144,
+              height: 144,
+              objectFit: "cover",
+              borderRadius: 4,
+            }}
           />
         ) : (
           <div
@@ -185,8 +206,7 @@ function SpellingCard({
           >
             圖片
           </div>
-        )
-      )}
+        ))}
       {/* 翻譯 + 詞性 */}
       <div style={{ textAlign: "center", color: "#374151" }}>
         {q.translation}
@@ -197,40 +217,49 @@ function SpellingCard({
         )}
       </div>
       {/* 答案槽（加上頂部間距，確保有書寫空間）*/}
-      <div style={{ marginTop: 6, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-      {isChoice ? (
-        <>
-          <span
-            style={{
-              display: "inline-block",
-              borderBottom: "2px solid #374151",
-              width: 40,
-              height: 24,
-            }}
-          />
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              justifyContent: "center",
-              gap: "2px 12px",
-              fontSize: "0.9em",
-            }}
-          >
-            {choiceOptions!.map((opt, i) => (
-              <span key={i} style={{ color: "#374151" }}>
-                <span style={{ fontWeight: 600 }}>{CHOICE_LABELS[i]}.</span> {opt}
-              </span>
-            ))}
-          </div>
-        </>
-      ) : (
-        <AnswerSlots count={q.answerLength} visible={showLetterCount} />
-      )}
-      {/* 作畫區：提供手寫作答空間 */}
-      {showDrawingArea && (
-        <div style={{ width: "100%", height: 160, marginTop: 8 }} />
-      )}
+      <div
+        style={{
+          marginTop: 6,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 4,
+        }}
+      >
+        {isChoice ? (
+          <>
+            <span
+              style={{
+                display: "inline-block",
+                borderBottom: "2px solid #374151",
+                width: 40,
+                height: 24,
+              }}
+            />
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "center",
+                gap: "2px 12px",
+                fontSize: "0.9em",
+              }}
+            >
+              {choiceOptions!.map((opt, i) => (
+                <span key={i} style={{ color: "#374151" }}>
+                  <span style={{ fontWeight: 600 }}>{CHOICE_LABELS[i]}.</span>{" "}
+                  {opt}
+                </span>
+              ))}
+            </div>
+          </>
+        ) : (
+          <AnswerSlots count={q.answerLength} visible={showLetterCount} />
+        )}
+        {/* 作畫區：提供手寫作答空間 */}
+        {showDrawingArea && (
+          <div style={{ width: "100%", height: 160, marginTop: 8 }} />
+        )}
       </div>
     </div>
   );
@@ -280,8 +309,8 @@ function PaperPage({
   divRef,
   withShadow = false,
 }: PaperPageProps) {
-  const titleFontSize = Math.round(fontSize * 22 / 14);
-  const infoFontSize = Math.round(fontSize * 13 / 14);
+  const titleFontSize = Math.round((fontSize * 22) / 14);
+  const infoFontSize = Math.round((fontSize * 13) / 14);
 
   const paperStyle: React.CSSProperties = {
     width: PAPER_W,
@@ -303,18 +332,36 @@ function PaperPage({
       {/* 表頭 */}
       {pageIndex === 0 ? (
         <div>
-          <h1 className="mb-3 text-center font-bold" style={{ fontSize: titleFontSize }}>
+          <h1
+            className="mb-3 text-center font-bold"
+            style={{ fontSize: titleFontSize }}
+          >
             {title}
           </h1>
-          <div className="mb-3 flex justify-center gap-12" style={{ fontSize: infoFontSize }}>
-            <span>班級：<span className="inline-block w-24 border-b border-gray-700 align-bottom" /></span>
-            <span>座號：<span className="inline-block w-16 border-b border-gray-700 align-bottom" /></span>
-            <span>姓名：<span className="inline-block w-28 border-b border-gray-700 align-bottom" /></span>
+          <div
+            className="mb-3 flex justify-center gap-12"
+            style={{ fontSize: infoFontSize }}
+          >
+            <span>
+              班級：
+              <span className="inline-block w-24 border-b border-gray-700 align-bottom" />
+            </span>
+            <span>
+              座號：
+              <span className="inline-block w-16 border-b border-gray-700 align-bottom" />
+            </span>
+            <span>
+              姓名：
+              <span className="inline-block w-28 border-b border-gray-700 align-bottom" />
+            </span>
           </div>
         </div>
       ) : (
         <div>
-          <h1 className="mb-3 text-center font-bold" style={{ fontSize: titleFontSize }}>
+          <h1
+            className="mb-3 text-center font-bold"
+            style={{ fontSize: titleFontSize }}
+          >
             {title}
           </h1>
           <hr className="mb-8 border-gray-400" />
@@ -327,9 +374,13 @@ function PaperPage({
           className="mb-4 rounded border border-gray-300 px-4 py-3"
           style={{ fontSize: infoFontSize }}
         >
-          <div className="mb-1.5 text-center font-semibold text-gray-600">Word Bank</div>
+          <div className="mb-1.5 text-center font-semibold text-gray-600">
+            Word Bank
+          </div>
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-1 text-gray-800">
-            {[...answerPool].sort().map((word, i) => <span key={i}>{word}</span>)}
+            {[...answerPool].sort().map((word, i) => (
+              <span key={i}>{word}</span>
+            ))}
           </div>
         </div>
       )}
@@ -337,7 +388,14 @@ function PaperPage({
       {/* 題目列表 */}
       {activityType === "spelling" ? (
         // 單字卡：2 欄格線
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: CARD_ROW_GAP, fontSize }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: CARD_ROW_GAP,
+            fontSize,
+          }}
+        >
           {qIndices.map((qi) => {
             const q = displayQuestions[qi];
             return (
@@ -397,12 +455,18 @@ function PaperPage({
           <img
             src={logoBase64}
             alt="Duotopia"
-            style={{ height: 20, width: 20 * LOGO_ASPECT_RATIO, objectFit: "contain" }}
+            style={{
+              height: 20,
+              width: 20 * LOGO_ASPECT_RATIO,
+              objectFit: "contain",
+            }}
           />
         ) : (
           <span>Duotopia</span>
         )}
-        <span>第 {pageIndex + 1} 頁 / 共 {totalPages} 頁</span>
+        <span>
+          第 {pageIndex + 1} 頁 / 共 {totalPages} 頁
+        </span>
       </div>
     </div>
   );
@@ -438,7 +502,8 @@ export function PrintPdfSheet({
   const [localHintMode, setLocalHintMode] = useState(initialHintMode);
   const [localChoiceCount, setLocalChoiceCount] = useState(choiceCount);
   const [localShowImage, setLocalShowImage] = useState(showImage);
-  const [localShowLetterCount, setLocalShowLetterCount] = useState(showLetterCount);
+  const [localShowLetterCount, setLocalShowLetterCount] =
+    useState(showLetterCount);
   const [localShuffle, setLocalShuffle] = useState(shuffleQuestions);
   const [localShowSentenceTranslation, setLocalShowSentenceTranslation] =
     useState(showSentenceTranslation);
@@ -514,12 +579,17 @@ export function PrintPdfSheet({
     if (localHintMode !== "choice") return {};
     const result: Record<number, string[]> = {};
     displayQuestions.forEach((q) => {
-      const distractors = answerPool.filter((a) => a !== q.correctAnswer).slice();
+      const distractors = answerPool
+        .filter((a) => a !== q.correctAnswer)
+        .slice();
       for (let i = distractors.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [distractors[i], distractors[j]] = [distractors[j], distractors[i]];
       }
-      const options = [q.correctAnswer, ...distractors.slice(0, localChoiceCount - 1)];
+      const options = [
+        q.correctAnswer,
+        ...distractors.slice(0, localChoiceCount - 1),
+      ];
       for (let i = options.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [options[i], options[j]] = [options[j], options[i]];
@@ -539,7 +609,9 @@ export function PrintPdfSheet({
         ? wordBankMeasureRef.current.offsetHeight + Q_GAP
         : 0;
 
-    const qHeights = displayQuestions.map((_, i) => qMeasureRefs.current[i]?.offsetHeight ?? 0);
+    const qHeights = displayQuestions.map(
+      (_, i) => qMeasureRefs.current[i]?.offsetHeight ?? 0,
+    );
 
     const pages: number[][] = [[]];
     let usedH = fullHeaderH + wordBankH;
@@ -609,7 +681,11 @@ export function PrintPdfSheet({
       // 等待字型（Noto Serif TC 等）載入，避免 fallback 字型造成版面跑位
       await document.fonts.ready;
 
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
       for (let i = 0; i < refs.length; i++) {
         if (i > 0) pdf.addPage();
         const canvas = await html2canvas(refs[i], {
@@ -691,7 +767,8 @@ export function PrintPdfSheet({
               extraHintSettings={
                 <>
                   {activityType === "cloze" &&
-                    (localHintMode === "wordbank" || localHintMode === "choice") && (
+                    (localHintMode === "wordbank" ||
+                      localHintMode === "choice") && (
                       <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
                         <input
                           type="checkbox"
@@ -748,7 +825,11 @@ export function PrintPdfSheet({
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-400">預覽</span>
               <button
-                onClick={() => setZoom((z) => parseFloat(Math.max(ZOOM_MIN, z - ZOOM_STEP).toFixed(1)))}
+                onClick={() =>
+                  setZoom((z) =>
+                    parseFloat(Math.max(ZOOM_MIN, z - ZOOM_STEP).toFixed(1)),
+                  )
+                }
                 disabled={zoom <= ZOOM_MIN}
                 className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-30"
                 aria-label="縮小預覽"
@@ -759,7 +840,11 @@ export function PrintPdfSheet({
                 {Math.round(zoom * 100)}%
               </span>
               <button
-                onClick={() => setZoom((z) => parseFloat(Math.min(ZOOM_MAX, z + ZOOM_STEP).toFixed(1)))}
+                onClick={() =>
+                  setZoom((z) =>
+                    parseFloat(Math.min(ZOOM_MAX, z + ZOOM_STEP).toFixed(1)),
+                  )
+                }
                 disabled={zoom >= ZOOM_MAX}
                 className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-30"
                 aria-label="放大預覽"
@@ -797,15 +882,35 @@ export function PrintPdfSheet({
               >
                 <span className="text-xs font-bold leading-none">A+</span>
               </button>
-              <span className="w-7 text-center text-sm text-gray-600">{fontSize}</span>
+              <span className="w-7 text-center text-sm text-gray-600">
+                {fontSize}
+              </span>
             </div>
           </div>
 
           {/* ── A4 多頁預覽（視覺，含 shadow，無 pageRefs）── */}
           <div className="flex-1 overflow-auto bg-gray-200 p-6">
-            <div style={{ width: PAPER_W * zoom, height: totalH * zoom, margin: "0 auto" }}>
-              <div style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: PAPER_W }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: PAGE_GAP }}>
+            <div
+              style={{
+                width: PAPER_W * zoom,
+                height: totalH * zoom,
+                margin: "0 auto",
+              }}
+            >
+              <div
+                style={{
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "top left",
+                  width: PAPER_W,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: PAGE_GAP,
+                  }}
+                >
                   {pageDistribution.map((qIndices, pageIndex) => (
                     <PaperPage
                       key={pageIndex}
@@ -838,13 +943,17 @@ export function PrintPdfSheet({
           // position:fixed + 負座標已足夠讓元素不出現在畫面上
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: PAGE_GAP }}>
+        <div
+          style={{ display: "flex", flexDirection: "column", gap: PAGE_GAP }}
+        >
           {pageDistribution.map((qIndices, pageIndex) => (
             <PaperPage
               key={pageIndex}
               pageIndex={pageIndex}
               qIndices={qIndices}
-              divRef={(el) => { pageRefs.current[pageIndex] = el; }}
+              divRef={(el) => {
+                pageRefs.current[pageIndex] = el;
+              }}
               {...sharedPageProps}
             />
           ))}
@@ -867,26 +976,43 @@ export function PrintPdfSheet({
         }}
       >
         <div ref={fullHeaderMeasureRef}>
-          <h1 className="mb-3 text-center font-bold" style={{ fontSize: Math.round(fontSize * 22 / 14) }}>
+          <h1
+            className="mb-3 text-center font-bold"
+            style={{ fontSize: Math.round((fontSize * 22) / 14) }}
+          >
             {title}
           </h1>
-          <div className="mb-3" style={{ fontSize: Math.round(fontSize * 13 / 14) }}>
+          <div
+            className="mb-3"
+            style={{ fontSize: Math.round((fontSize * 13) / 14) }}
+          >
             班級：______　座號：______　姓名：______
           </div>
         </div>
 
         <div ref={pageHeaderMeasureRef}>
-          <h1 className="mb-3 text-center font-bold" style={{ fontSize: Math.round(fontSize * 22 / 14) }}>
+          <h1
+            className="mb-3 text-center font-bold"
+            style={{ fontSize: Math.round((fontSize * 22) / 14) }}
+          >
             {title}
           </h1>
           <hr className="mb-8 border-gray-400" />
         </div>
 
         {localHintMode === "wordbank" && (
-          <div ref={wordBankMeasureRef} className="mb-4 rounded border border-gray-300 px-4 py-3" style={{ fontSize: Math.round(fontSize * 13 / 14) }}>
-            <div className="mb-1.5 text-center font-semibold text-gray-600">Word Bank</div>
+          <div
+            ref={wordBankMeasureRef}
+            className="mb-4 rounded border border-gray-300 px-4 py-3"
+            style={{ fontSize: Math.round((fontSize * 13) / 14) }}
+          >
+            <div className="mb-1.5 text-center font-semibold text-gray-600">
+              Word Bank
+            </div>
             <div className="flex flex-wrap justify-center gap-x-6 gap-y-1">
-              {[...answerPool].sort().map((word, i) => <span key={i}>{word}</span>)}
+              {[...answerPool].sort().map((word, i) => (
+                <span key={i}>{word}</span>
+              ))}
             </div>
           </div>
         )}
@@ -896,7 +1022,9 @@ export function PrintPdfSheet({
           displayQuestions.map((q, i) => (
             <div
               key={q.index}
-              ref={(el) => { qMeasureRefs.current[i] = el; }}
+              ref={(el) => {
+                qMeasureRefs.current[i] = el;
+              }}
               style={{
                 width: (PAPER_W - 2 * PAPER_PAD_SIDE - CARD_ROW_GAP) / 2,
                 fontSize,
@@ -917,7 +1045,9 @@ export function PrintPdfSheet({
             {displayQuestions.map((q, i) => (
               <li
                 key={q.index}
-                ref={(el) => { qMeasureRefs.current[i] = el; }}
+                ref={(el) => {
+                  qMeasureRefs.current[i] = el;
+                }}
                 className="flex gap-2"
               >
                 <span className="w-6 shrink-0 text-right font-medium text-gray-500">
@@ -956,27 +1086,42 @@ function ClozeQuestion({
   const isChoice = !!choiceOptions;
   return (
     <div className="flex items-start gap-3">
-      {showImage && (
-        q.imageUrl ? (
-          <img src={q.imageUrl} alt="" className="shrink-0 rounded object-cover" style={{ width: 72, height: 72 }} />
+      {showImage &&
+        (q.imageUrl ? (
+          <img
+            src={q.imageUrl}
+            alt=""
+            className="shrink-0 rounded object-cover"
+            style={{ width: 72, height: 72 }}
+          />
         ) : (
-          <div className="flex shrink-0 items-center justify-center rounded border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-300" style={{ width: 72, height: 72 }}>
+          <div
+            className="flex shrink-0 items-center justify-center rounded border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-300"
+            style={{ width: 72, height: 72 }}
+          >
             圖片
           </div>
-        )
-      )}
+        ))}
       <div className="flex-1 space-y-1.5">
         <div className="flex flex-wrap items-end gap-2 leading-relaxed text-gray-800">
           <span>{q.sentence ?? "—"}</span>
           {isChoice && (
-            <span className="inline-block border-b-2 border-gray-700 align-bottom" style={{ width: 32 }} />
+            <span
+              className="inline-block border-b-2 border-gray-700 align-bottom"
+              style={{ width: 32 }}
+            />
           )}
         </div>
         {showSentenceTranslation && q.sentenceTranslation && (
-          <p className="text-gray-400" style={{ fontSize: "0.86em" }}>{q.sentenceTranslation}</p>
+          <p className="text-gray-400" style={{ fontSize: "0.86em" }}>
+            {q.sentenceTranslation}
+          </p>
         )}
         {isChoice && choiceOptions && (
-          <div className="flex flex-wrap gap-x-6 gap-y-1" style={{ fontSize: "0.93em" }}>
+          <div
+            className="flex flex-wrap gap-x-6 gap-y-1"
+            style={{ fontSize: "0.93em" }}
+          >
             {choiceOptions.map((opt, i) => (
               <span key={i} className="text-gray-700">
                 <span className="font-medium">{CHOICE_LABELS[i]}.</span> {opt}

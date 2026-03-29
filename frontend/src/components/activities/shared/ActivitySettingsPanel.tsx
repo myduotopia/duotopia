@@ -207,7 +207,9 @@ export function ActivitySettingsPanel({
           <select
             value={inputMethod}
             onChange={(e) =>
-              onInputMethodChange?.(e.target.value as "keyboard" | "handwriting" | "drawing")
+              onInputMethodChange?.(
+                e.target.value as "keyboard" | "handwriting" | "drawing",
+              )
             }
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white"
           >
@@ -238,13 +240,15 @@ export function ActivitySettingsPanel({
       )}
 
       {/* 強制顯示虛擬鍵盤（手寫模式下隱藏；forceVirtualKeyboardVisible=false 時整個隱藏） */}
-      {forceVirtualKeyboardVisible && inputMethod !== "handwriting" && inputMethod !== "drawing" && (
-        <SettingCheckbox
-          checked={forceVirtualKeyboard}
-          onChange={onForceVirtualKeyboardChange}
-          label="強制顯示虛擬鍵盤"
-        />
-      )}
+      {forceVirtualKeyboardVisible &&
+        inputMethod !== "handwriting" &&
+        inputMethod !== "drawing" && (
+          <SettingCheckbox
+            checked={forceVirtualKeyboard}
+            onChange={onForceVirtualKeyboardChange}
+            label="強制顯示虛擬鍵盤"
+          />
+        )}
 
       {/* 打亂題目 */}
       <SettingCheckbox
@@ -290,7 +294,10 @@ export function ActivitySettingsPanel({
             }}
             onBlur={(e) => {
               const match = e.target.value.match(/^(\d{1,2}):(\d{2})$/);
-              if (!match) { onExamTimeValueChange("00:10"); return; }
+              if (!match) {
+                onExamTimeValueChange("00:10");
+                return;
+              }
               const h = parseInt(match[1]);
               const m = parseInt(match[2]);
               const totalSeconds = (h * 60 + m) * 60;

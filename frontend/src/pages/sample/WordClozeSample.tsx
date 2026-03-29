@@ -324,7 +324,8 @@ export default function WordClozeSample() {
   const [forceVirtualKeyboard, setForceVirtualKeyboard] = useState(false);
   // (pointer: coarse) 偵測主要指標裝置是否為觸控（手指），比 maxTouchPoints 更準確
   // Windows 桌機即使支援觸控 API，maxTouchPoints 也可能 > 0，但 pointer 仍為 fine
-  const isTouchDevice = forceVirtualKeyboard || window.matchMedia("(pointer: coarse)").matches;
+  const isTouchDevice =
+    forceVirtualKeyboard || window.matchMedia("(pointer: coarse)").matches;
 
   // 音檔播放速度
   const AUDIO_RATES = [0.5, 0.75, 1.0, 1.5, 2.0];
@@ -344,13 +345,16 @@ export default function WordClozeSample() {
   // 選擇題模式：選項數量（2-4）
   const [choiceCount, setChoiceCount] = useState(4);
   // 輸入方式：鍵盤（虛擬/原生）或手寫（Chrome Handwriting API）
-  const [inputMethod, setInputMethod] = useState<"keyboard" | "handwriting" | "drawing">("keyboard");
+  const [inputMethod, setInputMethod] = useState<
+    "keyboard" | "handwriting" | "drawing"
+  >("keyboard");
   // 考試結束後是否讓學生看到逐題答案對照
   const [showExamAnswers, setShowExamAnswers] = useState(true);
 
   // 每題限時（null = 不限時，單位：秒）
   const [questionTimeLimit, setQuestionTimeLimit] = useState<number | null>(10);
-  const [questionTimeRemaining, setQuestionTimeRemaining] = useState<number>(10);
+  const [questionTimeRemaining, setQuestionTimeRemaining] =
+    useState<number>(10);
 
   // 列印 PDF sheet 開關
   const [printSheetOpen, setPrintSheetOpen] = useState(false);
@@ -404,9 +408,9 @@ export default function WordClozeSample() {
   const choiceOptions = useMemo(() => {
     if (hintMode !== "choice") return [];
     const correct = currentAnswer;
-    const others = MOCK_WORDS
-      .filter((_, i) => i !== wordOrder[currentIndex])
-      .map((w) => w.answer);
+    const others = MOCK_WORDS.filter(
+      (_, i) => i !== wordOrder[currentIndex],
+    ).map((w) => w.answer);
     for (let i = others.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [others[i], others[j]] = [others[j], others[i]];
@@ -441,8 +445,9 @@ export default function WordClozeSample() {
   const [wordBank, setWordBank] = useState<string[]>([]);
 
   useEffect(() => {
-    const others = MOCK_WORDS.filter((_, i) => i !== wordOrder[currentIndex])
-      .map((w) => w.answer);
+    const others = MOCK_WORDS.filter(
+      (_, i) => i !== wordOrder[currentIndex],
+    ).map((w) => w.answer);
     // Fisher-Yates shuffle 後取前 9 個
     for (let i = others.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -519,7 +524,9 @@ export default function WordClozeSample() {
     (letter: string) => {
       if (answered || (isExamMode && examSubmitted)) return;
       // showLetterCount 模式下，只填入到實際答案字母數的格子
-      const maxSlots = showLetterCount ? currentAnswer.length : MAX_ANSWER_LENGTH;
+      const maxSlots = showLetterCount
+        ? currentAnswer.length
+        : MAX_ANSWER_LENGTH;
       setSlots((prev) => {
         const next = [...prev];
         const emptyIndex = next.findIndex((s, i) => s === null && i < maxSlots);
@@ -529,7 +536,13 @@ export default function WordClozeSample() {
         return next;
       });
     },
-    [answered, isExamMode, examSubmitted, showLetterCount, currentAnswer.length],
+    [
+      answered,
+      isExamMode,
+      examSubmitted,
+      showLetterCount,
+      currentAnswer.length,
+    ],
   );
 
   // 點擊答案格中的字母 → 移除（後方字母不補位）
@@ -595,7 +608,13 @@ export default function WordClozeSample() {
       }
       setSlots(newSlots);
     },
-    [answered, isExamMode, examSubmitted, showLetterCount, currentAnswer.length],
+    [
+      answered,
+      isExamMode,
+      examSubmitted,
+      showLetterCount,
+      currentAnswer.length,
+    ],
   );
 
   // 練習模式：送出答案
@@ -672,7 +691,8 @@ export default function WordClozeSample() {
 
   // Desktop: 全域鍵盤事件監聽
   useEffect(() => {
-    if (isTouchDevice || hintMode === "choice" || inputMethod === "handwriting") return;
+    if (isTouchDevice || hintMode === "choice" || inputMethod === "handwriting")
+      return;
 
     const handler = (e: KeyboardEvent) => {
       if (answered || showOverlay || (isExamMode && examSubmitted)) return;
@@ -737,8 +757,7 @@ export default function WordClozeSample() {
   // 考試計分
   const examScore = useMemo(() => {
     if (!examSubmitted) return null;
-    const pointsPerQuestion =
-      Math.round((100 / MOCK_WORDS.length) * 10) / 10;
+    const pointsPerQuestion = Math.round((100 / MOCK_WORDS.length) * 10) / 10;
     let correct = 0;
     wordOrder.forEach((wordIdx, posIdx) => {
       const word = MOCK_WORDS[wordIdx];
@@ -755,7 +774,12 @@ export default function WordClozeSample() {
   // 每題倒計時
   useEffect(() => {
     if (questionTimeLimit === null) return;
-    if (answered || (isExamMode && !examStarted) || (isExamMode && examSubmitted)) return;
+    if (
+      answered ||
+      (isExamMode && !examStarted) ||
+      (isExamMode && examSubmitted)
+    )
+      return;
     setQuestionTimeRemaining(questionTimeLimit);
     const interval = setInterval(() => {
       setQuestionTimeRemaining((prev) => (prev <= 1 ? 0 : prev - 1));
@@ -767,9 +791,19 @@ export default function WordClozeSample() {
         return 0;
       });
     }, questionTimeLimit * 1000);
-    return () => { clearInterval(interval); clearTimeout(timeout); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, questionTimeLimit, answered, isExamMode, examStarted, examSubmitted]);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentIndex,
+    questionTimeLimit,
+    answered,
+    isExamMode,
+    examStarted,
+    examSubmitted,
+  ]);
 
   // 重置考試
   const resetExam = useCallback(() => {
@@ -811,8 +845,7 @@ export default function WordClozeSample() {
 
   // 考試結果頁
   if (isExamMode && examSubmitted) {
-    const pointsPerQuestion =
-      Math.round((100 / MOCK_WORDS.length) * 10) / 10;
+    const pointsPerQuestion = Math.round((100 / MOCK_WORDS.length) * 10) / 10;
     return (
       <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
         <div className="max-w-2xl mx-auto">
@@ -837,8 +870,7 @@ export default function WordClozeSample() {
                     const word = MOCK_WORDS[wordIdx];
                     const studentAnswer = examAnswers[posIdx] || "";
                     const isCorrect =
-                      studentAnswer.toLowerCase() ===
-                      word.answer.toLowerCase();
+                      studentAnswer.toLowerCase() === word.answer.toLowerCase();
                     // 在例句中標示答案位置
                     const { before, after } = buildClozeparts(
                       word.exampleSentence,
@@ -865,9 +897,7 @@ export default function WordClozeSample() {
                             <span
                               className={cn(
                                 "font-medium",
-                                isCorrect
-                                  ? "text-green-600"
-                                  : "text-gray-600",
+                                isCorrect ? "text-green-600" : "text-gray-600",
                               )}
                             >
                               {word.answer}
@@ -885,9 +915,7 @@ export default function WordClozeSample() {
                           <span
                             className={cn(
                               "font-semibold",
-                              isCorrect
-                                ? "text-green-600"
-                                : "text-red-500",
+                              isCorrect ? "text-green-600" : "text-red-500",
                             )}
                           >
                             {word.answer}
@@ -930,9 +958,7 @@ export default function WordClozeSample() {
               <div className="space-y-2 text-sm text-gray-600">
                 <p>共 {MOCK_WORDS.length} 題</p>
                 <p>考試時間：{formatTime(examTimeLimit)}</p>
-                <p>
-                  每題 {Math.round((100 / MOCK_WORDS.length) * 10) / 10} 分
-                </p>
+                <p>每題 {Math.round((100 / MOCK_WORDS.length) * 10) / 10} 分</p>
               </div>
               <Button size="lg" onClick={() => setExamStarted(true)}>
                 開始考試
@@ -996,7 +1022,8 @@ export default function WordClozeSample() {
           ]}
           onHintModeChange={(mode) => {
             setHintMode(mode as HintMode);
-            if (mode === "wordbank" || mode === "choice") setShowLetterCount(false);
+            if (mode === "wordbank" || mode === "choice")
+              setShowLetterCount(false);
             // 選擇題模式不支援手寫，切換時重置輸入方式
             if (mode === "choice") setInputMethod("keyboard");
           }}
@@ -1006,7 +1033,7 @@ export default function WordClozeSample() {
           showImage={showImage}
           onShowImageChange={setShowImage}
           extraHintSettings={
-            (hintMode === "wordbank" || hintMode === "choice") ? (
+            hintMode === "wordbank" || hintMode === "choice" ? (
               <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                 <input
                   type="checkbox"
@@ -1023,7 +1050,9 @@ export default function WordClozeSample() {
           }
           showLetterCount={showLetterCount}
           onShowLetterCountChange={setShowLetterCount}
-          showLetterCountVisible={hintMode !== "wordbank" && hintMode !== "choice"}
+          showLetterCountVisible={
+            hintMode !== "wordbank" && hintMode !== "choice"
+          }
           inputMethod={inputMethod}
           onInputMethodChange={setInputMethod}
           inputMethodVisible={hintMode !== "choice"}
@@ -1039,7 +1068,9 @@ export default function WordClozeSample() {
           onShowExamAnswersChange={setShowExamAnswers}
         />
         <p className="text-xs text-gray-400">
-          ※ 作業模式、提示方式、字母數由老師出作業時選擇；考試時間最多 2 小時；字庫模式顯示 1 個正確答案 + 9 個隨機干擾詞；觸控裝置自動偵測虛擬鍵盤，老師可強制開啟
+          ※ 作業模式、提示方式、字母數由老師出作業時選擇；考試時間最多 2
+          小時；字庫模式顯示 1 個正確答案 + 9
+          個隨機干擾詞；觸控裝置自動偵測虛擬鍵盤，老師可強制開啟
         </p>
       </div>
     );
@@ -1090,7 +1121,8 @@ export default function WordClozeSample() {
           <DialogHeader>
             <DialogTitle>確認提交考卷？</DialogTitle>
             <DialogDescription>
-              已作答 {examAnsweredCount} / {MOCK_WORDS.length} 題。提交後無法修改。
+              已作答 {examAnsweredCount} / {MOCK_WORDS.length}{" "}
+              題。提交後無法修改。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1107,10 +1139,7 @@ export default function WordClozeSample() {
 
       {/* Preview Container */}
       <div
-        className={cn(
-          "mx-auto",
-          viewMode === "mobile" ? "max-w-sm" : "w-full",
-        )}
+        className={cn("mx-auto", viewMode === "mobile" ? "max-w-sm" : "w-full")}
       >
         {/* Header: Progress / Timer */}
         <div className="flex items-center justify-between mb-4">
@@ -1129,7 +1158,8 @@ export default function WordClozeSample() {
                   "flex items-center gap-1 text-sm font-medium tabular-nums",
                   questionTimeRemaining <= 3
                     ? "text-red-600"
-                    : questionTimeRemaining <= Math.ceil(questionTimeLimit * 0.4)
+                    : questionTimeRemaining <=
+                        Math.ceil(questionTimeLimit * 0.4)
                       ? "text-yellow-600"
                       : "text-gray-500",
                 )}
@@ -1216,10 +1246,7 @@ export default function WordClozeSample() {
                   </span>
                 ))}
               </div>
-            ) : hintMode === "choice" ? (
-              // 選擇模式：hintArea 留空（克漏字句子在 questionDisplay，選項在 choiceArea）
-              null
-            ) : (
+            ) : hintMode === "choice" ? null : ( // 選擇模式：hintArea 留空（克漏字句子在 questionDisplay，選項在 choiceArea）
               // audio 模式
               <div className="flex flex-col items-center gap-2">
                 <button
@@ -1252,11 +1279,12 @@ export default function WordClozeSample() {
                 <span className="text-base text-gray-700">{after}</span>
               </div>
               {/* 字庫/選擇模式下可選顯示句子翻譯 */}
-              {(hintMode === "wordbank" || hintMode === "choice") && showSentenceTranslation && (
-                <p className="text-sm text-gray-500 text-center mt-3">
-                  {currentWord.exampleTranslation}
-                </p>
-              )}
+              {(hintMode === "wordbank" || hintMode === "choice") &&
+                showSentenceTranslation && (
+                  <p className="text-sm text-gray-500 text-center mt-3">
+                    {currentWord.exampleTranslation}
+                  </p>
+                )}
             </>
           }
           slots={slots}
@@ -1304,7 +1332,9 @@ export default function WordClozeSample() {
         />
 
         {/* Virtual Keyboard — 選擇題模式與手寫模式不顯示 */}
-        {isTouchDevice && hintMode !== "choice" && inputMethod !== "handwriting" ? (
+        {isTouchDevice &&
+        hintMode !== "choice" &&
+        inputMethod !== "handwriting" ? (
           <div className="mt-4 select-none">
             {KEYBOARD_ROWS.map((row, rowIndex) => (
               <div key={rowIndex} className="flex justify-center gap-1 mb-1">
@@ -1349,9 +1379,7 @@ export default function WordClozeSample() {
                     onClick={handleBackspace}
                     className={cn(
                       "flex items-center justify-center rounded-lg bg-gray-100 border border-gray-300 text-gray-600 hover:bg-gray-200 transition-colors",
-                      viewMode === "mobile"
-                        ? "w-12 h-10"
-                        : "w-16 h-12",
+                      viewMode === "mobile" ? "w-12 h-10" : "w-16 h-12",
                     )}
                     aria-label="退格"
                   >

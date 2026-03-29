@@ -147,7 +147,6 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   // 追蹤是否已播放第一題音檔
   const hasPlayedFirstAudioRef = useRef(false);
 
-
   // 載入題目
   const lastLoadedAssignmentRef = useRef<number | null>(null);
   useEffect(() => {

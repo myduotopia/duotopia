@@ -107,7 +107,9 @@ export function WordActivityCard({
         <div
           className={cn(
             "flex items-center justify-center bg-gray-100 select-none pointer-events-none",
-            viewMode === "mobile" ? "h-48 w-full" : "w-[30%] min-w-64 min-h-[200px]",
+            viewMode === "mobile"
+              ? "h-48 w-full"
+              : "w-[30%] min-w-64 min-h-[200px]",
           )}
         >
           <span className="text-lg text-gray-400">圖片</span>
@@ -169,7 +171,9 @@ export function WordActivityCard({
                     >
                       {letter ||
                         (showSlotPlaceholder && hint ? (
-                          <span className="text-gray-300 italic text-sm">{hint}</span>
+                          <span className="text-gray-300 italic text-sm">
+                            {hint}
+                          </span>
                         ) : null)}
                     </button>
                   );
@@ -208,7 +212,9 @@ export function WordActivityCard({
                     ) : null,
                   )
                 ) : showSlotPlaceholder && placeholderText ? (
-                  <span className="text-gray-300 italic text-lg">{placeholderText}</span>
+                  <span className="text-gray-300 italic text-lg">
+                    {placeholderText}
+                  </span>
                 ) : (
                   <span className="text-gray-300 text-lg">輸入答案...</span>
                 )}
@@ -219,7 +225,9 @@ export function WordActivityCard({
             <div className="flex justify-center gap-3 mb-4">
               <button
                 onClick={onSubmit}
-                disabled={!hasInput || answered || (isExamMode && examSubmitted)}
+                disabled={
+                  !hasInput || answered || (isExamMode && examSubmitted)
+                }
                 className={cn(
                   "flex items-center justify-center w-10 h-10 rounded-full transition-colors",
                   answered

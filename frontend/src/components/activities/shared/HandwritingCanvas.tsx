@@ -58,7 +58,10 @@ export function HandwritingCanvas({
     navigator
       .createHandwritingRecognizer({ languages: ["en"] })
       .then((rec) => {
-        if (!mounted) { rec.finish(); return; }
+        if (!mounted) {
+          rec.finish();
+          return;
+        }
         recognizerRef.current = rec;
         drawingRef.current = rec.startDrawing({ recognitionType: "text" });
       })
@@ -187,7 +190,8 @@ export function HandwritingCanvas({
   // ── 不支援時顯示提示 ──────────────────────────────────────────────────
   if (isSupported === false) {
     return (
-      <div className="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500"
+      <div
+        className="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500"
         style={{ minHeight: canvasHeight }}
       >
         <p className="font-medium text-gray-600">此瀏覽器不支援手寫辨識</p>

@@ -912,7 +912,6 @@ async def reset_school_student_password(
             detail="無法重設已驗證信箱的學生密碼",
         )
 
-
     if not student.created_at:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

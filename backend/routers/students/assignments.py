@@ -1869,7 +1869,6 @@ async def get_rearrangement_questions(
                 audio_url=q_audio,
                 translation=q_translation,
                 original_text=q_text.strip(),  # 正確答案
->>>>>>> origin/staging
                 progress_status=progress_status,
                 progress_score=progress_score,
                 progress_error_count=progress_error_count,
