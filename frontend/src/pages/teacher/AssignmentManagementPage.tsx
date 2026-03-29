@@ -597,9 +597,7 @@ export default function AssignmentManagementPage() {
                               }}
                             >
                               <BarChart3 className="h-4 w-4 mr-2" />
-                              {t(
-                                "classroomDetail.buttons.analysisReport",
-                              )}
+                              {t("classroomDetail.buttons.analysisReport")}
                             </DropdownMenuItem>
                           )}
                           {showArchived ? (
@@ -700,9 +698,7 @@ export default function AssignmentManagementPage() {
                           }}
                         >
                           <BarChart3 className="h-4 w-4 mr-2" />
-                          {t(
-                            "classroomDetail.buttons.analysisReport",
-                          )}
+                          {t("classroomDetail.buttons.analysisReport")}
                         </DropdownMenuItem>
                       )}
                       {showArchived ? (
