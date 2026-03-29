@@ -795,7 +795,6 @@ export default function WordClozeSample() {
       clearInterval(interval);
       clearTimeout(timeout);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     currentIndex,
     questionTimeLimit,

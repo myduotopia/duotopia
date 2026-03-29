@@ -616,7 +616,6 @@ export default function WordSpellingSample() {
       clearInterval(interval);
       clearTimeout(timeout);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     currentIndex,
     questionTimeLimit,

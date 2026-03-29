@@ -571,7 +571,6 @@ export function PrintPdfSheet({
     } else {
       setDisplayQuestions(questions.map((q, i) => ({ ...q, index: i + 1 })));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localShuffle, questions]);
 
   // ── 選擇題選項 ────────────────────────────────────────────────────────────
@@ -986,7 +985,7 @@ export function PrintPdfSheet({
             className="mb-3"
             style={{ fontSize: Math.round((fontSize * 13) / 14) }}
           >
-            班級：______　座號：______　姓名：______
+            班級：______ 座號：______ 姓名：______
           </div>
         </div>
 
