@@ -1,6 +1,6 @@
 """Pydantic schemas and validators for student endpoints."""
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -8,6 +8,11 @@ from datetime import datetime
 class StudentValidateRequest(BaseModel):
     email: EmailStr
     password: str  # Can be birthdate (YYYYMMDD) or new password if changed
+
+    @field_validator("password")
+    @classmethod
+    def strip_password(cls, v: str) -> str:
+        return v.strip()
 
 
 class StudentLoginResponse(BaseModel):
@@ -24,6 +29,11 @@ class UpdatePasswordRequest(BaseModel):
     current_password: str
     new_password: str
 
+    @field_validator("current_password", "new_password")
+    @classmethod
+    def strip_password(cls, v: str) -> str:
+        return v.strip()
+
 
 class EmailUpdateRequest(BaseModel):
     email: str
@@ -32,6 +42,11 @@ class EmailUpdateRequest(BaseModel):
 class SwitchAccountRequest(BaseModel):
     target_student_id: int
     password: Optional[str] = None  # Identity 關聯帳號不需密碼，fallback 才需要
+
+    @field_validator("password")
+    @classmethod
+    def strip_password(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip() if v else v
 
 
 class SwitchClassroomRequest(BaseModel):
@@ -132,6 +147,16 @@ class RearrangementRetryRequest(BaseModel):
     content_item_id: int
 
 
+class RearrangementSelectionRecord(BaseModel):
+    """單次選字記錄"""
+
+    position: int  # 第幾個位置（正確答案的 index）
+    selected: str  # 學生選的字
+    correct: str  # 正確的字
+    is_correct: bool  # 是否正確
+    timestamp: str  # ISO 8601 時間戳
+
+
 class RearrangementCompleteRequest(BaseModel):
     """完成題目請求"""
 
@@ -139,3 +164,4 @@ class RearrangementCompleteRequest(BaseModel):
     timeout: bool = False  # 是否因超時完成
     expected_score: Optional[float] = None  # 最終分數
     error_count: Optional[int] = None  # 錯誤次數
+    selections: Optional[List[RearrangementSelectionRecord]] = None  # 完整答題歷程

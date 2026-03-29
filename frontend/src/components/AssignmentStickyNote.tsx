@@ -31,6 +31,7 @@ interface StudentProgress {
   student_name: string;
   score?: number;
   is_assigned?: boolean;
+  is_interim_score?: boolean;
   status:
     | "NOT_STARTED"
     | "IN_PROGRESS"
@@ -169,6 +170,7 @@ export default function AssignmentStickyNote({
                 (p.student_name as string) || (p.name as string) || "",
               score: (p.score as number) ?? undefined,
               is_assigned: p.is_assigned as boolean | undefined,
+              is_interim_score: (p.is_interim_score as boolean) || false,
               status: (p.status as string) || "NOT_STARTED",
             }) as StudentProgress,
         ),
@@ -505,9 +507,15 @@ export default function AssignmentStickyNote({
                     {/* Score */}
                     {showScore && (
                       <span
-                        className={`font-medium text-gray-500 dark:text-gray-400 leading-tight ${visibleCount >= 3 ? "text-[9px]" : "text-[10px]"}`}
+                        className={`font-medium leading-tight ${visibleCount >= 3 ? "text-[9px]" : "text-[10px]"} ${
+                          student.is_interim_score
+                            ? "text-blue-500 dark:text-blue-400 italic"
+                            : "text-gray-500 dark:text-gray-400"
+                        }`}
                       >
-                        {student.score != null ? student.score : "-"}
+                        {student.score != null
+                          ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(1)}`
+                          : "-"}
                       </span>
                     )}
                   </button>

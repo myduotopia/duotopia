@@ -49,7 +49,6 @@ import {
 import { retryAudioUpload } from "@/utils/retryHelper";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { useTranslation } from "react-i18next";
-import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { useDemoAzurePronunciation } from "@/hooks/useDemoAzurePronunciation";
 import { azureSpeechService } from "@/services/azureSpeechService";
 import { useAutoAnalysis } from "@/hooks/useAutoAnalysis"; // Issue #141: 例句朗讀自動分析
@@ -204,11 +203,7 @@ export default function StudentActivityPageContent({
 
   // 🚀 Azure Speech Service hook for direct API calls (background analysis)
   // Use demo hook when in demo mode (no authentication required)
-  const regularHook = useAzurePronunciation();
   const demoHook = useDemoAzurePronunciation();
-
-  // Select the appropriate hook based on mode
-  const { analyzePronunciation } = isDemoMode ? demoHook : regularHook;
 
   // Demo limit exceeded state (only used in demo mode)
   const {
@@ -249,12 +244,10 @@ export default function StudentActivityPageContent({
     retryCount?: number;
   }
 
-  const [itemAnalysisStates, setItemAnalysisStates] = useState<
-    Map<string, ItemAnalysisState>
-  >(new Map());
-  const [pendingAnalysisCount, setPendingAnalysisCount] = useState(0); // 🔒 追蹤背景分析數量以觸發 UI 更新
-  const pendingAnalysisRef = useRef<Map<string, Promise<void>>>(new Map());
-  const failedItemsRef = useRef<Set<string>>(new Set());
+  const [itemAnalysisStates] = useState<Map<string, ItemAnalysisState>>(
+    new Map(),
+  );
+  const [pendingAnalysisCount] = useState(0); // 🔒 追蹤背景分析數量（由 useAutoAnalysis 管理）
 
   // 例句重組導航狀態
   const [rearrangementQuestions, setRearrangementQuestions] = useState<
@@ -1172,208 +1165,7 @@ export default function StudentActivityPageContent({
   const getItemKey = (activityId: number, itemIndex: number) =>
     `${activityId}-${itemIndex}`;
 
-  // 🎯 Issue #75: 背景分析函數已停用 - 改用手動分析
-  // @ts-expect-error - Function disabled for Issue #75 manual analysis workflow
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const analyzeInBackground = useCallback(
-    async (activityId: number, itemIndex: number) => {
-      const itemKey = getItemKey(activityId, itemIndex);
-      const activity = activities.find((a) => a.id === activityId);
-      if (!activity || !activity.items || !activity.items[itemIndex]) {
-        console.error("Activity or item not found for background analysis");
-        return;
-      }
-
-      const item = activity.items[itemIndex];
-      const audioUrl = item.recording_url;
-      const referenceText = item.text;
-      const contentItemId = item.id;
-
-      if (!audioUrl || !referenceText || !contentItemId) {
-        console.warn("Missing data for background analysis:", {
-          audioUrl,
-          referenceText,
-          contentItemId,
-        });
-        return;
-      }
-
-      // 檢查是否已經在分析中或已完成
-      const currentState = itemAnalysisStates.get(itemKey);
-      if (
-        currentState?.status === "analyzing" ||
-        currentState?.status === "analyzed"
-      ) {
-        return;
-      }
-
-      // 更新狀態為 analyzing
-      setItemAnalysisStates((prev) => {
-        const next = new Map(prev);
-        next.set(itemKey, { status: "analyzing", retryCount: 0 });
-        return next;
-      });
-
-      const token = useStudentAuthStore.getState().token;
-      const apiUrl = import.meta.env.VITE_API_URL || "";
-
-      const analysisPromise = (async () => {
-        try {
-          let gcsAudioUrl = audioUrl as string;
-          const answer = answers.get(activityId);
-          let currentProgressId =
-            answer?.progressIds && answer.progressIds[itemIndex]
-              ? answer.progressIds[itemIndex]
-              : item.progress_id || null;
-
-          // 🔍 上傳音檔（如果是 blob URL）
-          if (typeof audioUrl === "string" && audioUrl.startsWith("blob:")) {
-            const response = await fetch(audioUrl);
-            const audioBlob = await response.blob();
-
-            const formData = new FormData();
-            formData.append("assignment_id", assignmentId!.toString());
-            formData.append("content_item_id", contentItemId.toString());
-            const uploadFileExtension = audioBlob.type.includes("mp4")
-              ? "recording.mp4"
-              : audioBlob.type.includes("webm")
-                ? "recording.webm"
-                : "recording.audio";
-            formData.append("audio_file", audioBlob, uploadFileExtension);
-
-            const uploadResult = await retryAudioUpload(
-              async () => {
-                const uploadResponse = await fetch(
-                  `${apiUrl}/api/students/upload-recording`,
-                  {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                    },
-                    body: formData,
-                  },
-                );
-
-                if (!uploadResponse.ok) {
-                  const error = new Error(
-                    `Upload failed: ${uploadResponse.status}`,
-                  );
-                  throw error;
-                }
-
-                return await uploadResponse.json();
-              },
-              () => {},
-            );
-
-            if (uploadResult) {
-              gcsAudioUrl = uploadResult.audio_url;
-              currentProgressId = uploadResult.progress_id;
-            }
-          }
-
-          if (!currentProgressId) {
-            throw new Error("No progress_id available for analysis");
-          }
-
-          // 🚀 使用 Azure Speech Service 直接分析（快速！）
-          const audioResponse = await fetch(gcsAudioUrl);
-          const audioBlob = await audioResponse.blob();
-
-          const azureResult = await analyzePronunciation(
-            audioBlob,
-            referenceText!,
-          );
-
-          if (!azureResult) {
-            throw new Error("Azure analysis failed");
-          }
-
-          // Convert Azure result format to our existing format
-          const analysisResult = {
-            pronunciation_score: azureResult.pronunciationScore,
-            accuracy_score: azureResult.accuracyScore,
-            fluency_score: azureResult.fluencyScore,
-            completeness_score: azureResult.completenessScore,
-            words: azureResult.words?.map((w) => ({
-              word: w.word,
-              accuracy_score: w.accuracyScore,
-              error_type: w.errorType,
-            })),
-          };
-
-          // 更新 activity 的 ai_scores
-          setActivities((prevActivities) => {
-            const newActivities = [...prevActivities];
-            const activityIndex = newActivities.findIndex(
-              (a) => a.id === activityId,
-            );
-            if (activityIndex !== -1) {
-              const updatedActivity = { ...newActivities[activityIndex] };
-              if (!updatedActivity.ai_scores) {
-                updatedActivity.ai_scores = { items: {} };
-              }
-              if (!updatedActivity.ai_scores.items) {
-                updatedActivity.ai_scores.items = {};
-              }
-              updatedActivity.ai_scores.items[itemIndex] = analysisResult;
-
-              // Also update item's ai_assessment
-              if (updatedActivity.items && updatedActivity.items[itemIndex]) {
-                const newItems = [...updatedActivity.items];
-                newItems[itemIndex] = {
-                  ...newItems[itemIndex],
-                  ai_assessment: analysisResult,
-                };
-                updatedActivity.items = newItems;
-              }
-
-              newActivities[activityIndex] = updatedActivity;
-            }
-            return newActivities;
-          });
-
-          // 更新狀態為 analyzed
-          setItemAnalysisStates((prev) => {
-            const next = new Map(prev);
-            next.set(itemKey, { status: "analyzed" });
-            return next;
-          });
-
-          pendingAnalysisRef.current.delete(itemKey);
-          failedItemsRef.current.delete(itemKey);
-          setPendingAnalysisCount(pendingAnalysisRef.current.size); // 🔒 更新計數
-        } catch (error) {
-          console.error(`❌ Background analysis failed for ${itemKey}:`, error);
-
-          // 更新狀態為 failed
-          setItemAnalysisStates((prev) => {
-            const next = new Map(prev);
-            const current = next.get(itemKey) || {
-              status: "failed" as const,
-              retryCount: 0,
-            };
-            next.set(itemKey, {
-              status: "failed",
-              error: error instanceof Error ? error.message : String(error),
-              retryCount: (current.retryCount || 0) + 1,
-            });
-            return next;
-          });
-
-          failedItemsRef.current.add(itemKey);
-          pendingAnalysisRef.current.delete(itemKey);
-          setPendingAnalysisCount(pendingAnalysisRef.current.size); // 🔒 更新計數
-        }
-      })();
-
-      pendingAnalysisRef.current.set(itemKey, analysisPromise);
-      setPendingAnalysisCount(pendingAnalysisRef.current.size); // 🔒 更新計數
-    },
-    [activities, answers, assignmentId, itemAnalysisStates],
-  );
-
-  // 🎯 Issue #75: checkAndTriggerBackgroundAnalysis 已移除 - 不再自動分析
+  // 🎯 Issue #75: analyzeInBackground 已移除 - 改用 useAutoAnalysis hook
 
   const handleNextActivity = async () => {
     const currentActivity = activities[currentActivityIndex];
@@ -1940,14 +1732,20 @@ export default function StudentActivityPageContent({
     const answer = answers.get(activity.id);
 
     // 單字集類型使用新的 SentenceMakingActivity 組件，不要進入舊的 GroupedQuestionsTemplate
-    // 例句集 + rearrangement 模式使用 RearrangementActivity，也不要進入 GroupedQuestionsTemplate
+    // 例句集/單字集 + rearrangement 模式使用 RearrangementActivity，也不要進入 GroupedQuestionsTemplate
     const isRearrangementMode =
-      isExampleSentencesType(activity.type) && practiceMode === "rearrangement";
+      (isExampleSentencesType(activity.type) ||
+        isVocabularySetType(activity.type)) &&
+      practiceMode === "rearrangement";
+    // 單字集 + 例句模式（reading/rearrangement）→ 走例句模式組件
+    const isVocabInSentenceMode =
+      isVocabularySetType(activity.type) &&
+      (practiceMode === "reading" || practiceMode === "rearrangement");
 
     if (
       activity.items &&
       activity.items.length > 0 &&
-      !isVocabularySetType(activity.type) &&
+      (!isVocabularySetType(activity.type) || isVocabInSentenceMode) &&
       !isRearrangementMode
     ) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2086,7 +1884,11 @@ export default function StudentActivityPageContent({
             isPreviewMode={isPreviewMode}
             isDemoMode={isDemoMode}
             showAnswer={showAnswer}
-            isPracticeMode={assignmentStatus === "SUBMITTED" || assignmentStatus === "RESUBMITTED" || assignmentStatus === "GRADED"}
+            isPracticeMode={
+              assignmentStatus === "SUBMITTED" ||
+              assignmentStatus === "RESUBMITTED" ||
+              assignmentStatus === "GRADED"
+            }
             currentQuestionIndex={rearrangementQuestionIndex}
             onQuestionIndexChange={setRearrangementQuestionIndex}
             onQuestionsLoaded={(questions, states) => {
@@ -2144,6 +1946,53 @@ export default function StudentActivityPageContent({
 
     // 單字集類型（包含 SENTENCE_MAKING 和 VOCABULARY_SET）
     if (isVocabularySetType(activity.type)) {
+      // 單字集 + 例句重組模式 → 使用 RearrangementActivity
+      // （reading 模式已在上方 guard 進入 GroupedQuestionsTemplate）
+      if (isVocabInSentenceMode && practiceMode === "rearrangement") {
+        return (
+          <RearrangementActivity
+            studentAssignmentId={assignmentId}
+            isPreviewMode={isPreviewMode}
+            isDemoMode={isDemoMode}
+            showAnswer={showAnswer}
+            isPracticeMode={
+              assignmentStatus === "SUBMITTED" ||
+              assignmentStatus === "RESUBMITTED" ||
+              assignmentStatus === "GRADED"
+            }
+            currentQuestionIndex={rearrangementQuestionIndex}
+            onQuestionIndexChange={setRearrangementQuestionIndex}
+            onQuestionsLoaded={(questions, states) => {
+              setRearrangementQuestions(questions);
+              setRearrangementQuestionStates(states);
+            }}
+            onQuestionStateChange={setRearrangementQuestionStates}
+            onComplete={async (totalScore, totalQuestions) => {
+              if (onSubmit) {
+                try {
+                  await onSubmit({ answers: [] });
+                  toast.success(
+                    t("rearrangement.messages.allComplete", {
+                      score: totalScore,
+                      total: totalQuestions * 100,
+                    }),
+                  );
+                } catch (error) {
+                  console.error("Submission failed:", error);
+                }
+              } else {
+                toast.success(
+                  t("rearrangement.messages.allComplete", {
+                    score: totalScore,
+                    total: totalQuestions * 100,
+                  }),
+                );
+              }
+            }}
+          />
+        );
+      }
+
       // Check practice mode for vocabulary set
       if (practiceMode === "word_reading") {
         // Phase 2-2: 單字朗讀練習
@@ -2154,6 +2003,7 @@ export default function StudentActivityPageContent({
             isDemoMode={isDemoMode}
             authToken={authToken}
             canUseAiAnalysis={canUseAiAnalysis}
+            readOnly={isReadOnly}
             onComplete={async () => {
               if (onSubmit) {
                 try {
@@ -2183,12 +2033,13 @@ export default function StudentActivityPageContent({
             assignmentId={assignmentId}
             isPreviewMode={isPreviewMode}
             isDemoMode={isDemoMode}
+            initialPracticeMode={assignmentStatus === "GRADED"}
             onComplete={() => {
               toast.success(
                 t("wordSelection.toast.completed") || "作業已完成！",
               );
               // 導航回作業列表
-              window.location.href = "/student/assignments";
+              onBack?.();
             }}
           />
         );
@@ -2399,8 +2250,10 @@ export default function StudentActivityPageContent({
             </div>
           </div>
 
-          {/* Activity navigation - 單字選擇模式不顯示此區塊 */}
-          {!isVocabularySetType(currentActivity?.type || "") && (
+          {/* Activity navigation - 單字選擇模式不顯示此區塊（但單字集+例句模式例外） */}
+          {(!isVocabularySetType(currentActivity?.type || "") ||
+            practiceMode === "reading" ||
+            practiceMode === "rearrangement") && (
             <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 scrollbar-hide">
               {/* 例句重組模式：所有題目合併顯示，不分 activity */}
               {practiceMode === "rearrangement" &&
@@ -2421,7 +2274,7 @@ export default function StudentActivityPageContent({
                         className={cn(
                           "relative w-8 h-8 sm:w-8 sm:h-8 rounded border transition-all",
                           "flex items-center justify-center text-sm sm:text-xs font-medium",
-                          "min-w-[32px] sm:min-w-[32px]",
+                          "min-w-[32px]",
                           isCompleted
                             ? "bg-green-100 text-green-800 border-green-400"
                             : isFailed
@@ -2450,10 +2303,15 @@ export default function StudentActivityPageContent({
                     activityIndex === currentActivityIndex;
 
                   // 🎯 Issue #147: 單字選擇模式不顯示題號指示器（練習是輪次制，與 items 不對應）
+                  // 但單字集+例句模式（reading/rearrangement）需要顯示題號
+                  const isVocabSentenceMode =
+                    isVocabularySetType(activity.type) &&
+                    (practiceMode === "reading" ||
+                      practiceMode === "rearrangement");
                   if (
                     activity.items &&
                     activity.items.length > 0 &&
-                    !isVocabularySetType(activity.type)
+                    (!isVocabularySetType(activity.type) || isVocabSentenceMode)
                   ) {
                     return (
                       <div
@@ -2461,7 +2319,7 @@ export default function StudentActivityPageContent({
                         className="flex items-center gap-1 sm:gap-2 flex-shrink-0"
                       >
                         <div className="flex items-center gap-1">
-                          <span className="text-sm sm:text-xs font-medium text-gray-600 whitespace-nowrap max-w-[120px] sm:max-w-none truncate sm:truncate-none">
+                          <span className="text-sm sm:text-xs font-medium text-gray-600 whitespace-nowrap max-w-[120px] sm:max-w-none truncate sm:overflow-visible sm:whitespace-normal">
                             {activity.title}
                           </span>
                           <Badge
@@ -2502,13 +2360,15 @@ export default function StudentActivityPageContent({
 
                             // 🎯 Issue #118: 判斷是否為例句朗讀模式（禁止跳題）
                             const isReadingMode =
-                              isExampleSentencesType(activity.type) &&
+                              (isExampleSentencesType(activity.type) ||
+                                isVocabSentenceMode) &&
                               practiceMode !== "rearrangement";
 
                             // 🎯 Issue #147: 判斷是否為單字選擇模式（禁止跳題）
-                            const isWordSelectionMode = isVocabularySetType(
-                              activity.type,
-                            );
+                            // 單字集+例句模式不算單字選擇模式
+                            const isWordSelectionMode =
+                              isVocabularySetType(activity.type) &&
+                              !isVocabSentenceMode;
 
                             // 🎯 Issue #118: 檢查當前題目是否已分析（用於顯示狀態）
                             const hasAssessment = !!item?.ai_assessment;
@@ -2541,7 +2401,7 @@ export default function StudentActivityPageContent({
                                 className={cn(
                                   "relative w-8 h-8 sm:w-8 sm:h-8 rounded border transition-all",
                                   "flex items-center justify-center text-sm sm:text-xs font-medium",
-                                  "min-w-[32px] sm:min-w-[32px]",
+                                  "min-w-[32px]",
                                   // 保持學生原本的完成狀態樣式
                                   // 🎯 Issue #147: 單字選擇模式只顯示狀態，不能點擊
                                   isWordSelectionMode

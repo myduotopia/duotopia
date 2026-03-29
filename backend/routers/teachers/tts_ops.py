@@ -1,25 +1,15 @@
 """
 Tts Ops operations for teachers.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, selectinload, joinedload
-from sqlalchemy import func
-from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+import logging
 
-from database import get_db
-from models import Teacher, Classroom, Student, Program, Lesson, Content, ContentItem
-from models import ClassroomStudent, Assignment, AssignmentContent
-from models import (
-    ProgramLevel,
-    TeacherOrganization,
-    TeacherSchool,
-    Organization,
-    School,
-)
+from fastapi import APIRouter, Depends, HTTPException
+
+from models import Teacher
 from .dependencies import get_current_teacher
-from .validators import *
-from .utils import TEST_SUBSCRIPTION_WHITELIST, parse_birthdate
+from .validators import TTSRequest, BatchTTSRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -44,7 +34,7 @@ async def generate_tts(
 
         return {"audio_url": audio_url}
     except Exception as e:
-        print(f"TTS error: {e}")
+        logger.error(f"TTS error: {e}")
         raise HTTPException(status_code=500, detail="TTS generation failed")
 
 
@@ -68,7 +58,7 @@ async def batch_generate_tts(
 
         return {"audio_urls": audio_urls}
     except Exception as e:
-        print(f"Batch TTS error: {e}")
+        logger.error(f"Batch TTS error: {e}")
         raise HTTPException(status_code=500, detail="Batch TTS generation failed")
 
 
@@ -87,5 +77,5 @@ async def get_tts_voices(
 
         return {"voices": voices}
     except Exception as e:
-        print(f"Get voices error: {e}")
+        logger.error(f"Get voices error: {e}")
         raise HTTPException(status_code=500, detail="Failed to get voices")

@@ -25,6 +25,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { X } from "lucide-react";
+
+const MAX_TAGS = 5;
 
 /**
  * MaterialsPage - Manage organization-level educational programs/materials
@@ -44,6 +54,9 @@ export default function MaterialsPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newProgramName, setNewProgramName] = useState("");
   const [newProgramDescription, setNewProgramDescription] = useState("");
+  const [newProgramLevel, setNewProgramLevel] = useState("");
+  const [newProgramTags, setNewProgramTags] = useState<string[]>([]);
+  const [newProgramTagInput, setNewProgramTagInput] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const creatingRef = useRef(false);
 
@@ -92,6 +105,7 @@ export default function MaterialsPage() {
     if (effectiveOrgId) {
       fetchPrograms();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- api recreated each render; only refetch on orgId change
   }, [effectiveOrgId]);
 
   const fetchPrograms = async () => {
@@ -116,6 +130,22 @@ export default function MaterialsPage() {
   const canManageMaterials =
     userRoles.includes("org_owner") || userRoles.includes("org_admin");
 
+  const handleAddTag = () => {
+    const tag = newProgramTagInput.trim();
+    if (!tag) return;
+    if (newProgramTags.length >= MAX_TAGS) return;
+    if (newProgramTags.includes(tag)) {
+      setNewProgramTagInput("");
+      return;
+    }
+    setNewProgramTags([...newProgramTags, tag]);
+    setNewProgramTagInput("");
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setNewProgramTags(newProgramTags.filter((t) => t !== tagToRemove));
+  };
+
   // Handle create program
   const handleCreateProgram = async () => {
     if (creatingRef.current) return;
@@ -130,11 +160,16 @@ export default function MaterialsPage() {
       await api.createProgram({
         name: newProgramName.trim(),
         description: newProgramDescription.trim() || undefined,
+        level: newProgramLevel || undefined,
+        tags: newProgramTags.length > 0 ? newProgramTags : undefined,
       });
       toast.success("教材建立成功");
       setCreateDialogOpen(false);
       setNewProgramName("");
       setNewProgramDescription("");
+      setNewProgramLevel("");
+      setNewProgramTags([]);
+      setNewProgramTagInput("");
       fetchPrograms(); // Refresh the list
     } catch (error) {
       console.error("Failed to create program:", error);
@@ -250,6 +285,65 @@ export default function MaterialsPage() {
                 onChange={(e) => setNewProgramDescription(e.target.value)}
                 rows={3}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="program-level">CEFR 等級</Label>
+              <Select
+                value={newProgramLevel}
+                onValueChange={setNewProgramLevel}
+              >
+                <SelectTrigger id="program-level">
+                  <SelectValue placeholder="選擇等級（選填）" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="preA">Pre-A</SelectItem>
+                  <SelectItem value="A1">A1</SelectItem>
+                  <SelectItem value="A2">A2</SelectItem>
+                  <SelectItem value="B1">B1</SelectItem>
+                  <SelectItem value="B2">B2</SelectItem>
+                  <SelectItem value="C1">C1</SelectItem>
+                  <SelectItem value="C2">C2</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>
+                標籤{" "}
+                <span className="text-gray-500 text-xs">
+                  （最多 {MAX_TAGS} 個）
+                </span>
+              </Label>
+              <Input
+                value={newProgramTagInput}
+                onChange={(e) => setNewProgramTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddTag();
+                  }
+                }}
+                placeholder="輸入標籤後按 Enter"
+                disabled={newProgramTags.length >= MAX_TAGS}
+              />
+              {newProgramTags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {newProgramTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm border border-blue-200"
+                    >
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTag(tag)}
+                        className="ml-2 text-blue-500 hover:text-blue-700"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

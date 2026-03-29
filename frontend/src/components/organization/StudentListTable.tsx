@@ -19,6 +19,7 @@ export interface Student {
   birthdate?: string | null;
   is_active: boolean;
   password_changed?: boolean;
+  email_verified?: boolean;
   schools?: Array<{ id: string; name: string }>;
   classrooms?: Array<{ id: number; name: string; school_id: string }>;
   created_at: string;
@@ -147,7 +148,7 @@ export function StudentListTable({
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 whitespace-nowrap">
                           {t("studentTable.passwordStatus.changed")}
                         </span>
-                        {onResetPassword && (
+                        {onResetPassword && !student.email_verified && (
                           <Button
                             variant="ghost"
                             size="sm"

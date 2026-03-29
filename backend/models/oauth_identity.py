@@ -29,6 +29,9 @@ class OAuthIdentity(Base):
     teacher_id = Column(
         Integer, ForeignKey("teachers.id", ondelete="CASCADE"), nullable=False
     )
+    identity_id = Column(
+        Integer, ForeignKey("identities.id", ondelete="SET NULL"), nullable=True
+    )
 
     # OAuth provider info
     provider = Column(String(50), nullable=False)
@@ -52,12 +55,14 @@ class OAuthIdentity(Base):
 
     # Relationships
     teacher = relationship("Teacher", back_populates="oauth_identities")
+    identity = relationship("Identity", backref="oauth_identities")
 
     __table_args__ = (
         UniqueConstraint("provider", "provider_user_id", name="uq_oauth_provider_user"),
         UniqueConstraint("teacher_id", "provider", name="uq_oauth_teacher_provider"),
         Index("ix_oauth_identity_teacher", "teacher_id"),
         Index("ix_oauth_identity_lookup", "provider", "provider_user_id"),
+        Index("ix_oauth_identity_identity", "identity_id"),
     )
 
     def __repr__(self):

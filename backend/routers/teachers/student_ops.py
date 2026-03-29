@@ -613,19 +613,44 @@ async def reset_student_password(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    if not student.created_at:
+    if student.email_verified:
         raise HTTPException(
-            status_code=400, detail="Student creation date not available"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無法重設已驗證信箱的學生密碼",
         )
 
-    # Reset password to creation date in Taiwan timezone (YYYYMMDD format)
+    # Determine the date source for default password:
+    # 1. student.created_at (preferred)
+    # 2. Fallback: classroom.created_at (for old students without created_at)
     taipei_tz = ZoneInfo("Asia/Taipei")
-    created_at_tw = (
-        student.created_at.astimezone(taipei_tz)
-        if student.created_at.tzinfo
-        else student.created_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(taipei_tz)
+    date_source = student.created_at
+
+    if not date_source:
+        # Fallback to classroom created_at
+        enrollment = (
+            db.query(ClassroomStudent)
+            .filter(
+                ClassroomStudent.student_id == student.id,
+                ClassroomStudent.is_active.is_(True),
+            )
+            .join(Classroom)
+            .filter(Classroom.teacher_id == current_teacher.id)
+            .order_by(Classroom.created_at.asc())
+            .first()
+        )
+        if enrollment and enrollment.classroom and enrollment.classroom.created_at:
+            date_source = enrollment.classroom.created_at
+
+    if not date_source:
+        raise HTTPException(status_code=400, detail="無法取得預設密碼日期來源")
+
+    # Reset password to date in Taiwan timezone (YYYYMMDD format)
+    date_tw = (
+        date_source.astimezone(taipei_tz)
+        if date_source.tzinfo
+        else date_source.replace(tzinfo=ZoneInfo("UTC")).astimezone(taipei_tz)
     )
-    default_password = created_at_tw.strftime("%Y%m%d")
+    default_password = date_tw.strftime("%Y%m%d")
     student.password_hash = get_password_hash(default_password)
     student.password_changed = False
 
@@ -684,6 +709,10 @@ async def get_classroom_students(
             "last_login": (s.last_login.isoformat() if s.last_login else None),
             "status": "active" if s.is_active else "inactive",
             "created_at": (s.created_at.isoformat() if s.created_at else None),
+            "email_verified": s.email_verified,
+            "classroom_created_at": (
+                classroom.created_at.isoformat() if classroom.created_at else None
+            ),
         }
         for s in students
     ]

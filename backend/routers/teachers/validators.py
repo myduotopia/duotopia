@@ -1,7 +1,7 @@
 """
 Pydantic models/schemas for teachers API validation.
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import date
 
@@ -27,6 +27,11 @@ class UpdateTeacherProfileRequest(BaseModel):
 class UpdatePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+    @field_validator("current_password", "new_password")
+    @classmethod
+    def strip_password(cls, v: str) -> str:
+        return v.strip()
 
 
 class ClassroomSummary(BaseModel):
@@ -185,6 +190,10 @@ class ContentCreate(BaseModel):
     is_public: Optional[bool] = False
 
 
+class ContentCopy(BaseModel):
+    target_lesson_id: int
+
+
 class ContentUpdate(BaseModel):
     title: Optional[str] = None
     items: Optional[List[Dict[str, Any]]] = None
@@ -218,14 +227,22 @@ class GenerateSentencesRequest(BaseModel):
 
 
 class TTSRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=2000)
     voice: Optional[str] = "en-US-JennyNeural"
     rate: Optional[str] = "+0%"
     volume: Optional[str] = "+0%"
 
 
 class BatchTTSRequest(BaseModel):
-    texts: List[str]
+    texts: List[str] = Field(..., max_length=50)
     voice: Optional[str] = "en-US-JennyNeural"
     rate: Optional[str] = "+0%"
     volume: Optional[str] = "+0%"
+
+    @field_validator("texts")
+    @classmethod
+    def validate_text_lengths(cls, v: List[str]) -> List[str]:
+        for i, text in enumerate(v):
+            if len(text) > 2000:
+                raise ValueError(f"texts[{i}] exceeds max length of 2000 characters")
+        return v

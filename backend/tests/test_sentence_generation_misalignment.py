@@ -264,3 +264,146 @@ class TestSentenceGenerationMisalignment:
             assert (
                 result["word"] == words[i]
             ), f"Expected word '{words[i]}', got '{result['word']}'"
+
+
+@pytest.mark.unit
+class TestSentenceGenerationChunking:
+    """Test cases for batch chunking to avoid token truncation (#505)"""
+
+    @pytest.fixture
+    def service(self):
+        """Create test service instance with mocked client"""
+        svc = TranslationService()
+        svc.use_vertex_ai = False
+        return svc
+
+    @pytest.mark.asyncio
+    async def test_large_batch_is_chunked(self, service):
+        """10 words should be split into 2 chunks of 5, each getting its own API call"""
+        words = [f"word{i}" for i in range(10)]
+
+        call_count = 0
+
+        async def mock_create(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            import json
+
+            prompt_content = kwargs["messages"][1]["content"]
+            chunk_words = [w for w in words if f'"word": "{w}"' in prompt_content]
+            sentences = [
+                {"sentence": f"Example with {w}.", "word": w} for w in chunk_words
+            ]
+            mock_resp = Mock()
+            mock_resp.choices = [Mock()]
+            mock_resp.choices[0].message.content = json.dumps(sentences)
+            return mock_resp
+
+        mock_client = Mock()
+        mock_client.chat.completions.create = AsyncMock(side_effect=mock_create)
+        service.client = mock_client
+
+        results = await service.generate_sentences(words=words, level="A1")
+
+        assert len(results) == 10, f"Expected 10 sentences, got {len(results)}"
+        assert call_count == 2, f"Expected 2 API calls (chunks), got {call_count}"
+        for i, result in enumerate(results):
+            assert result["word"] == words[i]
+
+    @pytest.mark.asyncio
+    async def test_small_batch_no_chunking(self, service):
+        """3 words should NOT be chunked (under SENTENCE_CHUNK_SIZE)"""
+        words = ["cat", "dog", "bird"]
+
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[
+            0
+        ].message.content = """[
+            {"sentence": "The cat is sleeping.", "word": "cat"},
+            {"sentence": "The dog is barking.", "word": "dog"},
+            {"sentence": "The bird is singing.", "word": "bird"}
+        ]"""
+
+        mock_client = Mock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        service.client = mock_client
+
+        results = await service.generate_sentences(words=words, level="A1")
+
+        assert len(results) == 3
+        assert mock_client.chat.completions.create.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_chunk_failure_isolation(self, service):
+        """If one chunk fails, other chunks should still return valid results"""
+        words = [f"word{i}" for i in range(10)]
+
+        call_number = 0
+
+        async def mock_create(**kwargs):
+            nonlocal call_number
+            call_number += 1
+            if call_number == 2:
+                raise Exception("API rate limit exceeded")
+            import json
+
+            prompt_content = kwargs["messages"][1]["content"]
+            chunk_words = [w for w in words if f'"word": "{w}"' in prompt_content]
+            sentences = [
+                {"sentence": f"Good sentence for {w}.", "word": w} for w in chunk_words
+            ]
+            mock_resp = Mock()
+            mock_resp.choices = [Mock()]
+            mock_resp.choices[0].message.content = json.dumps(sentences)
+            return mock_resp
+
+        mock_client = Mock()
+        mock_client.chat.completions.create = AsyncMock(side_effect=mock_create)
+        service.client = mock_client
+
+        results = await service.generate_sentences(words=words, level="A1")
+
+        # All 10 words should have results
+        assert len(results) == 10
+
+        # First 5 should have real sentences
+        for i in range(5):
+            assert "Good sentence" in results[i]["sentence"]
+            assert results[i]["word"] == words[i]
+
+        # Last 5 should have fallback sentences (from failed chunk)
+        for i in range(5, 10):
+            assert "example with" in results[i]["sentence"].lower()
+            assert results[i]["word"] == words[i]
+
+    @pytest.mark.asyncio
+    async def test_large_batch_chunked_vertex_ai(self):
+        """Vertex AI path: 10 words should be chunked into 2 batches"""
+        svc = TranslationService()
+        svc.use_vertex_ai = True
+
+        words = [f"word{i}" for i in range(10)]
+        call_count = 0
+
+        async def mock_generate_json(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            prompt = kwargs.get("prompt", "")
+            chunk_words = [w for w in words if f'"word": "{w}"' in prompt]
+            return [
+                {"sentence": f"Vertex example with {w}.", "word": w}
+                for w in chunk_words
+            ]
+
+        mock_vertex = Mock()
+        mock_vertex.generate_json = AsyncMock(side_effect=mock_generate_json)
+        svc.vertex_ai = mock_vertex
+
+        results = await svc.generate_sentences(words=words, level="A1")
+
+        assert len(results) == 10
+        assert call_count == 2, f"Expected 2 Vertex AI calls, got {call_count}"
+        for i, result in enumerate(results):
+            assert result["word"] == words[i]
+            assert "Vertex example" in result["sentence"]

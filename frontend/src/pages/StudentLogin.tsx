@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { ArrowLeft, ChevronRight, Home, Mail } from "lucide-react";
+import { ArrowLeft, ChevronRight, Home, Mail, Eye, EyeOff } from "lucide-react";
 import { useStudentAuthStore, StudentUser } from "@/stores/studentAuthStore";
 import { authService } from "@/services/authService";
 import { teacherService } from "@/services/teacherService";
@@ -61,6 +61,10 @@ export default function StudentLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const hasAutoSubmitted = useRef(false);
+
+  // Password visibility state
+  const [showEmailPassword, setShowEmailPassword] = useState(false);
+  const [showStepPassword, setShowStepPassword] = useState(false);
 
   // Email direct login state
   const [emailLoginEmail, setEmailLoginEmail] = useState("");
@@ -168,7 +172,7 @@ export default function StudentLogin() {
     try {
       const response = await authService.studentLogin({
         id: selectedStudent.id,
-        password: password,
+        password: password.trim(),
       });
 
       if (response.access_token) {
@@ -200,7 +204,7 @@ export default function StudentLogin() {
     try {
       const response = await authService.studentEmailLogin(
         emailLoginEmail,
-        emailLoginPassword,
+        emailLoginPassword.trim(),
       );
 
       const s = response.student;
@@ -331,14 +335,32 @@ export default function StudentLogin() {
                   onChange={(e) => setEmailLoginEmail(e.target.value)}
                   className="text-lg py-6"
                 />
-                <Input
-                  type="password"
-                  placeholder={t("studentLogin.emailLogin.passwordPlaceholder")}
-                  value={emailLoginPassword}
-                  onChange={(e) => setEmailLoginPassword(e.target.value)}
-                  className="text-lg py-6"
-                  onKeyDown={(e) => e.key === "Enter" && handleEmailLogin()}
-                />
+                <div className="relative">
+                  <Input
+                    type={showEmailPassword ? "text" : "password"}
+                    placeholder={t(
+                      "studentLogin.emailLogin.passwordPlaceholder",
+                    )}
+                    value={emailLoginPassword}
+                    onChange={(e) => setEmailLoginPassword(e.target.value)}
+                    className="text-lg py-6 pr-10"
+                    onKeyDown={(e) => e.key === "Enter" && handleEmailLogin()}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEmailPassword(!showEmailPassword)}
+                    aria-label={
+                      showEmailPassword ? "Hide password" : "Show password"
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showEmailPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
 
                 <Button
                   onClick={handleEmailLogin}
@@ -354,6 +376,15 @@ export default function StudentLogin() {
                     t("studentLogin.emailLogin.login")
                   )}
                 </Button>
+              </div>
+
+              <div className="text-center">
+                <Link
+                  to="/student/forgot-password"
+                  className="text-sm text-emerald-600 hover:underline"
+                >
+                  {t("studentLogin.emailLogin.forgotPassword")}
+                </Link>
               </div>
 
               {error && (
@@ -530,19 +561,43 @@ export default function StudentLogin() {
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Input
-                    type="password"
-                    placeholder={t("studentLogin.step4.placeholder")}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="text-lg py-6"
-                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showStepPassword ? "text" : "password"}
+                      placeholder={t("studentLogin.step4.placeholder")}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="text-lg py-6 pr-10"
+                      onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowStepPassword(!showStepPassword)}
+                      aria-label={
+                        showStepPassword ? "Hide password" : "Show password"
+                      }
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showStepPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                   {/* Password hint - always visible */}
                   <div className="text-sm text-gray-600 space-y-1 px-1">
                     <p>💡 {t("studentLogin.step4.passwordHint")}</p>
                     <p>📧 {t("studentLogin.step4.verifiedEmailHint")}</p>
-                    <p>🔑 {t("studentLogin.step4.forgotPassword")}</p>
+                    <p>
+                      🔑 {t("studentLogin.step4.forgotPasswordText")}{" "}
+                      <Link
+                        to="/student/forgot-password"
+                        className="text-emerald-600 hover:underline"
+                      >
+                        {t("studentLogin.step4.forgotPasswordLink")}
+                      </Link>
+                    </p>
                   </div>
                 </div>
 

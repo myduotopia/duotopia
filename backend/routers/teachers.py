@@ -2891,24 +2891,15 @@ async def get_content_detail(
     db: Session = Depends(get_db),
 ):
     """獲取內容詳情"""
-    # Verify the content belongs to the teacher
-    content = (
-        db.query(Content)
-        .join(Lesson)
-        .join(Program)
-        .filter(
-            Content.id == content_id,
-            Program.teacher_id == current_teacher.id,
-            Content.is_active.is_(True),
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .options(selectinload(Content.content_items))  # 🔥 避免 N+1：Eager load items
-        .first()
+    from utils.permissions import check_content_access
+
+    # check_content_access handles personal, org, template, and assignment copy access
+    _program, _lesson, content = check_content_access(
+        db, content_id, current_teacher, require_owner=False
     )
 
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
+    # Eager load content_items to avoid N+1
+    db.refresh(content, ["content_items"])
 
     # 檢查每個 ContentItem 是否有學生進度
     item_ids = (
@@ -3839,13 +3830,12 @@ async def get_assignment_preview(
 
     返回與學生 API 相同格式的資料，讓老師可以預覽完整的作業內容
     """
-    # 查詢作業（確認老師有權限）
+    # 查詢作業（確認老師有權限 — 支援 classroom_id 為 null 的即刻練習）
     assignment = (
         db.query(Assignment)
-        .join(Classroom)
         .filter(
             Assignment.id == assignment_id,
-            Classroom.teacher_id == current_teacher.id,
+            Assignment.teacher_id == current_teacher.id,
         )
         .first()
     )
@@ -3973,13 +3963,12 @@ async def preview_rearrangement_questions(
         translation: Optional[str] = None
         original_text: Optional[str] = None  # 正確答案（用於顯示答案功能）
 
-    # 取得作業（確認老師有權限）
+    # 取得作業（確認老師有權限 — 支援 classroom_id 為 null 的即刻練習）
     assignment = (
         db.query(Assignment)
-        .join(Classroom)
         .filter(
             Assignment.id == assignment_id,
-            Classroom.teacher_id == current_teacher.id,
+            Assignment.teacher_id == current_teacher.id,
         )
         .first()
     )
@@ -4056,13 +4045,12 @@ async def preview_rearrangement_answer(
     """
     import math
 
-    # 取得作業（確認老師有權限）
+    # 取得作業（確認老師有權限 — 支援 classroom_id 為 null 的即刻練習）
     assignment = (
         db.query(Assignment)
-        .join(Classroom)
         .filter(
             Assignment.id == assignment_id,
-            Classroom.teacher_id == current_teacher.id,
+            Assignment.teacher_id == current_teacher.id,
         )
         .first()
     )
@@ -4136,13 +4124,12 @@ async def preview_rearrangement_complete(
     - 不存入資料庫
     - 供老師預覽示範用
     """
-    # 取得作業（確認老師有權限）
+    # 取得作業（確認老師有權限 — 支援 classroom_id 為 null 的即刻練習）
     assignment = (
         db.query(Assignment)
-        .join(Classroom)
         .filter(
             Assignment.id == assignment_id,
-            Classroom.teacher_id == current_teacher.id,
+            Assignment.teacher_id == current_teacher.id,
         )
         .first()
     )
@@ -4172,13 +4159,12 @@ async def preview_rearrangement_retry(
     - 不存入資料庫
     - 供老師預覽示範用
     """
-    # 取得作業（確認老師有權限）
+    # 取得作業（確認老師有權限 — 支援 classroom_id 為 null 的即刻練習）
     assignment = (
         db.query(Assignment)
-        .join(Classroom)
         .filter(
             Assignment.id == assignment_id,
-            Classroom.teacher_id == current_teacher.id,
+            Assignment.teacher_id == current_teacher.id,
         )
         .first()
     )
@@ -4459,13 +4445,12 @@ async def preview_vocabulary_activities(
     - 不需要 StudentAssignment，直接從 Assignment 讀取
     - 返回格式與學生端 API 相同
     """
-    # 取得作業（確認老師有權限）
+    # 取得作業（確認老師有權限 — 支援 classroom_id 為 null 的即刻練習）
     assignment = (
         db.query(Assignment)
-        .join(Classroom)
         .filter(
             Assignment.id == assignment_id,
-            Classroom.teacher_id == current_teacher.id,
+            Assignment.teacher_id == current_teacher.id,
         )
         .first()
     )
@@ -4541,13 +4526,12 @@ async def preview_word_selection_start(
     """
     # from services.translation import translation_service  # disabled (#303)
 
-    # 取得作業（確認老師有權限）
+    # 取得作業（確認老師有權限 — 支援 classroom_id 為 null 的即刻練習）
     assignment = (
         db.query(Assignment)
-        .join(Classroom)
         .filter(
             Assignment.id == assignment_id,
-            Classroom.teacher_id == current_teacher.id,
+            Assignment.teacher_id == current_teacher.id,
         )
         .first()
     )
@@ -4698,13 +4682,12 @@ async def preview_word_selection_answer(
     - 不更新任何資料庫記錄
     - 回傳模擬的結果
     """
-    # 取得作業（確認老師有權限）
+    # 取得作業（確認老師有權限 — 支援 classroom_id 為 null 的即刻練習）
     assignment = (
         db.query(Assignment)
-        .join(Classroom)
         .filter(
             Assignment.id == assignment_id,
-            Classroom.teacher_id == current_teacher.id,
+            Assignment.teacher_id == current_teacher.id,
         )
         .first()
     )

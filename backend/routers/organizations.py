@@ -8,14 +8,23 @@ Note: Per-issue deploy now includes database migrations (2026-01-11 v4 - upgrade
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import func, distinct, union, select
 from sqlalchemy.orm import Session, joinedload, selectinload, load_only
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
+import logging
 import uuid
 
 from database import get_db
-from models import Teacher, Organization, TeacherOrganization, TeacherSchool, School
+from models import (
+    Teacher,
+    Organization,
+    TeacherOrganization,
+    TeacherSchool,
+    School,
+    StudentSchool,
+)
 from auth import verify_token, get_password_hash
 from services.casbin_service import get_casbin_service
 from services.email_service import email_service
@@ -398,98 +407,115 @@ async def get_organization_stats(
     Get aggregated statistics for organizations the current teacher can access.
     Returns counts of organizations, schools, teachers, and students.
     """
-    from sqlalchemy import func, distinct
+    logger = logging.getLogger(__name__)
 
-    # Get teacher's organizations
-    teacher_orgs = (
-        db.query(TeacherOrganization)
-        .filter(
-            TeacherOrganization.teacher_id == teacher.id,
+    try:
+        # Get teacher's organizations
+        teacher_orgs = (
+            db.query(TeacherOrganization)
+            .filter(
+                TeacherOrganization.teacher_id == teacher.id,
+                TeacherOrganization.is_active.is_(True),
+            )
+            .all()
+        )
+
+        # Validate and collect organization IDs (defensive coding)
+        org_ids = []
+        for to in teacher_orgs:
+            if isinstance(to.organization_id, uuid.UUID):
+                org_ids.append(to.organization_id)
+            else:
+                try:
+                    org_ids.append(uuid.UUID(str(to.organization_id)))
+                except ValueError:
+                    continue  # Skip invalid UUIDs
+
+        # If no organizations, return zeros
+        if not org_ids:
+            return OrganizationStatsResponse(
+                total_organizations=0,
+                total_schools=0,
+                total_teachers=0,
+                total_students=0,
+            )
+
+        # Count active organizations
+        total_orgs = (
+            db.query(func.count(Organization.id))
+            .filter(Organization.id.in_(org_ids), Organization.is_active.is_(True))
+            .scalar()
+        )
+
+        # Count schools under these organizations
+        total_schools = (
+            db.query(func.count(School.id))
+            .filter(School.organization_id.in_(org_ids), School.is_active.is_(True))
+            .scalar()
+        )
+
+        # Count unique teachers (org members + school members) - Use UNION to deduplicate
+        # A teacher can be both org member AND school member, so we must deduplicate
+        # Get school IDs for counting school-level teachers
+        school_ids = (
+            db.query(School.id)
+            .filter(School.organization_id.in_(org_ids), School.is_active.is_(True))
+            .all()
+        )
+        school_id_list = [s.id for s in school_ids]
+
+        # Build UNION query to get unique teacher IDs
+        # Query 1: Organization-level teachers
+        org_teacher_query = select(TeacherOrganization.teacher_id).where(
+            TeacherOrganization.organization_id.in_(org_ids),
             TeacherOrganization.is_active.is_(True),
         )
-        .all()
-    )
 
-    # Validate and collect organization IDs (defensive coding)
-    org_ids = []
-    for to in teacher_orgs:
-        if isinstance(to.organization_id, uuid.UUID):
-            org_ids.append(to.organization_id)
+        # Query 2: School-level teachers (only if schools exist)
+        if school_id_list:
+            school_teacher_query = select(TeacherSchool.teacher_id).where(
+                TeacherSchool.school_id.in_(school_id_list),
+                TeacherSchool.is_active.is_(True),
+            )
+            # UNION deduplicates automatically
+            unique_teachers_query = union(org_teacher_query, school_teacher_query)
         else:
-            try:
-                org_ids.append(uuid.UUID(str(to.organization_id)))
-            except ValueError:
-                continue  # Skip invalid UUIDs
+            unique_teachers_query = org_teacher_query
 
-    # If no organizations, return zeros
-    if not org_ids:
+        # Count unique teachers from the UNION
+        total_teachers = (
+            db.query(func.count())
+            .select_from(unique_teachers_query.alias("unique_teachers"))
+            .scalar()
+        ) or 0
+
+        # Count unique active students across all schools in these organizations
+        if school_id_list:
+            total_students = (
+                db.query(func.count(distinct(StudentSchool.student_id)))
+                .filter(
+                    StudentSchool.school_id.in_(school_id_list),
+                    StudentSchool.is_active.is_(True),
+                )
+                .scalar()
+            ) or 0
+        else:
+            total_students = 0
+
         return OrganizationStatsResponse(
-            total_organizations=0,
-            total_schools=0,
-            total_teachers=0,
-            total_students=0,
+            total_organizations=total_orgs or 0,
+            total_schools=total_schools or 0,
+            total_teachers=total_teachers,
+            total_students=total_students,
         )
-
-    # Count active organizations
-    total_orgs = (
-        db.query(func.count(Organization.id))
-        .filter(Organization.id.in_(org_ids), Organization.is_active.is_(True))
-        .scalar()
-    )
-
-    # Count schools under these organizations
-    total_schools = (
-        db.query(func.count(School.id))
-        .filter(School.organization_id.in_(org_ids), School.is_active.is_(True))
-        .scalar()
-    )
-
-    # Count unique teachers (org members + school members) - FIXED: Use UNION to deduplicate
-    # A teacher can be both org member AND school member, so we must deduplicate
-    from sqlalchemy import union, select
-
-    # Get school IDs for counting school-level teachers
-    school_ids = (
-        db.query(School.id)
-        .filter(School.organization_id.in_(org_ids), School.is_active.is_(True))
-        .all()
-    )
-    school_id_list = [s.id for s in school_ids]
-
-    # Build UNION query to get unique teacher IDs
-    # Query 1: Organization-level teachers
-    org_teacher_query = select(TeacherOrganization.teacher_id).where(
-        TeacherOrganization.organization_id.in_(org_ids),
-        TeacherOrganization.is_active.is_(True),
-    )
-
-    # Query 2: School-level teachers (only if schools exist)
-    if school_id_list:
-        school_teacher_query = select(TeacherSchool.teacher_id).where(
-            TeacherSchool.school_id.in_(school_id_list),
-            TeacherSchool.is_active.is_(True),
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching organization stats: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="獲取組織統計資料失敗",
         )
-        # UNION deduplicates automatically
-        unique_teachers_query = union(org_teacher_query, school_teacher_query)
-    else:
-        unique_teachers_query = org_teacher_query
-
-    # Count unique teachers from the UNION
-    total_teachers = (
-        db.query(func.count())
-        .select_from(unique_teachers_query.alias("unique_teachers"))
-        .scalar()
-    ) or 0
-
-    # TODO: Count students when student model is available
-    total_students = 0
-
-    return OrganizationStatsResponse(
-        total_organizations=total_orgs or 0,
-        total_schools=total_schools or 0,
-        total_teachers=total_teachers,
-        total_students=total_students,
-    )
 
 
 @router.get("/{org_id}", response_model=OrganizationResponse)

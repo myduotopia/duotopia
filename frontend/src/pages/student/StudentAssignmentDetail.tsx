@@ -106,7 +106,6 @@ export default function StudentAssignmentDetail() {
 
         if (activitiesResponse.ok) {
           const data = await activitiesResponse.json();
-          console.log("Activities API response:", data);
 
           // 設置 practice_mode（例句重組模式）
           if (data.practice_mode) {
@@ -183,13 +182,6 @@ export default function StudentAssignmentDetail() {
         completed_count: completedCount,
         content_count: totalCount,
       };
-
-      console.log("Assignment detail:", {
-        score: assignmentDetail.score,
-        completed: completedCount,
-        total: totalCount,
-        activities: contentProgress.length,
-      });
 
       setAssignment(assignmentDetail);
     } catch (error) {
@@ -388,7 +380,7 @@ export default function StudentAssignmentDetail() {
 
               {progress.score !== undefined && progress.status === "GRADED" && (
                 <div className="text-sm font-medium text-green-600">
-                  {progress.score}
+                  {progress.score.toFixed(1)}
                   {t("studentAssignmentDetail.scoring.scoreUnit")}
                 </div>
               )}
@@ -447,10 +439,14 @@ export default function StudentAssignmentDetail() {
 
   const statusDisplay = getStatusDisplay(assignment.status);
   const dueDateInfo = formatDueDate(assignment.due_date);
+  // Issue #460: Allow GRADED word_selection to start practice
+  const isGradedWordSelection =
+    assignment.status === "GRADED" && practiceMode === "word_selection";
   const canStart =
     assignment.status === "NOT_STARTED" ||
     assignment.status === "IN_PROGRESS" ||
-    assignment.status === "RETURNED";
+    assignment.status === "RETURNED" ||
+    isGradedWordSelection;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4">
@@ -577,11 +573,16 @@ export default function StudentAssignmentDetail() {
                   className="w-full sm:w-auto"
                 >
                   <Play className="h-4 w-4 mr-2" />
-                  {assignment.status === "NOT_STARTED"
-                    ? t("studentAssignmentDetail.buttons.startAssignment")
-                    : assignment.status === "IN_PROGRESS"
-                      ? t("studentAssignmentDetail.buttons.continueAssignment")
-                      : t("studentAssignmentDetail.buttons.resubmit")}
+                  {isGradedWordSelection
+                    ? t("studentAssignmentDetail.buttons.practice") ||
+                      "Practice"
+                    : assignment.status === "NOT_STARTED"
+                      ? t("studentAssignmentDetail.buttons.startAssignment")
+                      : assignment.status === "IN_PROGRESS"
+                        ? t(
+                            "studentAssignmentDetail.buttons.continueAssignment",
+                          )
+                        : t("studentAssignmentDetail.buttons.resubmit")}
                 </Button>
               </div>
             )}

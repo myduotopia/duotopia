@@ -501,7 +501,7 @@ export default function AdminBillingDashboard() {
                       />
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip
-                        formatter={(value: number) => formatCurrency(value)}
+                        formatter={(value) => formatCurrency(Number(value))}
                         labelFormatter={(label) => `日期: ${label}`}
                       />
                       <Legend wrapperStyle={{ fontSize: "12px" }} />
@@ -549,7 +549,7 @@ export default function AdminBillingDashboard() {
                         tick={{ fontSize: 10 }}
                       />
                       <Tooltip
-                        formatter={(value: number) => formatCurrency(value)}
+                        formatter={(value) => formatCurrency(Number(value))}
                       />
                       <Legend wrapperStyle={{ fontSize: "12px" }} />
                       <Bar dataKey="cost" fill="#82ca9d" name="費用 (USD)" />

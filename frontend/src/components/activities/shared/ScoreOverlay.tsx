@@ -12,41 +12,7 @@ import { useTranslation } from "react-i18next";
 import { CheckCircle, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Lottie from "lottie-react";
-
-// Lottie 星級動畫路徑（放在 public/lottie/ 下）
-const SCORE_ANIMATION_URLS: Record<string, string> = {
-  awesome: "/lottie/Star rating - Awesome.json",
-  good: "/lottie/Star rating - good.json",
-  okay: "/lottie/Star rating - Okay.json",
-  bad: "/lottie/Star rating - Bad.json",
-  confetti: "/lottie/confetti.json",
-};
-
-// Module-level 快取：所有 ScoreOverlay instance 共用，只 fetch 一次
-let cachedAnimations: Record<string, object> | null = null;
-let loadingPromise: Promise<Record<string, object>> | null = null;
-
-function loadLottieAnimations(): Promise<Record<string, object>> {
-  if (cachedAnimations) return Promise.resolve(cachedAnimations);
-  if (loadingPromise) return loadingPromise;
-  loadingPromise = (async () => {
-    const entries = Object.entries(SCORE_ANIMATION_URLS);
-    const results: Record<string, object> = {};
-    await Promise.all(
-      entries.map(async ([key, url]) => {
-        try {
-          const res = await fetch(url);
-          if (res.ok) results[key] = await res.json();
-        } catch {
-          // 靜默失敗
-        }
-      }),
-    );
-    cachedAnimations = results;
-    return results;
-  })();
-  return loadingPromise;
-}
+import { getCachedAnimations, loadLottieAnimations } from "./lottieCache";
 
 export interface ScoreOverlayProps {
   /** 是否顯示 overlay */
@@ -92,7 +58,7 @@ const ScoreOverlay: React.FC<ScoreOverlayProps> = ({
   const { t } = useTranslation();
   const [lottieAnimations, setLottieAnimations] = useState<
     Record<string, object>
-  >(cachedAnimations ?? {});
+  >(getCachedAnimations() ?? {});
   const [fading, setFading] = useState(false);
   const fadingRef = useRef(false);
   const completeCalledRef = useRef(false);

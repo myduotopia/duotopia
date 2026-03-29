@@ -32,11 +32,15 @@ import {
   Trophy,
   RefreshCw,
   Clock,
+  Send,
+  BookOpen,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
+import ScoreOverlay from "./shared/ScoreOverlay";
 
 interface WordOption {
   content_item_id: number;
@@ -60,6 +64,7 @@ interface WordSelectionActivityProps {
   assignmentId: number;
   isPreviewMode?: boolean;
   isDemoMode?: boolean; // Demo mode - uses public demo API endpoints
+  initialPracticeMode?: boolean; // True when assignment is already GRADED (re-practice)
   onComplete?: () => void;
 }
 
@@ -67,6 +72,7 @@ export default function WordSelectionActivity({
   assignmentId,
   isPreviewMode = false,
   isDemoMode = false,
+  initialPracticeMode = false,
   onComplete,
 }: WordSelectionActivityProps) {
   const { t } = useTranslation();
@@ -76,12 +82,14 @@ export default function WordSelectionActivity({
   const [loading, setLoading] = useState(true);
   const [words, setWords] = useState<WordOption[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [_sessionId, setSessionId] = useState<number | null>(null); // Kept for future session tracking
+  const [sessionId, setSessionId] = useState<number | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [scoreOverlayOpen, setScoreOverlayOpen] = useState(false);
+  const nextQuestionCalledRef = useRef(false);
 
   // Settings
   const [showWord, setShowWord] = useState(true);
@@ -97,6 +105,9 @@ export default function WordSelectionActivity({
     total_words: 0,
   });
   const [showAchievementDialog, setShowAchievementDialog] = useState(false);
+
+  // Issue #460: Practice-only mode (assignment already submitted, score locked)
+  const [isPracticeMode, setIsPracticeMode] = useState(initialPracticeMode);
 
   // Round tracking
   const [roundCompleted, setRoundCompleted] = useState(false);
@@ -117,13 +128,13 @@ export default function WordSelectionActivity({
   ): number => {
     if (currentStrength === undefined) {
       // 第一次作答
-      return isCorrect ? 0.5 : 0.2;
+      return isCorrect ? 0.5 : 0.0;
     }
-    // 後續作答：答對 +0.15，答錯 -0.2（但不低於 0.1）
+    // 後續作答：答對 +0.15，答錯 -0.2（可降至 0）
     if (isCorrect) {
       return Math.min(1.0, currentStrength + 0.15);
     } else {
-      return Math.max(0.1, currentStrength - 0.2);
+      return Math.max(0.0, currentStrength - 0.2);
     }
   };
 
@@ -191,6 +202,7 @@ export default function WordSelectionActivity({
         target_proficiency: number;
         words_mastered: number;
         achieved: boolean;
+        is_practice_mode?: boolean;
         show_word: boolean;
         show_image: boolean;
         play_audio: boolean;
@@ -199,6 +211,7 @@ export default function WordSelectionActivity({
 
       setWords(data.words || []);
       setSessionId(data.session_id);
+      setIsPracticeMode(data.is_practice_mode ?? false);
       setShowWord(data.show_word ?? true);
       setShowImage(data.show_image ?? true);
       setPlayAudio(data.play_audio ?? false);
@@ -356,6 +369,7 @@ export default function WordSelectionActivity({
     setSelectedAnswer(null); // No selection made
     setIsCorrect(false);
     setShowResult(true);
+    setScoreOverlayOpen(true);
     setSubmitting(true);
 
     // Skip API call in preview mode and demo mode, but track local stats (SM-2 simulation)
@@ -377,6 +391,7 @@ export default function WordSelectionActivity({
           selected_answer: "", // Empty answer for timeout
           is_correct: false,
           time_spent_seconds: timeLimit || 0,
+          session_id: sessionId,
         },
       );
 
@@ -399,6 +414,7 @@ export default function WordSelectionActivity({
     setSelectedAnswer(answer);
     setIsCorrect(correct);
     setShowResult(true);
+    setScoreOverlayOpen(true);
     setSubmitting(true);
 
     // Skip API call in preview mode and demo mode, but track local stats (SM-2 simulation)
@@ -420,6 +436,7 @@ export default function WordSelectionActivity({
           selected_answer: answer,
           is_correct: correct,
           time_spent_seconds: 0,
+          session_id: sessionId,
         },
       );
 
@@ -435,12 +452,18 @@ export default function WordSelectionActivity({
     }
   };
 
-  // Handle next word
-  const handleNext = () => {
+  // ScoreOverlay 動畫結束後自動跳下一題
+  const handleOverlayComplete = () => {
+    if (nextQuestionCalledRef.current) return;
+    nextQuestionCalledRef.current = true;
+    setTimeout(() => {
+      nextQuestionCalledRef.current = false;
+    }, 300);
+
+    setScoreOverlayOpen(false);
     setSelectedAnswer(null);
     setShowResult(false);
     // Reset timer immediately to prevent timeout effect from triggering on next question
-    // This fixes race condition where timeRemaining is still 0 when showResult becomes false
     if (timeLimit) {
       setTimeRemaining(timeLimit);
     }
@@ -448,7 +471,6 @@ export default function WordSelectionActivity({
     if (currentIndex < words.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      // Round completed
       setRoundCompleted(true);
     }
   };
@@ -458,8 +480,8 @@ export default function WordSelectionActivity({
     startPractice();
   };
 
-  // Complete assignment - 呼叫 API 完成作業並更新狀態
-  const handleCompleteAssignment = async () => {
+  // Issue #460: Submit assignment — called when student confirms submission
+  const handleSubmitAssignment = async () => {
     // 預覽模式和 demo 模式不需要呼叫 API
     if (isPreviewMode || isDemoMode) {
       toast.success(
@@ -479,20 +501,27 @@ export default function WordSelectionActivity({
       await apiClient.post(`/api/students/assignments/${assignmentId}/submit`);
 
       toast.success(
-        t("wordSelection.toast.completed") || "Assignment completed!",
+        t("wordSelection.toast.submitted") || "Assignment submitted!",
       );
+      setIsPracticeMode(true); // Now in practice-only mode
       setShowAchievementDialog(false);
-      onComplete?.();
+      setRoundCompleted(false);
+      // Don't call onComplete — student can continue practicing
     } catch (error) {
-      console.error("Error completing assignment:", error);
+      console.error("Error submitting assignment:", error);
       toast.error(
         t("wordSelection.toast.completeFailed") ||
-          "Failed to complete assignment. Please try again.",
+          "Failed to submit assignment. Please try again.",
       );
       // 保持 dialog 開啟，讓使用者可以重試
     } finally {
       setCompleting(false);
     }
+  };
+
+  // Complete and go back to assignment list
+  const handleCompleteAssignment = () => {
+    onComplete?.();
   };
 
   // Continue practice after achievement
@@ -540,6 +569,17 @@ export default function WordSelectionActivity({
             {t("wordSelection.roundComplete") || "Round Complete!"}
           </h2>
 
+          {/* Issue #460: Practice mode banner */}
+          {isPracticeMode && (
+            <div className="flex items-center gap-2 justify-center text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
+              <Info className="h-4 w-4" />
+              <span>
+                {t("wordSelection.practiceModeHint") ||
+                  "Practice mode — your score will not be affected"}
+              </span>
+            </div>
+          )}
+
           {/* Proficiency Progress */}
           <div className="space-y-2 max-w-md mx-auto">
             <div className="flex justify-between text-sm text-gray-600">
@@ -563,7 +603,20 @@ export default function WordSelectionActivity({
             </p>
           </div>
 
-          {proficiency.achieved ? (
+          {isPracticeMode ? (
+            /* Already submitted — practice-only mode */
+            <div className="flex gap-4 justify-center">
+              <Button onClick={handleStartNextRound}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                {t("wordSelection.continuePractice") || "Continue Practice"}
+              </Button>
+              <Button variant="outline" onClick={handleCompleteAssignment}>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                {t("wordSelection.backToList") || "Back to List"}
+              </Button>
+            </div>
+          ) : proficiency.achieved ? (
+            /* Issue #460: Achieved target — ask student whether to submit */
             <div className="space-y-4">
               <div className="flex justify-center">
                 <Trophy className="h-12 w-12 text-yellow-500" />
@@ -572,6 +625,10 @@ export default function WordSelectionActivity({
                 {t("wordSelection.targetReached") ||
                   "Congratulations! You've reached the target proficiency!"}
               </p>
+              <p className="text-gray-500 text-sm">
+                {t("wordSelection.submitPrompt") ||
+                  "Would you like to submit your assignment? You can continue practicing after submission, but your score will be locked."}
+              </p>
               <div className="flex gap-4 justify-center">
                 <Button
                   variant="outline"
@@ -579,18 +636,15 @@ export default function WordSelectionActivity({
                   disabled={completing}
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  {t("wordSelection.continuePractice") || "Continue Practice"}
+                  {t("wordSelection.keepPracticing") || "Keep Practicing"}
                 </Button>
-                <Button
-                  onClick={handleCompleteAssignment}
-                  disabled={completing}
-                >
+                <Button onClick={handleSubmitAssignment} disabled={completing}>
                   {completing ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
-                    <CheckCircle className="h-4 w-4 mr-2" />
+                    <Send className="h-4 w-4 mr-2" />
                   )}
-                  {t("wordSelection.close") || "Close"}
+                  {t("wordSelection.submitAssignment") || "Submit Assignment"}
                 </Button>
               </div>
             </div>
@@ -609,31 +663,41 @@ export default function WordSelectionActivity({
 
   return (
     <div className="space-y-6">
-      {/* Simplified header: [單字選擇] 第 N 題 + 熟悉度 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">
-            {t("wordSelection.wordSelection") || "Word Selection"}
-          </Badge>
-          <span className="text-sm text-gray-600">
-            {t("wordSelection.questionProgress", {
-              current: currentIndex + 1,
-              total: words.length,
-            }) || `第 ${currentIndex + 1}/${words.length} 題`}
+      {/* Issue #460: Practice mode banner */}
+      {isPracticeMode && (
+        <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
+          <BookOpen className="h-4 w-4" />
+          <span>
+            {t("wordSelection.practiceModeHeader") ||
+              "Practice mode — your submitted score will not change"}
           </span>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-gray-600">
-            {t("wordSelection.proficiency") || "Proficiency"}:
-          </span>
-          <span className="font-medium text-blue-600">
-            {displayProficiency.toFixed(1)}%
-          </span>
-        </div>
-      </div>
+      )}
 
-      {/* Separator line */}
-      <hr className="border-gray-200" />
+      {/* Header: 題號 + 進度條 */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">
+              {t("wordSelection.wordSelection") || "Word Selection"}
+            </Badge>
+            <span className="text-sm text-gray-600">
+              {t("wordSelection.questionProgress", {
+                current: currentIndex + 1,
+                total: words.length,
+              }) || `第 ${currentIndex + 1}/${words.length} 題`}
+            </span>
+          </div>
+          <span className="text-sm font-medium text-indigo-600">
+            {displayProficiency.toFixed(0)}% / {proficiency.target_mastery}%
+          </span>
+        </div>
+        <Progress
+          value={displayProficiency}
+          max={100}
+          className="h-2.5 [&>div]:bg-gradient-to-r [&>div]:from-indigo-500 [&>div]:to-purple-500"
+        />
+      </div>
 
       {/* Question content */}
       <div className="space-y-6">
@@ -651,7 +715,7 @@ export default function WordSelectionActivity({
         {/* Word Text - hide when in audio mode */}
         {!playAudio && (
           <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-800">
+            <h2 className="text-3xl font-bold text-gray-800 select-none">
               {currentWord.text}
             </h2>
           </div>
@@ -711,7 +775,7 @@ export default function WordSelectionActivity({
           </div>
         )}
 
-        {/* Answer Options - grid-rows-2 + 1fr ensures all 4 buttons are equal height */}
+        {/* Answer Options */}
         <div
           className="grid grid-cols-2 grid-rows-2 gap-3 sm:gap-4"
           style={{ gridAutoRows: "1fr" }}
@@ -719,70 +783,60 @@ export default function WordSelectionActivity({
           {currentWord.options.map((option, index) => {
             const isSelected = selectedAnswer === option;
             const isCorrectAnswer = option === currentWord.translation;
-            // Only show correct highlight if user answered correctly
             const showCorrect = showResult && isCorrectAnswer && isCorrect;
-            // Show incorrect highlight only for the selected wrong option
             const showIncorrect = showResult && isSelected && !isCorrectAnswer;
 
+            // 四個選項各用不同淺色
+            const optionColors = [
+              "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-400",
+              "bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-400",
+              "bg-amber-50 border-amber-200 hover:bg-amber-100 hover:border-amber-400",
+              "bg-teal-50 border-teal-200 hover:bg-teal-100 hover:border-teal-400",
+            ];
+
             return (
-              <Button
+              <button
                 key={index}
-                variant="outline"
                 className={cn(
-                  "h-full min-h-16 py-3 px-4 text-base sm:text-lg font-medium transition-all whitespace-normal text-center break-words",
-                  !showResult && "hover:bg-blue-50 hover:border-blue-400",
-                  showCorrect && "bg-green-100 border-green-500 text-green-800",
-                  showIncorrect && "bg-red-100 border-red-500 text-red-800",
-                  isSelected && !showResult && "border-blue-500 bg-blue-50",
+                  "h-full min-h-16 py-3 px-4 text-base sm:text-lg font-medium",
+                  "rounded-2xl border-2 shadow-md select-none",
+                  "transition-all duration-200",
+                  "whitespace-normal text-center break-words",
+                  !showResult &&
+                    "hover:shadow-lg hover:-translate-y-0.5 active:scale-95",
+                  !showResult && optionColors[index % 4],
+                  showCorrect &&
+                    "bg-green-100 border-green-500 text-green-800 shadow-green-200",
+                  showIncorrect &&
+                    "bg-red-100 border-red-500 text-red-800 shadow-red-200",
+                  isSelected &&
+                    !showResult &&
+                    "ring-2 ring-indigo-400 scale-95",
+                  showResult && !showCorrect && !showIncorrect && "opacity-50",
                 )}
                 onClick={() => handleSelectAnswer(option)}
                 disabled={showResult || submitting}
               >
                 {showCorrect && (
-                  <CheckCircle className="h-5 w-5 mr-2 shrink-0 text-green-600" />
+                  <CheckCircle className="h-5 w-5 mr-2 shrink-0 text-green-600 inline" />
                 )}
                 {showIncorrect && (
-                  <XCircle className="h-5 w-5 mr-2 shrink-0 text-red-600" />
+                  <XCircle className="h-5 w-5 mr-2 shrink-0 text-red-600 inline" />
                 )}
                 {option}
-              </Button>
+              </button>
             );
           })}
         </div>
-
-        {/* Result Feedback */}
-        {showResult && (
-          <div
-            className={cn(
-              "text-center p-4 rounded-lg",
-              isCorrect ? "bg-green-50" : "bg-red-50",
-            )}
-          >
-            <p
-              className={cn(
-                "font-medium text-lg",
-                isCorrect ? "text-green-700" : "text-red-700",
-              )}
-            >
-              {isCorrect
-                ? t("wordSelection.correct") || "Correct!"
-                : t("wordSelection.incorrect") || "Incorrect"}
-            </p>
-            {/* Note: Correct answer is intentionally NOT shown when wrong to encourage learning */}
-          </div>
-        )}
-
-        {/* Next Button */}
-        {showResult && (
-          <div className="flex justify-center pt-4">
-            <Button onClick={handleNext} size="lg">
-              {currentIndex < words.length - 1
-                ? t("wordSelection.next") || "Next"
-                : t("wordSelection.finishRound") || "Finish Round"}
-            </Button>
-          </div>
-        )}
       </div>
+
+      {/* 答對/答錯動畫 overlay → 動畫結束自動下一題 */}
+      <ScoreOverlay
+        open={scoreOverlayOpen}
+        score={isCorrect ? 100 : 0}
+        isError={!isCorrect}
+        onComplete={handleOverlayComplete}
+      />
 
       {/* Achievement Dialog */}
       <Dialog
@@ -828,14 +882,25 @@ export default function WordSelectionActivity({
               disabled={completing}
             >
               <RefreshCw className="h-4 w-4 mr-2" />
-              {t("wordSelection.continuePractice") || "Continue Practice"}
+              {isPracticeMode
+                ? t("wordSelection.continuePractice") || "Continue Practice"
+                : t("wordSelection.keepPracticing") || "Keep Practicing"}
             </Button>
-            <Button onClick={handleCompleteAssignment} disabled={completing}>
-              {completing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : null}
-              {t("wordSelection.close") || "Close"}
-            </Button>
+            {isPracticeMode ? (
+              <Button onClick={handleCompleteAssignment}>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                {t("wordSelection.backToList") || "Back to List"}
+              </Button>
+            ) : (
+              <Button onClick={handleSubmitAssignment} disabled={completing}>
+                {completing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                {t("wordSelection.submitAssignment") || "Submit Assignment"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

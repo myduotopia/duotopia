@@ -102,6 +102,7 @@ interface StudentProgress {
   attempts?: number;
   last_activity?: string;
   is_assigned?: boolean;
+  is_interim_score?: boolean; // #469: 暫存分數標記
   // 🔥 新增時間戳欄位用於狀態進度判斷（方案C）
   timestamps?: {
     started_at?: string;
@@ -556,6 +557,7 @@ export default function TeacherAssignmentDetailPage() {
           updated_at?: string;
           timestamps?: StudentProgress["timestamps"];
           is_assigned?: boolean; // 🔥 加入 is_assigned 欄位
+          is_interim_score?: boolean; // #469: 暫存分數標記
         }
 
         progressArray.forEach((item: ProgressItem) => {
@@ -578,6 +580,7 @@ export default function TeacherAssignmentDetailPage() {
             last_activity: item.last_activity || item.updated_at,
             timestamps: item.timestamps, // 🔥 加入 timestamps
             is_assigned: isAssigned, // 🔥 使用真實值而不是強制設為 true
+            is_interim_score: item.is_interim_score || false,
           });
         });
 
@@ -2166,13 +2169,20 @@ export default function TeacherAssignmentDetailPage() {
                         <td className="px-3 py-3 text-center w-20">
                           {isAssigned &&
                           (currentStatus === "GRADED" ||
-                            currentStatus === "RETURNED") ? (
+                            currentStatus === "RETURNED" ||
+                            (progress.is_interim_score &&
+                              progress.score != null)) ? (
                             <span
-                              className={`font-bold ${progress.score && progress.score >= 80 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+                              className={`font-bold ${
+                                progress.is_interim_score
+                                  ? "text-blue-500 dark:text-blue-400 italic"
+                                  : progress.score && progress.score >= 80
+                                    ? "text-green-600 dark:text-green-400"
+                                    : "text-red-600 dark:text-red-400"
+                              }`}
                             >
+                              {progress.is_interim_score && "~"}
                               {(progress.score || 0).toFixed(1)}
-                              {assignment?.practice_mode === "word_selection" &&
-                                "%"}
                             </span>
                           ) : (
                             <span className="text-gray-300 dark:text-gray-600">

@@ -16,6 +16,8 @@ import {
   X,
   Lock,
   Gauge,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { validatePasswordStrength } from "@/utils/passwordValidation";
@@ -174,6 +176,9 @@ export default function TeacherProfile() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   useEffect(() => {
@@ -261,8 +266,8 @@ export default function TeacherProfile() {
     setIsUpdatingPassword(true);
     try {
       await apiClient.updateTeacherPassword({
-        current_password: currentPassword,
-        new_password: newPassword,
+        current_password: currentPassword.trim(),
+        new_password: newPassword.trim(),
       });
       toast.success(t("teacherProfile.password.success.passwordUpdated"));
       setShowPasswordEdit(false);
@@ -495,40 +500,91 @@ export default function TeacherProfile() {
                 <label className="block text-sm font-medium mb-2">
                   {t("teacherProfile.password.currentPassword")}
                 </label>
-                <Input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder={t(
-                    "teacherProfile.password.currentPasswordPlaceholder",
-                  )}
-                />
+                <div className="relative">
+                  <Input
+                    type={showCurrentPassword ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder={t(
+                      "teacherProfile.password.currentPasswordPlaceholder",
+                    )}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    aria-label={
+                      showCurrentPassword ? "Hide password" : "Show password"
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showCurrentPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">
                   {t("teacherProfile.password.newPassword")}
                 </label>
-                <Input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder={t(
-                    "teacherProfile.password.newPasswordPlaceholder",
-                  )}
-                />
+                <div className="relative">
+                  <Input
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder={t(
+                      "teacherProfile.password.newPasswordPlaceholder",
+                    )}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    aria-label={
+                      showNewPassword ? "Hide password" : "Show password"
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showNewPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">
                   {t("teacherProfile.password.confirmPassword")}
                 </label>
-                <Input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder={t(
-                    "teacherProfile.password.confirmPasswordPlaceholder",
-                  )}
-                />
+                <div className="relative">
+                  <Input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder={t(
+                      "teacherProfile.password.confirmPasswordPlaceholder",
+                    )}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    aria-label={
+                      showConfirmPassword ? "Hide password" : "Show password"
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button

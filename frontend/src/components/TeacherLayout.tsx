@@ -1,4 +1,5 @@
 import { ReactNode, useMemo, useCallback, useRef } from "react";
+import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import DigitalTeachingToolbar from "@/components/teachingTools/DigitalTeachingToolbar";
@@ -69,7 +70,8 @@ function TeacherLayoutInner({
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { sidebarCollapsed, setSidebarCollapsed, sidebarDisabled } =
+    useSidebar();
   const [config, setConfig] = useState<SystemConfig | null>(null);
 
   // Get user role and roles from auth store
@@ -422,7 +424,7 @@ function TeacherLayoutInner({
       <div className="flex">
         {/* Desktop Sidebar */}
         <div
-          className={`hidden md:flex bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 ${sidebarCollapsed ? "w-16" : "w-64"} flex-col h-screen sticky top-0`}
+          className={`hidden md:flex bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 ${sidebarCollapsed ? "w-16" : "w-64"} flex-col h-screen sticky top-0 ${sidebarDisabled ? "pointer-events-none opacity-50" : ""}`}
         >
           <SidebarContent />
         </div>
@@ -495,10 +497,12 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
   }
 
   return (
-    <WorkspaceProvider teacherId={teacherProfile.id}>
-      <TeacherLayoutInner teacherProfile={teacherProfile}>
-        {children}
-      </TeacherLayoutInner>
-    </WorkspaceProvider>
+    <SidebarProvider>
+      <WorkspaceProvider teacherId={teacherProfile.id}>
+        <TeacherLayoutInner teacherProfile={teacherProfile}>
+          {children}
+        </TeacherLayoutInner>
+      </WorkspaceProvider>
+    </SidebarProvider>
   );
 }

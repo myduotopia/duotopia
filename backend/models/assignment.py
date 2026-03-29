@@ -14,6 +14,7 @@ from sqlalchemy import (
     Float,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -29,10 +30,11 @@ class Assignment(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=False)
     description = Column(Text)
-    classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=False)
+    classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=True)
     teacher_id = Column(Integer, ForeignKey("teachers.id"), nullable=False)
 
     due_date = Column(DateTime(timezone=True))
+    start_date = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -85,7 +87,7 @@ class Assignment(Base):
     is_archived = Column(Boolean, default=False)
     archived_at = Column(DateTime(timezone=True), nullable=True)
 
-    # 即刻練習標記（暫時資料，懶清理：建立新的時刪除舊的）
+    # 即刻練習標記（永久保存，不再自動清理）
     is_instant_practice = Column(Boolean, default=False)
 
     # Relationships
@@ -136,14 +138,19 @@ class StudentAssignment(Base):
     assignment_id = Column(
         Integer, ForeignKey("assignments.id"), nullable=True
     )  # nullable 暫時為 True 以兼容舊資料
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    student_id = Column(
+        Integer, ForeignKey("students.id"), nullable=True
+    )  # nullable: 即刻練習由老師作答，無 student
+    teacher_id = Column(
+        Integer, ForeignKey("teachers.id"), nullable=True
+    )  # 即刻練習時記錄作答的老師
 
     # TODO: Phase 2 - 移除以下舊欄位（等資料遷移完成）
     # 這些欄位應該從 Assignment 取得，不需要重複儲存
     classroom_id = Column(
-        Integer, ForeignKey("classrooms.id"), nullable=False
-    )  # 可從 assignment.classroom_id 取得
-    title = Column(String(200), nullable=False)  # 可從 assignment.title 取得
+        Integer, ForeignKey("classrooms.id"), nullable=True
+    )  # 可從 assignment.classroom_id 取得；即刻練習可為 NULL
+    title = Column(String(200), nullable=True)  # 可從 assignment.title 取得
     instructions = Column(Text)  # 可從 assignment.description 取得
     due_date = Column(DateTime(timezone=True))  # 可從 assignment.due_date 取得
 
@@ -184,3 +191,30 @@ class StudentAssignment(Base):
 
     def __repr__(self):
         return f"<Assignment {self.title} for {self.student_id}>"
+
+
+# ============ 作業分析報告 ============
+class AssignmentAnalysisReport(Base):
+    """作業分析報告 - AI 生成的學生表現與能力分析"""
+
+    __tablename__ = "assignment_analysis_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False)
+    teacher_id = Column(Integer, ForeignKey("teachers.id"), nullable=False)
+    practice_mode = Column(String(50), nullable=False)
+    status = Column(
+        String(20), nullable=False, default="pending"
+    )  # pending, completed, failed
+    report_data = Column(JSONB)  # 結構化報告內容
+    summary = Column(Text)  # 報告摘要（純文字）
+    student_count = Column(Integer, nullable=False, default=0)
+    tokens_used = Column(Integer, nullable=False, default=0)
+    points_deducted = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True))
+    error_message = Column(Text)
+
+    # Relationships
+    assignment = relationship("Assignment")
+    teacher = relationship("Teacher")

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload, contains_eager
 from sqlalchemy import text, case, func
 
@@ -23,7 +23,9 @@ from models import (
     StudentItemProgress,
     AssignmentStatus,
     PracticeSession,
+    PracticeAnswer,
 )
+from services.preview_service import get_sentence_fields
 from services.quota_service import QuotaService
 from .dependencies import get_current_student
 from .validators import (
@@ -175,6 +177,8 @@ async def get_assignment_activities(
 
     # 獲取作業對應的 Assignment（如果有 assignment_id）
     activities = []
+    _parent_assignment = None
+    _practice_mode = None
 
     if student_assignment.assignment_id:
         # 直接查詢這個學生作業的所有進度記錄（這才是正確的數據源）
@@ -239,6 +243,16 @@ async def get_assignment_activities(
                 .order_by(StudentContentProgress.order_index)
                 .all()
             )
+
+        # 提前取得 parent Assignment（需要 practice_mode 來決定欄位映射）
+        _parent_assignment = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+        _practice_mode = (
+            _parent_assignment.practice_mode if _parent_assignment else None
+        )
 
         # 優化：批次查詢所有 content，避免 N+1 問題
         content_ids = [progress.content_id for progress in progress_records]
@@ -309,12 +323,20 @@ async def get_assignment_activities(
                     # 使用 ContentItem 記錄（每個都有 ID）
                     items_with_ids = []
                     for ci in content_items:
+                        # 根據練習模式決定使用哪個欄位
+                        fields = get_sentence_fields(
+                            ci, content.type, _practice_mode or ""
+                        )
+                        if fields is None:
+                            continue  # skip vocab items without example_sentence
+                        q_text, q_translation, q_audio = fields
+
                         item_progress = progress_by_item.get(ci.id)
                         item_data = {
                             "id": ci.id,  # ContentItem 的 ID！
-                            "text": ci.text,
-                            "translation": ci.translation,
-                            "audio_url": ci.audio_url,
+                            "text": q_text,
+                            "translation": q_translation,
+                            "audio_url": q_audio,
                             "order_index": ci.order_index,
                         }
 
@@ -462,20 +484,15 @@ async def get_assignment_activities(
         db.commit()
 
     # 獲取 Assignment 的 practice_mode 和 show_answer（用於前端路由）
+    # 重用前面已查詢的 _parent_assignment（避免重複查詢）
     practice_mode = None
     show_answer = False
     score_category = None
-    parent_assignment = None
-    if student_assignment.assignment_id:
-        parent_assignment = (
-            db.query(Assignment)
-            .filter(Assignment.id == student_assignment.assignment_id)
-            .first()
-        )
-        if parent_assignment:
-            practice_mode = parent_assignment.practice_mode
-            show_answer = parent_assignment.show_answer or False
-            score_category = parent_assignment.score_category
+    parent_assignment = _parent_assignment if student_assignment.assignment_id else None
+    if parent_assignment:
+        practice_mode = parent_assignment.practice_mode
+        show_answer = parent_assignment.show_answer or False
+        score_category = parent_assignment.score_category
 
     # 檢查 AI 分析額度（根據作業所屬班級判斷：機構班級→機構點數，個人班級→個人配額）
     can_use_ai_analysis = (
@@ -599,6 +616,20 @@ async def submit_assignment(
             status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found"
         )
 
+    # Issue #460: If already GRADED, don't re-submit — return current state
+    if student_assignment.status == AssignmentStatus.GRADED:
+        return {
+            "message": "Assignment already submitted",
+            "submitted_at": (
+                student_assignment.submitted_at.isoformat()
+                if student_assignment.submitted_at
+                else None
+            ),
+            "status": student_assignment.status.value,
+            "is_auto_graded": True,
+            "score": student_assignment.score,
+        }
+
     # 取得作業的 practice_mode 來判斷是否為自動批改類型
     # 自動批改類型：rearrangement（例句重組）、word_selection（單字選擇）
     # 手動批改類型：reading（例句朗讀）、word_reading（單字朗讀）
@@ -668,7 +699,7 @@ async def submit_assignment(
             ).fetchone()
             if result:
                 current_mastery = float(result.current_mastery) * 100
-                student_assignment.score = min(100, int(current_mastery))
+                student_assignment.score = min(100, round(current_mastery))
             else:
                 student_assignment.score = 0
     else:
@@ -887,7 +918,7 @@ async def get_vocabulary_activities(
 
                 # AI Assessment scores
                 if progress.ai_assessed_at:
-                    item_data["ai_assessment"] = {
+                    ai_assessment_data = {
                         "accuracy_score": (
                             float(progress.accuracy_score)
                             if progress.accuracy_score
@@ -909,6 +940,27 @@ async def get_vocabulary_activities(
                             else None
                         ),
                     }
+
+                    # 🎯 從 ai_feedback 取出音素詳細資料（重開時還原圖表）
+                    if progress.ai_feedback:
+                        try:
+                            ai_fb = (
+                                json.loads(progress.ai_feedback)
+                                if isinstance(progress.ai_feedback, str)
+                                else progress.ai_feedback
+                            )
+                            if ai_fb.get("detailed_words"):
+                                ai_assessment_data["detailed_words"] = ai_fb[
+                                    "detailed_words"
+                                ]
+                            if ai_fb.get("reference_text"):
+                                ai_assessment_data["reference_text"] = ai_fb[
+                                    "reference_text"
+                                ]
+                        except (json.JSONDecodeError, AttributeError):
+                            pass
+
+                    item_data["ai_assessment"] = ai_assessment_data
 
                 # Teacher review
                 if progress.teacher_reviewed_at:
@@ -941,6 +993,9 @@ async def get_vocabulary_activities(
         "practice_mode": "word_reading",
         "show_translation": show_translation,
         "show_image": show_image,
+        "time_limit_per_question": (
+            assignment.time_limit_per_question if assignment else None
+        ),
         "total_items": len(items),
         "items": items,
         "can_use_ai_analysis": can_use_ai_analysis,  # 根據工作區判斷的 AI 分析額度
@@ -1053,6 +1108,7 @@ async def submit_vocabulary_assignment(
     if student_assignment.status in [
         AssignmentStatus.SUBMITTED,
         AssignmentStatus.GRADED,
+        AssignmentStatus.RESUBMITTED,
     ]:
         return {
             "success": True,
@@ -1061,7 +1117,11 @@ async def submit_vocabulary_assignment(
         }
 
     # Update assignment status
-    student_assignment.status = AssignmentStatus.SUBMITTED
+    # 待訂正（RETURNED）提交後為已訂正（RESUBMITTED），其他為已提交（SUBMITTED）
+    if student_assignment.status == AssignmentStatus.RETURNED:
+        student_assignment.status = AssignmentStatus.RESUBMITTED
+    else:
+        student_assignment.status = AssignmentStatus.SUBMITTED
     student_assignment.submitted_at = datetime.now(timezone.utc)
 
     # Update all item progress to SUBMITTED status
@@ -1074,7 +1134,7 @@ async def submit_vocabulary_assignment(
     return {
         "success": True,
         "message": "Assignment submitted successfully",
-        "status": "SUBMITTED",
+        "status": student_assignment.status.value,
         "submitted_at": student_assignment.submitted_at.isoformat(),
     }
 
@@ -1094,9 +1154,10 @@ class WordSelectionStartResponse(BaseModel):
 
 class WordSelectionAnswerRequest(BaseModel):
     content_item_id: int
-    selected_answer: str
+    selected_answer: str = Field(max_length=200)
     is_correct: bool
     time_spent_seconds: int = 0
+    session_id: Optional[int] = None  # PracticeSession ID for answer tracking
 
 
 class WordSelectionAnswerResponse(BaseModel):
@@ -1155,6 +1216,7 @@ async def start_word_selection_practice(
         )
 
     # Update assignment status to IN_PROGRESS if not started
+    # Issue #460: Allow GRADED assignments to start practice (score won't change)
     if student_assignment.status == AssignmentStatus.NOT_STARTED:
         student_assignment.status = AssignmentStatus.IN_PROGRESS
         student_assignment.started_at = datetime.now(timezone.utc)
@@ -1332,6 +1394,9 @@ async def start_word_selection_practice(
     words_mastered = int(mastery_result.words_mastered) if mastery_result else 0
     achieved = bool(mastery_result.achieved) if mastery_result else False
 
+    # Issue #460: Tell frontend if this is practice-only mode (already submitted)
+    is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
+
     return {
         "session_id": practice_session.id,
         "words": words_with_options,
@@ -1340,6 +1405,7 @@ async def start_word_selection_practice(
         "target_proficiency": target_proficiency,
         "words_mastered": words_mastered,
         "achieved": achieved,
+        "is_practice_mode": is_practice_mode,
         "show_word": assignment.show_word if assignment else True,
         "show_image": assignment.show_image if assignment else True,
         "play_audio": assignment.play_audio if assignment else False,
@@ -1402,6 +1468,7 @@ async def submit_word_selection_answer(
 
     # 伺服器端驗證答案正確性（不信任客戶端的 is_correct）
     is_correct = request.selected_answer.strip() == correct_answer.strip()
+    is_timeout = request.selected_answer.strip() == ""
 
     # Call update_memory_strength PostgreSQL function
     result = db.execute(
@@ -1423,7 +1490,97 @@ async def submit_word_selection_answer(
 
     new_memory_strength = float(result.memory_strength) if result else 0
 
-    # Sync assignment status after each answer
+    # --- Record PracticeAnswer for analytics (#451) ---
+    if request.session_id:
+        practice_session = (
+            db.query(PracticeSession)
+            .filter(
+                PracticeSession.id == request.session_id,
+                PracticeSession.student_id == student_id,
+                PracticeSession.student_assignment_id == assignment_id,
+            )
+            .first()
+        )
+        if practice_session:
+            # Create PracticeAnswer record
+            practice_answer = PracticeAnswer(
+                practice_session_id=practice_session.id,
+                content_item_id=request.content_item_id,
+                is_correct=is_correct,
+                time_spent_seconds=request.time_spent_seconds,
+                answer_data={
+                    "type": "word_selection",
+                    "word_text": content_item.text or "",
+                    "selected_answer": request.selected_answer,
+                    "correct_answer": correct_answer,
+                    "is_timeout": is_timeout,
+                },
+            )
+            db.add(practice_answer)
+
+            # Update PracticeSession stats
+            practice_session.words_practiced = (
+                practice_session.words_practiced or 0
+            ) + 1
+            if is_correct:
+                practice_session.correct_count = (
+                    practice_session.correct_count or 0
+                ) + 1
+
+    # --- Accumulate word_selection_data on StudentItemProgress (#451) ---
+    # Accounting invariant:
+    #   error_count = timeout_count + (non-timeout wrong answers)
+    #   error_selections only tracks non-timeout wrong answers (capped at 20 entries)
+    #   So: error_count >= len(error_selections) always holds
+    item_progress = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == assignment_id,
+            StudentItemProgress.content_item_id == request.content_item_id,
+        )
+        .first()
+    )
+    if item_progress:
+        ws_data = item_progress.word_selection_data or {
+            "correct_count": 0,
+            "error_count": 0,
+            "timeout_count": 0,
+            "error_selections": [],
+        }
+        if is_correct:
+            ws_data["correct_count"] = ws_data.get("correct_count", 0) + 1
+        else:
+            ws_data["error_count"] = ws_data.get("error_count", 0) + 1
+            if is_timeout:
+                ws_data["timeout_count"] = ws_data.get("timeout_count", 0) + 1
+            elif request.selected_answer.strip():
+                # Track which wrong option was selected (cap at 20 entries)
+                error_selections = ws_data.get("error_selections", [])
+                found = False
+                for entry in error_selections:
+                    if entry["selected"] == request.selected_answer:
+                        entry["count"] = entry.get("count", 0) + 1
+                        found = True
+                        break
+                if not found and len(error_selections) < 20:
+                    error_selections.append(
+                        {"selected": request.selected_answer, "count": 1}
+                    )
+                ws_data["error_selections"] = error_selections
+        ws_data["last_answered_at"] = datetime.now(timezone.utc).isoformat()
+        # Shallow copy is safe: error_selections contains only flat dicts
+        item_progress.word_selection_data = dict(ws_data)
+    else:
+        logger.warning(
+            "StudentItemProgress not found for sa_id=%s, item_id=%s — "
+            "word_selection_data not recorded",
+            assignment_id,
+            request.content_item_id,
+        )
+
+    # Issue #460: Only auto-submit when mastery reaches 100%.
+    # For other thresholds, the frontend asks the student whether to submit.
+    # If already GRADED (submitted), allow practice but don't update score.
     mastery_result = db.execute(
         text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
         {"sa_id": assignment_id},
@@ -1431,21 +1588,14 @@ async def submit_word_selection_answer(
 
     if mastery_result:
         current_mastery = float(mastery_result.current_mastery)
-        target_mastery = float(mastery_result.target_mastery)
-        achieved = current_mastery >= target_mastery
 
-        # Sync status based on mastery
-        if achieved:
-            student_assignment.score = min(100.0, current_mastery * 100)
-            if student_assignment.status != AssignmentStatus.GRADED:
+        if student_assignment.status != AssignmentStatus.GRADED:
+            # Auto-submit only when mastery = 100%
+            if current_mastery >= 1.0:
+                student_assignment.score = min(100, round(current_mastery * 100))
                 student_assignment.status = AssignmentStatus.GRADED
                 student_assignment.submitted_at = datetime.now(timezone.utc)
-        else:
-            # If was GRADED but now below target, change back to IN_PROGRESS
-            if student_assignment.status == AssignmentStatus.GRADED:
-                student_assignment.status = AssignmentStatus.IN_PROGRESS
-                student_assignment.submitted_at = None
-                student_assignment.score = None
+        # If already GRADED, score is locked — do not update
 
     db.commit()
 
@@ -1574,15 +1724,25 @@ async def complete_word_selection_assignment(
     target_proficiency = assignment.target_proficiency if assignment else 80
     current_mastery = float(result.current_mastery) * 100 if result else 0
 
+    # Issue #460: If already GRADED, don't re-submit — just return current state
+    if student_assignment.status == AssignmentStatus.GRADED:
+        return {
+            "success": True,
+            "message": "作業已提交",
+            "status": "COMPLETED",
+            "final_score": student_assignment.score,
+            "achieved_target": current_mastery >= target_proficiency,
+        }
+
     # Update assignment status to COMPLETED
     student_assignment.status = (
         AssignmentStatus.GRADED
     )  # GRADED = completed for auto-graded
     student_assignment.submitted_at = datetime.now(timezone.utc)
 
-    # Calculate final score based on mastery
+    # Calculate final score based on mastery — lock score at submission time
     # Issue #165: Fix - use 'score' column instead of non-existent 'final_score'
-    student_assignment.score = min(100, int(current_mastery))
+    student_assignment.score = min(100, round(current_mastery))
 
     db.commit()
 
@@ -1667,8 +1827,16 @@ async def get_rearrangement_questions(
 
     questions = []
     for item in content_items:
+        # 根據內容類型決定使用哪個欄位
+        fields = get_sentence_fields(
+            item, item.content.type if item.content else None, "rearrangement"
+        )
+        if fields is None:
+            continue  # skip vocab items without example_sentence
+        q_text, q_translation, q_audio = fields
+
         # 打亂單字順序（使用 seeded RNG 確保一致性）
-        words = item.text.strip().split()
+        words = q_text.strip().split()
         shuffled_words = words.copy()
         rng.shuffle(shuffled_words)
 
@@ -1679,7 +1847,11 @@ async def get_rearrangement_questions(
         progress_error_count = None
         if progress and progress.status == "COMPLETED":
             progress_status = "COMPLETED"
-            progress_score = float(progress.expected_score) if progress.expected_score is not None else None
+            progress_score = (
+                float(progress.expected_score)
+                if progress.expected_score is not None
+                else None
+            )
             progress_error_count = progress.error_count
 
         questions.append(
@@ -1694,9 +1866,10 @@ async def get_rearrangement_questions(
                     else 30
                 ),
                 play_audio=assignment.play_audio or False,
-                audio_url=item.audio_url,
-                translation=item.translation,
-                original_text=item.text.strip(),  # 正確答案
+                audio_url=q_audio,
+                translation=q_translation,
+                original_text=q_text.strip(),  # 正確答案
+>>>>>>> origin/staging
                 progress_status=progress_status,
                 progress_score=progress_score,
                 progress_error_count=progress_error_count,
@@ -1767,8 +1940,14 @@ async def submit_rearrangement_answer(
         db.add(progress)
         db.flush()
 
-    # 解析正確答案
-    correct_words = content_item.text.strip().split()
+    # 解析正確答案（單字集用 example_sentence）
+    fields = get_sentence_fields(
+        content_item,
+        content_item.content.type if content_item.content else None,
+        "rearrangement",
+    )
+    q_text = fields[0] if fields else content_item.text
+    correct_words = q_text.strip().split()
     word_count = len(correct_words)
     max_errors = content_item.max_errors or (3 if word_count <= 10 else 5)
     points_per_word = math.floor(100 / word_count)
@@ -1938,6 +2117,13 @@ async def complete_rearrangement(
         .first()
     )
 
+    # 組裝 rearrangement_data（包含完整答題歷程）
+    rearrangement_data = {}
+    if request.selections:
+        rearrangement_data["selections"] = [s.model_dump() for s in request.selections]
+    rearrangement_data["completed_at"] = datetime.now(timezone.utc).isoformat()
+    rearrangement_data["timeout"] = request.timeout
+
     if not progress:
         # 防禦性：建立新記錄（正常情況下應該已存在）
         progress = StudentItemProgress(
@@ -1947,6 +2133,7 @@ async def complete_rearrangement(
             timeout_ended=request.timeout,
             expected_score=request.expected_score or 0,
             error_count=request.error_count or 0,
+            rearrangement_data=rearrangement_data,
         )
         db.add(progress)
     else:
@@ -1959,6 +2146,11 @@ async def complete_rearrangement(
             progress.expected_score = request.expected_score
         if request.error_count is not None:
             progress.error_count = request.error_count
+
+        # 合併答題歷程（保留既有 retries 等資訊）
+        existing_data = progress.rearrangement_data or {}
+        existing_data.update(rearrangement_data)
+        progress.rearrangement_data = existing_data
 
     db.commit()
 

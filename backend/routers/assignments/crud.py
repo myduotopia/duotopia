@@ -22,6 +22,7 @@ from models import (
     School,
     Content,
     ContentItem,
+    ContentType,
     Lesson,
     Program,
     Assignment,
@@ -39,6 +40,7 @@ from .validators import (
     ContentResponse,
 )
 from .dependencies import get_current_teacher
+from services.preview_service import _VOCABULARY_CONTENT_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +148,7 @@ async def create_assignment(
         classroom_id=request.classroom_id,
         teacher_id=current_teacher.id,
         due_date=request.due_date,
+        start_date=request.start_date,
         is_active=True,
         # 作答模式設定
         practice_mode=request.practice_mode,
@@ -209,6 +212,7 @@ async def create_assignment(
                 example_sentence=original_item.example_sentence,
                 example_sentence_translation=original_item.example_sentence_translation,
                 example_sentence_definition=original_item.example_sentence_definition,
+                example_sentence_audio_url=original_item.example_sentence_audio_url,
                 # Phase 2 欄位
                 image_url=original_item.image_url,
                 part_of_speech=original_item.part_of_speech,
@@ -252,6 +256,53 @@ async def create_assignment(
             logger.info(
                 f"Auto-generated cross-content distractors for "
                 f"{generated_count} items in assignment {assignment.id}"
+            )
+
+    # 例句模式 + 單字集：為缺少例句音檔的 items 自動 TTS 生成
+    if request.practice_mode in ("reading", "rearrangement"):
+        from services.tts import TTSService
+        from utils.ttsVoiceResolver import get_voice_and_rate
+
+        tts_service = TTSService()
+        all_copy_content_ids = list(content_copy_map.values())
+        db.flush()  # ensure copied items are queryable
+        vocab_items = (
+            db.query(ContentItem)
+            .join(Content)
+            .filter(
+                ContentItem.content_id.in_(all_copy_content_ids),
+                Content.type.in_(_VOCABULARY_CONTENT_TYPES),
+                ContentItem.example_sentence.isnot(None),
+                ContentItem.example_sentence != "",
+                ContentItem.example_sentence_audio_url.is_(None),
+            )
+            .all()
+        )
+        tts_generated = 0
+        for item in vocab_items:
+            try:
+                # 從 item_metadata 讀取 audio_settings，用相同 voice 生成例句音檔
+                audio_settings = (
+                    item.item_metadata.get("audio_settings", {})
+                    if item.item_metadata
+                    else {}
+                )
+                voice, rate = get_voice_and_rate(
+                    audio_settings.get("accent", "American English"),
+                    audio_settings.get("gender", "Male"),
+                    audio_settings.get("speed", "Normal x1"),
+                )
+                audio_url = await tts_service.generate_tts(
+                    item.example_sentence, voice, rate
+                )
+                item.example_sentence_audio_url = audio_url
+                tts_generated += 1
+            except Exception as e:
+                logger.warning(f"TTS generation failed for item {item.id}: {e}")
+        if tts_generated > 0:
+            logger.info(
+                f"Auto-generated example sentence TTS for "
+                f"{tts_generated} vocab items in assignment {assignment.id}"
             )
 
     # 建立 AssignmentContent 關聯（指向副本）
@@ -373,21 +424,33 @@ async def get_assignments(
     classroom_id: Optional[int] = Query(None, description="Filter by classroom"),
     status: Optional[str] = Query(None, description="Filter by status"),
     is_archived: Optional[bool] = Query(False, description="Filter by archive status"),
+    is_instant_practice: Optional[bool] = Query(
+        None,
+        description="Filter by instant practice (None=all, True=only, False=exclude)",
+    ),
     db: Session = Depends(get_db),
     current_teacher: Teacher = Depends(get_current_teacher),
 ):
     """
     取得作業列表（新架構）
     - 教師看到自己建立的作業
-    - 可依班級和狀態篩選
+    - 可依班級、狀態、即刻練習篩選
     - 預設只顯示未封存作業，is_archived=true 顯示封存作業
+    - is_instant_practice=None 顯示所有，True 只顯示即刻練習，False 排除即刻練習
+    - 不帶 classroom_id 時回傳所有班級的作業（跨班級查詢）
     """
-    # 建立查詢（排除即刻練習暫時作業）
+    # 建立查詢
     query = db.query(Assignment).filter(
         Assignment.teacher_id == current_teacher.id,
         Assignment.is_active.is_(True),
-        Assignment.is_instant_practice.is_(False),
     )
+
+    # 即刻練習篩選（預設 None = 顯示所有）
+    if is_instant_practice is True:
+        query = query.filter(Assignment.is_instant_practice.is_(True))
+    elif is_instant_practice is False:
+        query = query.filter(Assignment.is_instant_practice.is_(False))
+    # is_instant_practice=None → 不篩選，回傳全部
 
     # 封存篩選
     if is_archived:
@@ -400,6 +463,17 @@ async def get_assignments(
         query = query.filter(Assignment.classroom_id == classroom_id)
 
     assignments = query.order_by(Assignment.created_at.desc()).all()
+
+    # Batch-load classroom names (avoid N+1)
+    classroom_ids = list({a.classroom_id for a in assignments if a.classroom_id})
+    classrooms = (
+        db.query(Classroom.id, Classroom.name)
+        .filter(Classroom.id.in_(classroom_ids))
+        .all()
+        if classroom_ids
+        else []
+    )
+    classroom_name_map = {c.id: c.name for c in classrooms}
 
     # Batch-load assignment content counts (avoid N+1)
     assignment_ids = [a.id for a in assignments]
@@ -482,10 +556,15 @@ async def get_assignments(
                 "title": assignment.title,
                 "description": assignment.description,
                 "classroom_id": assignment.classroom_id,
+                "classroom_name": classroom_name_map.get(assignment.classroom_id),
+                "is_instant_practice": assignment.is_instant_practice or False,
                 "content_count": content_count,
                 "student_count": total_students,
                 "due_date": (
                     assignment.due_date.isoformat() if assignment.due_date else None
+                ),
+                "start_date": (
+                    assignment.start_date.isoformat() if assignment.start_date else None
                 ),
                 "created_at": (
                     assignment.created_at.isoformat() if assignment.created_at else None
@@ -597,25 +676,45 @@ async def patch_assignment(
             status_code=404, detail="Assignment not found or you don't have permission"
         )
 
-    # 只更新提供的欄位
-    if request.title is not None:
+    # 只更新提供的欄位（使用 model_fields_set 區分「未提供」和「明確傳 null」）
+    provided = request.model_fields_set
+
+    if "title" in provided:
         assignment.title = request.title
 
-    if request.description is not None:
+    if "description" in provided:
         assignment.description = request.description
-    elif request.instructions is not None:  # Support 'instructions' as alias
+    elif "instructions" in provided:
         assignment.description = request.instructions
 
-    if request.due_date is not None:
+    if "due_date" in provided:
         assignment.due_date = request.due_date
+
+    if "start_date" in provided:
+        assignment.start_date = request.start_date
+
+    # 進階設定更新
+    advanced_fields = [
+        "time_limit_per_question",
+        "shuffle_questions",
+        "show_answer",
+        "play_audio",
+        "target_proficiency",
+        "show_word",
+        "show_image",
+        "show_translation",
+    ]
+    for field in advanced_fields:
+        if field in provided:
+            setattr(assignment, field, getattr(request, field))
 
     # 更新 StudentAssignment 記錄
     update_fields = {}
-    if request.title is not None:
+    if "title" in provided:
         update_fields["title"] = request.title
-    if request.description is not None or request.instructions is not None:
+    if "description" in provided or "instructions" in provided:
         update_fields["instructions"] = request.description or request.instructions
-    if request.due_date is not None:
+    if "due_date" in provided:
         update_fields["due_date"] = request.due_date
 
     if update_fields:

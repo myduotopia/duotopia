@@ -183,6 +183,20 @@ class TestStudentPasswordReset:
         assert response.status_code == 200
         assert response.json()["message"] == "Password updated successfully"
 
+    def test_update_password_digits_only(self, test_client, student_token):
+        """Test student can set a pure-digit password (min 6 chars) - Issue #454"""
+        response = test_client.put(
+            "/api/students/me/password",
+            headers={"Authorization": f"Bearer {student_token}"},
+            json={
+                "current_password": "20100101",
+                "new_password": "123456",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["message"] == "Password updated successfully"
+
 
 class TestStudentProfileUpdate:
     """Test student profile update API endpoints"""

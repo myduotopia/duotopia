@@ -20,6 +20,11 @@ export function validatePasswordStrength(
     return { valid: false, errorKey: "passwordTooShort" };
   }
 
+  // Check for spaces
+  if (/\s/.test(password)) {
+    return { valid: false, errorKey: "containsSpaces" };
+  }
+
   // Check for uppercase letter
   if (!/[A-Z]/.test(password)) {
     return { valid: false, errorKey: "missingUppercase" };
@@ -38,6 +43,21 @@ export function validatePasswordStrength(
   // Check for special character (matches backend special_chars)
   if (!/[!@#$%^&*()_+\-=[\]{}|;:,.<>?]/.test(password)) {
     return { valid: false, errorKey: "missingSpecialChar" };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validate student password strength (relaxed rules)
+ * Students only need minimum 6 characters, digits-only is OK
+ * Matches backend: auth.py:validate_student_password_strength()
+ */
+export function validateStudentPasswordStrength(
+  password: string,
+): PasswordValidationResult {
+  if (password.length < 6) {
+    return { valid: false, errorKey: "passwordTooShort" };
   }
 
   return { valid: true };

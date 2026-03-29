@@ -3,6 +3,7 @@ Content Ops operations for teachers.
 """
 from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
 from sqlalchemy.orm import Session, selectinload, joinedload
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, text
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -18,7 +19,7 @@ from models import (
     School,
 )
 from .dependencies import get_current_teacher
-from .validators import *
+from .validators import ContentCreate, ContentUpdate, ContentCopy
 from .utils import TEST_SUBSCRIPTION_WHITELIST, parse_birthdate
 from models import ContentType
 
@@ -36,16 +37,12 @@ async def get_lesson_contents(
     db: Session = Depends(get_db),
 ):
     """取得單元的內容列表"""
-    # Verify the lesson belongs to the teacher
-    lesson = (
-        db.query(Lesson)
-        .join(Program)
-        .filter(Lesson.id == lesson_id, Program.teacher_id == current_teacher.id)
-        .first()
-    )
+    from utils.permissions import check_lesson_access
 
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found")
+    # check_lesson_access handles personal, org, and template lesson access
+    _program, lesson = check_lesson_access(
+        db, lesson_id, current_teacher, require_owner=False
+    )
 
     contents = (
         db.query(Content)
@@ -111,26 +108,12 @@ async def create_content(
     db: Session = Depends(get_db),
 ):
     """建立新內容"""
-    # Verify the lesson belongs to the teacher or is a template program
-    lesson = (
-        db.query(Lesson)
-        .join(Program)
-        .filter(
-            Lesson.id == lesson_id,
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .filter(
-            # Either: lesson belongs to teacher's program
-            # Or: lesson belongs to a template program (公版課程)
-            (Program.teacher_id == current_teacher.id)
-            | (Program.is_template.is_(True))
-        )
-        .first()
-    )
+    from utils.permissions import check_lesson_access
 
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found")
+    # check_lesson_access handles personal, org, and template lesson access
+    _program, lesson = check_lesson_access(
+        db, lesson_id, current_teacher, require_owner=True
+    )
 
     # 如果沒有提供 order_index，自動設為最後一個位置
     if content_data.order_index is None:
@@ -233,6 +216,10 @@ async def create_content(
             if "parts_of_speech" in item_data:
                 metadata["parts_of_speech"] = item_data["parts_of_speech"]
 
+            # 儲存 TTS audio settings（accent/gender/speed）供例句 TTS 生成使用
+            if "audio_settings" in item_data:
+                metadata["audio_settings"] = item_data["audio_settings"]
+
             # 根據前端傳來的資料決定存儲到 translation 欄位的內容
             # 優先使用 definition (中文翻譯)，如果沒有則使用 translation
             translation_value = item_data.get("definition") or item_data.get(
@@ -263,6 +250,7 @@ async def create_content(
                 example_sentence_definition=item_data.get(
                     "example_sentence_definition"
                 ),
+                example_sentence_audio_url=item_data.get("example_sentence_audio_url"),
                 word_count=word_count,
                 max_errors=max_errors,
                 # 單字集相關欄位
@@ -307,23 +295,15 @@ async def get_content_detail(
     db: Session = Depends(get_db),
 ):
     """獲取內容詳情"""
-    # Verify the content belongs to the teacher
-    content = (
-        db.query(Content)
-        .join(Lesson)
-        .join(Program)
-        .filter(
-            Content.id == content_id,
-            Program.teacher_id == current_teacher.id,
-            Content.is_active.is_(True),
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .first()
+    from utils.permissions import check_content_access
+
+    # check_content_access handles personal, org, template, and assignment copy access
+    _program, _lesson, content = check_content_access(
+        db, content_id, current_teacher, require_owner=False
     )
 
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
+    # Eager load content_items to avoid N+1
+    db.refresh(content, ["content_items"])
 
     return {
         "id": content.id,
@@ -372,6 +352,7 @@ async def get_content_detail(
                 # 單字集相關欄位
                 "example_sentence": item.example_sentence,
                 "example_sentence_translation": item.example_sentence_translation,
+                "example_sentence_audio_url": item.example_sentence_audio_url,
                 "image_url": item.image_url,
                 "part_of_speech": item.part_of_speech,
                 # 前端使用 parts_of_speech (plural, array)
@@ -408,28 +389,12 @@ async def update_content(
     db: Session = Depends(get_db),
 ):
     """更新內容"""
-    # Verify the content belongs to the teacher or is a template program
-    content = (
-        db.query(Content)
-        .join(Lesson)
-        .join(Program)
-        .filter(
-            Content.id == content_id,
-            Content.is_active.is_(True),
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .filter(
-            # Either: content belongs to teacher's program
-            # Or: content belongs to a template program (公版課程)
-            (Program.teacher_id == current_teacher.id)
-            | (Program.is_template.is_(True))
-        )
-        .first()
-    )
+    from utils.permissions import check_content_access
 
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
+    # check_content_access handles personal, org, template, and assignment copy access
+    _program, _lesson, content = check_content_access(
+        db, content_id, current_teacher, require_owner=True
+    )
 
     # 引入音檔管理器
     from services.audio_manager import get_audio_manager
@@ -531,6 +496,10 @@ async def update_content(
                 if "parts_of_speech" in item_data:
                     metadata["parts_of_speech"] = item_data["parts_of_speech"]
 
+                # 儲存 TTS audio settings（accent/gender/speed）供例句 TTS 生成使用
+                if "audio_settings" in item_data:
+                    metadata["audio_settings"] = item_data["audio_settings"]
+
                 # 根據前端傳來的資料決定存儲到 translation 欄位的內容
                 # 優先使用 definition (中文翻譯)，如果沒有則使用 translation
                 translation_value = item_data.get("definition") or item_data.get(
@@ -573,6 +542,9 @@ async def update_content(
                     ),
                     example_sentence_definition=item_data.get(
                         "example_sentence_definition"
+                    ),
+                    example_sentence_audio_url=item_data.get(
+                        "example_sentence_audio_url"
                     ),
                     word_count=word_count,
                     max_errors=max_errors,
@@ -691,23 +663,12 @@ async def delete_content(
     db: Session = Depends(get_db),
 ):
     """刪除內容（軟刪除）"""
-    # Verify the content belongs to the teacher
-    content = (
-        db.query(Content)
-        .join(Lesson)
-        .join(Program)
-        .filter(
-            Content.id == content_id,
-            Program.teacher_id == current_teacher.id,
-            Content.is_active.is_(True),
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .first()
-    )
+    from utils.permissions import check_content_access
 
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
+    # check_content_access handles personal, org, template, and assignment copy access
+    _program, _lesson, content = check_content_access(
+        db, content_id, current_teacher, require_owner=True, allow_assignment_copy=False
+    )
 
     # 檢查是否有相關的作業
 
@@ -730,6 +691,71 @@ async def delete_content(
             "reason": "soft_delete",
             "note": "內容已停用但資料保留，相關作業仍可查看",
         },
+    }
+
+
+@router.post("/contents/{content_id}/copy")
+async def copy_content(
+    content_id: int,
+    copy_data: ContentCopy,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """複製內容到指定的單元"""
+    from utils.permissions import check_content_access, check_lesson_access
+    from services.program_service import _copy_content_with_items
+
+    # 驗證來源 content 存取權限
+    _program, _lesson, content = check_content_access(
+        db, content_id, current_teacher, require_owner=False
+    )
+
+    # 驗證目標 lesson 存取權限
+    _target_program, target_lesson = check_lesson_access(
+        db, copy_data.target_lesson_id, current_teacher, require_owner=True
+    )
+
+    # 計算目標 lesson 中的最大 order_index
+    max_order = (
+        db.query(func.max(Content.order_index))
+        .filter(
+            Content.lesson_id == copy_data.target_lesson_id,
+            Content.is_active.is_(True),
+        )
+        .scalar()
+    )
+
+    # Eager load content_items
+    db.refresh(content, ["content_items"])
+
+    # 複製 content 及所有 items
+    new_content = _copy_content_with_items(content, copy_data.target_lesson_id, db)
+
+    # 設定複製後的標題和 order_index
+    new_content.title = f"{content.title}(copy)"
+    new_content.order_index = (max_order or 0) + 1
+    # Teacher-initiated copy: track source but keep is_assignment_copy=False (default)
+    new_content.source_content_id = content.id
+
+    try:
+        db.commit()
+        db.refresh(new_content)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="複製內容衝突，請重試")
+
+    return {
+        "id": new_content.id,
+        "type": new_content.type.value if new_content.type else "EXAMPLE_SENTENCES",
+        "title": new_content.title,
+        "items_count": len(new_content.content_items),
+        "target_wpm": new_content.target_wpm,
+        "target_accuracy": new_content.target_accuracy,
+        "order_index": new_content.order_index,
+        "level": getattr(new_content, "level", "A1"),
+        "tags": getattr(new_content, "tags", []),
+        "source_content_id": content.id,
+        "target_lesson_id": copy_data.target_lesson_id,
     }
 
 
@@ -796,5 +822,5 @@ async def upload_image(
     except HTTPException as e:
         raise e
     except Exception as e:
-        print(f"Image upload error: {e}")
+        logger.error("Image upload error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Image upload failed")

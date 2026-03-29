@@ -14,6 +14,7 @@ import TeacherResetPassword from "./pages/TeacherResetPassword";
 import TeacherSetupPassword from "./pages/TeacherSetupPassword";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import TeacherClassrooms from "./pages/teacher/TeacherClassrooms";
+import AssignmentManagementPage from "./pages/teacher/AssignmentManagementPage";
 import TeacherStudents from "./pages/teacher/TeacherStudents";
 import ClassroomDetail from "./pages/teacher/ClassroomDetail";
 import TeacherAssignmentDetailPage from "./pages/teacher/TeacherAssignmentDetailPage";
@@ -25,6 +26,8 @@ import ResourceMaterialsPage from "./pages/teacher/ResourceMaterialsPage";
 import TeacherSubscription from "./pages/teacher/TeacherSubscription";
 import TeacherProfile from "./pages/teacher/TeacherProfile";
 import StudentLogin from "./pages/StudentLogin";
+import StudentForgotPassword from "./pages/StudentForgotPassword";
+import StudentResetPassword from "./pages/StudentResetPassword";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentAssignmentList from "./pages/student/StudentAssignmentList";
 import StudentAssignmentDetail from "./pages/student/StudentAssignmentDetail";
@@ -37,6 +40,10 @@ import DatabaseAdminPage from "./pages/admin/DatabaseAdminPage";
 import AdminMonitoringPage from "./pages/admin/AdminMonitoringPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import CreateOrganization from "./pages/admin/CreateOrganization";
+import BlogListPage from "./pages/BlogListPage";
+import BlogPostPage from "./pages/BlogPostPage";
+import AdminBlogPage from "./pages/admin/AdminBlogPage";
+import AdminBlogEditorPage from "./pages/admin/AdminBlogEditorPage";
 import DebugPage from "./pages/DebugPage";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -46,6 +53,7 @@ import DemoAssignmentPage from "./pages/DemoAssignmentPage";
 import WordSpellingSample from "./pages/sample/WordSpellingSample";
 import WordClozeSample from "./pages/sample/WordClozeSample";
 import { Toaster } from "sonner";
+import { useCrossTabAuthSync } from "./hooks/useCrossTabAuthSync";
 
 /**
  * Custom hook to detect mobile screen size
@@ -75,6 +83,8 @@ function useIsMobile() {
 function App() {
   // Issue #142: Use bottom-center on mobile to avoid blocking question numbers
   const isMobile = useIsMobile();
+  // Issue #472: Cross-tab auth sync
+  useCrossTabAuthSync();
 
   return (
     <>
@@ -91,6 +101,10 @@ function App() {
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/pricing" element={<PricingPage />} />
+
+        {/* Blog Routes - Public */}
+        <Route path="/blog" element={<BlogListPage />} />
+        <Route path="/blog/:slug" element={<BlogPostPage />} />
 
         {/* Demo Route - Public, no authentication required */}
         <Route path="/demo/:assignmentId" element={<DemoAssignmentPage />} />
@@ -142,6 +156,16 @@ function App() {
           }
         />
         <Route
+          path="/teacher/assignments"
+          element={
+            <ProtectedRoute>
+              <TeacherLayout>
+                <AssignmentManagementPage />
+              </TeacherLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/teacher/classroom/:id"
           element={
             <ProtectedRoute>
@@ -161,6 +185,14 @@ function App() {
         />
         <Route
           path="/teacher/classroom/:classroomId/assignment/:assignmentId/preview"
+          element={
+            <ProtectedRoute>
+              <TeacherAssignmentPreviewPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/assignment/:assignmentId/preview"
           element={
             <ProtectedRoute>
               <TeacherAssignmentPreviewPage />
@@ -261,6 +293,14 @@ function App() {
 
         {/* Student Routes */}
         <Route path="/student/login" element={<StudentLogin />} />
+        <Route
+          path="/student/forgot-password"
+          element={<StudentForgotPassword />}
+        />
+        <Route
+          path="/student/reset-password"
+          element={<StudentResetPassword />}
+        />
 
         {/* Email Verification */}
         <Route path="/verify-email" element={<EmailVerification />} />
@@ -275,6 +315,30 @@ function App() {
           }
         />
         <Route path="/admin/database" element={<DatabaseAdminPage />} />
+        <Route
+          path="/admin/blog"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminBlogPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/blog/new"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminBlogEditorPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/blog/:id/edit"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminBlogEditorPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/admin/organizations/create"
           element={
