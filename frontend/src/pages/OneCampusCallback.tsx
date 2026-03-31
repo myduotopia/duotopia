@@ -36,7 +36,8 @@ export default function OneCampusCallback() {
 
   useEffect(() => {
     const code = searchParams.get("code");
-    const schoolDsns = searchParams.get("schoolDsns") || searchParams.get("dsns");
+    const schoolDsns =
+      searchParams.get("schoolDsns") || searchParams.get("dsns");
 
     if (!code || !schoolDsns) {
       setStatus("error");
