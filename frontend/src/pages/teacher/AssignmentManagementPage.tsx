@@ -37,9 +37,11 @@ import {
   RefreshCw,
   X,
   Loader2,
+  BarChart3,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
+import { AssignmentAnalysisDialog } from "@/components/AssignmentAnalysisDialog";
 
 interface Assignment {
   id: number;
@@ -81,6 +83,9 @@ export default function AssignmentManagementPage() {
 
   // View toggle
   const [showArchived, setShowArchived] = useState(false);
+
+  // Analysis dialog
+  const [analysisTarget, setAnalysisTarget] = useState<Assignment | null>(null);
 
   // Filters
   const [filterClassroom, setFilterClassroom] = useState<string>("");
@@ -502,8 +507,7 @@ export default function AssignmentManagementPage() {
                 {filteredAssignments.map((assignment) => (
                   <TableRow
                     key={assignment.id}
-                    className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                    onClick={() => handleViewDetails(assignment)}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
                   >
                     <TableCell className="font-medium max-w-[200px] truncate">
                       {assignment.title}
@@ -572,7 +576,10 @@ export default function AssignmentManagementPage() {
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent
+                          align="end"
+                          className="bg-white dark:bg-gray-800 border dark:border-gray-700"
+                        >
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation();
@@ -582,6 +589,17 @@ export default function AssignmentManagementPage() {
                             <Eye className="h-4 w-4 mr-2" />
                             {t("assignmentManagement.actions.view")}
                           </DropdownMenuItem>
+                          {showArchived && (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAnalysisTarget(assignment);
+                              }}
+                            >
+                              <BarChart3 className="h-4 w-4 mr-2" />
+                              {t("classroomDetail.buttons.analysisReport")}
+                            </DropdownMenuItem>
+                          )}
                           {showArchived ? (
                             <DropdownMenuItem
                               onClick={(e) => {
@@ -627,8 +645,7 @@ export default function AssignmentManagementPage() {
             {filteredAssignments.map((assignment) => (
               <div
                 key={assignment.id}
-                className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4 space-y-2 cursor-pointer"
-                onClick={() => handleViewDetails(assignment)}
+                className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4 space-y-2"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
@@ -660,7 +677,10 @@ export default function AssignmentManagementPage() {
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent
+                      align="end"
+                      className="bg-white dark:bg-gray-800 border dark:border-gray-700"
+                    >
                       <DropdownMenuItem
                         onClick={(e) => {
                           e.stopPropagation();
@@ -670,6 +690,17 @@ export default function AssignmentManagementPage() {
                         <Eye className="h-4 w-4 mr-2" />
                         {t("assignmentManagement.actions.view")}
                       </DropdownMenuItem>
+                      {showArchived && (
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAnalysisTarget(assignment);
+                          }}
+                        >
+                          <BarChart3 className="h-4 w-4 mr-2" />
+                          {t("classroomDetail.buttons.analysisReport")}
+                        </DropdownMenuItem>
+                      )}
                       {showArchived ? (
                         <DropdownMenuItem
                           onClick={(e) => {
@@ -730,6 +761,17 @@ export default function AssignmentManagementPage() {
             ))}
           </div>
         </>
+      )}
+
+      {analysisTarget && (
+        <AssignmentAnalysisDialog
+          open={!!analysisTarget}
+          onOpenChange={(open) => {
+            if (!open) setAnalysisTarget(null);
+          }}
+          assignmentId={analysisTarget.id}
+          assignmentTitle={analysisTarget.title}
+        />
       )}
     </div>
   );

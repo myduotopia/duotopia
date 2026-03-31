@@ -497,7 +497,7 @@ async def generate_analysis_report(
         report_json = await vertex_ai.generate_json(
             prompt=prompt,
             model_type="flash",
-            max_tokens=4000,
+            max_tokens=16384,
             temperature=0.3,
             system_instruction="你是英語教學分析專家。請根據數據產生精確、有建設性的分析報告。回傳格式必須是 JSON。",
         )

@@ -183,7 +183,9 @@ export function AssignmentAnalysisDialog({
                         : value.toFixed(1)
                       : String(value ?? "")}
                   </div>
-                  <div className="text-xs text-gray-500">{key}</div>
+                  <div className="text-xs text-gray-500">
+                    {t(`analysisDialog.report.statLabels.${key}`, key)}
+                  </div>
                 </div>
               ))}
             </div>
