@@ -57,6 +57,7 @@
     "i18next": "^25.6.0",
     "i18next-browser-languagedetector": "^8.2.0",
     "i18next-http-backend": "^3.0.2",
+    "jspdf": "^4.2.1",
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.542.0",
     "microsoft-cognitiveservices-speech-sdk": "^1.47.0",

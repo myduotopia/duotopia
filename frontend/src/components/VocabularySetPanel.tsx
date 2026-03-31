@@ -190,7 +190,7 @@ const SENTENCE_TRANSLATION_LANGUAGES = [
 ];
 
 // 批次貼上上限 (#422)
-const BATCH_PASTE_MAX = 20;
+const BATCH_PASTE_MAX = 30;
 
 /**
  * 檢測重複的行 index（單字完全相同 或 翻譯完全相同）
@@ -3206,6 +3206,16 @@ export default function VocabularySetPanel({
       !customTranslationLang.trim()
     ) {
       toast.error(t("contentEditor.labels.enterCustomLanguage"));
+      return;
+    }
+
+    // 批次新增上限 (#422)
+    if (lines.length > BATCH_PASTE_MAX) {
+      toast.error(
+        t("contentEditor.messages.batchPasteLimit", {
+          count: BATCH_PASTE_MAX,
+        }),
+      );
       return;
     }
 
