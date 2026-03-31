@@ -458,14 +458,14 @@ jobs:
           ENV_VARS="$ENV_VARS,ENABLE_PAYMENT=${{ secrets.STAGING_ENABLE_PAYMENT }}"
           ENV_VARS="$ENV_VARS,DEMO_ALLOWED_ORIGINS=${{ secrets.STAGING_FRONTEND_URL }}"
 
-          # 💰 Staging: 最小化成本
-          MIN_INSTANCES=0      # Scale-to-Zero 最大化節省成本
-          MEMORY="256Mi"
-          CPU="500m"           # 0.5 CPU
-          CONCURRENCY=1        # CPU < 1 時必須設為 1
-          MAX_INSTANCES=1      # Staging 流量低，降為 1 節省成本
-          CPU_THROTTLING="--cpu-throttling"
-          CPU_BOOST="--no-cpu-boost"
+          # Staging: 與 Production 相同機器規格，min=0 節省成本
+          MIN_INSTANCES=0      # Scale-to-Zero 節省成本
+          MEMORY="512Mi"
+          CPU="1000m"          # 1 CPU
+          CONCURRENCY=10       # 與 Production 一致
+          MAX_INSTANCES=10     # 與 Production 一致
+          CPU_THROTTLING="--no-cpu-throttling"
+          CPU_BOOST="--cpu-boost"
         fi
 
         # Use ~ as custom delimiter instead of , because env var values contain
