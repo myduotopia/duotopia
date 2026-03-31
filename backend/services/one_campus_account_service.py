@@ -278,7 +278,10 @@ class OneCampusAccountService:
         db.flush()
 
         # Generate a placeholder email for Teacher (required NOT NULL)
-        placeholder_email = f"1campus_{one_campus_account}@sso.duotopia.com"
+        # one_campus_account may contain '@' (e.g. user@1campus.net),
+        # so replace it to form a valid email address.
+        safe_account = one_campus_account.replace("@", "_at_")
+        placeholder_email = f"1campus_{safe_account}@sso.duotopia.com"
 
         teacher = Teacher(
             name=teacher_name,

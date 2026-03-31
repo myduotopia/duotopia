@@ -267,13 +267,15 @@ async def one_campus_callback(
             school_dsns=schoolDsns,
         )
 
+        teacher_response = _build_teacher_response(db, teacher)
+
         access_token = create_access_token(
             data={
                 "sub": str(teacher.id),
                 "email": teacher.email,
                 "type": "teacher",
                 "name": teacher.name,
-                "role": "teacher",
+                "role": teacher_response["role"],
             },
             expires_delta=timedelta(hours=24),
         )
@@ -281,7 +283,7 @@ async def one_campus_callback(
         return OneCampusCallbackResponse(
             access_token=access_token,
             role_type="teacher",
-            user=_build_teacher_response(db, teacher),
+            user=teacher_response,
             action=action,
         )
 
