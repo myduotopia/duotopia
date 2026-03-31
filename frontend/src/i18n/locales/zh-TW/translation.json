@@ -4847,7 +4847,20 @@
       "weakness": "弱點：",
       "suggestion": "建議：",
       "generatedAt": "生成時間：",
-      "pointsUsed": "消耗點數："
+      "pointsUsed": "消耗點數：",
+      "statLabels": {
+        "average_score": "平均分數",
+        "highest_score": "最高分",
+        "lowest_score": "最低分",
+        "completion_rate": "完成率",
+        "avg_error_count": "平均錯誤數",
+        "avg_accuracy": "平均準確率",
+        "avg_fluency": "平均流暢度",
+        "avg_pronunciation": "平均發音",
+        "total_words": "總單字數",
+        "avg_correct_rate": "平均正確率",
+        "most_difficult_words": "最難單字"
+      }
     }
   },
   "assignmentManagement": {
