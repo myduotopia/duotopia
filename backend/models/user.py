@@ -86,7 +86,7 @@ class Teacher(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=True)  # nullable for SSO-only accounts
     name = Column(String(100), nullable=False)
     phone = Column(String(20))
     avatar_url = Column(String(500))

@@ -475,19 +475,35 @@ export default function StudentLogin() {
                 </div>
               )}
 
-              {/* Email direct login link */}
-              <div className="mt-6 pt-6 border-t text-center">
+              {/* 1Campus SSO + Email login links */}
+              <div className="mt-6 pt-6 border-t space-y-3">
                 <Button
-                  variant="link"
-                  className="text-emerald-600 hover:text-emerald-700"
+                  variant="outline"
+                  className="w-full py-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-green-200 text-green-700 font-medium"
                   onClick={() => {
-                    setLoginMode("email");
-                    setError("");
+                    window.location.href = "https://1campus.net";
                   }}
                 >
-                  <Mail className="h-4 w-4 mr-1.5" />
-                  {t("studentLogin.emailLogin.switchToEmail")}
+                  🏫{" "}
+                  {t(
+                    "studentLogin.oneCampus.button",
+                    "Log in with School Account (1Campus)",
+                  )}
                 </Button>
+
+                <div className="text-center">
+                  <Button
+                    variant="link"
+                    className="text-emerald-600 hover:text-emerald-700"
+                    onClick={() => {
+                      setLoginMode("email");
+                      setError("");
+                    }}
+                  >
+                    <Mail className="h-4 w-4 mr-1.5" />
+                    {t("studentLogin.emailLogin.switchToEmail")}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
