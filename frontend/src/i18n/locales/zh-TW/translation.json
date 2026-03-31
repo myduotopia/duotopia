@@ -4381,6 +4381,13 @@
       "accent": "口音",
       "gender": "性別",
       "speed": "語速"
+    },
+    "generate": {
+      "accent": "口音",
+      "gender": "性別",
+      "speed": "語速",
+      "generating": "生成中...",
+      "generate": "生成"
     }
   },
   "vocabularySet": {

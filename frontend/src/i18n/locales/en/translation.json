@@ -4437,6 +4437,13 @@
       "clickToUpload": "click to upload",
       "macScreenshotHint": "Tip: Use Ctrl+Shift+Cmd+4 for screenshot to paste",
       "windowsScreenshotHint": "Tip: Use Win+Shift+S for screenshot to paste"
+    },
+    "generate": {
+      "accent": "Accent",
+      "gender": "Gender",
+      "speed": "Speed",
+      "generating": "Generating...",
+      "generate": "Generate"
     }
   },
   "wordReading": {
