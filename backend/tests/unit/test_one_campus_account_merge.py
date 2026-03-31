@@ -270,7 +270,11 @@ class TestAggregatedClassroomsIdentityPath:
         cr1 = Classroom(name="Classroom 1", teacher_id=teacher.id)
         db.add(cr1)
         db.flush()
-        db.add(ClassroomStudent(classroom_id=cr1.id, student_id=student_a.id, is_active=True))
+        db.add(
+            ClassroomStudent(
+                classroom_id=cr1.id, student_id=student_a.id, is_active=True
+            )
+        )
 
         # Student B (sibling) in Classroom 2
         student_b = Student(
@@ -284,7 +288,11 @@ class TestAggregatedClassroomsIdentityPath:
         cr2 = Classroom(name="Classroom 2", teacher_id=teacher.id)
         db.add(cr2)
         db.flush()
-        db.add(ClassroomStudent(classroom_id=cr2.id, student_id=student_b.id, is_active=True))
+        db.add(
+            ClassroomStudent(
+                classroom_id=cr2.id, student_id=student_b.id, is_active=True
+            )
+        )
 
         db.commit()
 
@@ -342,7 +350,11 @@ class TestAggregatedClassroomsIdentityPath:
         cr = Classroom(name="Shared CR", teacher_id=teacher.id)
         db.add(cr)
         db.flush()
-        db.add(ClassroomStudent(classroom_id=cr.id, student_id=student_b.id, is_active=True))
+        db.add(
+            ClassroomStudent(
+                classroom_id=cr.id, student_id=student_b.id, is_active=True
+            )
+        )
         db.commit()
 
         result = _get_aggregated_classrooms(db, student_a)
