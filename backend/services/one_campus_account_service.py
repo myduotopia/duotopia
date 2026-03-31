@@ -117,6 +117,44 @@ class OneCampusAccountService:
                 )
                 return existing_identity, student, "merge_prompt"
 
+        # Step 2.5: Check if 1Campus account matches an existing verified email
+        if one_campus_account:
+            email_identity = (
+                db.query(Identity)
+                .filter(
+                    Identity.email == one_campus_account,
+                    Identity.email_verified.is_(True),
+                    Identity.is_active.is_(True),
+                )
+                .first()
+            )
+            if email_identity:
+                # Merge 1Campus fields into existing email-verified Identity
+                email_identity.one_campus_student_id = one_campus_student_id
+                email_identity.one_campus_account = one_campus_account
+                if national_id_hash:
+                    email_identity.national_id_hash = national_id_hash
+                db.commit()
+
+                student = (
+                    db.query(Student)
+                    .filter(
+                        Student.identity_id == email_identity.id,
+                        Student.is_active.is_(True),
+                    )
+                    .order_by(Student.is_primary_account.desc().nulls_last())
+                    .first()
+                )
+                if student:
+                    logger.info(
+                        "1Campus SSO: auto-merged student by email match, "
+                        "student_id=%s, identity_id=%s, email=%s",
+                        student.id,
+                        email_identity.id,
+                        one_campus_account,
+                    )
+                    return email_identity, student, "existing"
+
         # Step 3: Create new Identity + Student
         identity = Identity(
             one_campus_student_id=one_campus_student_id,
@@ -266,6 +304,41 @@ class OneCampusAccountService:
                         existing_identity.id,
                     )
                     return existing_identity, teacher, "existing"
+
+        # Step 2.5: Check if 1Campus account matches an existing verified email
+        if one_campus_account:
+            email_identity = (
+                db.query(Identity)
+                .filter(
+                    Identity.email == one_campus_account,
+                    Identity.email_verified.is_(True),
+                    Identity.is_active.is_(True),
+                )
+                .first()
+            )
+            if email_identity:
+                teacher = (
+                    db.query(Teacher)
+                    .filter(
+                        Teacher.identity_id == email_identity.id,
+                        Teacher.is_active.is_(True),
+                    )
+                    .first()
+                )
+                if teacher:
+                    # Merge 1Campus fields into existing email-verified Identity
+                    email_identity.one_campus_account = one_campus_account
+                    if national_id_hash:
+                        email_identity.national_id_hash = national_id_hash
+                    db.commit()
+                    logger.info(
+                        "1Campus SSO: auto-merged teacher by email match, "
+                        "teacher_id=%s, identity_id=%s, email=%s",
+                        teacher.id,
+                        email_identity.id,
+                        one_campus_account,
+                    )
+                    return email_identity, teacher, "existing"
 
         # Step 3: Create new Identity + Teacher
         identity = Identity(
