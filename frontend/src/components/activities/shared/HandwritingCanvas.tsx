@@ -39,6 +39,7 @@ export function HandwritingCanvas({
   viewMode,
 }: HandwritingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const recognizerRef = useRef<HandwritingRecognizer | null>(null);
   const drawingRef = useRef<HandwritingDrawing | null>(null);
   const currentStrokeRef = useRef<HandwritingStroke | null>(null);
@@ -47,6 +48,21 @@ export function HandwritingCanvas({
   const [isSupported, setIsSupported] = useState<boolean | null>(null); // null = 偵測中
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [hasStrokes, setHasStrokes] = useState(false);
+  const [canvasWidth, setCanvasWidth] = useState(400);
+
+  // Track container width with ResizeObserver
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w && w > 0) setCanvasWidth(Math.round(w));
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
 
   // ── 初始化：feature detect + 建立 recognizer ──────────────────────────
   useEffect(() => {
@@ -83,7 +99,7 @@ export function HandwritingCanvas({
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.strokeStyle = "#1e40af";
-    ctx.lineWidth = viewMode === "mobile" ? 2.5 : 3;
+    ctx.lineWidth = (viewMode === "mobile" ? 2.5 : 3) * dpr;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     return ctx;
@@ -128,20 +144,20 @@ export function HandwritingCanvas({
 
       const canvas = canvasRef.current!;
       const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const cssX = e.clientX - rect.left;
+      const cssY = e.clientY - rect.top;
 
-      // 新筆畫
+      // 新筆畫 — HandwritingStroke uses CSS coordinates
       const stroke = new HandwritingStroke();
-      stroke.addPoint({ x, y, t: e.timeStamp });
+      stroke.addPoint({ x: cssX, y: cssY, t: e.timeStamp });
       currentStrokeRef.current = stroke;
 
-      // 開始畫線
+      // 開始畫線 — canvas uses DPR-scaled coordinates
       const ctx = getCtx();
       ctx?.beginPath();
-      ctx?.moveTo(x, y);
+      ctx?.moveTo(cssX * dpr, cssY * dpr);
     },
-    [isDisabled, isSupported],
+    [isDisabled, isSupported, dpr],
   );
 
   const handlePointerMove = useCallback(
@@ -150,16 +166,16 @@ export function HandwritingCanvas({
 
       const canvas = canvasRef.current!;
       const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const cssX = e.clientX - rect.left;
+      const cssY = e.clientY - rect.top;
 
-      currentStrokeRef.current.addPoint({ x, y, t: e.timeStamp });
+      currentStrokeRef.current.addPoint({ x: cssX, y: cssY, t: e.timeStamp });
 
       const ctx = getCtx();
-      ctx?.lineTo(x, y);
+      ctx?.lineTo(cssX * dpr, cssY * dpr);
       ctx?.stroke();
     },
-    [isDisabled],
+    [isDisabled, dpr],
   );
 
   const handlePointerUp = useCallback(() => {
@@ -219,11 +235,11 @@ export function HandwritingCanvas({
   // ── 手寫 Canvas ────────────────────────────────────────────────────────
   return (
     <div className="mt-4 select-none">
-      <div className="relative">
+      <div className="relative" ref={containerRef}>
         <canvas
           ref={canvasRef}
-          width={canvasRef.current?.parentElement?.clientWidth ?? 400}
-          height={canvasHeight}
+          width={canvasWidth * dpr}
+          height={canvasHeight * dpr}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -234,7 +250,7 @@ export function HandwritingCanvas({
               ? "border-gray-200 cursor-not-allowed opacity-50"
               : "border-blue-200 cursor-crosshair",
           )}
-          style={{ height: canvasHeight }}
+          style={{ width: canvasWidth, height: canvasHeight }}
         />
 
         {/* 辨識中遮罩 */}

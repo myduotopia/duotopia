@@ -1044,8 +1044,8 @@ export function AssignmentDialog({
 
   // 處理下一步按鈕點擊
   const handleNextStep = () => {
-    // 從 step 1 移動到 step 2 時，根據內容類型設定預設練習模式
-    if (currentStep === 1) {
+    // 從 step 1 移動到 step 2 時，根據內容類型設定預設練習模式（僅在尚未選擇時）
+    if (currentStep === 1 && !formData.practice_mode) {
       const contentCategory = getCartContentTypeCategory();
       if (contentCategory === "vocabulary_set") {
         // 單字集預設為單字朗讀模式，不限時

@@ -10,7 +10,7 @@
  * 2. 清除按鈕 → canvas 清除
  */
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,8 +24,24 @@ export function DrawingCanvas({
   viewMode,
 }: DrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const isDrawingRef = useRef(false);
   const [hasStrokes, setHasStrokes] = useState(false);
+  const [canvasWidth, setCanvasWidth] = useState(400);
+
+  // Track container width with ResizeObserver
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w && w > 0) setCanvasWidth(Math.round(w));
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
 
   const getCtx = () => {
     const canvas = canvasRef.current;
@@ -33,7 +49,7 @@ export function DrawingCanvas({
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.strokeStyle = "#1e40af";
-    ctx.lineWidth = viewMode === "mobile" ? 2.5 : 3;
+    ctx.lineWidth = (viewMode === "mobile" ? 2.5 : 3) * dpr;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     return ctx;
@@ -47,14 +63,14 @@ export function DrawingCanvas({
 
       const canvas = canvasRef.current!;
       const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const x = (e.clientX - rect.left) * dpr;
+      const y = (e.clientY - rect.top) * dpr;
 
       const ctx = getCtx();
       ctx?.beginPath();
       ctx?.moveTo(x, y);
     },
-    [isDisabled],
+    [isDisabled, dpr],
   );
 
   const handlePointerMove = useCallback(
@@ -63,14 +79,14 @@ export function DrawingCanvas({
 
       const canvas = canvasRef.current!;
       const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const x = (e.clientX - rect.left) * dpr;
+      const y = (e.clientY - rect.top) * dpr;
 
       const ctx = getCtx();
       ctx?.lineTo(x, y);
       ctx?.stroke();
     },
-    [isDisabled],
+    [isDisabled, dpr],
   );
 
   const handlePointerUp = useCallback(() => {
@@ -92,11 +108,11 @@ export function DrawingCanvas({
 
   return (
     <div className="mt-4 select-none">
-      <div className="relative">
+      <div className="relative" ref={containerRef}>
         <canvas
           ref={canvasRef}
-          width={canvasRef.current?.parentElement?.clientWidth ?? 400}
-          height={canvasHeight}
+          width={canvasWidth * dpr}
+          height={canvasHeight * dpr}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -107,7 +123,7 @@ export function DrawingCanvas({
               ? "border-gray-200 cursor-not-allowed opacity-50"
               : "border-blue-200 cursor-crosshair",
           )}
-          style={{ height: canvasHeight }}
+          style={{ width: canvasWidth, height: canvasHeight }}
         />
         {!hasStrokes && !isDisabled && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
