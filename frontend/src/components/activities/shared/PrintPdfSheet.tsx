@@ -556,6 +556,8 @@ export function PrintPdfSheet({
       setLocalShowSentenceTranslation(showSentenceTranslation);
       setLocalShowDrawingArea(showDrawingArea);
     }
+    // Intentionally sync only when dialog opens — parent props like hintMode, choiceCount
+    // are captured once on open; subsequent parent re-renders should not reset local state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -573,9 +575,24 @@ export function PrintPdfSheet({
     }
   }, [localShuffle, questions]);
 
-  // ── 選擇題選項 ────────────────────────────────────────────────────────────
+  // ── 選擇題選項（穩定洗牌：僅在題目或選項數變更時重新產生）────────────────
+  const choicesCacheRef = useRef<{
+    key: string;
+    data: Record<number, string[]>;
+  }>({ key: "", data: {} });
+
   const questionChoiceOptions = useMemo<Record<number, string[]>>(() => {
     if (localHintMode !== "choice") return {};
+
+    // 穩定 key：題目 index + correctAnswer + choiceCount
+    const cacheKey =
+      displayQuestions.map((q) => `${q.index}:${q.correctAnswer}`).join("|") +
+      `|cc=${localChoiceCount}`;
+
+    if (choicesCacheRef.current.key === cacheKey) {
+      return choicesCacheRef.current.data;
+    }
+
     const result: Record<number, string[]> = {};
     displayQuestions.forEach((q) => {
       const distractors = answerPool
@@ -595,9 +612,10 @@ export function PrintPdfSheet({
       }
       result[q.index] = options;
     });
+
+    choicesCacheRef.current = { key: cacheKey, data: result };
     return result;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localHintMode, displayQuestions, localChoiceCount]);
+  }, [localHintMode, displayQuestions, localChoiceCount, answerPool]);
 
   // ── 量測題目高度 → 計算分頁 ───────────────────────────────────────────────
   useLayoutEffect(() => {

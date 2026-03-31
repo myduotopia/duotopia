@@ -137,6 +137,7 @@ export function HandwritingCanvas({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       if (isDisabled || !drawingRef.current || !isSupported) return;
+      if (typeof HandwritingStroke === "undefined") return;
       e.currentTarget.setPointerCapture(e.pointerId);
 
       // 取消待執行的辨識
