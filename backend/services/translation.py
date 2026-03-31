@@ -209,9 +209,9 @@ class TranslationService:
 
             if target_lang == "zh-TW":
                 prompt = f"""請將以下 JSON 陣列中的英文翻譯成繁體中文。
+每個單字只提供一個最常用的翻譯，不要用分號列出多個同義詞。
 直接返回 JSON 陣列格式，每個翻譯對應一個項目。
 只返回 JSON 陣列，不要任何其他文字或說明。
-為兼容舊版測試，可使用 '---' 分隔多個翻譯（同樣需保持項目數量一致）。
 
 輸入: {texts_json}
 
@@ -340,6 +340,9 @@ Required: Return format must be ["translation1", "translation2", ...]"""
             )
             return texts
 
+    # 每批翻譯+詞性最多處理的單字數量
+    TRANSLATE_POS_CHUNK_SIZE = 10
+
     async def batch_translate_with_pos(
         self, texts: List[str], target_lang: str = "zh-TW"
     ) -> List[Dict[str, any]]:
@@ -353,6 +356,23 @@ Required: Return format must be ["translation1", "translation2", ...]"""
         Returns:
             包含 translation 和 parts_of_speech 的字典列表
         """
+        # 超過 chunk size 時分批處理
+        if len(texts) > self.TRANSLATE_POS_CHUNK_SIZE:
+            all_results = []
+            for i in range(0, len(texts), self.TRANSLATE_POS_CHUNK_SIZE):
+                chunk = texts[i : i + self.TRANSLATE_POS_CHUNK_SIZE]
+                chunk_results = await self._batch_translate_with_pos_single(
+                    chunk, target_lang
+                )
+                all_results.extend(chunk_results)
+            return all_results
+
+        return await self._batch_translate_with_pos_single(texts, target_lang)
+
+    async def _batch_translate_with_pos_single(
+        self, texts: List[str], target_lang: str = "zh-TW"
+    ) -> List[Dict[str, any]]:
+        """單批次翻譯（不超過 TRANSLATE_POS_CHUNK_SIZE 個單字）"""
         self._ensure_client()
         import json
 
@@ -361,12 +381,14 @@ Required: Return format must be ["translation1", "translation2", ...]"""
 
             if target_lang == "zh-TW":
                 prompt = f"""請分析以下英文單字列表，為每個單字提供：
-1. 繁體中文翻譯
+1. 繁體中文翻譯（只提供一個最常用的翻譯，不要用分號列出多個）
 2. 詞性（必須列出所有常見用法的詞性）
 
 單字列表: {texts_json}
 
 重要提示：
+- 翻譯只需要一個最常見、最核心的意思，不要列出多個同義詞
+- 例如：comprehensive coverage → 綜合保障（不要寫「全面性保障；綜合性保險；全面覆蓋」）
 - 許多英文單字有多種詞性，請列出所有常見的用法
 - 例如：顏色詞（red, blue, green）通常既是形容詞也是名詞
 - 例如：動作詞（run, walk, dance）通常既是動詞也是名詞
