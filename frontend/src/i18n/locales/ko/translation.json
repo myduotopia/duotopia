@@ -333,7 +333,20 @@
       "weakness": "약점: ",
       "suggestion": "제안: ",
       "generatedAt": "생성 시간: ",
-      "pointsUsed": "소모 포인트: "
+      "pointsUsed": "소모 포인트: ",
+      "statLabels": {
+        "average_score": "평균 점수",
+        "highest_score": "최고 점수",
+        "lowest_score": "최저 점수",
+        "completion_rate": "완료율",
+        "avg_error_count": "평균 오류 수",
+        "avg_accuracy": "평균 정확도",
+        "avg_fluency": "평균 유창성",
+        "avg_pronunciation": "평균 발음",
+        "total_words": "총 단어 수",
+        "avg_correct_rate": "평균 정답률",
+        "most_difficult_words": "가장 어려운 단어"
+      }
     }
   }
 }
