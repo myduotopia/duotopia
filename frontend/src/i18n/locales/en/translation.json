@@ -1726,10 +1726,23 @@
         "viewPlans": "View Plans"
       },
       "steps": {
+        "selectClassroom": "Select Classroom",
         "selectContent": "Select Content",
         "practiceMode": "Practice Mode",
         "selectStudents": "Select Students",
         "details": "Assignment Details"
+      },
+      "classroomSelection": {
+        "description": "Select classrooms to dispatch the assignment to (multiple selection allowed)",
+        "selectedCount": "{{count}} classroom(s) selected",
+        "loading": "Loading classrooms...",
+        "noClassrooms": "No classrooms yet. Please create a classroom first.",
+        "studentCount": "{{count}} students"
+      },
+      "multiClass": {
+        "willCreate": "Will create {{count}} assignments",
+        "selectAll": "Select All",
+        "deselectAll": "Deselect All"
       },
       "practiceMode": {
         "title": "Practice Mode Settings",
@@ -4772,6 +4785,9 @@
   },
   "contentCopy": {
     "button": "Copy to..."
+  },
+  "tree": {
+    "dispatch": "Dispatch"
   },
   "instantPractice": {
     "title": "Instant Practice",

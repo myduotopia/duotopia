@@ -112,13 +112,33 @@ interface Program {
 interface AssignmentDialogProps {
   open: boolean;
   onClose: () => void;
-  classroomId: number;
-  students: Student[];
+  classroomId?: number;
+  students?: Student[];
   onSuccess?: () => void;
   /** Override organization context (for use outside WorkspaceProvider, e.g. org admin module) */
   organizationId?: string;
   /** Override school context (for use outside WorkspaceProvider, e.g. org admin module) */
   schoolId?: string;
+  /** Pre-selected contents from content pages (e.g. 我的教材) */
+  preSelectedContents?: CartItem[];
+}
+
+// 多班級選擇時，每個班級的學生選擇狀態
+interface SelectedClassroom {
+  id: number;
+  name: string;
+  school_id: string;
+  students: Student[];
+  selectedStudentIds: number[];
+  assignToAll: boolean;
+}
+
+interface ClassroomOption {
+  id: number;
+  name: string;
+  student_count: number;
+  school_id?: string;
+  school_name?: string;
 }
 
 // =============================================================================
@@ -159,7 +179,7 @@ interface QuotaInfo {
 }
 
 // 購物車項目的詳細資訊（用於排序和顯示）
-interface CartItem {
+export interface CartItem {
   contentId: number;
   programName: string;
   lessonName: string;
@@ -250,10 +270,11 @@ export function AssignmentDialog({
   open,
   onClose,
   classroomId,
-  students,
+  students = [],
   onSuccess,
   organizationId: propOrganizationId,
   schoolId: propSchoolId,
+  preSelectedContents,
 }: AssignmentDialogProps) {
   const { t } = useTranslation();
   // useWorkspaceSafe 在 WorkspaceProvider 外（如機構管理模組）不會 throw，而是回傳 null
@@ -270,6 +291,12 @@ export function AssignmentDialog({
       workspace?.selectedOrganization !== null) ||
     !!propOrganizationId;
 
+  // 是否需要班級選擇步驟（從教材頁面開啟時無 classroomId）
+  const needsClassroomStep = !classroomId;
+  // 是否有預選內容（從教材頁面帶入）
+  const hasPreSelectedContents =
+    preSelectedContents && preSelectedContents.length > 0;
+
   const [loading, setLoading] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [internalStudents, setInternalStudents] = useState<Student[]>([]);
@@ -280,7 +307,7 @@ export function AssignmentDialog({
   const [loadingLessons, setLoadingLessons] = useState<Record<number, boolean>>(
     {},
   );
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(needsClassroomStep ? 0 : 1);
   // 只在機構模式且有機構 ID 時顯示「機構教材」tab
   const showOrgTab = isOrgMode && effectiveOrganizationId !== null;
 
@@ -288,8 +315,22 @@ export function AssignmentDialog({
     "template" | "classroom" | "organization"
   >(showOrgTab ? "organization" : "template");
 
-  // 學生列表：優先用外部傳入的，否則內部載入的
-  const effectiveStudents = students.length > 0 ? students : internalStudents;
+  // === 多班級選擇 ===
+  const [classroomOptions, setClassroomOptions] = useState<ClassroomOption[]>(
+    [],
+  );
+  const [loadingClassrooms, setLoadingClassrooms] = useState(false);
+  const [selectedClassrooms, setSelectedClassrooms] = useState<
+    SelectedClassroom[]
+  >([]);
+  const [activeClassroomTab, setActiveClassroomTab] = useState<number>(0);
+
+  // 學生列表：多班級模式用 selectedClassrooms，單班級模式用原有邏輯
+  const effectiveStudents = needsClassroomStep
+    ? selectedClassrooms[activeClassroomTab]?.students || []
+    : students.length > 0
+      ? students
+      : internalStudents;
 
   // 分別儲存公版和班級課程
   const [templatePrograms, setTemplatePrograms] = useState<Program[]>([]);
@@ -346,9 +387,9 @@ export function AssignmentDialog({
     show_image: true, // 顯示圖片
   });
 
-  // 內部載入學生列表（當外部未傳入時）
+  // 內部載入學生列表（當外部未傳入時，單班級模式）
   const loadStudents = async () => {
-    if (!effectiveSchoolId) return;
+    if (!effectiveSchoolId || !classroomId) return;
     setLoadingStudents(true);
     try {
       const data = (await apiClient.getClassroomStudents(
@@ -374,42 +415,127 @@ export function AssignmentDialog({
     }
   };
 
+  // 載入班級列表（多班級選擇模式）
+  const loadClassroomOptions = async () => {
+    setLoadingClassrooms(true);
+    try {
+      const data = (await apiClient.getTeacherClassrooms()) as ClassroomOption[];
+      setClassroomOptions(data || []);
+    } catch {
+      toast.error(t("dialogs.assignmentDialog.errors.loadClassroomsFailed"));
+    } finally {
+      setLoadingClassrooms(false);
+    }
+  };
+
+  // 切換班級選擇（多班級模式）
+  const toggleClassroomSelection = async (classroom: ClassroomOption) => {
+    const existing = selectedClassrooms.find((c) => c.id === classroom.id);
+    if (existing) {
+      // 取消選擇
+      setSelectedClassrooms((prev) => prev.filter((c) => c.id !== classroom.id));
+    } else {
+      // 新增選擇，載入學生
+      try {
+        const schoolId = classroom.school_id || effectiveSchoolId;
+        if (!schoolId) return;
+        const students = (await apiClient.getClassroomStudents(
+          schoolId,
+          classroom.id,
+        )) as Student[];
+        setSelectedClassrooms((prev) => [
+          ...prev,
+          {
+            id: classroom.id,
+            name: classroom.name,
+            school_id: schoolId,
+            students: students || [],
+            selectedStudentIds: (students || []).map((s) => s.id),
+            assignToAll: true,
+          },
+        ]);
+      } catch {
+        toast.error(`載入 ${classroom.name} 學生列表失敗`);
+      }
+    }
+  };
+
+  // 多班級模式：切換某班的學生
+  const toggleClassroomStudent = (classroomId: number, studentId: number) => {
+    setSelectedClassrooms((prev) =>
+      prev.map((c) => {
+        if (c.id !== classroomId) return c;
+        const newIds = c.selectedStudentIds.includes(studentId)
+          ? c.selectedStudentIds.filter((id) => id !== studentId)
+          : [...c.selectedStudentIds, studentId];
+        return {
+          ...c,
+          selectedStudentIds: newIds,
+          assignToAll: newIds.length === c.students.length,
+        };
+      }),
+    );
+  };
+
+  // 多班級模式：全選/取消全選某班
+  const toggleClassroomAllStudents = (classroomId: number) => {
+    setSelectedClassrooms((prev) =>
+      prev.map((c) => {
+        if (c.id !== classroomId) return c;
+        const allSelected = c.assignToAll;
+        return {
+          ...c,
+          selectedStudentIds: allSelected ? [] : c.students.map((s) => s.id),
+          assignToAll: !allSelected,
+        };
+      }),
+    );
+  };
+
   useEffect(() => {
     if (open) {
-      // 如果外部未傳入學生，內部自行載入
-      if (students.length === 0) {
-        setInternalStudents([]);
-        loadStudents();
+      // 多班級模式：載入班級列表
+      if (needsClassroomStep) {
+        loadClassroomOptions();
+        setSelectedClassrooms([]);
+        setActiveClassroomTab(0);
       } else {
-        setInternalStudents(students);
+        // 單班級模式：載入學生
+        if (students.length === 0) {
+          setInternalStudents([]);
+          loadStudents();
+        } else {
+          setInternalStudents(students);
+        }
       }
       loadTemplatePrograms();
-      loadClassroomPrograms();
+      if (classroomId) {
+        loadClassroomPrograms();
+      }
       if (showOrgTab) {
         loadOrgPrograms();
       }
       loadQuotaInfo();
       // Reset form when dialog opens
-      setCartItems([]);
+      setCartItems(hasPreSelectedContents ? [...preSelectedContents!] : []);
       setFormData({
         title: "",
         instructions: "",
-        student_ids: students.map((s) => s.id), // 預設全選所有學生（外部傳入時）
+        student_ids: students.map((s) => s.id),
         assign_to_all: true,
         due_date: undefined,
-        start_date: new Date(), // 預設為今天
-        practice_mode: "", // Step 1 需要使用者主動選擇
+        start_date: new Date(),
+        practice_mode: "",
         time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40,
         shuffle_questions: false,
         show_answer: false,
         play_audio: false,
-        // 單字集專用設定
         target_proficiency: 80,
         show_translation: true,
         show_word: true,
         show_image: true,
       });
-      setCurrentStep(1);
+      setCurrentStep(needsClassroomStep ? 0 : 1);
       setActiveTab(showOrgTab ? "organization" : "template");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load functions recreated each render; only run on dialog open/context change
@@ -867,7 +993,17 @@ export function AssignmentDialog({
       toast.error(t("dialogs.assignmentDialog.errors.titleRequired"));
       return;
     }
-    if (formData.student_ids.length === 0) {
+
+    // 多班級模式驗證
+    if (needsClassroomStep) {
+      const hasStudents = selectedClassrooms.some(
+        (c) => c.selectedStudentIds.length > 0,
+      );
+      if (!hasStudents) {
+        toast.error(t("dialogs.assignmentDialog.errors.noStudentSelected"));
+        return;
+      }
+    } else if (formData.student_ids.length === 0) {
       toast.error(t("dialogs.assignmentDialog.errors.noStudentSelected"));
       return;
     }
@@ -882,9 +1018,6 @@ export function AssignmentDialog({
         .map((item) => item.contentId);
 
       // 根據練習模式和播放音檔設定決定 answer_mode
-      // - 例句朗讀 (reading) → speaking 模式
-      // - 例句重組 (rearrangement) + 播放音檔 → listening 模式
-      // - 例句重組 (rearrangement) + 不播放音檔 → writing 模式
       let answerMode: "speaking" | "listening" | "writing";
       if (formData.practice_mode === "reading") {
         answerMode = "speaking";
@@ -894,48 +1027,82 @@ export function AssignmentDialog({
         answerMode = "writing";
       }
 
-      // Create one assignment with multiple contents (新架構)
-      const payload = {
+      // 共用的 payload 基礎
+      const basePayload = {
         title: formData.title,
-        description: formData.instructions || undefined, // 欄位名稱改為 description
-        classroom_id: classroomId,
-        content_ids: sortedContentIds, // 多個內容 ID（已排序）
-        student_ids: formData.assign_to_all ? [] : formData.student_ids,
+        description: formData.instructions || undefined,
+        content_ids: sortedContentIds,
         due_date: formData.due_date
           ? formData.due_date.toISOString()
           : undefined,
         start_date: formData.start_date
           ? formData.start_date.toISOString()
           : undefined,
-        answer_mode: answerMode, // 根據練習模式決定
-        // ===== 例句集作答模式設定 =====
+        answer_mode: answerMode,
         practice_mode: formData.practice_mode,
         time_limit_per_question: formData.time_limit_per_question,
         shuffle_questions: formData.shuffle_questions,
         show_answer: formData.show_answer,
         play_audio: formData.play_audio,
-        // ===== 單字集作答模式設定 =====
         target_proficiency: formData.target_proficiency,
         show_translation: formData.show_translation,
         show_word: formData.show_word,
         show_image: formData.show_image,
-        // ===== 機構模式：傳遞機構/學校 ID 以供後端授權驗證 =====
         ...(effectiveOrganizationId && {
           organization_id: effectiveOrganizationId,
         }),
-        ...(effectiveSchoolId && { school_id: effectiveSchoolId }),
       };
 
-      const result = await apiClient.post<{ student_count: number }>(
-        "/api/teachers/assignments/create",
-        payload,
-      );
+      if (needsClassroomStep) {
+        // 多班級模式：per classroom 建立 assignment
+        const classroomsToCreate = selectedClassrooms.filter(
+          (c) => c.selectedStudentIds.length > 0,
+        );
+        let totalStudents = 0;
 
-      toast.success(
-        t("dialogs.assignmentDialog.success.created", {
-          count: result.student_count || 0,
-        }),
-      );
+        for (const classroom of classroomsToCreate) {
+          const payload = {
+            ...basePayload,
+            classroom_id: classroom.id,
+            student_ids: classroom.assignToAll
+              ? []
+              : classroom.selectedStudentIds,
+            school_id: classroom.school_id,
+          };
+          const result = await apiClient.post<{ student_count: number }>(
+            "/api/teachers/assignments/create",
+            payload,
+          );
+          totalStudents += result.student_count || 0;
+        }
+
+        toast.success(
+          t("dialogs.assignmentDialog.success.multiCreated", {
+            classroomCount: classroomsToCreate.length,
+            studentCount: totalStudents,
+          }),
+        );
+      } else {
+        // 單班級模式：原有邏輯
+        const payload = {
+          ...basePayload,
+          classroom_id: classroomId,
+          student_ids: formData.assign_to_all ? [] : formData.student_ids,
+          ...(effectiveSchoolId && { school_id: effectiveSchoolId }),
+        };
+
+        const result = await apiClient.post<{ student_count: number }>(
+          "/api/teachers/assignments/create",
+          payload,
+        );
+
+        toast.success(
+          t("dialogs.assignmentDialog.success.created", {
+            count: result.student_count || 0,
+          }),
+        );
+      }
+
       onSuccess?.();
       handleClose();
     } catch (error: unknown) {
@@ -992,7 +1159,6 @@ export function AssignmentDialog({
       shuffle_questions: false,
       show_answer: false,
       play_audio: false,
-      // 單字集專用設定
       target_proficiency: 80,
       show_translation: true,
       show_word: true,
@@ -1001,18 +1167,28 @@ export function AssignmentDialog({
     setCartItems([]);
     setExpandedPrograms(new Set());
     setExpandedLessons(new Set());
-    setCurrentStep(1);
+    setSelectedClassrooms([]);
+    setActiveClassroomTab(0);
+    setCurrentStep(needsClassroomStep ? 0 : 1);
     setActiveTab(showOrgTab ? "organization" : "template");
     onClose();
   };
 
   const canProceed = () => {
     switch (currentStep) {
+      case 0:
+        return selectedClassrooms.length > 0; // 至少選一個班級
       case 1:
-        return !!formData.practice_mode; // 必須選擇練習模式
+        return !!formData.practice_mode;
       case 2:
         return cartItems.length > 0;
       case 3:
+        // 多班級模式：至少有一個班級選了學生
+        if (needsClassroomStep) {
+          return selectedClassrooms.some(
+            (c) => c.selectedStudentIds.length > 0,
+          );
+        }
         return formData.student_ids.length > 0;
       case 4:
         return formData.title.trim().length > 0;
@@ -1071,23 +1247,51 @@ export function AssignmentDialog({
     // 從 step 2 移動到 step 3 時，檢查驗證
     if (currentStep === 2) {
       if (!checkAudioRequirement()) {
-        return; // 驗證失敗，不繼續
+        return;
       }
     }
-    setCurrentStep(currentStep + 1);
+    let nextStep = currentStep + 1;
+    // 從教材頁面進入且有預選內容時，跳過 step 2（選教材）
+    if (hasPreSelectedContents && needsClassroomStep && nextStep === 2) {
+      nextStep = 3;
+    }
+    setCurrentStep(nextStep);
   };
 
+  // 處理上一步（需跳過被隱藏的步驟）
+  const handlePrevStep = () => {
+    let prevStep = currentStep - 1;
+    if (hasPreSelectedContents && needsClassroomStep && prevStep === 2) {
+      prevStep = 1;
+    }
+    setCurrentStep(prevStep);
+  };
+
+  // 動態步驟列表
   const steps = [
+    ...(needsClassroomStep
+      ? [
+          {
+            number: 0,
+            title: t("dialogs.assignmentDialog.steps.selectClassroom"),
+            icon: Building2,
+          },
+        ]
+      : []),
     {
       number: 1,
       title: t("dialogs.assignmentDialog.steps.practiceMode"),
       icon: Settings,
     },
-    {
-      number: 2,
-      title: t("dialogs.assignmentDialog.steps.selectContent"),
-      icon: BookOpen,
-    },
+    ...(hasPreSelectedContents && needsClassroomStep
+      ? []
+      : [
+          {
+            number: 2,
+            title: t("dialogs.assignmentDialog.steps.selectContent"),
+            icon: BookOpen,
+          },
+        ]),
     {
       number: 3,
       title: t("dialogs.assignmentDialog.steps.selectStudents"),
@@ -1099,6 +1303,8 @@ export function AssignmentDialog({
       icon: FileText,
     },
   ];
+  const lastStepNumber = steps[steps.length - 1].number;
+  const firstStepNumber = steps[0].number;
 
   return (
     <Sheet open={open} onOpenChange={handleClose}>
@@ -1307,7 +1513,13 @@ export function AssignmentDialog({
                   className="flex-1 flex flex-col min-h-0"
                 >
                   <TabsList
-                    className={`grid w-full ${showOrgTab ? "grid-cols-3" : "grid-cols-2"} mb-2`}
+                    className={`grid w-full ${
+                      showOrgTab && classroomId
+                        ? "grid-cols-3"
+                        : showOrgTab || classroomId
+                          ? "grid-cols-2"
+                          : "grid-cols-1"
+                    } mb-2`}
                   >
                     <TabsTrigger
                       value="template"
@@ -1325,13 +1537,15 @@ export function AssignmentDialog({
                         機構教材
                       </TabsTrigger>
                     )}
-                    <TabsTrigger
-                      value="classroom"
-                      className="flex items-center gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
-                    >
-                      <Users className="h-4 w-4" />
-                      班級課程
-                    </TabsTrigger>
+                    {classroomId && (
+                      <TabsTrigger
+                        value="classroom"
+                        className="flex items-center gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                      >
+                        <Users className="h-4 w-4" />
+                        班級課程
+                      </TabsTrigger>
+                    )}
                   </TabsList>
 
                   {/* 個人教材 Tab */}
@@ -2174,6 +2388,96 @@ export function AssignmentDialog({
             </div>
           )}
 
+          {/* Step 0: Select Classrooms (多班級模式) */}
+          {currentStep === 0 && needsClassroomStep && (
+            <div className="h-full flex flex-col">
+              <div className="mb-2">
+                <p className="text-sm text-gray-600">
+                  {t(
+                    "dialogs.assignmentDialog.classroomSelection.description",
+                  )}
+                </p>
+                {selectedClassrooms.length > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="mt-1 bg-blue-50 text-blue-700"
+                  >
+                    {t(
+                      "dialogs.assignmentDialog.classroomSelection.selectedCount",
+                      { count: selectedClassrooms.length },
+                    )}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="flex-1 border rounded-lg bg-gray-50 p-2 overflow-hidden">
+                <ScrollArea className="h-full">
+                  {loadingClassrooms ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                      <span className="ml-2 text-sm text-gray-500">
+                        {t(
+                          "dialogs.assignmentDialog.classroomSelection.loading",
+                        )}
+                      </span>
+                    </div>
+                  ) : classroomOptions.length === 0 ? (
+                    <div className="flex items-center justify-center py-8 text-sm text-gray-500">
+                      {t(
+                        "dialogs.assignmentDialog.classroomSelection.noClassrooms",
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1">
+                      {classroomOptions.map((classroom) => {
+                        const isSelected = selectedClassrooms.some(
+                          (c) => c.id === classroom.id,
+                        );
+                        return (
+                          <Card
+                            key={classroom.id}
+                            onClick={() =>
+                              toggleClassroomSelection(classroom)
+                            }
+                            className={cn(
+                              "p-3 cursor-pointer transition-all",
+                              isSelected
+                                ? "bg-blue-50 border-blue-300 shadow-sm"
+                                : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm",
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                checked={isSelected}
+                                className="data-[state=checked]:bg-blue-600 h-5 w-5 pointer-events-none"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">
+                                  {classroom.name}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {t(
+                                    "dialogs.assignmentDialog.classroomSelection.studentCount",
+                                    {
+                                      count: classroom.student_count,
+                                    },
+                                  )}
+                                </p>
+                              </div>
+                              {isSelected && (
+                                <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />
+                              )}
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </ScrollArea>
+              </div>
+            </div>
+          )}
+
           {/* Step 1: Practice Mode Settings (was Step 2) */}
           {currentStep === 1 && (
             <div className="h-full flex flex-col">
@@ -2761,7 +3065,173 @@ export function AssignmentDialog({
           {/* Step 3: Select Students */}
           {currentStep === 3 && (
             <div className="h-full flex flex-col">
-              {loadingStudents ? (
+              {needsClassroomStep ? (
+                /* === 多班級模式：Tabs 切換班級 === */
+                <>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-sm text-gray-600">
+                      {t(
+                        "dialogs.assignmentDialog.selectStudents.multiDescription",
+                      )}
+                    </p>
+                    <Badge
+                      variant="secondary"
+                      className="bg-blue-50 text-blue-700"
+                    >
+                      {t(
+                        "dialogs.assignmentDialog.selectStudents.willCreate",
+                        {
+                          count: selectedClassrooms.filter(
+                            (c) => c.selectedStudentIds.length > 0,
+                          ).length,
+                        },
+                      )}
+                    </Badge>
+                  </div>
+
+                  {/* Classroom Tabs */}
+                  <Tabs
+                    value={String(activeClassroomTab)}
+                    onValueChange={(v) =>
+                      setActiveClassroomTab(Number(v))
+                    }
+                    className="flex-1 flex flex-col overflow-hidden"
+                  >
+                    <TabsList className="w-full justify-start overflow-x-auto">
+                      {selectedClassrooms.map((classroom, idx) => (
+                        <TabsTrigger
+                          key={classroom.id}
+                          value={String(idx)}
+                          className="text-xs"
+                        >
+                          {classroom.name}
+                          <Badge
+                            variant="secondary"
+                            className="ml-1 text-[10px] px-1"
+                          >
+                            {classroom.selectedStudentIds.length}/
+                            {classroom.students.length}
+                          </Badge>
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+
+                    {selectedClassrooms.map((classroom, idx) => (
+                      <TabsContent
+                        key={classroom.id}
+                        value={String(idx)}
+                        className="flex-1 flex flex-col overflow-hidden mt-2"
+                      >
+                        {/* Quick Select All for this classroom */}
+                        <Card className="p-2 mb-2 bg-blue-50 border-blue-200">
+                          <div
+                            onClick={() =>
+                              toggleClassroomAllStudents(classroom.id)
+                            }
+                            className="flex items-center gap-3 w-full cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={classroom.assignToAll}
+                              className="data-[state=checked]:bg-blue-600 h-5 w-5"
+                            />
+                            <div className="flex-1 text-left">
+                              <p className="text-sm font-semibold text-blue-900">
+                                {t(
+                                  "dialogs.assignmentDialog.selectStudents.assignAll",
+                                )}
+                              </p>
+                              <p className="text-xs text-blue-700">
+                                {t(
+                                  "dialogs.assignmentDialog.selectStudents.totalStudents",
+                                  {
+                                    count: classroom.students.length,
+                                  },
+                                )}
+                              </p>
+                            </div>
+                            {classroom.assignToAll && (
+                              <Badge className="bg-blue-600 text-white">
+                                {t(
+                                  "dialogs.assignmentDialog.selectStudents.allSelected",
+                                )}
+                              </Badge>
+                            )}
+                          </div>
+                        </Card>
+
+                        {/* Student Grid */}
+                        <div className="flex-1 border rounded-lg bg-gray-50 p-2 overflow-hidden">
+                          <ScrollArea className="h-full">
+                            <div className="grid grid-cols-3 gap-1.5 p-1">
+                              {[...classroom.students]
+                                .sort((a, b) => {
+                                  if (
+                                    !a.student_number &&
+                                    !b.student_number
+                                  )
+                                    return 0;
+                                  if (!a.student_number) return 1;
+                                  if (!b.student_number) return -1;
+                                  return a.student_number.localeCompare(
+                                    b.student_number,
+                                    undefined,
+                                    { numeric: true },
+                                  );
+                                })
+                                .map((student) => (
+                                  <div
+                                    key={student.id}
+                                    onClick={() =>
+                                      toggleClassroomStudent(
+                                        classroom.id,
+                                        student.id,
+                                      )
+                                    }
+                                    className={cn(
+                                      "p-2 rounded-md border transition-all text-left relative cursor-pointer",
+                                      classroom.selectedStudentIds.includes(
+                                        student.id,
+                                      )
+                                        ? "bg-blue-50 border-blue-300 shadow-sm"
+                                        : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm",
+                                    )}
+                                  >
+                                    <div className="flex items-start gap-2">
+                                      <Checkbox
+                                        checked={classroom.selectedStudentIds.includes(
+                                          student.id,
+                                        )}
+                                        className="data-[state=checked]:bg-blue-600 mt-0.5 h-4 w-4 pointer-events-none"
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <p className="font-medium text-xs truncate">
+                                          {student.student_number
+                                            ? `${student.student_number}.${student.name}`
+                                            : student.name}
+                                        </p>
+                                        <p className="text-[10px] text-gray-500 truncate">
+                                          {student.email}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    {classroom.selectedStudentIds.includes(
+                                      student.id,
+                                    ) && (
+                                      <div className="absolute top-1 right-1">
+                                        <CheckCircle2 className="h-3 w-3 text-blue-600" />
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                            </div>
+                          </ScrollArea>
+                        </div>
+                      </TabsContent>
+                    ))}
+                  </Tabs>
+                </>
+              ) : loadingStudents ? (
+                /* === 單班級模式：載入中 === */
                 <div className="flex-1 flex items-center justify-center">
                   <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
                   <span className="ml-2 text-sm text-gray-500">
@@ -2769,6 +3239,7 @@ export function AssignmentDialog({
                   </span>
                 </div>
               ) : (
+                /* === 單班級模式：原有邏輯 === */
                 <>
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-sm text-gray-600">
@@ -2818,13 +3289,12 @@ export function AssignmentDialog({
                     </div>
                   </Card>
 
-                  {/* Student Grid - Maximum use of space */}
+                  {/* Student Grid */}
                   <div className="flex-1 border rounded-lg bg-gray-50 p-2 overflow-hidden">
                     <ScrollArea className="h-full">
                       <div className="grid grid-cols-3 gap-1.5 p-1">
                         {[...effectiveStudents]
                           .sort((a, b) => {
-                            // Sort by student_number: students without number go to the end
                             if (!a.student_number && !b.student_number)
                               return 0;
                             if (!a.student_number) return 1;
@@ -3118,13 +3588,13 @@ export function AssignmentDialog({
             <Button
               variant="outline"
               onClick={
-                currentStep === 1
+                currentStep === firstStepNumber
                   ? handleClose
-                  : () => setCurrentStep(currentStep - 1)
+                  : handlePrevStep
               }
               disabled={loading}
             >
-              {currentStep === 1 ? (
+              {currentStep === firstStepNumber ? (
                 <>{t("dialogs.assignmentDialog.buttons.cancel")}</>
               ) : (
                 <>
@@ -3134,9 +3604,14 @@ export function AssignmentDialog({
               )}
             </Button>
 
-            {/* 右側：下一步/建立按鈕 */}
+            {/* 右側：提示 + 下一步/建立按鈕 */}
             <div className="flex items-center gap-2">
-              {currentStep < 4 ? (
+              {needsClassroomStep && selectedClassrooms.length > 1 && currentStep === lastStepNumber && (
+                <span className="text-xs text-gray-500">
+                  {t("dialogs.assignmentDialog.multiClass.willCreate", { count: selectedClassrooms.length })}
+                </span>
+              )}
+              {currentStep < lastStepNumber ? (
                 <Button onClick={handleNextStep} disabled={!canProceed()}>
                   {t("dialogs.assignmentDialog.buttons.next")}
                   <ArrowRight className="h-4 w-4 ml-1" />

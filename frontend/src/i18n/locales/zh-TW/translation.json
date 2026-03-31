@@ -1643,10 +1643,23 @@
     "assignmentDialog": {
       "title": "指派新作業",
       "steps": {
+        "selectClassroom": "選擇班級",
         "selectContent": "選擇內容",
         "practiceMode": "練習模式",
         "selectStudents": "選擇學生",
         "details": "作業詳情"
+      },
+      "classroomSelection": {
+        "description": "選擇要派發作業的班級（可多選）",
+        "selectedCount": "已選 {{count}} 個班級",
+        "loading": "載入班級中...",
+        "noClassrooms": "尚無班級，請先建立班級",
+        "studentCount": "{{count}} 位學生"
+      },
+      "multiClass": {
+        "willCreate": "將建立 {{count}} 份作業",
+        "selectAll": "全選",
+        "deselectAll": "取消全選"
       },
       "quota": {
         "remaining": "配額餘額",
@@ -4791,6 +4804,9 @@
   },
   "contentCopy": {
     "button": "複製到..."
+  },
+  "tree": {
+    "dispatch": "派發"
   },
   "instantPractice": {
     "title": "即刻練習",

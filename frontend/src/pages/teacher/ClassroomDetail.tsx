@@ -22,7 +22,7 @@ import ContentTypeDialog from "@/components/ContentTypeDialog";
 import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
 import VocabularySetPanel from "@/components/VocabularySetPanel";
 import ContentCopyDialog from "@/components/ContentCopyDialog";
-import { AssignmentDialog } from "@/components/AssignmentDialog";
+import { AssignmentDialog, CartItem } from "@/components/AssignmentDialog";
 import { InstantPracticeDialog } from "@/components/InstantPracticeDialog";
 import { AssignmentDetailSheet } from "@/components/AssignmentDetailSheet";
 import BatchGradingModal from "@/components/BatchGradingModal";
@@ -201,6 +201,10 @@ export default function ClassroomDetail({
     title: string;
     type?: string;
   } | null>(null);
+
+  // Dispatch assignment states (from Programs tab)
+  const [showDispatchDialog, setShowDispatchDialog] = useState(false);
+  const [dispatchContents, setDispatchContents] = useState<CartItem[]>([]);
 
   // Assignment states
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
@@ -1699,6 +1703,32 @@ export default function ClassroomDetail({
                       setShowContentCopyDialog(true);
                     }
                   }}
+                  onDispatch={
+                    !isTemplateMode
+                      ? (item, level, parentId) => {
+                          if (level === 2) {
+                            const program = programs.find((p) =>
+                              p.lessons?.some((l) => l.id === parentId),
+                            );
+                            const lesson = program?.lessons?.find(
+                              (l) => l.id === parentId,
+                            );
+                            const cartItem: CartItem = {
+                              contentId: item.id as number,
+                              programName: program?.name || "",
+                              lessonName: lesson?.name || "",
+                              contentTitle: (item.title || item.name) as string,
+                              contentType: (item.type as string) || "",
+                              itemsCount: item.items_count as number | undefined,
+                              order: 0,
+                              hasMissingAudio: false,
+                            };
+                            setDispatchContents([cartItem]);
+                            setShowDispatchDialog(true);
+                          }
+                        }
+                      : undefined
+                  }
                 />
               </TabsContent>
 
@@ -2926,14 +2956,31 @@ export default function ClassroomDetail({
         classroomName={classroom?.name || ""}
       />
 
-      {/* Assignment Dialog */}
+      {/* Assignment Dialog (from Assignments tab - existing) */}
       <AssignmentDialog
         open={showAssignmentDialog}
         onClose={() => setShowAssignmentDialog(false)}
         classroomId={Number(id)}
         students={students}
         onSuccess={() => {
-          fetchAssignments(); // Refresh assignments after creating
+          fetchAssignments();
+        }}
+      />
+
+      {/* Assignment Dispatch Dialog (from Programs tab - with preSelectedContents) */}
+      <AssignmentDialog
+        open={showDispatchDialog}
+        onClose={() => {
+          setShowDispatchDialog(false);
+          setDispatchContents([]);
+        }}
+        classroomId={Number(id)}
+        students={students}
+        preSelectedContents={dispatchContents}
+        onSuccess={() => {
+          setShowDispatchDialog(false);
+          setDispatchContents([]);
+          fetchAssignments();
         }}
       />
 
