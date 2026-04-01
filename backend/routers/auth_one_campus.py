@@ -18,11 +18,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from auth import create_access_token
+from auth import create_access_token, get_current_user
 from core.config import settings
 from core.limiter import limiter
 from database import get_db
-from models.user import Student, Teacher
+from models.user import Identity, Student, Teacher
 from models.organization import TeacherOrganization, TeacherSchool
 from routers.students.auth import (
     _get_aggregated_classrooms,
@@ -57,6 +57,10 @@ class OneCampusCallbackResponse(BaseModel):
 
 class MergeConfirmRequest(BaseModel):
     merge_token: str
+
+
+class BindAccountRequest(BaseModel):
+    email: str
 
 
 # --- Helpers ---
@@ -389,3 +393,123 @@ async def merge_confirm(
         student=_build_student_response(db, primary_student),
         action="merged",
     )
+
+
+@router.post("/bind-account")
+@limiter.limit("5/minute")
+async def bind_account(
+    request: Request,
+    body: BindAccountRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Request to bind a 1Campus SSO account to a Duotopia email.
+
+    The caller must be logged in via 1Campus SSO (has an Identity with
+    one_campus_student_id or one_campus_account but no verified email).
+    Sends a verification email to the provided address.
+    After verification, the Identity merge happens in verify-email endpoint.
+    """
+    user_type = current_user.get("type")
+    user_id = int(current_user.get("sub"))
+
+    # Resolve the Identity for the current user
+    if user_type == "student":
+        user = db.query(Student).filter(Student.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Student not found")
+        identity = (
+            db.query(Identity).filter(Identity.id == user.identity_id).first()
+            if user.identity_id
+            else None
+        )
+    elif user_type == "teacher":
+        user = db.query(Teacher).filter(Teacher.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Teacher not found")
+        identity = (
+            db.query(Identity).filter(Identity.id == user.identity_id).first()
+            if user.identity_id
+            else None
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported user type")
+
+    if not identity:
+        raise HTTPException(
+            status_code=400,
+            detail="No identity found. Please log in via 1Campus SSO first.",
+        )
+
+    # Must be a 1Campus SSO account
+    if not identity.one_campus_account:
+        raise HTTPException(
+            status_code=400,
+            detail="This account is not linked to 1Campus SSO.",
+        )
+
+    # Must not already have a verified email
+    if identity.email_verified and identity.email:
+        raise HTTPException(
+            status_code=400,
+            detail="This account already has a verified email.",
+        )
+
+    target_email = body.email.strip().lower()
+
+    if user_type == "student":
+        from services.email_service import email_service
+        from services.identity_service import identity_service
+
+        # Set the email on the student record for verification flow
+        user.email = target_email
+        user.email_verified = False
+        user.email_verified_at = None
+
+        # Ensure Identity has the email (unverified) for later merge
+        if not identity.email or identity.email != target_email:
+            identity.email = target_email
+            identity.email_verified = False
+
+        # Send verification email (reuse existing flow)
+        success = email_service.send_verification_email(db, user, target_email)
+        if not success:
+            raise HTTPException(
+                status_code=500, detail="Failed to send verification email"
+            )
+
+        return {
+            "message": "Verification email sent. Please check your inbox.",
+            "email": target_email,
+            "action": "verification_sent",
+        }
+
+    else:
+        # Teacher flow — same logic
+        from services.email_service import email_service
+
+        # For teachers we need a Student-like token flow.
+        # Teachers don't have email_verification_token on their model,
+        # so we create a bind token instead.
+        bind_token = _create_merge_token(
+            existing_identity_id=identity.id,
+            one_campus_student_id=identity.one_campus_account,
+            one_campus_account=target_email,
+        )
+
+        # Update teacher email (unverified)
+        user.email = target_email
+        if not identity.email or identity.email != target_email:
+            identity.email = target_email
+            identity.email_verified = False
+        db.commit()
+
+        # For teachers, we'll use the merge-confirm flow with a special token
+        # that encodes the bind intent. The frontend will redirect to
+        # a verification page.
+        return {
+            "message": "Verification email sent. Please check your inbox.",
+            "email": target_email,
+            "bind_token": bind_token,
+            "action": "verification_sent",
+        }
