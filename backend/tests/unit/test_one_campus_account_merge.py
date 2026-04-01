@@ -73,13 +73,14 @@ class TestStudentEmailAutoMerge:
         db.add(unverified_identity)
         db.flush()
 
-        Student(
+        unverified_student = Student(
             name="Unverified Student",
             email="unverified@school.edu.tw",
             identity_id=unverified_identity.id,
             is_primary_account=True,
             is_active=True,
         )
+        db.add(unverified_student)
         db.commit()
 
         identity, student, action = OneCampusAccountService.find_or_create_student(
@@ -206,12 +207,13 @@ class TestTeacherEmailAutoMerge:
         db.add(unverified)
         db.flush()
 
-        Teacher(
+        unverified_teacher = Teacher(
             name="Unverified Teacher",
             email="unteacher@school.edu.tw",
             identity_id=unverified.id,
             is_active=True,
         )
+        db.add(unverified_teacher)
         db.commit()
 
         identity, teacher, action = OneCampusAccountService.find_or_create_teacher(

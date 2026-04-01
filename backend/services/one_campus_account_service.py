@@ -129,13 +129,6 @@ class OneCampusAccountService:
                 .first()
             )
             if email_identity:
-                # Merge 1Campus fields into existing email-verified Identity
-                email_identity.one_campus_student_id = one_campus_student_id
-                email_identity.one_campus_account = one_campus_account
-                if national_id_hash:
-                    email_identity.national_id_hash = national_id_hash
-                db.commit()
-
                 student = (
                     db.query(Student)
                     .filter(
@@ -146,6 +139,12 @@ class OneCampusAccountService:
                     .first()
                 )
                 if student:
+                    # Only write 1Campus fields after confirming student exists
+                    email_identity.one_campus_student_id = one_campus_student_id
+                    email_identity.one_campus_account = one_campus_account
+                    if national_id_hash:
+                        email_identity.national_id_hash = national_id_hash
+                    db.commit()
                     logger.info(
                         "1Campus SSO: auto-merged student by email match, "
                         "student_id=%s, identity_id=%s, email=%s",
@@ -326,7 +325,7 @@ class OneCampusAccountService:
                     .first()
                 )
                 if teacher:
-                    # Merge 1Campus fields into existing email-verified Identity
+                    # Only write 1Campus fields after confirming teacher exists
                     email_identity.one_campus_account = one_campus_account
                     if national_id_hash:
                         email_identity.national_id_hash = national_id_hash
