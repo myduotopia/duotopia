@@ -68,21 +68,38 @@ def _get_classrooms_for_student(db: Session, student_id: int) -> list:
 
 
 def _get_aggregated_classrooms(db: Session, student: Student) -> list:
-    """取得學生的所有班級（含跨帳號已驗證 email 的 sibling students）"""
+    """取得學生的所有班級（含跨帳號 identity_id 或已驗證 email 的 sibling students）"""
     classrooms_list = _get_classrooms_for_student(db, student.id)
+    seen_student_ids = {student.id}
 
-    if student.email_verified and student.email:
-        sibling_students = (
+    # Path 1: identity_id — 同一 Identity 下所有 students 的班級
+    if student.identity_id:
+        identity_siblings = (
             db.query(Student)
             .filter(
-                Student.email == student.email,
-                Student.email_verified.is_(True),
+                Student.identity_id == student.identity_id,
                 Student.id != student.id,
                 Student.is_active.is_(True),
             )
             .all()
         )
-        for sibling in sibling_students:
+        for sibling in identity_siblings:
+            seen_student_ids.add(sibling.id)
+            classrooms_list.extend(_get_classrooms_for_student(db, sibling.id))
+
+    # Path 2: email — 已驗證 email 相同的 students（排除已透過 identity 聚合的）
+    if student.email_verified and student.email:
+        email_siblings = (
+            db.query(Student)
+            .filter(
+                Student.email == student.email,
+                Student.email_verified.is_(True),
+                Student.id.notin_(seen_student_ids),
+                Student.is_active.is_(True),
+            )
+            .all()
+        )
+        for sibling in email_siblings:
             classrooms_list.extend(_get_classrooms_for_student(db, sibling.id))
 
     return classrooms_list
