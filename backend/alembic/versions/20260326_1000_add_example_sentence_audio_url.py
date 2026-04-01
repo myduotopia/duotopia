@@ -27,4 +27,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Intentionally left empty — column removal is handled manually if needed
     pass
