@@ -136,8 +136,8 @@ class AudioUploadService:
             # 讀取檔案內容
             content = await file.read()
 
-            # 檢查檔案大小（至少 5KB，最多 2MB）
-            min_file_size = 5 * 1024  # 5KB
+            # 檢查檔案大小（至少 1KB，最多 2MB）
+            min_file_size = 1 * 1024  # 1KB
             if len(content) < min_file_size:
                 # 記錄到 BigQuery
                 from services.bigquery_logger import get_bigquery_logger
