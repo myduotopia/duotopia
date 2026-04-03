@@ -15,13 +15,18 @@ import os
 import json
 import re
 import logging
+import asyncio
 from typing import Optional, Literal
 
 logger = logging.getLogger(__name__)
 
 # Model name constants
+FAST_MODEL = "gemini-2.0-flash"  # 快速模型，適合簡單翻譯等任務
 FLASH_MODEL = "gemini-2.5-flash"
 PRO_MODEL = "gemini-2.5-pro"
+
+# Default timeout for Vertex AI calls (seconds)
+VERTEX_AI_TIMEOUT = 60
 
 
 class VertexAIService:
@@ -32,6 +37,7 @@ class VertexAIService:
         self.location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
         self._initialized = False
         # Cached models without system_instruction (for reuse)
+        self._fast_model = None
         self._flash_model = None
         self._pro_model = None
 
@@ -53,11 +59,16 @@ class VertexAIService:
 
     def _get_model(
         self,
-        model_type: Literal["flash", "pro"] = "flash",
+        model_type: Literal["fast", "flash", "pro"] = "flash",
         system_instruction: Optional[str] = None,
     ):
         """
         取得 GenerativeModel 實例
+
+        model_type:
+        - "fast": gemini-2.0-flash（快速，適合翻譯等簡單任務）
+        - "flash": gemini-2.5-flash（平衡，適合例句生成等需推理的任務）
+        - "pro": gemini-2.5-pro（複雜分析）
 
         當有 system_instruction 時，建立新的 model 實例（Gemini 原生支援）。
         無 system_instruction 時，使用 cached model 以提升效能。
@@ -65,14 +76,22 @@ class VertexAIService:
         self._ensure_initialized()
         from vertexai.generative_models import GenerativeModel
 
-        model_name = FLASH_MODEL if model_type == "flash" else PRO_MODEL
+        model_name_map = {
+            "fast": FAST_MODEL,
+            "flash": FLASH_MODEL,
+            "pro": PRO_MODEL,
+        }
+        model_name = model_name_map.get(model_type, FLASH_MODEL)
 
         if system_instruction:
-            # 每次建立新 model，因為 system_instruction 是 constructor 參數
             return GenerativeModel(model_name, system_instruction=system_instruction)
 
         # 無 system_instruction 時使用 cached model
-        if model_type == "flash":
+        if model_type == "fast":
+            if self._fast_model is None:
+                self._fast_model = GenerativeModel(model_name)
+            return self._fast_model
+        elif model_type == "flash":
             if self._flash_model is None:
                 self._flash_model = GenerativeModel(model_name)
             return self._flash_model
@@ -84,10 +103,11 @@ class VertexAIService:
     async def generate_text(
         self,
         prompt: str,
-        model_type: Literal["flash", "pro"] = "flash",
+        model_type: Literal["fast", "flash", "pro"] = "flash",
         max_tokens: int = 1000,
         temperature: float = 0.7,
         system_instruction: Optional[str] = None,
+        timeout: Optional[int] = VERTEX_AI_TIMEOUT,
     ) -> str:
         """
         統一的文字生成介面
@@ -113,12 +133,21 @@ class VertexAIService:
 
         try:
             logger.info(f"Vertex AI generate_text: calling model (type={model_type})")
-            response = await model.generate_content_async(
-                prompt,
-                generation_config=config,
+            response = await asyncio.wait_for(
+                model.generate_content_async(
+                    prompt,
+                    generation_config=config,
+                ),
+                timeout=timeout,
             )
             logger.info("Vertex AI generate_text: response received")
             return response.text
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Vertex AI generate_text timed out after {timeout}s "
+                f"(model_type={model_type})"
+            )
+            raise TimeoutError(f"Vertex AI call timed out after {timeout} seconds")
         except Exception as e:
             logger.error(f"Vertex AI generation failed: {e}", exc_info=True)
             raise
@@ -126,10 +155,11 @@ class VertexAIService:
     async def generate_json(
         self,
         prompt: str,
-        model_type: Literal["flash", "pro"] = "flash",
+        model_type: Literal["fast", "flash", "pro"] = "flash",
         max_tokens: int = 1000,
         temperature: float = 0.3,
         system_instruction: Optional[str] = None,
+        timeout: Optional[int] = VERTEX_AI_TIMEOUT,
     ) -> dict:
         """
         生成 JSON 格式的回應
@@ -156,9 +186,12 @@ class VertexAIService:
 
         try:
             logger.info(f"Vertex AI generate_json: calling model (type={model_type})")
-            response = await model.generate_content_async(
-                prompt,
-                generation_config=config,
+            response = await asyncio.wait_for(
+                model.generate_content_async(
+                    prompt,
+                    generation_config=config,
+                ),
+                timeout=timeout,
             )
             logger.info("Vertex AI generate_json: response received")
 
@@ -210,6 +243,12 @@ class VertexAIService:
                     return json.loads(json_content)
                 else:
                     raise
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Vertex AI generate_json timed out after {timeout}s "
+                f"(model_type={model_type})"
+            )
+            raise TimeoutError(f"Vertex AI call timed out after {timeout} seconds")
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON from Vertex AI response: {e}")
             logger.error(f"Raw response: {response.text if response else 'None'}")

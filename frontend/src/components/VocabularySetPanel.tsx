@@ -3373,99 +3373,143 @@ export default function VocabularySetPanel({
           totalSteps,
         });
 
-        for (let i = 0; i < itemsToProcess.length; i++) {
-          if (batchPauseRef.current) {
-            toast.info(
-              `${t("contentEditor.messages.batchPaused")} (${completedItems}/${totalItems})`,
-            );
-            break;
+        // --- Helper: retry with backoff ---
+        const withRetry = async <T,>(
+          fn: () => Promise<T>,
+          retries = 2,
+          delays = [1000, 3000],
+        ): Promise<T> => {
+          for (let attempt = 0; ; attempt++) {
+            try {
+              return await fn();
+            } catch (err) {
+              if (attempt >= retries) throw err;
+              await new Promise((r) => setTimeout(r, delays[attempt] || 3000));
+            }
           }
+        };
 
-          const idx = itemsToProcess[i];
+        // --- Classify items by what they need ---
+        const needsTranslation: number[] = [];
+        const needsTTS: number[] = [];
+        const needsExamples: number[] = [];
+
+        for (const idx of itemsToProcess) {
           const row = currentRows[idx];
-          const text = row.text;
-          const rowSteps = getStepsForRow(row);
-          if (rowSteps === 0) continue;
+          if (autoTranslate) {
+            const hasTranslation = (() => {
+              if (batchLang === "chinese") return !!row.definition;
+              if (batchLang === "english") return !!row.translation;
+              if (batchLang === "japanese") return !!row.japanese_translation;
+              if (batchLang === "korean") return !!row.korean_translation;
+              return !!row.definition;
+            })();
+            if (!hasTranslation) needsTranslation.push(idx);
+          }
+          if (autoTTS && !row.audioUrl && !row.audio_url) needsTTS.push(idx);
+          if (shouldGenerateExamples && !row.example_sentence?.trim())
+            needsExamples.push(idx);
+        }
+
+        // --- Phase 1: Translation (parallel batch) ---
+        if (needsTranslation.length > 0 && !batchPauseRef.current) {
+          const textsToTranslate = needsTranslation.map(
+            (idx) => currentRows[idx].text,
+          );
 
           try {
-            // 補齊翻譯（如果缺少）
-            if (autoTranslate) {
-              const hasTranslation = (() => {
-                if (batchLang === "chinese") return !!row.definition;
-                if (batchLang === "english") return !!row.translation;
-                if (batchLang === "japanese") return !!row.japanese_translation;
-                if (batchLang === "korean") return !!row.korean_translation;
-                return !!row.definition;
-              })();
-
-              if (!hasTranslation) {
-                if (batchLang === "chinese") {
-                  const posResponse = await apiClient.batchTranslateWithPos(
-                    [text],
-                    batchLangCode,
+            if (batchLang === "chinese") {
+              const posResponse = await withRetry(() =>
+                apiClient.batchTranslateWithPos(
+                  textsToTranslate,
+                  batchLangCode,
+                ),
+              );
+              const results = posResponse.results || [];
+              results.forEach(
+                (
+                  result: {
+                    translation?: string;
+                    parts_of_speech?: string[];
+                  },
+                  i: number,
+                ) => {
+                  if (!result) return;
+                  const idx = needsTranslation[i];
+                  const parsed = extractFirstDefinition(
+                    result.translation || "",
                   );
-                  const results = posResponse.results || [];
-                  if (results[0]) {
-                    const parsed = extractFirstDefinition(
-                      results[0].translation || "",
+                  currentRows[idx].definition = parsed.text;
+                  if (
+                    result.parts_of_speech &&
+                    result.parts_of_speech.length > 0
+                  ) {
+                    currentRows[idx].partsOfSpeech = convertAbbreviatedPOS(
+                      result.parts_of_speech,
                     );
-                    currentRows[idx].definition = parsed.text;
-                    if (results[0].parts_of_speech?.length > 0) {
-                      currentRows[idx].partsOfSpeech = convertAbbreviatedPOS(
-                        results[0].parts_of_speech,
-                      );
-                    } else if (parsed.pos) {
-                      currentRows[idx].partsOfSpeech = convertAbbreviatedPOS([
-                        parsed.pos,
-                      ]);
-                    }
+                  } else if (parsed.pos) {
+                    currentRows[idx].partsOfSpeech = convertAbbreviatedPOS([
+                      parsed.pos,
+                    ]);
                   }
-                } else if (batchLang !== "other") {
-                  const translateResponse = await apiClient.batchTranslate(
-                    [text],
-                    batchLangCode,
-                  );
-                  const translations =
-                    (translateResponse as { translations?: string[] })
-                      .translations || [];
-                  if (translations[0]) {
-                    const parsed = extractFirstDefinition(translations[0]);
-                    if (batchLang === "english")
-                      currentRows[idx].translation = parsed.text;
-                    else if (batchLang === "japanese")
-                      currentRows[idx].japanese_translation = parsed.text;
-                    else if (batchLang === "korean")
-                      currentRows[idx].korean_translation = parsed.text;
-                    if (parsed.pos)
-                      currentRows[idx].partsOfSpeech = convertAbbreviatedPOS([
-                        parsed.pos,
-                      ]);
-                  }
-                }
-                completedSteps++;
-                setBatchProgress({
-                  completedItems,
-                  totalItems,
-                  completedSteps,
-                  totalSteps,
-                });
-                setRows([...currentRows]);
-              }
+                },
+              );
+            } else if (batchLang !== "other") {
+              const translateResponse = await withRetry(() =>
+                apiClient.batchTranslate(textsToTranslate, batchLangCode),
+              );
+              const translations =
+                (translateResponse as { translations?: string[] })
+                  .translations || [];
+              translations.forEach((trans: string, i: number) => {
+                if (!trans) return;
+                const idx = needsTranslation[i];
+                const parsed = extractFirstDefinition(trans);
+                if (batchLang === "english")
+                  currentRows[idx].translation = parsed.text;
+                else if (batchLang === "japanese")
+                  currentRows[idx].japanese_translation = parsed.text;
+                else if (batchLang === "korean")
+                  currentRows[idx].korean_translation = parsed.text;
+                if (parsed.pos)
+                  currentRows[idx].partsOfSpeech = convertAbbreviatedPOS([
+                    parsed.pos,
+                  ]);
+              });
             }
+          } catch (error) {
+            console.error("Batch translation failed:", error);
+          }
 
-            // 補齊 TTS（如果缺少）— 每題重新解析 Random
-            if (autoTTS && !row.audioUrl && !row.audio_url) {
+          completedSteps += needsTranslation.length;
+          setRows([...currentRows]);
+          setBatchProgress({
+            completedItems,
+            totalItems,
+            completedSteps,
+            totalSteps,
+          });
+        }
+
+        // --- Phase 2: TTS (parallel per-item) ---
+        if (needsTTS.length > 0 && !batchPauseRef.current) {
+          const ttsResults = await Promise.allSettled(
+            needsTTS.map((idx) => {
+              const text = currentRows[idx].text;
               const { voice, rate } = getVoiceAndRate(
                 batchTTSAccent,
                 batchTTSGender,
                 batchTTSSpeed,
               );
-              const ttsResult = await apiClient.generateTTS(
-                text,
-                voice,
-                rate,
-                "+0%",
+              return withRetry(() =>
+                apiClient.generateTTS(text, voice, rate, "+0%"),
               );
+            }),
+          );
+
+          ttsResults.forEach((result, i) => {
+            if (result.status === "fulfilled") {
+              const ttsResult = result.value;
               if (
                 ttsResult &&
                 typeof ttsResult === "object" &&
@@ -3475,61 +3519,20 @@ export default function VocabularySetPanel({
                 const fullUrl = audioUrl?.startsWith("http")
                   ? audioUrl
                   : `${import.meta.env.VITE_API_URL}${audioUrl}`;
+                const idx = needsTTS[i];
                 currentRows[idx].audioUrl = fullUrl;
                 currentRows[idx].audio_url = fullUrl;
               }
-              completedSteps++;
-              setBatchProgress({
-                completedItems,
-                totalItems,
-                completedSteps,
-                totalSteps,
-              });
-              setRows([...currentRows]);
+            } else {
+              console.error(
+                `TTS failed for "${currentRows[needsTTS[i]].text}":`,
+                result.reason,
+              );
             }
+          });
 
-            // 補齊例句（如果缺少）
-            if (shouldGenerateExamples && !row.example_sentence?.trim()) {
-              const response = await apiClient.generateSentences({
-                words: [text],
-                definitions: [currentRows[idx].definition || ""],
-                lesson_id: lessonId,
-                level: aiGenerateLevel,
-                prompt: aiGeneratePrompt || undefined,
-                translate_to: exampleTargetLang || undefined,
-                parts_of_speech: [currentRows[idx].partsOfSpeech || []],
-              });
-              const sentencesData =
-                (
-                  response as {
-                    sentences?: Array<{
-                      sentence?: string;
-                      translation?: string;
-                    }>;
-                  }
-                ).sentences || [];
-              if (sentencesData[0]) {
-                currentRows[idx].example_sentence =
-                  sentencesData[0].sentence || "";
-                if (sentencesData[0].translation) {
-                  currentRows[idx].example_sentence_translation =
-                    sentencesData[0].translation;
-                }
-              }
-              completedSteps++;
-              setBatchProgress({
-                completedItems,
-                totalItems,
-                completedSteps,
-                totalSteps,
-              });
-              setRows([...currentRows]);
-            }
-          } catch (error) {
-            console.error(`Error backfilling word "${text}":`, error);
-          }
-
-          completedItems++;
+          completedSteps += needsTTS.length;
+          setRows([...currentRows]);
           setBatchProgress({
             completedItems,
             totalItems,
@@ -3537,6 +3540,63 @@ export default function VocabularySetPanel({
             totalSteps,
           });
         }
+
+        // --- Phase 3: Example sentences (parallel batch) ---
+        if (needsExamples.length > 0 && !batchPauseRef.current) {
+          const exWords = needsExamples.map((idx) => currentRows[idx].text);
+          const exDefs = needsExamples.map(
+            (idx) => currentRows[idx].definition || "",
+          );
+          const exPOS = needsExamples.map(
+            (idx) => currentRows[idx].partsOfSpeech || [],
+          );
+
+          try {
+            const response = await withRetry(() =>
+              apiClient.generateSentences({
+                words: exWords,
+                definitions: exDefs,
+                lesson_id: lessonId,
+                level: aiGenerateLevel,
+                prompt: aiGeneratePrompt || undefined,
+                translate_to: exampleTargetLang || undefined,
+                parts_of_speech: exPOS,
+              }),
+            );
+            const sentencesData =
+              (
+                response as {
+                  sentences?: Array<{
+                    sentence?: string;
+                    translation?: string;
+                  }>;
+                }
+              ).sentences || [];
+            sentencesData.forEach(
+              (s: { sentence?: string; translation?: string }, i: number) => {
+                if (!s) return;
+                const idx = needsExamples[i];
+                currentRows[idx].example_sentence = s.sentence || "";
+                if (s.translation) {
+                  currentRows[idx].example_sentence_translation = s.translation;
+                }
+              },
+            );
+          } catch (error) {
+            console.error("Batch example sentence generation failed:", error);
+          }
+
+          completedSteps += needsExamples.length;
+          setRows([...currentRows]);
+          setBatchProgress({
+            completedItems,
+            totalItems,
+            completedSteps,
+            totalSteps,
+          });
+        }
+
+        completedItems = totalItems;
 
         toast.success(
           t("vocabularySet.messages.itemsAdded", {
