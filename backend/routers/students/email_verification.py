@@ -207,9 +207,7 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 
     # Path B: If this Identity is a 1Campus SSO account, perform bind/merge
     bound_identity = None
-    if identity and identity.one_campus_account:
-        from models.user import Identity as IdentityModel
-
+    if identity and identity.one_campus_account and identity.email_verified:
         bound_identity = identity_service.bind_1campus_identity_to_email(
             db, identity, student.email, user_type="student"
         )
