@@ -6,6 +6,7 @@ Provides:
 """
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -15,14 +16,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
-from auth import create_access_token
+from auth import create_access_token, get_current_user
 from core.config import settings
 from core.limiter import limiter
 from database import get_db
-from models.user import Student, Teacher
+from models.user import Identity, Student, Teacher
 from models.organization import TeacherOrganization, TeacherSchool
 from routers.students.auth import (
     _get_aggregated_classrooms,
@@ -57,6 +58,10 @@ class OneCampusCallbackResponse(BaseModel):
 
 class MergeConfirmRequest(BaseModel):
     merge_token: str
+
+
+class BindAccountRequest(BaseModel):
+    email: EmailStr
 
 
 # --- Helpers ---
@@ -100,7 +105,7 @@ def _verify_merge_token(token: str) -> dict:
 
     try:
         payload_dict = json.loads(base64.urlsafe_b64decode(payload_b64))
-    except (json.JSONDecodeError, UnicodeDecodeError, KeyError) as e:
+    except (json.JSONDecodeError, UnicodeDecodeError, KeyError, binascii.Error) as e:
         raise ValueError(f"Invalid merge token payload: {e}")
 
     if payload_dict.get("exp", 0) < int(time.time()):
@@ -389,3 +394,217 @@ async def merge_confirm(
         student=_build_student_response(db, primary_student),
         action="merged",
     )
+
+
+@router.get("/verify-teacher-bind")
+@limiter.limit("10/minute")
+async def verify_teacher_bind(
+    request: Request,
+    token: str = Query(..., description="Bind verification token"),
+    db: Session = Depends(get_db),
+):
+    """Verify teacher bind token and perform Identity merge.
+
+    Called when the teacher clicks the verification link in the bind email.
+    The token encodes: identity_id, one_campus_account, target_email.
+    """
+    try:
+        token_data = _verify_merge_token(token)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    identity_id = token_data["existing_identity_id"]
+    target_email = token_data["one_campus_account"]  # target email stored here
+
+    # Find the Identity
+    sso_identity = db.get(Identity, identity_id)
+    if not sso_identity or not sso_identity.is_active:
+        raise HTTPException(status_code=404, detail="Identity not found")
+
+    # Find the teacher with this bind token
+    teacher = (
+        db.query(Teacher)
+        .filter(
+            Teacher.identity_id == identity_id,
+            Teacher.email_verification_token == token,
+            Teacher.is_active.is_(True),
+        )
+        .first()
+    )
+    if not teacher:
+        raise HTTPException(status_code=400, detail="Invalid or expired bind token")
+
+    # Perform the bind
+    from services.identity_service import identity_service
+
+    surviving_identity = identity_service.bind_1campus_identity_to_email(
+        db, sso_identity, target_email, user_type="teacher"
+    )
+
+    # Update teacher email — check uniqueness first to avoid constraint violation
+    existing_teacher_with_email = (
+        db.query(Teacher)
+        .filter(
+            Teacher.email == target_email,
+            Teacher.id != teacher.id,
+            Teacher.is_active.is_(True),
+        )
+        .first()
+    )
+    if not existing_teacher_with_email:
+        teacher.email = target_email
+    teacher.email_verified = True
+    teacher.email_verified_at = datetime.now(timezone.utc)
+    teacher.email_verification_token = None
+
+    # Update Identity email verification
+    surviving_identity.email = target_email
+    surviving_identity.email_verified = True
+    surviving_identity.email_verified_at = datetime.now(timezone.utc)
+
+    db.commit()
+
+    logger.info(
+        "Teacher bind verified: teacher_id=%s, email=%s, identity_id=%s",
+        teacher.id,
+        target_email,
+        surviving_identity.id,
+    )
+
+    return {
+        "message": "帳號綁定成功",
+        "teacher_name": teacher.name,
+        "email": target_email,
+        "verified": True,
+    }
+
+
+@router.post("/bind-account")
+@limiter.limit("5/minute")
+async def bind_account(
+    request: Request,
+    body: BindAccountRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Request to bind a 1Campus SSO account to a Duotopia email.
+
+    The caller must be logged in via 1Campus SSO (has an Identity with
+    one_campus_student_id or one_campus_account but no verified email).
+    Sends a verification email to the provided address.
+    After verification, the Identity merge happens in verify-email endpoint.
+    """
+    user_type = current_user.get("type")
+    user_id = int(current_user.get("sub"))
+
+    # Resolve the Identity for the current user
+    if user_type == "student":
+        user = db.query(Student).filter(Student.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Student not found")
+        identity = (
+            db.query(Identity).filter(Identity.id == user.identity_id).first()
+            if user.identity_id
+            else None
+        )
+    elif user_type == "teacher":
+        user = db.query(Teacher).filter(Teacher.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Teacher not found")
+        identity = (
+            db.query(Identity).filter(Identity.id == user.identity_id).first()
+            if user.identity_id
+            else None
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported user type")
+
+    if not identity:
+        raise HTTPException(
+            status_code=400,
+            detail="No identity found. Please log in via 1Campus SSO first.",
+        )
+
+    # Must be a 1Campus SSO account
+    if not identity.one_campus_account:
+        raise HTTPException(
+            status_code=400,
+            detail="This account is not linked to 1Campus SSO.",
+        )
+
+    # Must not already have a verified email
+    if identity.email_verified and identity.email:
+        raise HTTPException(
+            status_code=400,
+            detail="This account already has a verified email.",
+        )
+
+    target_email = body.email.strip().lower()
+
+    if user_type == "student":
+        from services.email_service import email_service
+
+        # Set unverified email on student for the existing verification flow.
+        # send_verification_email() stores the token and commits internally.
+        # The email is marked unverified — actual bind/merge happens in
+        # verify-email endpoint after the user clicks the link.
+        user.email = target_email
+        user.email_verified = False
+        user.email_verified_at = None
+
+        # Ensure Identity has the email (unverified) for later merge
+        if not identity.email or identity.email != target_email:
+            identity.email = target_email
+            identity.email_verified = False
+        db.flush()
+
+        # Send verification email (commits internally)
+        success = email_service.send_verification_email(db, user, target_email)
+        if not success:
+            raise HTTPException(
+                status_code=500, detail="Failed to send verification email"
+            )
+
+        return {
+            "message": "Verification email sent. Please check your inbox.",
+            "email": target_email,
+            "action": "verification_sent",
+        }
+
+    else:
+        # Teacher flow — Do NOT overwrite teacher.email or identity.email
+        # before verification. Use a signed bind token that encodes the
+        # target email, store it as the teacher's verification token,
+        # and send the actual email.
+        from services.email_service import email_service
+
+        # Create bind token. Field mapping note: we reuse _create_merge_token
+        # with swapped semantics — "one_campus_student_id" carries the 1Campus
+        # account, and "one_campus_account" carries the target Duotopia email.
+        # verify_teacher_bind reads token_data["one_campus_account"] as target.
+        bind_token = _create_merge_token(
+            existing_identity_id=identity.id,
+            one_campus_student_id=identity.one_campus_account or "",
+            one_campus_account=target_email,
+        )
+
+        # Store bind token on teacher and send verification email
+        user.email_verification_token = bind_token
+        user.email_verification_sent_at = datetime.now(timezone.utc)
+        db.commit()
+
+        success = email_service.send_teacher_bind_email(
+            target_email=target_email,
+            teacher_name=user.name,
+            bind_token=bind_token,
+        )
+        if not success:
+            raise HTTPException(
+                status_code=500, detail="Failed to send verification email"
+            )
+
+        return {
+            "message": "Verification email sent. Please check your inbox.",
+            "email": target_email,
+            "action": "verification_sent",
+        }

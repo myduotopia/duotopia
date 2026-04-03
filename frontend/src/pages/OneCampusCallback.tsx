@@ -1,8 +1,16 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Loader2, AlertCircle, Home, MergeIcon } from "lucide-react";
+import {
+  Loader2,
+  AlertCircle,
+  Home,
+  MergeIcon,
+  Link2,
+  Mail,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -21,9 +29,9 @@ export default function OneCampusCallback() {
   const { login: studentLogin } = useStudentAuthStore();
   const { login: teacherLogin } = useTeacherAuthStore();
 
-  const [status, setStatus] = useState<"loading" | "error" | "merge_prompt">(
-    "loading",
-  );
+  const [status, setStatus] = useState<
+    "loading" | "error" | "merge_prompt" | "bind_prompt" | "bind_sent"
+  >("loading");
   const [errorMessage, setErrorMessage] = useState("");
   const [mergeInfo, setMergeInfo] = useState<{
     merge_token: string;
@@ -33,6 +41,11 @@ export default function OneCampusCallback() {
     message: string;
   } | null>(null);
   const [merging, setMerging] = useState(false);
+  const [bindEmail, setBindEmail] = useState("");
+  const [bindLoading, setBindLoading] = useState(false);
+  const [bindRoleType, setBindRoleType] = useState<"student" | "teacher">(
+    "student",
+  );
 
   useEffect(() => {
     const code = searchParams.get("code");
@@ -80,6 +93,11 @@ export default function OneCampusCallback() {
             is_demo: data.user.is_demo,
             is_admin: data.user.is_admin,
           });
+          if (data.action === "created") {
+            setBindRoleType("teacher");
+            setStatus("bind_prompt");
+            return;
+          }
           navigate("/teacher/dashboard", { replace: true });
         } else if (data.student) {
           studentLogin(data.access_token, {
@@ -98,6 +116,11 @@ export default function OneCampusCallback() {
             classrooms: data.student.classrooms,
             classrooms_count: data.student.classrooms_count,
           });
+          if (data.action === "created") {
+            setBindRoleType("student");
+            setStatus("bind_prompt");
+            return;
+          }
           navigate("/student/dashboard", { replace: true });
         }
       }
@@ -170,6 +193,48 @@ export default function OneCampusCallback() {
     navigate("/student/login", { replace: true });
   }
 
+  async function handleBindSubmit() {
+    if (!bindEmail.trim()) return;
+    setBindLoading(true);
+    try {
+      await api.post("/api/auth/1campus/bind-account", {
+        email: bindEmail.trim(),
+      });
+      setStatus("bind_sent");
+    } catch (err: unknown) {
+      if (
+        err &&
+        typeof err === "object" &&
+        "response" in err &&
+        err.response &&
+        typeof err.response === "object" &&
+        "data" in err.response
+      ) {
+        const resp = err.response as { data: { detail?: string } };
+        setErrorMessage(
+          resp.data.detail ||
+            t(
+              "oneCampus.errors.generic",
+              "Operation failed. Please try again.",
+            ),
+        );
+      } else {
+        setErrorMessage(
+          t("oneCampus.errors.generic", "Operation failed. Please try again."),
+        );
+      }
+      setStatus("error");
+    } finally {
+      setBindLoading(false);
+    }
+  }
+
+  function handleBindSkip() {
+    const dashboardPath =
+      bindRoleType === "teacher" ? "/teacher/dashboard" : "/student/dashboard";
+    navigate(dashboardPath, { replace: true });
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
       <Link
@@ -203,6 +268,83 @@ export default function OneCampusCallback() {
               className="w-full"
             >
               {t("oneCampus.errors.backToLogin", "Back to Login")}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {status === "bind_prompt" && (
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <Link2 className="h-12 w-12 text-blue-500 mx-auto mb-2" />
+            <CardTitle>
+              {t("oneCampus.bind.title", "Bind Duotopia Account")}
+            </CardTitle>
+            <CardDescription>
+              {t(
+                "oneCampus.bind.description",
+                "If you already have a Duotopia account, enter your email to link it with your school account.",
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Input
+                type="email"
+                placeholder={t(
+                  "oneCampus.bind.emailPlaceholder",
+                  "your-email@example.com",
+                )}
+                value={bindEmail}
+                onChange={(e) => setBindEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleBindSubmit();
+                }}
+              />
+            </div>
+
+            <Button
+              onClick={handleBindSubmit}
+              disabled={bindLoading || !bindEmail.trim()}
+              className="w-full"
+            >
+              {bindLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Mail className="h-4 w-4 mr-2" />
+              )}
+              {t("oneCampus.bind.sendVerification", "Send Verification Email")}
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={handleBindSkip}
+              className="w-full"
+            >
+              {t("oneCampus.bind.skip", "Skip for now")}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {status === "bind_sent" && (
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <Mail className="h-12 w-12 text-green-500 mx-auto mb-2" />
+            <CardTitle>
+              {t("oneCampus.bind.sentTitle", "Verification Email Sent")}
+            </CardTitle>
+            <CardDescription>
+              {t(
+                "oneCampus.bind.sentDescription",
+                "We've sent a verification email to {{email}}. Please check your inbox and click the verification link.",
+                { email: bindEmail },
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <Button onClick={handleBindSkip} className="w-full">
+              {t("oneCampus.bind.continue", "Continue to Dashboard")}
             </Button>
           </CardContent>
         </Card>

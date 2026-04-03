@@ -1368,6 +1368,16 @@
       "newAccount": "學校帳號",
       "confirm": "合併帳號",
       "skip": "先跳過"
+    },
+    "bind": {
+      "title": "綁定 Duotopia 帳號",
+      "description": "如果你已經有 Duotopia 帳號，輸入 Email 即可將學校帳號與 Duotopia 帳號綁定。",
+      "emailPlaceholder": "your-email@example.com",
+      "sendVerification": "發送驗證信",
+      "skip": "先跳過",
+      "sentTitle": "驗證信已發送",
+      "sentDescription": "我們已發送驗證信到 {{email}}，請查看信箱並點擊驗證連結。",
+      "continue": "前往儀表板"
     }
   },
   "studentDashboard": {

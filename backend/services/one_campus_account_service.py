@@ -340,7 +340,37 @@ class OneCampusAccountService:
                     return email_identity, teacher, "existing"
 
         # Step 3: Create new Identity + Teacher
+        # Use the real 1Campus account email instead of a placeholder,
+        # but only if no other Identity/Teacher already uses this email.
+        identity_email_taken = (
+            db.query(Identity)
+            .filter(
+                Identity.email == one_campus_account,
+                Identity.is_active.is_(True),
+            )
+            .first()
+        ) is not None
+
+        teacher_email_taken = (
+            db.query(Teacher)
+            .filter(
+                Teacher.email == one_campus_account,
+                Teacher.is_active.is_(True),
+            )
+            .first()
+        ) is not None
+
+        use_real_email = not identity_email_taken and not teacher_email_taken
+
+        # Fallback to placeholder if email is already taken
+        if not use_real_email:
+            safe_account = one_campus_account.replace("@", "_at_")
+            teacher_email = f"1campus_{safe_account}@sso.duotopia.com"
+        else:
+            teacher_email = one_campus_account
+
         identity = Identity(
+            email=one_campus_account if not identity_email_taken else None,
             one_campus_account=one_campus_account,
             national_id_hash=national_id_hash,
             email_verified=False,
@@ -349,15 +379,9 @@ class OneCampusAccountService:
         db.add(identity)
         db.flush()
 
-        # Generate a placeholder email for Teacher (required NOT NULL)
-        # one_campus_account may contain '@' (e.g. user@1campus.net),
-        # so replace it to form a valid email address.
-        safe_account = one_campus_account.replace("@", "_at_")
-        placeholder_email = f"1campus_{safe_account}@sso.duotopia.com"
-
         teacher = Teacher(
             name=teacher_name,
-            email=placeholder_email,
+            email=teacher_email,
             password_hash=None,
             has_password=False,
             identity_id=identity.id,

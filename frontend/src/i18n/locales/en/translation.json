@@ -1398,6 +1398,16 @@
       "newAccount": "School account",
       "confirm": "Merge Accounts",
       "skip": "Skip for now"
+    },
+    "bind": {
+      "title": "Bind Duotopia Account",
+      "description": "If you already have a Duotopia account, enter your email to link it with your school account.",
+      "emailPlaceholder": "your-email@example.com",
+      "sendVerification": "Send Verification Email",
+      "skip": "Skip for now",
+      "sentTitle": "Verification Email Sent",
+      "sentDescription": "We've sent a verification email to {{email}}. Please check your inbox and click the verification link.",
+      "continue": "Continue to Dashboard"
     }
   },
   "teacherRegister": {

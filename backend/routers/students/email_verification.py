@@ -205,6 +205,17 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
     # 更新 Identity 驗證狀態 + 密碼遷移
     identity = identity_service.on_email_verified(db, student)
 
+    # Path B: If this Identity is a 1Campus SSO account, perform bind/merge
+    bound_identity = None
+    if identity and identity.one_campus_account and identity.email_verified:
+        bound_identity = identity_service.bind_1campus_identity_to_email(
+            db, identity, student.email, user_type="student"
+        )
+        # If merge happened, update student's identity_id to the surviving one
+        if bound_identity and bound_identity.id != identity.id:
+            db.refresh(student)
+            identity = bound_identity
+
     # 將 identity_id 同步到所有同 email 的 sibling students
     if student.identity_id and student.email:
         siblings = (
@@ -224,6 +235,7 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 
     linked_count = 0
     if identity:
+        db.refresh(identity)
         linked_count = len(
             [s for s in identity.linked_students if s.id != student.id and s.is_active]
         )
@@ -235,6 +247,7 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
         "verified": True,
         "identity_consolidated": identity is not None,
         "linked_accounts_count": linked_count,
+        "one_campus_bound": bound_identity is not None,
     }
 
 
