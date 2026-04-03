@@ -147,6 +147,7 @@ class TranslationService:
                     max_tokens=token_limit,
                     temperature=0.3,
                     system_instruction=system_instruction,
+                    disable_thinking=True,
                 )
                 return result.strip()
             else:
@@ -265,6 +266,7 @@ Required: Return format must be ["translation1", "translation2", ...]"""
                     max_tokens=3500,
                     temperature=0.3,
                     system_instruction=system_instruction,
+                    disable_thinking=True,
                 )
                 # Ensure it's a list
                 if isinstance(translations, str):
@@ -453,6 +455,7 @@ Only reply with JSON array, no other text."""
                     max_tokens=2000,
                     temperature=0.2,
                     system_instruction=system_instruction,
+                    disable_thinking=True,
                 )
             else:
                 response = await self.client.chat.completions.create(

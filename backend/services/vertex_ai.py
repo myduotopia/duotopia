@@ -33,7 +33,7 @@ class VertexAIService:
 
     def __init__(self):
         self.project_id = os.getenv("VERTEX_AI_PROJECT_ID", "duotopia-472708")
-        self.location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+        self.location = os.getenv("VERTEX_AI_LOCATION", "asia-northeast1")
         self._initialized = False
         # Cached models without system_instruction (for reuse)
         self._flash_model = None
@@ -96,6 +96,7 @@ class VertexAIService:
         temperature: float = 0.7,
         system_instruction: Optional[str] = None,
         timeout: Optional[int] = VERTEX_AI_TIMEOUT,
+        disable_thinking: bool = False,
     ) -> str:
         """
         統一的文字生成介面
@@ -106,6 +107,7 @@ class VertexAIService:
             max_tokens: 最大輸出 token 數
             temperature: 溫度參數 (0-1)
             system_instruction: 系統指令（使用 Gemini 原生 system_instruction）
+            disable_thinking: 關閉 thinking（加速簡單任務如翻譯）
 
         Returns:
             生成的文字
@@ -114,10 +116,13 @@ class VertexAIService:
 
         model = self._get_model(model_type, system_instruction)
 
-        config = GenerationConfig(
-            max_output_tokens=max_tokens,
-            temperature=temperature,
-        )
+        config_kwargs = {
+            "max_output_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if disable_thinking:
+            config_kwargs["thinking_config"] = {"thinking_budget": 0}
+        config = GenerationConfig(**config_kwargs)
 
         try:
             logger.info(f"Vertex AI generate_text: calling model (type={model_type})")
@@ -148,6 +153,7 @@ class VertexAIService:
         temperature: float = 0.3,
         system_instruction: Optional[str] = None,
         timeout: Optional[int] = VERTEX_AI_TIMEOUT,
+        disable_thinking: bool = False,
     ) -> dict:
         """
         生成 JSON 格式的回應
@@ -158,6 +164,7 @@ class VertexAIService:
             max_tokens: 最大輸出 token 數
             temperature: 溫度參數
             system_instruction: 系統指令（使用 Gemini 原生 system_instruction）
+            disable_thinking: 關閉 thinking（加速簡單任務如翻譯）
 
         Returns:
             解析後的 JSON dict
@@ -166,11 +173,14 @@ class VertexAIService:
 
         model = self._get_model(model_type, system_instruction)
 
-        config = GenerationConfig(
-            max_output_tokens=max_tokens,
-            temperature=temperature,
-            response_mime_type="application/json",
-        )
+        config_kwargs = {
+            "max_output_tokens": max_tokens,
+            "temperature": temperature,
+            "response_mime_type": "application/json",
+        }
+        if disable_thinking:
+            config_kwargs["thinking_config"] = {"thinking_budget": 0}
+        config = GenerationConfig(**config_kwargs)
 
         try:
             logger.info(f"Vertex AI generate_json: calling model (type={model_type})")
