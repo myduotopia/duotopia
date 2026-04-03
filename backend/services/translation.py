@@ -481,21 +481,40 @@ Only reply with JSON array, no other text."""
             # 確保返回數量正確
             if len(results) != len(texts):
                 logger.warning(
-                    "Expected %d results, got %d. Falling back.",
+                    "Expected %d results, got %d. Falling back to simple translate.",
                     len(texts),
                     len(results),
                 )
-                # Fallback: 逐個處理
-                tasks = [self.translate_with_pos(text, target_lang) for text in texts]
-                results = await asyncio.gather(*tasks)
+                # Fallback: 逐個用 translate_text（不遞迴回 batch）
+                fallback_results = []
+                for text in texts:
+                    try:
+                        trans = await self.translate_text(text, target_lang)
+                        fallback_results.append(
+                            {"translation": trans, "parts_of_speech": []}
+                        )
+                    except Exception:
+                        fallback_results.append(
+                            {"translation": text, "parts_of_speech": []}
+                        )
+                return fallback_results
 
             return results
         except Exception as e:
             logger.error("Batch translate with POS error: %s. Falling back.", e)
-            # Fallback: 逐個處理
-            tasks = [self.translate_with_pos(text, target_lang) for text in texts]
-            results = await asyncio.gather(*tasks)
-            return results
+            # Fallback: 逐個用 translate_text（不遞迴回 batch）
+            fallback_results = []
+            for text in texts:
+                try:
+                    trans = await self.translate_text(text, target_lang)
+                    fallback_results.append(
+                        {"translation": trans, "parts_of_speech": []}
+                    )
+                except Exception:
+                    fallback_results.append(
+                        {"translation": text, "parts_of_speech": []}
+                    )
+            return fallback_results
 
     # 每批最多處理的單字數量
     SENTENCE_CHUNK_SIZE = 5
