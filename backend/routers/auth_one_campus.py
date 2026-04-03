@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from auth import create_access_token, get_current_user
@@ -61,7 +61,7 @@ class MergeConfirmRequest(BaseModel):
 
 
 class BindAccountRequest(BaseModel):
-    email: str
+    email: EmailStr
 
 
 # --- Helpers ---
@@ -441,8 +441,18 @@ async def verify_teacher_bind(
         db, sso_identity, target_email, user_type="teacher"
     )
 
-    # Update teacher email to the verified target email
-    teacher.email = target_email
+    # Update teacher email — check uniqueness first to avoid constraint violation
+    existing_teacher_with_email = (
+        db.query(Teacher)
+        .filter(
+            Teacher.email == target_email,
+            Teacher.id != teacher.id,
+            Teacher.is_active.is_(True),
+        )
+        .first()
+    )
+    if not existing_teacher_with_email:
+        teacher.email = target_email
     teacher.email_verified = True
     teacher.email_verified_at = datetime.now(timezone.utc)
     teacher.email_verification_token = None
@@ -533,9 +543,11 @@ async def bind_account(
 
     if user_type == "student":
         from services.email_service import email_service
-        from services.identity_service import identity_service
 
-        # Set the email on the student record for verification flow
+        # Set unverified email on student for the existing verification flow.
+        # send_verification_email() stores the token and commits internally.
+        # The email is marked unverified — actual bind/merge happens in
+        # verify-email endpoint after the user clicks the link.
         user.email = target_email
         user.email_verified = False
         user.email_verified_at = None
@@ -544,8 +556,9 @@ async def bind_account(
         if not identity.email or identity.email != target_email:
             identity.email = target_email
             identity.email_verified = False
+        db.flush()
 
-        # Send verification email (reuse existing flow)
+        # Send verification email (commits internally)
         success = email_service.send_verification_email(db, user, target_email)
         if not success:
             raise HTTPException(
@@ -565,7 +578,10 @@ async def bind_account(
         # and send the actual email.
         from services.email_service import email_service
 
-        # Create bind token encoding: identity_id + target_email
+        # Create bind token. Field mapping note: we reuse _create_merge_token
+        # with swapped semantics — "one_campus_student_id" carries the 1Campus
+        # account, and "one_campus_account" carries the target Duotopia email.
+        # verify_teacher_bind reads token_data["one_campus_account"] as target.
         bind_token = _create_merge_token(
             existing_identity_id=identity.id,
             one_campus_student_id=identity.one_campus_account or "",
