@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     DateTime,
     Boolean,
     Date,
@@ -100,7 +101,7 @@ class Teacher(Base):
     # Email 驗證字段
     email_verified = Column(Boolean, default=False)
     email_verified_at = Column(DateTime(timezone=True))
-    email_verification_token = Column(String(100))
+    email_verification_token = Column(Text)
     email_verification_sent_at = Column(DateTime(timezone=True))
 
     # 密碼重設字段
@@ -323,7 +324,7 @@ class Student(Base):
     password_changed = Column(Boolean, default=False)
     email_verified = Column(Boolean, default=False)
     email_verified_at = Column(DateTime(timezone=True))
-    email_verification_token = Column(String(100))
+    email_verification_token = Column(Text)
     email_verification_sent_at = Column(DateTime(timezone=True))
 
     # 密碼重設字段
