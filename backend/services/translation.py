@@ -143,7 +143,7 @@ class TranslationService:
             if self.use_vertex_ai:
                 result = await self.vertex_ai.generate_text(
                     prompt=prompt,
-                    model_type="flash",
+                    model_type="fast",
                     max_tokens=token_limit,
                     temperature=0.3,
                     system_instruction=system_instruction,
@@ -261,7 +261,7 @@ Required: Return format must be ["translation1", "translation2", ...]"""
             if self.use_vertex_ai:
                 translations = await self.vertex_ai.generate_json(
                     prompt=prompt,
-                    model_type="flash",
+                    model_type="fast",
                     max_tokens=3500,
                     temperature=0.3,
                     system_instruction=system_instruction,
@@ -449,7 +449,7 @@ Only reply with JSON array, no other text."""
             if self.use_vertex_ai:
                 results = await self.vertex_ai.generate_json(
                     prompt=prompt,
-                    model_type="flash",
+                    model_type="fast",
                     max_tokens=2000,
                     temperature=0.2,
                     system_instruction=system_instruction,
