@@ -16,6 +16,7 @@ import json
 import re
 import logging
 import asyncio
+import time
 from typing import Optional, Literal
 
 logger = logging.getLogger(__name__)
@@ -138,7 +139,12 @@ class VertexAIService:
             self._set_thinking_budget(config, 0)
 
         try:
-            logger.info(f"Vertex AI generate_text: calling model (type={model_type})")
+            t0 = time.monotonic()
+            logger.info(
+                "[PERF] Vertex AI generate_text START | model=%s | region=%s",
+                model_type,
+                self.location,
+            )
             response = await asyncio.wait_for(
                 model.generate_content_async(
                     prompt,
@@ -146,16 +152,32 @@ class VertexAIService:
                 ),
                 timeout=timeout,
             )
-            logger.info("Vertex AI generate_text: response received")
+            elapsed = time.monotonic() - t0
+            logger.info(
+                "[PERF] Vertex AI generate_text DONE | model=%s | region=%s | %.2fs",
+                model_type,
+                self.location,
+                elapsed,
+            )
             return response.text
         except asyncio.TimeoutError:
+            elapsed = time.monotonic() - t0
             logger.error(
-                f"Vertex AI generate_text timed out after {timeout}s "
-                f"(model_type={model_type})"
+                "[PERF] Vertex AI generate_text TIMEOUT | model=%s | region=%s | %.2fs",
+                model_type,
+                self.location,
+                elapsed,
             )
             raise TimeoutError(f"Vertex AI call timed out after {timeout} seconds")
         except Exception as e:
-            logger.error(f"Vertex AI generation failed: {e}", exc_info=True)
+            elapsed = time.monotonic() - t0
+            logger.error(
+                "[PERF] Vertex AI generate_text ERROR | model=%s | region=%s | %.2fs | %s",
+                model_type,
+                self.location,
+                elapsed,
+                e,
+            )
             raise
 
     async def generate_json(
@@ -195,7 +217,12 @@ class VertexAIService:
             self._set_thinking_budget(config, 0)
 
         try:
-            logger.info(f"Vertex AI generate_json: calling model (type={model_type})")
+            t0 = time.monotonic()
+            logger.info(
+                "[PERF] Vertex AI generate_json START | model=%s | region=%s",
+                model_type,
+                self.location,
+            )
             response = await asyncio.wait_for(
                 model.generate_content_async(
                     prompt,
@@ -203,7 +230,13 @@ class VertexAIService:
                 ),
                 timeout=timeout,
             )
-            logger.info("Vertex AI generate_json: response received")
+            elapsed = time.monotonic() - t0
+            logger.info(
+                "[PERF] Vertex AI generate_json DONE | model=%s | region=%s | %.2fs",
+                model_type,
+                self.location,
+                elapsed,
+            )
 
             content = response.text.strip()
 
@@ -254,9 +287,12 @@ class VertexAIService:
                 else:
                     raise
         except asyncio.TimeoutError:
+            elapsed = time.monotonic() - t0
             logger.error(
-                f"Vertex AI generate_json timed out after {timeout}s "
-                f"(model_type={model_type})"
+                "[PERF] Vertex AI generate_json TIMEOUT | model=%s | region=%s | %.2fs",
+                model_type,
+                self.location,
+                elapsed,
             )
             raise TimeoutError(f"Vertex AI call timed out after {timeout} seconds")
         except json.JSONDecodeError as e:
@@ -264,7 +300,14 @@ class VertexAIService:
             logger.error(f"Raw response: {response.text if response else 'None'}")
             raise
         except Exception as e:
-            logger.error(f"Vertex AI JSON generation failed: {e}", exc_info=True)
+            elapsed = time.monotonic() - t0
+            logger.error(
+                "[PERF] Vertex AI generate_json ERROR | model=%s | region=%s | %.2fs | %s",
+                model_type,
+                self.location,
+                elapsed,
+                e,
+            )
             raise
 
     def generate_text_sync(
