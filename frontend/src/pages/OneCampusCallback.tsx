@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Loader2, AlertCircle, Home, MergeIcon, Link2, Mail } from "lucide-react";
+import {
+  Loader2,
+  AlertCircle,
+  Home,
+  MergeIcon,
+  Link2,
+  Mail,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -206,7 +213,10 @@ export default function OneCampusCallback() {
         const resp = err.response as { data: { detail?: string } };
         setErrorMessage(
           resp.data.detail ||
-            t("oneCampus.errors.generic", "Operation failed. Please try again."),
+            t(
+              "oneCampus.errors.generic",
+              "Operation failed. Please try again.",
+            ),
         );
       } else {
         setErrorMessage(
@@ -306,7 +316,11 @@ export default function OneCampusCallback() {
               {t("oneCampus.bind.sendVerification", "Send Verification Email")}
             </Button>
 
-            <Button variant="outline" onClick={handleBindSkip} className="w-full">
+            <Button
+              variant="outline"
+              onClick={handleBindSkip}
+              className="w-full"
+            >
               {t("oneCampus.bind.skip", "Skip for now")}
             </Button>
           </CardContent>
