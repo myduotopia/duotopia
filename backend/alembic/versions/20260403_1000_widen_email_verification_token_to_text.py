@@ -16,7 +16,8 @@ depends_on = None
 
 def upgrade() -> None:
     # Idempotent: ALTER TYPE to TEXT is safe even if already TEXT
-    op.execute("""
+    op.execute(
+        """
         DO $$ BEGIN
             IF EXISTS (
                 SELECT 1 FROM information_schema.columns
@@ -28,9 +29,11 @@ def upgrade() -> None:
                     ALTER COLUMN email_verification_token TYPE TEXT;
             END IF;
         END $$;
-    """)
+    """
+    )
 
-    op.execute("""
+    op.execute(
+        """
         DO $$ BEGIN
             IF EXISTS (
                 SELECT 1 FROM information_schema.columns
@@ -42,7 +45,8 @@ def upgrade() -> None:
                     ALTER COLUMN email_verification_token TYPE TEXT;
             END IF;
         END $$;
-    """)
+    """
+    )
 
 
 def downgrade() -> None:
