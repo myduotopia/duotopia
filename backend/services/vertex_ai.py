@@ -88,6 +88,20 @@ class VertexAIService:
                 self._pro_model = GenerativeModel(model_name)
             return self._pro_model
 
+    @staticmethod
+    def _set_thinking_budget(config, budget: int):
+        """Set thinking budget on GenerationConfig via internal protobuf."""
+        try:
+            from google.cloud.aiplatform_v1beta1.types.content import (
+                GenerationConfig as BetaGenConfig,
+            )
+
+            config._raw_generation_config.thinking_config = (
+                BetaGenConfig.ThinkingConfig(thinking_budget=budget)
+            )
+        except Exception as e:
+            logger.warning(f"Failed to set thinking_budget: {e}")
+
     async def generate_text(
         self,
         prompt: str,
@@ -116,13 +130,12 @@ class VertexAIService:
 
         model = self._get_model(model_type, system_instruction)
 
-        config_kwargs = {
-            "max_output_tokens": max_tokens,
-            "temperature": temperature,
-        }
+        config = GenerationConfig(
+            max_output_tokens=max_tokens,
+            temperature=temperature,
+        )
         if disable_thinking:
-            config_kwargs["thinking_config"] = {"thinking_budget": 0}
-        config = GenerationConfig(**config_kwargs)
+            self._set_thinking_budget(config, 0)
 
         try:
             logger.info(f"Vertex AI generate_text: calling model (type={model_type})")
@@ -173,14 +186,13 @@ class VertexAIService:
 
         model = self._get_model(model_type, system_instruction)
 
-        config_kwargs = {
-            "max_output_tokens": max_tokens,
-            "temperature": temperature,
-            "response_mime_type": "application/json",
-        }
+        config = GenerationConfig(
+            max_output_tokens=max_tokens,
+            temperature=temperature,
+            response_mime_type="application/json",
+        )
         if disable_thinking:
-            config_kwargs["thinking_config"] = {"thinking_budget": 0}
-        config = GenerationConfig(**config_kwargs)
+            self._set_thinking_budget(config, 0)
 
         try:
             logger.info(f"Vertex AI generate_json: calling model (type={model_type})")
