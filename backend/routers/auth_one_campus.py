@@ -432,9 +432,7 @@ async def verify_teacher_bind(
         .first()
     )
     if not teacher:
-        raise HTTPException(
-            status_code=400, detail="Invalid or expired bind token"
-        )
+        raise HTTPException(status_code=400, detail="Invalid or expired bind token")
 
     # Perform the bind
     from services.identity_service import identity_service
