@@ -147,9 +147,7 @@ class VertexAIService:
                 f"Vertex AI generate_text timed out after {timeout}s "
                 f"(model_type={model_type})"
             )
-            raise TimeoutError(
-                f"Vertex AI call timed out after {timeout} seconds"
-            )
+            raise TimeoutError(f"Vertex AI call timed out after {timeout} seconds")
         except Exception as e:
             logger.error(f"Vertex AI generation failed: {e}", exc_info=True)
             raise
@@ -250,9 +248,7 @@ class VertexAIService:
                 f"Vertex AI generate_json timed out after {timeout}s "
                 f"(model_type={model_type})"
             )
-            raise TimeoutError(
-                f"Vertex AI call timed out after {timeout} seconds"
-            )
+            raise TimeoutError(f"Vertex AI call timed out after {timeout} seconds")
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON from Vertex AI response: {e}")
             logger.error(f"Raw response: {response.text if response else 'None'}")

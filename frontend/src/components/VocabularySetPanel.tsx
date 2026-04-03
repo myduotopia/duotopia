@@ -3515,8 +3515,7 @@ export default function VocabularySetPanel({
                 typeof ttsResult === "object" &&
                 "audio_url" in ttsResult
               ) {
-                const audioUrl = (ttsResult as { audio_url: string })
-                  .audio_url;
+                const audioUrl = (ttsResult as { audio_url: string }).audio_url;
                 const fullUrl = audioUrl?.startsWith("http")
                   ? audioUrl
                   : `${import.meta.env.VITE_API_URL}${audioUrl}`;
@@ -3574,10 +3573,7 @@ export default function VocabularySetPanel({
                 }
               ).sentences || [];
             sentencesData.forEach(
-              (
-                s: { sentence?: string; translation?: string },
-                i: number,
-              ) => {
+              (s: { sentence?: string; translation?: string }, i: number) => {
                 if (!s) return;
                 const idx = needsExamples[i];
                 currentRows[idx].example_sentence = s.sentence || "";
