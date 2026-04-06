@@ -98,7 +98,7 @@ export default function Home() {
         <img
           src="https://storage.googleapis.com/duotopia-social-media-videos/website/logo/logo_row_nobg.png"
           alt={t("home.header.logo")}
-          className="h-[50px]"
+          className="h-10 sm:h-[50px]"
         />
         <div className="flex items-center gap-1.5 sm:gap-3">
           <Link to="/blog">
