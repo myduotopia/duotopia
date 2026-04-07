@@ -1719,7 +1719,9 @@ export default function ClassroomDetail({
                               lessonName: lesson?.name || "",
                               contentTitle: (item.title || item.name) as string,
                               contentType: (item.type as string) || "",
-                              itemsCount: item.items_count as number | undefined,
+                              itemsCount: item.items_count as
+                                | number
+                                | undefined,
                               order: 0,
                               hasMissingAudio: false,
                             };

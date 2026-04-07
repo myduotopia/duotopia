@@ -419,7 +419,8 @@ export function AssignmentDialog({
   const loadClassroomOptions = async () => {
     setLoadingClassrooms(true);
     try {
-      const data = (await apiClient.getTeacherClassrooms()) as ClassroomOption[];
+      const data =
+        (await apiClient.getTeacherClassrooms()) as ClassroomOption[];
       setClassroomOptions(data || []);
     } catch {
       toast.error(t("dialogs.assignmentDialog.errors.loadClassroomsFailed"));
@@ -433,7 +434,9 @@ export function AssignmentDialog({
     const existing = selectedClassrooms.find((c) => c.id === classroom.id);
     if (existing) {
       // 取消選擇
-      setSelectedClassrooms((prev) => prev.filter((c) => c.id !== classroom.id));
+      setSelectedClassrooms((prev) =>
+        prev.filter((c) => c.id !== classroom.id),
+      );
     } else {
       // 新增選擇，載入學生
       try {
@@ -2393,9 +2396,7 @@ export function AssignmentDialog({
             <div className="h-full flex flex-col">
               <div className="mb-2">
                 <p className="text-sm text-gray-600">
-                  {t(
-                    "dialogs.assignmentDialog.classroomSelection.description",
-                  )}
+                  {t("dialogs.assignmentDialog.classroomSelection.description")}
                 </p>
                 {selectedClassrooms.length > 0 && (
                   <Badge
@@ -2436,9 +2437,7 @@ export function AssignmentDialog({
                         return (
                           <Card
                             key={classroom.id}
-                            onClick={() =>
-                              toggleClassroomSelection(classroom)
-                            }
+                            onClick={() => toggleClassroomSelection(classroom)}
                             className={cn(
                               "p-3 cursor-pointer transition-all",
                               isSelected
@@ -3078,23 +3077,18 @@ export function AssignmentDialog({
                       variant="secondary"
                       className="bg-blue-50 text-blue-700"
                     >
-                      {t(
-                        "dialogs.assignmentDialog.selectStudents.willCreate",
-                        {
-                          count: selectedClassrooms.filter(
-                            (c) => c.selectedStudentIds.length > 0,
-                          ).length,
-                        },
-                      )}
+                      {t("dialogs.assignmentDialog.selectStudents.willCreate", {
+                        count: selectedClassrooms.filter(
+                          (c) => c.selectedStudentIds.length > 0,
+                        ).length,
+                      })}
                     </Badge>
                   </div>
 
                   {/* Classroom Tabs */}
                   <Tabs
                     value={String(activeClassroomTab)}
-                    onValueChange={(v) =>
-                      setActiveClassroomTab(Number(v))
-                    }
+                    onValueChange={(v) => setActiveClassroomTab(Number(v))}
                     className="flex-1 flex flex-col overflow-hidden"
                   >
                     <TabsList className="w-full justify-start overflow-x-auto">
@@ -3165,10 +3159,7 @@ export function AssignmentDialog({
                             <div className="grid grid-cols-3 gap-1.5 p-1">
                               {[...classroom.students]
                                 .sort((a, b) => {
-                                  if (
-                                    !a.student_number &&
-                                    !b.student_number
-                                  )
+                                  if (!a.student_number && !b.student_number)
                                     return 0;
                                   if (!a.student_number) return 1;
                                   if (!b.student_number) return -1;
@@ -3588,9 +3579,7 @@ export function AssignmentDialog({
             <Button
               variant="outline"
               onClick={
-                currentStep === firstStepNumber
-                  ? handleClose
-                  : handlePrevStep
+                currentStep === firstStepNumber ? handleClose : handlePrevStep
               }
               disabled={loading}
             >
@@ -3606,11 +3595,15 @@ export function AssignmentDialog({
 
             {/* 右側：提示 + 下一步/建立按鈕 */}
             <div className="flex items-center gap-2">
-              {needsClassroomStep && selectedClassrooms.length > 1 && currentStep === lastStepNumber && (
-                <span className="text-xs text-gray-500">
-                  {t("dialogs.assignmentDialog.multiClass.willCreate", { count: selectedClassrooms.length })}
-                </span>
-              )}
+              {needsClassroomStep &&
+                selectedClassrooms.length > 1 &&
+                currentStep === lastStepNumber && (
+                  <span className="text-xs text-gray-500">
+                    {t("dialogs.assignmentDialog.multiClass.willCreate", {
+                      count: selectedClassrooms.length,
+                    })}
+                  </span>
+                )}
               {currentStep < lastStepNumber ? (
                 <Button onClick={handleNextStep} disabled={!canProceed()}>
                   {t("dialogs.assignmentDialog.buttons.next")}
