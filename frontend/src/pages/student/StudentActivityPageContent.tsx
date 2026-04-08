@@ -30,6 +30,7 @@ import RearrangementActivity, {
 } from "@/components/activities/RearrangementActivity";
 import WordReadingActivity from "@/components/activities/WordReadingActivity";
 import WordSelectionActivity from "@/components/activities/WordSelectionActivity";
+import { TugOfWarGame } from "@/components/activities/TugOfWarGame";
 import {
   ChevronLeft,
   ChevronRight,
@@ -2045,6 +2046,20 @@ export default function StudentActivityPageContent({
         );
       }
 
+      if (practiceMode === "tug_of_war") {
+        // 拔河遊戲：純前端，不寫入資料庫
+        return (
+          <TugOfWarGame
+            assignmentId={assignmentId}
+            isPreviewMode={isPreviewMode}
+            isDemoMode={isDemoMode}
+            onComplete={() => {
+              onBack?.();
+            }}
+          />
+        );
+      }
+
       // 造句練習：使用艾賓浩斯記憶曲線系統
       return (
         <SentenceMakingActivity
@@ -2517,7 +2532,8 @@ export default function StudentActivityPageContent({
               // 🎯 單字選擇/朗讀模式：WordSelectionActivity/WordReadingActivity 自帶導航，不顯示外部導航按鈕
               if (
                 practiceMode === "word_selection" ||
-                practiceMode === "word_reading"
+                practiceMode === "word_reading" ||
+                practiceMode === "tug_of_war"
               ) {
                 return null;
               }

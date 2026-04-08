@@ -319,7 +319,7 @@ def get_word_selection_start(
     exclude_ids: str = "",
 ) -> dict:
     """Return word-selection practice data with options/distractors."""
-    if assignment.practice_mode != "word_selection":
+    if assignment.practice_mode not in ("word_selection", "tug_of_war"):
         raise HTTPException(
             status_code=400,
             detail="This assignment is not in word_selection mode",
@@ -346,13 +346,19 @@ def get_word_selection_start(
     exclude_id_set = _parse_exclude_ids(exclude_ids)
     remaining_items = [item for item in content_items if item.id not in exclude_id_set]
 
-    if len(remaining_items) < 10:
-        remaining_items = list(content_items)
-
-    if assignment.shuffle_questions:
-        random.shuffle(remaining_items)
-
-    content_items = remaining_items[:10]
+    if assignment.practice_mode == "tug_of_war":
+        # 拔河模式：使用全部單字
+        if not remaining_items:
+            remaining_items = list(content_items)
+        if assignment.shuffle_questions:
+            random.shuffle(remaining_items)
+        content_items = remaining_items
+    else:
+        if len(remaining_items) < 10:
+            remaining_items = list(content_items)
+        if assignment.shuffle_questions:
+            random.shuffle(remaining_items)
+        content_items = remaining_items[:10]
 
     # Build response
     words_with_options = []

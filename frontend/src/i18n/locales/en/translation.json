@@ -4773,7 +4773,35 @@
       "wordSelection": {
         "label": "Word Selection",
         "description": "Select the correct translation for each word"
+      },
+      "tugOfWar": {
+        "label": "Tug of War",
+        "description": "2-player same-screen vocabulary battle"
       }
+    }
+  },
+  "tugOfWar": {
+    "teamA": "Team A",
+    "teamB": "Team B",
+    "showImages": "Show images",
+    "loading": "Loading vocabulary...",
+    "modes": {
+      "audioToEnglish": "Audio → English",
+      "audioToChinese": "Audio → Translation",
+      "englishToChinese": "English → Translation",
+      "chineseToEnglish": "Translation → English"
+    },
+    "error": {
+      "loadFailed": "Failed to load vocabulary",
+      "notEnoughWords": "Not enough words (minimum 4 required)"
+    },
+    "result": {
+      "teamAWins": "Team A Wins!",
+      "teamBWins": "Team B Wins!",
+      "draw": "Draw!",
+      "totalQuestions": "{{count}} questions total",
+      "close": "Close",
+      "playAgain": "Play Again"
     }
   },
   "blog": {

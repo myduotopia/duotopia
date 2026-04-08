@@ -44,7 +44,7 @@ class InstantPracticeRequest(BaseModel):
     content_id: int
     classroom_id: Optional[int] = None
     practice_mode: Literal[
-        "reading", "rearrangement", "word_reading", "word_selection"
+        "reading", "rearrangement", "word_reading", "word_selection", "tug_of_war"
     ] = "reading"
     time_limit_per_question: Optional[int] = None
     shuffle_questions: bool = False
@@ -154,8 +154,8 @@ async def create_instant_practice(
         db.add(item_copy)
         db.flush()
 
-    # word_selection 模式：為缺少干擾項的 items 生成
-    if request.practice_mode == "word_selection":
+    # word_selection / tug_of_war 模式：為缺少干擾項的 items 生成
+    if request.practice_mode in ("word_selection", "tug_of_war"):
         all_items = (
             db.query(ContentItem)
             .filter(ContentItem.content_id == content_copy.id)

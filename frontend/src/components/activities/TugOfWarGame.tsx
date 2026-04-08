@@ -1,0 +1,402 @@
+/**
+ * TugOfWarGame - 拔河遊戲主元件
+ *
+ * 2 人同螢幕對戰的單字選擇遊戲。純前端，不寫入資料庫。
+ * 透過 assignment API 取得單字資料後，遊戲邏輯全在前端。
+ *
+ * Props:
+ * - assignmentId: 用來 fetch 單字列表
+ * - isPreviewMode / isDemoMode: API endpoint 切換
+ * - onComplete: 遊戲結束/關閉時的回調
+ */
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import Phaser from "phaser";
+import { X, ChevronDown, Loader2, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { apiClient } from "@/lib/api";
+import { useGameLogic } from "./tug-of-war/useGameLogic";
+import { QuestionDisplay } from "./tug-of-war/QuestionDisplay";
+import { TeamOptions } from "./tug-of-war/TeamOptions";
+import { TugOfWarScene } from "@/games/tug-of-war/TugOfWarScene";
+import type { TugOfWarState } from "@/games/tug-of-war/TugOfWarScene";
+import type { VocabItem, QuestionMode } from "./tug-of-war/types";
+import { DEFAULT_GAME_CONFIG } from "./tug-of-war/types";
+
+interface TugOfWarGameProps {
+  assignmentId: number;
+  isPreviewMode?: boolean;
+  isDemoMode?: boolean;
+  onComplete?: () => void;
+}
+
+interface WordOptionResponse {
+  content_item_id: number;
+  text: string;
+  translation: string;
+  audio_url?: string;
+  image_url?: string;
+}
+
+const QUESTION_MODES: { value: QuestionMode; labelKey: string }[] = [
+  { value: "audio_to_english", labelKey: "tugOfWar.modes.audioToEnglish" },
+  { value: "audio_to_chinese", labelKey: "tugOfWar.modes.audioToChinese" },
+  { value: "english_to_chinese", labelKey: "tugOfWar.modes.englishToChinese" },
+  { value: "chinese_to_english", labelKey: "tugOfWar.modes.chineseToEnglish" },
+];
+
+export function TugOfWarGame({
+  assignmentId,
+  isPreviewMode = false,
+  isDemoMode = false,
+  onComplete,
+}: TugOfWarGameProps) {
+  const { t } = useTranslation();
+  const [vocabItems, setVocabItems] = useState<VocabItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showImages, setShowImages] = useState(false);
+
+  // Fetch vocabulary items
+  useEffect(() => {
+    const fetchVocab = async () => {
+      try {
+        setLoading(true);
+        const endpoint = isDemoMode
+          ? `/api/demo/assignments/${assignmentId}/preview/word-selection-start`
+          : isPreviewMode
+            ? `/api/teachers/assignments/${assignmentId}/preview/word-selection-start`
+            : `/api/students/assignments/${assignmentId}/vocabulary/selection/start`;
+
+        const data = await apiClient.get<{
+          words: WordOptionResponse[];
+          total_words: number;
+        }>(endpoint);
+
+        const items: VocabItem[] = data.words.map((w) => ({
+          id: w.content_item_id,
+          text: w.text,
+          translation: w.translation,
+          audio_url: w.audio_url,
+          image_url: w.image_url,
+        }));
+
+        setVocabItems(items);
+      } catch (err) {
+        console.error("Failed to fetch vocabulary:", err);
+        setError(t("tugOfWar.error.loadFailed"));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchVocab();
+  }, [assignmentId, isPreviewMode, isDemoMode, t]);
+
+  const {
+    gameState,
+    currentQuestion,
+    totalQuestions,
+    winScore,
+    progress,
+    winner,
+    answerHistory,
+    startGame,
+    changeMode,
+    handleAnswer,
+  } = useGameLogic(vocabItems);
+
+  // Auto-start when vocab loads
+  useEffect(() => {
+    if (vocabItems.length > 0 && gameState.gameStatus === "waiting") {
+      startGame("audio_to_english");
+    }
+  }, [vocabItems, gameState.gameStatus, startGame]);
+
+  const handleModeChange = useCallback(
+    (mode: QuestionMode) => {
+      changeMode(mode);
+    },
+    [changeMode],
+  );
+
+  const handleClose = useCallback(() => {
+    onComplete?.();
+  }, [onComplete]);
+
+  const handleRestart = useCallback(() => {
+    startGame(gameState.questionMode);
+  }, [startGame, gameState.questionMode]);
+
+  const isAnswered = gameState.answeredBy !== null;
+
+  // Phaser game instance - must be before any early returns
+  const phaserContainerRef = useRef<HTMLDivElement>(null);
+  const phaserGameRef = useRef<Phaser.Game | null>(null);
+
+  // Init Phaser
+  useEffect(() => {
+    if (!phaserContainerRef.current || phaserGameRef.current) return;
+    if (loading || error) return;
+
+    const game = new Phaser.Game({
+      type: Phaser.AUTO,
+      width: 1000,
+      height: 300,
+      parent: phaserContainerRef.current,
+      transparent: false,
+      scene: [TugOfWarScene],
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_HORIZONTALLY,
+      },
+    });
+    phaserGameRef.current = game;
+
+    return () => {
+      game.destroy(true);
+      phaserGameRef.current = null;
+    };
+  }, [loading, error]);
+
+  // Sync React state → Phaser scene
+  useEffect(() => {
+    const game = phaserGameRef.current;
+    if (!game) return;
+    const scene = game.scene.getScene("TugOfWarScene");
+    if (!scene) return;
+
+    const state: TugOfWarState = {
+      ropePosition: gameState.ropePosition,
+      maxPosition: totalQuestions,
+      winScore,
+      lastCorrectTeam: gameState.lastCorrectTeam,
+      isPaused: isAnswered,
+      teamACooldown: gameState.teamACooldown,
+      teamBCooldown: gameState.teamBCooldown,
+      winner: winner,
+    };
+    scene.data.set("state", state);
+  }, [gameState, totalQuestions, isAnswered]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-3">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-amber-500" />
+          <p className="text-sm text-gray-500">{t("tugOfWar.loading")}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || vocabItems.length < 4) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-3">
+          <p className="text-red-500 font-medium">
+            {error || t("tugOfWar.error.notEnoughWords")}
+          </p>
+          <Button variant="outline" onClick={handleClose}>
+            {t("common.back")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+      {/* CSS for game fonts */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Silkscreen&family=Patrick+Hand&display=swap');
+        .pixel-font { font-family: 'Silkscreen', monospace; }
+        .handwrite-font { font-family: 'Patrick Hand', cursive; letter-spacing: 0.05em; }
+      `}</style>
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-1 pixel-font">
+              {t(
+                QUESTION_MODES.find(
+                  (m) => m.value === gameState.questionMode,
+                )?.labelKey || "",
+              )}
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="bg-white dark:bg-gray-900 border shadow-lg">
+            {QUESTION_MODES.map((mode) => (
+              <DropdownMenuItem
+                key={mode.value}
+                onClick={() => handleModeChange(mode.value)}
+                className={
+                  mode.value === gameState.questionMode ? "bg-amber-50" : ""
+                }
+              >
+                {t(mode.labelKey)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showImages}
+            onChange={(e) => setShowImages(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          {t("tugOfWar.showImages")}
+        </label>
+
+        <div className="pixel-font text-sm text-gray-500">
+          {progress} / {totalQuestions}
+        </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleClose}
+          className="h-8 w-8 p-0"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Score display */}
+      <div className="flex items-center justify-center gap-6">
+        <div className="text-center">
+          <span className="pixel-font text-sm text-red-500">
+            {t("tugOfWar.teamA")}
+          </span>
+          <span className="pixel-font text-2xl font-bold text-red-500 ml-2">
+            {gameState.scores.a}
+          </span>
+        </div>
+        <span className="text-gray-300 pixel-font">vs</span>
+        <div className="text-center">
+          <span className="pixel-font text-2xl font-bold text-blue-500 mr-2">
+            {gameState.scores.b}
+          </span>
+          <span className="pixel-font text-sm text-blue-500">
+            {t("tugOfWar.teamB")}
+          </span>
+        </div>
+      </div>
+
+      {/* Game scene: canvas + question/options in unified background */}
+      <div className="relative w-full rounded-xl overflow-hidden bg-sky-100">
+        <div
+          ref={phaserContainerRef}
+          className="w-full"
+        />
+        {/* Replay icon overlaid on canvas center */}
+        {winner && (
+          <button
+            onClick={handleRestart}
+            className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 p-2 rounded-full hover:scale-110 transition-transform cursor-pointer"
+          >
+            <RotateCcw className="h-10 w-10 text-white drop-shadow-md" strokeWidth={3} />
+          </button>
+        )}
+
+        {/* Question overlaid on canvas, centered above the rope flag */}
+        {currentQuestion && (
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
+            <QuestionDisplay
+              question={currentQuestion}
+              showPrompt={!isAnswered}
+            />
+          </div>
+        )}
+
+        {/* Team options below canvas (during game) */}
+        {currentQuestion && (
+          <div className="grid grid-cols-2 gap-4 p-4">
+            <div className="p-3 rounded-xl border-2 border-red-500 bg-red-500/20">
+              <TeamOptions
+                team="a"
+                options={currentQuestion.optionsA}
+                onSelect={handleAnswer}
+                disabled={isAnswered}
+                isCooldown={gameState.teamACooldown}
+                cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
+                teamLabel={t("tugOfWar.teamA")}
+                showImages={showImages}
+                vocabItems={vocabItems}
+                useHandwriteFont={gameState.questionMode === "audio_to_english" || gameState.questionMode === "chinese_to_english"}
+              />
+            </div>
+            <div className="p-3 rounded-xl border-2 border-blue-500 bg-blue-500/20">
+              <TeamOptions
+                team="b"
+                options={currentQuestion.optionsB}
+                onSelect={handleAnswer}
+                disabled={isAnswered}
+                isCooldown={gameState.teamBCooldown}
+                cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
+                teamLabel={t("tugOfWar.teamB")}
+                showImages={showImages}
+                vocabItems={vocabItems}
+                useHandwriteFont={gameState.questionMode === "audio_to_english" || gameState.questionMode === "chinese_to_english"}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Answer history (after game ends) */}
+        {winner && answerHistory.length > 0 && (
+          <div className="grid grid-cols-2 gap-4 p-4">
+            {/* Team A answers */}
+            <div className="p-3 rounded-xl border-2 border-red-500 bg-red-500/20">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {answerHistory
+                  .filter((r) => r.team === "a")
+                  .filter((r, i, arr) => arr.findIndex((x) => x.question.vocabItem.id === r.question.vocabItem.id) === i)
+                  .map((r, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm"
+                    >
+                      <span className="font-bold text-red-600">{r.question.vocabItem.text}</span>
+                      <span className="text-gray-400">-</span>
+                      <span className="text-gray-600">{r.question.vocabItem.translation}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+            {/* Team B answers */}
+            <div className="p-3 rounded-xl border-2 border-blue-500 bg-blue-500/20">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {answerHistory
+                  .filter((r) => r.team === "b")
+                  .filter((r, i, arr) => arr.findIndex((x) => x.question.vocabItem.id === r.question.vocabItem.id) === i)
+                  .map((r, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-sm"
+                    >
+                      <span className="font-bold text-blue-600">{r.question.vocabItem.text}</span>
+                      <span className="text-gray-400">-</span>
+                      <span className="text-gray-600">{r.question.vocabItem.translation}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}

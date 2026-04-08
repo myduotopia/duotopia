@@ -53,6 +53,7 @@ import TestSubscription from "./pages/TestSubscription";
 import DemoAssignmentPage from "./pages/DemoAssignmentPage";
 import WordSpellingSample from "./pages/sample/WordSpellingSample";
 import WordClozeSample from "./pages/sample/WordClozeSample";
+import TugOfWarSample from "./pages/sample/TugOfWarSample";
 import { Toaster } from "sonner";
 import { useCrossTabAuthSync } from "./hooks/useCrossTabAuthSync";
 
@@ -403,6 +404,10 @@ function App() {
         <Route
           path="/sample/vocabulary-set/word-cloze"
           element={<WordClozeSample />}
+        />
+        <Route
+          path="/sample/tug-of-war"
+          element={<TugOfWarSample />}
         />
 
         {/* Test Pages */}
