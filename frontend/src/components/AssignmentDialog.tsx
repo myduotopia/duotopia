@@ -266,11 +266,13 @@ function SortableCartItem({ item, index, onRemove, t }: SortableCartItemProps) {
   );
 }
 
+const EMPTY_STUDENTS: Student[] = [];
+
 export function AssignmentDialog({
   open,
   onClose,
   classroomId,
-  students = [],
+  students = EMPTY_STUDENTS,
   onSuccess,
   organizationId: propOrganizationId,
   schoolId: propSchoolId,
