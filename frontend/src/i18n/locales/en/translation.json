@@ -1708,10 +1708,10 @@
         "created": "Assignment created successfully, assigned to {{count}} students"
       },
       "contentTypes": {
-        "reading_assessment": "Example Sentences",
-        "READING_ASSESSMENT": "Example Sentences",
-        "example_sentences": "Example Sentences",
-        "EXAMPLE_SENTENCES": "Example Sentences",
+        "reading_assessment": "Paragraph Set",
+        "READING_ASSESSMENT": "Paragraph Set",
+        "example_sentences": "Paragraph Set",
+        "EXAMPLE_SENTENCES": "Paragraph Set",
         "vocabulary_set": "Vocabulary Set",
         "VOCABULARY_SET": "Vocabulary Set",
         "sentence_making": "Vocabulary Set",
@@ -1795,8 +1795,8 @@
       "cancel": "Cancel",
       "types": {
         "example_sentences": {
-          "name": "Example Sentences",
-          "description": "Create sentences for reading or rearrangement practice (2-25 words)",
+          "name": "Paragraph Set",
+          "description": "Create paragraphs for reading or ordering practice. Paste multiple paragraphs from an article, up to 120 words each",
           "recommended": "Recommended"
         },
         "vocabulary_set": {
@@ -2760,7 +2760,7 @@
       "noDescription": "No Description",
       "unknownType": "Unknown Type",
       "notSet": "Not Set",
-      "readingAssessmentSettings": "Add Example Sentences",
+      "readingAssessmentSettings": "Add Paragraph Set",
       "subscriptionExpiredWarning": "⚠️ Subscription Expired",
       "daysRemaining": "{{days}} days remaining",
       "requiresSubscription": "Subscription required to assign homework",
@@ -2983,10 +2983,10 @@
       "resubmitted": "Resubmitted"
     },
     "contentTypes": {
-      "readingAssessment": "Example Sentences",
-      "reading_assessment": "Example Sentences",
-      "READING_ASSESSMENT": "Example Sentences",
-      "EXAMPLE_SENTENCES": "Example Sentences",
+      "readingAssessment": "Paragraph Set",
+      "reading_assessment": "Paragraph Set",
+      "READING_ASSESSMENT": "Paragraph Set",
+      "EXAMPLE_SENTENCES": "Paragraph Set",
       "speakingPractice": "Speaking Practice",
       "speaking_practice": "Speaking Practice",
       "SPEAKING_PRACTICE": "Speaking Practice",
@@ -3225,7 +3225,7 @@
       "featureInDevelopment": "{{type}} feature in development"
     },
     "dialogs": {
-      "addReadingTitle": "Add Example Sentences",
+      "addReadingTitle": "Add Paragraph Set",
       "editContentTitle": "Edit Content"
     }
   },
@@ -4723,7 +4723,7 @@
     },
     "contentTypes": {
       "reading_assessment": "Reading Assessment",
-      "example_sentences": "Example Sentences",
+      "example_sentences": "Paragraph Set",
       "vocabulary_set": "Vocabulary Set",
       "sentence_making": "Sentence Making"
     },
