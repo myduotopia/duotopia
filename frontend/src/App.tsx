@@ -405,10 +405,7 @@ function App() {
           path="/sample/vocabulary-set/word-cloze"
           element={<WordClozeSample />}
         />
-        <Route
-          path="/sample/tug-of-war"
-          element={<TugOfWarSample />}
-        />
+        <Route path="/sample/tug-of-war" element={<TugOfWarSample />} />
 
         {/* Test Pages */}
         <Route

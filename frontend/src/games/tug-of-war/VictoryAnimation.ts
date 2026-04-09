@@ -124,16 +124,61 @@ export class VictoryAnimation {
     const kneeY = bodyBottomY + LEG_LEN * 0.45;
 
     // Leg outlines
-    this.drawThickLimb(g, OUTLINE_COLOR, bodyCenterX - 4, bodyBottomY, leftKneeX, kneeY, leftFootX, groundY + LEG_LEN, LEG_THICKNESS + OUTLINE_WIDTH * 2);
-    this.drawThickLimb(g, OUTLINE_COLOR, bodyCenterX + 4, bodyBottomY, rightKneeX, kneeY, rightFootX, groundY + LEG_LEN, LEG_THICKNESS + OUTLINE_WIDTH * 2);
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      bodyCenterX - 4,
+      bodyBottomY,
+      leftKneeX,
+      kneeY,
+      leftFootX,
+      groundY + LEG_LEN,
+      LEG_THICKNESS + OUTLINE_WIDTH * 2,
+    );
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      bodyCenterX + 4,
+      bodyBottomY,
+      rightKneeX,
+      kneeY,
+      rightFootX,
+      groundY + LEG_LEN,
+      LEG_THICKNESS + OUTLINE_WIDTH * 2,
+    );
     // Leg fills
-    this.drawThickLimb(g, c.color, bodyCenterX - 4, bodyBottomY, leftKneeX, kneeY, leftFootX, groundY + LEG_LEN, LEG_THICKNESS);
-    this.drawThickLimb(g, c.color, bodyCenterX + 4, bodyBottomY, rightKneeX, kneeY, rightFootX, groundY + LEG_LEN, LEG_THICKNESS);
+    this.drawThickLimb(
+      g,
+      c.color,
+      bodyCenterX - 4,
+      bodyBottomY,
+      leftKneeX,
+      kneeY,
+      leftFootX,
+      groundY + LEG_LEN,
+      LEG_THICKNESS,
+    );
+    this.drawThickLimb(
+      g,
+      c.color,
+      bodyCenterX + 4,
+      bodyBottomY,
+      rightKneeX,
+      kneeY,
+      rightFootX,
+      groundY + LEG_LEN,
+      LEG_THICKNESS,
+    );
 
     // === Body (wider for front view) ===
     const frontBodyW = BODY_WIDTH * 3;
     g.fillStyle(OUTLINE_COLOR);
-    g.fillEllipse(bodyCenterX, bodyCenterY, frontBodyW + OUTLINE_WIDTH * 2, BODY_HEIGHT + OUTLINE_WIDTH * 2);
+    g.fillEllipse(
+      bodyCenterX,
+      bodyCenterY,
+      frontBodyW + OUTLINE_WIDTH * 2,
+      BODY_HEIGHT + OUTLINE_WIDTH * 2,
+    );
     g.fillStyle(c.color);
     g.fillEllipse(bodyCenterX, bodyCenterY, frontBodyW, BODY_HEIGHT);
 
@@ -147,8 +192,28 @@ export class VictoryAnimation {
     const lElbowY = shoulderY - 14;
     const lHandX = lShoulderX - 16;
     const lHandY = shoulderY - 30 + armWave;
-    this.drawThickLimb(g, OUTLINE_COLOR, lShoulderX, shoulderY, lElbowX, lElbowY, lHandX, lHandY, ARM_THICKNESS + OUTLINE_WIDTH * 2);
-    this.drawThickLimb(g, c.color, lShoulderX, shoulderY, lElbowX, lElbowY, lHandX, lHandY, ARM_THICKNESS);
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      lShoulderX,
+      shoulderY,
+      lElbowX,
+      lElbowY,
+      lHandX,
+      lHandY,
+      ARM_THICKNESS + OUTLINE_WIDTH * 2,
+    );
+    this.drawThickLimb(
+      g,
+      c.color,
+      lShoulderX,
+      shoulderY,
+      lElbowX,
+      lElbowY,
+      lHandX,
+      lHandY,
+      ARM_THICKNESS,
+    );
     g.fillStyle(OUTLINE_COLOR);
     g.fillCircle(lHandX, lHandY, 5 + OUTLINE_WIDTH);
     g.fillStyle(c.color);
@@ -160,8 +225,28 @@ export class VictoryAnimation {
     const rElbowY = shoulderY - 14;
     const rHandX = rShoulderX + 16;
     const rHandY = shoulderY - 30 - armWave;
-    this.drawThickLimb(g, OUTLINE_COLOR, rShoulderX, shoulderY, rElbowX, rElbowY, rHandX, rHandY, ARM_THICKNESS + OUTLINE_WIDTH * 2);
-    this.drawThickLimb(g, c.color, rShoulderX, shoulderY, rElbowX, rElbowY, rHandX, rHandY, ARM_THICKNESS);
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      rShoulderX,
+      shoulderY,
+      rElbowX,
+      rElbowY,
+      rHandX,
+      rHandY,
+      ARM_THICKNESS + OUTLINE_WIDTH * 2,
+    );
+    this.drawThickLimb(
+      g,
+      c.color,
+      rShoulderX,
+      shoulderY,
+      rElbowX,
+      rElbowY,
+      rHandX,
+      rHandY,
+      ARM_THICKNESS,
+    );
     g.fillStyle(OUTLINE_COLOR);
     g.fillCircle(rHandX, rHandY, 5 + OUTLINE_WIDTH);
     g.fillStyle(c.color);
@@ -255,25 +340,145 @@ export class VictoryAnimation {
     // Draw order: back to front
 
     // Back leg (drawn first, behind)
-    this.drawThickLimb(g, OUTLINE_COLOR, bKneeX, kneeY, bShinMidX, bShinMidY, bFootX, bFootY, LEG_THICKNESS + OUTLINE_WIDTH * 2);
-    this.drawThickLimb(g, c.color, bKneeX, kneeY, bShinMidX, bShinMidY, bFootX, bFootY, LEG_THICKNESS);
-    this.drawThickLimb(g, OUTLINE_COLOR, bKneeX, kneeY, bThighMidX, bThighMidY, bHipX, hipY, LEG_THICKNESS + OUTLINE_WIDTH * 2);
-    this.drawThickLimb(g, c.color, bKneeX, kneeY, bThighMidX, bThighMidY, bHipX, hipY, LEG_THICKNESS);
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      bKneeX,
+      kneeY,
+      bShinMidX,
+      bShinMidY,
+      bFootX,
+      bFootY,
+      LEG_THICKNESS + OUTLINE_WIDTH * 2,
+    );
+    this.drawThickLimb(
+      g,
+      c.color,
+      bKneeX,
+      kneeY,
+      bShinMidX,
+      bShinMidY,
+      bFootX,
+      bFootY,
+      LEG_THICKNESS,
+    );
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      bKneeX,
+      kneeY,
+      bThighMidX,
+      bThighMidY,
+      bHipX,
+      hipY,
+      LEG_THICKNESS + OUTLINE_WIDTH * 2,
+    );
+    this.drawThickLimb(
+      g,
+      c.color,
+      bKneeX,
+      kneeY,
+      bThighMidX,
+      bThighMidY,
+      bHipX,
+      hipY,
+      LEG_THICKNESS,
+    );
 
     // Front leg (drawn second, in front)
-    this.drawThickLimb(g, OUTLINE_COLOR, fKneeX, kneeY, fShinMidX, fShinMidY, fFootX, fFootY, LEG_THICKNESS + OUTLINE_WIDTH * 2);
-    this.drawThickLimb(g, c.color, fKneeX, kneeY, fShinMidX, fShinMidY, fFootX, fFootY, LEG_THICKNESS);
-    this.drawThickLimb(g, OUTLINE_COLOR, fKneeX, kneeY, fThighMidX, fThighMidY, fHipX, hipY, LEG_THICKNESS + OUTLINE_WIDTH * 2);
-    this.drawThickLimb(g, c.color, fKneeX, kneeY, fThighMidX, fThighMidY, fHipX, hipY, LEG_THICKNESS);
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      fKneeX,
+      kneeY,
+      fShinMidX,
+      fShinMidY,
+      fFootX,
+      fFootY,
+      LEG_THICKNESS + OUTLINE_WIDTH * 2,
+    );
+    this.drawThickLimb(
+      g,
+      c.color,
+      fKneeX,
+      kneeY,
+      fShinMidX,
+      fShinMidY,
+      fFootX,
+      fFootY,
+      LEG_THICKNESS,
+    );
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      fKneeX,
+      kneeY,
+      fThighMidX,
+      fThighMidY,
+      fHipX,
+      hipY,
+      LEG_THICKNESS + OUTLINE_WIDTH * 2,
+    );
+    this.drawThickLimb(
+      g,
+      c.color,
+      fKneeX,
+      kneeY,
+      fThighMidX,
+      fThighMidY,
+      fHipX,
+      hipY,
+      LEG_THICKNESS,
+    );
 
     // Back arm (drawn before torso/head, further from viewer)
-    this.drawThickLimb(g, OUTLINE_COLOR, bArmX, shoulderY, bArmX, bElbowY, bArmX, bHandY, ARM_THICKNESS + OUTLINE_WIDTH * 2);
-    this.drawThickLimb(g, c.color, bArmX, shoulderY, bArmX, bElbowY, bArmX, bHandY, ARM_THICKNESS);
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      bArmX,
+      shoulderY,
+      bArmX,
+      bElbowY,
+      bArmX,
+      bHandY,
+      ARM_THICKNESS + OUTLINE_WIDTH * 2,
+    );
+    this.drawThickLimb(
+      g,
+      c.color,
+      bArmX,
+      shoulderY,
+      bArmX,
+      bElbowY,
+      bArmX,
+      bHandY,
+      ARM_THICKNESS,
+    );
 
     // Torso (smooth arc using quadratic bezier sampling)
     const TORSO_THICKNESS = BODY_WIDTH * 2;
-    this.drawSmoothArc(g, OUTLINE_COLOR, hipX, hipY, backMidX, backMidY, shoulderX, shoulderY, TORSO_THICKNESS + OUTLINE_WIDTH * 2);
-    this.drawSmoothArc(g, c.color, hipX, hipY, backMidX, backMidY, shoulderX, shoulderY, TORSO_THICKNESS);
+    this.drawSmoothArc(
+      g,
+      OUTLINE_COLOR,
+      hipX,
+      hipY,
+      backMidX,
+      backMidY,
+      shoulderX,
+      shoulderY,
+      TORSO_THICKNESS + OUTLINE_WIDTH * 2,
+    );
+    this.drawSmoothArc(
+      g,
+      c.color,
+      hipX,
+      hipY,
+      backMidX,
+      backMidY,
+      shoulderX,
+      shoulderY,
+      TORSO_THICKNESS,
+    );
 
     // Head
     g.fillStyle(OUTLINE_COLOR);
@@ -282,8 +487,28 @@ export class VictoryAnimation {
     g.fillCircle(headX, headY, HEAD_RADIUS);
 
     // Front arm (drawn after head, closer to viewer)
-    this.drawThickLimb(g, OUTLINE_COLOR, fArmX, shoulderY, fArmX, fElbowY, fArmX, fHandY, ARM_THICKNESS + OUTLINE_WIDTH * 2);
-    this.drawThickLimb(g, c.color, fArmX, shoulderY, fArmX, fElbowY, fArmX, fHandY, ARM_THICKNESS);
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      fArmX,
+      shoulderY,
+      fArmX,
+      fElbowY,
+      fArmX,
+      fHandY,
+      ARM_THICKNESS + OUTLINE_WIDTH * 2,
+    );
+    this.drawThickLimb(
+      g,
+      c.color,
+      fArmX,
+      shoulderY,
+      fArmX,
+      fElbowY,
+      fArmX,
+      fHandY,
+      ARM_THICKNESS,
+    );
 
     // Crying face (side view, half-open sad eyes)
     const eyeBaseX = headX + dir * 5;
@@ -325,9 +550,12 @@ export class VictoryAnimation {
   private drawSmoothArc(
     g: Phaser.GameObjects.Graphics,
     color: number,
-    x1: number, y1: number,
-    cx: number, cy: number,
-    x2: number, y2: number,
+    x1: number,
+    y1: number,
+    cx: number,
+    cy: number,
+    x2: number,
+    y2: number,
     thickness: number,
   ) {
     g.fillStyle(color);
@@ -345,9 +573,12 @@ export class VictoryAnimation {
   private drawThickLimb(
     g: Phaser.GameObjects.Graphics,
     color: number,
-    x1: number, y1: number,
-    x2: number, y2: number,
-    x3: number, y3: number,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    x3: number,
+    y3: number,
     thickness: number,
   ) {
     g.fillStyle(color);

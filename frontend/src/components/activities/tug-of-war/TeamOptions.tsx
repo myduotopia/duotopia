@@ -115,13 +115,24 @@ export function TeamOptions({
             >
               {OPTION_LABELS[index]}
             </span>
-            {showImages && (() => {
-              const item = vocabItems.find((v) => v.text === option || v.translation === option);
-              return item?.image_url ? (
-                <img src={item.image_url} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />
-              ) : null;
-            })()}
-            <span className={`text-lg font-medium break-words whitespace-normal ${useHandwriteFont ? "handwrite-font text-xl" : ""}`}>{option}</span>
+            {showImages &&
+              (() => {
+                const item = vocabItems.find(
+                  (v) => v.text === option || v.translation === option,
+                );
+                return item?.image_url ? (
+                  <img
+                    src={item.image_url}
+                    alt=""
+                    className="w-8 h-8 rounded object-cover flex-shrink-0"
+                  />
+                ) : null;
+              })()}
+            <span
+              className={`text-lg font-medium break-words whitespace-normal ${useHandwriteFont ? "handwrite-font text-xl" : ""}`}
+            >
+              {option}
+            </span>
           </button>
         ))}
       </div>

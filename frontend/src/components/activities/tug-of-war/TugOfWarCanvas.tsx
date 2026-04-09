@@ -248,10 +248,7 @@ export function TugOfWarCanvas({
       canvas.height = canvas.offsetHeight * (window.devicePixelRatio || 1);
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        ctx.scale(
-          window.devicePixelRatio || 1,
-          window.devicePixelRatio || 1,
-        );
+        ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
       }
     }
 
@@ -270,10 +267,7 @@ export function TugOfWarCanvas({
         canvas.height = canvas.offsetHeight * (window.devicePixelRatio || 1);
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.scale(
-            window.devicePixelRatio || 1,
-            window.devicePixelRatio || 1,
-          );
+          ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
         }
       }
     };

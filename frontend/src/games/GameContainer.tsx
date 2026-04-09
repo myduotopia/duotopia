@@ -14,7 +14,11 @@ interface GameContainerProps {
   style?: React.CSSProperties;
 }
 
-export function GameContainer({ config, className, style }: GameContainerProps) {
+export function GameContainer({
+  config,
+  className,
+  style,
+}: GameContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
 

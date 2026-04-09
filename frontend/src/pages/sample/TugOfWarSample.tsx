@@ -58,7 +58,8 @@ export default function TugOfWarSample() {
       isPaused: false,
       teamACooldown: cooldownA,
       teamBCooldown: cooldownB,
-      winner: ropePosition <= -winScore ? "a" : ropePosition >= winScore ? "b" : null,
+      winner:
+        ropePosition <= -winScore ? "a" : ropePosition >= winScore ? "b" : null,
     };
     scene.data.set("state", state);
   }, [ropePosition, lastTeam, cooldownA, cooldownB]);
@@ -151,7 +152,14 @@ export default function TugOfWarSample() {
       {/* State info */}
       <div style={{ textAlign: "center", color: "#6B7280" }}>
         <p>Rope position: {ropePosition}</p>
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            justifyContent: "center",
+            marginTop: 8,
+          }}
+        >
           <label>
             <input
               type="checkbox"

@@ -137,7 +137,9 @@ export function QuestionDisplay({
 
   return (
     <div className="text-center py-2 h-16 flex items-center justify-center">
-      <span className="text-4xl font-bold handwrite-font">{question.prompt}</span>
+      <span className="text-4xl font-bold handwrite-font">
+        {question.prompt}
+      </span>
     </div>
   );
 }

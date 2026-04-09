@@ -68,8 +68,10 @@ export class Rope {
     const lEndY = groundY;
     // Draw curve as segments
     for (let t = 0; t <= 1; t += 0.05) {
-      const px = (1 - t) * (1 - t) * leftEndX + 2 * (1 - t) * t * lCtrlX + t * t * lEndX;
-      const py = (1 - t) * (1 - t) * y + 2 * (1 - t) * t * lCtrlY + t * t * lEndY;
+      const px =
+        (1 - t) * (1 - t) * leftEndX + 2 * (1 - t) * t * lCtrlX + t * t * lEndX;
+      const py =
+        (1 - t) * (1 - t) * y + 2 * (1 - t) * t * lCtrlY + t * t * lEndY;
       g.lineTo(px, py);
     }
     g.strokePath();
@@ -83,8 +85,12 @@ export class Rope {
     const rEndX = rightEndX + tailLen * 0.15;
     const rEndY = groundY;
     for (let t = 0; t <= 1; t += 0.05) {
-      const px = (1 - t) * (1 - t) * rightEndX + 2 * (1 - t) * t * rCtrlX + t * t * rEndX;
-      const py = (1 - t) * (1 - t) * y + 2 * (1 - t) * t * rCtrlY + t * t * rEndY;
+      const px =
+        (1 - t) * (1 - t) * rightEndX +
+        2 * (1 - t) * t * rCtrlX +
+        t * t * rEndX;
+      const py =
+        (1 - t) * (1 - t) * y + 2 * (1 - t) * t * rCtrlY + t * t * rEndY;
       g.lineTo(px, py);
     }
     g.strokePath();
@@ -129,11 +135,7 @@ export class Rope {
     g.strokePath();
 
     g.fillStyle(this.flagColor);
-    g.fillTriangle(
-      flagX, y - 28,
-      flagX + 16, y - 22,
-      flagX, y - 16,
-    );
+    g.fillTriangle(flagX, y - 28, flagX + 16, y - 22, flagX, y - 16);
   }
 
   destroy() {

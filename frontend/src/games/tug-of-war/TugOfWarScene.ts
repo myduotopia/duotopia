@@ -107,11 +107,15 @@ export class TugOfWarScene extends Phaser.Scene {
     // 1) Create stickmen (this creates both backGraphics and frontGraphics)
     for (let i = 0; i < 3; i++) {
       const sx = this.centerX - 200 - i * 50;
-      this.stickmenA.push(new Stickman(this, sx, this.groundY, TEAM_A_COLOR, false));
+      this.stickmenA.push(
+        new Stickman(this, sx, this.groundY, TEAM_A_COLOR, false),
+      );
     }
     for (let i = 0; i < 3; i++) {
       const sx = this.centerX + 200 + i * 50;
-      this.stickmenB.push(new Stickman(this, sx, this.groundY, TEAM_B_COLOR, true));
+      this.stickmenB.push(
+        new Stickman(this, sx, this.groundY, TEAM_B_COLOR, true),
+      );
     }
 
     // 2) Rope — created after stickmen's backGraphics, before frontGraphics are brought up
@@ -128,14 +132,24 @@ export class TugOfWarScene extends Phaser.Scene {
 
     // Listen for state updates from React
     this.data.set("state", this.state);
-    this.data.events.on("changedata-state", (_: unknown, value: TugOfWarState) => {
-      this.state = value;
-      this.applyState();
-    });
+    this.data.events.on(
+      "changedata-state",
+      (_: unknown, value: TugOfWarState) => {
+        this.state = value;
+        this.applyState();
+      },
+    );
   }
 
   private applyState() {
-    const { ropePosition, winScore, lastCorrectTeam, teamACooldown, teamBCooldown, isPaused } = this.state;
+    const {
+      ropePosition,
+      winScore,
+      lastCorrectTeam,
+      teamACooldown,
+      teamBCooldown,
+      isPaused,
+    } = this.state;
 
     // Update rope position — each point moves rope by maxOffset/winScore
     // so at exactly winScore points, flag reaches the win line
@@ -182,8 +196,12 @@ export class TugOfWarScene extends Phaser.Scene {
 
       // Get current positions
       const ropeOffset = this.rope.offset;
-      const ax = this.stickmenA.map((_, i) => this.centerX - 200 - i * 50 + ropeOffset);
-      const bx = this.stickmenB.map((_, i) => this.centerX + 200 + i * 50 + ropeOffset);
+      const ax = this.stickmenA.map(
+        (_, i) => this.centerX - 200 - i * 50 + ropeOffset,
+      );
+      const bx = this.stickmenB.map(
+        (_, i) => this.centerX + 200 + i * 50 + ropeOffset,
+      );
 
       this.victoryAnim.start(winner, { ax, bx, groundY: this.groundY });
     } else if (!winner && this.isVictoryPlaying) {
@@ -235,17 +253,35 @@ export class TugOfWarScene extends Phaser.Scene {
     const bottom = this.groundY;
 
     // Left win line (Team A wins here) — dashed
-    this.drawDashedLine(g, this.centerX - winOffset, top, bottom, 0xef4444, 0.5);
+    this.drawDashedLine(
+      g,
+      this.centerX - winOffset,
+      top,
+      bottom,
+      0xef4444,
+      0.5,
+    );
 
     // Right win line (Team B wins here) — dashed
-    this.drawDashedLine(g, this.centerX + winOffset, top, bottom, 0x3b82f6, 0.5);
+    this.drawDashedLine(
+      g,
+      this.centerX + winOffset,
+      top,
+      bottom,
+      0x3b82f6,
+      0.5,
+    );
   }
 
   private drawDashedLine(
     g: Phaser.GameObjects.Graphics,
-    x: number, top: number, bottom: number,
-    color: number, alpha: number,
-    dashLen = 6, gapLen = 4,
+    x: number,
+    top: number,
+    bottom: number,
+    color: number,
+    alpha: number,
+    dashLen = 6,
+    gapLen = 4,
   ) {
     g.lineStyle(2, color, alpha);
     let y = top;

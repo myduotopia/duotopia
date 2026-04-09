@@ -103,18 +103,40 @@ export class Stickman {
     const frontHipX = bodyCenterX + dir * 5;
     const backHipX = bodyCenterX - dir * 4;
 
-    const frontKneeX = (frontHipX + frontFootX) / 2 + (this.isPulling ? dir * kneeBend : 0);
+    const frontKneeX =
+      (frontHipX + frontFootX) / 2 + (this.isPulling ? dir * kneeBend : 0);
     const frontKneeY = (bodyBottomY + groundY) / 2 + (this.isPulling ? -3 : 0);
-    const backKneeX = (backHipX + backFootX) / 2 + (this.isPulling ? dir * kneeBend * 0.5 : 0);
+    const backKneeX =
+      (backHipX + backFootX) / 2 + (this.isPulling ? dir * kneeBend * 0.5 : 0);
     const backKneeY = (bodyBottomY + groundY) / 2 + (this.isPulling ? -2 : 0);
 
     return {
-      dir, x, groundY, bodyBottomY, bodyCenterX, bodyCenterY, headX, headY,
-      shoulderX, shoulderY,
-      frontElbowX, frontElbowY, frontHandX, frontHandY,
-      backElbowX, backElbowY, backHandX, backHandY,
-      frontFootX, backFootX, frontHipX, backHipX,
-      frontKneeX, frontKneeY, backKneeX, backKneeY,
+      dir,
+      x,
+      groundY,
+      bodyBottomY,
+      bodyCenterX,
+      bodyCenterY,
+      headX,
+      headY,
+      shoulderX,
+      shoulderY,
+      frontElbowX,
+      frontElbowY,
+      frontHandX,
+      frontHandY,
+      backElbowX,
+      backElbowY,
+      backHandX,
+      backHandY,
+      frontFootX,
+      backFootX,
+      frontHipX,
+      backHipX,
+      frontKneeX,
+      frontKneeY,
+      backKneeX,
+      backKneeY,
     };
   }
 
@@ -128,21 +150,50 @@ export class Stickman {
 
     // === OUTLINES ===
     // Legs outline
-    this.drawThickLimb(g, OUTLINE_COLOR,
-      p.frontHipX, p.bodyBottomY, p.frontKneeX, p.frontKneeY, p.frontFootX, p.groundY,
-      this.LEG_THICKNESS + OUTLINE_WIDTH * 2);
-    this.drawThickLimb(g, OUTLINE_COLOR,
-      p.backHipX, p.bodyBottomY, p.backKneeX, p.backKneeY, p.backFootX, p.groundY,
-      this.LEG_THICKNESS + OUTLINE_WIDTH * 2);
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      p.frontHipX,
+      p.bodyBottomY,
+      p.frontKneeX,
+      p.frontKneeY,
+      p.frontFootX,
+      p.groundY,
+      this.LEG_THICKNESS + OUTLINE_WIDTH * 2,
+    );
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      p.backHipX,
+      p.bodyBottomY,
+      p.backKneeX,
+      p.backKneeY,
+      p.backFootX,
+      p.groundY,
+      this.LEG_THICKNESS + OUTLINE_WIDTH * 2,
+    );
 
     // Body outline
     g.fillStyle(OUTLINE_COLOR);
-    g.fillEllipse(p.bodyCenterX, p.bodyCenterY, this.BODY_WIDTH * 2 + OUTLINE_WIDTH * 2, this.BODY_HEIGHT + OUTLINE_WIDTH * 2);
+    g.fillEllipse(
+      p.bodyCenterX,
+      p.bodyCenterY,
+      this.BODY_WIDTH * 2 + OUTLINE_WIDTH * 2,
+      this.BODY_HEIGHT + OUTLINE_WIDTH * 2,
+    );
 
     // Back arm outline
-    this.drawThickLimb(g, OUTLINE_COLOR,
-      p.shoulderX, p.shoulderY + 3, p.backElbowX, p.backElbowY, p.backHandX, p.backHandY,
-      this.ARM_THICKNESS + OUTLINE_WIDTH * 2);
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      p.shoulderX,
+      p.shoulderY + 3,
+      p.backElbowX,
+      p.backElbowY,
+      p.backHandX,
+      p.backHandY,
+      this.ARM_THICKNESS + OUTLINE_WIDTH * 2,
+    );
     g.fillStyle(OUTLINE_COLOR);
     g.fillCircle(p.backHandX, p.backHandY, 5 + OUTLINE_WIDTH);
 
@@ -152,21 +203,50 @@ export class Stickman {
 
     // === FILLS ===
     // Legs fill
-    this.drawThickLimb(g, this.color,
-      p.frontHipX, p.bodyBottomY, p.frontKneeX, p.frontKneeY, p.frontFootX, p.groundY,
-      this.LEG_THICKNESS);
-    this.drawThickLimb(g, this.color,
-      p.backHipX, p.bodyBottomY, p.backKneeX, p.backKneeY, p.backFootX, p.groundY,
-      this.LEG_THICKNESS);
+    this.drawThickLimb(
+      g,
+      this.color,
+      p.frontHipX,
+      p.bodyBottomY,
+      p.frontKneeX,
+      p.frontKneeY,
+      p.frontFootX,
+      p.groundY,
+      this.LEG_THICKNESS,
+    );
+    this.drawThickLimb(
+      g,
+      this.color,
+      p.backHipX,
+      p.bodyBottomY,
+      p.backKneeX,
+      p.backKneeY,
+      p.backFootX,
+      p.groundY,
+      this.LEG_THICKNESS,
+    );
 
     // Body fill
     g.fillStyle(this.color);
-    g.fillEllipse(p.bodyCenterX, p.bodyCenterY, this.BODY_WIDTH * 2, this.BODY_HEIGHT);
+    g.fillEllipse(
+      p.bodyCenterX,
+      p.bodyCenterY,
+      this.BODY_WIDTH * 2,
+      this.BODY_HEIGHT,
+    );
 
     // Back arm fill
-    this.drawThickLimb(g, this.color,
-      p.shoulderX, p.shoulderY + 3, p.backElbowX, p.backElbowY, p.backHandX, p.backHandY,
-      this.ARM_THICKNESS);
+    this.drawThickLimb(
+      g,
+      this.color,
+      p.shoulderX,
+      p.shoulderY + 3,
+      p.backElbowX,
+      p.backElbowY,
+      p.backHandX,
+      p.backHandY,
+      this.ARM_THICKNESS,
+    );
     g.fillStyle(this.color);
     g.fillCircle(p.backHandX, p.backHandY, 5);
 
@@ -193,16 +273,32 @@ export class Stickman {
     const p = this.getPositions();
 
     // Front arm outline
-    this.drawThickLimb(g, OUTLINE_COLOR,
-      p.shoulderX, p.shoulderY, p.frontElbowX, p.frontElbowY, p.frontHandX, p.frontHandY,
-      this.ARM_THICKNESS + OUTLINE_WIDTH * 2);
+    this.drawThickLimb(
+      g,
+      OUTLINE_COLOR,
+      p.shoulderX,
+      p.shoulderY,
+      p.frontElbowX,
+      p.frontElbowY,
+      p.frontHandX,
+      p.frontHandY,
+      this.ARM_THICKNESS + OUTLINE_WIDTH * 2,
+    );
     g.fillStyle(OUTLINE_COLOR);
     g.fillCircle(p.frontHandX, p.frontHandY, 5 + OUTLINE_WIDTH);
 
     // Front arm fill
-    this.drawThickLimb(g, this.color,
-      p.shoulderX, p.shoulderY, p.frontElbowX, p.frontElbowY, p.frontHandX, p.frontHandY,
-      this.ARM_THICKNESS);
+    this.drawThickLimb(
+      g,
+      this.color,
+      p.shoulderX,
+      p.shoulderY,
+      p.frontElbowX,
+      p.frontElbowY,
+      p.frontHandX,
+      p.frontHandY,
+      this.ARM_THICKNESS,
+    );
     g.fillStyle(this.color);
     g.fillCircle(p.frontHandX, p.frontHandY, 5);
 
@@ -213,7 +309,10 @@ export class Stickman {
     g.strokePath();
   }
 
-  private drawFace(g: Phaser.GameObjects.Graphics, p: ReturnType<typeof this.getPositions>) {
+  private drawFace(
+    g: Phaser.GameObjects.Graphics,
+    p: ReturnType<typeof this.getPositions>,
+  ) {
     if (this.isPulling) {
       const eyeBaseX = p.headX + p.dir * 5;
       const eyeY = p.headY - 1;
@@ -270,9 +369,12 @@ export class Stickman {
   private drawThickLimb(
     g: Phaser.GameObjects.Graphics,
     color: number,
-    x1: number, y1: number,
-    x2: number, y2: number,
-    x3: number, y3: number,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    x3: number,
+    y3: number,
     thickness: number,
   ) {
     g.fillStyle(color);

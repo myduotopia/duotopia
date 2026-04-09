@@ -251,10 +251,8 @@ export function useGameLogic(
           };
         } else {
           // Wrong answer - apply cooldown to this team
-          const cooldownKey =
-            team === "a" ? "teamACooldown" : "teamBCooldown";
-          const timerRef =
-            team === "a" ? cooldownTimerA : cooldownTimerB;
+          const cooldownKey = team === "a" ? "teamACooldown" : "teamBCooldown";
+          const timerRef = team === "a" ? cooldownTimerA : cooldownTimerB;
 
           if (timerRef.current) clearTimeout(timerRef.current);
 
