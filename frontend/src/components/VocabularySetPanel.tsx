@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { useTranslation } from "react-i18next";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,6 @@ import {
   Clipboard,
   Image as ImageIcon,
   X,
-  Loader2,
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +35,11 @@ import {
   TTS_SPEEDS,
   getVoiceAndRate,
 } from "@/utils/ttsVoiceResolver";
+import {
+  BatchWorkPanel,
+  BatchPasteArea,
+  BatchTTSSettings,
+} from "@/components/shared/batch";
 // dnd-kit imports
 import {
   DndContext,
@@ -1555,6 +1559,11 @@ function SortableRowInner({
   );
 }
 
+export interface VocabularySetPanelHandle {
+  save: () => Promise<void>;
+  isBusy: boolean;
+}
+
 interface VocabularySetPanelProps {
   content?: { id?: number; title?: string; items?: ContentRow[] };
   editingContent?: { id?: number; title?: string; items?: ContentRow[] };
@@ -1570,7 +1579,7 @@ interface VocabularySetPanelProps {
   isAssignmentCopy?: boolean; // 是否為作業副本（顯示干擾項編輯）
 }
 
-export default function VocabularySetPanel({
+const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPanelProps>(function VocabularySetPanel({
   content,
   editingContent,
   onUpdateContent,
@@ -1579,7 +1588,7 @@ export default function VocabularySetPanel({
   programLevel,
   isCreating = false,
   isAssignmentCopy = false,
-}: VocabularySetPanelProps) {
+}, ref) {
   const { t } = useTranslation();
   const { setEditorBusy } = useSidebar();
 
@@ -1591,7 +1600,7 @@ export default function VocabularySetPanel({
   const [title, setTitle] = useState("");
   // 記住用戶最後選擇的翻譯語言，批次翻譯時使用
   const [lastSelectedWordLang, setLastSelectedWordLang] =
-    useState<WordTranslationLanguage>("chinese");
+    useState<WordTranslationLanguage | "">("");
   const [customTranslationLang, setCustomTranslationLang] = useState("");
   const [rows, setRows] = useState<ContentRow[]>([
     {
@@ -1651,19 +1660,7 @@ export default function VocabularySetPanel({
     new Map(),
   );
 
-  // Sync sentence translation language from word translation language
-  useEffect(() => {
-    if (lastSelectedWordLang === "english") {
-      // 英英翻譯時，例句不預選語言
-      setAiGenerateTranslateLang("");
-      setCustomSentenceTranslationLang("");
-    } else if (lastSelectedWordLang === "other") {
-      setAiGenerateTranslateLang("other");
-      setCustomSentenceTranslationLang(customTranslationLang);
-    } else {
-      setAiGenerateTranslateLang(lastSelectedWordLang);
-    }
-  }, [lastSelectedWordLang, customTranslationLang]);
+  // #582: 例句翻譯語言由造句元件獨立控制，不再與單字翻譯語言連動
 
   // Recalculate duplicates whenever rows change
   useEffect(() => {
@@ -1694,7 +1691,7 @@ export default function VocabularySetPanel({
   ); // 🔥 階段2：預設使用 Program level
   const [aiGeneratePrompt, setAiGeneratePrompt] = useState("");
   const [aiGenerateTranslateLang, setAiGenerateTranslateLang] =
-    useState<string>("chinese");
+    useState<string>("");
   const [customSentenceTranslationLang, setCustomSentenceTranslationLang] =
     useState("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -1711,10 +1708,7 @@ export default function VocabularySetPanel({
     }),
   );
 
-  // TTS options for batch paste (Issue #121)
-  const batchTTSAccents = TTS_ACCENTS;
-  const batchTTSGenders = TTS_GENDERS;
-  const batchTTSSpeeds = TTS_SPEEDS;
+  // TTS options still used by handleBatchGenerateTTS logic
 
   // Load saved TTS settings from localStorage (Issue #121)
   useEffect(() => {
@@ -2361,7 +2355,7 @@ export default function VocabularySetPanel({
                   parsed.pos,
                 ]);
               }
-              newRows[item.index].selectedWordLanguage = batchLang;
+              if (batchLang) newRows[item.index].selectedWordLanguage = batchLang;
             }
           });
         } else {
@@ -2387,7 +2381,7 @@ export default function VocabularySetPanel({
                 parsed.pos,
               ]);
             }
-            newRows[item.index].selectedWordLanguage = batchLang;
+            if (batchLang) newRows[item.index].selectedWordLanguage = batchLang;
           });
         }
       }
@@ -2419,7 +2413,7 @@ export default function VocabularySetPanel({
               parsed.pos,
             ]);
           }
-          newRows[item.index].selectedWordLanguage = batchLang;
+          if (batchLang) newRows[item.index].selectedWordLanguage = batchLang;
         });
       }
 
@@ -2530,6 +2524,101 @@ export default function VocabularySetPanel({
       return { success: false, updatedRows: currentRows };
     }
   };
+
+  // Save handler - extracted for useImperativeHandle
+  const handleSave = async () => {
+    let validRows = rows.filter((row) => row.text && row.text.trim());
+
+    if (validRows.length === 0) {
+      toast.error(t("contentEditor.messages.addAtLeastOneItem"));
+      return;
+    }
+
+    if (!title || title.trim() === "") {
+      toast.error(t("contentEditor.messages.enterTitle"));
+      return;
+    }
+
+    const dupes = findDuplicates(validRows);
+    if (dupes.size > 0) {
+      setDuplicateMap(dupes);
+      toast.error(t("contentEditor.messages.duplicateItems"));
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const translationResult = await autoGenerateTranslationsSilently(validRows);
+      if (!translationResult.success) {
+        setIsSaving(false);
+        return;
+      }
+      validRows = translationResult.updatedRows;
+
+      const audioResult = await autoGenerateAudioSilently(validRows);
+      if (!audioResult.success) {
+        setIsSaving(false);
+        return;
+      }
+      validRows = audioResult.updatedRows;
+
+      setRows(
+        rows.map((row) => {
+          const updated = validRows.find((v) => v.id === row.id);
+          return updated || row;
+        }),
+      );
+
+      const saveData = {
+        title: title,
+        items: validRows.map(buildItemPayload),
+        target_wpm: 60,
+        target_accuracy: 0.8,
+        time_limit_seconds: 180,
+      };
+
+      const existingContentId = editingContent?.id || content?.id;
+
+      if (existingContentId) {
+        try {
+          await apiClient.updateContent(existingContentId, saveData);
+          toast.success(t("contentEditor.messages.savingSuccess"));
+          if (onSave) {
+            await onSave({
+              id: existingContentId,
+              title: saveData.title,
+              items: saveData.items,
+            });
+          }
+        } catch (error) {
+          console.error("Failed to update content:", error);
+          toast.error(t("contentEditor.messages.savingFailed"));
+        }
+      } else if (isCreating && lessonId) {
+        try {
+          const newContent = await apiClient.createContent(lessonId, {
+            type: "VOCABULARY_SET",
+            ...saveData,
+          });
+          toast.success(t("contentEditor.messages.contentCreatedSuccess"));
+          if (onSave) {
+            await onSave(newContent);
+          }
+        } catch (error) {
+          console.error("Failed to create content:", error);
+          toast.error(t("contentEditor.messages.creatingContentFailed"));
+        }
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+    get isBusy() { return isSaving || isBatchPasting; },
+  }));
 
   // ========== 原有函數 ==========
 
@@ -2874,7 +2963,7 @@ export default function VocabularySetPanel({
                 ]);
               }
             }
-            newRows[item.index].selectedWordLanguage = batchLang;
+            if (batchLang) newRows[item.index].selectedWordLanguage = batchLang;
           });
         } else {
           const translateResponse = await apiClient.batchTranslate(
@@ -2899,7 +2988,7 @@ export default function VocabularySetPanel({
                 parsed.pos,
               ]);
             }
-            newRows[item.index].selectedWordLanguage = batchLang;
+            if (batchLang) newRows[item.index].selectedWordLanguage = batchLang;
           });
         }
       }
@@ -2931,7 +3020,7 @@ export default function VocabularySetPanel({
               parsed.pos,
             ]);
           }
-          newRows[item.index].selectedWordLanguage = batchLang;
+          if (batchLang) newRows[item.index].selectedWordLanguage = batchLang;
         });
       }
 
@@ -3199,6 +3288,12 @@ export default function VocabularySetPanel({
       }
     }
 
+    // 檢查：勾選翻譯但沒選語言
+    if (autoTranslate && !lastSelectedWordLang) {
+      toast.error(t("contentEditor.labels.selectLanguage"));
+      return;
+    }
+
     // 檢查：勾選翻譯但選了「其他」卻沒輸入語言
     if (
       autoTranslate &&
@@ -3342,6 +3437,7 @@ export default function VocabularySetPanel({
           }
           if (autoTTS && !row.audioUrl && !row.audio_url) steps++;
           if (shouldGenerateExamples && !row.example_sentence?.trim()) steps++;
+          if (shouldGenerateExamples && row.example_sentence?.trim() && !row.example_sentence_translation?.trim()) steps++;
           return steps;
         };
 
@@ -3393,6 +3489,7 @@ export default function VocabularySetPanel({
         const needsTranslation: number[] = [];
         const needsTTS: number[] = [];
         const needsExamples: number[] = [];
+        const needsExampleTranslation: number[] = [];
 
         for (const idx of itemsToProcess) {
           const row = currentRows[idx];
@@ -3409,6 +3506,8 @@ export default function VocabularySetPanel({
           if (autoTTS && !row.audioUrl && !row.audio_url) needsTTS.push(idx);
           if (shouldGenerateExamples && !row.example_sentence?.trim())
             needsExamples.push(idx);
+          if (shouldGenerateExamples && row.example_sentence?.trim() && !row.example_sentence_translation?.trim())
+            needsExampleTranslation.push(idx);
         }
 
         // --- Phase 1: Translation (parallel batch) ---
@@ -3596,6 +3695,44 @@ export default function VocabularySetPanel({
           });
         }
 
+        // --- Phase 4: Translate existing example sentences missing translation ---
+        if (needsExampleTranslation.length > 0 && !batchPauseRef.current && exampleTargetLang) {
+          const textsToTranslate = needsExampleTranslation.map(
+            (idx) => currentRows[idx].example_sentence || "",
+          );
+
+          try {
+            const translateResponse = await withRetry(() =>
+              apiClient.batchTranslate(textsToTranslate, exampleTargetLang),
+            );
+            const translations =
+              (translateResponse as { translations?: string[] }).translations || [];
+            translations.forEach((trans: string, i: number) => {
+              if (!trans) return;
+              const idx = needsExampleTranslation[i];
+              const sentenceLang = currentRows[idx].selectedSentenceLanguage || aiGenerateTranslateLang || "chinese";
+              if (sentenceLang === "japanese") {
+                currentRows[idx].example_sentence_japanese = trans;
+              } else if (sentenceLang === "korean") {
+                currentRows[idx].example_sentence_korean = trans;
+              } else {
+                currentRows[idx].example_sentence_translation = trans;
+              }
+            });
+          } catch (error) {
+            console.error("Batch example translation failed:", error);
+          }
+
+          completedSteps += needsExampleTranslation.length;
+          setRows([...currentRows]);
+          setBatchProgress({
+            completedItems,
+            totalItems,
+            completedSteps,
+            totalSteps,
+          });
+        }
+
         completedItems = totalItems;
 
         toast.success(
@@ -3692,7 +3829,7 @@ export default function VocabularySetPanel({
           text,
           definition: "",
           translation: "",
-          selectedWordLanguage: lastSelectedWordLang,
+          selectedWordLanguage: lastSelectedWordLang || undefined,
           example_sentence: "",
           example_sentence_translation: "",
         };
@@ -3946,207 +4083,39 @@ export default function VocabularySetPanel({
       </div>
 
       {/* Desktop: Side-by-side layout / Mobile: Editor only */}
-      <div className="flex flex-1 gap-4 min-h-0 overflow-y-auto">
+      <div className="flex flex-1 gap-4 min-h-0">
         {/* Left: Batch Work Area (Desktop only) */}
-        <div className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4 sticky top-0 self-start">
-          {/* Batch Paste */}
-          <div className="space-y-3 flex-1 flex flex-col">
-            <label className="text-sm font-semibold text-gray-800">
-              {t("contentEditor.labels.pasteContent")}
-            </label>
-            {(() => {
-              const lines = batchPasteText.split("\n");
-              const lineCount = lines.filter((line: string) =>
-                line.trim(),
-              ).length;
-              const overLimit = lineCount > BATCH_PASTE_MAX;
-              return (
-                <>
-                  <div
-                    className="flex-1 min-h-[calc(1.625rem*8+1rem)] max-h-[calc(1.625rem*10+1rem)] border border-gray-300 rounded-lg focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all overflow-y-auto cursor-text"
-                    onClick={(e) => {
-                      const ta = (e.currentTarget as HTMLElement).querySelector(
-                        "textarea",
-                      );
-                      if (ta) ta.focus();
-                    }}
-                  >
-                    <div className="flex">
-                      {/* Line numbers */}
-                      <div className="flex flex-col py-2 px-2 text-gray-300 font-mono text-sm select-none min-w-[2rem] text-right sticky left-0">
-                        {Array.from(
-                          { length: Math.max(lines.length, 1) },
-                          (_, i) => (
-                            <div key={i} className="leading-[1.625rem]">
-                              {i + 1}
-                            </div>
-                          ),
-                        )}
-                      </div>
-                      <textarea
-                        value={batchPasteText}
-                        onChange={(e) => {
-                          const newValue = e.target.value;
-                          const newLines = newValue.split("\n");
-                          const prevLineCount =
-                            batchPasteText.split("\n").length;
-                          const isPaste = newLines.length - prevLineCount > 1;
-
-                          if (isPaste) {
-                            const filtered = newLines
-                              .filter((l: string) => l.trim())
-                              .slice(0, BATCH_PASTE_MAX);
-                            setBatchPasteText(filtered.join("\n"));
-                          } else if (newLines.length > BATCH_PASTE_MAX) {
-                            setBatchPasteText(
-                              newLines.slice(0, BATCH_PASTE_MAX).join("\n"),
-                            );
-                          } else {
-                            setBatchPasteText(newValue);
-                          }
-                        }}
-                        placeholder="apple&#10;banana&#10;orange"
-                        className="flex-1 px-3 py-2 font-mono text-sm resize-none outline-none leading-[1.625rem] overflow-hidden"
-                        style={{
-                          height: `${Math.max(lines.length, 8) * 1.625 + 1}rem`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div
-                    className={`text-xs ${overLimit ? "text-red-500 font-medium" : "text-gray-500"}`}
-                  >
-                    {lineCount || 0} {t("contentEditor.messages.items")}
-                    {` / ${BATCH_PASTE_MAX}`}
-                    {overLimit &&
-                      ` (${t("contentEditor.messages.batchPasteLimitShort", { count: BATCH_PASTE_MAX })})`}
-                  </div>
-                </>
-              );
-            })()}
-
-            {/* AI Generate Translation */}
-            <div className="bg-green-50 rounded-lg border border-green-200 overflow-hidden">
-              <div className="flex items-center gap-2 p-3">
-                <input
-                  type="checkbox"
-                  checked={batchPasteAutoTranslate}
-                  onChange={(e) => setBatchPasteAutoTranslate(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <Globe className="h-4 w-4" />
-                <span className="text-sm font-semibold text-gray-800">
-                  {t("contentEditor.labels.aiGenerateTranslation")}
-                </span>
-              </div>
-              {batchPasteAutoTranslate && (
-                <div className="px-3 pb-3 space-y-2">
-                  <label className="text-xs text-gray-600 mb-1 block">
-                    {t("contentEditor.labels.translationLanguage")}
-                  </label>
-                  <select
-                    value={lastSelectedWordLang}
-                    onChange={(e) => {
-                      const newLang = e.target.value as WordTranslationLanguage;
-                      setLastSelectedWordLang(newLang);
-                      // 統一更新所有 rows 的語言
-                      rows.forEach((_, i) => {
-                        handleUpdateRow(i, "selectedWordLanguage", newLang);
-                      });
-                    }}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  >
-                    {WORD_TRANSLATION_LANGUAGES.map((lang) => (
-                      <option key={lang.value} value={lang.value}>
-                        {lang.value === "other"
-                          ? t("contentEditor.labels.otherLanguage")
-                          : lang.label}
-                      </option>
-                    ))}
-                  </select>
-                  {lastSelectedWordLang === "other" && (
-                    <input
-                      type="text"
-                      value={customTranslationLang}
-                      onChange={(e) => setCustomTranslationLang(e.target.value)}
-                      placeholder={t("contentEditor.labels.enterLanguage")}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* AI Generate TTS */}
-            <div className="bg-yellow-50 rounded-lg border border-yellow-200 overflow-hidden">
-              <div className="flex items-center gap-2 p-3">
-                <input
-                  type="checkbox"
-                  checked={batchPasteAutoTTS}
-                  onChange={(e) => setBatchPasteAutoTTS(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <Volume2 className="h-4 w-4" />
-                <span className="text-sm font-semibold text-gray-800">
-                  {t("contentEditor.labels.aiGenerateTTS")}
-                </span>
-              </div>
-              {batchPasteAutoTTS && (
-                <div className="px-3 pb-3 space-y-2">
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
-                      {t("contentEditor.ttsSettings.accent")}
-                    </label>
-                    <select
-                      value={batchTTSAccent}
-                      onChange={(e) => setBatchTTSAccent(e.target.value)}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      {batchTTSAccents.map((accent) => (
-                        <option key={accent} value={accent}>
-                          {accent}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-xs text-gray-600 mb-1 block">
-                        {t("contentEditor.ttsSettings.gender")}
-                      </label>
-                      <select
-                        value={batchTTSGender}
-                        onChange={(e) => setBatchTTSGender(e.target.value)}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      >
-                        {batchTTSGenders.map((gender) => (
-                          <option key={gender} value={gender}>
-                            {gender}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-600 mb-1 block">
-                        {t("contentEditor.ttsSettings.speed")}
-                      </label>
-                      <select
-                        value={batchTTSSpeed}
-                        onChange={(e) => setBatchTTSSpeed(e.target.value)}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      >
-                        {batchTTSSpeeds.map((speed) => (
-                          <option key={speed} value={speed}>
-                            {speed}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
+        <BatchWorkPanel
+          text={batchPasteText}
+          onTextChange={setBatchPasteText}
+          maxItems={BATCH_PASTE_MAX}
+          placeholder="apple&#10;banana&#10;orange"
+          autoTranslate={batchPasteAutoTranslate}
+          onAutoTranslateChange={setBatchPasteAutoTranslate}
+          selectedLanguage={lastSelectedWordLang}
+          onLanguageChange={(lang) => {
+            const newLang = lang as WordTranslationLanguage;
+            setLastSelectedWordLang(newLang);
+            setRows((prev) =>
+              prev.map((row) => ({ ...row, selectedWordLanguage: newLang })),
+            );
+          }}
+          translationLanguages={WORD_TRANSLATION_LANGUAGES}
+          customLanguage={customTranslationLang}
+          onCustomLanguageChange={setCustomTranslationLang}
+          autoTTS={batchPasteAutoTTS}
+          onAutoTTSChange={setBatchPasteAutoTTS}
+          ttsSettings={{ accent: batchTTSAccent, gender: batchTTSGender, speed: batchTTSSpeed }}
+          onTTSSettingsChange={(s) => {
+            setBatchTTSAccent(s.accent);
+            setBatchTTSGender(s.gender);
+            setBatchTTSSpeed(s.speed);
+          }}
+          onConfirm={() => handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)}
+          onPause={() => { batchPauseRef.current = true; }}
+          isBusy={isBatchPasting}
+          progress={batchProgress}
+        >
             {/* AI Generate Examples */}
             <div className="mt-4 bg-purple-50 rounded-lg border border-purple-200 overflow-hidden">
               <div className="flex items-center gap-2 p-3">
@@ -4216,6 +4185,16 @@ export default function VocabularySetPanel({
                         setAiGenerateTranslateLang(val);
                         if (val !== "other")
                           setCustomSentenceTranslationLang("");
+                        // 切換語言時清空所有例句翻譯欄位
+                        setRows((prev) =>
+                          prev.map((row) => ({
+                            ...row,
+                            example_sentence_translation: "",
+                            example_sentence_japanese: "",
+                            example_sentence_korean: "",
+                            selectedSentenceLanguage: (val || undefined) as SentenceTranslationLanguage | undefined,
+                          })),
+                        );
                       }}
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     >
@@ -4247,53 +4226,7 @@ export default function VocabularySetPanel({
               )}
             </div>
 
-            {/* Do the Magic + Pause Button */}
-            <div className="flex gap-2">
-              <Button
-                onClick={() =>
-                  handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)
-                }
-                disabled={isBatchPasting}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                {t("contentEditor.buttons.confirmPaste")}
-              </Button>
-              {isBatchPasting && (
-                <Button
-                  onClick={() => {
-                    batchPauseRef.current = true;
-                  }}
-                  className="bg-red-500 hover:bg-red-600 text-white px-4"
-                >
-                  {t("contentEditor.buttons.pause")}
-                </Button>
-              )}
-            </div>
-            {/* Progress Bar */}
-            {isBatchPasting && batchProgress && (
-              <div className="space-y-1">
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                  <div
-                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${batchProgress.totalSteps > 0 ? (batchProgress.completedSteps / batchProgress.totalSteps) * 100 : 0}%`,
-                    }}
-                  />
-                </div>
-                <p className="text-xs text-gray-500 text-center">
-                  {Math.round(
-                    batchProgress.totalSteps > 0
-                      ? (batchProgress.completedSteps /
-                          batchProgress.totalSteps) *
-                          100
-                      : 0,
-                  )}
-                  % ({batchProgress.completedItems}/{batchProgress.totalItems})
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+        </BatchWorkPanel>
 
         {/* Right: Word Editor Area */}
         <div className="flex-1 flex flex-col min-h-0">
@@ -4457,32 +4390,13 @@ export default function VocabularySetPanel({
             </p>
           </DialogHeader>
           <div className="space-y-6 overflow-y-auto flex-1 min-h-0">
-            <div>
-              <label className="text-base font-semibold text-gray-800 mb-3 block">
-                {t("contentEditor.labels.pasteContent")}
-              </label>
-              <textarea
-                value={batchPasteText}
-                onChange={(e) => setBatchPasteText(e.target.value)}
-                placeholder="apple&#10;banana&#10;orange"
-                className="w-full min-h-80 max-h-[60vh] px-4 py-3 border-2 border-gray-300 rounded-lg font-mono text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-y overflow-y-auto"
-              />
-              {(() => {
-                const lineCount = batchPasteText
-                  .split("\n")
-                  .filter((line: string) => line.trim()).length;
-                const overLimit = lineCount > BATCH_PASTE_MAX;
-                return (
-                  <div
-                    className={`text-xs mt-2 ${overLimit ? "text-red-500 font-medium" : "text-gray-500"}`}
-                  >
-                    {lineCount || 0} {t("contentEditor.messages.items")}
-                    {overLimit &&
-                      ` (${t("contentEditor.messages.batchPasteLimitShort", { count: BATCH_PASTE_MAX })})`}
-                  </div>
-                );
-              })()}
-            </div>
+            <BatchPasteArea
+              text={batchPasteText}
+              onChange={setBatchPasteText}
+              maxItems={BATCH_PASTE_MAX}
+              placeholder="apple&#10;banana&#10;orange"
+              variant="dialog"
+            />
             <div className="flex gap-6 p-4 bg-gray-50 rounded-lg">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -4510,61 +4424,15 @@ export default function VocabularySetPanel({
 
             {/* TTS Settings Section (Issue #121) */}
             {batchPasteAutoTTS && (
-              <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <label className="text-sm font-semibold text-gray-800 mb-3 block">
-                  {t("contentEditor.ttsSettings.title")}
-                </label>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">
-                      {t("contentEditor.ttsSettings.accent")}
-                    </label>
-                    <select
-                      value={batchTTSAccent}
-                      onChange={(e) => setBatchTTSAccent(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      {batchTTSAccents.map((accent) => (
-                        <option key={accent} value={accent}>
-                          {accent}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">
-                      {t("contentEditor.ttsSettings.gender")}
-                    </label>
-                    <select
-                      value={batchTTSGender}
-                      onChange={(e) => setBatchTTSGender(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      {batchTTSGenders.map((gender) => (
-                        <option key={gender} value={gender}>
-                          {gender}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">
-                      {t("contentEditor.ttsSettings.speed")}
-                    </label>
-                    <select
-                      value={batchTTSSpeed}
-                      onChange={(e) => setBatchTTSSpeed(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      {batchTTSSpeeds.map((speed) => (
-                        <option key={speed} value={speed}>
-                          {speed}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
+              <BatchTTSSettings
+                settings={{ accent: batchTTSAccent, gender: batchTTSGender, speed: batchTTSSpeed }}
+                onChange={(s) => {
+                  setBatchTTSAccent(s.accent);
+                  setBatchTTSGender(s.gender);
+                  setBatchTTSSpeed(s.speed);
+                }}
+                variant="section"
+              />
             )}
           </div>
           <DialogFooter className="pt-6 flex-shrink-0 border-t border-gray-200 mt-4">
@@ -4746,133 +4614,8 @@ export default function VocabularySetPanel({
       </Dialog>
 
       {/* Save Button */}
-      {onSave && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <Button
-            size="lg"
-            className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
-            disabled={isSaving || isBatchPasting}
-            onClick={async () => {
-              // 過濾掉空白項目
-              let validRows = rows.filter((row) => row.text && row.text.trim());
-
-              if (validRows.length === 0) {
-                toast.error(t("contentEditor.messages.addAtLeastOneItem"));
-                return;
-              }
-
-              if (!title || title.trim() === "") {
-                toast.error(t("contentEditor.messages.enterTitle"));
-                return;
-              }
-
-              // 檢查重複
-              const dupes = findDuplicates(validRows);
-              if (dupes.size > 0) {
-                setDuplicateMap(dupes);
-                toast.error(t("contentEditor.messages.duplicateItems"));
-                return;
-              }
-
-              // 開始儲存流程（翻譯 → 音檔 → 儲存 → 干擾選項生成）
-              setIsSaving(true);
-
-              try {
-                // ========== Step 1: 自動生成缺少的翻譯 ==========
-                const translationResult =
-                  await autoGenerateTranslationsSilently(validRows);
-                if (!translationResult.success) {
-                  // 錯誤 toast 已在函數內顯示
-                  setIsSaving(false);
-                  return;
-                }
-                validRows = translationResult.updatedRows;
-
-                // ========== Step 2: 自動生成缺少的音檔 ==========
-                const audioResult = await autoGenerateAudioSilently(validRows);
-                if (!audioResult.success) {
-                  // 錯誤 toast 已在函數內顯示
-                  setIsSaving(false);
-                  return;
-                }
-                validRows = audioResult.updatedRows;
-
-                // 更新 rows state（讓 UI 顯示生成的內容）
-                setRows(
-                  rows.map((row) => {
-                    const updated = validRows.find((v) => v.id === row.id);
-                    return updated || row;
-                  }),
-                );
-
-                // ========== Step 3: 準備並儲存資料 ==========
-                // 注意：例句為選填，不檢查是否缺少
-                const saveData = {
-                  title: title,
-                  items: validRows.map(buildItemPayload),
-                  target_wpm: 60,
-                  target_accuracy: 0.8,
-                  time_limit_seconds: 180,
-                };
-
-                const existingContentId = editingContent?.id || content?.id;
-
-                if (existingContentId) {
-                  // 編輯模式：更新現有內容
-                  try {
-                    await apiClient.updateContent(existingContentId, saveData);
-
-                    toast.success(t("contentEditor.messages.savingSuccess"));
-
-                    if (onSave) {
-                      await onSave({
-                        id: existingContentId,
-                        title: saveData.title,
-                        items: saveData.items,
-                      });
-                    }
-                  } catch (error) {
-                    console.error("Failed to update content:", error);
-                    toast.error(t("contentEditor.messages.savingFailed"));
-                  }
-                } else if (isCreating && lessonId) {
-                  // 創建模式：新增內容
-                  try {
-                    const newContent = await apiClient.createContent(lessonId, {
-                      type: "VOCABULARY_SET",
-                      ...saveData,
-                    });
-
-                    toast.success(
-                      t("contentEditor.messages.contentCreatedSuccess"),
-                    );
-
-                    if (onSave) {
-                      await onSave(newContent);
-                    }
-                  } catch (error) {
-                    console.error("Failed to create content:", error);
-                    toast.error(
-                      t("contentEditor.messages.creatingContentFailed"),
-                    );
-                  }
-                }
-              } finally {
-                setIsSaving(false);
-              }
-            }}
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {t("vocabularySet.saving") || "儲存中..."}
-              </>
-            ) : (
-              t("contentEditor.buttons.save")
-            )}
-          </Button>
-        </div>
-      )}
     </div>
   );
-}
+});
+
+export default VocabularySetPanel;
