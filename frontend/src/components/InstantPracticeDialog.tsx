@@ -58,7 +58,7 @@ const PRACTICE_MODES: PracticeModeOption[] = [
     labelKey: "instantPractice.modes.rearrangement.label",
     descriptionKey: "instantPractice.modes.rearrangement.description",
     icon: Shuffle,
-    contentTypes: ["EXAMPLE_SENTENCES", "example_sentences"],
+    contentTypes: ["VOCABULARY_SET", "vocabulary_set"],
   },
   {
     value: "word_reading",
