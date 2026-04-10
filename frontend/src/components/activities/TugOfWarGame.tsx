@@ -12,7 +12,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import Phaser from "phaser";
 import { X, ChevronDown, Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -139,30 +138,39 @@ export function TugOfWarGame({
 
   // Phaser game instance - must be before any early returns
   const phaserContainerRef = useRef<HTMLDivElement>(null);
-  const phaserGameRef = useRef<Phaser.Game | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const phaserGameRef = useRef<any>(null);
 
-  // Init Phaser
+  // Init Phaser (lazy-loaded to avoid ~1MB in main bundle)
   useEffect(() => {
     if (!phaserContainerRef.current || phaserGameRef.current) return;
     if (loading || error) return;
 
-    const game = new Phaser.Game({
-      type: Phaser.AUTO,
-      width: 1000,
-      height: 300,
-      parent: phaserContainerRef.current,
-      transparent: false,
-      scene: [TugOfWarScene],
-      scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_HORIZONTALLY,
-      },
+    let destroyed = false;
+    import("phaser").then(({ default: Phaser }) => {
+      if (destroyed || !phaserContainerRef.current) return;
+
+      const game = new Phaser.Game({
+        type: Phaser.AUTO,
+        width: 1000,
+        height: 300,
+        parent: phaserContainerRef.current,
+        transparent: false,
+        scene: [TugOfWarScene],
+        scale: {
+          mode: Phaser.Scale.FIT,
+          autoCenter: Phaser.Scale.CENTER_HORIZONTALLY,
+        },
+      });
+      phaserGameRef.current = game;
     });
-    phaserGameRef.current = game;
 
     return () => {
-      game.destroy(true);
-      phaserGameRef.current = null;
+      destroyed = true;
+      if (phaserGameRef.current) {
+        phaserGameRef.current.destroy(true);
+        phaserGameRef.current = null;
+      }
     };
   }, [loading, error]);
 

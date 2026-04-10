@@ -322,7 +322,7 @@ def get_word_selection_start(
     if assignment.practice_mode not in ("word_selection", "tug_of_war"):
         raise HTTPException(
             status_code=400,
-            detail="This assignment is not in word_selection mode",
+            detail="This assignment does not support word-selection or tug-of-war mode",
         )
 
     content_items = (

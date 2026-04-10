@@ -282,11 +282,13 @@ export function useGameLogic(
   const progress = totalQuestions > 0 ? gameState.currentIndex + 1 : 0;
   const winScore = totalQuestions > 0 ? Math.floor(totalQuestions / 2) + 1 : 1;
 
-  const winner: Team | null =
+  const winner: Team | "draw" | null =
     gameState.gameStatus === "finished"
       ? gameState.scores.a > gameState.scores.b
         ? "a"
-        : "b"
+        : gameState.scores.b > gameState.scores.a
+          ? "b"
+          : "draw"
       : null;
 
   return {

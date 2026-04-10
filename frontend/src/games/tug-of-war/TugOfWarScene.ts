@@ -24,7 +24,7 @@ export interface TugOfWarState {
   isPaused: boolean;
   teamACooldown: boolean;
   teamBCooldown: boolean;
-  winner: "a" | "b" | null;
+  winner: "a" | "b" | "draw" | null;
 }
 
 export class TugOfWarScene extends Phaser.Scene {
@@ -181,7 +181,7 @@ export class TugOfWarScene extends Phaser.Scene {
 
     // Victory animation: trigger or reset
     const { winner } = this.state;
-    if (winner && !this.isVictoryPlaying) {
+    if (winner && winner !== "draw" && !this.isVictoryPlaying) {
       this.isVictoryPlaying = true;
 
       // Hide normal stickmen
