@@ -1873,7 +1873,9 @@ export default function ReadingAssessmentPanel({
     }
 
     // 計算還能新增幾題（扣除現有非空白題目）
-    const nonEmptyCount = rows.filter((row) => row.text && row.text.trim()).length;
+    const nonEmptyCount = rows.filter(
+      (row) => row.text && row.text.trim(),
+    ).length;
     const remaining = MAX_ROWS - nonEmptyCount;
 
     if (remaining <= 0) {

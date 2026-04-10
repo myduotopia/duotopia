@@ -297,10 +297,15 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
     const details = wordsData
       .filter(
         (w: { accuracy_score?: number; error_type?: string }) =>
-          w.error_type !== "None" || (w.accuracy_score != null && w.accuracy_score < 60),
+          w.error_type !== "None" ||
+          (w.accuracy_score != null && w.accuracy_score < 60),
       )
       .map(
-        (w: { word: string; accuracy_score?: number; error_type?: string }) => ({
+        (w: {
+          word: string;
+          accuracy_score?: number;
+          error_type?: string;
+        }) => ({
           label: w.word,
           score: w.accuracy_score || 0,
           errorType: w.error_type,
