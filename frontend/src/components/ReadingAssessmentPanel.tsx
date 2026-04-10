@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +32,7 @@ import {
   TTS_SPEEDS,
   getVoiceAndRate,
 } from "@/utils/ttsVoiceResolver";
+import { BatchPasteArea, BatchTTSSettings, BatchWorkPanel } from "@/components/shared/batch";
 // dnd-kit imports
 import {
   DndContext,
@@ -52,13 +53,14 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 // 翻譯語言選項
-type TranslationLanguage = "chinese" | "japanese" | "korean";
+type TranslationLanguage = "chinese" | "japanese" | "korean" | "other";
 
 // Language constants - labels will be translated dynamically using t()
 const TRANSLATION_LANGUAGES = [
   { value: "chinese" as const, labelKey: "chinese", code: "zh-TW" },
   { value: "japanese" as const, labelKey: "japanese", code: "ja" },
   { value: "korean" as const, labelKey: "korean", code: "ko" },
+  { value: "other" as const, labelKey: "other", code: "" },
 ];
 
 // 批次貼上/翻譯的項目上限
@@ -829,6 +831,8 @@ interface SortableRowInnerProps {
     lang: TranslationLanguage,
   ) => Promise<void>;
   rowsLength: number;
+  panelTranslateLang?: TranslationLanguage | "";
+  panelCustomLang?: string;
 }
 
 function SortableRowInner({
@@ -840,8 +844,10 @@ function SortableRowInner({
   handleOpenTTSModal,
   handleRemoveAudio,
   handleGenerateSingleDefinition,
-  handleGenerateSingleDefinitionWithLang,
+  handleGenerateSingleDefinitionWithLang: _handleGenerateSingleDefinitionWithLang,
   rowsLength,
+  panelTranslateLang = "",
+  panelCustomLang = "",
 }: SortableRowInnerProps) {
   const { t } = useTranslation();
   const {
@@ -951,14 +957,14 @@ function SortableRowInner({
           <div className="relative">
             <textarea
               value={(() => {
-                const lang = row.selectedLanguage || "chinese";
-                if (lang === "chinese") return row.definition || "";
+                const lang = panelTranslateLang || row.selectedLanguage || "";
+                if (lang === "chinese" || lang === "other" || lang === "") return row.definition || "";
                 if (lang === "japanese") return row.japanese_translation || "";
                 if (lang === "korean") return row.korean_translation || "";
                 return row.definition || "";
               })()}
               onChange={(e) => {
-                const lang = row.selectedLanguage || "chinese";
+                const lang = panelTranslateLang || row.selectedLanguage || "";
                 let field: keyof ContentRow = "definition";
                 if (lang === "japanese") field = "japanese_translation";
                 else if (lang === "korean") field = "korean_translation";
@@ -966,7 +972,9 @@ function SortableRowInner({
               }}
               className="w-full px-3 py-2 pr-24 border rounded-md text-sm resize-none"
               placeholder={(() => {
-                const lang = row.selectedLanguage || "chinese";
+                const lang = panelTranslateLang || row.selectedLanguage || "";
+                if (!lang) return t("contentEditor.labels.selectLanguage");
+                if (lang === "other") return panelCustomLang || t("contentEditor.labels.otherLanguage");
                 const langConfig = TRANSLATION_LANGUAGES.find(
                   (l) => l.value === lang,
                 );
@@ -975,33 +983,21 @@ function SortableRowInner({
               rows={2}
               maxLength={500}
             />
-            <div className="absolute right-2 top-2 flex items-center space-x-1">
-              <select
-                value={row.selectedLanguage || "chinese"}
-                onChange={(e) => {
-                  const newLang = e.target.value as TranslationLanguage;
-                  handleUpdateRow(index, "selectedLanguage", newLang);
-                  // Auto-generate when switching language
-                  if (row.text && row.text.trim()) {
-                    setTimeout(() => {
-                      handleGenerateSingleDefinitionWithLang(index, newLang);
-                    }, 100);
-                  }
-                }}
-                className="px-1 py-0.5 border rounded text-xs bg-white"
-              >
-                {TRANSLATION_LANGUAGES.map((lang) => (
-                  <option key={lang.value} value={lang.value}>
-                    {t(`contentEditor.translationLanguages.${lang.labelKey}`)}
-                  </option>
-                ))}
-              </select>
+            <div className="absolute right-2 top-2">
               <button
                 onClick={() => handleGenerateSingleDefinition(index)}
-                className="p-1 rounded hover:bg-gray-200 text-gray-600 flex items-center gap-0.5"
+                className="text-xs text-gray-400 hover:text-blue-500 hover:underline cursor-pointer transition-colors"
                 title={t("contentEditor.messages.generatingTranslation")}
               >
-                <Globe className="h-4 w-4" />
+                {(() => {
+                  const lang = panelTranslateLang || row.selectedLanguage || "";
+                  if (!lang) return t("contentEditor.labels.selectLanguage");
+                  if (lang === "other") return panelCustomLang || t("contentEditor.labels.otherLanguage");
+                  const langConfig = TRANSLATION_LANGUAGES.find((l) => l.value === lang);
+                  return langConfig
+                    ? t(`contentEditor.translationLanguages.${langConfig.labelKey}`)
+                    : lang;
+                })()}
               </button>
             </div>
           </div>
@@ -1044,6 +1040,11 @@ function SortableRowInner({
   );
 }
 
+export interface ReadingAssessmentPanelHandle {
+  save: () => Promise<void>;
+  isBusy: boolean;
+}
+
 interface ReadingAssessmentPanelProps {
   content?: { id?: number; title?: string; items?: ContentRow[] };
   editingContent?: { id?: number; title?: string; items?: ContentRow[] };
@@ -1059,7 +1060,7 @@ interface ReadingAssessmentPanelProps {
   isAssignmentCopy?: boolean; // 是否為作業副本（需要特別處理刪除）
 }
 
-export default function ReadingAssessmentPanel({
+const ReadingAssessmentPanel = forwardRef<ReadingAssessmentPanelHandle, ReadingAssessmentPanelProps>(function ReadingAssessmentPanel({
   content,
   editingContent,
   onUpdateContent,
@@ -1068,7 +1069,7 @@ export default function ReadingAssessmentPanel({
   // programLevel - reserved for future AI generation features
   isCreating = false,
   isAssignmentCopy = false,
-}: ReadingAssessmentPanelProps) {
+}, ref) {
   const { t } = useTranslation();
 
   const [title, setTitle] = useState("");
@@ -1078,7 +1079,7 @@ export default function ReadingAssessmentPanel({
       text: "",
       definition: "",
       translation: "",
-      selectedLanguage: "chinese",
+      selectedLanguage: undefined,
       example_sentence: "",
       example_sentence_translation: "",
       example_sentence_definition: "",
@@ -1088,7 +1089,7 @@ export default function ReadingAssessmentPanel({
       text: "",
       definition: "",
       translation: "",
-      selectedLanguage: "chinese",
+      selectedLanguage: undefined,
       example_sentence: "",
       example_sentence_translation: "",
       example_sentence_definition: "",
@@ -1098,7 +1099,7 @@ export default function ReadingAssessmentPanel({
       text: "",
       definition: "",
       translation: "",
-      selectedLanguage: "chinese",
+      selectedLanguage: undefined,
       example_sentence: "",
       example_sentence_translation: "",
       example_sentence_definition: "",
@@ -1111,6 +1112,8 @@ export default function ReadingAssessmentPanel({
   const [batchPasteText, setBatchPasteText] = useState("");
   const [batchPasteAutoTTS, setBatchPasteAutoTTS] = useState(false);
   const [batchPasteAutoTranslate, setBatchPasteAutoTranslate] = useState(false);
+  const [selectedTranslateLang, setSelectedTranslateLang] = useState<TranslationLanguage | "">("");
+  const [customTranslateLang, setCustomTranslateLang] = useState("");
   const [isInitialLoad, setIsInitialLoad] = useState(true); // 🔥 標記是否為初始載入
 
   // TTS settings for batch paste (Issue #121)
@@ -1138,10 +1141,95 @@ export default function ReadingAssessmentPanel({
     }),
   );
 
-  // TTS options for batch paste (Issue #121)
-  const batchTTSAccents = TTS_ACCENTS;
-  const batchTTSGenders = TTS_GENDERS;
-  const batchTTSSpeeds = TTS_SPEEDS;
+  // Save handler - extracted for useImperativeHandle
+  const handleSave = async () => {
+    const validRows = rows.filter((row) => row.text && row.text.trim());
+
+    if (validRows.length === 0) {
+      toast.error(t("contentEditor.messages.addAtLeastOneItem"));
+      return;
+    }
+
+    if (!title || title.trim() === "") {
+      toast.error(t("contentEditor.messages.enterTitle"));
+      return;
+    }
+
+    const saveData = {
+      title: title,
+      items: validRows.map((row) => ({
+        text: row.text.trim(),
+        definition: row.definition || "",
+        english_definition: row.translation || "",
+        translation: row.definition || "",
+        selectedLanguage: row.selectedLanguage || "chinese",
+        audio_url: row.audioUrl || row.audio_url || "",
+      })),
+      target_wpm: 60,
+      target_accuracy: 0.8,
+      time_limit_seconds: 180,
+    };
+
+    const existingContentId = editingContent?.id || content?.id;
+
+    if (existingContentId) {
+      try {
+        await apiClient.updateContent(existingContentId, saveData);
+        toast.success(t("contentEditor.messages.savingSuccess"));
+        if (onSave) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (onSave as (content?: any) => void | Promise<void>)({
+            id: existingContentId,
+            title: saveData.title,
+            items: saveData.items,
+          });
+        }
+      } catch (error: unknown) {
+        console.error("Failed to update content:", error);
+        if (error instanceof ApiError) {
+          const detail = error.detail;
+          const errorMessage =
+            typeof detail === "object" && !Array.isArray(detail) && detail?.message
+              ? detail.message
+              : typeof detail === "string" ? detail : null;
+          toast.error(errorMessage || t("contentEditor.messages.savingFailed"));
+        } else {
+          toast.error(t("contentEditor.messages.savingFailed"));
+        }
+      }
+    } else if (isCreating && lessonId) {
+      try {
+        const newContent = await apiClient.createContent(lessonId, {
+          type: "EXAMPLE_SENTENCES",
+          ...saveData,
+        });
+        toast.success(t("contentEditor.messages.contentCreatedSuccess"));
+        if (onSave) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (onSave as (content?: any) => void | Promise<void>)(newContent);
+        }
+      } catch (error: unknown) {
+        console.error("Failed to create content:", error);
+        if (error instanceof ApiError) {
+          const detail = error.detail;
+          const errorMessage =
+            typeof detail === "object" && !Array.isArray(detail) && detail?.message
+              ? detail.message
+              : typeof detail === "string" ? detail : null;
+          toast.error(errorMessage || t("contentEditor.messages.creatingContentFailed"));
+        } else {
+          toast.error(t("contentEditor.messages.creatingContentFailed"));
+        }
+      }
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+    get isBusy() { return isBatchProcessing; },
+  }));
+
+  // TTS options still used by handleBatchGenerateTTS logic
 
   // Load saved TTS settings from localStorage (Issue #121)
   useEffect(() => {
@@ -1191,7 +1279,7 @@ export default function ReadingAssessmentPanel({
             definition: item.definition || "",
             translation: item.translation || "",
             audioUrl: item.audio_url || "",
-            selectedLanguage: "chinese" as TranslationLanguage,
+            selectedLanguage: undefined,
             has_student_progress: item.has_student_progress || false, // 🔥 保留學生進度狀態
           }),
         );
@@ -1323,7 +1411,7 @@ export default function ReadingAssessmentPanel({
       text: "",
       definition: "",
       translation: "",
-      selectedLanguage: "chinese",
+      selectedLanguage: undefined,
       example_sentence: "",
       example_sentence_translation: "",
       example_sentence_definition: "",
@@ -1721,9 +1809,8 @@ export default function ReadingAssessmentPanel({
   };
 
   const handleGenerateSingleDefinition = async (index: number) => {
-    const newRows = [...rows];
-    const currentLang = newRows[index].selectedLanguage || "chinese";
-    return handleGenerateSingleDefinitionWithLang(index, currentLang);
+    const currentLang = rows[index].selectedLanguage || selectedTranslateLang || "chinese";
+    return handleGenerateSingleDefinitionWithLang(index, currentLang as TranslationLanguage);
   };
 
   const handleGenerateSingleDefinitionWithLang = async (
@@ -1870,6 +1957,18 @@ export default function ReadingAssessmentPanel({
       return;
     }
 
+    // 勾了翻譯但沒選語言
+    if (autoTranslate && !selectedTranslateLang) {
+      toast.error(t("contentEditor.labels.selectLanguage"));
+      return;
+    }
+
+    // 選了「其他」但沒輸入語言名稱
+    if (autoTranslate && selectedTranslateLang === "other" && !customTranslateLang.trim()) {
+      toast.error(t("contentEditor.labels.enterCustomLanguage"));
+      return;
+    }
+
     // 超過上限時自動截斷
     if (lines.length > MAX_BATCH_ITEMS) {
       toast.warning(
@@ -1894,7 +1993,7 @@ export default function ReadingAssessmentPanel({
       text,
       definition: "",
       translation: "",
-      selectedLanguage: "chinese",
+      selectedLanguage: undefined,
       example_sentence: "",
       example_sentence_translation: "",
       example_sentence_definition: "",
@@ -1967,14 +2066,18 @@ export default function ReadingAssessmentPanel({
           }
         }
 
-        if (autoTranslate) {
-          const result = await apiClient.batchTranslate(lines, "zh-TW");
+        if (autoTranslate && selectedTranslateLang) {
+          const langCode = selectedTranslateLang === "other"
+            ? customTranslateLang || ""
+            : TRANSLATION_LANGUAGES.find((l) => l.value === selectedTranslateLang)?.code || "zh-TW";
+          const result = await apiClient.batchTranslate(lines, langCode);
           const translations =
             (result as { translations?: string[] }).translations || result;
           if (Array.isArray(translations)) {
             newItems = newItems.map((item, i) => ({
               ...item,
               definition: translations[i] || "",
+              selectedLanguage: selectedTranslateLang,
             }));
           }
         }
@@ -2068,7 +2171,7 @@ export default function ReadingAssessmentPanel({
   }
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-200px)]">
+    <div className="flex flex-col h-full max-h-[calc(100vh-70px)]">
       {/* Fixed Header Section */}
       <div className="flex-shrink-0 space-y-4 pb-4">
         {/* Assignment Copy Warning Banner */}
@@ -2116,8 +2219,8 @@ export default function ReadingAssessmentPanel({
           />
         </div>
 
-        {/* Batch Actions - RWD adjusted */}
-        <div className="flex flex-wrap gap-2">
+        {/* Batch Actions - Mobile only (desktop uses left panel) */}
+        <div className="flex flex-wrap gap-2 md:hidden">
           <Button
             variant="outline"
             size="sm"
@@ -2172,6 +2275,38 @@ export default function ReadingAssessmentPanel({
         </div>
       </div>
 
+      {/* Desktop: Side-by-side layout / Mobile: Editor only */}
+      <div className="flex flex-1 gap-4 min-h-0">
+        {/* Left: Batch Work Area (Desktop only) */}
+        <BatchWorkPanel
+          text={batchPasteText}
+          onTextChange={setBatchPasteText}
+          maxItems={MAX_BATCH_ITEMS}
+          placeholder="put&#10;Put it away.&#10;It's time to put everything away. Right now."
+          autoTranslate={batchPasteAutoTranslate}
+          onAutoTranslateChange={setBatchPasteAutoTranslate}
+          selectedLanguage={selectedTranslateLang}
+          onLanguageChange={(lang) => {
+            setSelectedTranslateLang(lang as TranslationLanguage | "");
+            if (lang !== "other") setCustomTranslateLang("");
+          }}
+          translationLanguages={TRANSLATION_LANGUAGES.map((l) => ({ value: l.value, label: l.labelKey === "chinese" ? "中文" : l.labelKey === "japanese" ? "日本語" : l.labelKey === "korean" ? "한국어" : "Other", code: l.code }))}
+          customLanguage={customTranslateLang}
+          onCustomLanguageChange={setCustomTranslateLang}
+          autoTTS={batchPasteAutoTTS}
+          onAutoTTSChange={setBatchPasteAutoTTS}
+          ttsSettings={{ accent: batchTTSAccent, gender: batchTTSGender, speed: batchTTSSpeed }}
+          onTTSSettingsChange={(s) => {
+            setBatchTTSAccent(s.accent);
+            setBatchTTSGender(s.gender);
+            setBatchTTSSpeed(s.speed);
+          }}
+          onConfirm={() => handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)}
+          isBusy={isPasting}
+        />
+
+        {/* Right: Editor Area */}
+        <div className="flex-1 flex flex-col min-h-0">
       {/* Scrollable Content Rows with dnd-kit */}
       <DndContext
         sensors={sensors}
@@ -2182,7 +2317,7 @@ export default function ReadingAssessmentPanel({
           items={rows.map((row) => row.id)}
           strategy={verticalListSortingStrategy}
         >
-          <div className="flex-1 overflow-y-auto space-y-3 pr-2 min-h-0">
+          <div className="space-y-3 pr-2">
             {rows.map((row, index) => {
               // useSortable must be called inside the component that's in SortableContext
               // so we'll use a nested component
@@ -2203,6 +2338,8 @@ export default function ReadingAssessmentPanel({
                     handleGenerateSingleDefinitionWithLang
                   }
                   rowsLength={rows.length}
+                  panelTranslateLang={selectedTranslateLang}
+                  panelCustomLang={customTranslateLang}
                 />
               );
             })}
@@ -2220,138 +2357,9 @@ export default function ReadingAssessmentPanel({
         </SortableContext>
       </DndContext>
 
-      {/* Footer with Save Button */}
-      {onSave && (
-        <div className="flex-shrink-0 pt-4 mt-4 border-t border-gray-200 sticky bottom-0 bg-white z-10">
-          <div className="flex justify-end gap-3">
-            <Button
-              size="lg"
-              disabled={isBatchProcessing}
-              className="px-8 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={async () => {
-                // 過濾掉空白項目
-                const validRows = rows.filter(
-                  (row) => row.text && row.text.trim(),
-                );
 
-                if (validRows.length === 0) {
-                  toast.error(t("contentEditor.messages.addAtLeastOneItem"));
-                  return;
-                }
-
-                if (!title || title.trim() === "") {
-                  toast.error(t("contentEditor.messages.enterTitle"));
-                  return;
-                }
-
-                // 準備要儲存的資料
-                const saveData = {
-                  title: title,
-                  items: validRows.map((row) => ({
-                    text: row.text.trim(),
-                    definition: row.definition || "",
-                    english_definition: row.translation || "",
-                    translation: row.definition || "",
-                    selectedLanguage: row.selectedLanguage || "chinese",
-                    audio_url: row.audioUrl || row.audio_url || "",
-                  })),
-                  target_wpm: 60,
-                  target_accuracy: 0.8,
-                  time_limit_seconds: 180,
-                };
-
-                const existingContentId = editingContent?.id || content?.id;
-
-                if (existingContentId) {
-                  // 編輯模式：更新現有內容
-                  try {
-                    await apiClient.updateContent(existingContentId, saveData);
-                    toast.success(t("contentEditor.messages.savingSuccess"));
-                    if (onSave) {
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      await (onSave as (content?: any) => void | Promise<void>)(
-                        {
-                          id: existingContentId,
-                          title: saveData.title,
-                          items: saveData.items,
-                        },
-                      );
-                    }
-                  } catch (error: unknown) {
-                    console.error("Failed to update content:", error);
-                    // 解析 ApiError 的結構化錯誤訊息
-                    if (error instanceof ApiError) {
-                      const detail = error.detail;
-                      const errorMessage =
-                        typeof detail === "object" &&
-                        !Array.isArray(detail) &&
-                        detail?.message
-                          ? detail.message
-                          : typeof detail === "string"
-                            ? detail
-                            : null;
-                      toast.error(
-                        errorMessage ||
-                          t("contentEditor.messages.savingFailed"),
-                      );
-                    } else {
-                      toast.error(t("contentEditor.messages.savingFailed"));
-                    }
-                  }
-                } else if (isCreating && lessonId) {
-                  // 創建模式：新增內容
-                  try {
-                    const newContent = await apiClient.createContent(lessonId, {
-                      type: "EXAMPLE_SENTENCES",
-                      ...saveData,
-                    });
-                    toast.success(
-                      t("contentEditor.messages.contentCreatedSuccess"),
-                    );
-                    if (onSave) {
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      await (onSave as (content?: any) => void | Promise<void>)(
-                        newContent,
-                      );
-                    }
-                  } catch (error: unknown) {
-                    console.error("Failed to create content:", error);
-                    // 解析 ApiError 的結構化錯誤訊息
-                    if (error instanceof ApiError) {
-                      const detail = error.detail;
-                      const errorMessage =
-                        typeof detail === "object" &&
-                        !Array.isArray(detail) &&
-                        detail?.message
-                          ? detail.message
-                          : typeof detail === "string"
-                            ? detail
-                            : null;
-                      toast.error(
-                        errorMessage ||
-                          t("contentEditor.messages.creatingContentFailed"),
-                      );
-                    } else {
-                      toast.error(
-                        t("contentEditor.messages.creatingContentFailed"),
-                      );
-                    }
-                  }
-                }
-              }}
-            >
-              {isBatchProcessing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {t("contentEditor.buttons.processing")}
-                </>
-              ) : (
-                t("contentEditor.buttons.save")
-              )}
-            </Button>
-          </div>
-        </div>
-      )}
+        </div>{/* End Right: Editor Area */}
+      </div>{/* End Desktop: Side-by-side layout */}
 
       {/* TTS Modal */}
       {selectedRow && (
@@ -2383,34 +2391,13 @@ export default function ReadingAssessmentPanel({
             </p>
           </DialogHeader>
           <div className="space-y-6 overflow-y-auto flex-1 min-h-0">
-            <div>
-              <label className="text-base font-semibold text-gray-800 mb-3 block">
-                {t("contentEditor.labels.pasteContent")}
-              </label>
-              <textarea
-                value={batchPasteText}
-                onChange={(e) => {
-                  setBatchPasteText(e.target.value);
-                }}
-                placeholder="put&#10;Put it away.&#10;It's time to put everything away. Right now."
-                className="w-full min-h-80 max-h-[60vh] px-4 py-3 border-2 border-gray-300 rounded-lg font-mono text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-y overflow-y-auto"
-              />
-              <div className="text-xs mt-2 flex items-center justify-between">
-                <span className="text-gray-500">
-                  {batchPasteText.split("\n").filter((line) => line.trim())
-                    .length || 0}{" "}
-                  {t("contentEditor.messages.items")}
-                </span>
-                {batchPasteText.split("\n").filter((line) => line.trim())
-                  .length > MAX_BATCH_ITEMS && (
-                  <span className="text-amber-600 font-medium">
-                    {t("contentEditor.messages.batchLimitWarning", {
-                      count: MAX_BATCH_ITEMS,
-                    })}
-                  </span>
-                )}
-              </div>
-            </div>
+            <BatchPasteArea
+              text={batchPasteText}
+              onChange={setBatchPasteText}
+              maxItems={MAX_BATCH_ITEMS}
+              placeholder="put&#10;Put it away.&#10;It's time to put everything away. Right now."
+              variant="dialog"
+            />
             <div className="flex gap-6 p-4 bg-gray-50 rounded-lg">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -2438,61 +2425,15 @@ export default function ReadingAssessmentPanel({
 
             {/* TTS Settings Section (Issue #121) */}
             {batchPasteAutoTTS && (
-              <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <label className="text-sm font-semibold text-gray-800 mb-3 block">
-                  {t("contentEditor.ttsSettings.title")}
-                </label>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">
-                      {t("contentEditor.ttsSettings.accent")}
-                    </label>
-                    <select
-                      value={batchTTSAccent}
-                      onChange={(e) => setBatchTTSAccent(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      {batchTTSAccents.map((accent) => (
-                        <option key={accent} value={accent}>
-                          {accent}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">
-                      {t("contentEditor.ttsSettings.gender")}
-                    </label>
-                    <select
-                      value={batchTTSGender}
-                      onChange={(e) => setBatchTTSGender(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      {batchTTSGenders.map((gender) => (
-                        <option key={gender} value={gender}>
-                          {gender}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">
-                      {t("contentEditor.ttsSettings.speed")}
-                    </label>
-                    <select
-                      value={batchTTSSpeed}
-                      onChange={(e) => setBatchTTSSpeed(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      {batchTTSSpeeds.map((speed) => (
-                        <option key={speed} value={speed}>
-                          {speed}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
+              <BatchTTSSettings
+                settings={{ accent: batchTTSAccent, gender: batchTTSGender, speed: batchTTSSpeed }}
+                onChange={(s) => {
+                  setBatchTTSAccent(s.accent);
+                  setBatchTTSGender(s.gender);
+                  setBatchTTSSpeed(s.speed);
+                }}
+                variant="section"
+              />
             )}
           </div>
           <DialogFooter className="pt-6 flex-shrink-0 border-t border-gray-200 mt-4">
@@ -2520,4 +2461,6 @@ export default function ReadingAssessmentPanel({
       </Dialog>
     </div>
   );
-}
+});
+
+export default ReadingAssessmentPanel;
