@@ -893,11 +893,22 @@ function SortableRowInner({
         <div className="relative">
           <textarea
             value={row.text}
-            onChange={(e) => handleUpdateRow(index, "text", e.target.value)}
-            className="w-full px-3 py-2 pr-20 border rounded-md text-sm resize-y min-h-[3rem]"
+            onChange={(e) => {
+              const words = e.target.value.trim().split(/\s+/).filter(Boolean);
+              if (words.length > 150) return;
+              handleUpdateRow(index, "text", e.target.value);
+              e.target.style.height = "auto";
+              e.target.style.height = e.target.scrollHeight + "px";
+            }}
+            ref={(el) => {
+              if (el) {
+                el.style.height = "auto";
+                el.style.height = el.scrollHeight + "px";
+              }
+            }}
+            className="w-full px-3 py-2 pr-20 border rounded-md text-sm resize-y min-h-[38px] overflow-hidden"
             placeholder={t("contentEditor.placeholders.enterText")}
-            maxLength={800}
-            rows={3}
+            rows={1}
           />
           <div className="absolute right-2 top-2 flex items-center space-x-1">
             {row.audioUrl && (
@@ -971,8 +982,16 @@ function SortableRowInner({
                 if (lang === "japanese") field = "japanese_translation";
                 else if (lang === "korean") field = "korean_translation";
                 handleUpdateRow(index, field, e.target.value);
+                e.target.style.height = "auto";
+                e.target.style.height = e.target.scrollHeight + "px";
               }}
-              className="w-full px-3 py-2 pr-24 border rounded-md text-sm resize-none"
+              ref={(el) => {
+                if (el) {
+                  el.style.height = "auto";
+                  el.style.height = el.scrollHeight + "px";
+                }
+              }}
+              className="w-full px-3 py-2 pr-24 border rounded-md text-sm resize-y min-h-[38px] overflow-hidden"
               placeholder={(() => {
                 const lang = panelTranslateLang || row.selectedLanguage || "";
                 if (!lang) return t("contentEditor.labels.selectLanguage");
@@ -1157,10 +1176,24 @@ const ReadingAssessmentPanel = forwardRef<ReadingAssessmentPanelHandle, ReadingA
       return;
     }
 
+    // 檢查單字數上限
+    const overLimitRow = validRows.find((row) => {
+      const words = row.text.trim().split(/\s+/).filter(Boolean);
+      return words.length > 150;
+    });
+    if (overLimitRow) {
+      toast.error(t("contentEditor.messages.wordLimitExceeded", { limit: 150 }));
+      return;
+    }
+
+    // 修正句子之間缺少空格的問題（例如 "end.Begin" → "end. Begin"）
+    const fixSentenceSpacing = (text: string) =>
+      text.replace(/([.!?])([A-Z])/g, "$1 $2");
+
     const saveData = {
       title: title,
       items: validRows.map((row) => ({
-        text: row.text.trim(),
+        text: fixSentenceSpacing(row.text.trim()),
         definition: row.definition || "",
         english_definition: row.translation || "",
         translation: row.definition || "",
@@ -1945,17 +1978,161 @@ const ReadingAssessmentPanel = forwardRef<ReadingAssessmentPanelHandle, ReadingA
     }
   };
 
+  // 將超過 150 單字的段落自動分段，保留句子完整性
+  const splitParagraphByWordLimit = (text: string, maxWords = 150): string[] => {
+    const sentences = text.match(/[^.!?]*[.!?]+\s*/g) || [text];
+    const paragraphs: string[] = [];
+    let current = "";
+
+    for (const sentence of sentences) {
+      const combined = current + sentence;
+      const wordCount = combined.trim().split(/\s+/).filter(Boolean).length;
+
+      if (wordCount > maxWords && current.trim()) {
+        paragraphs.push(current.trim());
+        current = sentence;
+      } else {
+        current = combined;
+      }
+    }
+    if (current.trim()) {
+      paragraphs.push(current.trim());
+    }
+    return paragraphs;
+  };
+
   const handleBatchPaste = async (autoTTS: boolean, autoTranslate: boolean) => {
-    // 分割文字，每行一個項目
-    const lines = batchPasteText
+    // 分割文字，每行一個項目，超過 150 單字的段落自動分段
+    const rawLines = batchPasteText
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
 
-    if (lines.length === 0) {
-      toast.error(t("contentEditor.messages.enterContent"));
+    const lines: string[] = [];
+    for (const line of rawLines) {
+      const wordCount = line.split(/\s+/).filter(Boolean).length;
+      if (wordCount > 150) {
+        lines.push(...splitParagraphByWordLimit(line));
+      } else {
+        lines.push(line);
+      }
+    }
+
+    // === Backfill 模式：textarea 空白時，補齊已有段落缺少的翻譯/TTS ===
+    const isBackfillMode = lines.length === 0;
+
+    if (isBackfillMode) {
+      const existingRows = rows.filter((r) => r.text && r.text.trim());
+      if (existingRows.length === 0) {
+        toast.error(t("contentEditor.messages.enterContent"));
+        return;
+      }
+
+      // 檢查翻譯語言
+      if (autoTranslate && !selectedTranslateLang) {
+        toast.error(t("contentEditor.labels.selectLanguage"));
+        return;
+      }
+      if (autoTranslate && selectedTranslateLang === "other" && !customTranslateLang.trim()) {
+        toast.error(t("contentEditor.labels.enterCustomLanguage"));
+        return;
+      }
+
+      setIsPasting(true);
+      const currentRows = [...rows];
+      let processed = 0;
+
+      try {
+        // 補齊翻譯
+        if (autoTranslate && selectedTranslateLang) {
+          const langCode = selectedTranslateLang === "other"
+            ? customTranslateLang || ""
+            : TRANSLATION_LANGUAGES.find((l) => l.value === selectedTranslateLang)?.code || "zh-TW";
+
+          const needsTranslation = currentRows
+            .map((r, i) => ({ r, i }))
+            .filter(({ r }) => r.text?.trim() && !r.definition?.trim());
+
+          if (needsTranslation.length > 0) {
+            const texts = needsTranslation.map(({ r }) => r.text.trim());
+            const result = await apiClient.batchTranslate(texts, langCode);
+            const translations =
+              (result as { translations?: string[] }).translations || [];
+            needsTranslation.forEach(({ i }, idx) => {
+              if (translations[idx]) {
+                currentRows[i].definition = translations[idx];
+                currentRows[i].selectedLanguage = selectedTranslateLang;
+              }
+            });
+            processed += needsTranslation.length;
+          }
+        }
+
+        // 補齊 TTS
+        if (autoTTS) {
+          saveBatchTTSSettings();
+          const needsTTS = currentRows
+            .map((r, i) => ({ r, i }))
+            .filter(({ r }) => r.text?.trim() && !r.audioUrl && !r.audio_url);
+
+          if (needsTTS.length > 0) {
+            const isRandom = batchTTSAccent === "Random" || batchTTSGender === "Random";
+
+            if (isRandom) {
+              for (const { r, i } of needsTTS) {
+                const { voice, rate } = getVoiceAndRate(batchTTSAccent, batchTTSGender, batchTTSSpeed);
+                const ttsResult = await apiClient.generateTTS(r.text, voice, rate, "+0%");
+                if (ttsResult?.audio_url) {
+                  const fullUrl = ttsResult.audio_url.startsWith("http")
+                    ? ttsResult.audio_url
+                    : `${import.meta.env.VITE_API_URL}${ttsResult.audio_url}`;
+                  currentRows[i].audioUrl = fullUrl;
+                  currentRows[i].audio_url = fullUrl;
+                }
+              }
+            } else {
+              const { voice, rate } = getVoiceAndRate(batchTTSAccent, batchTTSGender, batchTTSSpeed);
+              const texts = needsTTS.map(({ r }) => r.text.trim());
+              const ttsResult = await apiClient.batchGenerateTTS(texts, voice, rate, "+0%");
+              if (ttsResult && typeof ttsResult === "object" && "audio_urls" in ttsResult) {
+                const audioUrls = (ttsResult as { audio_urls: string[] }).audio_urls;
+                needsTTS.forEach(({ i }, idx) => {
+                  if (audioUrls[idx]) {
+                    const fullUrl = audioUrls[idx].startsWith("http")
+                      ? audioUrls[idx]
+                      : `${import.meta.env.VITE_API_URL}${audioUrls[idx]}`;
+                    currentRows[i].audioUrl = fullUrl;
+                    currentRows[i].audio_url = fullUrl;
+                  }
+                });
+              }
+            }
+            processed += needsTTS.length;
+          }
+        }
+
+        setRows(currentRows);
+
+        if (processed === 0) {
+          toast.info(t("contentEditor.messages.noItemsNeedProcessing", {
+            defaultValue: "所有項目已完成，無需補齊",
+          }));
+        } else {
+          toast.success(t("contentEditor.messages.backfillComplete", {
+            defaultValue: `已補齊 ${processed} 個項目`,
+            count: processed,
+          }));
+        }
+      } catch (error) {
+        console.error("Backfill error:", error);
+        toast.error(t("contentEditor.messages.batchProcessingFailed"));
+      } finally {
+        setIsPasting(false);
+      }
       return;
     }
+
+    // === 正常貼上模式 ===
 
     // 勾了翻譯但沒選語言
     if (autoTranslate && !selectedTranslateLang) {

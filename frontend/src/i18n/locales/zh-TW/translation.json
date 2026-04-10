@@ -4349,6 +4349,7 @@
       "enterTitle": "請輸入標題",
       "addAtLeastOneItem": "請至少新增一個內容項目",
       "addAtLeastFiveItems": "單字集至少需要 5 個單字",
+      "wordLimitExceeded": "單一題目的英文原文不可超過 {{limit}} 個單字",
       "duplicateItems": "有重複的單字或翻譯，請先處理重複項目",
       "duplicateWord": "重複",
       "maxRowsReached": "最多只能新增 15 列",
