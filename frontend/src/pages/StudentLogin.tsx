@@ -9,6 +9,7 @@ import { authService } from "@/services/authService";
 import { teacherService } from "@/services/teacherService";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { FEATURE_FLAGS } from "@/config/featureFlags";
 
 interface TeacherHistory {
   email: string;
@@ -477,19 +478,21 @@ export default function StudentLogin() {
 
               {/* 1Campus SSO + Email login links */}
               <div className="mt-6 pt-6 border-t space-y-3">
-                <Button
-                  variant="outline"
-                  className="w-full py-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-green-200 text-green-700 font-medium"
-                  onClick={() => {
-                    window.location.href = "https://1campus.net";
-                  }}
-                >
-                  🏫{" "}
-                  {t(
-                    "studentLogin.oneCampus.button",
-                    "Log in with School Account (1Campus)",
-                  )}
-                </Button>
+                {FEATURE_FLAGS.ONE_CAMPUS_LOGIN && (
+                  <Button
+                    variant="outline"
+                    className="w-full py-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-green-200 text-green-700 font-medium"
+                    onClick={() => {
+                      window.location.href = "https://1campus.net";
+                    }}
+                  >
+                    🏫{" "}
+                    {t(
+                      "studentLogin.oneCampus.button",
+                      "Log in with School Account (1Campus)",
+                    )}
+                  </Button>
+                )}
 
                 <div className="text-center">
                   <Button
