@@ -20,7 +20,7 @@ interface GameResultProps {
 export function GameResult({
   winner,
   scores,
-  totalQuestions,
+  totalQuestions: _totalQuestions,
   onRestart,
   onClose,
 }: GameResultProps) {

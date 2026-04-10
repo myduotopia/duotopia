@@ -28,7 +28,7 @@ export function TeamOptions({
   disabled,
   isCooldown,
   cooldownMs,
-  teamLabel,
+  teamLabel: _teamLabel,
   showImages = false,
   vocabItems = [],
   useHandwriteFont = false,

@@ -106,7 +106,6 @@ export class VictoryAnimation {
 
     const time = this.elapsed * 0.003 + c.phase;
     const jumpHeight = Math.abs(Math.sin(time * Math.PI)) * 30;
-    const dir = c.facingLeft ? -1 : 1;
     const groundY = c.baseY - jumpHeight;
 
     // Positions
