@@ -151,3 +151,6 @@ backend/tests/load_testing/__pycache__/
 # Git Worktrees (for isolated issue development)
 .worktrees/
 worktrees/
+
+# Social media content generation (local only)
+docs/social-media/

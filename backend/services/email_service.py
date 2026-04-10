@@ -415,6 +415,74 @@ class EmailService:
             logger.error(f"發送教師驗證 email 失敗: {str(e)}")
             return False
 
+    def send_teacher_bind_email(
+        self,
+        target_email: str,
+        teacher_name: str,
+        bind_token: str,
+    ) -> bool:
+        """Send a bind verification email to a teacher's target Duotopia email.
+
+        Unlike send_teacher_verification_email, this does NOT modify the
+        teacher record — the bind_token is already stored by the caller.
+        """
+        try:
+            verification_url = (
+                f"{self.frontend_url}/1campus-verify-bind?token={bind_token}"
+            )
+
+            subject = f"【Duotopia】帳號綁定驗證 - {teacher_name}"
+            html_content = f"""
+            <html><head><meta charset="UTF-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: #2563eb; color: white; padding: 20px;
+                    text-align: center; border-radius: 8px 8px 0 0; }}
+                .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
+                .button {{ display: inline-block; background: #2563eb; color: white;
+                    padding: 12px 24px; text-decoration: none; border-radius: 6px; }}
+            </style></head><body>
+            <div class="container">
+                <div class="header"><h1>Duotopia 帳號綁定</h1></div>
+                <div class="content">
+                    <h2>親愛的 {teacher_name} 老師：</h2>
+                    <p>您正在將學校帳號（1Campus）與此 Duotopia 帳號綁定。</p>
+                    <p>請點擊下方按鈕完成驗證：</p>
+                    <p style="text-align: center; margin: 30px 0;">
+                        <a href="{verification_url}" class="button">確認綁定</a>
+                    </p>
+                    <p><small>此連結將在 10 分鐘後失效。如果您沒有申請此綁定，請忽略此信件。</small></p>
+                </div>
+            </div></body></html>
+            """
+
+            if not self.smtp_user or not self.smtp_password:
+                logger.info(f"開發模式：教師綁定驗證連結 - {verification_url}")
+                print(f"\n📧 教師綁定驗證 Email（開發模式）")
+                print(f"   收件人: {target_email}")
+                print(f"   教師: {teacher_name}")
+                print(f"   驗證連結: {verification_url}\n")
+                return True
+
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = f"{self.from_name} <{self.from_email}>"
+            msg["To"] = target_email
+            msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
+                server.starttls()
+                server.login(self.smtp_user, self.smtp_password)
+                server.send_message(msg)
+
+            logger.info(f"教師綁定驗證 email 已發送到 {target_email}")
+            return True
+
+        except Exception as e:
+            logger.error(f"發送教師綁定驗證 email 失敗: {str(e)}")
+            return False
+
     def verify_teacher_email_token(self, db: Session, token: str) -> Optional[Teacher]:
         """驗證教師 email token 並啟動訂閱
 

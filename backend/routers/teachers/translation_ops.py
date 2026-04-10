@@ -2,6 +2,7 @@
 Translation Ops operations for teachers.
 """
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload, joinedload
@@ -69,13 +70,33 @@ async def batch_translate_with_pos(
     current_teacher: Teacher = Depends(get_current_teacher),
 ):
     """批次翻譯多個單字並辨識詞性"""
+    t0 = time.monotonic()
+    word_count = len(request.texts)
+    logger.info(
+        "[PERF] API translate-with-pos/batch START | words=%d | lang=%s",
+        word_count,
+        request.target_lang,
+    )
     try:
         results = await translation_service.batch_translate_with_pos(
             request.texts, request.target_lang
         )
+        elapsed = time.monotonic() - t0
+        logger.info(
+            "[PERF] API translate-with-pos/batch DONE | words=%d | %.2fs | avg=%.2fs/word",
+            word_count,
+            elapsed,
+            elapsed / word_count if word_count else 0,
+        )
         return {"originals": request.texts, "results": results}
     except Exception as e:
-        logger.error("Batch translate with POS error: %s", e)
+        elapsed = time.monotonic() - t0
+        logger.error(
+            "[PERF] API translate-with-pos/batch ERROR | words=%d | %.2fs | %s",
+            word_count,
+            elapsed,
+            e,
+        )
         raise HTTPException(status_code=500, detail="Translation service error")
 
 
@@ -102,6 +123,13 @@ async def generate_sentences(
     db: Session = Depends(get_db),
 ):
     """AI 生成例句"""
+    t0 = time.monotonic()
+    word_count = len(request.words)
+    logger.info(
+        "[PERF] API generate-sentences START | words=%d | level=%s",
+        word_count,
+        request.level,
+    )
     try:
         # 如果有 lesson_id，查詢 Lesson 與 Program 取得完整教學情境
         unit_context = None
@@ -141,7 +169,20 @@ async def generate_sentences(
             translate_to=request.translate_to,
             parts_of_speech=request.parts_of_speech,
         )
+        elapsed = time.monotonic() - t0
+        logger.info(
+            "[PERF] API generate-sentences DONE | words=%d | %.2fs | avg=%.2fs/word",
+            word_count,
+            elapsed,
+            elapsed / word_count if word_count else 0,
+        )
         return {"sentences": sentences}
     except Exception as e:
-        logger.error("Generate sentences error: %s", e)
+        elapsed = time.monotonic() - t0
+        logger.error(
+            "[PERF] API generate-sentences ERROR | words=%d | %.2fs | %s",
+            word_count,
+            elapsed,
+            e,
+        )
         raise HTTPException(status_code=500, detail="Generate sentences failed")

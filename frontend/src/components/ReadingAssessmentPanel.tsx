@@ -61,8 +61,10 @@ const TRANSLATION_LANGUAGES = [
   { value: "korean" as const, labelKey: "korean", code: "ko" },
 ];
 
+// 每個例句集的題目上限
+const MAX_ROWS = 8;
 // 批次貼上/翻譯的項目上限
-const MAX_BATCH_ITEMS = 25;
+const MAX_BATCH_ITEMS = MAX_ROWS;
 
 interface ContentRow {
   id: string | number;
@@ -883,15 +885,15 @@ function SortableRowInner({
       <div className="flex-1 w-full space-y-2">
         {/* Text input */}
         <div className="relative">
-          <input
-            type="text"
+          <textarea
             value={row.text}
             onChange={(e) => handleUpdateRow(index, "text", e.target.value)}
-            className="w-full px-3 py-2 pr-20 border rounded-md text-sm"
+            className="w-full px-3 py-2 pr-20 border rounded-md text-sm resize-y min-h-[3rem]"
             placeholder={t("contentEditor.placeholders.enterText")}
-            maxLength={200}
+            maxLength={800}
+            rows={3}
           />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center space-x-1">
+          <div className="absolute right-2 top-2 flex items-center space-x-1">
             {row.audioUrl && (
               <button
                 onClick={() => {
@@ -1312,7 +1314,7 @@ export default function ReadingAssessmentPanel({
   };
 
   const handleAddRow = () => {
-    if (rows.length >= 15) {
+    if (rows.length >= MAX_ROWS) {
       toast.error(t("contentEditor.messages.maxRowsReached"));
       return;
     }
@@ -1348,7 +1350,7 @@ export default function ReadingAssessmentPanel({
   };
 
   const handleCopyRow = (index: number) => {
-    if (rows.length >= 15) {
+    if (rows.length >= MAX_ROWS) {
       toast.error(t("contentEditor.messages.maxRowsReached"));
       return;
     }
@@ -1870,14 +1872,25 @@ export default function ReadingAssessmentPanel({
       return;
     }
 
-    // 超過上限時自動截斷
-    if (lines.length > MAX_BATCH_ITEMS) {
+    // 計算還能新增幾題（扣除現有非空白題目）
+    const nonEmptyCount = rows.filter(
+      (row) => row.text && row.text.trim(),
+    ).length;
+    const remaining = MAX_ROWS - nonEmptyCount;
+
+    if (remaining <= 0) {
+      toast.error(t("contentEditor.messages.maxRowsReached"));
+      return;
+    }
+
+    // 超過剩餘可用數量時自動截斷
+    if (lines.length > remaining) {
       toast.warning(
         t("contentEditor.messages.batchLimitTruncated", {
-          count: MAX_BATCH_ITEMS,
+          count: remaining,
         }),
       );
-      lines.length = MAX_BATCH_ITEMS;
+      lines.length = remaining;
     }
 
     setIsPasting(true);
@@ -2211,7 +2224,7 @@ export default function ReadingAssessmentPanel({
             <button
               onClick={handleAddRow}
               className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600"
-              disabled={rows.length >= 15}
+              disabled={rows.length >= MAX_ROWS}
             >
               <Plus className="h-5 w-5" />
               {t("contentEditor.buttons.addItem")}
@@ -2248,7 +2261,7 @@ export default function ReadingAssessmentPanel({
                 const saveData = {
                   title: title,
                   items: validRows.map((row) => ({
-                    text: row.text.trim(),
+                    text: row.text.trim().replace(/([.!?])([A-Z])/g, "$1 $2"),
                     definition: row.definition || "",
                     english_definition: row.translation || "",
                     translation: row.definition || "",

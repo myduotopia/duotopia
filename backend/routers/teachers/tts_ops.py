@@ -1,25 +1,16 @@
 """
 Tts Ops operations for teachers.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, selectinload, joinedload
-from sqlalchemy import func
-from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+import logging
+import time
 
-from database import get_db
-from models import Teacher, Classroom, Student, Program, Lesson, Content, ContentItem
-from models import ClassroomStudent, Assignment, AssignmentContent
-from models import (
-    ProgramLevel,
-    TeacherOrganization,
-    TeacherSchool,
-    Organization,
-    School,
-)
+from fastapi import APIRouter, Depends, HTTPException
+
+from models import Teacher
 from .dependencies import get_current_teacher
-from .validators import *
-from .utils import TEST_SUBSCRIPTION_WHITELIST, parse_birthdate
+from .validators import TTSRequest, BatchTTSRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -29,12 +20,17 @@ async def generate_tts(
     request: TTSRequest, current_teacher: Teacher = Depends(get_current_teacher)
 ):
     """生成單一 TTS 音檔"""
+    t0 = time.monotonic()
+    logger.info(
+        "[PERF] API tts START | text_len=%d | voice=%s",
+        len(request.text),
+        request.voice,
+    )
     try:
         from services.tts import get_tts_service
 
         tts_service = get_tts_service()
 
-        # 直接使用 await，因為 FastAPI 已經在異步環境中
         audio_url = await tts_service.generate_tts(
             text=request.text,
             voice=request.voice,
@@ -42,9 +38,12 @@ async def generate_tts(
             volume=request.volume,
         )
 
+        elapsed = time.monotonic() - t0
+        logger.info("[PERF] API tts DONE | %.2fs", elapsed)
         return {"audio_url": audio_url}
     except Exception as e:
-        print(f"TTS error: {e}")
+        elapsed = time.monotonic() - t0
+        logger.error("[PERF] API tts ERROR | %.2fs | %s", elapsed, e)
         raise HTTPException(status_code=500, detail="TTS generation failed")
 
 
@@ -68,7 +67,7 @@ async def batch_generate_tts(
 
         return {"audio_urls": audio_urls}
     except Exception as e:
-        print(f"Batch TTS error: {e}")
+        logger.error(f"Batch TTS error: {e}")
         raise HTTPException(status_code=500, detail="Batch TTS generation failed")
 
 
@@ -87,5 +86,5 @@ async def get_tts_voices(
 
         return {"voices": voices}
     except Exception as e:
-        print(f"Get voices error: {e}")
+        logger.error(f"Get voices error: {e}")
         raise HTTPException(status_code=500, detail="Failed to get voices")

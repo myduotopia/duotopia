@@ -14,6 +14,7 @@ import TeacherResetPassword from "./pages/TeacherResetPassword";
 import TeacherSetupPassword from "./pages/TeacherSetupPassword";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import TeacherClassrooms from "./pages/teacher/TeacherClassrooms";
+import AssignmentManagementPage from "./pages/teacher/AssignmentManagementPage";
 import TeacherStudents from "./pages/teacher/TeacherStudents";
 import ClassroomDetail from "./pages/teacher/ClassroomDetail";
 import TeacherAssignmentDetailPage from "./pages/teacher/TeacherAssignmentDetailPage";
@@ -27,6 +28,7 @@ import TeacherProfile from "./pages/teacher/TeacherProfile";
 import StudentLogin from "./pages/StudentLogin";
 import StudentForgotPassword from "./pages/StudentForgotPassword";
 import StudentResetPassword from "./pages/StudentResetPassword";
+import OneCampusCallback from "./pages/OneCampusCallback";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentAssignmentList from "./pages/student/StudentAssignmentList";
 import StudentAssignmentDetail from "./pages/student/StudentAssignmentDetail";
@@ -49,6 +51,9 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import PricingPage from "./pages/PricingPage";
 import TestSubscription from "./pages/TestSubscription";
 import DemoAssignmentPage from "./pages/DemoAssignmentPage";
+import WordSpellingSample from "./pages/sample/WordSpellingSample";
+import WordClozeSample from "./pages/sample/WordClozeSample";
+import TugOfWarSample from "./pages/sample/TugOfWarSample";
 import { Toaster } from "sonner";
 import { useCrossTabAuthSync } from "./hooks/useCrossTabAuthSync";
 
@@ -148,6 +153,16 @@ function App() {
             <ProtectedRoute>
               <TeacherLayout>
                 <TeacherClassrooms />
+              </TeacherLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/assignments"
+          element={
+            <ProtectedRoute>
+              <TeacherLayout>
+                <AssignmentManagementPage />
               </TeacherLayout>
             </ProtectedRoute>
           }
@@ -278,6 +293,9 @@ function App() {
         {/* ✅ Phase 4: 組織管理路由已移至 /organization/* */}
         {/* Teacher Profile is now integrated in TeacherLayout sidebar */}
 
+        {/* 1Campus SSO Callback */}
+        <Route path="/auth/1campus/callback" element={<OneCampusCallback />} />
+
         {/* Student Routes */}
         <Route path="/student/login" element={<StudentLogin />} />
         <Route
@@ -377,6 +395,17 @@ function App() {
 
         {/* Debug 頁面 */}
         <Route path="/debug" element={<DebugPage />} />
+
+        {/* Sample Pages — 設計稿，不需登入 */}
+        <Route
+          path="/sample/vocabulary-set/word-spelling"
+          element={<WordSpellingSample />}
+        />
+        <Route
+          path="/sample/vocabulary-set/word-cloze"
+          element={<WordClozeSample />}
+        />
+        <Route path="/sample/tug-of-war" element={<TugOfWarSample />} />
 
         {/* Test Pages */}
         <Route

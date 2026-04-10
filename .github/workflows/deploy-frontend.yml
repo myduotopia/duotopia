@@ -155,19 +155,20 @@ jobs:
     - name: Get backend URL
       id: backend_url
       run: |
-        # 獲取後端服務的實際 URL (staging only)
-        BACKEND_URL=$(gcloud run services describe ${{ steps.env_vars.outputs.BACKEND_SERVICE }} \
-          --platform managed \
-          --region $REGION \
-          --format 'value(status.url)' 2>/dev/null || echo "")
+        # 優先使用 GitHub secrets（gcloud status.url 仍回傳已停用的舊格式 URL）
+        # See: https://github.com/myduotopia/duotopia/issues/548
+        if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          BACKEND_URL="${{ secrets.DEVELOP_BACKEND_URL }}"
+        else
+          BACKEND_URL="${{ secrets.STAGING_BACKEND_URL }}"
+        fi
 
         if [ -z "$BACKEND_URL" ]; then
-          echo "⚠️ Backend service not found, using fallback URL"
-          if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
-            BACKEND_URL="${{ secrets.DEVELOP_BACKEND_URL }}"
-          else
-            BACKEND_URL="${{ secrets.STAGING_BACKEND_URL }}"
-          fi
+          echo "⚠️ Secret not set, falling back to gcloud"
+          BACKEND_URL=$(gcloud run services describe ${{ steps.env_vars.outputs.BACKEND_SERVICE }} \
+            --platform managed \
+            --region $REGION \
+            --format 'value(status.url)' 2>/dev/null || echo "")
         fi
 
         echo "BACKEND_URL=$BACKEND_URL" >> $GITHUB_OUTPUT

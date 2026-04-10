@@ -9,8 +9,10 @@ import {
   Users,
   BookOpen,
   Package,
+  ClipboardList,
 } from "lucide-react";
 import { SidebarGroup } from "@/types/sidebar";
+import { FEATURE_FLAGS } from "@/config/featureFlags";
 
 export const getSidebarGroups = (
   t: (key: string) => string,
@@ -48,6 +50,16 @@ export const getSidebarGroups = (
         icon: GraduationCap,
         path: "/teacher/classrooms",
       },
+      ...(FEATURE_FLAGS.ASSIGNMENTS
+        ? [
+            {
+              id: "assignments" as const,
+              label: t("assignmentManagement.title"),
+              icon: ClipboardList,
+              path: "/teacher/assignments",
+            },
+          ]
+        : []),
       {
         id: "students",
         label: t("teacherLayout.nav.allStudents"),

@@ -190,6 +190,9 @@ class ContentItemResponse(BaseModel):
     text: str
     translation: Optional[str] = None
     audio_url: Optional[str] = None
+    example_sentence: Optional[str] = None
+    example_sentence_translation: Optional[str] = None
+    example_sentence_audio_url: Optional[str] = None
 
     class Config:
         from_attributes = True

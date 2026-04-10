@@ -1218,6 +1218,10 @@
       "failed": "Failed to send, please try again later",
       "cooldown": "Please wait {{seconds}} seconds before resending",
       "noEmail": "Didn't receive the email?"
+    },
+    "oneCampus": {
+      "separator": "or",
+      "button": "Log in with School Account (1Campus)"
     }
   },
   "studentLogin": {
@@ -1267,6 +1271,9 @@
       "loggingIn": "Logging in...",
       "error": "Login failed. Please check your email and password.",
       "forgotPassword": "Forgot password?"
+    },
+    "oneCampus": {
+      "button": "Log in with School Account (1Campus)"
     },
     "errors": {
       "teacherNotFound": "Teacher account not found",
@@ -1370,6 +1377,37 @@
     "success": {
       "verificationSent": "Verification email sent! Please check your inbox",
       "emailUpdated": "Email updated successfully"
+    },
+    "noClassroom": {
+      "title": "Welcome to Duotopia!",
+      "description": "You haven't joined any classes yet. Please ask your teacher for help."
+    }
+  },
+  "oneCampus": {
+    "loading": "Logging in with school account...",
+    "errors": {
+      "title": "Login Failed",
+      "missingParams": "Missing required parameters. Please try logging in again.",
+      "generic": "Login failed. Please try again.",
+      "backToLogin": "Back to Login",
+      "mergeFailed": "Account merge failed. Please try again."
+    },
+    "merge": {
+      "title": "Account Found",
+      "existingAccount": "Existing account",
+      "newAccount": "School account",
+      "confirm": "Merge Accounts",
+      "skip": "Skip for now"
+    },
+    "bind": {
+      "title": "Bind Duotopia Account",
+      "description": "If you already have a Duotopia account, enter your email to link it with your school account.",
+      "emailPlaceholder": "your-email@example.com",
+      "sendVerification": "Send Verification Email",
+      "skip": "Skip for now",
+      "sentTitle": "Verification Email Sent",
+      "sentDescription": "We've sent a verification email to {{email}}. Please check your inbox and click the verification link.",
+      "continue": "Continue to Dashboard"
     }
   },
   "teacherRegister": {
@@ -1670,10 +1708,10 @@
         "created": "Assignment created successfully, assigned to {{count}} students"
       },
       "contentTypes": {
-        "reading_assessment": "Example Sentences",
-        "READING_ASSESSMENT": "Example Sentences",
-        "example_sentences": "Example Sentences",
-        "EXAMPLE_SENTENCES": "Example Sentences",
+        "reading_assessment": "Paragraph Set",
+        "READING_ASSESSMENT": "Paragraph Set",
+        "example_sentences": "Paragraph Set",
+        "EXAMPLE_SENTENCES": "Paragraph Set",
         "vocabulary_set": "Vocabulary Set",
         "VOCABULARY_SET": "Vocabulary Set",
         "sentence_making": "Vocabulary Set",
@@ -1757,8 +1795,8 @@
       "cancel": "Cancel",
       "types": {
         "example_sentences": {
-          "name": "Example Sentences",
-          "description": "Create sentences for reading or rearrangement practice (2-25 words)",
+          "name": "Paragraph Set",
+          "description": "Create paragraphs for reading or ordering practice. Paste multiple paragraphs from an article, up to 120 words each",
           "recommended": "Recommended"
         },
         "vocabulary_set": {
@@ -2669,7 +2707,8 @@
       "saveChanges": "Save Changes",
       "addItem": "Add Item",
       "record": "Record",
-      "stickyNote": "Sticky Note"
+      "stickyNote": "Sticky Note",
+      "analysisReport": "Analysis Report"
     },
     "stats": {
       "studentCount": "Students",
@@ -2721,7 +2760,7 @@
       "noDescription": "No Description",
       "unknownType": "Unknown Type",
       "notSet": "Not Set",
-      "readingAssessmentSettings": "Add Example Sentences",
+      "readingAssessmentSettings": "Add Paragraph Set",
       "subscriptionExpiredWarning": "⚠️ Subscription Expired",
       "daysRemaining": "{{days}} days remaining",
       "requiresSubscription": "Subscription required to assign homework",
@@ -2944,10 +2983,10 @@
       "resubmitted": "Resubmitted"
     },
     "contentTypes": {
-      "readingAssessment": "Example Sentences",
-      "reading_assessment": "Example Sentences",
-      "READING_ASSESSMENT": "Example Sentences",
-      "EXAMPLE_SENTENCES": "Example Sentences",
+      "readingAssessment": "Paragraph Set",
+      "reading_assessment": "Paragraph Set",
+      "READING_ASSESSMENT": "Paragraph Set",
+      "EXAMPLE_SENTENCES": "Paragraph Set",
       "speakingPractice": "Speaking Practice",
       "speaking_practice": "Speaking Practice",
       "SPEAKING_PRACTICE": "Speaking Practice",
@@ -3186,7 +3225,7 @@
       "featureInDevelopment": "{{type}} feature in development"
     },
     "dialogs": {
-      "addReadingTitle": "Add Example Sentences",
+      "addReadingTitle": "Add Paragraph Set",
       "editContentTitle": "Edit Content"
     }
   },
@@ -4436,6 +4475,13 @@
       "clickToUpload": "click to upload",
       "macScreenshotHint": "Tip: Use Ctrl+Shift+Cmd+4 for screenshot to paste",
       "windowsScreenshotHint": "Tip: Use Win+Shift+S for screenshot to paste"
+    },
+    "generate": {
+      "accent": "Accent",
+      "gender": "Gender",
+      "speed": "Speed",
+      "generating": "Generating...",
+      "generate": "Generate"
     }
   },
   "wordReading": {
@@ -4677,7 +4723,7 @@
     },
     "contentTypes": {
       "reading_assessment": "Reading Assessment",
-      "example_sentences": "Example Sentences",
+      "example_sentences": "Paragraph Set",
       "vocabulary_set": "Vocabulary Set",
       "sentence_making": "Sentence Making"
     },
@@ -4727,7 +4773,35 @@
       "wordSelection": {
         "label": "Word Selection",
         "description": "Select the correct translation for each word"
+      },
+      "tugOfWar": {
+        "label": "Tug of War",
+        "description": "2-player same-screen vocabulary battle"
       }
+    }
+  },
+  "tugOfWar": {
+    "teamA": "Team A",
+    "teamB": "Team B",
+    "showImages": "Show images",
+    "loading": "Loading vocabulary...",
+    "modes": {
+      "audioToEnglish": "Audio → English",
+      "audioToChinese": "Audio → Translation",
+      "englishToChinese": "English → Translation",
+      "chineseToEnglish": "Translation → English"
+    },
+    "error": {
+      "loadFailed": "Failed to load vocabulary",
+      "notEnoughWords": "Not enough words (minimum 4 required)"
+    },
+    "result": {
+      "teamAWins": "Team A Wins!",
+      "teamBWins": "Team B Wins!",
+      "draw": "Draw!",
+      "totalQuestions": "{{count}} questions total",
+      "close": "Close",
+      "playAgain": "Play Again"
     }
   },
   "blog": {
@@ -4782,5 +4856,112 @@
       "description": "Blog post management",
       "confirmDeleteCategory": "Are you sure you want to delete category \"{{name}}\"?"
     }
+  },
+  "analysisDialog": {
+    "title": "Assignment Analysis",
+    "practiceMode": {
+      "rearrangement": "Sentence Rearrangement",
+      "reading": "Sentence Reading",
+      "word_selection": "Word Selection",
+      "word_reading": "Word Reading"
+    },
+    "estimate": {
+      "practiceMode": "Practice Mode",
+      "studentCount": "Student Count",
+      "studentCountValue": "{{count}} students",
+      "estimatedPoints": "Estimated Points",
+      "pointsValue": "{{count}} pts",
+      "remainingQuota": "Remaining Quota"
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "confirm": "Analyze ({{points}} pts)",
+      "close": "Close",
+      "retry": "Retry"
+    },
+    "messages": {
+      "generating": "AI is analyzing student performance, please wait...",
+      "reportGenerated": "Analysis report generated"
+    },
+    "errors": {
+      "loadFailed": "Failed to load analysis info",
+      "generateFailed": "Failed to generate report. Please try again later.",
+      "insufficientQuota": "Insufficient points. Please purchase more credits."
+    },
+    "report": {
+      "overallSummary": "Overall Summary",
+      "classStatistics": "Class Statistics",
+      "difficultSentences": "Difficult Sentences",
+      "wordAnalysis": "Word Analysis",
+      "studentInsights": "Student Insights",
+      "teachingSuggestions": "Teaching Suggestions",
+      "errorRate": "Error Rate",
+      "correctRate": "Correct Rate",
+      "statLabels": {
+        "average_score": "Average Score",
+        "highest_score": "Highest Score",
+        "lowest_score": "Lowest Score",
+        "completion_rate": "Completion Rate",
+        "avg_error_count": "Avg Errors",
+        "avg_accuracy": "Avg Accuracy",
+        "avg_fluency": "Avg Fluency",
+        "avg_pronunciation": "Avg Pronunciation",
+        "total_words": "Total Words",
+        "avg_correct_rate": "Avg Correct Rate",
+        "most_difficult_words": "Most Difficult Words"
+      },
+      "strength": "Strength: ",
+      "weakness": "Weakness: ",
+      "suggestion": "Suggestion: ",
+      "generatedAt": "Generated: ",
+      "pointsUsed": "Points Used: "
+    }
+  },
+  "assignmentManagement": {
+    "title": "Assignment Management",
+    "fetchError": "Failed to load assignments",
+    "empty": "No assignments yet",
+    "filters": {
+      "allClassrooms": "All Classes",
+      "noClassroom": "No Class",
+      "allTypes": "All Types",
+      "regularOnly": "Regular Only",
+      "instantOnly": "Instant Practice Only"
+    },
+    "columns": {
+      "title": "Title",
+      "classroom": "Class",
+      "type": "Type",
+      "mode": "Practice Mode",
+      "students": "Students",
+      "completion": "Completion",
+      "createdAt": "Created",
+      "dueDate": "Due Date"
+    },
+    "labels": {
+      "instantPractice": "Instant Practice",
+      "regular": "Regular",
+      "noClassroom": "No Class"
+    },
+    "actions": {
+      "view": "View Details",
+      "archive": "Archive",
+      "unarchive": "Unarchive",
+      "delete": "Delete"
+    },
+    "confirm": {
+      "archiveTitle": "Confirm Archive",
+      "archiveDescription": "Are you sure you want to archive \"{{title}}\"? You can find it in the archive.",
+      "unarchiveTitle": "Confirm Unarchive",
+      "unarchiveDescription": "Are you sure you want to unarchive \"{{title}}\"?",
+      "deleteTitle": "Confirm Delete",
+      "deleteDescription": "Are you sure you want to delete \"{{title}}\"? This action cannot be undone."
+    },
+    "archiveSuccess": "Assignment archived",
+    "archiveError": "Failed to archive",
+    "unarchiveSuccess": "Assignment unarchived",
+    "unarchiveError": "Failed to unarchive",
+    "deleteSuccess": "Assignment deleted",
+    "deleteError": "Failed to delete"
   }
 }

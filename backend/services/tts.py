@@ -76,17 +76,17 @@ class TTSService:
                             self.storage_client = (
                                 storage.Client.from_service_account_json(key_path)
                             )
-                            print(
-                                "✅ TTS GCS client initialized with service account key"
+                            logger.info(
+                                "TTS GCS client initialized with service account key"
                             )
                             return self.storage_client
                         except Exception as e:
-                            print(f"⚠️  Failed to use service account key: {e}")
+                            logger.warning(f"Failed to use service account key: {e}")
                     else:
-                        print("⚠️  Service account key file is empty, skipping")
+                        logger.warning("Service account key file is empty, skipping")
                 except (json.JSONDecodeError, ValueError) as e:
-                    print(
-                        f"⚠️  Service account key file is invalid JSON: {e}, skipping"
+                    logger.warning(
+                        f"Service account key file is invalid JSON: {e}, skipping"
                     )
 
             # 方法 2: 使用 Application Default Credentials (本機開發)
@@ -102,8 +102,8 @@ class TTSService:
                     self.storage_client = storage.Client(
                         credentials=credentials, project=project
                     )
-                    print(
-                        "✅ TTS GCS client initialized with Application Default Credentials"
+                    logger.info(
+                        "TTS GCS client initialized with Application Default Credentials"
                     )
                     return self.storage_client
                 finally:
@@ -113,8 +113,8 @@ class TTSService:
                             "GOOGLE_APPLICATION_CREDENTIALS"
                         ] = original_creds_env
             except Exception as e:
-                print(f"❌ TTS GCS client initialization failed: {e}")
-                print("   請執行: gcloud auth application-default login")
+                logger.error(f"TTS GCS client initialization failed: {e}")
+                logger.error("   請執行: gcloud auth application-default login")
                 raise ValueError(
                     f"GCS client initialization failed: {e}. "
                     "Please configure GCS credentials (service-account-key.json or gcloud auth)."
@@ -233,7 +233,7 @@ class TTSService:
                 )
 
                 # 生成 TTS（同步操作，需在 executor 中執行）
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 # 直接傳遞方法調用，不需要 lambda
                 result = await loop.run_in_executor(None, synthesizer.speak_text, text)
 
@@ -275,8 +275,8 @@ class TTSService:
                     try:
                         os.unlink(tmp_file_path)
                     except Exception as e:
-                        print(
-                            f"Warning: Failed to delete temp file {tmp_file_path}: {e}"
+                        logger.warning(
+                            f"Failed to delete temp file {tmp_file_path}: {e}"
                         )
 
         except Exception as e:

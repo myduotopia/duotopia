@@ -296,6 +296,141 @@ class IdentityService:
         # 都有自定義密碼 or 都是預設密碼 -> 保持 Identity 的
         return
 
+    def bind_1campus_identity_to_email(
+        self,
+        db: Session,
+        sso_identity: Identity,
+        target_email: str,
+        user_type: str = "student",
+    ) -> Identity:
+        """Bind an SSO-only 1Campus Identity to an existing email-based Identity.
+
+        Called after email verification succeeds for a 1Campus user who
+        manually entered their Duotopia email.
+
+        Two scenarios:
+        1. target_email has an existing active Identity → migrate 1Campus fields
+           to that Identity, move linked users, deactivate the SSO Identity.
+        2. target_email has no Identity → set the email on the SSO Identity directly.
+
+        Returns the surviving Identity.
+        """
+        # Look for an existing Identity with the target email
+        email_identity = (
+            db.query(Identity)
+            .filter(
+                Identity.email == target_email,
+                Identity.is_active.is_(True),
+                Identity.id != sso_identity.id,
+            )
+            .first()
+        )
+
+        if email_identity:
+            # Scenario 1: Merge SSO fields into the email Identity
+            email_identity.one_campus_student_id = sso_identity.one_campus_student_id
+            email_identity.one_campus_account = sso_identity.one_campus_account
+            if sso_identity.national_id_hash:
+                email_identity.national_id_hash = sso_identity.national_id_hash
+
+            # Smart password merge
+            self._smart_password_merge_identity(sso_identity, email_identity)
+
+            # Migrate linked users from SSO Identity to email Identity
+            if user_type == "student":
+                students = (
+                    db.query(Student)
+                    .filter(
+                        Student.identity_id == sso_identity.id,
+                        Student.is_active.is_(True),
+                    )
+                    .all()
+                )
+                for s in students:
+                    s.identity_id = email_identity.id
+                    # Don't override existing primary
+                    has_primary = (
+                        db.query(Student)
+                        .filter(
+                            Student.identity_id == email_identity.id,
+                            Student.is_primary_account.is_(True),
+                            Student.is_active.is_(True),
+                            Student.id != s.id,
+                        )
+                        .first()
+                    )
+                    if has_primary:
+                        s.is_primary_account = False
+            else:
+                teachers = (
+                    db.query(Teacher)
+                    .filter(
+                        Teacher.identity_id == sso_identity.id,
+                        Teacher.is_active.is_(True),
+                    )
+                    .all()
+                )
+                for t in teachers:
+                    t.identity_id = email_identity.id
+                    # Only update email if it won't violate uniqueness
+                    existing_teacher_with_email = (
+                        db.query(Teacher)
+                        .filter(
+                            Teacher.email == target_email,
+                            Teacher.id != t.id,
+                            Teacher.is_active.is_(True),
+                        )
+                        .first()
+                    )
+                    if not existing_teacher_with_email:
+                        t.email = target_email
+
+            # Deactivate the SSO-only Identity
+            sso_identity.is_active = False
+            db.flush()
+
+            logger.info(
+                "1Campus bind: merged sso_identity=%s into email_identity=%s "
+                "(email=%s, type=%s)",
+                sso_identity.id,
+                email_identity.id,
+                target_email,
+                user_type,
+            )
+            return email_identity
+
+        else:
+            # Scenario 2: No existing email Identity → set email on SSO Identity
+            sso_identity.email = target_email
+            db.flush()
+
+            logger.info(
+                "1Campus bind: set email=%s on sso_identity=%s (type=%s)",
+                target_email,
+                sso_identity.id,
+                user_type,
+            )
+            return sso_identity
+
+    def _smart_password_merge_identity(
+        self, source: Identity, target: Identity
+    ) -> None:
+        """Merge password from source Identity into target Identity.
+
+        Same strategy as _smart_password_merge but between two Identities.
+        """
+        if target.password_changed:
+            return
+        if source.password_changed and not target.password_changed:
+            target.password_hash = source.password_hash
+            target.password_changed = True
+            target.last_password_change = datetime.now(timezone.utc)
+            logger.info(
+                "Adopted sso identity %s password for target identity %s",
+                source.id,
+                target.id,
+            )
+
     def get_linked_students(self, db: Session, identity_id: int) -> list[Student]:
         """取得 Identity 下所有關聯的 Student 帳號"""
         return (

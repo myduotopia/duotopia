@@ -9,7 +9,7 @@ This module aggregates all assignment-related routers:
 """
 
 from fastapi import APIRouter
-from . import crud, detail, submission, grading
+from . import crud, detail, submission, grading, analysis
 from .grading import get_student_submission  # noqa: E402
 
 # Main router with prefix - note: no trailing slash
@@ -35,5 +35,8 @@ router.include_router(submission.router, tags=["assignments-submission"])
 
 # Include grading endpoints (AI and manual)
 router.include_router(grading.router, tags=["assignments-grading"])
+
+# Include analysis endpoints (report generation)
+router.include_router(analysis.router, tags=["assignments-analysis"])
 
 __all__ = ["router", "get_student_submission"]

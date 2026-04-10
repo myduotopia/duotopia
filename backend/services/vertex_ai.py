@@ -15,6 +15,8 @@ import os
 import json
 import re
 import logging
+import asyncio
+import time
 from typing import Optional, Literal
 
 logger = logging.getLogger(__name__)
@@ -23,13 +25,16 @@ logger = logging.getLogger(__name__)
 FLASH_MODEL = "gemini-2.5-flash"
 PRO_MODEL = "gemini-2.5-pro"
 
+# Default timeout for Vertex AI calls (seconds)
+VERTEX_AI_TIMEOUT = 60
+
 
 class VertexAIService:
     """Vertex AI (Gemini) 服務封裝"""
 
     def __init__(self):
         self.project_id = os.getenv("VERTEX_AI_PROJECT_ID", "duotopia-472708")
-        self.location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+        self.location = os.getenv("VERTEX_AI_LOCATION", "asia-northeast1")
         self._initialized = False
         # Cached models without system_instruction (for reuse)
         self._flash_model = None
@@ -59,6 +64,10 @@ class VertexAIService:
         """
         取得 GenerativeModel 實例
 
+        model_type:
+        - "flash": gemini-2.5-flash
+        - "pro": gemini-2.5-pro（複雜分析）
+
         當有 system_instruction 時，建立新的 model 實例（Gemini 原生支援）。
         無 system_instruction 時，使用 cached model 以提升效能。
         """
@@ -68,7 +77,6 @@ class VertexAIService:
         model_name = FLASH_MODEL if model_type == "flash" else PRO_MODEL
 
         if system_instruction:
-            # 每次建立新 model，因為 system_instruction 是 constructor 參數
             return GenerativeModel(model_name, system_instruction=system_instruction)
 
         # 無 system_instruction 時使用 cached model
@@ -81,6 +89,20 @@ class VertexAIService:
                 self._pro_model = GenerativeModel(model_name)
             return self._pro_model
 
+    @staticmethod
+    def _set_thinking_budget(config, budget: int):
+        """Set thinking budget on GenerationConfig via internal protobuf."""
+        try:
+            from google.cloud.aiplatform_v1beta1.types.content import (
+                GenerationConfig as BetaGenConfig,
+            )
+
+            config._raw_generation_config.thinking_config = (
+                BetaGenConfig.ThinkingConfig(thinking_budget=budget)
+            )
+        except Exception as e:
+            logger.warning(f"Failed to set thinking_budget: {e}")
+
     async def generate_text(
         self,
         prompt: str,
@@ -88,6 +110,8 @@ class VertexAIService:
         max_tokens: int = 1000,
         temperature: float = 0.7,
         system_instruction: Optional[str] = None,
+        timeout: Optional[int] = VERTEX_AI_TIMEOUT,
+        disable_thinking: bool = False,
     ) -> str:
         """
         統一的文字生成介面
@@ -98,6 +122,7 @@ class VertexAIService:
             max_tokens: 最大輸出 token 數
             temperature: 溫度參數 (0-1)
             system_instruction: 系統指令（使用 Gemini 原生 system_instruction）
+            disable_thinking: 關閉 thinking（加速簡單任務如翻譯）
 
         Returns:
             生成的文字
@@ -110,17 +135,49 @@ class VertexAIService:
             max_output_tokens=max_tokens,
             temperature=temperature,
         )
+        if disable_thinking:
+            self._set_thinking_budget(config, 0)
 
         try:
-            logger.info(f"Vertex AI generate_text: calling model (type={model_type})")
-            response = await model.generate_content_async(
-                prompt,
-                generation_config=config,
+            t0 = time.monotonic()
+            logger.info(
+                "[PERF] Vertex AI generate_text START | model=%s | region=%s",
+                model_type,
+                self.location,
             )
-            logger.info("Vertex AI generate_text: response received")
+            response = await asyncio.wait_for(
+                model.generate_content_async(
+                    prompt,
+                    generation_config=config,
+                ),
+                timeout=timeout,
+            )
+            elapsed = time.monotonic() - t0
+            logger.info(
+                "[PERF] Vertex AI generate_text DONE | model=%s | region=%s | %.2fs",
+                model_type,
+                self.location,
+                elapsed,
+            )
             return response.text
+        except asyncio.TimeoutError:
+            elapsed = time.monotonic() - t0
+            logger.error(
+                "[PERF] Vertex AI generate_text TIMEOUT | model=%s | region=%s | %.2fs",
+                model_type,
+                self.location,
+                elapsed,
+            )
+            raise TimeoutError(f"Vertex AI call timed out after {timeout} seconds")
         except Exception as e:
-            logger.error(f"Vertex AI generation failed: {e}", exc_info=True)
+            elapsed = time.monotonic() - t0
+            logger.error(
+                "[PERF] Vertex AI generate_text ERROR | model=%s | region=%s | %.2fs | %s",
+                model_type,
+                self.location,
+                elapsed,
+                e,
+            )
             raise
 
     async def generate_json(
@@ -130,6 +187,8 @@ class VertexAIService:
         max_tokens: int = 1000,
         temperature: float = 0.3,
         system_instruction: Optional[str] = None,
+        timeout: Optional[int] = VERTEX_AI_TIMEOUT,
+        disable_thinking: bool = False,
     ) -> dict:
         """
         生成 JSON 格式的回應
@@ -140,6 +199,7 @@ class VertexAIService:
             max_tokens: 最大輸出 token 數
             temperature: 溫度參數
             system_instruction: 系統指令（使用 Gemini 原生 system_instruction）
+            disable_thinking: 關閉 thinking（加速簡單任務如翻譯）
 
         Returns:
             解析後的 JSON dict
@@ -151,16 +211,32 @@ class VertexAIService:
         config = GenerationConfig(
             max_output_tokens=max_tokens,
             temperature=temperature,
-            response_mime_type="application/json",  # 強制 JSON 輸出
+            response_mime_type="application/json",
         )
+        if disable_thinking:
+            self._set_thinking_budget(config, 0)
 
         try:
-            logger.info(f"Vertex AI generate_json: calling model (type={model_type})")
-            response = await model.generate_content_async(
-                prompt,
-                generation_config=config,
+            t0 = time.monotonic()
+            logger.info(
+                "[PERF] Vertex AI generate_json START | model=%s | region=%s",
+                model_type,
+                self.location,
             )
-            logger.info("Vertex AI generate_json: response received")
+            response = await asyncio.wait_for(
+                model.generate_content_async(
+                    prompt,
+                    generation_config=config,
+                ),
+                timeout=timeout,
+            )
+            elapsed = time.monotonic() - t0
+            logger.info(
+                "[PERF] Vertex AI generate_json DONE | model=%s | region=%s | %.2fs",
+                model_type,
+                self.location,
+                elapsed,
+            )
 
             content = response.text.strip()
 
@@ -210,12 +286,28 @@ class VertexAIService:
                     return json.loads(json_content)
                 else:
                     raise
+        except asyncio.TimeoutError:
+            elapsed = time.monotonic() - t0
+            logger.error(
+                "[PERF] Vertex AI generate_json TIMEOUT | model=%s | region=%s | %.2fs",
+                model_type,
+                self.location,
+                elapsed,
+            )
+            raise TimeoutError(f"Vertex AI call timed out after {timeout} seconds")
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON from Vertex AI response: {e}")
             logger.error(f"Raw response: {response.text if response else 'None'}")
             raise
         except Exception as e:
-            logger.error(f"Vertex AI JSON generation failed: {e}", exc_info=True)
+            elapsed = time.monotonic() - t0
+            logger.error(
+                "[PERF] Vertex AI generate_json ERROR | model=%s | region=%s | %.2fs | %s",
+                model_type,
+                self.location,
+                elapsed,
+                e,
+            )
             raise
 
     def generate_text_sync(

@@ -1248,6 +1248,10 @@
       "failed": "發送失敗，請稍後再試",
       "cooldown": "請等待 {{seconds}} 秒後再重新發送",
       "noEmail": "沒有收到郵件？"
+    },
+    "oneCampus": {
+      "separator": "或",
+      "button": "學校帳號登入 (1Campus)"
     }
   },
   "studentLogin": {
@@ -1298,6 +1302,9 @@
       "error": "登入失敗，請確認 Email 和密碼是否正確",
       "forgotPassword": "忘記密碼？"
     },
+    "oneCampus": {
+      "button": "學校帳號登入 (1Campus)"
+    },
     "errors": {
       "teacherNotFound": "找不到此教師帳號",
       "teacherValidationFailed": "無法驗證教師帳號，請稍後再試",
@@ -1346,7 +1353,38 @@
     "switchSuccess": "已切換至 {{name}}（{{org}}）",
     "switchError": "切換帳號失敗，請稍後再試"
   },
+  "oneCampus": {
+    "loading": "正在使用學校帳號登入...",
+    "errors": {
+      "title": "登入失敗",
+      "missingParams": "缺少必要參數，請重新登入。",
+      "generic": "登入失敗，請重試。",
+      "backToLogin": "返回登入頁",
+      "mergeFailed": "帳號合併失敗，請重試。"
+    },
+    "merge": {
+      "title": "找到現有帳號",
+      "existingAccount": "現有帳號",
+      "newAccount": "學校帳號",
+      "confirm": "合併帳號",
+      "skip": "先跳過"
+    },
+    "bind": {
+      "title": "綁定 Duotopia 帳號",
+      "description": "如果你已經有 Duotopia 帳號，輸入 Email 即可將學校帳號與 Duotopia 帳號綁定。",
+      "emailPlaceholder": "your-email@example.com",
+      "sendVerification": "發送驗證信",
+      "skip": "先跳過",
+      "sentTitle": "驗證信已發送",
+      "sentDescription": "我們已發送驗證信到 {{email}}，請查看信箱並點擊驗證連結。",
+      "continue": "前往儀表板"
+    }
+  },
   "studentDashboard": {
+    "noClassroom": {
+      "title": "歡迎來到 Duotopia！",
+      "description": "目前還沒有加入任何班級，請等待老師將你加入班級。"
+    },
     "welcome": {
       "greeting": "你好，{{name}}！歡迎回到 Duotopia 🚀",
       "subtitle": "繼續你的英語學習之旅吧"
@@ -1706,10 +1744,10 @@
         "created": "成功創建作業，已指派給 {{count}} 位學生"
       },
       "contentTypes": {
-        "reading_assessment": "例句集",
-        "READING_ASSESSMENT": "例句集",
-        "example_sentences": "例句集",
-        "EXAMPLE_SENTENCES": "例句集",
+        "reading_assessment": "段落集",
+        "READING_ASSESSMENT": "段落集",
+        "example_sentences": "段落集",
+        "EXAMPLE_SENTENCES": "段落集",
         "vocabulary_set": "單字集",
         "VOCABULARY_SET": "單字集",
         "sentence_making": "造句練習",
@@ -1787,8 +1825,8 @@
       "cancel": "取消",
       "types": {
         "example_sentences": {
-          "name": "例句集",
-          "description": "建立例句供學生練習朗讀或重組（2-25個單字）",
+          "name": "段落集",
+          "description": "建立段落供學生練習朗讀或排序，可將文章多個段落貼上，每段落最多120個單字",
           "recommended": "推薦"
         },
         "vocabulary_set": {
@@ -2700,7 +2738,8 @@
       "saveChanges": "儲存變更",
       "addItem": "新增項目",
       "record": "錄音",
-      "stickyNote": "便利貼"
+      "stickyNote": "便利貼",
+      "analysisReport": "作業分析"
     },
     "stats": {
       "studentCount": "學生數",
@@ -2752,7 +2791,7 @@
       "noDescription": "無說明",
       "unknownType": "未知類型",
       "notSet": "未設定",
-      "readingAssessmentSettings": "新增例句集",
+      "readingAssessmentSettings": "新增段落集",
       "subscriptionExpiredWarning": "⚠️ 訂閱已過期",
       "daysRemaining": "剩餘 {{days}} 天",
       "requiresSubscription": "需要訂閱才能指派作業",
@@ -2949,10 +2988,10 @@
       "editContent": "編輯內容"
     },
     "contentTypes": {
-      "readingAssessment": "例句集",
-      "reading_assessment": "例句集",
-      "READING_ASSESSMENT": "例句集",
-      "EXAMPLE_SENTENCES": "例句集",
+      "readingAssessment": "段落集",
+      "reading_assessment": "段落集",
+      "READING_ASSESSMENT": "段落集",
+      "EXAMPLE_SENTENCES": "段落集",
       "speakingPractice": "口說練習",
       "speaking_practice": "口說練習",
       "SPEAKING_PRACTICE": "口說練習",
@@ -3191,7 +3230,7 @@
       "featureInDevelopment": "{{type}} 功能開發中"
     },
     "dialogs": {
-      "addReadingTitle": "新增例句集",
+      "addReadingTitle": "新增段落集",
       "editContentTitle": "編輯內容"
     }
   },
@@ -4380,6 +4419,13 @@
       "accent": "口音",
       "gender": "性別",
       "speed": "語速"
+    },
+    "generate": {
+      "accent": "口音",
+      "gender": "性別",
+      "speed": "語速",
+      "generating": "生成中...",
+      "generate": "生成"
     }
   },
   "vocabularySet": {
@@ -4696,7 +4742,7 @@
     },
     "contentTypes": {
       "reading_assessment": "閱讀評量",
-      "example_sentences": "例句集",
+      "example_sentences": "段落集",
       "vocabulary_set": "單字集",
       "sentence_making": "造句"
     },
@@ -4746,7 +4792,35 @@
       "wordSelection": {
         "label": "單字選擇",
         "description": "根據單字選擇正確的翻譯"
+      },
+      "tugOfWar": {
+        "label": "拔河對戰",
+        "description": "2人同螢幕搶答拔河遊戲"
       }
+    }
+  },
+  "tugOfWar": {
+    "teamA": "A隊",
+    "teamB": "B隊",
+    "showImages": "顯示圖片",
+    "loading": "載入單字中...",
+    "modes": {
+      "audioToEnglish": "聽音選英文",
+      "audioToChinese": "聽音選翻譯/解釋",
+      "englishToChinese": "英文選翻譯/解釋",
+      "chineseToEnglish": "翻譯/解釋選英文"
+    },
+    "error": {
+      "loadFailed": "載入單字失敗",
+      "notEnoughWords": "單字數量不足（至少需要 4 個）"
+    },
+    "result": {
+      "teamAWins": "A隊獲勝！",
+      "teamBWins": "B隊獲勝！",
+      "draw": "平手！",
+      "totalQuestions": "共 {{count}} 題",
+      "close": "關閉",
+      "playAgain": "再玩一次"
     }
   },
   "blog": {
@@ -4801,5 +4875,112 @@
       "description": "Blog 文章管理",
       "confirmDeleteCategory": "確定要刪除分類「{{name}}」嗎？"
     }
+  },
+  "analysisDialog": {
+    "title": "作業分析",
+    "practiceMode": {
+      "rearrangement": "例句重組",
+      "reading": "例句朗讀",
+      "word_selection": "單字選擇",
+      "word_reading": "單字朗讀"
+    },
+    "estimate": {
+      "practiceMode": "作業類型",
+      "studentCount": "學生人數",
+      "studentCountValue": "{{count}} 人",
+      "estimatedPoints": "預估消耗點數",
+      "pointsValue": "{{count}} 點",
+      "remainingQuota": "目前剩餘點數"
+    },
+    "buttons": {
+      "cancel": "取消",
+      "confirm": "確認分析（扣 {{points}} 點）",
+      "close": "關閉",
+      "retry": "重試"
+    },
+    "messages": {
+      "generating": "AI 正在分析學生表現，請稍候...",
+      "reportGenerated": "分析報告已生成"
+    },
+    "errors": {
+      "loadFailed": "無法載入分析資訊",
+      "generateFailed": "生成報告失敗，請稍後再試",
+      "insufficientQuota": "點數不足，請先購買點數包"
+    },
+    "report": {
+      "overallSummary": "整體摘要",
+      "classStatistics": "班級統計",
+      "difficultSentences": "困難句子",
+      "wordAnalysis": "單字分析",
+      "studentInsights": "學生分析",
+      "teachingSuggestions": "教學建議",
+      "errorRate": "錯誤率",
+      "correctRate": "正確率",
+      "strength": "優勢：",
+      "weakness": "弱點：",
+      "suggestion": "建議：",
+      "generatedAt": "生成時間：",
+      "pointsUsed": "消耗點數：",
+      "statLabels": {
+        "average_score": "平均分數",
+        "highest_score": "最高分",
+        "lowest_score": "最低分",
+        "completion_rate": "完成率",
+        "avg_error_count": "平均錯誤數",
+        "avg_accuracy": "平均準確率",
+        "avg_fluency": "平均流暢度",
+        "avg_pronunciation": "平均發音",
+        "total_words": "總單字數",
+        "avg_correct_rate": "平均正確率",
+        "most_difficult_words": "最難單字"
+      }
+    }
+  },
+  "assignmentManagement": {
+    "title": "作業管理",
+    "fetchError": "載入作業列表失敗",
+    "empty": "目前沒有作業",
+    "filters": {
+      "allClassrooms": "所有班級",
+      "noClassroom": "無班級",
+      "allTypes": "所有類型",
+      "regularOnly": "一般作業",
+      "instantOnly": "即刻練習"
+    },
+    "columns": {
+      "title": "標題",
+      "classroom": "班級",
+      "type": "類型",
+      "mode": "練習模式",
+      "students": "學生數",
+      "completion": "完成率",
+      "createdAt": "建立日期",
+      "dueDate": "截止日期"
+    },
+    "labels": {
+      "instantPractice": "即刻練習",
+      "regular": "一般作業",
+      "noClassroom": "無班級"
+    },
+    "actions": {
+      "view": "查看詳情",
+      "archive": "封存",
+      "unarchive": "取消封存",
+      "delete": "刪除"
+    },
+    "confirm": {
+      "archiveTitle": "確認封存",
+      "archiveDescription": "確定要封存「{{title}}」嗎？封存後可在封存區找到。",
+      "unarchiveTitle": "確認取消封存",
+      "unarchiveDescription": "確定要取消封存「{{title}}」嗎？",
+      "deleteTitle": "確認刪除",
+      "deleteDescription": "確定要刪除「{{title}}」嗎？此操作無法復原。"
+    },
+    "archiveSuccess": "作業已封存",
+    "archiveError": "封存失敗",
+    "unarchiveSuccess": "作業已取消封存",
+    "unarchiveError": "取消封存失敗",
+    "deleteSuccess": "作業已刪除",
+    "deleteError": "刪除失敗"
   }
 }

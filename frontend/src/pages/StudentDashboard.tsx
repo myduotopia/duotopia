@@ -19,6 +19,7 @@ import {
   AlertCircle,
   Mail,
   Loader2,
+  School,
 } from "lucide-react";
 
 export default function StudentDashboard() {
@@ -363,8 +364,28 @@ export default function StudentDashboard() {
           </DialogContent>
         </Dialog>
 
+        {/* Empty state for students without classrooms (e.g. 1Campus SSO first login) */}
+        {user &&
+          (!user.classrooms || user.classrooms.length === 0) &&
+          !user.classroom_id && (
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <School className="h-16 w-16 text-blue-300 mb-4" />
+              <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-2">
+                {t("studentDashboard.noClassroom.title", "歡迎來到 Duotopia！")}
+              </h2>
+              <p className="text-gray-500 dark:text-gray-400 text-center max-w-md">
+                {t(
+                  "studentDashboard.noClassroom.description",
+                  "目前還沒有加入任何班級，請等待老師將你加入班級。",
+                )}
+              </p>
+            </div>
+          )}
+
         {/* Dashboard Tiles — 成就 + 作業狀態統一容器 */}
-        <div className="flex flex-wrap gap-3 sm:gap-4 justify-center sm:justify-start">
+        <div
+          className={`flex flex-wrap gap-3 sm:gap-4 justify-center sm:justify-start ${user && (!user.classrooms || user.classrooms.length === 0) && !user.classroom_id ? "hidden" : ""}`}
+        >
           {/* ===== 成就區 ===== */}
 
           {/* Email 設定 — 未驗證時顯示 */}
