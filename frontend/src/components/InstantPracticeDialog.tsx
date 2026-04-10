@@ -21,6 +21,7 @@ import {
   Shuffle,
   BookOpen,
   Zap,
+  Swords,
   Loader2,
   type LucideIcon,
 } from "lucide-react";
@@ -72,6 +73,13 @@ const PRACTICE_MODES: PracticeModeOption[] = [
     labelKey: "instantPractice.modes.wordSelection.label",
     descriptionKey: "instantPractice.modes.wordSelection.description",
     icon: Zap,
+    contentTypes: ["VOCABULARY_SET", "vocabulary_set"],
+  },
+  {
+    value: "tug_of_war",
+    labelKey: "instantPractice.modes.tugOfWar.label",
+    descriptionKey: "instantPractice.modes.tugOfWar.description",
+    icon: Swords,
     contentTypes: ["VOCABULARY_SET", "vocabulary_set"],
   },
 ];

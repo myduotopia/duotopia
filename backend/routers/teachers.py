@@ -4539,8 +4539,8 @@ async def preview_word_selection_start(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
-    # 確認是單字選擇模式
-    if assignment.practice_mode != "word_selection":
+    # 確認是單字選擇模式（tug_of_war 共用同一資料格式）
+    if assignment.practice_mode not in ("word_selection", "tug_of_war"):
         raise HTTPException(
             status_code=400, detail="This assignment is not in word_selection mode"
         )

@@ -4792,7 +4792,35 @@
       "wordSelection": {
         "label": "單字選擇",
         "description": "根據單字選擇正確的翻譯"
+      },
+      "tugOfWar": {
+        "label": "拔河對戰",
+        "description": "2人同螢幕搶答拔河遊戲"
       }
+    }
+  },
+  "tugOfWar": {
+    "teamA": "A隊",
+    "teamB": "B隊",
+    "showImages": "顯示圖片",
+    "loading": "載入單字中...",
+    "modes": {
+      "audioToEnglish": "聽音選英文",
+      "audioToChinese": "聽音選翻譯/解釋",
+      "englishToChinese": "英文選翻譯/解釋",
+      "chineseToEnglish": "翻譯/解釋選英文"
+    },
+    "error": {
+      "loadFailed": "載入單字失敗",
+      "notEnoughWords": "單字數量不足（至少需要 4 個）"
+    },
+    "result": {
+      "teamAWins": "A隊獲勝！",
+      "teamBWins": "B隊獲勝！",
+      "draw": "平手！",
+      "totalQuestions": "共 {{count}} 題",
+      "close": "關閉",
+      "playAgain": "再玩一次"
     }
   },
   "blog": {
