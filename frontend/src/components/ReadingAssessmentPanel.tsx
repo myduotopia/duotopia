@@ -1175,7 +1175,6 @@ const ReadingAssessmentPanel = forwardRef<ReadingAssessmentPanelHandle, ReadingA
     if (existingContentId) {
       try {
         await apiClient.updateContent(existingContentId, saveData);
-        toast.success(t("contentEditor.messages.savingSuccess"));
         if (onSave) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (onSave as (content?: any) => void | Promise<void>)({
@@ -1203,7 +1202,6 @@ const ReadingAssessmentPanel = forwardRef<ReadingAssessmentPanelHandle, ReadingA
           type: "EXAMPLE_SENTENCES",
           ...saveData,
         });
-        toast.success(t("contentEditor.messages.contentCreatedSuccess"));
         if (onSave) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (onSave as (content?: any) => void | Promise<void>)(newContent);

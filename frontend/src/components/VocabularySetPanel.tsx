@@ -2529,8 +2529,8 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
   const handleSave = async () => {
     let validRows = rows.filter((row) => row.text && row.text.trim());
 
-    if (validRows.length === 0) {
-      toast.error(t("contentEditor.messages.addAtLeastOneItem"));
+    if (validRows.length < 5) {
+      toast.error(t("contentEditor.messages.addAtLeastFiveItems"));
       return;
     }
 
@@ -2583,7 +2583,6 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
       if (existingContentId) {
         try {
           await apiClient.updateContent(existingContentId, saveData);
-          toast.success(t("contentEditor.messages.savingSuccess"));
           if (onSave) {
             await onSave({
               id: existingContentId,
@@ -2601,7 +2600,6 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
             type: "VOCABULARY_SET",
             ...saveData,
           });
-          toast.success(t("contentEditor.messages.contentCreatedSuccess"));
           if (onSave) {
             await onSave(newContent);
           }
@@ -3314,8 +3312,11 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
       return;
     }
 
-    // 檢查：勾選 AI 例句但沒選翻譯語言
-    if (aiGenerateExpanded && !aiGenerateTranslateLang) {
+    // 檢查：勾選 AI 例句但沒選翻譯語言（僅在有需要生成例句時檢查）
+    const hasItemsNeedingExamples = rows.some(
+      (r) => r.text?.trim() && !r.example_sentence?.trim(),
+    );
+    if (aiGenerateExpanded && hasItemsNeedingExamples && !aiGenerateTranslateLang) {
       toast.error(t("contentEditor.labels.selectExampleLanguage"));
       return;
     }
@@ -3323,6 +3324,7 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
     // 檢查：AI 例句選了「其他」卻沒輸入語言
     if (
       aiGenerateExpanded &&
+      hasItemsNeedingExamples &&
       aiGenerateTranslateLang === "other" &&
       !customSentenceTranslationLang.trim()
     ) {
@@ -3358,7 +3360,8 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
     }
 
     // 檢查：例句翻譯語言一致性（已有例句翻譯的不可更改語言）
-    if (aiGenerateExpanded) {
+    // 跳過條件：沒選例句語言、或單字翻譯選英文（英文沒有例句翻譯）
+    if (aiGenerateExpanded && aiGenerateTranslateLang && lastSelectedWordLang !== "english") {
       const existingWithExampleTranslation = rows.find((r) => {
         if (!r.text?.trim() || !r.example_sentence_translation?.trim())
           return false;
