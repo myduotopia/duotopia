@@ -42,7 +42,7 @@ export default function BlogHeader() {
             size="sm"
             onClick={() => {
               if (isTeacherAuth && teacherUser) {
-                navigate(getTeacherDashboardRoute(teacherUser));
+                navigate(getTeacherDashboardRoute());
               } else {
                 setIsTeacherLoginOpen(true);
               }

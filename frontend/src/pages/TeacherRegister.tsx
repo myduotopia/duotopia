@@ -33,7 +33,7 @@ export default function TeacherRegister() {
   // Redirect authenticated users to dashboard
   useEffect(() => {
     if (isAuthenticated && user) {
-      navigate(getTeacherDashboardRoute(user), {
+      navigate(getTeacherDashboardRoute(), {
         replace: true,
       });
     }

@@ -134,7 +134,7 @@ export default function StudentLayout() {
         <div className="p-6 border-b">
           <div className="flex items-center justify-between">
             <Link
-              to="/student/dashboard"
+              to="/"
               className="flex-1 flex justify-center"
             >
               <img

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Card,
@@ -299,13 +299,13 @@ export default function TeacherDashboardWithSidebar() {
         {/* Header */}
         <div className="p-4 border-b flex items-center justify-between">
           {!sidebarCollapsed && (
-            <div>
+            <Link to="/">
               <img
                 src="https://storage.googleapis.com/duotopia-social-media-videos/website/logo/logo_row_nobg.png"
                 alt="Duotopia"
                 className="h-8 sm:h-10"
               />
-            </div>
+            </Link>
           )}
           <Button
             variant="ghost"
