@@ -35,7 +35,7 @@ export default function TeacherLogin() {
   // Redirect authenticated users to dashboard
   useEffect(() => {
     if (isAuthenticated && user) {
-      navigate(getTeacherDashboardRoute(user), { replace: true });
+      navigate(getTeacherDashboardRoute(), { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
 

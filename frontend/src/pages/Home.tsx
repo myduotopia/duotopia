@@ -95,11 +95,13 @@ export default function Home() {
     <div className="min-h-screen bg-white">
       {/* 第一區段: Header - 白色背景 */}
       <header className="bg-white py-3 px-3 sm:py-4 sm:px-6 flex items-center justify-between shadow-sm">
-        <img
-          src="https://storage.googleapis.com/duotopia-social-media-videos/website/logo/logo_row_nobg.png"
-          alt={t("home.header.logo")}
-          className="h-8 sm:h-10"
-        />
+        <Link to="/">
+          <img
+            src="https://storage.googleapis.com/duotopia-social-media-videos/website/logo/logo_row_nobg.png"
+            alt={t("home.header.logo")}
+            className="h-8 sm:h-10"
+          />
+        </Link>
         <div className="flex items-center gap-1.5 sm:gap-3">
           <Link to="/blog">
             <Button
@@ -115,7 +117,7 @@ export default function Home() {
             size="sm"
             onClick={() => {
               if (isTeacherAuth && teacherUser) {
-                navigate(getTeacherDashboardRoute(teacherUser));
+                navigate(getTeacherDashboardRoute());
               } else {
                 setIsTeacherLoginOpen(true);
               }
