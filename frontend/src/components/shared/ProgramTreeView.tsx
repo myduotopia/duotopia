@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { RecursiveTreeAccordion } from "./RecursiveTreeAccordion";
 import { programTreeConfig } from "./programTreeConfig";
-import ReadingAssessmentPanel, { type ReadingAssessmentPanelHandle } from "@/components/ReadingAssessmentPanel";
+import ReadingAssessmentPanel, {
+  type ReadingAssessmentPanelHandle,
+} from "@/components/ReadingAssessmentPanel";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import SentenceMakingPanel from "@/components/activities/SentenceMakingActivity";
-import VocabularySetPanel, { type VocabularySetPanelHandle } from "@/components/VocabularySetPanel";
+import VocabularySetPanel, {
+  type VocabularySetPanelHandle,
+} from "@/components/VocabularySetPanel";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
 import {
   ProgramTreeLesson,

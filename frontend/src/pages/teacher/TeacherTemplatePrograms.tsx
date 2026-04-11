@@ -10,8 +10,12 @@ import { programTreeConfig } from "@/components/shared/programTreeConfig";
 import { ProgramDialog } from "@/components/ProgramDialog";
 import { LessonDialog } from "@/components/LessonDialog";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
-import ReadingAssessmentPanel, { type ReadingAssessmentPanelHandle } from "@/components/ReadingAssessmentPanel";
-import VocabularySetPanel, { type VocabularySetPanelHandle } from "@/components/VocabularySetPanel";
+import ReadingAssessmentPanel, {
+  type ReadingAssessmentPanelHandle,
+} from "@/components/ReadingAssessmentPanel";
+import VocabularySetPanel, {
+  type VocabularySetPanelHandle,
+} from "@/components/VocabularySetPanel";
 import ContentCopyDialog from "@/components/ContentCopyDialog";
 import { ProgramVisibilitySelector } from "@/components/ProgramVisibilitySelector";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
