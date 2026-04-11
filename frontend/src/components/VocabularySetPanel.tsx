@@ -1,4 +1,10 @@
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { Button } from "@/components/ui/button";
@@ -1579,16 +1585,22 @@ interface VocabularySetPanelProps {
   isAssignmentCopy?: boolean; // 是否為作業副本（顯示干擾項編輯）
 }
 
-const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPanelProps>(function VocabularySetPanel({
-  content,
-  editingContent,
-  onUpdateContent,
-  onSave,
-  lessonId,
-  programLevel,
-  isCreating = false,
-  isAssignmentCopy = false,
-}, ref) {
+const VocabularySetPanel = forwardRef<
+  VocabularySetPanelHandle,
+  VocabularySetPanelProps
+>(function VocabularySetPanel(
+  {
+    content,
+    editingContent,
+    onUpdateContent,
+    onSave,
+    lessonId,
+    programLevel,
+    isCreating = false,
+    isAssignmentCopy = false,
+  },
+  ref,
+) {
   const { t } = useTranslation();
   const { setEditorBusy } = useSidebar();
 
@@ -1599,8 +1611,9 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
 
   const [title, setTitle] = useState("");
   // 記住用戶最後選擇的翻譯語言，批次翻譯時使用
-  const [lastSelectedWordLang, setLastSelectedWordLang] =
-    useState<WordTranslationLanguage | "">("");
+  const [lastSelectedWordLang, setLastSelectedWordLang] = useState<
+    WordTranslationLanguage | ""
+  >("");
   const [customTranslationLang, setCustomTranslationLang] = useState("");
   const [rows, setRows] = useState<ContentRow[]>([
     {
@@ -2355,7 +2368,8 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
                   parsed.pos,
                 ]);
               }
-              if (batchLang) newRows[item.index].selectedWordLanguage = batchLang;
+              if (batchLang)
+                newRows[item.index].selectedWordLanguage = batchLang;
             }
           });
         } else {
@@ -2549,7 +2563,8 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
     setIsSaving(true);
 
     try {
-      const translationResult = await autoGenerateTranslationsSilently(validRows);
+      const translationResult =
+        await autoGenerateTranslationsSilently(validRows);
       if (!translationResult.success) {
         setIsSaving(false);
         return;
@@ -2615,7 +2630,9 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
 
   useImperativeHandle(ref, () => ({
     save: handleSave,
-    get isBusy() { return isSaving || isBatchPasting; },
+    get isBusy() {
+      return isSaving || isBatchPasting;
+    },
   }));
 
   // ========== 原有函數 ==========
@@ -3316,7 +3333,11 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
     const hasItemsNeedingExamples = rows.some(
       (r) => r.text?.trim() && !r.example_sentence?.trim(),
     );
-    if (aiGenerateExpanded && hasItemsNeedingExamples && !aiGenerateTranslateLang) {
+    if (
+      aiGenerateExpanded &&
+      hasItemsNeedingExamples &&
+      !aiGenerateTranslateLang
+    ) {
       toast.error(t("contentEditor.labels.selectExampleLanguage"));
       return;
     }
@@ -3361,7 +3382,11 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
 
     // 檢查：例句翻譯語言一致性（已有例句翻譯的不可更改語言）
     // 跳過條件：沒選例句語言、或單字翻譯選英文（英文沒有例句翻譯）
-    if (aiGenerateExpanded && aiGenerateTranslateLang && lastSelectedWordLang !== "english") {
+    if (
+      aiGenerateExpanded &&
+      aiGenerateTranslateLang &&
+      lastSelectedWordLang !== "english"
+    ) {
       const existingWithExampleTranslation = rows.find((r) => {
         if (!r.text?.trim() || !r.example_sentence_translation?.trim())
           return false;
@@ -3440,7 +3465,12 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
           }
           if (autoTTS && !row.audioUrl && !row.audio_url) steps++;
           if (shouldGenerateExamples && !row.example_sentence?.trim()) steps++;
-          if (shouldGenerateExamples && row.example_sentence?.trim() && !row.example_sentence_translation?.trim()) steps++;
+          if (
+            shouldGenerateExamples &&
+            row.example_sentence?.trim() &&
+            !row.example_sentence_translation?.trim()
+          )
+            steps++;
           return steps;
         };
 
@@ -3509,7 +3539,11 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
           if (autoTTS && !row.audioUrl && !row.audio_url) needsTTS.push(idx);
           if (shouldGenerateExamples && !row.example_sentence?.trim())
             needsExamples.push(idx);
-          if (shouldGenerateExamples && row.example_sentence?.trim() && !row.example_sentence_translation?.trim())
+          if (
+            shouldGenerateExamples &&
+            row.example_sentence?.trim() &&
+            !row.example_sentence_translation?.trim()
+          )
             needsExampleTranslation.push(idx);
         }
 
@@ -3699,7 +3733,11 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
         }
 
         // --- Phase 4: Translate existing example sentences missing translation ---
-        if (needsExampleTranslation.length > 0 && !batchPauseRef.current && exampleTargetLang) {
+        if (
+          needsExampleTranslation.length > 0 &&
+          !batchPauseRef.current &&
+          exampleTargetLang
+        ) {
           const textsToTranslate = needsExampleTranslation.map(
             (idx) => currentRows[idx].example_sentence || "",
           );
@@ -3709,11 +3747,15 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
               apiClient.batchTranslate(textsToTranslate, exampleTargetLang),
             );
             const translations =
-              (translateResponse as { translations?: string[] }).translations || [];
+              (translateResponse as { translations?: string[] }).translations ||
+              [];
             translations.forEach((trans: string, i: number) => {
               if (!trans) return;
               const idx = needsExampleTranslation[i];
-              const sentenceLang = currentRows[idx].selectedSentenceLanguage || aiGenerateTranslateLang || "chinese";
+              const sentenceLang =
+                currentRows[idx].selectedSentenceLanguage ||
+                aiGenerateTranslateLang ||
+                "chinese";
               if (sentenceLang === "japanese") {
                 currentRows[idx].example_sentence_japanese = trans;
               } else if (sentenceLang === "korean") {
@@ -4108,127 +4150,135 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
           onCustomLanguageChange={setCustomTranslationLang}
           autoTTS={batchPasteAutoTTS}
           onAutoTTSChange={setBatchPasteAutoTTS}
-          ttsSettings={{ accent: batchTTSAccent, gender: batchTTSGender, speed: batchTTSSpeed }}
+          ttsSettings={{
+            accent: batchTTSAccent,
+            gender: batchTTSGender,
+            speed: batchTTSSpeed,
+          }}
           onTTSSettingsChange={(s) => {
             setBatchTTSAccent(s.accent);
             setBatchTTSGender(s.gender);
             setBatchTTSSpeed(s.speed);
           }}
-          onConfirm={() => handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)}
-          onPause={() => { batchPauseRef.current = true; }}
+          onConfirm={() =>
+            handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)
+          }
+          onPause={() => {
+            batchPauseRef.current = true;
+          }}
           isBusy={isBatchPasting}
           progress={batchProgress}
         >
-            {/* AI Generate Examples */}
-            <div className="mt-4 bg-purple-50 rounded-lg border border-purple-200 overflow-hidden">
-              <div className="flex items-center gap-2 p-3">
-                <input
-                  type="checkbox"
-                  checked={aiGenerateExpanded}
-                  onChange={(e) => setAiGenerateExpanded(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <Sparkles className="h-4 w-4" />
-                <span className="text-sm font-semibold text-gray-800">
-                  {t("vocabularySet.modals.aiGenerateExamplesTitle")}
-                </span>
-                <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">
-                  Beta
-                </span>
-              </div>
-              {aiGenerateExpanded && (
-                <div className="px-3 pb-3 space-y-3">
-                  {/* Difficulty Level */}
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
-                      {t("vocabularySet.labels.difficultyLevel")}
-                    </label>
-                    <div className="flex flex-wrap gap-1">
-                      {["A1", "A2", "B1", "B2", "C1", "C2"].map((level) => (
-                        <button
-                          key={level}
-                          onClick={() => setAiGenerateLevel(level)}
-                          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-                            aiGenerateLevel === level
-                              ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
-                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                          }`}
-                        >
-                          {level}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* AI Prompt */}
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
-                      {t("vocabularySet.labels.aiPrompt")}
-                    </label>
-                    <textarea
-                      value={aiGeneratePrompt}
-                      onChange={(e) => setAiGeneratePrompt(e.target.value)}
-                      placeholder={t(
-                        "vocabularySet.placeholders.aiPromptExample",
-                      )}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-none"
-                      rows={2}
-                    />
-                  </div>
-
-                  {/* Sentence translation language selector */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs text-gray-600 block">
-                      {t("vocabularySet.labels.translateTo")}
-                    </label>
-                    <select
-                      value={aiGenerateTranslateLang}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setAiGenerateTranslateLang(val);
-                        if (val !== "other")
-                          setCustomSentenceTranslationLang("");
-                        // 切換語言時清空所有例句翻譯欄位
-                        setRows((prev) =>
-                          prev.map((row) => ({
-                            ...row,
-                            example_sentence_translation: "",
-                            example_sentence_japanese: "",
-                            example_sentence_korean: "",
-                            selectedSentenceLanguage: (val || undefined) as SentenceTranslationLanguage | undefined,
-                          })),
-                        );
-                      }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="">
-                        {t("contentEditor.labels.selectLanguage")}
-                      </option>
-                      {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
-                        <option key={lang.value} value={lang.value}>
-                          {lang.label}
-                        </option>
-                      ))}
-                      <option value="other">
-                        {t("contentEditor.labels.otherLanguage")}
-                      </option>
-                    </select>
-                    {aiGenerateTranslateLang === "other" && (
-                      <input
-                        type="text"
-                        value={customSentenceTranslationLang}
-                        onChange={(e) =>
-                          setCustomSentenceTranslationLang(e.target.value)
-                        }
-                        placeholder={t("contentEditor.labels.enterLanguage")}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      />
-                    )}
+          {/* AI Generate Examples */}
+          <div className="mt-4 bg-purple-50 rounded-lg border border-purple-200 overflow-hidden">
+            <div className="flex items-center gap-2 p-3">
+              <input
+                type="checkbox"
+                checked={aiGenerateExpanded}
+                onChange={(e) => setAiGenerateExpanded(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <Sparkles className="h-4 w-4" />
+              <span className="text-sm font-semibold text-gray-800">
+                {t("vocabularySet.modals.aiGenerateExamplesTitle")}
+              </span>
+              <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">
+                Beta
+              </span>
+            </div>
+            {aiGenerateExpanded && (
+              <div className="px-3 pb-3 space-y-3">
+                {/* Difficulty Level */}
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">
+                    {t("vocabularySet.labels.difficultyLevel")}
+                  </label>
+                  <div className="flex flex-wrap gap-1">
+                    {["A1", "A2", "B1", "B2", "C1", "C2"].map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => setAiGenerateLevel(level)}
+                        className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                          aiGenerateLevel === level
+                            ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        }`}
+                      >
+                        {level}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
-            </div>
 
+                {/* AI Prompt */}
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">
+                    {t("vocabularySet.labels.aiPrompt")}
+                  </label>
+                  <textarea
+                    value={aiGeneratePrompt}
+                    onChange={(e) => setAiGeneratePrompt(e.target.value)}
+                    placeholder={t(
+                      "vocabularySet.placeholders.aiPromptExample",
+                    )}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-none"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Sentence translation language selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-600 block">
+                    {t("vocabularySet.labels.translateTo")}
+                  </label>
+                  <select
+                    value={aiGenerateTranslateLang}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setAiGenerateTranslateLang(val);
+                      if (val !== "other") setCustomSentenceTranslationLang("");
+                      // 切換語言時清空所有例句翻譯欄位
+                      setRows((prev) =>
+                        prev.map((row) => ({
+                          ...row,
+                          example_sentence_translation: "",
+                          example_sentence_japanese: "",
+                          example_sentence_korean: "",
+                          selectedSentenceLanguage: (val || undefined) as
+                            | SentenceTranslationLanguage
+                            | undefined,
+                        })),
+                      );
+                    }}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">
+                      {t("contentEditor.labels.selectLanguage")}
+                    </option>
+                    {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
+                      <option key={lang.value} value={lang.value}>
+                        {lang.label}
+                      </option>
+                    ))}
+                    <option value="other">
+                      {t("contentEditor.labels.otherLanguage")}
+                    </option>
+                  </select>
+                  {aiGenerateTranslateLang === "other" && (
+                    <input
+                      type="text"
+                      value={customSentenceTranslationLang}
+                      onChange={(e) =>
+                        setCustomSentenceTranslationLang(e.target.value)
+                      }
+                      placeholder={t("contentEditor.labels.enterLanguage")}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </BatchWorkPanel>
 
         {/* Right: Word Editor Area */}
@@ -4428,7 +4478,11 @@ const VocabularySetPanel = forwardRef<VocabularySetPanelHandle, VocabularySetPan
             {/* TTS Settings Section (Issue #121) */}
             {batchPasteAutoTTS && (
               <BatchTTSSettings
-                settings={{ accent: batchTTSAccent, gender: batchTTSGender, speed: batchTTSSpeed }}
+                settings={{
+                  accent: batchTTSAccent,
+                  gender: batchTTSGender,
+                  speed: batchTTSSpeed,
+                }}
                 onChange={(s) => {
                   setBatchTTSAccent(s.accent);
                   setBatchTTSGender(s.gender);

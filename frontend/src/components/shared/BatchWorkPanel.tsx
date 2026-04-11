@@ -9,10 +9,7 @@
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { BatchPasteArea } from "./BatchPasteArea";
-import {
-  BatchTTSSettings,
-  type TTSSettingsState,
-} from "./BatchTTSSettings";
+import { BatchTTSSettings, type TTSSettingsState } from "./BatchTTSSettings";
 import {
   BatchTranslateSettings,
   type TranslationLanguageOption,

@@ -43,7 +43,11 @@ export function BatchTTSSettings({
   const speeds = TTS_SPEEDS as readonly string[];
 
   const settingsGrid = (
-    <div className={variant === "card" ? "grid grid-cols-1 gap-2" : "grid grid-cols-3 gap-4"}>
+    <div
+      className={
+        variant === "card" ? "grid grid-cols-1 gap-2" : "grid grid-cols-3 gap-4"
+      }
+    >
       <div>
         <label className="text-xs font-medium text-gray-600 mb-1 block">
           {t("contentEditor.ttsSettings.accent")}

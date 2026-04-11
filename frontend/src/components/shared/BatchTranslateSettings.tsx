@@ -58,9 +58,7 @@ export function BatchTranslateSettings({
         onChange={(e) => onLanguageChange(e.target.value)}
         className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
       >
-        <option value="">
-          {t("contentEditor.labels.selectLanguage")}
-        </option>
+        <option value="">{t("contentEditor.labels.selectLanguage")}</option>
         {languages.map((lang) => (
           <option key={lang.value} value={lang.value}>
             {lang.value === "other"
