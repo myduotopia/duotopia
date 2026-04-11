@@ -133,10 +133,7 @@ export default function StudentLayout() {
         {/* Logo Section */}
         <div className="p-6 border-b">
           <div className="flex items-center justify-between">
-            <Link
-              to="/"
-              className="flex-1 flex justify-center"
-            >
+            <Link to="/" className="flex-1 flex justify-center">
               <img
                 src="https://storage.googleapis.com/duotopia-social-media-videos/website/logo/logo_row_nobg.png"
                 alt="Duotopia"
