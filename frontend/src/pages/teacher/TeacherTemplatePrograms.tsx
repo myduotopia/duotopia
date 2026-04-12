@@ -19,8 +19,16 @@ import VocabularySetPanel, {
 import ContentCopyDialog from "@/components/ContentCopyDialog";
 import { ProgramVisibilitySelector } from "@/components/ProgramVisibilitySelector";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
+import ProgramFolderView from "@/components/shared/ProgramFolderView";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  X,
+  Search,
+  FolderPlus,
+  List,
+  LayoutGrid,
+} from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useResourceMaterialsAPI } from "@/hooks/useResourceMaterialsAPI";
@@ -52,6 +60,10 @@ function TeacherTemplateProgramsInner() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [isReordering, setIsReordering] = useState(false);
+
+  // View mode: 'tree' (original accordion) or 'folder' (folder-style grid)
+  const [viewMode, setViewMode] = useState<"tree" | "folder">("folder");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Instant practice states
   const [showInstantPractice, setShowInstantPractice] = useState(false);
@@ -525,6 +537,21 @@ function TeacherTemplateProgramsInner() {
     }
   };
 
+  // Filter programs by search query
+  const filteredPrograms = useMemo(() => {
+    if (!searchQuery.trim()) return programs;
+    const q = searchQuery.toLowerCase();
+    return programs.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.lessons?.some(
+          (l) =>
+            l.name.toLowerCase().includes(q) ||
+            l.contents?.some((c) => c.title?.toLowerCase().includes(q)),
+        ),
+    );
+  }, [programs, searchQuery]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -537,20 +564,84 @@ function TeacherTemplateProgramsInner() {
   }
 
   return (
-    <div className="relative h-full bg-gray-50">
+    <div
+      className="relative h-full overflow-y-auto"
+      style={{ scrollbarGutter: "stable" }}
+    >
       <div
-        className={`p-6 space-y-4 transition-all duration-300 ${
+        className={`p-5 space-y-4 transition-all duration-300 ${
           showReadingEditor && editorContentId !== null
             ? "pr-[calc(50%+2rem)]"
             : ""
         }`}
       >
+        {/* ── Toolbar ── */}
+        {/* Desktop: single row / Mobile: two rows */}
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
+          <h2 className="text-[22px] font-bold text-gray-900 whitespace-nowrap">
+            {t("teacherTemplatePrograms.title")}
+          </h2>
+
+          {/* Spacer (desktop only) */}
+          <div className="hidden md:block flex-1" />
+
+          {/* Add + Search + View toggle */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleCreateProgram}
+              className="flex items-center gap-1.5 sm:px-3.5 sm:py-2 sm:bg-white sm:border sm:border-gray-200 sm:rounded-lg text-gray-700 text-[13px] font-medium sm:hover:bg-gray-50 transition-colors shrink-0"
+            >
+              <FolderPlus size={20} className="sm:hidden" />
+              <FolderPlus size={16} className="hidden sm:block" />
+              <span className="hidden sm:inline">
+                {t("teacherTemplatePrograms.buttons.addProgram")}
+              </span>
+            </button>
+            <div className="relative flex-1 md:w-60 md:flex-none">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <Input
+                placeholder={t("teacherTemplatePrograms.toolbar.searchPlaceholder", "搜尋我的教材...")}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 h-9 text-[13px] border-gray-200 rounded-lg"
+              />
+            </div>
+            <div className="flex border border-gray-200 rounded-lg overflow-hidden shrink-0">
+              <button
+                onClick={() => setViewMode("tree")}
+                className={`p-2 transition-colors ${
+                  viewMode === "tree"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-500 hover:bg-gray-100"
+                }`}
+                title={t("teacherTemplatePrograms.toolbar.treeView", "條列式")}
+              >
+                <List size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode("folder")}
+                className={`p-2 transition-colors ${
+                  viewMode === "folder"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-500 hover:bg-gray-100"
+                }`}
+                title={t("teacherTemplatePrograms.toolbar.folderView", "資料夾式")}
+              >
+                <LayoutGrid size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Content area ── */}
+        {viewMode === "tree" ? (
         <RecursiveTreeAccordion
-          data={programs}
+          data={filteredPrograms}
           config={treeConfig}
-          title={t("teacherTemplatePrograms.title")}
-          showCreateButton
-          createButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
+          showCreateButton={false}
           onCreateClick={handleCreateProgram}
           onEdit={(item, level, parentId) => {
             if (level === 0) handleEditProgram(item.id);
@@ -618,6 +709,44 @@ function TeacherTemplateProgramsInner() {
             }
           }}
         />
+        ) : (
+          <ProgramFolderView
+            programs={filteredPrograms}
+            onEditProgram={handleEditProgram}
+            onDeleteProgram={handleDeleteProgram}
+            onEditLesson={handleEditLesson}
+            onDeleteLesson={handleDeleteLesson}
+            onCreateLesson={handleCreateLesson}
+            onContentClick={(content, lessonId) => {
+              const program = programs.find((p) =>
+                p.lessons?.some((l) => l.id === lessonId),
+              );
+              const lesson = program?.lessons?.find(
+                (l) => l.id === lessonId,
+              );
+              handleContentClick({
+                ...content,
+                lesson_id: lessonId,
+                lessonName: lesson?.name,
+                programName: program?.name,
+              });
+            }}
+            onDeleteContent={handleDeleteContent}
+            onCopyContent={(contentId, title) => {
+              setCopyContentInfo({ id: contentId, title });
+              setShowCopyDialog(true);
+            }}
+            onInstantPractice={(content) => {
+              setInstantPracticeContent({
+                id: content.id,
+                title: content.title,
+                type: content.type,
+              });
+              setShowInstantPractice(true);
+            }}
+            onCreateContent={handleCreateContent}
+          />
+        )}
       </div>
 
       {/* Reading Assessment Modal (新增模式) */}

@@ -3227,6 +3227,11 @@
     "dialogs": {
       "addReadingTitle": "Add Paragraph Set",
       "editContentTitle": "Edit Content"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search my materials...",
+      "treeView": "List View",
+      "folderView": "Folder View"
     }
   },
   "teacherSubscription": {

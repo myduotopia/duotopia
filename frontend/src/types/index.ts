@@ -113,6 +113,7 @@ export interface Program {
   organization_id?: string; // UUID
   school_id?: string; // UUID
   lessons?: Lesson[];
+  contents?: Content[];
   classroom_name?: string;
   is_duplicate?: boolean;
   tags?: string[];

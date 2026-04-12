@@ -3232,6 +3232,11 @@
     "dialogs": {
       "addReadingTitle": "新增段落集",
       "editContentTitle": "編輯內容"
+    },
+    "toolbar": {
+      "searchPlaceholder": "搜尋我的教材...",
+      "treeView": "條列式",
+      "folderView": "資料夾式"
     }
   },
   "teacherSubscription": {
