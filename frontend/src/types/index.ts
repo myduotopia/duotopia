@@ -59,6 +59,7 @@ export interface ContentItem {
   translation?: string;
   definition?: string;
   audio_url?: string;
+  image_url?: string;
   question?: string;
   answer?: string;
   options?: string[];
