@@ -1,7 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { RecursiveTreeAccordion } from "@/components/shared/RecursiveTreeAccordion";
 import { programTreeConfig } from "@/components/shared/programTreeConfig";
+import MaterialsToolbar from "@/components/shared/MaterialsToolbar";
+import type { ViewMode } from "@/components/shared/MaterialsToolbar";
+import ProgramFolderView from "@/components/shared/ProgramFolderView";
 import { ProgramDialog } from "@/components/ProgramDialog";
 import { LessonDialog } from "@/components/LessonDialog";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
@@ -34,6 +37,9 @@ export default function OrgMaterialsPage() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [isReordering, setIsReordering] = useState(false);
+
+  const [viewMode, setViewMode] = useState<ViewMode>("folder");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Program dialog states
   const [programDialogType, setProgramDialogType] = useState<
@@ -454,6 +460,20 @@ export default function OrgMaterialsPage() {
     }
   };
 
+  const filteredPrograms = useMemo(() => {
+    if (!searchQuery.trim()) return programs;
+    const q = searchQuery.toLowerCase();
+    return programs.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.lessons?.some(
+          (l) =>
+            l.name.toLowerCase().includes(q) ||
+            l.contents?.some((c) => c.title?.toLowerCase().includes(q)),
+        ),
+    );
+  }, [programs, searchQuery]);
+
   if (loading) {
     return (
       <>
@@ -491,9 +511,12 @@ export default function OrgMaterialsPage() {
 
   return (
     <>
-      <div className="relative h-full bg-gray-50">
+      <div
+        className="relative h-full overflow-y-auto"
+        style={{ scrollbarGutter: "stable" }}
+      >
         <div
-          className={`p-6 space-y-4 transition-all duration-300 ${
+          className={`p-5 space-y-4 transition-all duration-300 ${
             showReadingEditor && editorContentId !== null
               ? "pr-[calc(50%+2rem)]"
               : ""
@@ -501,7 +524,7 @@ export default function OrgMaterialsPage() {
         >
           {/* Workspace indicator */}
           {workspaceInfo && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 mb-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
               <p className="text-sm text-blue-700">
                 <span className="font-medium">目前工作區：</span>{" "}
                 {workspaceInfo}
@@ -509,13 +532,22 @@ export default function OrgMaterialsPage() {
             </div>
           )}
 
-          <RecursiveTreeAccordion
-            data={programs}
-            config={programTreeConfig}
+          <MaterialsToolbar
             title="機構教材"
-            showCreateButton={canManage}
-            createButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
-            onCreateClick={handleCreateProgram}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="搜尋機構教材..."
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            onAdd={canManage ? handleCreateProgram : undefined}
+            addButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
+          />
+
+          {viewMode === "tree" ? (
+          <RecursiveTreeAccordion
+            data={filteredPrograms}
+            config={programTreeConfig}
+            showCreateButton={false}
             disableActions={!canManage}
             disableReason="僅機構管理員可編輯機構教材"
             onEdit={(item, level, parentId) => {
@@ -546,10 +578,8 @@ export default function OrgMaterialsPage() {
             }}
             onCreate={(level, parentId) => {
               if (level === 1) {
-                // Creating lesson inside program
                 handleCreateLesson(parentId as number);
               } else if (level === 2) {
-                // Creating content inside lesson - need to find program
                 const program = programs.find((p) =>
                   p.lessons?.some((l) => l.id === parentId),
                 );
@@ -575,6 +605,41 @@ export default function OrgMaterialsPage() {
               }
             }}
           />
+          ) : (
+          <ProgramFolderView
+            programs={filteredPrograms}
+            onEditProgram={canManage ? handleEditProgram : () => {}}
+            onDeleteProgram={canManage ? handleDeleteProgram : () => {}}
+            onEditLesson={(programId, lessonId) => canManage && handleEditLesson(programId, lessonId)}
+            onDeleteLesson={(programId, lessonId) => canManage && handleDeleteLesson(programId, lessonId)}
+            onCreateLesson={(programId) => canManage && handleCreateLesson(programId)}
+            onContentClick={(content, lessonId) => {
+              const program = programs.find((p) =>
+                p.lessons?.some((l) => l.id === lessonId),
+              );
+              const lesson = program?.lessons?.find(
+                (l) => l.id === lessonId,
+              );
+              handleContentClick({
+                ...content,
+                lesson_id: lessonId,
+                lessonName: lesson?.name,
+                programName: program?.name,
+              });
+            }}
+            onDeleteContent={(lessonId, contentId, title) =>
+              canManage && handleDeleteContent(lessonId, contentId, title)
+            }
+            onCopyContent={(contentId, title) => {
+              setCopyContentInfo({ id: contentId, title });
+              setShowCopyDialog(true);
+            }}
+            onInstantPractice={() => {}}
+            onCreateContent={(programId, lessonId) =>
+              canManage && handleCreateContent(programId, lessonId)
+            }
+          />
+          )}
         </div>
 
         {/* Reading Assessment Modal (新增模式) */}

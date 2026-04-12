@@ -11,7 +11,7 @@
  * - Content 卡片（文字預覽 + type badge + title + play 按鈕）
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Folder,
@@ -201,14 +201,12 @@ function ProgramCard({
 /* ── Lesson Card ── */
 function LessonCard({
   lesson,
-  index,
   isSelected,
   onClick,
   onEdit,
   onDelete,
 }: {
   lesson: Lesson;
-  index: number;
   isSelected: boolean;
   onClick: () => void;
   onEdit: () => void;
@@ -502,12 +500,11 @@ function ExpandArea({
             onAdd={() => onCreateLesson(program.id)}
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-            {lessons.map((lesson, i) => (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-5">
+            {lessons.map((lesson) => (
               <LessonCard
                 key={lesson.id}
                 lesson={lesson}
-                index={i}
                 isSelected={lesson.id === selectedLessonId}
                 onClick={() => setSelectedLessonId(lesson.id === selectedLessonId ? null : lesson.id)}
                 onEdit={() => onEditLesson(program.id, lesson.id)}
@@ -597,26 +594,40 @@ export default function ProgramFolderView({
   );
   const selectedProgram = programs.find((p) => p.id === selectedProgramId);
 
-  // Find which row the selected program is in (4-column grid)
-  const selectedIndex = programs.findIndex((p) => p.id === selectedProgramId);
+  // Detect actual number of grid columns based on container width
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [columns, setColumns] = useState(4);
 
-  // Group programs into rows of 4
+  const updateColumns = useCallback(() => {
+    const w = containerRef.current?.offsetWidth ?? 1024;
+    // Match auto-fill with minmax(240px, 1fr): calculate how many 240px cards fit
+    const gap = 20; // gap-5 = 20px
+    const cols = Math.max(1, Math.floor((w + gap) / (240 + gap)));
+    setColumns(cols);
+  }, []);
+
+  useEffect(() => {
+    updateColumns();
+    const observer = new ResizeObserver(updateColumns);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [updateColumns]);
+
+  // Group programs into rows based on actual column count
   const rows: Program[][] = [];
-  for (let i = 0; i < programs.length; i += 4) {
-    rows.push(programs.slice(i, i + 4));
+  for (let i = 0; i < programs.length; i += columns) {
+    rows.push(programs.slice(i, i + columns));
   }
-  const selectedRowIndex =
-    selectedIndex >= 0 ? Math.floor(selectedIndex / 4) : -1;
 
-  // Calculate arrow position (which column in the row)
-  const selectedColIndex = selectedIndex >= 0 ? selectedIndex % 4 : -1;
+  const selectedIndex = programs.findIndex((p) => p.id === selectedProgramId);
+  const selectedRowIndex =
+    selectedIndex >= 0 ? Math.floor(selectedIndex / columns) : -1;
 
   return (
-    <div className="space-y-4">
+    <div ref={containerRef} className="space-y-5">
       {rows.map((row, rowIndex) => (
         <div key={rowIndex}>
-          {/* Program cards row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
             {row.map((program) => (
               <ProgramCard
                 key={program.id}
@@ -633,19 +644,9 @@ export default function ProgramFolderView({
             ))}
           </div>
 
-          {/* Expand area below the row containing the selected program */}
+          {/* Expand area below the visual row containing the selected program */}
           {selectedRowIndex === rowIndex && selectedProgram && (
-            <div className="relative mt-4">
-              {/* Arrow pointing to selected card */}
-              <div
-                className="absolute -top-2 z-10 hidden lg:block"
-                style={{
-                  left: `calc(${selectedColIndex * 25}% + ${selectedColIndex * 5}px + 12.5% - 12px)`,
-                }}
-              >
-                <div className="w-0 h-0 border-l-[12px] border-r-[12px] border-b-[12px] border-l-transparent border-r-transparent border-b-white" />
-              </div>
-
+            <div className="mt-4">
               <ExpandArea
                 program={selectedProgram}
                 onEditLesson={onEditLesson}

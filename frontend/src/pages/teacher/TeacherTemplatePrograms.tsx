@@ -21,14 +21,9 @@ import { ProgramVisibilitySelector } from "@/components/ProgramVisibilitySelecto
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import ProgramFolderView from "@/components/shared/ProgramFolderView";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  X,
-  Search,
-  FolderPlus,
-  List,
-  LayoutGrid,
-} from "lucide-react";
+import { X } from "lucide-react";
+import MaterialsToolbar from "@/components/shared/MaterialsToolbar";
+import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import { apiClient } from "@/lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useResourceMaterialsAPI } from "@/hooks/useResourceMaterialsAPI";
@@ -62,7 +57,7 @@ function TeacherTemplateProgramsInner() {
   const [isReordering, setIsReordering] = useState(false);
 
   // View mode: 'tree' (original accordion) or 'folder' (folder-style grid)
-  const [viewMode, setViewMode] = useState<"tree" | "folder">("folder");
+  const [viewMode, setViewMode] = useState<ViewMode>("folder");
   const [searchQuery, setSearchQuery] = useState("");
 
   // Instant practice states
@@ -575,66 +570,16 @@ function TeacherTemplateProgramsInner() {
             : ""
         }`}
       >
-        {/* ── Toolbar ── */}
-        {/* Desktop: single row / Mobile: two rows */}
-        <div className="flex flex-col md:flex-row md:items-center gap-3">
-          <h2 className="text-[22px] font-bold text-gray-900 whitespace-nowrap">
-            {t("teacherTemplatePrograms.title")}
-          </h2>
-
-          {/* Spacer (desktop only) */}
-          <div className="hidden md:block flex-1" />
-
-          {/* Add + Search + View toggle */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleCreateProgram}
-              className="flex items-center gap-1.5 sm:px-3.5 sm:py-2 sm:bg-white sm:border sm:border-gray-200 sm:rounded-lg text-gray-700 text-[13px] font-medium sm:hover:bg-gray-50 transition-colors shrink-0"
-            >
-              <FolderPlus size={20} className="sm:hidden" />
-              <FolderPlus size={16} className="hidden sm:block" />
-              <span className="hidden sm:inline">
-                {t("teacherTemplatePrograms.buttons.addProgram")}
-              </span>
-            </button>
-            <div className="relative flex-1 md:w-60 md:flex-none">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-              />
-              <Input
-                placeholder={t("teacherTemplatePrograms.toolbar.searchPlaceholder", "搜尋我的教材...")}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 h-9 text-[13px] border-gray-200 rounded-lg"
-              />
-            </div>
-            <div className="flex border border-gray-200 rounded-lg overflow-hidden shrink-0">
-              <button
-                onClick={() => setViewMode("tree")}
-                className={`p-2 transition-colors ${
-                  viewMode === "tree"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-500 hover:bg-gray-100"
-                }`}
-                title={t("teacherTemplatePrograms.toolbar.treeView", "條列式")}
-              >
-                <List size={16} />
-              </button>
-              <button
-                onClick={() => setViewMode("folder")}
-                className={`p-2 transition-colors ${
-                  viewMode === "folder"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-500 hover:bg-gray-100"
-                }`}
-                title={t("teacherTemplatePrograms.toolbar.folderView", "資料夾式")}
-              >
-                <LayoutGrid size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
+        <MaterialsToolbar
+          title={t("teacherTemplatePrograms.title")}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder={t("teacherTemplatePrograms.toolbar.searchPlaceholder", "搜尋我的教材...")}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onAdd={handleCreateProgram}
+          addButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
+        />
 
         {/* ── Content area ── */}
         {viewMode === "tree" ? (
