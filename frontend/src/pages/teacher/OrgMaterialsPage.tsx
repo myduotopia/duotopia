@@ -544,101 +544,107 @@ export default function OrgMaterialsPage() {
           />
 
           {viewMode === "tree" ? (
-          <RecursiveTreeAccordion
-            data={filteredPrograms}
-            config={programTreeConfig}
-            showCreateButton={false}
-            disableActions={!canManage}
-            disableReason="僅機構管理員可編輯機構教材"
-            onEdit={(item, level, parentId) => {
-              if (level === 0) handleEditProgram(item.id);
-              else if (level === 1)
-                handleEditLesson(parentId as number, item.id);
-            }}
-            onDelete={(item, level, parentId) => {
-              if (level === 0) handleDeleteProgram(item.id);
-              else if (level === 1)
-                handleDeleteLesson(parentId as number, item.id);
-              else if (level === 2)
-                handleDeleteContent(parentId as number, item.id, item.title);
-            }}
-            onClick={(item, level, parentId) => {
-              if (level === 2) {
+            <RecursiveTreeAccordion
+              data={filteredPrograms}
+              config={programTreeConfig}
+              showCreateButton={false}
+              disableActions={!canManage}
+              disableReason="僅機構管理員可編輯機構教材"
+              onEdit={(item, level, parentId) => {
+                if (level === 0) handleEditProgram(item.id);
+                else if (level === 1)
+                  handleEditLesson(parentId as number, item.id);
+              }}
+              onDelete={(item, level, parentId) => {
+                if (level === 0) handleDeleteProgram(item.id);
+                else if (level === 1)
+                  handleDeleteLesson(parentId as number, item.id);
+                else if (level === 2)
+                  handleDeleteContent(parentId as number, item.id, item.title);
+              }}
+              onClick={(item, level, parentId) => {
+                if (level === 2) {
+                  const program = programs.find((p) =>
+                    p.lessons?.some((l) => l.id === parentId),
+                  );
+                  const lesson = program?.lessons?.find(
+                    (l) => l.id === parentId,
+                  );
+                  handleContentClick({
+                    ...item,
+                    lesson_id: parentId as number,
+                    lessonName: lesson?.name,
+                    programName: program?.name,
+                  });
+                }
+              }}
+              onCreate={(level, parentId) => {
+                if (level === 1) {
+                  handleCreateLesson(parentId as number);
+                } else if (level === 2) {
+                  const program = programs.find((p) =>
+                    p.lessons?.some((l) => l.id === parentId),
+                  );
+                  if (program) {
+                    handleCreateContent(program.id, parentId as number);
+                  }
+                }
+              }}
+              onReorder={(fromIndex, toIndex, level, parentId) => {
+                if (level === 0) handleReorderPrograms(fromIndex, toIndex);
+                else if (level === 1)
+                  handleReorderLessons(parentId as number, fromIndex, toIndex);
+                else if (level === 2)
+                  handleReorderContents(parentId as number, fromIndex, toIndex);
+              }}
+              onCopy={(item, level) => {
+                if (level === 2) {
+                  setCopyContentInfo({
+                    id: item.id as number,
+                    title: (item.title || item.name) as string,
+                  });
+                  setShowCopyDialog(true);
+                }
+              }}
+            />
+          ) : (
+            <ProgramFolderView
+              programs={filteredPrograms}
+              onEditProgram={canManage ? handleEditProgram : () => {}}
+              onDeleteProgram={canManage ? handleDeleteProgram : () => {}}
+              onEditLesson={(programId, lessonId) =>
+                canManage && handleEditLesson(programId, lessonId)
+              }
+              onDeleteLesson={(programId, lessonId) =>
+                canManage && handleDeleteLesson(programId, lessonId)
+              }
+              onCreateLesson={(programId) =>
+                canManage && handleCreateLesson(programId)
+              }
+              onContentClick={(content, lessonId) => {
                 const program = programs.find((p) =>
-                  p.lessons?.some((l) => l.id === parentId),
+                  p.lessons?.some((l) => l.id === lessonId),
                 );
-                const lesson = program?.lessons?.find((l) => l.id === parentId);
+                const lesson = program?.lessons?.find((l) => l.id === lessonId);
                 handleContentClick({
-                  ...item,
-                  lesson_id: parentId as number,
+                  ...content,
+                  lesson_id: lessonId,
                   lessonName: lesson?.name,
                   programName: program?.name,
                 });
+              }}
+              onDeleteContent={(lessonId, contentId, title) =>
+                canManage && handleDeleteContent(lessonId, contentId, title)
               }
-            }}
-            onCreate={(level, parentId) => {
-              if (level === 1) {
-                handleCreateLesson(parentId as number);
-              } else if (level === 2) {
-                const program = programs.find((p) =>
-                  p.lessons?.some((l) => l.id === parentId),
-                );
-                if (program) {
-                  handleCreateContent(program.id, parentId as number);
-                }
-              }
-            }}
-            onReorder={(fromIndex, toIndex, level, parentId) => {
-              if (level === 0) handleReorderPrograms(fromIndex, toIndex);
-              else if (level === 1)
-                handleReorderLessons(parentId as number, fromIndex, toIndex);
-              else if (level === 2)
-                handleReorderContents(parentId as number, fromIndex, toIndex);
-            }}
-            onCopy={(item, level) => {
-              if (level === 2) {
-                setCopyContentInfo({
-                  id: item.id as number,
-                  title: (item.title || item.name) as string,
-                });
+              onCopyContent={(contentId, title) => {
+                setCopyContentInfo({ id: contentId, title });
                 setShowCopyDialog(true);
+              }}
+              onInstantPractice={() => {}}
+              onCreateContent={(programId, lessonId) =>
+                canManage && handleCreateContent(programId, lessonId)
               }
-            }}
-          />
-          ) : (
-          <ProgramFolderView
-            programs={filteredPrograms}
-            onEditProgram={canManage ? handleEditProgram : () => {}}
-            onDeleteProgram={canManage ? handleDeleteProgram : () => {}}
-            onEditLesson={(programId, lessonId) => canManage && handleEditLesson(programId, lessonId)}
-            onDeleteLesson={(programId, lessonId) => canManage && handleDeleteLesson(programId, lessonId)}
-            onCreateLesson={(programId) => canManage && handleCreateLesson(programId)}
-            onContentClick={(content, lessonId) => {
-              const program = programs.find((p) =>
-                p.lessons?.some((l) => l.id === lessonId),
-              );
-              const lesson = program?.lessons?.find(
-                (l) => l.id === lessonId,
-              );
-              handleContentClick({
-                ...content,
-                lesson_id: lessonId,
-                lessonName: lesson?.name,
-                programName: program?.name,
-              });
-            }}
-            onDeleteContent={(lessonId, contentId, title) =>
-              canManage && handleDeleteContent(lessonId, contentId, title)
-            }
-            onCopyContent={(contentId, title) => {
-              setCopyContentInfo({ id: contentId, title });
-              setShowCopyDialog(true);
-            }}
-            onInstantPractice={() => {}}
-            onCreateContent={(programId, lessonId) =>
-              canManage && handleCreateContent(programId, lessonId)
-            }
-          />
+            />
           )}
         </div>
 

@@ -63,7 +63,13 @@ export default function MaterialsToolbar({
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
           />
           <Input
-            placeholder={searchPlaceholder ?? t("teacherTemplatePrograms.toolbar.searchPlaceholder", "搜尋教材...")}
+            placeholder={
+              searchPlaceholder ??
+              t(
+                "teacherTemplatePrograms.toolbar.searchPlaceholder",
+                "搜尋教材...",
+              )
+            }
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-8 h-9 text-[13px] border-gray-200 rounded-lg"

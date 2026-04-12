@@ -574,7 +574,10 @@ function TeacherTemplateProgramsInner() {
           title={t("teacherTemplatePrograms.title")}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          searchPlaceholder={t("teacherTemplatePrograms.toolbar.searchPlaceholder", "搜尋我的教材...")}
+          searchPlaceholder={t(
+            "teacherTemplatePrograms.toolbar.searchPlaceholder",
+            "搜尋我的教材...",
+          )}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onAdd={handleCreateProgram}
@@ -583,77 +586,78 @@ function TeacherTemplateProgramsInner() {
 
         {/* ── Content area ── */}
         {viewMode === "tree" ? (
-        <RecursiveTreeAccordion
-          data={filteredPrograms}
-          config={treeConfig}
-          showCreateButton={false}
-          onCreateClick={handleCreateProgram}
-          onEdit={(item, level, parentId) => {
-            if (level === 0) handleEditProgram(item.id);
-            else if (level === 1) handleEditLesson(parentId as number, item.id);
-          }}
-          onDelete={(item, level, parentId) => {
-            if (level === 0) handleDeleteProgram(item.id);
-            else if (level === 1)
-              handleDeleteLesson(parentId as number, item.id);
-            else if (level === 2)
-              handleDeleteContent(parentId as number, item.id, item.title);
-          }}
-          onClick={(item, level, parentId) => {
-            if (level === 2) {
-              const program = programs.find((p) =>
-                p.lessons?.some((l) => l.id === parentId),
-              );
-              const lesson = program?.lessons?.find((l) => l.id === parentId);
-              handleContentClick({
-                ...item,
-                lesson_id: parentId as number,
-                lessonName: lesson?.name,
-                programName: program?.name,
-              });
-            }
-          }}
-          onCreate={(level, parentId) => {
-            if (level === 1) {
-              // Creating lesson inside program
-              handleCreateLesson(parentId as number);
-            } else if (level === 2) {
-              // Creating content inside lesson - need to find program
-              const program = programs.find((p) =>
-                p.lessons?.some((l) => l.id === parentId),
-              );
-              if (program) {
-                handleCreateContent(program.id, parentId as number);
+          <RecursiveTreeAccordion
+            data={filteredPrograms}
+            config={treeConfig}
+            showCreateButton={false}
+            onCreateClick={handleCreateProgram}
+            onEdit={(item, level, parentId) => {
+              if (level === 0) handleEditProgram(item.id);
+              else if (level === 1)
+                handleEditLesson(parentId as number, item.id);
+            }}
+            onDelete={(item, level, parentId) => {
+              if (level === 0) handleDeleteProgram(item.id);
+              else if (level === 1)
+                handleDeleteLesson(parentId as number, item.id);
+              else if (level === 2)
+                handleDeleteContent(parentId as number, item.id, item.title);
+            }}
+            onClick={(item, level, parentId) => {
+              if (level === 2) {
+                const program = programs.find((p) =>
+                  p.lessons?.some((l) => l.id === parentId),
+                );
+                const lesson = program?.lessons?.find((l) => l.id === parentId);
+                handleContentClick({
+                  ...item,
+                  lesson_id: parentId as number,
+                  lessonName: lesson?.name,
+                  programName: program?.name,
+                });
               }
-            }
-          }}
-          onReorder={(fromIndex, toIndex, level, parentId) => {
-            if (level === 0) handleReorderPrograms(fromIndex, toIndex);
-            else if (level === 1)
-              handleReorderLessons(parentId as number, fromIndex, toIndex);
-            else if (level === 2)
-              handleReorderContents(parentId as number, fromIndex, toIndex);
-          }}
-          onInstantPractice={(item, level) => {
-            if (level === 2) {
-              setInstantPracticeContent({
-                id: item.id as number,
-                title: (item.title || item.name) as string,
-                type: item.type as string | undefined,
-              });
-              setShowInstantPractice(true);
-            }
-          }}
-          onCopy={(item, level) => {
-            if (level === 2) {
-              setCopyContentInfo({
-                id: item.id as number,
-                title: (item.title || item.name) as string,
-              });
-              setShowCopyDialog(true);
-            }
-          }}
-        />
+            }}
+            onCreate={(level, parentId) => {
+              if (level === 1) {
+                // Creating lesson inside program
+                handleCreateLesson(parentId as number);
+              } else if (level === 2) {
+                // Creating content inside lesson - need to find program
+                const program = programs.find((p) =>
+                  p.lessons?.some((l) => l.id === parentId),
+                );
+                if (program) {
+                  handleCreateContent(program.id, parentId as number);
+                }
+              }
+            }}
+            onReorder={(fromIndex, toIndex, level, parentId) => {
+              if (level === 0) handleReorderPrograms(fromIndex, toIndex);
+              else if (level === 1)
+                handleReorderLessons(parentId as number, fromIndex, toIndex);
+              else if (level === 2)
+                handleReorderContents(parentId as number, fromIndex, toIndex);
+            }}
+            onInstantPractice={(item, level) => {
+              if (level === 2) {
+                setInstantPracticeContent({
+                  id: item.id as number,
+                  title: (item.title || item.name) as string,
+                  type: item.type as string | undefined,
+                });
+                setShowInstantPractice(true);
+              }
+            }}
+            onCopy={(item, level) => {
+              if (level === 2) {
+                setCopyContentInfo({
+                  id: item.id as number,
+                  title: (item.title || item.name) as string,
+                });
+                setShowCopyDialog(true);
+              }
+            }}
+          />
         ) : (
           <ProgramFolderView
             programs={filteredPrograms}
@@ -666,9 +670,7 @@ function TeacherTemplateProgramsInner() {
               const program = programs.find((p) =>
                 p.lessons?.some((l) => l.id === lessonId),
               );
-              const lesson = program?.lessons?.find(
-                (l) => l.id === lessonId,
-              );
+              const lesson = program?.lessons?.find((l) => l.id === lessonId);
               handleContentClick({
                 ...content,
                 lesson_id: lessonId,

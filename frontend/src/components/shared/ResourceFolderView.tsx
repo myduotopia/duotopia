@@ -97,10 +97,8 @@ function ResourceProgramCard({
           {material.name}
         </h3>
         <p className="text-xs text-gray-500">
-          {material.lesson_count}{" "}
-          {t("programFolderView.units", "個單元")} ·{" "}
-          {material.content_count}{" "}
-          {t("programFolderView.contents", "內容")}
+          {material.lesson_count} {t("programFolderView.units", "個單元")} ·{" "}
+          {material.content_count} {t("programFolderView.contents", "內容")}
         </p>
 
         {/* Copy button */}
@@ -236,7 +234,9 @@ function ExpandArea({
 }: {
   detail: ResourceMaterialDetail | null;
   loadingDetail: boolean;
-  onContentClick?: (content: ResourceMaterialDetail["lessons"][0]["contents"][0]) => void;
+  onContentClick?: (
+    content: ResourceMaterialDetail["lessons"][0]["contents"][0],
+  ) => void;
 }) {
   const { t } = useTranslation();
   const [selectedLessonId, setSelectedLessonId] = useState<number | null>(null);
@@ -292,7 +292,8 @@ function ExpandArea({
               >
                 <div className="h-[100px] px-3.5 py-3 overflow-hidden rounded-t-2xl bg-[#EEEAF5]">
                   <p className="text-xs text-gray-500 leading-relaxed line-clamp-4 whitespace-pre-line">
-                    {lesson.description || t("programFolderView.noDescription", "尚無描述")}
+                    {lesson.description ||
+                      t("programFolderView.noDescription", "尚無描述")}
                   </p>
                 </div>
                 <div className="px-4 pt-2.5 pb-3.5 h-[90px] flex flex-col gap-2">
@@ -376,7 +377,8 @@ function Pagination({
 }
 
 /* ── Main: ResourceFolderView ── */
-export type ResourceContentItem = ResourceMaterialDetail["lessons"][0]["contents"][0];
+export type ResourceContentItem =
+  ResourceMaterialDetail["lessons"][0]["contents"][0];
 
 export interface ResourceFolderViewProps {
   materials: ResourceMaterial[];
@@ -476,9 +478,7 @@ export default function ResourceFolderView({
       ))}
 
       {materials.length === 0 && (
-        <div className="text-center py-12 text-gray-400">
-          尚無公版教材
-        </div>
+        <div className="text-center py-12 text-gray-400">尚無公版教材</div>
       )}
 
       <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />

@@ -169,7 +169,8 @@ function ResourceMaterialsInner() {
   );
 
   // Content viewer sheet
-  const [viewerContent, setViewerContent] = useState<ResourceContentItem | null>(null);
+  const [viewerContent, setViewerContent] =
+    useState<ResourceContentItem | null>(null);
 
   // Copy dialog states
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
@@ -358,9 +359,7 @@ function ResourceMaterialsInner() {
                   <BookOpen className="h-5 w-5 text-blue-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-base">
-                    {listDetail.name}
-                  </h4>
+                  <h4 className="font-semibold text-base">{listDetail.name}</h4>
                   {listDetail.description && (
                     <p className="text-sm text-gray-500 truncate">
                       {listDetail.description}
@@ -470,9 +469,7 @@ function ResourceMaterialsInner() {
           <Button
             size="lg"
             onClick={() => {
-              const material = materials.find(
-                (m) => m.id === listDetail.id,
-              );
+              const material = materials.find((m) => m.id === listDetail.id);
               if (material) handleCopyClick(material);
             }}
             className="px-8"
@@ -496,7 +493,10 @@ function ResourceMaterialsInner() {
           title={t("resourceMaterials.title")}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          searchPlaceholder={t("resourceMaterials.searchPlaceholder", "搜尋公版教材...")}
+          searchPlaceholder={t(
+            "resourceMaterials.searchPlaceholder",
+            "搜尋公版教材...",
+          )}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
         />
@@ -632,18 +632,24 @@ function ResourceMaterialsInner() {
                   </span>
                 )}
                 <span className="text-sm text-gray-400">
-                  {viewerContent.item_count} {t("programFolderView.questions", "題")}
+                  {viewerContent.item_count}{" "}
+                  {t("programFolderView.questions", "題")}
                 </span>
               </div>
               {/* Items list */}
               <div className="rounded-lg border border-gray-200 overflow-hidden">
                 <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 border-b border-gray-200">
-                  <span className="w-8 text-xs font-medium text-gray-500">#</span>
+                  <span className="w-8 text-xs font-medium text-gray-500">
+                    #
+                  </span>
                   <span className="flex-1 text-xs font-medium text-gray-500">
                     {t("resourceMaterials.detail.tableHeader.content", "內容")}
                   </span>
                   <span className="flex-1 text-xs font-medium text-gray-500">
-                    {t("resourceMaterials.detail.tableHeader.translation", "翻譯")}
+                    {t(
+                      "resourceMaterials.detail.tableHeader.translation",
+                      "翻譯",
+                    )}
                   </span>
                 </div>
                 {viewerContent.items.map((item, idx) => (

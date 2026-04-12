@@ -36,7 +36,8 @@ const LEVEL_COVERS: Record<string, string> = {
   C2: "https://storage.googleapis.com/duotopia-social-media-videos/website/level-images/C2.png",
 };
 
-const DEFAULT_COVER = "https://storage.googleapis.com/duotopia-social-media-videos/website/level-images/A1.png";
+const DEFAULT_COVER =
+  "https://storage.googleapis.com/duotopia-social-media-videos/website/level-images/A1.png";
 
 function getCoverImage(level?: string): string {
   if (!level) return DEFAULT_COVER;
@@ -44,18 +45,16 @@ function getCoverImage(level?: string): string {
 }
 
 /* ── Content type badge config ── */
-const TYPE_BADGE: Record<
-  string,
-  { label: string; bg: string; text: string }
-> = {
-  example_sentences: { label: "段落集", bg: "#F0FDF4", text: "#059669" },
-  EXAMPLE_SENTENCES: { label: "段落集", bg: "#F0FDF4", text: "#059669" },
-  reading_assessment: { label: "段落集", bg: "#F0FDF4", text: "#059669" },
-  vocabulary_set: { label: "單字集", bg: "#FFFBEB", text: "#D97706" },
-  VOCABULARY_SET: { label: "單字集", bg: "#FFFBEB", text: "#D97706" },
-  sentence_making: { label: "造句", bg: "#F5F3FF", text: "#7C3AED" },
-  SENTENCE_MAKING: { label: "造句", bg: "#F5F3FF", text: "#7C3AED" },
-};
+const TYPE_BADGE: Record<string, { label: string; bg: string; text: string }> =
+  {
+    example_sentences: { label: "段落集", bg: "#F0FDF4", text: "#059669" },
+    EXAMPLE_SENTENCES: { label: "段落集", bg: "#F0FDF4", text: "#059669" },
+    reading_assessment: { label: "段落集", bg: "#F0FDF4", text: "#059669" },
+    vocabulary_set: { label: "單字集", bg: "#FFFBEB", text: "#D97706" },
+    VOCABULARY_SET: { label: "單字集", bg: "#FFFBEB", text: "#D97706" },
+    sentence_making: { label: "造句", bg: "#F5F3FF", text: "#7C3AED" },
+    SENTENCE_MAKING: { label: "造句", bg: "#F5F3FF", text: "#7C3AED" },
+  };
 
 /* ── Dropdown Menu ── */
 interface MenuAction {
@@ -141,9 +140,7 @@ function ProgramCard({
     <div
       className="relative rounded-2xl bg-white cursor-pointer transition-all hover:shadow-md"
       style={{
-        border: isSelected
-          ? "3px solid #4CAF50"
-          : "1px solid #E5E7EB",
+        border: isSelected ? "3px solid #4CAF50" : "1px solid #E5E7EB",
       }}
       onClick={onClick}
     >
@@ -229,16 +226,15 @@ function LessonCard({
     <div
       className="relative rounded-2xl bg-white cursor-pointer transition-all hover:shadow-md"
       style={{
-        border: isSelected
-          ? "3px solid #7C3AED"
-          : "1px solid #E5E7EB",
+        border: isSelected ? "3px solid #7C3AED" : "1px solid #E5E7EB",
       }}
       onClick={onClick}
     >
       {/* Description preview */}
       <div className="h-[100px] px-3.5 py-3 overflow-hidden rounded-t-2xl bg-[#EEEAF5]">
         <p className="text-xs text-gray-500 leading-relaxed line-clamp-4 whitespace-pre-line">
-          {lesson.description || t("programFolderView.noDescription", "尚無描述")}
+          {lesson.description ||
+            t("programFolderView.noDescription", "尚無描述")}
         </p>
       </div>
 
@@ -360,7 +356,9 @@ function ContentCard({
                     {item.translation && (
                       <>
                         <span className="mx-1 text-gray-300">·</span>
-                        <span className="text-gray-400">{item.translation}</span>
+                        <span className="text-gray-400">
+                          {item.translation}
+                        </span>
                       </>
                     )}
                   </div>
@@ -450,7 +448,6 @@ function ContentCard({
           />
         )}
       </div>
-
     </div>
   );
 }
@@ -519,8 +516,8 @@ function ExpandArea({
 
   // Contents to display: selected lesson's contents, or program-level contents
   const displayContents = selectedLesson
-    ? selectedLesson.contents ?? []
-    : program.contents ?? [];
+    ? (selectedLesson.contents ?? [])
+    : (program.contents ?? []);
   const contentsSectionTitle = selectedLesson
     ? `${t("programFolderView.contentsSection", "內容")}: ${selectedLesson.name}`
     : t("programFolderView.contentsSection", "內容");
@@ -545,7 +542,11 @@ function ExpandArea({
                 key={lesson.id}
                 lesson={lesson}
                 isSelected={lesson.id === selectedLessonId}
-                onClick={() => setSelectedLessonId(lesson.id === selectedLessonId ? null : lesson.id)}
+                onClick={() =>
+                  setSelectedLessonId(
+                    lesson.id === selectedLessonId ? null : lesson.id,
+                  )
+                }
                 onEdit={() => onEditLesson(program.id, lesson.id)}
                 onDelete={() => onDeleteLesson(program.id, lesson.id)}
               />
@@ -575,9 +576,7 @@ function ExpandArea({
         iconColor="#059669"
         // TODO: 當沒有選中 lesson 時，新增內容的 lessonId 傳 0，
         // 後端工程師需決定 program-level content 的建立方式與儲存邏輯
-        onAdd={() =>
-          onCreateContent(program.id, selectedLesson?.id ?? 0)
-        }
+        onAdd={() => onCreateContent(program.id, selectedLesson?.id ?? 0)}
         addLabel={t("programFolderView.addContent", "新增內容")}
       />
 
@@ -716,9 +715,7 @@ export default function ProgramFolderView({
       ))}
 
       {programs.length === 0 && (
-        <div className="text-center py-12 text-gray-400">
-          尚無教材
-        </div>
+        <div className="text-center py-12 text-gray-400">尚無教材</div>
       )}
     </div>
   );
