@@ -20,6 +20,7 @@ import {
   Pencil,
   Trash2,
   Copy,
+  ArrowRightLeft,
   Play,
   Plus,
 } from "lucide-react";
@@ -27,15 +28,15 @@ import type { Program, Lesson, Content } from "@/types";
 
 /* ── Cover image mapping by level ── */
 const LEVEL_COVERS: Record<string, string> = {
-  A1: "/images/course-covers/A1.png",
-  A2: "/images/course-covers/A2.png",
-  B1: "/images/course-covers/B1.png",
-  B2: "/images/course-covers/B2.png",
-  C1: "/images/course-covers/C1.png",
-  C2: "/images/course-covers/C2.png",
+  A1: "https://storage.googleapis.com/duotopia-social-media-videos/website/level-images/A1.png",
+  A2: "https://storage.googleapis.com/duotopia-social-media-videos/website/level-images/A2.png",
+  B1: "https://storage.googleapis.com/duotopia-social-media-videos/website/level-images/B1.png",
+  B2: "https://storage.googleapis.com/duotopia-social-media-videos/website/level-images/B2.png",
+  C1: "https://storage.googleapis.com/duotopia-social-media-videos/website/level-images/C1.png",
+  C2: "https://storage.googleapis.com/duotopia-social-media-videos/website/level-images/C2.png",
 };
 
-const DEFAULT_COVER = "/images/course-covers/A1.png";
+const DEFAULT_COVER = "https://storage.googleapis.com/duotopia-social-media-videos/website/level-images/A1.png";
 
 function getCoverImage(level?: string): string {
   if (!level) return DEFAULT_COVER;
@@ -62,6 +63,7 @@ interface MenuAction {
   icon: React.ReactNode;
   onClick: () => void;
   danger?: boolean;
+  disabled?: boolean;
 }
 
 function DropdownMenu({
@@ -89,13 +91,20 @@ function DropdownMenu({
       {actions.map((a, i) => (
         <button
           key={i}
+          disabled={a.disabled}
           onClick={(e) => {
             e.stopPropagation();
-            a.onClick();
-            onClose();
+            if (!a.disabled) {
+              a.onClick();
+              onClose();
+            }
           }}
-          className={`flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded-md text-xs hover:bg-gray-50 transition-colors ${
-            a.danger ? "text-red-500" : "text-gray-700"
+          className={`flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded-md text-xs transition-colors ${
+            a.disabled
+              ? "text-gray-300 cursor-not-allowed"
+              : a.danger
+                ? "text-red-500 hover:bg-gray-50"
+                : "text-gray-700 hover:bg-gray-50"
           }`}
         >
           {a.icon}
@@ -280,14 +289,12 @@ function LessonCard({
 function ContentCard({
   content,
   onClick,
-  onEdit,
   onDelete,
   onCopy,
   onInstantPractice,
 }: {
   content: Content;
   onClick: () => void;
-  onEdit?: () => void;
   onDelete?: () => void;
   onCopy?: () => void;
   onInstantPractice?: () => void;
@@ -306,23 +313,53 @@ function ContentCard({
       className="relative rounded-xl bg-white border border-gray-200 transition-all hover:shadow-md group"
       onClick={onClick}
     >
-      {/* Text preview */}
-      <div className="h-[160px] p-6 overflow-hidden rounded-t-xl relative">
+      {/* Preview: image + text or text only */}
+      <div className="h-[160px] p-6 overflow-hidden rounded-t-xl relative select-none">
         {items.length > 0 ? (
-          <div className="space-y-1.5 text-[13px] w-full">
-            {items.slice(0, 5).map((item, i) => (
-              <p
-                key={i}
-                className={`break-words ${i >= 3 ? "text-gray-400" : i >= 2 ? "text-gray-500" : "text-gray-700"}`}
-              >
-                {item.text}
-                {item.translation && (
-                  <span className="ml-2 text-gray-400">
-                    {item.translation}
-                  </span>
-                )}
-              </p>
-            ))}
+          <div className="flex gap-3 h-full">
+            {/* First item image (if exists) */}
+            {items[0].image_url && (
+              <img
+                src={items[0].image_url}
+                alt={items[0].text}
+                className="w-20 h-20 object-cover rounded-lg shrink-0 opacity-60"
+                draggable={false}
+              />
+            )}
+            {items[0].image_url ? (
+              // 有圖：text 和 translation 上下排列，truncate 節省空間
+              <div className="space-y-0.5 text-[12px] flex-1 min-w-0">
+                {items.slice(0, 4).map((item, i) => (
+                  <div
+                    key={i}
+                    className={`truncate leading-tight ${i >= 3 ? "text-gray-400" : i >= 2 ? "text-gray-500" : "text-gray-700"}`}
+                  >
+                    {item.text}
+                    {item.translation && (
+                      <span className="text-gray-400"> {item.translation}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // 無圖：text · translation 同一行，break-words
+              <div className="space-y-1 text-[13px] flex-1 min-w-0">
+                {items.slice(0, 5).map((item, i) => (
+                  <div
+                    key={i}
+                    className={`break-words leading-tight ${i >= 3 ? "text-gray-400" : i >= 2 ? "text-gray-500" : "text-gray-700"}`}
+                  >
+                    <span>{item.text}</span>
+                    {item.translation && (
+                      <>
+                        <span className="mx-1 text-gray-300">·</span>
+                        <span className="text-gray-400">{item.translation}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-gray-300">
@@ -381,15 +418,6 @@ function ContentCard({
             <DropdownMenu
               onClose={() => setShowMenu(false)}
               actions={[
-                ...(onEdit
-                  ? [
-                      {
-                        label: t("common.edit", "編輯"),
-                        icon: <Pencil size={13} />,
-                        onClick: onEdit,
-                      },
-                    ]
-                  : []),
                 ...(onCopy
                   ? [
                       {
@@ -399,6 +427,14 @@ function ContentCard({
                       },
                     ]
                   : []),
+                {
+                  label: t("common.move", "移動"),
+                  icon: <ArrowRightLeft size={13} />,
+                  onClick: () => {
+                    // TODO: 等工程師實作移動功能
+                  },
+                  disabled: true,
+                },
                 ...(onDelete
                   ? [
                       {
@@ -425,11 +461,13 @@ function SectionHeader({
   title,
   iconColor,
   onAdd,
+  addLabel,
 }: {
   icon: React.ReactNode;
   title: string;
   iconColor?: string;
   onAdd?: () => void;
+  addLabel?: string;
 }) {
   const { t } = useTranslation();
   return (
@@ -443,7 +481,7 @@ function SectionHeader({
           className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 transition-colors"
         >
           <Plus size={14} />
-          {t("common.add", "新增")}
+          {addLabel ?? t("common.add", "新增")}
         </button>
       )}
     </div>
@@ -498,9 +536,10 @@ function ExpandArea({
             icon={<Folder size={14} />}
             title={t("programFolderView.lessonsSection", "單元")}
             onAdd={() => onCreateLesson(program.id)}
+            addLabel={t("programFolderView.addLesson", "新增單元")}
           />
 
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-5">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
             {lessons.map((lesson) => (
               <LessonCard
                 key={lesson.id}
@@ -520,6 +559,7 @@ function ExpandArea({
           icon={<Folder size={14} />}
           title={t("programFolderView.lessonsSection", "單元")}
           onAdd={() => onCreateLesson(program.id)}
+          addLabel={t("programFolderView.addLesson", "新增單元")}
         />
       )}
 
@@ -533,15 +573,15 @@ function ExpandArea({
         onAdd={() =>
           onCreateContent(program.id, selectedLesson?.id ?? 0)
         }
+        addLabel={t("programFolderView.addContent", "新增內容")}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5">
         {displayContents.map((content) => (
           <ContentCard
             key={content.id}
             content={content}
-            onClick={() => {/* 點擊卡片不開啟編輯器，透過三點選單操作 */}}
-            onEdit={() => onContentClick(content, contentsLessonId)}
+            onClick={() => onContentClick(content, contentsLessonId)}
             onDelete={() =>
               onDeleteContent(contentsLessonId, content.id, content.title)
             }
