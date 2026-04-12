@@ -152,7 +152,7 @@ function ProgramCard({
         <img
           src={getCoverImage(program.level)}
           alt={program.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover object-bottom"
         />
         {program.description && (
           <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/cover:opacity-100 transition-opacity p-3 flex items-center">
@@ -164,8 +164,8 @@ function ProgramCard({
       </div>
 
       {/* Info */}
-      <div className="relative px-4 py-3.5 h-[90px] flex flex-col gap-2">
-        <h3 className="text-[15px] font-semibold text-gray-800 line-clamp-2 leading-tight">
+      <div className="relative px-4 pt-2.5 pb-3.5 h-[90px] flex flex-col gap-2">
+        <h3 className="text-[18px] font-semibold text-gray-800 line-clamp-2 leading-tight">
           {program.name}
         </h3>
         <p className="text-xs text-gray-500">
@@ -243,8 +243,8 @@ function LessonCard({
       </div>
 
       {/* Info */}
-      <div className="relative px-4 py-3.5 h-[90px] flex flex-col gap-2">
-        <h3 className="text-[15px] font-semibold text-[#1E3A5F] line-clamp-2 leading-tight">
+      <div className="relative px-4 pt-2.5 pb-3.5 h-[90px] flex flex-col gap-2">
+        <h3 className="text-[18px] font-semibold text-[#1E3A5F] line-clamp-2 leading-tight">
           {lesson.name}
         </h3>
         <p className="text-xs text-gray-500">
@@ -314,7 +314,14 @@ function ContentCard({
       onClick={onClick}
     >
       {/* Preview: image + text or text only */}
-      <div className="h-[160px] p-6 overflow-hidden rounded-t-xl relative select-none">
+      <div className="h-[160px] pt-10 px-6 pb-6 overflow-hidden rounded-t-xl relative select-none">
+        {/* Type badge */}
+        <span
+          className="absolute top-2 left-2 z-10 text-[12px] font-medium px-2.5 py-1 rounded"
+          style={{ backgroundColor: badge.bg, color: badge.text }}
+        >
+          {badge.label}
+        </span>
         {items.length > 0 ? (
           <div className="flex gap-3 h-full">
             {/* First item image (if exists) */}
@@ -385,70 +392,63 @@ function ContentCard({
       </div>
 
       {/* Info */}
-      <div className="px-3.5 py-2.5 space-y-1.5">
-        {/* Type badge + count */}
-        <div className="flex items-center gap-2">
-          <span
-            className="text-[10px] font-medium px-2 py-0.5 rounded"
-            style={{ backgroundColor: badge.bg, color: badge.text }}
-          >
-            {badge.label}
-          </span>
-          <span className="text-[11px] text-gray-400">
-            {content.items_count ?? items.length}{" "}
-            {t("programFolderView.questions", "題")}
-          </span>
-        </div>
+      <div className="relative px-3.5 pt-2.5 pb-2 space-y-1.5">
+        {/* Title */}
+        <h3 className="text-[18px] font-semibold text-gray-800 truncate pr-6">
+          {content.title}
+        </h3>
 
-        {/* Title + ellipsis */}
-        <div className="relative flex items-center gap-1">
-          <h3 className="text-sm font-semibold text-gray-800 truncate flex-1">
-            {content.title}
-          </h3>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowMenu(!showMenu);
-            }}
-            className="text-gray-400 hover:text-gray-600 shrink-0"
-          >
-            <span className="text-sm font-bold">⋯</span>
-          </button>
-          {showMenu && (
-            <DropdownMenu
-              onClose={() => setShowMenu(false)}
-              actions={[
-                ...(onCopy
-                  ? [
-                      {
-                        label: t("common.copy", "複製"),
-                        icon: <Copy size={13} />,
-                        onClick: onCopy,
-                      },
-                    ]
-                  : []),
-                {
-                  label: t("common.move", "移動"),
-                  icon: <ArrowRightLeft size={13} />,
-                  onClick: () => {
-                    // TODO: 等工程師實作移動功能
-                  },
-                  disabled: true,
+        {/* Count */}
+        <span className="text-[11px] text-gray-400">
+          {content.items_count ?? items.length}{" "}
+          {t("programFolderView.questions", "題")}
+        </span>
+
+        {/* Ellipsis menu trigger */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowMenu(!showMenu);
+          }}
+          className="absolute right-3 bottom-3 p-1 opacity-70 hover:opacity-100 transition-opacity"
+        >
+          <Ellipsis size={18} className="text-gray-500" />
+        </button>
+
+        {showMenu && (
+          <DropdownMenu
+            onClose={() => setShowMenu(false)}
+            actions={[
+              ...(onCopy
+                ? [
+                    {
+                      label: t("common.copy", "複製"),
+                      icon: <Copy size={13} />,
+                      onClick: onCopy,
+                    },
+                  ]
+                : []),
+              {
+                label: t("common.move", "移動"),
+                icon: <ArrowRightLeft size={13} />,
+                onClick: () => {
+                  // TODO: 等工程師實作移動功能
                 },
-                ...(onDelete
-                  ? [
-                      {
-                        label: t("common.delete", "刪除"),
-                        icon: <Trash2 size={13} />,
-                        onClick: onDelete,
-                        danger: true,
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-          )}
-        </div>
+                disabled: true,
+              },
+              ...(onDelete
+                ? [
+                    {
+                      label: t("common.delete", "刪除"),
+                      icon: <Trash2 size={13} />,
+                      onClick: onDelete,
+                      danger: true,
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        )}
       </div>
 
     </div>
