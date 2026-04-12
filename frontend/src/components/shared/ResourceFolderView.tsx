@@ -71,7 +71,7 @@ function ResourceProgramCard({
     <div
       className="relative rounded-2xl bg-white cursor-pointer transition-all hover:shadow-md"
       style={{
-        border: isSelected ? "2px solid #4CAF50" : "1px solid #E5E7EB",
+        border: isSelected ? "3px solid #4CAF50" : "1px solid #E5E7EB",
       }}
       onClick={onClick}
     >
@@ -80,7 +80,7 @@ function ResourceProgramCard({
         <img
           src={getCoverImage(material.level)}
           alt={material.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover object-bottom"
         />
         {material.description && (
           <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/cover:opacity-100 transition-opacity p-3 flex items-center">
@@ -92,8 +92,8 @@ function ResourceProgramCard({
       </div>
 
       {/* Info */}
-      <div className="relative px-4 py-3.5 h-[90px] flex flex-col gap-2">
-        <h3 className="text-[15px] font-semibold text-gray-800 line-clamp-2 leading-tight">
+      <div className="relative px-4 pt-2.5 pb-3.5 h-[90px] flex flex-col gap-2">
+        <h3 className="text-[17px] font-semibold text-gray-800 line-clamp-2 leading-tight">
           {material.name}
         </h3>
         <p className="text-xs text-gray-500">
@@ -141,7 +141,7 @@ function SectionHeader({
   return (
     <div className="flex items-center gap-2">
       <span style={{ color: iconColor ?? "#6B7280" }}>{icon}</span>
-      <span className="text-[13px] font-semibold text-gray-700">{title}</span>
+      <span className="text-[15px] font-semibold text-gray-700">{title}</span>
       <div className="flex-1 h-px bg-gray-200" />
     </div>
   );
@@ -169,14 +169,21 @@ function ContentPreviewCard({
       onClick={onClick}
     >
       {/* Preview: image + text or text only */}
-      <div className="h-[160px] p-6 overflow-hidden rounded-t-xl relative">
+      <div className="h-[160px] pt-10 px-6 pb-6 overflow-hidden rounded-t-xl relative select-none">
+        {/* Type badge */}
+        <span
+          className="absolute top-2 left-2 z-10 text-[12px] font-medium px-2.5 py-1 rounded"
+          style={{ backgroundColor: badge.bg, color: badge.text }}
+        >
+          {badge.label}
+        </span>
         {items.length > 0 ? (
           <div className="flex gap-3 h-full">
             {items[0].image_url && (
               <img
                 src={items[0].image_url}
                 alt={items[0].text}
-                className="w-20 h-20 object-cover rounded-lg shrink-0"
+                className="w-20 h-20 object-cover rounded-lg shrink-0 opacity-60"
                 draggable={false}
               />
             )}
@@ -208,22 +215,14 @@ function ContentPreviewCard({
       </div>
 
       {/* Info */}
-      <div className="px-3.5 py-2.5 space-y-1.5">
-        <div className="flex items-center gap-2">
-          <span
-            className="text-[10px] font-medium px-2 py-0.5 rounded"
-            style={{ backgroundColor: badge.bg, color: badge.text }}
-          >
-            {badge.label}
-          </span>
-          <span className="text-[11px] text-gray-400">
-            {content.item_count ?? items.length}{" "}
-            {t("programFolderView.questions", "題")}
-          </span>
-        </div>
-        <h3 className="text-sm font-semibold text-gray-800 truncate">
+      <div className="px-3.5 pt-2.5 pb-2 space-y-1.5">
+        <h3 className="text-[17px] font-semibold text-gray-800 truncate">
           {content.title}
         </h3>
+        <span className="text-[11px] text-gray-400">
+          {content.item_count ?? items.length}{" "}
+          {t("programFolderView.questions", "題")}
+        </span>
       </div>
     </div>
   );
@@ -271,8 +270,8 @@ function ExpandArea({
       {lessons.length > 0 && (
         <>
           <SectionHeader
-            icon={<Folder size={14} />}
-            title={t("programFolderView.lessonsSection", "單元")}
+            icon={<Folder size={15} />}
+            title={`${t("programFolderView.lessonsSection", "單元")}: ${detail.name}`}
           />
           <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
             {lessons.map((lesson) => (
@@ -282,7 +281,7 @@ function ExpandArea({
                 style={{
                   border:
                     lesson.id === selectedLessonId
-                      ? "2px solid #7C3AED"
+                      ? "3px solid #7C3AED"
                       : "1px solid #E5E7EB",
                 }}
                 onClick={() =>
@@ -296,8 +295,8 @@ function ExpandArea({
                     {lesson.description || t("programFolderView.noDescription", "尚無描述")}
                   </p>
                 </div>
-                <div className="px-4 py-3.5 h-[90px] flex flex-col gap-2">
-                  <h3 className="text-[15px] font-semibold text-[#1E3A5F] line-clamp-2 leading-tight">
+                <div className="px-4 pt-2.5 pb-3.5 h-[90px] flex flex-col gap-2">
+                  <h3 className="text-[17px] font-semibold text-[#1E3A5F] line-clamp-2 leading-tight">
                     {lesson.name}
                   </h3>
                   <p className="text-xs text-gray-500">
@@ -313,10 +312,10 @@ function ExpandArea({
 
       {/* Contents section */}
       <SectionHeader
-        icon={<FileText size={14} />}
+        icon={<FileText size={15} />}
         title={
           selectedLesson
-            ? `${t("programFolderView.contentsSection", "內容")} — ${selectedLesson.name}`
+            ? `${t("programFolderView.contentsSection", "內容")}: ${selectedLesson.name}`
             : t("programFolderView.contentsSection", "內容")
         }
         iconColor="#059669"
@@ -458,7 +457,14 @@ export default function ResourceFolderView({
           </div>
 
           {selectedRowIndex === rowIndex && (
-            <div className="mt-4">
+            <div className="relative mt-4 animate-fade-up">
+              {/* Triangle pointer to selected program card */}
+              <div
+                className="absolute -top-3 w-0 h-0 border-l-[30px] border-l-transparent border-r-[30px] border-r-transparent border-b-[12px] border-b-white z-10"
+                style={{
+                  left: `calc((100% / ${columns}) * (${selectedIndex % columns} + 0.5) - 30px)`,
+                }}
+              />
               <ExpandArea
                 detail={selectedDetail}
                 loadingDetail={loadingDetail}

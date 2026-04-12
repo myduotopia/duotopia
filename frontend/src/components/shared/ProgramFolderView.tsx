@@ -142,7 +142,7 @@ function ProgramCard({
       className="relative rounded-2xl bg-white cursor-pointer transition-all hover:shadow-md"
       style={{
         border: isSelected
-          ? "2px solid #4CAF50"
+          ? "3px solid #4CAF50"
           : "1px solid #E5E7EB",
       }}
       onClick={onClick}
@@ -165,7 +165,7 @@ function ProgramCard({
 
       {/* Info */}
       <div className="relative px-4 pt-2.5 pb-3.5 h-[90px] flex flex-col gap-2">
-        <h3 className="text-[18px] font-semibold text-gray-800 line-clamp-2 leading-tight">
+        <h3 className="text-[17px] font-semibold text-gray-800 line-clamp-2 leading-tight">
           {program.name}
         </h3>
         <p className="text-xs text-gray-500">
@@ -230,7 +230,7 @@ function LessonCard({
       className="relative rounded-2xl bg-white cursor-pointer transition-all hover:shadow-md"
       style={{
         border: isSelected
-          ? "2px solid #7C3AED"
+          ? "3px solid #7C3AED"
           : "1px solid #E5E7EB",
       }}
       onClick={onClick}
@@ -244,7 +244,7 @@ function LessonCard({
 
       {/* Info */}
       <div className="relative px-4 pt-2.5 pb-3.5 h-[90px] flex flex-col gap-2">
-        <h3 className="text-[18px] font-semibold text-[#1E3A5F] line-clamp-2 leading-tight">
+        <h3 className="text-[17px] font-semibold text-[#1E3A5F] line-clamp-2 leading-tight">
           {lesson.name}
         </h3>
         <p className="text-xs text-gray-500">
@@ -394,7 +394,7 @@ function ContentCard({
       {/* Info */}
       <div className="relative px-3.5 pt-2.5 pb-2 space-y-1.5">
         {/* Title */}
-        <h3 className="text-[18px] font-semibold text-gray-800 truncate pr-6">
+        <h3 className="text-[17px] font-semibold text-gray-800 truncate pr-6">
           {content.title}
         </h3>
 
@@ -473,12 +473,12 @@ function SectionHeader({
   return (
     <div className="flex items-center gap-2">
       <span style={{ color: iconColor ?? "#6B7280" }}>{icon}</span>
-      <span className="text-[13px] font-semibold text-gray-700">{title}</span>
+      <span className="text-[15px] font-semibold text-gray-700">{title}</span>
       <div className="flex-1 h-px bg-gray-200" />
       {onAdd && (
         <button
           onClick={onAdd}
-          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 transition-colors"
+          className="flex items-center gap-1 text-[14px] text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50 transition-colors"
         >
           <Plus size={14} />
           {addLabel ?? t("common.add", "新增")}
@@ -522,7 +522,7 @@ function ExpandArea({
     ? selectedLesson.contents ?? []
     : program.contents ?? [];
   const contentsSectionTitle = selectedLesson
-    ? `${t("programFolderView.contentsSection", "內容")} — ${selectedLesson.name}`
+    ? `${t("programFolderView.contentsSection", "內容")}: ${selectedLesson.name}`
     : t("programFolderView.contentsSection", "內容");
   // lessonId for callbacks: use selected lesson, or 0 for program-level
   const contentsLessonId = selectedLesson?.id ?? 0;
@@ -533,8 +533,8 @@ function ExpandArea({
       {lessons.length > 0 && (
         <>
           <SectionHeader
-            icon={<Folder size={14} />}
-            title={t("programFolderView.lessonsSection", "單元")}
+            icon={<Folder size={15} />}
+            title={`${t("programFolderView.lessonsSection", "單元")}: ${program.name}`}
             onAdd={() => onCreateLesson(program.id)}
             addLabel={t("programFolderView.addLesson", "新增單元")}
           />
@@ -555,17 +555,22 @@ function ExpandArea({
       )}
 
       {lessons.length === 0 && (
-        <SectionHeader
-          icon={<Folder size={14} />}
-          title={t("programFolderView.lessonsSection", "單元")}
-          onAdd={() => onCreateLesson(program.id)}
-          addLabel={t("programFolderView.addLesson", "新增單元")}
-        />
+        <>
+          <SectionHeader
+            icon={<Folder size={15} />}
+            title={`${t("programFolderView.lessonsSection", "單元")}: ${program.name}`}
+            onAdd={() => onCreateLesson(program.id)}
+            addLabel={t("programFolderView.addLesson", "新增單元")}
+          />
+          <p className="text-sm text-gray-400 text-center py-4">
+            {t("programFolderView.noLessons", "尚無單元")}
+          </p>
+        </>
       )}
 
       {/* Contents section — always visible */}
       <SectionHeader
-        icon={<FileText size={14} />}
+        icon={<FileText size={15} />}
         title={contentsSectionTitle}
         iconColor="#059669"
         // TODO: 當沒有選中 lesson 時，新增內容的 lessonId 傳 0，
@@ -686,7 +691,14 @@ export default function ProgramFolderView({
 
           {/* Expand area below the visual row containing the selected program */}
           {selectedRowIndex === rowIndex && selectedProgram && (
-            <div className="mt-4">
+            <div className="relative mt-4 animate-fade-up">
+              {/* Triangle pointer to selected program card */}
+              <div
+                className="absolute -top-3 w-0 h-0 border-l-[30px] border-l-transparent border-r-[30px] border-r-transparent border-b-[12px] border-b-white z-10"
+                style={{
+                  left: `calc((100% / ${columns}) * (${selectedIndex % columns} + 0.5) - 30px)`,
+                }}
+              />
               <ExpandArea
                 program={selectedProgram}
                 onEditLesson={onEditLesson}
