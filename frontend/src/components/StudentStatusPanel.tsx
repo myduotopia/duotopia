@@ -12,7 +12,7 @@
  */
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutGrid, List, Loader2 } from "lucide-react";
+import { LayoutGrid, List, Loader2, Save, X } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,6 +43,8 @@ export interface StudentStatusPanelProps {
   isEditingStudents: boolean;
   onEditingStudentsChange: (editing: boolean) => void;
   onStudentIdsChanged: (studentIds: number[]) => void;
+  onSave?: () => void;
+  saving?: boolean;
   loading: boolean;
 }
 
@@ -249,14 +251,12 @@ function StatusLegend() {
 
 function StudentCard({
   student,
-  isEditing,
   isSelected,
   isDisabled,
   onToggle,
   onClick,
 }: {
   student: StudentProgress;
-  isEditing: boolean;
   isSelected: boolean;
   isDisabled: boolean;
   onToggle: () => void;
@@ -270,34 +270,25 @@ function StudentCard({
   return (
     <button
       type="button"
-      onClick={isEditing ? onToggle : onClick}
-      disabled={isEditing && isDisabled}
-      className={`relative flex flex-col items-center justify-center p-2 rounded-lg text-center transition-all min-h-[4.5rem] overflow-hidden min-w-0 ${
+      onClick={isDisabled ? onClick : onToggle}
+      className={`relative flex flex-col items-center justify-center p-2 rounded-lg text-center transition-all aspect-square overflow-hidden min-w-0 cursor-pointer hover:shadow-md ${
         isUnassigned
           ? "border border-dashed border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/50"
           : "border border-gray-200 bg-white dark:border-gray-600 dark:bg-gray-800"
-      } ${
-        isEditing && isDisabled
-          ? "opacity-60 cursor-not-allowed"
-          : isEditing
-            ? "cursor-pointer hover:shadow-sm"
-            : "cursor-pointer hover:shadow-md hover:scale-[1.03]"
       }`}
     >
-      {/* Checkbox overlay (edit mode) */}
-      {isEditing && (
-        <span className="absolute top-1 left-1">
-          {isDisabled ? (
-            <span className="inline-block w-3.5 h-3.5 rounded-sm bg-gray-300 dark:bg-gray-600" />
-          ) : isSelected ? (
-            <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold">
-              ✓
-            </span>
-          ) : (
-            <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
-          )}
-        </span>
-      )}
+      {/* Checkbox (always visible) */}
+      <span className="absolute top-1 left-1">
+        {isDisabled ? (
+          <span className="inline-block w-3.5 h-3.5 rounded-sm bg-gray-300 dark:bg-gray-600" />
+        ) : isSelected ? (
+          <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold">
+            ✓
+          </span>
+        ) : (
+          <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
+        )}
+      </span>
 
       {/* Status dot (top-right) */}
       <span className="absolute top-1 right-1">
@@ -356,13 +347,8 @@ function StudentRow({
   return (
     <button
       type="button"
-      onClick={isEditing ? onToggle : onClick}
-      disabled={isEditing && isDisabled}
-      className={`flex items-center w-full gap-3 py-2 px-3 rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
-        isEditing && isDisabled
-          ? "opacity-60 cursor-not-allowed"
-          : "cursor-pointer"
-      }`}
+      onClick={isEditing && !isDisabled ? onToggle : onClick}
+      className="flex items-center w-full gap-3 py-2 px-3 rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
     >
       {/* Checkbox (edit mode) */}
       {isEditing && (
@@ -419,44 +405,74 @@ export default function StudentStatusPanel({
   assignmentId,
   classroomId,
   practiceMode,
-  isEditingStudents,
+  isEditingStudents: _isEditingStudents,
   onEditingStudentsChange: _onEditingStudentsChange,
   onStudentIdsChanged,
+  onSave,
+  saving = false,
   loading,
 }: StudentStatusPanelProps) {
-  // _onEditingStudentsChange is available for future use (e.g., "編輯派發" button inside panel)
+  void _isEditingStudents;
   void _onEditingStudentsChange;
   const { t } = useTranslation();
 
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [activeTab, setActiveTab] = useState<TabValue>("all");
   const [sortMode, setSortMode] = useState<SortMode>("number");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const isGradable = practiceMode
     ? GRADABLE_MODES.has(practiceMode)
     : false;
 
-  // Initialize selected IDs when entering edit mode
+  // Reset marked students when switching tabs
   useEffect(() => {
-    if (isEditingStudents) {
-      const assignedIds = new Set(
+    setSelectedIds(new Set());
+  }, [activeTab, students]);
+
+  // The initial set of assigned student IDs (source of truth)
+  const initialAssignedIds = useMemo(
+    () =>
+      new Set(
         students
           .filter(
             (s) => s.status !== "unassigned" && s.is_assigned !== false,
           )
           .map((s) => s.student_id),
-      );
-      setSelectedIds(assignedIds);
-    }
-  }, [isEditingStudents, students]);
+      ),
+    [students],
+  );
 
-  // Notify parent of changes
+  // selectedIds = students marked for action (add or remove)
+  // hasChanges = any student marked
+  const hasChanges = selectedIds.size > 0;
+
+  // Compute final student_ids list based on active tab + marked students
+  // Assigned tab: marked = to remove → final = initial minus marked
+  // Unassigned tab: marked = to add → final = initial plus marked
   useEffect(() => {
-    if (isEditingStudents) {
-      onStudentIdsChanged(Array.from(selectedIds));
+    if (!hasChanges) {
+      onStudentIdsChanged(Array.from(initialAssignedIds));
+      return;
     }
-  }, [selectedIds, isEditingStudents, onStudentIdsChanged]);
+    let finalIds: Set<number>;
+    if (activeTab === "assigned") {
+      finalIds = new Set(initialAssignedIds);
+      selectedIds.forEach((id) => finalIds.delete(id));
+    } else if (activeTab === "unassigned") {
+      finalIds = new Set(initialAssignedIds);
+      selectedIds.forEach((id) => finalIds.add(id));
+    } else {
+      finalIds = new Set(initialAssignedIds);
+    }
+    onStudentIdsChanged(Array.from(finalIds));
+  }, [selectedIds, activeTab, initialAssignedIds, hasChanges, onStudentIdsChanged]);
+
+  // Cancel = clear all marks
+  const handleCancel = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
 
   // ---- Filtering by tab ----
   const filteredStudents = useMemo(() => {
@@ -476,30 +492,41 @@ export default function StudentStatusPanel({
 
   // ---- Sorting ----
   const sortedStudents = useMemo(() => {
+    const dir = sortDirection === "asc" ? 1 : -1;
     return [...filteredStudents].sort((a, b) => {
+      let cmp = 0;
       switch (sortMode) {
         case "number":
-          return Number(a.student_number) - Number(b.student_number);
+          cmp = Number(a.student_number) - Number(b.student_number);
+          break;
         case "name":
-          return a.student_name.localeCompare(b.student_name, "zh-TW");
+          cmp = a.student_name.localeCompare(b.student_name, "zh-TW");
+          break;
         case "score":
-          return (b.score ?? -1) - (a.score ?? -1);
+          cmp = (a.score ?? -1) - (b.score ?? -1);
+          break;
         case "status":
-          return (
-            (STATUS_ORDER[a.status] ?? -1) - (STATUS_ORDER[b.status] ?? -1)
-          );
-        default:
-          return 0;
+          cmp =
+            (STATUS_ORDER[a.status] ?? -1) - (STATUS_ORDER[b.status] ?? -1);
+          break;
       }
+      return cmp * dir;
     });
-  }, [filteredStudents, sortMode]);
+  }, [filteredStudents, sortMode, sortDirection]);
 
   // ---- Checkbox helpers ----
-  const isCheckboxDisabled = useCallback((s: StudentProgress) => {
-    return (
-      s.status !== "NOT_STARTED" && s.status !== "unassigned"
-    );
-  }, []);
+  // All tab: all disabled (display only)
+  // Assigned tab: only NOT_STARTED can be toggled
+  // Unassigned tab: all can be toggled
+  const isCheckboxDisabled = useCallback(
+    (s: StudentProgress) => {
+      if (activeTab === "all") return true;
+      if (activeTab === "unassigned") return false;
+      // assigned tab: only NOT_STARTED can be unchecked
+      return s.status !== "NOT_STARTED";
+    },
+    [activeTab],
+  );
 
   const toggleStudent = useCallback(
     (studentId: number) => {
@@ -536,16 +563,16 @@ export default function StudentStatusPanel({
     });
   }, [filteredStudents, selectedIds, isCheckboxDisabled]);
 
-  // ---- Navigation ----
+  // ---- Navigation (only on "all" tab) ----
   const handleStudentClick = useCallback(
     (_student: StudentProgress) => {
-      if (isEditingStudents || !isGradable) return;
+      if (!isGradable) return;
       window.open(
         `/teacher/classroom/${classroomId}/assignment/${assignmentId}/grading`,
         "_blank",
       );
     },
-    [isEditingStudents, isGradable, classroomId, assignmentId],
+    [isGradable, classroomId, assignmentId],
   );
 
   // ---- Tab counts ----
@@ -603,16 +630,19 @@ export default function StudentStatusPanel({
     },
   ];
 
+  // Whether checkboxes are interactive on current tab
+  const isCheckboxActive = activeTab !== "all";
+
   // ---- Select all checkbox state ----
   const selectAllState = useMemo(() => {
-    if (!isEditingStudents) return "hidden";
+    if (!isCheckboxActive) return "hidden";
     const toggleable = filteredStudents.filter((s) => !isCheckboxDisabled(s));
     if (toggleable.length === 0) return "disabled";
     const allSelected = toggleable.every((s) =>
       selectedIds.has(s.student_id),
     );
     return allSelected ? "checked" : "unchecked";
-  }, [isEditingStudents, filteredStudents, selectedIds, isCheckboxDisabled]);
+  }, [isCheckboxActive, filteredStudents, selectedIds, isCheckboxDisabled]);
 
   return (
     <div className="border-t dark:border-gray-700 pt-4">
@@ -624,20 +654,35 @@ export default function StudentStatusPanel({
 
         {/* Sort segmented buttons */}
         <div className="flex items-center rounded-md overflow-hidden border border-gray-200 dark:border-gray-600">
-          {sortOptions.map((opt, i) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setSortMode(opt.value)}
-              className={`px-2 py-1 text-[10px] font-medium transition-colors ${
-                sortMode === opt.value
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-              } ${i > 0 ? "border-l border-gray-200 dark:border-gray-600" : ""}`}
-            >
-              {opt.label}
-            </button>
-          ))}
+          {sortOptions.map((opt, i) => {
+            const isActive = sortMode === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  if (isActive) {
+                    setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                  } else {
+                    setSortMode(opt.value);
+                    setSortDirection("asc");
+                  }
+                }}
+                className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+                  isActive
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                } ${i > 0 ? "border-l border-gray-200 dark:border-gray-600" : ""}`}
+              >
+                {opt.label}
+                {isActive && (
+                  <span className="ml-0.5">
+                    {sortDirection === "asc" ? "↑" : "↓"}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* View mode toggle */}
@@ -724,7 +769,6 @@ export default function StudentStatusPanel({
             <StudentCard
               key={student.student_id}
               student={student}
-              isEditing={isEditingStudents}
               isSelected={selectedIds.has(student.student_id)}
               isDisabled={isCheckboxDisabled(student)}
               onToggle={() => toggleStudent(student.student_id)}
@@ -738,13 +782,56 @@ export default function StudentStatusPanel({
             <StudentRow
               key={student.student_id}
               student={student}
-              isEditing={isEditingStudents}
+              isEditing={isCheckboxActive}
               isSelected={selectedIds.has(student.student_id)}
               isDisabled={isCheckboxDisabled(student)}
               onToggle={() => toggleStudent(student.student_id)}
               onClick={() => handleStudentClick(student)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Save / Cancel bar (visible when selections changed) */}
+      {hasChanges && (
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            {activeTab === "assigned"
+              ? t(
+                  "assignmentDetail.sheet.removedCount",
+                  "移除 {{count}} 位",
+                  { count: selectedIds.size },
+                )
+              : t(
+                  "assignmentDetail.sheet.addedCount",
+                  "新增 {{count}} 位",
+                  { count: selectedIds.size },
+                )}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={saving}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+            >
+              <X className="h-3.5 w-3.5" />
+              {t("common.cancel", "取消")}
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {t("assignmentDetail.sheet.saveStudents", "儲存派發")}
+            </button>
+          </div>
         </div>
       )}
 

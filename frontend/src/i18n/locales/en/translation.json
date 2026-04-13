@@ -3016,7 +3016,9 @@
       "statusSubmitted": "Submitted, awaiting grading",
       "statusReturned": "Returned for correction",
       "statusResubmitted": "Corrected, awaiting review",
-      "statusGraded": "Grading complete"
+      "statusGraded": "Grading complete",
+      "addedCount": "Adding {{count}} students",
+      "removedCount": "Removing {{count}} students"
     },
     "status": {
       "submitted": "Submitted",

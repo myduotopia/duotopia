@@ -67,7 +67,9 @@
       "statusSubmitted": "學生已完成，待老師批改",
       "statusReturned": "學生未開始訂正",
       "statusResubmitted": "學生已訂正，待老師批改",
-      "statusGraded": "老師已批改完畢"
+      "statusGraded": "老師已批改完畢",
+      "addedCount": "新增 {{count}} 位",
+      "removedCount": "移除 {{count}} 位"
     },
     "status": {
       "submitted": "已繳交",

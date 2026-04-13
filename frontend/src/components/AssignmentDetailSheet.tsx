@@ -1082,6 +1082,8 @@ export function AssignmentDetailSheet({
               isEditingStudents={isEditingStudents}
               onEditingStudentsChange={setIsEditingStudents}
               onStudentIdsChanged={setPendingStudentIds}
+              onSave={handleSaveStudents}
+              saving={saving}
               loading={loading}
             />
           </div>
