@@ -82,7 +82,7 @@ export function TeamOptions({
     : null;
 
   const maxLen = Math.max(...options.map((o) => o.length));
-  const useVertical = !showImages && maxLen > 10;
+  const useVertical = !showImages && maxLen > 7;
 
   return (
     <div className="flex flex-col gap-2 relative w-full">
