@@ -509,9 +509,7 @@ async def get_assignment_activities(
         "show_answer": show_answer,  # 例句重組：答題結束後是否顯示正確答案
         "score_category": score_category,  # 分數記錄分類
         "time_limit_per_question": (
-            parent_assignment.time_limit_per_question
-            if parent_assignment
-            else None
+            parent_assignment.time_limit_per_question if parent_assignment else None
         ),
         "total_activities": len(activities),
         "activities": activities,
