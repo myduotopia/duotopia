@@ -428,7 +428,7 @@ export function TugOfWarGame({
         </div>
 
         {/* Canvas center — question + animation */}
-        <div className="w-[350px] flex-shrink-0 self-stretch relative rounded-xl overflow-hidden bg-sky-100 flex flex-col justify-end">
+        <div className="w-[350px] flex-shrink-0 self-stretch relative rounded-xl overflow-hidden bg-sky-100 flex flex-col justify-center">
           <div ref={phaserContainerRef} className="w-full" />
           {/* Replay icon */}
           {winner && (
