@@ -258,18 +258,6 @@ export default function WordReadingTemplate({
           if (timerRef.current) {
             clearInterval(timerRef.current);
           }
-          // Auto-stop recording when time is up
-          if (
-            mediaRecorderRef.current &&
-            mediaRecorderRef.current.state === "recording"
-          ) {
-            mediaRecorderRef.current.stop();
-            setIsRecording(false);
-            if (recordingIntervalRef.current) {
-              clearInterval(recordingIntervalRef.current);
-              recordingIntervalRef.current = null;
-            }
-          }
           setShowTimeoutDialog(true);
           onTimeout?.();
           return 0;
