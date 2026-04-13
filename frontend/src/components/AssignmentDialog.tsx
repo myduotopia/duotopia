@@ -421,8 +421,9 @@ export function AssignmentDialog({
   const loadClassroomOptions = async () => {
     setLoadingClassrooms(true);
     try {
-      const data =
-        (await apiClient.getTeacherClassrooms()) as ClassroomOption[];
+      const data = (await apiClient.getTeacherClassrooms({
+        mode: "personal",
+      })) as ClassroomOption[];
       setClassroomOptions(data || []);
     } catch {
       toast.error(t("dialogs.assignmentDialog.errors.loadClassroomsFailed"));
