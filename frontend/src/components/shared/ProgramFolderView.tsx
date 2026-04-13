@@ -504,7 +504,7 @@ function ExpandArea({
   onContentClick: (content: Content, lessonId: number) => void;
   onDeleteContent: (lessonId: number, contentId: number, title: string) => void;
   onCopyContent: (contentId: number, title: string) => void;
-  onInstantPractice: (content: Content) => void;
+  onInstantPractice?: (content: Content) => void;
   onCreateContent: (programId: number, lessonId: number) => void;
 }) {
   const { t } = useTranslation();
@@ -590,7 +590,9 @@ function ExpandArea({
               onDeleteContent(contentsLessonId, content.id, content.title)
             }
             onCopy={() => onCopyContent(content.id, content.title)}
-            onInstantPractice={() => onInstantPractice(content)}
+            onInstantPractice={
+              onInstantPractice ? () => onInstantPractice(content) : undefined
+            }
           />
         ))}
         {displayContents.length === 0 && (
@@ -616,7 +618,7 @@ export interface ProgramFolderViewProps {
   onContentClick: (content: Content, lessonId: number) => void;
   onDeleteContent: (lessonId: number, contentId: number, title: string) => void;
   onCopyContent: (contentId: number, title: string) => void;
-  onInstantPractice: (content: Content) => void;
+  onInstantPractice?: (content: Content) => void;
   onCreateContent: (programId: number, lessonId: number) => void;
 }
 
@@ -633,6 +635,7 @@ export default function ProgramFolderView({
   onInstantPractice,
   onCreateContent,
 }: ProgramFolderViewProps) {
+  const { t } = useTranslation();
   const [selectedProgramId, setSelectedProgramId] = useState<number | null>(
     null,
   );
@@ -715,7 +718,9 @@ export default function ProgramFolderView({
       ))}
 
       {programs.length === 0 && (
-        <div className="text-center py-12 text-gray-400">尚無教材</div>
+        <div className="text-center py-12 text-gray-400">
+          {t("programFolderView.noPrograms", "尚無教材")}
+        </div>
       )}
     </div>
   );

@@ -640,7 +640,6 @@ export default function OrgMaterialsPage() {
                 setCopyContentInfo({ id: contentId, title });
                 setShowCopyDialog(true);
               }}
-              onInstantPractice={() => {}}
               onCreateContent={(programId, lessonId) =>
                 canManage && handleCreateContent(programId, lessonId)
               }

@@ -206,9 +206,12 @@ function ResourceMaterialsInner() {
     setSelectedId(material.id);
     setSelectedDetail(null);
     setLoadingDetail(true);
-    const detail = await getMaterialDetail(material.id);
-    if (detail) setSelectedDetail(detail);
-    setLoadingDetail(false);
+    try {
+      const detail = await getMaterialDetail(material.id);
+      if (detail) setSelectedDetail(detail);
+    } finally {
+      setLoadingDetail(false);
+    }
   };
 
   // List view: click card → fetch detail → show detail page
