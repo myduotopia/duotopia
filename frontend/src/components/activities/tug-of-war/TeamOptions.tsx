@@ -84,6 +84,22 @@ export function TeamOptions({
   const maxLen = Math.max(...options.map((o) => o.length));
   const useVertical = !showImages && maxLen > 7;
 
+  // Dynamic font size based on text length
+  const fontSize = maxLen <= 4
+    ? "text-2xl sm:text-3xl"
+    : maxLen <= 7
+      ? "text-xl sm:text-2xl"
+      : maxLen <= 12
+        ? "text-base sm:text-lg"
+        : "text-sm sm:text-base";
+  const handwriteSize = maxLen <= 4
+    ? "handwrite-font text-3xl sm:text-4xl"
+    : maxLen <= 7
+      ? "handwrite-font text-2xl sm:text-3xl"
+      : maxLen <= 12
+        ? "handwrite-font text-lg sm:text-xl"
+        : "handwrite-font text-base sm:text-lg";
+
   return (
     <div className="flex flex-col gap-2 relative w-full">
       {/* Options grid — 2x2 default, 1x4 when text is long */}
@@ -134,7 +150,7 @@ export function TeamOptions({
                 ) : null;
               })()}
             <span
-              className={`text-xl sm:text-2xl font-medium break-words whitespace-normal min-w-0 ${useHandwriteFont ? "handwrite-font text-2xl sm:text-3xl" : ""}`}
+              className={`${fontSize} font-medium break-words whitespace-normal min-w-0 ${useHandwriteFont ? handwriteSize : ""}`}
             >
               {option}
             </span>
