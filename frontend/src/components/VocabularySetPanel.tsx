@@ -462,9 +462,11 @@ const TTSModal = ({
         audioBlobRef.current = audioBlob;
         recordingDurationRef.current = currentDuration;
 
-        // 創建本地 URL 供預覽播放
-        const localUrl = URL.createObjectURL(audioBlob);
-        setRecordedAudio(localUrl);
+        // 創建本地 URL 供預覽播放（先釋放舊的 object URL）
+        setRecordedAudio((prev) => {
+          if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(audioBlob);
+        });
         toast.success(t("contentEditor.messages.recordingComplete"));
 
         stream.getTracks().forEach((track) => track.stop());
@@ -907,7 +909,10 @@ const TTSModal = ({
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          setRecordedAudio("");
+                          setRecordedAudio((prev) => {
+                            if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+                            return "";
+                          });
                           setSelectedSource(null);
                           audioBlobRef.current = null;
                           setRecordingDuration(0);
@@ -1024,7 +1029,7 @@ interface SortableRowInnerProps {
     index: number,
     lang: SentenceTranslationLanguage,
   ) => Promise<void>;
-  handleOpenAIGenerateModal: (index: number) => void;
+  handleOpenAIGenerateModal: (index: number | null) => void;
   rowsLength: number;
   imageUploading?: boolean;
   // 剪貼簿貼上圖片功能
@@ -1753,12 +1758,6 @@ const VocabularySetPanel = forwardRef<
   };
 
   // Load existing content data from database
-  useEffect(() => {
-    if (content?.id) {
-      loadContentData();
-    }
-  }, [content?.id]);
-
   const loadContentData = async () => {
     if (!content?.id) return;
 
@@ -1913,6 +1912,13 @@ const VocabularySetPanel = forwardRef<
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (content?.id) {
+      loadContentData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content?.id]);
 
   // Update parent when data changes
   useEffect(() => {
@@ -2260,7 +2266,7 @@ const VocabularySetPanel = forwardRef<
                 ) => ({
                   id: String(index + 1),
                   text: item.text || "",
-                  definition: item.translation || "",
+                  definition: item.definition || "",
                   audioUrl: item.audio_url || "",
                 }),
               );
