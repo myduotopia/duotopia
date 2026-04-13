@@ -272,11 +272,8 @@ export function TugOfWarGame({
     );
   }
 
-  // Calculate available height for game area (viewport - header ~40px - score ~36px - padding)
-  const gameAreaHeight = Math.max(viewport.height - 100, 200);
-
   return (
-    <div className="w-screen h-screen overflow-hidden px-2 py-2 flex flex-col gap-2">
+    <div className="w-full h-full overflow-hidden px-2 py-2 flex flex-col gap-2">
       {/* Portrait orientation overlay */}
       {isPortrait && (
         <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white">
@@ -379,11 +376,8 @@ export function TugOfWarGame({
         </div>
       </div>
 
-      {/* Game area: three-column layout, fills remaining viewport */}
-      <div
-        className="flex gap-3 items-stretch flex-1 min-h-0"
-        style={{ maxHeight: gameAreaHeight }}
-      >
+      {/* Game area: three-column layout, fills remaining parent space */}
+      <div className="flex gap-3 items-stretch flex-1 min-h-0">
         {/* Team A — left */}
         <div className="flex-1 p-2 rounded-xl border-2 border-red-500 bg-red-500/20 flex items-center overflow-y-auto">
           {currentQuestion ? (
