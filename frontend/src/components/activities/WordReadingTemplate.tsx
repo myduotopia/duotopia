@@ -221,7 +221,6 @@ export default function WordReadingTemplate({
     return { overallScore, dimensions, details };
   }, [assessmentResult, phonemeResult, t]);
 
-
   // Reset state when item changes (only triggered by currentItem.id change)
   useEffect(() => {
     // Revoke previous blob URL to prevent memory leak
@@ -262,7 +261,6 @@ export default function WordReadingTemplate({
         });
       }
     }
-
   }, [currentItem.id]); // Only run when item changes, not when existingAudioUrl/timeLimit changes
 
   // Sync assessment from background analysis completing after navigation
@@ -326,7 +324,6 @@ export default function WordReadingTemplate({
       }
     };
   }, [currentItem.id, currentItem.audio_url, playbackRate]);
-
 
   // Play example audio
   const handlePlayExample = () => {
@@ -1132,7 +1129,6 @@ export default function WordReadingTemplate({
           </div>
         </div>
       </div>
-
 
       {/* 🎯 Issue #461: 分析完成星星鼓勵動畫 overlay */}
       <ScoreOverlay
