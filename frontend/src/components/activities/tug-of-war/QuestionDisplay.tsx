@@ -102,7 +102,7 @@ export function QuestionDisplay({
   }, [question.vocabItem.id, showPrompt, question.hasAudio, startLoop, stopLoop]);
 
   // Fixed height for image mode to prevent container from jumping
-  const imageContainerClass = "text-center py-2 h-68 flex items-center justify-center";
+  const imageContainerClass = "text-center py-2 h-72 flex items-center justify-center";
   const defaultContainerClass = "text-center py-2 h-16 flex items-center justify-center";
 
   if (!showPrompt) {
