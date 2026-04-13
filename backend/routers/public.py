@@ -3,6 +3,8 @@ Public API endpoints for student login flow
 不需要認證的公開端點
 """
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import Response, HTMLResponse
 from sqlalchemy.orm import Session
@@ -14,6 +16,8 @@ from models import Teacher, Classroom, Student, ClassroomStudent
 from services.blog_service import BlogService
 import logging
 import os
+
+SITE_DOMAIN = "https://duotopia.co"
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +177,86 @@ def get_config():
     environment = os.getenv("ENVIRONMENT", "development")
 
     return ConfigResponse(enablePayment=enable_payment, environment=environment)
+
+
+# ============ SEO Endpoints ============
+
+
+@router.get("/robots.txt")
+def get_robots_txt():
+    """Generate robots.txt based on environment."""
+    environment = os.getenv("ENVIRONMENT", "development")
+    sitemap_url = f"{SITE_DOMAIN}/api/public/sitemap-index.xml"
+
+    if environment == "production":
+        content = (
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Disallow: /api/\n"
+            "Disallow: /teacher/\n"
+            "Disallow: /student/\n"
+            "Disallow: /admin/\n"
+            "Disallow: /organization/\n"
+            "Disallow: /debug\n"
+            f"\nSitemap: {sitemap_url}\n"
+        )
+    else:
+        content = "User-agent: *\nDisallow: /\n"
+
+    return Response(content=content, media_type="text/plain")
+
+
+@router.get("/sitemap-index.xml")
+def get_sitemap_index():
+    """Generate sitemap index referencing sub-sitemaps."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        "  <sitemap>\n"
+        f"    <loc>{SITE_DOMAIN}/api/public/sitemap-static.xml</loc>\n"
+        f"    <lastmod>{now}</lastmod>\n"
+        "  </sitemap>\n"
+        "  <sitemap>\n"
+        f"    <loc>{SITE_DOMAIN}/api/public/blog/sitemap.xml</loc>\n"
+        f"    <lastmod>{now}</lastmod>\n"
+        "  </sitemap>\n"
+        "</sitemapindex>"
+    )
+    return Response(content=xml, media_type="application/xml")
+
+
+@router.get("/sitemap-static.xml")
+def get_sitemap_static():
+    """Generate sitemap for static public pages."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    pages = [
+        ("/", "daily", "1.0"),
+        ("/pricing", "weekly", "0.8"),
+        ("/blog", "daily", "0.8"),
+        ("/terms", "monthly", "0.3"),
+        ("/privacy", "monthly", "0.3"),
+    ]
+
+    urls = []
+    for path, changefreq, priority in pages:
+        urls.append(
+            f"  <url>\n"
+            f"    <loc>{SITE_DOMAIN}{path}</loc>\n"
+            f"    <lastmod>{now}</lastmod>\n"
+            f"    <changefreq>{changefreq}</changefreq>\n"
+            f"    <priority>{priority}</priority>\n"
+            f"  </url>"
+        )
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "\n".join(urls)
+        + "\n</urlset>"
+    )
+    return Response(content=xml, media_type="application/xml")
 
 
 # ============ Blog Public Endpoints ============

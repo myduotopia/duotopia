@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://duotopia.co/api/public/sitemap-index.xml
