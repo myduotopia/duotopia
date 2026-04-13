@@ -607,7 +607,6 @@ function ResourceMaterialsInner() {
             className="fixed inset-0 bg-black/20 z-40"
             onClick={() => setViewerContent(null)}
           />
-          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
           <div
             className="fixed top-0 right-0 h-screen w-full max-w-lg bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300 select-none"
             onContextMenu={(e) => e.preventDefault()}
