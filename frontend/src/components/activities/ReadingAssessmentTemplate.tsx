@@ -387,7 +387,6 @@ export default function ReadingAssessmentTemplate({
           )}
         </div>
       </div>
-
     </>
   );
 }
