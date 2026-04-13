@@ -101,9 +101,13 @@ export function QuestionDisplay({
     };
   }, [question.vocabItem.id, showPrompt, question.hasAudio, startLoop, stopLoop]);
 
+  // Fixed height for image mode to prevent container from jumping
+  const imageContainerClass = "text-center py-2 h-68 flex items-center justify-center";
+  const defaultContainerClass = "text-center py-2 h-16 flex items-center justify-center";
+
   if (!showPrompt) {
     return (
-      <div className="text-center py-2 h-16 flex items-center justify-center">
+      <div className={question.hasImage ? imageContainerClass : defaultContainerClass}>
         <span className="text-4xl font-bold text-green-600 handwrite-font">
           {question.correctAnswer}
         </span>
@@ -114,7 +118,7 @@ export function QuestionDisplay({
   if (question.hasImage) {
     const imageUrl = question.vocabItem.image_url;
     return (
-      <div className="text-center py-2 h-68 flex items-center justify-center">
+      <div className={imageContainerClass}>
         {imageUrl ? (
           <img
             src={imageUrl}
