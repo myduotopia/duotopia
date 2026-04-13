@@ -1694,6 +1694,7 @@
       },
       "selectStudents": {
         "description": "選擇要接收作業的學生",
+        "multiDescription": "各班級學生選擇（切換分頁查看）",
         "selected": "{{selected}}/{{total}} 已選",
         "assignAll": "指派給全班所有學生",
         "totalStudents": "共 {{count}} 位學生",

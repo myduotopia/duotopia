@@ -1645,6 +1645,7 @@
       },
       "selectStudents": {
         "description": "Select students to receive the assignment",
+        "multiDescription": "Select students per classroom (switch tabs to view)",
         "selected": "{{selected}}/{{total}} selected",
         "assignAll": "Assign to all students in class",
         "totalStudents": "Total {{count}} students",

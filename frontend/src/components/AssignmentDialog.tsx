@@ -1229,50 +1229,6 @@ export function AssignmentDialog({
     return true;
   };
 
-  // 處理下一步按鈕點擊
-  const handleNextStep = () => {
-    // 從 step 1 移動到 step 2 時，根據內容類型設定預設練習模式（僅在尚未選擇時）
-    if (currentStep === 1 && !formData.practice_mode) {
-      const contentCategory = getCartContentTypeCategory();
-      if (contentCategory === "vocabulary_set") {
-        // 單字集預設為單字朗讀模式，不限時
-        setFormData((prev) => ({
-          ...prev,
-          practice_mode: "word_reading",
-          time_limit_per_question: 0, // 單字朗讀預設不限時
-        }));
-      } else {
-        // 例句集預設為例句朗讀模式
-        setFormData((prev) => ({
-          ...prev,
-          practice_mode: "reading",
-        }));
-      }
-    }
-
-    // 從 step 2 移動到 step 3 時，檢查驗證
-    if (currentStep === 2) {
-      if (!checkAudioRequirement()) {
-        return;
-      }
-    }
-    let nextStep = currentStep + 1;
-    // 從教材頁面進入且有預選內容時，跳過 step 2（選教材）
-    if (hasPreSelectedContents && needsClassroomStep && nextStep === 2) {
-      nextStep = 3;
-    }
-    setCurrentStep(nextStep);
-  };
-
-  // 處理上一步（需跳過被隱藏的步驟）
-  const handlePrevStep = () => {
-    let prevStep = currentStep - 1;
-    if (hasPreSelectedContents && needsClassroomStep && prevStep === 2) {
-      prevStep = 1;
-    }
-    setCurrentStep(prevStep);
-  };
-
   // 動態步驟列表
   const steps = [
     ...(needsClassroomStep
@@ -1313,8 +1269,51 @@ export function AssignmentDialog({
       icon: FileText,
     },
   ];
+  const stepNumbers = steps.map((s) => s.number);
   const lastStepNumber = steps[steps.length - 1].number;
   const firstStepNumber = steps[0].number;
+
+  // 處理下一步按鈕點擊
+  const handleNextStep = () => {
+    // 從 step 1 移動到 step 2 時，根據內容類型設定預設練習模式（僅在尚未選擇時）
+    if (currentStep === 1 && !formData.practice_mode) {
+      const contentCategory = getCartContentTypeCategory();
+      if (contentCategory === "vocabulary_set") {
+        // 單字集預設為單字朗讀模式，不限時
+        setFormData((prev) => ({
+          ...prev,
+          practice_mode: "word_reading",
+          time_limit_per_question: 0, // 單字朗讀預設不限時
+        }));
+      } else {
+        // 例句集預設為例句朗讀模式
+        setFormData((prev) => ({
+          ...prev,
+          practice_mode: "reading",
+        }));
+      }
+    }
+
+    // 從 step 2 移動到 step 3 時，檢查驗證
+    if (currentStep === 2) {
+      if (!checkAudioRequirement()) {
+        return;
+      }
+    }
+    // 找到 steps 中下一個有效步驟
+    const currentIndex = stepNumbers.indexOf(currentStep);
+    if (currentIndex < stepNumbers.length - 1) {
+      setCurrentStep(stepNumbers[currentIndex + 1]);
+    }
+  };
+
+  // 處理上一步（跳過被隱藏的步驟）
+  const handlePrevStep = () => {
+    const currentIndex = stepNumbers.indexOf(currentStep);
+    if (currentIndex > 0) {
+      setCurrentStep(stepNumbers[currentIndex - 1]);
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={handleClose}>
