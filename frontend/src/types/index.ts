@@ -59,6 +59,7 @@ export interface ContentItem {
   translation?: string;
   definition?: string;
   audio_url?: string;
+  image_url?: string;
   question?: string;
   answer?: string;
   options?: string[];
@@ -113,6 +114,7 @@ export interface Program {
   organization_id?: string; // UUID
   school_id?: string; // UUID
   lessons?: Lesson[];
+  contents?: Content[];
   classroom_name?: string;
   is_duplicate?: boolean;
   tags?: string[];

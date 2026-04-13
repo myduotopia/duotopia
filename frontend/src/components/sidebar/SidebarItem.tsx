@@ -36,9 +36,9 @@ export const SidebarItem = ({
     <Link to={item.path} className="block" onClick={onNavigate}>
       <Button
         variant={isActive ? "default" : "ghost"}
-        className={`w-full justify-start h-10 min-h-10 ${isCollapsed ? "px-3" : "px-4"}`}
+        className={`w-full h-10 min-h-10 ${isCollapsed ? "justify-center px-0" : "justify-start px-4"}`}
       >
-        <Icon className="h-4 w-4" />
+        <Icon className="h-4 w-4 flex-shrink-0" />
         {!isCollapsed && (
           <>
             <span className="ml-2 text-sm flex-1 text-left">{item.label}</span>

@@ -142,6 +142,7 @@ async def get_teacher_programs(
                                             "translation": item.translation,
                                             "audio_url": item.audio_url,
                                             "order_index": item.order_index,
+                                            "image_url": item.image_url,
                                         }
                                     )
 

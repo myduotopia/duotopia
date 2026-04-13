@@ -44,6 +44,7 @@ export interface ResourceMaterialDetail {
         order_index: number;
         text: string;
         translation: string | null;
+        image_url?: string | null;
       }[];
     }[];
   }[];

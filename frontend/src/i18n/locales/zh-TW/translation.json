@@ -24,6 +24,7 @@
     "upload": "上傳",
     "preview": "預覽",
     "copy": "複製",
+    "move": "移動",
     "paste": "貼上",
     "cut": "剪下",
     "yes": "是",
@@ -3208,6 +3209,19 @@
       "noStudents": "尚未建立學生"
     }
   },
+  "programFolderView": {
+    "units": "個單元",
+    "contents": "內容",
+    "questions": "題",
+    "noDescription": "尚無描述",
+    "lessonsSection": "單元",
+    "contentsSection": "內容",
+    "addLesson": "新增單元",
+    "addContent": "新增內容",
+    "noContents": "此單元尚無內容",
+    "noProgramContents": "此教材尚無內容",
+    "noLessons": "此教材尚無單元"
+  },
   "teacherTemplatePrograms": {
     "title": "我的教材",
     "buttons": {
@@ -3232,6 +3246,11 @@
     "dialogs": {
       "addReadingTitle": "新增段落集",
       "editContentTitle": "編輯內容"
+    },
+    "toolbar": {
+      "searchPlaceholder": "搜尋我的教材...",
+      "treeView": "條列式",
+      "folderView": "資料夾式"
     }
   },
   "teacherSubscription": {
@@ -4715,6 +4734,7 @@
     "title": "資源教材包",
     "subtitle": "瀏覽並複製公開的教材資源到你的教材庫",
     "subtitleOrg": "瀏覽並複製教材資源到組織教材庫",
+    "searchPlaceholder": "搜尋公版教材...",
     "browseAndCopy": "瀏覽與複製教材",
     "loading": "載入中...",
     "empty": {

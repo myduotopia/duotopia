@@ -19,8 +19,11 @@ import VocabularySetPanel, {
 import ContentCopyDialog from "@/components/ContentCopyDialog";
 import { ProgramVisibilitySelector } from "@/components/ProgramVisibilitySelector";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
+import ProgramFolderView from "@/components/shared/ProgramFolderView";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import MaterialsToolbar from "@/components/shared/MaterialsToolbar";
+import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import { apiClient } from "@/lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useResourceMaterialsAPI } from "@/hooks/useResourceMaterialsAPI";
@@ -52,6 +55,10 @@ function TeacherTemplateProgramsInner() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [isReordering, setIsReordering] = useState(false);
+
+  // View mode: 'tree' (original accordion) or 'folder' (folder-style grid)
+  const [viewMode, setViewMode] = useState<ViewMode>("folder");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Instant practice states
   const [showInstantPractice, setShowInstantPractice] = useState(false);
@@ -525,6 +532,21 @@ function TeacherTemplateProgramsInner() {
     }
   };
 
+  // Filter programs by search query
+  const filteredPrograms = useMemo(() => {
+    if (!searchQuery.trim()) return programs;
+    const q = searchQuery.toLowerCase();
+    return programs.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.lessons?.some(
+          (l) =>
+            l.name.toLowerCase().includes(q) ||
+            l.contents?.some((c) => c.title?.toLowerCase().includes(q)),
+        ),
+    );
+  }, [programs, searchQuery]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -537,87 +559,141 @@ function TeacherTemplateProgramsInner() {
   }
 
   return (
-    <div className="relative h-full bg-gray-50">
+    <div
+      className="relative h-full overflow-y-auto"
+      style={{ scrollbarGutter: "stable" }}
+    >
       <div
-        className={`p-6 space-y-4 transition-all duration-300 ${
+        className={`p-5 space-y-4 transition-all duration-300 ${
           showReadingEditor && editorContentId !== null
             ? "pr-[calc(50%+2rem)]"
             : ""
         }`}
       >
-        <RecursiveTreeAccordion
-          data={programs}
-          config={treeConfig}
+        <MaterialsToolbar
           title={t("teacherTemplatePrograms.title")}
-          showCreateButton
-          createButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
-          onCreateClick={handleCreateProgram}
-          onEdit={(item, level, parentId) => {
-            if (level === 0) handleEditProgram(item.id);
-            else if (level === 1) handleEditLesson(parentId as number, item.id);
-          }}
-          onDelete={(item, level, parentId) => {
-            if (level === 0) handleDeleteProgram(item.id);
-            else if (level === 1)
-              handleDeleteLesson(parentId as number, item.id);
-            else if (level === 2)
-              handleDeleteContent(parentId as number, item.id, item.title);
-          }}
-          onClick={(item, level, parentId) => {
-            if (level === 2) {
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder={t(
+            "teacherTemplatePrograms.toolbar.searchPlaceholder",
+            "搜尋我的教材...",
+          )}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onAdd={handleCreateProgram}
+          addButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
+        />
+
+        {/* ── Content area ── */}
+        {viewMode === "tree" ? (
+          <RecursiveTreeAccordion
+            data={filteredPrograms}
+            config={treeConfig}
+            showCreateButton={false}
+            onCreateClick={handleCreateProgram}
+            onEdit={(item, level, parentId) => {
+              if (level === 0) handleEditProgram(item.id);
+              else if (level === 1)
+                handleEditLesson(parentId as number, item.id);
+            }}
+            onDelete={(item, level, parentId) => {
+              if (level === 0) handleDeleteProgram(item.id);
+              else if (level === 1)
+                handleDeleteLesson(parentId as number, item.id);
+              else if (level === 2)
+                handleDeleteContent(parentId as number, item.id, item.title);
+            }}
+            onClick={(item, level, parentId) => {
+              if (level === 2) {
+                const program = programs.find((p) =>
+                  p.lessons?.some((l) => l.id === parentId),
+                );
+                const lesson = program?.lessons?.find((l) => l.id === parentId);
+                handleContentClick({
+                  ...item,
+                  lesson_id: parentId as number,
+                  lessonName: lesson?.name,
+                  programName: program?.name,
+                });
+              }
+            }}
+            onCreate={(level, parentId) => {
+              if (level === 1) {
+                // Creating lesson inside program
+                handleCreateLesson(parentId as number);
+              } else if (level === 2) {
+                // Creating content inside lesson - need to find program
+                const program = programs.find((p) =>
+                  p.lessons?.some((l) => l.id === parentId),
+                );
+                if (program) {
+                  handleCreateContent(program.id, parentId as number);
+                }
+              }
+            }}
+            onReorder={(fromIndex, toIndex, level, parentId) => {
+              if (level === 0) handleReorderPrograms(fromIndex, toIndex);
+              else if (level === 1)
+                handleReorderLessons(parentId as number, fromIndex, toIndex);
+              else if (level === 2)
+                handleReorderContents(parentId as number, fromIndex, toIndex);
+            }}
+            onInstantPractice={(item, level) => {
+              if (level === 2) {
+                setInstantPracticeContent({
+                  id: item.id as number,
+                  title: (item.title || item.name) as string,
+                  type: item.type as string | undefined,
+                });
+                setShowInstantPractice(true);
+              }
+            }}
+            onCopy={(item, level) => {
+              if (level === 2) {
+                setCopyContentInfo({
+                  id: item.id as number,
+                  title: (item.title || item.name) as string,
+                });
+                setShowCopyDialog(true);
+              }
+            }}
+          />
+        ) : (
+          <ProgramFolderView
+            programs={filteredPrograms}
+            onEditProgram={handleEditProgram}
+            onDeleteProgram={handleDeleteProgram}
+            onEditLesson={handleEditLesson}
+            onDeleteLesson={handleDeleteLesson}
+            onCreateLesson={handleCreateLesson}
+            onContentClick={(content, lessonId) => {
               const program = programs.find((p) =>
-                p.lessons?.some((l) => l.id === parentId),
+                p.lessons?.some((l) => l.id === lessonId),
               );
-              const lesson = program?.lessons?.find((l) => l.id === parentId);
+              const lesson = program?.lessons?.find((l) => l.id === lessonId);
               handleContentClick({
-                ...item,
-                lesson_id: parentId as number,
+                ...content,
+                lesson_id: lessonId,
                 lessonName: lesson?.name,
                 programName: program?.name,
               });
-            }
-          }}
-          onCreate={(level, parentId) => {
-            if (level === 1) {
-              // Creating lesson inside program
-              handleCreateLesson(parentId as number);
-            } else if (level === 2) {
-              // Creating content inside lesson - need to find program
-              const program = programs.find((p) =>
-                p.lessons?.some((l) => l.id === parentId),
-              );
-              if (program) {
-                handleCreateContent(program.id, parentId as number);
-              }
-            }
-          }}
-          onReorder={(fromIndex, toIndex, level, parentId) => {
-            if (level === 0) handleReorderPrograms(fromIndex, toIndex);
-            else if (level === 1)
-              handleReorderLessons(parentId as number, fromIndex, toIndex);
-            else if (level === 2)
-              handleReorderContents(parentId as number, fromIndex, toIndex);
-          }}
-          onInstantPractice={(item, level) => {
-            if (level === 2) {
+            }}
+            onDeleteContent={handleDeleteContent}
+            onCopyContent={(contentId, title) => {
+              setCopyContentInfo({ id: contentId, title });
+              setShowCopyDialog(true);
+            }}
+            onInstantPractice={(content) => {
               setInstantPracticeContent({
-                id: item.id as number,
-                title: (item.title || item.name) as string,
-                type: item.type as string | undefined,
+                id: content.id,
+                title: content.title,
+                type: content.type,
               });
               setShowInstantPractice(true);
-            }
-          }}
-          onCopy={(item, level) => {
-            if (level === 2) {
-              setCopyContentInfo({
-                id: item.id as number,
-                title: (item.title || item.name) as string,
-              });
-              setShowCopyDialog(true);
-            }
-          }}
-        />
+            }}
+            onCreateContent={handleCreateContent}
+          />
+        )}
       </div>
 
       {/* Reading Assessment Modal (新增模式) */}

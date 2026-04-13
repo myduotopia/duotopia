@@ -24,6 +24,7 @@
     "upload": "Upload",
     "preview": "Preview",
     "copy": "Copy",
+    "move": "Move",
     "paste": "Paste",
     "cut": "Cut",
     "yes": "Yes",
@@ -3203,6 +3204,19 @@
       "noStudents": "No students yet"
     }
   },
+  "programFolderView": {
+    "units": "units",
+    "contents": "contents",
+    "questions": "items",
+    "noDescription": "No description",
+    "lessonsSection": "Lessons",
+    "contentsSection": "Contents",
+    "addLesson": "Add Lesson",
+    "addContent": "Add Content",
+    "noContents": "No contents in this lesson",
+    "noProgramContents": "No contents in this program",
+    "noLessons": "No lessons in this program"
+  },
   "teacherTemplatePrograms": {
     "title": "My Teaching Materials",
     "buttons": {
@@ -3227,6 +3241,11 @@
     "dialogs": {
       "addReadingTitle": "Add Paragraph Set",
       "editContentTitle": "Edit Content"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search my materials...",
+      "treeView": "List View",
+      "folderView": "Folder View"
     }
   },
   "teacherSubscription": {
@@ -4696,6 +4715,7 @@
     "title": "Resource Materials",
     "subtitle": "Browse and copy public teaching resources to your material library",
     "subtitleOrg": "Browse and copy teaching resources to your organization's material library",
+    "searchPlaceholder": "Search resource materials...",
     "browseAndCopy": "Browse & Copy Materials",
     "loading": "Loading...",
     "empty": {
