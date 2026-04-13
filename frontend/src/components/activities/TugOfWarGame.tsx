@@ -67,7 +67,8 @@ export function TugOfWarGame({
     width: typeof window !== "undefined" ? window.innerWidth : 1024,
     height: typeof window !== "undefined" ? window.innerHeight : 768,
   });
-  const isPortrait = viewport.height > viewport.width;
+  // Show rotate prompt when portrait OR viewport too narrow for three-column layout
+  const isPortrait = viewport.height > viewport.width || viewport.width < 768;
 
   // Viewport size tracking
   useEffect(() => {
@@ -379,7 +380,7 @@ export function TugOfWarGame({
       {/* Game area: three-column layout, fills remaining parent space */}
       <div className="flex gap-3 items-stretch flex-1 min-h-0">
         {/* Team A — left */}
-        <div className="flex-1 p-2 rounded-xl border-2 border-red-500 bg-red-500/20 flex items-center overflow-y-auto">
+        <div className="flex-1 min-w-[180px] p-2 rounded-xl border-2 border-red-500 bg-red-500/20 flex items-center overflow-y-auto">
           {currentQuestion ? (
             <TeamOptions
               team="a"
@@ -453,7 +454,7 @@ export function TugOfWarGame({
         </div>
 
         {/* Team B — right */}
-        <div className="flex-1 p-2 rounded-xl border-2 border-blue-500 bg-blue-500/20 flex items-center overflow-y-auto">
+        <div className="flex-1 min-w-[180px] p-2 rounded-xl border-2 border-blue-500 bg-blue-500/20 flex items-center overflow-y-auto">
           {currentQuestion ? (
             <TeamOptions
               team="b"
