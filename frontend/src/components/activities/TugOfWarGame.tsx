@@ -428,29 +428,31 @@ export function TugOfWarGame({
         </div>
 
         {/* Canvas center — question + animation */}
-        <div className="w-[350px] flex-shrink-0 self-stretch relative rounded-xl overflow-hidden bg-sky-100 flex flex-col justify-center">
-          <div ref={phaserContainerRef} className="w-full" />
-          {/* Replay icon */}
-          {winner && (
-            <button
-              onClick={handleRestart}
-              className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 p-2 rounded-full hover:scale-110 transition-transform cursor-pointer"
-            >
-              <RotateCcw
-                className="h-10 w-10 text-white drop-shadow-md"
-                strokeWidth={3}
-              />
-            </button>
-          )}
-          {/* Question overlay — top of canvas */}
+        <div className="w-[350px] flex-shrink-0 self-stretch rounded-xl overflow-hidden bg-sky-100 flex flex-col items-center">
+          {/* Question — normal flow, pushes canvas down */}
           {currentQuestion && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+            <div className="py-2">
               <QuestionDisplay
                 question={currentQuestion}
                 showPrompt={!isAnswered}
               />
             </div>
           )}
+          {/* Phaser canvas + replay */}
+          <div className="relative w-full flex-1 flex items-center justify-center">
+            <div ref={phaserContainerRef} className="w-full" />
+            {winner && (
+              <button
+                onClick={handleRestart}
+                className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 p-2 rounded-full hover:scale-110 transition-transform cursor-pointer"
+              >
+                <RotateCcw
+                  className="h-10 w-10 text-white drop-shadow-md"
+                  strokeWidth={3}
+                />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Team B — right */}
