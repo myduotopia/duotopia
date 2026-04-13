@@ -212,7 +212,7 @@ export function TugOfWarGame({
         scene: [TugOfWarScene],
         scale: {
           mode: Phaser.Scale.FIT,
-          autoCenter: Phaser.Scale.CENTER_HORIZONTALLY,
+          autoCenter: Phaser.Scale.CENTER_BOTH,
         },
       });
       phaserGameRef.current = game;
