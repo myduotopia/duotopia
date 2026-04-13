@@ -376,9 +376,9 @@ export function TugOfWarGame({
 
       {/* Game area: three-column layout */}
       <div className="flex gap-3 items-stretch">
-        {/* Team A options — left */}
-        {currentQuestion && (
-          <div className="flex-1 p-2 rounded-xl border-2 border-red-500 bg-red-500/20 flex items-center">
+        {/* Team A — left */}
+        <div className="flex-1 p-2 rounded-xl border-2 border-red-500 bg-red-500/20 flex items-center">
+          {currentQuestion ? (
             <TeamOptions
               team="a"
               options={currentQuestion.optionsA}
@@ -395,8 +395,34 @@ export function TugOfWarGame({
                 gameState.questionMode === "image_to_english"
               }
             />
-          </div>
-        )}
+          ) : winner && answerHistory.length > 0 ? (
+            <div className="grid grid-cols-1 gap-2 w-full">
+              {answerHistory
+                .filter((r) => r.team === "a")
+                .filter(
+                  (r, i, arr) =>
+                    arr.findIndex(
+                      (x) =>
+                        x.question.vocabItem.id === r.question.vocabItem.id,
+                    ) === i,
+                )
+                .map((r, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm"
+                  >
+                    <span className="font-bold text-red-600">
+                      {r.question.vocabItem.text}
+                    </span>
+                    <span className="text-gray-400">-</span>
+                    <span className="text-gray-600">
+                      {r.question.vocabItem.translation}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          ) : null}
+        </div>
 
         {/* Canvas center — question + animation */}
         <div className="flex-1 relative rounded-xl overflow-hidden bg-sky-100">
@@ -424,9 +450,9 @@ export function TugOfWarGame({
           )}
         </div>
 
-        {/* Team B options — right */}
-        {currentQuestion && (
-          <div className="flex-1 p-2 rounded-xl border-2 border-blue-500 bg-blue-500/20 flex items-center">
+        {/* Team B — right */}
+        <div className="flex-1 p-2 rounded-xl border-2 border-blue-500 bg-blue-500/20 flex items-center">
+          {currentQuestion ? (
             <TeamOptions
               team="b"
               options={currentQuestion.optionsB}
@@ -443,44 +469,8 @@ export function TugOfWarGame({
                 gameState.questionMode === "image_to_english"
               }
             />
-          </div>
-        )}
-      </div>
-
-      {/* Answer history (after game ends) */}
-      {winner && answerHistory.length > 0 && (
-        <div className="grid grid-cols-2 gap-4">
-          {/* Team A answers */}
-          <div className="p-3 rounded-xl border-2 border-red-500 bg-red-500/20">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {answerHistory
-                .filter((r) => r.team === "a")
-                .filter(
-                  (r, i, arr) =>
-                    arr.findIndex(
-                      (x) =>
-                        x.question.vocabItem.id === r.question.vocabItem.id,
-                    ) === i,
-                )
-                .map((r, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm"
-                  >
-                    <span className="font-bold text-red-600">
-                      {r.question.vocabItem.text}
-                    </span>
-                    <span className="text-gray-400">-</span>
-                    <span className="text-gray-600">
-                      {r.question.vocabItem.translation}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          </div>
-          {/* Team B answers */}
-          <div className="p-3 rounded-xl border-2 border-blue-500 bg-blue-500/20">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          ) : winner && answerHistory.length > 0 ? (
+            <div className="grid grid-cols-1 gap-2 w-full">
               {answerHistory
                 .filter((r) => r.team === "b")
                 .filter(
@@ -505,9 +495,9 @@ export function TugOfWarGame({
                   </div>
                 ))}
             </div>
-          </div>
+          ) : null}
         </div>
-      )}
+      </div>
     </div>
   );
 }
