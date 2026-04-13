@@ -205,7 +205,7 @@ export default function ReadingAssessmentTemplate({
         {/* Right Side - Content Area */}
         <div className="flex-1 space-y-6">
           {/* Time Limit Display (static) */}
-          {!readOnly && timeLimit > 0 && (
+          {!readOnly && timeLimit > 0 && !audioUrl && (
             <div className="flex justify-end">
               <div className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
                 <Clock className="h-4 w-4" />
@@ -242,13 +242,7 @@ export default function ReadingAssessmentTemplate({
           <AudioRecorder
             existingAudioUrl={audioUrl}
             onRecordingComplete={(blob, url) => {
-              setAudioUrl(url);
-              onRecordingComplete?.(blob, url);
-            }}
-            onRecordingStart={() => {
-              recordingStartTimeRef.current = Date.now();
-            }}
-            onRecordingStop={() => {
+              // Check recording duration against time limit
               if (timeLimit > 0 && recordingStartTimeRef.current > 0) {
                 const elapsedSeconds =
                   (Date.now() - recordingStartTimeRef.current) / 1000;
@@ -260,9 +254,15 @@ export default function ReadingAssessmentTemplate({
                     }) ||
                       `錄音時間 ${Math.round(elapsedSeconds)} 秒超過限制 ${timeLimit} 秒，請重新錄音`,
                   );
-                  setAudioUrl(undefined);
+                  URL.revokeObjectURL(url);
+                  return; // Don't set audioUrl — discard over-limit recording
                 }
               }
+              setAudioUrl(url);
+              onRecordingComplete?.(blob, url);
+            }}
+            onRecordingStart={() => {
+              recordingStartTimeRef.current = Date.now();
             }}
             readOnly={readOnly}
             variant="default"

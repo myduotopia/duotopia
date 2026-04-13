@@ -723,7 +723,7 @@ export default function WordReadingTemplate({
                 </select>
 
                 {/* Time Limit Display (static) */}
-                {!readOnly && timeLimit > 0 && (
+                {!readOnly && timeLimit > 0 && !audioUrl && (
                   <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
                     <Clock className="h-3 w-3" />
                     <span>
