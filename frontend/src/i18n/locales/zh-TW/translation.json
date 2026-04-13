@@ -1756,7 +1756,8 @@
         "quotaLowDesc": "作業已建立，但學生目前無法使用 AI 分析功能，僅能上傳音檔練習"
       },
       "success": {
-        "created": "成功創建作業，已指派給 {{count}} 位學生"
+        "created": "成功創建作業，已指派給 {{count}} 位學生",
+        "multiCreated": "成功建立 {{classroomCount}} 個班級的作業，共 {{studentCount}} 位學生"
       },
       "contentTypes": {
         "reading_assessment": "段落集",

@@ -1707,7 +1707,8 @@
         "quotaLowDesc": "Assignment created, but students cannot use AI analysis at this time. They can still upload audio for practice."
       },
       "success": {
-        "created": "Assignment created successfully, assigned to {{count}} students"
+        "created": "Assignment created successfully, assigned to {{count}} students",
+        "multiCreated": "Created assignments for {{classroomCount}} classrooms, {{studentCount}} students total"
       },
       "contentTypes": {
         "reading_assessment": "Paragraph Set",
