@@ -1179,7 +1179,11 @@ export function AssignmentDialog({
   const canProceed = () => {
     switch (currentStep) {
       case 0:
-        return selectedClassrooms.length > 0; // 至少選一個班級
+        // 至少選一個班級且該班至少選一個學生
+        return (
+          selectedClassrooms.length > 0 &&
+          selectedClassrooms.some((c) => c.selectedStudentIds.length > 0)
+        );
       case 1:
         return !!formData.practice_mode;
       case 2:
@@ -1294,11 +1298,15 @@ export function AssignmentDialog({
             icon: BookOpen,
           },
         ]),
-    {
-      number: 3,
-      title: t("dialogs.assignmentDialog.steps.selectStudents"),
-      icon: Users,
-    },
+    ...(!needsClassroomStep
+      ? [
+          {
+            number: 3,
+            title: t("dialogs.assignmentDialog.steps.selectStudents"),
+            icon: Users,
+          },
+        ]
+      : []),
     {
       number: 4,
       title: t("dialogs.assignmentDialog.steps.details"),
@@ -2428,23 +2436,29 @@ export function AssignmentDialog({
                       )}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1">
+                    <div className="grid grid-cols-1 gap-2 p-1">
                       {classroomOptions.map((classroom) => {
-                        const isSelected = selectedClassrooms.some(
+                        const selected = selectedClassrooms.find(
                           (c) => c.id === classroom.id,
                         );
+                        const isSelected = !!selected;
                         return (
                           <Card
                             key={classroom.id}
-                            onClick={() => toggleClassroomSelection(classroom)}
                             className={cn(
-                              "p-3 cursor-pointer transition-all",
+                              "transition-all overflow-hidden",
                               isSelected
                                 ? "bg-blue-50 border-blue-300 shadow-sm"
                                 : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm",
                             )}
                           >
-                            <div className="flex items-center gap-3">
+                            {/* Classroom header */}
+                            <div
+                              onClick={() =>
+                                toggleClassroomSelection(classroom)
+                              }
+                              className="p-3 cursor-pointer flex items-center gap-3"
+                            >
                               <Checkbox
                                 checked={isSelected}
                                 className="data-[state=checked]:bg-blue-600 h-5 w-5 pointer-events-none"
@@ -2462,10 +2476,92 @@ export function AssignmentDialog({
                                   )}
                                 </p>
                               </div>
-                              {isSelected && (
-                                <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />
+                              {isSelected && selected && (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] px-1.5 bg-blue-100 text-blue-700"
+                                >
+                                  {selected.selectedStudentIds.length}/
+                                  {selected.students.length}
+                                </Badge>
                               )}
                             </div>
+
+                            {/* Expanded student list */}
+                            {isSelected && selected && (
+                              <div className="border-t border-blue-200 px-3 pb-3">
+                                {/* Select all toggle */}
+                                <div
+                                  onClick={() =>
+                                    toggleClassroomAllStudents(classroom.id)
+                                  }
+                                  className="flex items-center gap-2 py-2 cursor-pointer"
+                                >
+                                  <Checkbox
+                                    checked={selected.assignToAll}
+                                    className="data-[state=checked]:bg-blue-600 h-4 w-4"
+                                  />
+                                  <span className="text-xs font-medium text-blue-800">
+                                    {t(
+                                      "dialogs.assignmentDialog.selectStudents.assignAll",
+                                    )}
+                                  </span>
+                                </div>
+
+                                {/* Student grid */}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                                  {[...selected.students]
+                                    .sort((a, b) => {
+                                      if (
+                                        !a.student_number &&
+                                        !b.student_number
+                                      )
+                                        return 0;
+                                      if (!a.student_number) return 1;
+                                      if (!b.student_number) return -1;
+                                      return a.student_number.localeCompare(
+                                        b.student_number,
+                                        undefined,
+                                        { numeric: true },
+                                      );
+                                    })
+                                    .map((student) => (
+                                      <div
+                                        key={student.id}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleClassroomStudent(
+                                            classroom.id,
+                                            student.id,
+                                          );
+                                        }}
+                                        className={cn(
+                                          "p-1.5 rounded border text-left cursor-pointer transition-all text-xs",
+                                          selected.selectedStudentIds.includes(
+                                            student.id,
+                                          )
+                                            ? "bg-blue-100 border-blue-300"
+                                            : "bg-white border-gray-200 hover:border-gray-300",
+                                        )}
+                                      >
+                                        <div className="flex items-center gap-1.5">
+                                          <Checkbox
+                                            checked={selected.selectedStudentIds.includes(
+                                              student.id,
+                                            )}
+                                            className="data-[state=checked]:bg-blue-600 h-3.5 w-3.5 pointer-events-none"
+                                          />
+                                          <span className="truncate">
+                                            {student.student_number
+                                              ? `${student.student_number}.${student.name}`
+                                              : student.name}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
                           </Card>
                         );
                       })}

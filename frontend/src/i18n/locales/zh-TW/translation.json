@@ -1643,7 +1643,7 @@
     "assignmentDialog": {
       "title": "指派新作業",
       "steps": {
-        "selectClassroom": "選擇班級",
+        "selectClassroom": "選擇班級與學生",
         "selectContent": "選擇內容",
         "practiceMode": "練習模式",
         "selectStudents": "選擇學生",
