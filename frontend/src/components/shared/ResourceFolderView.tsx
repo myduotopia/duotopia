@@ -210,7 +210,9 @@ function ContentPreviewCard({
                     {item.translation && (
                       <>
                         <span className="mx-1 text-gray-300">·</span>
-                        <span className="text-gray-400">{item.translation}</span>
+                        <span className="text-gray-400">
+                          {item.translation}
+                        </span>
                       </>
                     )}
                   </div>
@@ -495,7 +497,9 @@ export default function ResourceFolderView({
       ))}
 
       {materials.length === 0 && (
-        <div className="text-center py-12 text-gray-400">{t("resourceFolderView.empty", "尚無公版教材")}</div>
+        <div className="text-center py-12 text-gray-400">
+          {t("resourceFolderView.empty", "尚無公版教材")}
+        </div>
       )}
 
       <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
