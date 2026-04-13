@@ -442,10 +442,7 @@ export function AssignmentDialog({
     } else {
       // 新增選擇，載入學生
       try {
-        const schoolId = classroom.school_id || effectiveSchoolId;
-        if (!schoolId) return;
-        const students = (await apiClient.getClassroomStudents(
-          schoolId,
+        const students = (await apiClient.getTeacherClassroomStudents(
           classroom.id,
         )) as Student[];
         setSelectedClassrooms((prev) => [
@@ -453,7 +450,7 @@ export function AssignmentDialog({
           {
             id: classroom.id,
             name: classroom.name,
-            school_id: schoolId,
+            school_id: classroom.school_id || effectiveSchoolId || "",
             students: students || [],
             selectedStudentIds: (students || []).map((s) => s.id),
             assignToAll: true,
