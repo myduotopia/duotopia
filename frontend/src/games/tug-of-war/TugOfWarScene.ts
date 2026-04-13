@@ -62,7 +62,7 @@ export class TugOfWarScene extends Phaser.Scene {
     // Last stickman at 200 + 2*50 = 300px from center
     // Canvas half width = 500px, so max move = 500 - 300 - 20 = 180px
     // But also must not cross center: max move < 200 - 25 = 175px
-    this.maxOffset = 120;
+    this.maxOffset = 60;
 
     // Background
     this.add.rectangle(width / 2, height / 2, width, height, SKY_COLOR);
@@ -106,13 +106,13 @@ export class TugOfWarScene extends Phaser.Scene {
 
     // 1) Create stickmen (this creates both backGraphics and frontGraphics)
     for (let i = 0; i < 3; i++) {
-      const sx = this.centerX - 200 - i * 50;
+      const sx = this.centerX - 80 - i * 30;
       this.stickmenA.push(
         new Stickman(this, sx, this.groundY, TEAM_A_COLOR, false),
       );
     }
     for (let i = 0; i < 3; i++) {
-      const sx = this.centerX + 200 + i * 50;
+      const sx = this.centerX + 80 + i * 30;
       this.stickmenB.push(
         new Stickman(this, sx, this.groundY, TEAM_B_COLOR, true),
       );
@@ -120,7 +120,7 @@ export class TugOfWarScene extends Phaser.Scene {
 
     // 2) Rope — created after stickmen's backGraphics, before frontGraphics are brought up
     const ropeY = this.groundY - 48;
-    this.rope = new Rope(this, this.centerX, ropeY, 540, this.groundY);
+    this.rope = new Rope(this, this.centerX, ropeY, 300, this.groundY);
 
     // 3) Bring all front hands to top (above rope)
     [...this.stickmenA, ...this.stickmenB].forEach((s) => {
@@ -197,10 +197,10 @@ export class TugOfWarScene extends Phaser.Scene {
       // Get current positions
       const ropeOffset = this.rope.offset;
       const ax = this.stickmenA.map(
-        (_, i) => this.centerX - 200 - i * 50 + ropeOffset,
+        (_, i) => this.centerX - 80 - i * 30 + ropeOffset,
       );
       const bx = this.stickmenB.map(
-        (_, i) => this.centerX + 200 + i * 50 + ropeOffset,
+        (_, i) => this.centerX + 80 + i * 30 + ropeOffset,
       );
 
       this.victoryAnim.start(winner, { ax, bx, groundY: this.groundY });
@@ -227,11 +227,11 @@ export class TugOfWarScene extends Phaser.Scene {
     // Move stickmen with rope offset
     const ropeOffset = this.rope.offset;
     this.stickmenA.forEach((s, i) => {
-      s.setX(this.centerX - 200 - i * 50 + ropeOffset);
+      s.setX(this.centerX - 80 - i * 30 + ropeOffset);
       s.update(delta);
     });
     this.stickmenB.forEach((s, i) => {
-      s.setX(this.centerX + 200 + i * 50 + ropeOffset);
+      s.setX(this.centerX + 80 + i * 30 + ropeOffset);
       s.update(delta);
     });
 

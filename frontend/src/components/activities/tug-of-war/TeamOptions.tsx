@@ -81,10 +81,15 @@ export function TeamOptions({
     ? Math.max(0, (cooldownMs * (1 - cooldownProgress)) / 1000).toFixed(1)
     : null;
 
+  const maxLen = Math.max(...options.map((o) => o.length));
+  const useVertical = !showImages && maxLen > 10;
+
   return (
-    <div className="flex flex-col gap-2 relative">
-      {/* Options in 2x2 grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-rows-2 gap-2">
+    <div className="flex flex-col gap-2 relative w-full">
+      {/* Options grid — 2x2 default, 1x4 when text is long */}
+      <div
+        className={`grid ${useVertical ? "grid-cols-1" : "grid-cols-2"} gap-2`}
+      >
         {options.map((option, index) => (
           <button
             key={`${option}-${index}`}

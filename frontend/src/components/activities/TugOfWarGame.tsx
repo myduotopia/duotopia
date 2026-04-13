@@ -202,7 +202,7 @@ export function TugOfWarGame({
 
       const game = new Phaser.Game({
         type: Phaser.AUTO,
-        width: 1000,
+        width: 500,
         height: 300,
         parent: phaserContainerRef.current,
         transparent: false,
@@ -374,136 +374,140 @@ export function TugOfWarGame({
         </div>
       </div>
 
-      {/* Game scene: canvas + question/options in unified background */}
-      <div className="relative w-full rounded-xl overflow-hidden bg-sky-100">
-        <div ref={phaserContainerRef} className="w-full" />
-        {/* Replay icon overlaid on canvas center */}
-        {winner && (
-          <button
-            onClick={handleRestart}
-            className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 p-2 rounded-full hover:scale-110 transition-transform cursor-pointer"
-          >
-            <RotateCcw
-              className="h-10 w-10 text-white drop-shadow-md"
-              strokeWidth={3}
-            />
-          </button>
-        )}
-
-        {/* Question overlaid on canvas, centered above the rope flag */}
+      {/* Game area: three-column layout */}
+      <div className="flex gap-3 items-stretch">
+        {/* Team A options — left */}
         {currentQuestion && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
-            <QuestionDisplay
-              question={currentQuestion}
-              showPrompt={!isAnswered}
+          <div className="w-1/4 p-2 rounded-xl border-2 border-red-500 bg-red-500/20 flex items-center">
+            <TeamOptions
+              team="a"
+              options={currentQuestion.optionsA}
+              onSelect={handleAnswer}
+              disabled={isAnswered}
+              isCooldown={gameState.teamACooldown}
+              cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
+              teamLabel={t("tugOfWar.teamA")}
+              showImages={effectiveShowImages}
+              vocabItems={vocabItems}
+              useHandwriteFont={
+                gameState.questionMode === "audio_to_english" ||
+                gameState.questionMode === "chinese_to_english" ||
+                gameState.questionMode === "image_to_english"
+              }
             />
           </div>
         )}
 
-        {/* Team options below canvas (during game) */}
-        {currentQuestion && (
-          <div className="grid grid-cols-2 gap-4 p-4">
-            <div className="p-3 rounded-xl border-2 border-red-500 bg-red-500/20">
-              <TeamOptions
-                team="a"
-                options={currentQuestion.optionsA}
-                onSelect={handleAnswer}
-                disabled={isAnswered}
-                isCooldown={gameState.teamACooldown}
-                cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
-                teamLabel={t("tugOfWar.teamA")}
-                showImages={effectiveShowImages}
-                vocabItems={vocabItems}
-                useHandwriteFont={
-                  gameState.questionMode === "audio_to_english" ||
-                  gameState.questionMode === "chinese_to_english" ||
-                  gameState.questionMode === "image_to_english"
-                }
+        {/* Canvas center — question + animation */}
+        <div className="flex-1 relative rounded-xl overflow-hidden bg-sky-100">
+          <div ref={phaserContainerRef} className="w-full" />
+          {/* Replay icon */}
+          {winner && (
+            <button
+              onClick={handleRestart}
+              className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 p-2 rounded-full hover:scale-110 transition-transform cursor-pointer"
+            >
+              <RotateCcw
+                className="h-10 w-10 text-white drop-shadow-md"
+                strokeWidth={3}
+              />
+            </button>
+          )}
+          {/* Question overlay — top of canvas */}
+          {currentQuestion && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+              <QuestionDisplay
+                question={currentQuestion}
+                showPrompt={!isAnswered}
               />
             </div>
-            <div className="p-3 rounded-xl border-2 border-blue-500 bg-blue-500/20">
-              <TeamOptions
-                team="b"
-                options={currentQuestion.optionsB}
-                onSelect={handleAnswer}
-                disabled={isAnswered}
-                isCooldown={gameState.teamBCooldown}
-                cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
-                teamLabel={t("tugOfWar.teamB")}
-                showImages={effectiveShowImages}
-                vocabItems={vocabItems}
-                useHandwriteFont={
-                  gameState.questionMode === "audio_to_english" ||
-                  gameState.questionMode === "chinese_to_english" ||
-                  gameState.questionMode === "image_to_english"
-                }
-              />
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Answer history (after game ends) */}
-        {winner && answerHistory.length > 0 && (
-          <div className="grid grid-cols-2 gap-4 p-4">
-            {/* Team A answers */}
-            <div className="p-3 rounded-xl border-2 border-red-500 bg-red-500/20">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {answerHistory
-                  .filter((r) => r.team === "a")
-                  .filter(
-                    (r, i, arr) =>
-                      arr.findIndex(
-                        (x) =>
-                          x.question.vocabItem.id === r.question.vocabItem.id,
-                      ) === i,
-                  )
-                  .map((r, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm"
-                    >
-                      <span className="font-bold text-red-600">
-                        {r.question.vocabItem.text}
-                      </span>
-                      <span className="text-gray-400">-</span>
-                      <span className="text-gray-600">
-                        {r.question.vocabItem.translation}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-            {/* Team B answers */}
-            <div className="p-3 rounded-xl border-2 border-blue-500 bg-blue-500/20">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {answerHistory
-                  .filter((r) => r.team === "b")
-                  .filter(
-                    (r, i, arr) =>
-                      arr.findIndex(
-                        (x) =>
-                          x.question.vocabItem.id === r.question.vocabItem.id,
-                      ) === i,
-                  )
-                  .map((r, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-sm"
-                    >
-                      <span className="font-bold text-blue-600">
-                        {r.question.vocabItem.text}
-                      </span>
-                      <span className="text-gray-400">-</span>
-                      <span className="text-gray-600">
-                        {r.question.vocabItem.translation}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
+        {/* Team B options — right */}
+        {currentQuestion && (
+          <div className="w-1/4 p-2 rounded-xl border-2 border-blue-500 bg-blue-500/20 flex items-center">
+            <TeamOptions
+              team="b"
+              options={currentQuestion.optionsB}
+              onSelect={handleAnswer}
+              disabled={isAnswered}
+              isCooldown={gameState.teamBCooldown}
+              cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
+              teamLabel={t("tugOfWar.teamB")}
+              showImages={effectiveShowImages}
+              vocabItems={vocabItems}
+              useHandwriteFont={
+                gameState.questionMode === "audio_to_english" ||
+                gameState.questionMode === "chinese_to_english" ||
+                gameState.questionMode === "image_to_english"
+              }
+            />
           </div>
         )}
       </div>
+
+      {/* Answer history (after game ends) */}
+      {winner && answerHistory.length > 0 && (
+        <div className="grid grid-cols-2 gap-4">
+          {/* Team A answers */}
+          <div className="p-3 rounded-xl border-2 border-red-500 bg-red-500/20">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {answerHistory
+                .filter((r) => r.team === "a")
+                .filter(
+                  (r, i, arr) =>
+                    arr.findIndex(
+                      (x) =>
+                        x.question.vocabItem.id === r.question.vocabItem.id,
+                    ) === i,
+                )
+                .map((r, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm"
+                  >
+                    <span className="font-bold text-red-600">
+                      {r.question.vocabItem.text}
+                    </span>
+                    <span className="text-gray-400">-</span>
+                    <span className="text-gray-600">
+                      {r.question.vocabItem.translation}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+          {/* Team B answers */}
+          <div className="p-3 rounded-xl border-2 border-blue-500 bg-blue-500/20">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {answerHistory
+                .filter((r) => r.team === "b")
+                .filter(
+                  (r, i, arr) =>
+                    arr.findIndex(
+                      (x) =>
+                        x.question.vocabItem.id === r.question.vocabItem.id,
+                    ) === i,
+                )
+                .map((r, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-sm"
+                  >
+                    <span className="font-bold text-blue-600">
+                      {r.question.vocabItem.text}
+                    </span>
+                    <span className="text-gray-400">-</span>
+                    <span className="text-gray-600">
+                      {r.question.vocabItem.translation}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
