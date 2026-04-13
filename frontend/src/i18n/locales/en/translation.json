@@ -4789,8 +4789,11 @@
       "audioToEnglish": "Audio → English",
       "audioToChinese": "Audio → Translation",
       "englishToChinese": "English → Translation",
-      "chineseToEnglish": "Translation → English"
+      "chineseToEnglish": "Translation → English",
+      "imageToEnglish": "Image → English"
     },
+    "rotateDevice": "Please rotate your device",
+    "rotateDeviceHint": "This game is best played in landscape mode",
     "error": {
       "loadFailed": "Failed to load vocabulary",
       "notEnoughWords": "Not enough words (minimum 4 required)"

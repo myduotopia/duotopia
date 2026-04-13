@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { X, ChevronDown, Loader2, RotateCcw } from "lucide-react";
+import { X, ChevronDown, Loader2, RotateCcw, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -49,6 +49,7 @@ const QUESTION_MODES: { value: QuestionMode; labelKey: string }[] = [
   { value: "audio_to_chinese", labelKey: "tugOfWar.modes.audioToChinese" },
   { value: "english_to_chinese", labelKey: "tugOfWar.modes.englishToChinese" },
   { value: "chinese_to_english", labelKey: "tugOfWar.modes.chineseToEnglish" },
+  { value: "image_to_english", labelKey: "tugOfWar.modes.imageToEnglish" },
 ];
 
 export function TugOfWarGame({
@@ -62,6 +63,45 @@ export function TugOfWarGame({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showImages, setShowImages] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(
+    typeof window !== "undefined" && window.innerHeight > window.innerWidth,
+  );
+
+  // Orientation detection
+  useEffect(() => {
+    const checkOrientation = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+    window.addEventListener("resize", checkOrientation);
+    screen.orientation?.addEventListener("change", checkOrientation);
+    return () => {
+      window.removeEventListener("resize", checkOrientation);
+      screen.orientation?.removeEventListener("change", checkOrientation);
+    };
+  }, []);
+
+  // Attempt fullscreen + landscape lock on mount
+  useEffect(() => {
+    const requestLandscape = async () => {
+      try {
+        await document.documentElement.requestFullscreen?.();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (screen.orientation as any)?.lock?.("landscape");
+      } catch {
+        // Not supported — rely on rotate overlay
+      }
+    };
+    requestLandscape();
+
+    return () => {
+      document.exitFullscreen?.().catch(() => {});
+      try {
+        screen.orientation?.unlock?.();
+      } catch {
+        // Ignore
+      }
+    };
+  }, []);
 
   // Fetch vocabulary items
   useEffect(() => {
@@ -112,6 +152,8 @@ export function TugOfWarGame({
     handleAnswer,
   } = useGameLogic(vocabItems);
 
+  const allHaveImages = vocabItems.every((v) => !!v.image_url);
+
   // Auto-start when vocab loads
   useEffect(() => {
     if (vocabItems.length > 0 && gameState.gameStatus === "waiting") {
@@ -127,6 +169,12 @@ export function TugOfWarGame({
   );
 
   const handleClose = useCallback(() => {
+    document.exitFullscreen?.().catch(() => {});
+    try {
+      screen.orientation?.unlock?.();
+    } catch {
+      // Ignore
+    }
     onComplete?.();
   }, [onComplete]);
 
@@ -135,6 +183,8 @@ export function TugOfWarGame({
   }, [startGame, gameState.questionMode]);
 
   const isAnswered = gameState.answeredBy !== null;
+  const isImageMode = gameState.questionMode === "image_to_english";
+  const effectiveShowImages = showImages && !isImageMode;
 
   // Phaser game instance - must be before any early returns
   const phaserContainerRef = useRef<HTMLDivElement>(null);
@@ -222,6 +272,19 @@ export function TugOfWarGame({
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+      {/* Portrait orientation overlay */}
+      {isPortrait && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white">
+          <Smartphone className="h-16 w-16 mb-4 rotate-90" />
+          <p className="text-lg font-medium">
+            {t("tugOfWar.rotateDevice")}
+          </p>
+          <p className="text-sm text-white/60 mt-2">
+            {t("tugOfWar.rotateDeviceHint")}
+          </p>
+        </div>
+      )}
+
       {/* CSS for game fonts */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Silkscreen&family=Patrick+Hand&display=swap');
@@ -242,25 +305,35 @@ export function TugOfWarGame({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="bg-white dark:bg-gray-900 border shadow-lg">
-            {QUESTION_MODES.map((mode) => (
-              <DropdownMenuItem
-                key={mode.value}
-                onClick={() => handleModeChange(mode.value)}
-                className={
-                  mode.value === gameState.questionMode ? "bg-amber-50" : ""
-                }
-              >
-                {t(mode.labelKey)}
-              </DropdownMenuItem>
-            ))}
+            {QUESTION_MODES.map((mode) => {
+              const isDisabled =
+                mode.value === "image_to_english" && !allHaveImages;
+              return (
+                <DropdownMenuItem
+                  key={mode.value}
+                  onClick={() => !isDisabled && handleModeChange(mode.value)}
+                  disabled={isDisabled}
+                  className={
+                    mode.value === gameState.questionMode
+                      ? "bg-amber-50"
+                      : isDisabled
+                        ? "opacity-40 cursor-not-allowed"
+                        : ""
+                  }
+                >
+                  {t(mode.labelKey)}
+                </DropdownMenuItem>
+              );
+            })}
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none">
+        <label className={`flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none ${isImageMode ? "opacity-40 pointer-events-none" : ""}`}>
           <input
             type="checkbox"
             checked={showImages}
             onChange={(e) => setShowImages(e.target.checked)}
+            disabled={isImageMode}
             className="rounded border-gray-300"
           />
           {t("tugOfWar.showImages")}
@@ -339,11 +412,12 @@ export function TugOfWarGame({
                 isCooldown={gameState.teamACooldown}
                 cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
                 teamLabel={t("tugOfWar.teamA")}
-                showImages={showImages}
+                showImages={effectiveShowImages}
                 vocabItems={vocabItems}
                 useHandwriteFont={
                   gameState.questionMode === "audio_to_english" ||
-                  gameState.questionMode === "chinese_to_english"
+                  gameState.questionMode === "chinese_to_english" ||
+                  gameState.questionMode === "image_to_english"
                 }
               />
             </div>
@@ -356,11 +430,12 @@ export function TugOfWarGame({
                 isCooldown={gameState.teamBCooldown}
                 cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
                 teamLabel={t("tugOfWar.teamB")}
-                showImages={showImages}
+                showImages={effectiveShowImages}
                 vocabItems={vocabItems}
                 useHandwriteFont={
                   gameState.questionMode === "audio_to_english" ||
-                  gameState.questionMode === "chinese_to_english"
+                  gameState.questionMode === "chinese_to_english" ||
+                  gameState.questionMode === "image_to_english"
                 }
               />
             </div>

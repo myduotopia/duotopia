@@ -99,8 +99,7 @@ export function QuestionDisplay({
       stopLoop();
       speechSynthesis.cancel();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question.vocabItem.id, showPrompt]);
+  }, [question.vocabItem.id, showPrompt, question.hasAudio, startLoop, stopLoop]);
 
   if (!showPrompt) {
     return (
@@ -108,6 +107,25 @@ export function QuestionDisplay({
         <span className="text-4xl font-bold text-green-600 handwrite-font">
           {question.correctAnswer}
         </span>
+      </div>
+    );
+  }
+
+  if (question.hasImage) {
+    const imageUrl = question.vocabItem.image_url;
+    return (
+      <div className="text-center py-2 h-20 flex items-center justify-center">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt=""
+            className="h-16 w-16 rounded-lg object-cover shadow-md"
+          />
+        ) : (
+          <span className="text-4xl font-bold handwrite-font">
+            {question.vocabItem.text}
+          </span>
+        )}
       </div>
     );
   }

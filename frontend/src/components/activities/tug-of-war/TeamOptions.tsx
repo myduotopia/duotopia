@@ -124,12 +124,12 @@ export function TeamOptions({
                   <img
                     src={item.image_url}
                     alt=""
-                    className="w-8 h-8 rounded object-cover flex-shrink-0"
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded object-cover flex-shrink-0"
                   />
                 ) : null;
               })()}
             <span
-              className={`text-lg font-medium break-words whitespace-normal ${useHandwriteFont ? "handwrite-font text-xl" : ""}`}
+              className={`text-lg sm:text-xl font-medium break-words whitespace-normal ${useHandwriteFont ? "handwrite-font text-xl sm:text-2xl" : ""}`}
             >
               {option}
             </span>

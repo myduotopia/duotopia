@@ -29,13 +29,22 @@ function generateQuestions(
   vocabItems: VocabItem[],
   mode: QuestionMode,
 ): Question[] {
-  const items = shuffleArray(vocabItems);
+  let items = shuffleArray(vocabItems);
+
+  // Image modes: prefer items with image_url (fallback to all if < 4)
+  if (mode === "image_to_english") {
+    const withImages = items.filter((i) => i.image_url);
+    if (withImages.length >= 4) {
+      items = withImages;
+    }
+  }
 
   return items.map((item) => {
     // Determine correct answer and prompt based on mode
     let correctAnswer: string;
     let prompt: string;
     let hasAudio = false;
+    let hasImage = false;
 
     switch (mode) {
       case "audio_to_english":
@@ -56,11 +65,18 @@ function generateQuestions(
         correctAnswer = item.text;
         prompt = item.translation;
         break;
+      case "image_to_english":
+        correctAnswer = item.text;
+        prompt = "";
+        hasImage = true;
+        break;
     }
 
     // Generate distractors from other vocab items
     const isAnswerEnglish =
-      mode === "audio_to_english" || mode === "chinese_to_english";
+      mode === "audio_to_english" ||
+      mode === "chinese_to_english" ||
+      mode === "image_to_english";
     const pool = vocabItems
       .filter((v) => v.id !== item.id)
       .map((v) => (isAnswerEnglish ? v.text : v.translation))
@@ -85,6 +101,7 @@ function generateQuestions(
       optionsA,
       optionsB,
       hasAudio,
+      hasImage,
     };
   });
 }
