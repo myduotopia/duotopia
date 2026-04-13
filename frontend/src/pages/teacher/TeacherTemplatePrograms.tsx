@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
@@ -10,10 +10,15 @@ import { programTreeConfig } from "@/components/shared/programTreeConfig";
 import { ProgramDialog } from "@/components/ProgramDialog";
 import { LessonDialog } from "@/components/LessonDialog";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
-import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
-import VocabularySetPanel from "@/components/VocabularySetPanel";
+import ReadingAssessmentPanel, {
+  type ReadingAssessmentPanelHandle,
+} from "@/components/ReadingAssessmentPanel";
+import VocabularySetPanel, {
+  type VocabularySetPanelHandle,
+} from "@/components/VocabularySetPanel";
 import ContentCopyDialog from "@/components/ContentCopyDialog";
 import { ProgramVisibilitySelector } from "@/components/ProgramVisibilitySelector";
+import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import { apiClient } from "@/lib/api";
@@ -40,6 +45,9 @@ function TeacherTemplateProgramsInner() {
   const { updateVisibility } = useResourceMaterialsAPI();
 
   const navigate = useNavigate();
+
+  const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
+  const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
@@ -623,29 +631,33 @@ function TeacherTemplateProgramsInner() {
               <h2 className="text-lg font-semibold">
                 {t("teacherTemplatePrograms.dialogs.addReadingTitle")}
               </h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={editorBusy}
-                onClick={() => {
-                  if (editorBusy) return;
-                  if (
-                    !window.confirm(
-                      t("contentEditor.labels.unsavedChangesConfirm"),
+              <div className="flex items-center gap-2">
+                <RefSaveButton panelRef={readingPanelRef} />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={editorBusy}
+                  onClick={() => {
+                    if (editorBusy) return;
+                    if (
+                      !window.confirm(
+                        t("contentEditor.labels.unsavedChangesConfirm"),
+                      )
                     )
-                  )
-                    return;
-                  setShowReadingEditor(false);
-                  setEditorLessonId(null);
-                  setEditorContentId(null);
-                  setSelectedContent(null);
-                }}
-              >
-                <X className="h-5 w-5" />
-              </Button>
+                      return;
+                    setShowReadingEditor(false);
+                    setEditorLessonId(null);
+                    setEditorContentId(null);
+                    setSelectedContent(null);
+                  }}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
             <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
               <ReadingAssessmentPanel
+                ref={readingPanelRef}
                 lessonId={editorLessonId}
                 programLevel={getProgramLevelByLessonId(
                   programs,
@@ -714,42 +726,46 @@ function TeacherTemplateProgramsInner() {
                 <h2 className="text-lg font-semibold text-gray-900">
                   {t("teacherTemplatePrograms.dialogs.editContentTitle")}
                 </h2>
-                <button
-                  disabled={editorBusy}
-                  onClick={() => {
-                    if (editorBusy) return;
-                    if (
-                      !window.confirm(
-                        t("contentEditor.labels.unsavedChangesConfirm"),
+                <div className="flex items-center gap-2">
+                  <RefSaveButton panelRef={readingPanelRef} />
+                  <button
+                    disabled={editorBusy}
+                    onClick={() => {
+                      if (editorBusy) return;
+                      if (
+                        !window.confirm(
+                          t("contentEditor.labels.unsavedChangesConfirm"),
+                        )
                       )
-                    )
-                      return;
-                    setShowReadingEditor(false);
-                    setEditorLessonId(null);
-                    setEditorContentId(null);
-                    setSelectedContent(null);
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  aria-label="關閉"
-                >
-                  <svg
-                    className="w-5 h-5 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                        return;
+                      setShowReadingEditor(false);
+                      setEditorLessonId(null);
+                      setEditorContentId(null);
+                      setSelectedContent(null);
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    aria-label="關閉"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
+                    <svg
+                      className="w-5 h-5 text-gray-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               <div className="p-6">
                 <ReadingAssessmentPanel
+                  ref={readingPanelRef}
                   lessonId={editorLessonId}
                   contentId={editorContentId}
                   content={{
@@ -815,28 +831,32 @@ function TeacherTemplateProgramsInner() {
                 <h2 className="text-lg font-semibold">
                   {t("vocabularySet.dialogTitle")}
                 </h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={editorBusy}
-                  onClick={() => {
-                    if (editorBusy) return;
-                    if (
-                      !window.confirm(
-                        t("contentEditor.labels.unsavedChangesConfirm"),
+                <div className="flex items-center gap-2">
+                  <RefSaveButton panelRef={vocabPanelRef} />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={editorBusy}
+                    onClick={() => {
+                      if (editorBusy) return;
+                      if (
+                        !window.confirm(
+                          t("contentEditor.labels.unsavedChangesConfirm"),
+                        )
                       )
-                    )
-                      return;
-                    setShowVocabularySetEditor(false);
-                    setVocabularySetLessonId(null);
-                    setVocabularySetContentId(null);
-                  }}
-                >
-                  <X className="h-5 w-5" />
-                </Button>
+                        return;
+                      setShowVocabularySetEditor(false);
+                      setVocabularySetLessonId(null);
+                      setVocabularySetContentId(null);
+                    }}
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
               <div className="flex-1 overflow-auto p-6">
                 <VocabularySetPanel
+                  ref={vocabPanelRef}
                   content={undefined}
                   editingContent={{
                     id: vocabularySetContentId || undefined,
@@ -905,29 +925,33 @@ function TeacherTemplateProgramsInner() {
                 <h2 className="text-lg font-semibold text-gray-900">
                   {t("vocabularySet.editTitle")}
                 </h2>
-                <button
-                  disabled={editorBusy}
-                  onClick={() => {
-                    if (editorBusy) return;
-                    if (
-                      !window.confirm(
-                        t("contentEditor.labels.unsavedChangesConfirm"),
+                <div className="flex items-center gap-2">
+                  <RefSaveButton panelRef={vocabPanelRef} />
+                  <button
+                    disabled={editorBusy}
+                    onClick={() => {
+                      if (editorBusy) return;
+                      if (
+                        !window.confirm(
+                          t("contentEditor.labels.unsavedChangesConfirm"),
+                        )
                       )
-                    )
-                      return;
-                    setShowVocabularySetEditor(false);
-                    setVocabularySetLessonId(null);
-                    setVocabularySetContentId(null);
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  aria-label="關閉"
-                >
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
+                        return;
+                      setShowVocabularySetEditor(false);
+                      setVocabularySetLessonId(null);
+                      setVocabularySetContentId(null);
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    aria-label="關閉"
+                  >
+                    <X className="w-5 h-5 text-gray-500" />
+                  </button>
+                </div>
               </div>
 
               <div className="p-6">
                 <VocabularySetPanel
+                  ref={vocabPanelRef}
                   content={{ id: vocabularySetContentId }}
                   editingContent={{ id: vocabularySetContentId }}
                   lessonId={vocabularySetLessonId}

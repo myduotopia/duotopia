@@ -1,4 +1,11 @@
-import { useState, useRef, useEffect } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +39,11 @@ import {
   TTS_SPEEDS,
   getVoiceAndRate,
 } from "@/utils/ttsVoiceResolver";
+import {
+  BatchPasteArea,
+  BatchTTSSettings,
+  BatchWorkPanel,
+} from "@/components/shared/batch";
 // dnd-kit imports
 import {
   DndContext,
@@ -52,13 +64,14 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 // 翻譯語言選項
-type TranslationLanguage = "chinese" | "japanese" | "korean";
+type TranslationLanguage = "chinese" | "japanese" | "korean" | "other";
 
 // Language constants - labels will be translated dynamically using t()
 const TRANSLATION_LANGUAGES = [
   { value: "chinese" as const, labelKey: "chinese", code: "zh-TW" },
   { value: "japanese" as const, labelKey: "japanese", code: "ja" },
   { value: "korean" as const, labelKey: "korean", code: "ko" },
+  { value: "other" as const, labelKey: "other", code: "" },
 ];
 
 // 每個例句集的題目上限
@@ -826,11 +839,13 @@ interface SortableRowInnerProps {
   handleOpenTTSModal: (row: ContentRow) => void;
   handleRemoveAudio: (index: number) => void;
   handleGenerateSingleDefinition: (index: number) => Promise<void>;
-  handleGenerateSingleDefinitionWithLang: (
+  handleGenerateSingleDefinitionWithLang?: (
     index: number,
     lang: TranslationLanguage,
   ) => Promise<void>;
   rowsLength: number;
+  panelTranslateLang?: TranslationLanguage | "";
+  panelCustomLang?: string;
 }
 
 function SortableRowInner({
@@ -842,8 +857,9 @@ function SortableRowInner({
   handleOpenTTSModal,
   handleRemoveAudio,
   handleGenerateSingleDefinition,
-  handleGenerateSingleDefinitionWithLang,
   rowsLength,
+  panelTranslateLang = "",
+  panelCustomLang = "",
 }: SortableRowInnerProps) {
   const { t } = useTranslation();
   const {
@@ -860,6 +876,13 @@ function SortableRowInner({
     transition,
     opacity: isDragging ? 0.4 : 1,
   };
+
+  const autoHeightRef = useCallback((el: HTMLTextAreaElement | null) => {
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = el.scrollHeight + "px";
+    }
+  }, []);
 
   return (
     <div
@@ -887,11 +910,17 @@ function SortableRowInner({
         <div className="relative">
           <textarea
             value={row.text}
-            onChange={(e) => handleUpdateRow(index, "text", e.target.value)}
-            className="w-full px-3 py-2 pr-20 border rounded-md text-sm resize-y min-h-[3rem]"
+            onChange={(e) => {
+              const words = e.target.value.trim().split(/\s+/).filter(Boolean);
+              if (words.length > 150) return;
+              handleUpdateRow(index, "text", e.target.value);
+              e.target.style.height = "auto";
+              e.target.style.height = e.target.scrollHeight + "px";
+            }}
+            ref={autoHeightRef}
+            className="w-full px-3 py-2 pr-20 border rounded-md text-sm resize-y min-h-[38px] overflow-hidden"
             placeholder={t("contentEditor.placeholders.enterText")}
-            maxLength={800}
-            rows={3}
+            rows={1}
           />
           <div className="absolute right-2 top-2 flex items-center space-x-1">
             {row.audioUrl && (
@@ -953,22 +982,31 @@ function SortableRowInner({
           <div className="relative">
             <textarea
               value={(() => {
-                const lang = row.selectedLanguage || "chinese";
-                if (lang === "chinese") return row.definition || "";
+                const lang = panelTranslateLang || row.selectedLanguage || "";
+                if (lang === "chinese" || lang === "other" || lang === "")
+                  return row.definition || "";
                 if (lang === "japanese") return row.japanese_translation || "";
                 if (lang === "korean") return row.korean_translation || "";
                 return row.definition || "";
               })()}
               onChange={(e) => {
-                const lang = row.selectedLanguage || "chinese";
+                const lang = panelTranslateLang || row.selectedLanguage || "";
                 let field: keyof ContentRow = "definition";
                 if (lang === "japanese") field = "japanese_translation";
                 else if (lang === "korean") field = "korean_translation";
                 handleUpdateRow(index, field, e.target.value);
+                e.target.style.height = "auto";
+                e.target.style.height = e.target.scrollHeight + "px";
               }}
-              className="w-full px-3 py-2 pr-24 border rounded-md text-sm resize-none"
+              ref={autoHeightRef}
+              className="w-full px-3 py-2 pr-24 border rounded-md text-sm resize-y min-h-[38px] overflow-hidden"
               placeholder={(() => {
-                const lang = row.selectedLanguage || "chinese";
+                const lang = panelTranslateLang || row.selectedLanguage || "";
+                if (!lang) return t("contentEditor.labels.selectLanguage");
+                if (lang === "other")
+                  return (
+                    panelCustomLang || t("contentEditor.labels.otherLanguage")
+                  );
                 const langConfig = TRANSLATION_LANGUAGES.find(
                   (l) => l.value === lang,
                 );
@@ -977,33 +1015,28 @@ function SortableRowInner({
               rows={2}
               maxLength={500}
             />
-            <div className="absolute right-2 top-2 flex items-center space-x-1">
-              <select
-                value={row.selectedLanguage || "chinese"}
-                onChange={(e) => {
-                  const newLang = e.target.value as TranslationLanguage;
-                  handleUpdateRow(index, "selectedLanguage", newLang);
-                  // Auto-generate when switching language
-                  if (row.text && row.text.trim()) {
-                    setTimeout(() => {
-                      handleGenerateSingleDefinitionWithLang(index, newLang);
-                    }, 100);
-                  }
-                }}
-                className="px-1 py-0.5 border rounded text-xs bg-white"
-              >
-                {TRANSLATION_LANGUAGES.map((lang) => (
-                  <option key={lang.value} value={lang.value}>
-                    {t(`contentEditor.translationLanguages.${lang.labelKey}`)}
-                  </option>
-                ))}
-              </select>
+            <div className="absolute right-2 top-2">
               <button
                 onClick={() => handleGenerateSingleDefinition(index)}
-                className="p-1 rounded hover:bg-gray-200 text-gray-600 flex items-center gap-0.5"
+                className="text-xs text-gray-400 hover:text-blue-500 hover:underline cursor-pointer transition-colors"
                 title={t("contentEditor.messages.generatingTranslation")}
               >
-                <Globe className="h-4 w-4" />
+                {(() => {
+                  const lang = panelTranslateLang || row.selectedLanguage || "";
+                  if (!lang) return t("contentEditor.labels.selectLanguage");
+                  if (lang === "other")
+                    return (
+                      panelCustomLang || t("contentEditor.labels.otherLanguage")
+                    );
+                  const langConfig = TRANSLATION_LANGUAGES.find(
+                    (l) => l.value === lang,
+                  );
+                  return langConfig
+                    ? t(
+                        `contentEditor.translationLanguages.${langConfig.labelKey}`,
+                      )
+                    : lang;
+                })()}
               </button>
             </div>
           </div>
@@ -1046,6 +1079,11 @@ function SortableRowInner({
   );
 }
 
+export interface ReadingAssessmentPanelHandle {
+  save: () => Promise<void>;
+  isBusy: boolean;
+}
+
 interface ReadingAssessmentPanelProps {
   content?: { id?: number; title?: string; items?: ContentRow[] };
   editingContent?: { id?: number; title?: string; items?: ContentRow[] };
@@ -1061,16 +1099,22 @@ interface ReadingAssessmentPanelProps {
   isAssignmentCopy?: boolean; // 是否為作業副本（需要特別處理刪除）
 }
 
-export default function ReadingAssessmentPanel({
-  content,
-  editingContent,
-  onUpdateContent,
-  onSave,
-  lessonId,
-  // programLevel - reserved for future AI generation features
-  isCreating = false,
-  isAssignmentCopy = false,
-}: ReadingAssessmentPanelProps) {
+const ReadingAssessmentPanel = forwardRef<
+  ReadingAssessmentPanelHandle,
+  ReadingAssessmentPanelProps
+>(function ReadingAssessmentPanel(
+  {
+    content,
+    editingContent,
+    onUpdateContent,
+    onSave,
+    lessonId,
+    // programLevel - reserved for future AI generation features
+    isCreating = false,
+    isAssignmentCopy = false,
+  },
+  ref,
+) {
   const { t } = useTranslation();
 
   const [title, setTitle] = useState("");
@@ -1080,7 +1124,7 @@ export default function ReadingAssessmentPanel({
       text: "",
       definition: "",
       translation: "",
-      selectedLanguage: "chinese",
+      selectedLanguage: undefined,
       example_sentence: "",
       example_sentence_translation: "",
       example_sentence_definition: "",
@@ -1090,7 +1134,7 @@ export default function ReadingAssessmentPanel({
       text: "",
       definition: "",
       translation: "",
-      selectedLanguage: "chinese",
+      selectedLanguage: undefined,
       example_sentence: "",
       example_sentence_translation: "",
       example_sentence_definition: "",
@@ -1100,7 +1144,7 @@ export default function ReadingAssessmentPanel({
       text: "",
       definition: "",
       translation: "",
-      selectedLanguage: "chinese",
+      selectedLanguage: undefined,
       example_sentence: "",
       example_sentence_translation: "",
       example_sentence_definition: "",
@@ -1113,6 +1157,10 @@ export default function ReadingAssessmentPanel({
   const [batchPasteText, setBatchPasteText] = useState("");
   const [batchPasteAutoTTS, setBatchPasteAutoTTS] = useState(false);
   const [batchPasteAutoTranslate, setBatchPasteAutoTranslate] = useState(false);
+  const [selectedTranslateLang, setSelectedTranslateLang] = useState<
+    TranslationLanguage | ""
+  >("");
+  const [customTranslateLang, setCustomTranslateLang] = useState("");
   const [isInitialLoad, setIsInitialLoad] = useState(true); // 🔥 標記是否為初始載入
 
   // TTS settings for batch paste (Issue #121)
@@ -1140,10 +1188,123 @@ export default function ReadingAssessmentPanel({
     }),
   );
 
-  // TTS options for batch paste (Issue #121)
-  const batchTTSAccents = TTS_ACCENTS;
-  const batchTTSGenders = TTS_GENDERS;
-  const batchTTSSpeeds = TTS_SPEEDS;
+  // Save handler - extracted for useImperativeHandle
+  const handleSave = async () => {
+    const validRows = rows.filter((row) => row.text && row.text.trim());
+
+    if (validRows.length === 0) {
+      toast.error(t("contentEditor.messages.addAtLeastOneItem"));
+      return;
+    }
+
+    if (!title || title.trim() === "") {
+      toast.error(t("contentEditor.messages.enterTitle"));
+      return;
+    }
+
+    // 檢查單字數上限
+    const overLimitRow = validRows.find((row) => {
+      const words = row.text.trim().split(/\s+/).filter(Boolean);
+      return words.length > 150;
+    });
+    if (overLimitRow) {
+      toast.error(
+        t("contentEditor.messages.wordLimitExceeded", { limit: 150 }),
+      );
+      return;
+    }
+
+    // 修正句子之間缺少空格的問題（例如 "end.Begin" → "end. Begin"）
+    const fixSentenceSpacing = (text: string) =>
+      text.replace(/([.!?])([A-Z])/g, "$1 $2");
+
+    const saveData = {
+      title: title,
+      items: validRows.map((row) => ({
+        text: fixSentenceSpacing(row.text.trim()),
+        definition: row.definition || "",
+        english_definition: row.translation || "",
+        translation: row.definition || "",
+        selectedLanguage: row.selectedLanguage || "chinese",
+        audio_url: row.audioUrl || row.audio_url || "",
+      })),
+      target_wpm: 60,
+      target_accuracy: 0.8,
+      time_limit_seconds: 180,
+    };
+
+    const existingContentId = editingContent?.id || content?.id;
+
+    if (existingContentId) {
+      try {
+        await apiClient.updateContent(existingContentId, saveData);
+        toast.success(t("contentEditor.messages.savingSuccess"));
+        if (onSave) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (onSave as (content?: any) => void | Promise<void>)({
+            id: existingContentId,
+            title: saveData.title,
+            items: saveData.items,
+          });
+        }
+      } catch (error: unknown) {
+        console.error("Failed to update content:", error);
+        if (error instanceof ApiError) {
+          const detail = error.detail;
+          const errorMessage =
+            typeof detail === "object" &&
+            !Array.isArray(detail) &&
+            detail?.message
+              ? detail.message
+              : typeof detail === "string"
+                ? detail
+                : null;
+          toast.error(errorMessage || t("contentEditor.messages.savingFailed"));
+        } else {
+          toast.error(t("contentEditor.messages.savingFailed"));
+        }
+      }
+    } else if (isCreating && lessonId) {
+      try {
+        const newContent = await apiClient.createContent(lessonId, {
+          type: "EXAMPLE_SENTENCES",
+          ...saveData,
+        });
+        toast.success(t("contentEditor.messages.contentCreatedSuccess"));
+        if (onSave) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (onSave as (content?: any) => void | Promise<void>)(newContent);
+        }
+      } catch (error: unknown) {
+        console.error("Failed to create content:", error);
+        if (error instanceof ApiError) {
+          const detail = error.detail;
+          const errorMessage =
+            typeof detail === "object" &&
+            !Array.isArray(detail) &&
+            detail?.message
+              ? detail.message
+              : typeof detail === "string"
+                ? detail
+                : null;
+          toast.error(
+            errorMessage || t("contentEditor.messages.creatingContentFailed"),
+          );
+        } else {
+          toast.error(t("contentEditor.messages.creatingContentFailed"));
+        }
+      }
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+    get isBusy() {
+      return isBatchProcessing;
+    },
+  }));
+
+  // TTS options still used by handleBatchGenerateTTS logic
 
   // Load saved TTS settings from localStorage (Issue #121)
   useEffect(() => {
@@ -1193,7 +1354,7 @@ export default function ReadingAssessmentPanel({
             definition: item.definition || "",
             translation: item.translation || "",
             audioUrl: item.audio_url || "",
-            selectedLanguage: "chinese" as TranslationLanguage,
+            selectedLanguage: undefined,
             has_student_progress: item.has_student_progress || false, // 🔥 保留學生進度狀態
           }),
         );
@@ -1325,7 +1486,7 @@ export default function ReadingAssessmentPanel({
       text: "",
       definition: "",
       translation: "",
-      selectedLanguage: "chinese",
+      selectedLanguage: undefined,
       example_sentence: "",
       example_sentence_translation: "",
       example_sentence_definition: "",
@@ -1723,9 +1884,12 @@ export default function ReadingAssessmentPanel({
   };
 
   const handleGenerateSingleDefinition = async (index: number) => {
-    const newRows = [...rows];
-    const currentLang = newRows[index].selectedLanguage || "chinese";
-    return handleGenerateSingleDefinitionWithLang(index, currentLang);
+    const currentLang =
+      rows[index].selectedLanguage || selectedTranslateLang || "chinese";
+    return handleGenerateSingleDefinitionWithLang(
+      index,
+      currentLang as TranslationLanguage,
+    );
   };
 
   const handleGenerateSingleDefinitionWithLang = async (
@@ -1860,15 +2024,213 @@ export default function ReadingAssessmentPanel({
     }
   };
 
+  // 將超過 150 單字的段落自動分段，保留句子完整性
+  const splitParagraphByWordLimit = (
+    text: string,
+    maxWords = 150,
+  ): string[] => {
+    const sentences = text.match(/[^.!?]*[.!?]+\s*/g) || [text];
+    const paragraphs: string[] = [];
+    let current = "";
+
+    for (const sentence of sentences) {
+      const combined = current + sentence;
+      const wordCount = combined.trim().split(/\s+/).filter(Boolean).length;
+
+      if (wordCount > maxWords && current.trim()) {
+        paragraphs.push(current.trim());
+        current = sentence;
+      } else {
+        current = combined;
+      }
+    }
+    if (current.trim()) {
+      paragraphs.push(current.trim());
+    }
+    return paragraphs;
+  };
+
   const handleBatchPaste = async (autoTTS: boolean, autoTranslate: boolean) => {
-    // 分割文字，每行一個項目
-    const lines = batchPasteText
+    // 分割文字，每行一個項目，超過 150 單字的段落自動分段
+    const rawLines = batchPasteText
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
 
-    if (lines.length === 0) {
-      toast.error(t("contentEditor.messages.enterContent"));
+    const lines: string[] = [];
+    for (const line of rawLines) {
+      const wordCount = line.split(/\s+/).filter(Boolean).length;
+      if (wordCount > 150) {
+        lines.push(...splitParagraphByWordLimit(line));
+      } else {
+        lines.push(line);
+      }
+    }
+
+    // === Backfill 模式：textarea 空白時，補齊已有段落缺少的翻譯/TTS ===
+    const isBackfillMode = lines.length === 0;
+
+    if (isBackfillMode) {
+      const existingRows = rows.filter((r) => r.text && r.text.trim());
+      if (existingRows.length === 0) {
+        toast.error(t("contentEditor.messages.enterContent"));
+        return;
+      }
+
+      // 檢查翻譯語言
+      if (autoTranslate && !selectedTranslateLang) {
+        toast.error(t("contentEditor.labels.selectLanguage"));
+        return;
+      }
+      if (
+        autoTranslate &&
+        selectedTranslateLang === "other" &&
+        !customTranslateLang.trim()
+      ) {
+        toast.error(t("contentEditor.labels.enterCustomLanguage"));
+        return;
+      }
+
+      setIsPasting(true);
+      const currentRows = [...rows];
+      let processed = 0;
+
+      try {
+        // 補齊翻譯
+        if (autoTranslate && selectedTranslateLang) {
+          const langCode =
+            selectedTranslateLang === "other"
+              ? customTranslateLang || ""
+              : TRANSLATION_LANGUAGES.find(
+                  (l) => l.value === selectedTranslateLang,
+                )?.code || "zh-TW";
+
+          const needsTranslation = currentRows
+            .map((r, i) => ({ r, i }))
+            .filter(({ r }) => r.text?.trim() && !r.definition?.trim());
+
+          if (needsTranslation.length > 0) {
+            const texts = needsTranslation.map(({ r }) => r.text.trim());
+            const result = await apiClient.batchTranslate(texts, langCode);
+            const translations =
+              (result as { translations?: string[] }).translations || [];
+            needsTranslation.forEach(({ i }, idx) => {
+              if (translations[idx]) {
+                currentRows[i].definition = translations[idx];
+                currentRows[i].selectedLanguage = selectedTranslateLang;
+              }
+            });
+            processed += needsTranslation.length;
+          }
+        }
+
+        // 補齊 TTS
+        if (autoTTS) {
+          saveBatchTTSSettings();
+          const needsTTS = currentRows
+            .map((r, i) => ({ r, i }))
+            .filter(({ r }) => r.text?.trim() && !r.audioUrl && !r.audio_url);
+
+          if (needsTTS.length > 0) {
+            const isRandom =
+              batchTTSAccent === "Random" || batchTTSGender === "Random";
+
+            if (isRandom) {
+              for (const { r, i } of needsTTS) {
+                const { voice, rate } = getVoiceAndRate(
+                  batchTTSAccent,
+                  batchTTSGender,
+                  batchTTSSpeed,
+                );
+                const ttsResult = await apiClient.generateTTS(
+                  r.text,
+                  voice,
+                  rate,
+                  "+0%",
+                );
+                if (ttsResult?.audio_url) {
+                  const fullUrl = ttsResult.audio_url.startsWith("http")
+                    ? ttsResult.audio_url
+                    : `${import.meta.env.VITE_API_URL}${ttsResult.audio_url}`;
+                  currentRows[i].audioUrl = fullUrl;
+                  currentRows[i].audio_url = fullUrl;
+                }
+              }
+            } else {
+              const { voice, rate } = getVoiceAndRate(
+                batchTTSAccent,
+                batchTTSGender,
+                batchTTSSpeed,
+              );
+              const texts = needsTTS.map(({ r }) => r.text.trim());
+              const ttsResult = await apiClient.batchGenerateTTS(
+                texts,
+                voice,
+                rate,
+                "+0%",
+              );
+              if (
+                ttsResult &&
+                typeof ttsResult === "object" &&
+                "audio_urls" in ttsResult
+              ) {
+                const audioUrls = (ttsResult as { audio_urls: string[] })
+                  .audio_urls;
+                needsTTS.forEach(({ i }, idx) => {
+                  if (audioUrls[idx]) {
+                    const fullUrl = audioUrls[idx].startsWith("http")
+                      ? audioUrls[idx]
+                      : `${import.meta.env.VITE_API_URL}${audioUrls[idx]}`;
+                    currentRows[i].audioUrl = fullUrl;
+                    currentRows[i].audio_url = fullUrl;
+                  }
+                });
+              }
+            }
+            processed += needsTTS.length;
+          }
+        }
+
+        setRows(currentRows);
+
+        if (processed === 0) {
+          toast.info(
+            t("contentEditor.messages.noItemsNeedProcessing", {
+              defaultValue: "所有項目已完成，無需補齊",
+            }),
+          );
+        } else {
+          toast.success(
+            t("contentEditor.messages.backfillComplete", {
+              defaultValue: `已補齊 ${processed} 個項目`,
+              count: processed,
+            }),
+          );
+        }
+      } catch (error) {
+        console.error("Backfill error:", error);
+        toast.error(t("contentEditor.messages.batchProcessingFailed"));
+      } finally {
+        setIsPasting(false);
+      }
+      return;
+    }
+
+    // === 正常貼上模式 ===
+
+    // 勾了翻譯但沒選語言
+    if (autoTranslate && !selectedTranslateLang) {
+      toast.error(t("contentEditor.labels.selectLanguage"));
+      return;
+    }
+
+    // 選了「其他」但沒輸入語言名稱
+    if (
+      autoTranslate &&
+      selectedTranslateLang === "other" &&
+      !customTranslateLang.trim()
+    ) {
+      toast.error(t("contentEditor.labels.enterCustomLanguage"));
       return;
     }
 
@@ -1907,7 +2269,7 @@ export default function ReadingAssessmentPanel({
       text,
       definition: "",
       translation: "",
-      selectedLanguage: "chinese",
+      selectedLanguage: undefined,
       example_sentence: "",
       example_sentence_translation: "",
       example_sentence_definition: "",
@@ -1980,14 +2342,21 @@ export default function ReadingAssessmentPanel({
           }
         }
 
-        if (autoTranslate) {
-          const result = await apiClient.batchTranslate(lines, "zh-TW");
+        if (autoTranslate && selectedTranslateLang) {
+          const langCode =
+            selectedTranslateLang === "other"
+              ? customTranslateLang || ""
+              : TRANSLATION_LANGUAGES.find(
+                  (l) => l.value === selectedTranslateLang,
+                )?.code || "zh-TW";
+          const result = await apiClient.batchTranslate(lines, langCode);
           const translations =
             (result as { translations?: string[] }).translations || result;
           if (Array.isArray(translations)) {
             newItems = newItems.map((item, i) => ({
               ...item,
               definition: translations[i] || "",
+              selectedLanguage: selectedTranslateLang,
             }));
           }
         }
@@ -2081,7 +2450,7 @@ export default function ReadingAssessmentPanel({
   }
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-200px)]">
+    <div className="flex flex-col h-full max-h-[calc(100vh-70px)]">
       {/* Fixed Header Section */}
       <div className="flex-shrink-0 space-y-4 pb-4">
         {/* Assignment Copy Warning Banner */}
@@ -2129,8 +2498,8 @@ export default function ReadingAssessmentPanel({
           />
         </div>
 
-        {/* Batch Actions - RWD adjusted */}
-        <div className="flex flex-wrap gap-2">
+        {/* Batch Actions - Mobile only (desktop uses left panel) */}
+        <div className="flex flex-wrap gap-2 md:hidden">
           <Button
             variant="outline"
             size="sm"
@@ -2185,186 +2554,101 @@ export default function ReadingAssessmentPanel({
         </div>
       </div>
 
-      {/* Scrollable Content Rows with dnd-kit */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={rows.map((row) => row.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          <div className="flex-1 overflow-y-auto space-y-3 pr-2 min-h-0">
-            {rows.map((row, index) => {
-              // useSortable must be called inside the component that's in SortableContext
-              // so we'll use a nested component
-              return (
-                <SortableRowInner
-                  key={row.id}
-                  row={row}
-                  index={index}
-                  handleUpdateRow={handleUpdateRow}
-                  handleRemoveRow={handleDeleteRow}
-                  handleDuplicateRow={handleCopyRow}
-                  handleOpenTTSModal={handleOpenTTSModal}
-                  handleRemoveAudio={handleRemoveAudio}
-                  handleGenerateSingleDefinition={
-                    handleGenerateSingleDefinition
-                  }
-                  handleGenerateSingleDefinitionWithLang={
-                    handleGenerateSingleDefinitionWithLang
-                  }
-                  rowsLength={rows.length}
-                />
-              );
-            })}
+      {/* Desktop: Side-by-side layout / Mobile: Editor only */}
+      <div className="flex flex-1 gap-4 min-h-0">
+        {/* Left: Batch Work Area (Desktop only) */}
+        <BatchWorkPanel
+          text={batchPasteText}
+          onTextChange={setBatchPasteText}
+          maxItems={MAX_BATCH_ITEMS}
+          placeholder="put&#10;Put it away.&#10;It's time to put everything away. Right now."
+          autoTranslate={batchPasteAutoTranslate}
+          onAutoTranslateChange={setBatchPasteAutoTranslate}
+          selectedLanguage={selectedTranslateLang}
+          onLanguageChange={(lang) => {
+            setSelectedTranslateLang(lang as TranslationLanguage | "");
+            if (lang !== "other") setCustomTranslateLang("");
+          }}
+          translationLanguages={TRANSLATION_LANGUAGES.map((l) => ({
+            value: l.value,
+            label: t(`contentEditor.translationLanguages.${l.labelKey}`),
+            code: l.code,
+          }))}
+          customLanguage={customTranslateLang}
+          onCustomLanguageChange={setCustomTranslateLang}
+          autoTTS={batchPasteAutoTTS}
+          onAutoTTSChange={setBatchPasteAutoTTS}
+          ttsSettings={{
+            accent: batchTTSAccent,
+            gender: batchTTSGender,
+            speed: batchTTSSpeed,
+          }}
+          onTTSSettingsChange={(s) => {
+            setBatchTTSAccent(s.accent);
+            setBatchTTSGender(s.gender);
+            setBatchTTSSpeed(s.speed);
+          }}
+          onConfirm={() =>
+            handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)
+          }
+          isBusy={isPasting}
+        />
 
-            {/* Add Row Button */}
-            <button
-              onClick={handleAddRow}
-              className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600"
-              disabled={rows.length >= MAX_ROWS}
+        {/* Right: Editor Area */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* Scrollable Content Rows with dnd-kit */}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={rows.map((row) => row.id)}
+              strategy={verticalListSortingStrategy}
             >
-              <Plus className="h-5 w-5" />
-              {t("contentEditor.buttons.addItem")}
-            </button>
-          </div>
-        </SortableContext>
-      </DndContext>
+              <div className="space-y-3 pr-2">
+                {rows.map((row, index) => {
+                  // useSortable must be called inside the component that's in SortableContext
+                  // so we'll use a nested component
+                  return (
+                    <SortableRowInner
+                      key={row.id}
+                      row={row}
+                      index={index}
+                      handleUpdateRow={handleUpdateRow}
+                      handleRemoveRow={handleDeleteRow}
+                      handleDuplicateRow={handleCopyRow}
+                      handleOpenTTSModal={handleOpenTTSModal}
+                      handleRemoveAudio={handleRemoveAudio}
+                      handleGenerateSingleDefinition={
+                        handleGenerateSingleDefinition
+                      }
+                      handleGenerateSingleDefinitionWithLang={
+                        handleGenerateSingleDefinitionWithLang
+                      }
+                      rowsLength={rows.length}
+                      panelTranslateLang={selectedTranslateLang}
+                      panelCustomLang={customTranslateLang}
+                    />
+                  );
+                })}
 
-      {/* Footer with Save Button */}
-      {onSave && (
-        <div className="flex-shrink-0 pt-4 mt-4 border-t border-gray-200 sticky bottom-0 bg-white z-10">
-          <div className="flex justify-end gap-3">
-            <Button
-              size="lg"
-              disabled={isBatchProcessing}
-              className="px-8 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={async () => {
-                // 過濾掉空白項目
-                const validRows = rows.filter(
-                  (row) => row.text && row.text.trim(),
-                );
-
-                if (validRows.length === 0) {
-                  toast.error(t("contentEditor.messages.addAtLeastOneItem"));
-                  return;
-                }
-
-                if (!title || title.trim() === "") {
-                  toast.error(t("contentEditor.messages.enterTitle"));
-                  return;
-                }
-
-                // 準備要儲存的資料
-                const saveData = {
-                  title: title,
-                  items: validRows.map((row) => ({
-                    text: row.text.trim().replace(/([.!?])([A-Z])/g, "$1 $2"),
-                    definition: row.definition || "",
-                    english_definition: row.translation || "",
-                    translation: row.definition || "",
-                    selectedLanguage: row.selectedLanguage || "chinese",
-                    audio_url: row.audioUrl || row.audio_url || "",
-                  })),
-                  target_wpm: 60,
-                  target_accuracy: 0.8,
-                  time_limit_seconds: 180,
-                };
-
-                const existingContentId = editingContent?.id || content?.id;
-
-                if (existingContentId) {
-                  // 編輯模式：更新現有內容
-                  try {
-                    await apiClient.updateContent(existingContentId, saveData);
-                    toast.success(t("contentEditor.messages.savingSuccess"));
-                    if (onSave) {
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      await (onSave as (content?: any) => void | Promise<void>)(
-                        {
-                          id: existingContentId,
-                          title: saveData.title,
-                          items: saveData.items,
-                        },
-                      );
-                    }
-                  } catch (error: unknown) {
-                    console.error("Failed to update content:", error);
-                    // 解析 ApiError 的結構化錯誤訊息
-                    if (error instanceof ApiError) {
-                      const detail = error.detail;
-                      const errorMessage =
-                        typeof detail === "object" &&
-                        !Array.isArray(detail) &&
-                        detail?.message
-                          ? detail.message
-                          : typeof detail === "string"
-                            ? detail
-                            : null;
-                      toast.error(
-                        errorMessage ||
-                          t("contentEditor.messages.savingFailed"),
-                      );
-                    } else {
-                      toast.error(t("contentEditor.messages.savingFailed"));
-                    }
-                  }
-                } else if (isCreating && lessonId) {
-                  // 創建模式：新增內容
-                  try {
-                    const newContent = await apiClient.createContent(lessonId, {
-                      type: "EXAMPLE_SENTENCES",
-                      ...saveData,
-                    });
-                    toast.success(
-                      t("contentEditor.messages.contentCreatedSuccess"),
-                    );
-                    if (onSave) {
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      await (onSave as (content?: any) => void | Promise<void>)(
-                        newContent,
-                      );
-                    }
-                  } catch (error: unknown) {
-                    console.error("Failed to create content:", error);
-                    // 解析 ApiError 的結構化錯誤訊息
-                    if (error instanceof ApiError) {
-                      const detail = error.detail;
-                      const errorMessage =
-                        typeof detail === "object" &&
-                        !Array.isArray(detail) &&
-                        detail?.message
-                          ? detail.message
-                          : typeof detail === "string"
-                            ? detail
-                            : null;
-                      toast.error(
-                        errorMessage ||
-                          t("contentEditor.messages.creatingContentFailed"),
-                      );
-                    } else {
-                      toast.error(
-                        t("contentEditor.messages.creatingContentFailed"),
-                      );
-                    }
-                  }
-                }
-              }}
-            >
-              {isBatchProcessing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {t("contentEditor.buttons.processing")}
-                </>
-              ) : (
-                t("contentEditor.buttons.save")
-              )}
-            </Button>
-          </div>
+                {/* Add Row Button */}
+                <button
+                  onClick={handleAddRow}
+                  className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600"
+                  disabled={rows.length >= MAX_ROWS}
+                >
+                  <Plus className="h-5 w-5" />
+                  {t("contentEditor.buttons.addItem")}
+                </button>
+              </div>
+            </SortableContext>
+          </DndContext>
         </div>
-      )}
+        {/* End Right: Editor Area */}
+      </div>
+      {/* End Desktop: Side-by-side layout */}
 
       {/* TTS Modal */}
       {selectedRow && (
@@ -2396,34 +2680,13 @@ export default function ReadingAssessmentPanel({
             </p>
           </DialogHeader>
           <div className="space-y-6 overflow-y-auto flex-1 min-h-0">
-            <div>
-              <label className="text-base font-semibold text-gray-800 mb-3 block">
-                {t("contentEditor.labels.pasteContent")}
-              </label>
-              <textarea
-                value={batchPasteText}
-                onChange={(e) => {
-                  setBatchPasteText(e.target.value);
-                }}
-                placeholder="put&#10;Put it away.&#10;It's time to put everything away. Right now."
-                className="w-full min-h-80 max-h-[60vh] px-4 py-3 border-2 border-gray-300 rounded-lg font-mono text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-y overflow-y-auto"
-              />
-              <div className="text-xs mt-2 flex items-center justify-between">
-                <span className="text-gray-500">
-                  {batchPasteText.split("\n").filter((line) => line.trim())
-                    .length || 0}{" "}
-                  {t("contentEditor.messages.items")}
-                </span>
-                {batchPasteText.split("\n").filter((line) => line.trim())
-                  .length > MAX_BATCH_ITEMS && (
-                  <span className="text-amber-600 font-medium">
-                    {t("contentEditor.messages.batchLimitWarning", {
-                      count: MAX_BATCH_ITEMS,
-                    })}
-                  </span>
-                )}
-              </div>
-            </div>
+            <BatchPasteArea
+              text={batchPasteText}
+              onChange={setBatchPasteText}
+              maxItems={MAX_BATCH_ITEMS}
+              placeholder="put&#10;Put it away.&#10;It's time to put everything away. Right now."
+              variant="dialog"
+            />
             <div className="flex gap-6 p-4 bg-gray-50 rounded-lg">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -2451,61 +2714,19 @@ export default function ReadingAssessmentPanel({
 
             {/* TTS Settings Section (Issue #121) */}
             {batchPasteAutoTTS && (
-              <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <label className="text-sm font-semibold text-gray-800 mb-3 block">
-                  {t("contentEditor.ttsSettings.title")}
-                </label>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">
-                      {t("contentEditor.ttsSettings.accent")}
-                    </label>
-                    <select
-                      value={batchTTSAccent}
-                      onChange={(e) => setBatchTTSAccent(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      {batchTTSAccents.map((accent) => (
-                        <option key={accent} value={accent}>
-                          {accent}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">
-                      {t("contentEditor.ttsSettings.gender")}
-                    </label>
-                    <select
-                      value={batchTTSGender}
-                      onChange={(e) => setBatchTTSGender(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      {batchTTSGenders.map((gender) => (
-                        <option key={gender} value={gender}>
-                          {gender}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">
-                      {t("contentEditor.ttsSettings.speed")}
-                    </label>
-                    <select
-                      value={batchTTSSpeed}
-                      onChange={(e) => setBatchTTSSpeed(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      {batchTTSSpeeds.map((speed) => (
-                        <option key={speed} value={speed}>
-                          {speed}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
+              <BatchTTSSettings
+                settings={{
+                  accent: batchTTSAccent,
+                  gender: batchTTSGender,
+                  speed: batchTTSSpeed,
+                }}
+                onChange={(s) => {
+                  setBatchTTSAccent(s.accent);
+                  setBatchTTSGender(s.gender);
+                  setBatchTTSSpeed(s.speed);
+                }}
+                variant="section"
+              />
             )}
           </div>
           <DialogFooter className="pt-6 flex-shrink-0 border-t border-gray-200 mt-4">
@@ -2533,4 +2754,6 @@ export default function ReadingAssessmentPanel({
       </Dialog>
     </div>
   );
-}
+});
+
+export default ReadingAssessmentPanel;

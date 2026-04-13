@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { ReactNode } from "react";
 import { render, waitFor } from "@testing-library/react";
 import VocabularySetPanel from "../VocabularySetPanel";
 
@@ -30,7 +31,7 @@ vi.mock("sonner", () => ({
 
 // Mock dnd-kit to avoid complex setup
 vi.mock("@dnd-kit/core", () => ({
-  DndContext: ({ children }: { children: React.ReactNode }) => children,
+  DndContext: ({ children }: { children: ReactNode }) => children,
   closestCenter: vi.fn(),
   useSensor: vi.fn(),
   useSensors: () => [],
@@ -39,7 +40,7 @@ vi.mock("@dnd-kit/core", () => ({
 }));
 
 vi.mock("@dnd-kit/sortable", () => ({
-  SortableContext: ({ children }: { children: React.ReactNode }) => children,
+  SortableContext: ({ children }: { children: ReactNode }) => children,
   verticalListSortingStrategy: {},
   useSortable: () => ({
     attributes: {},
