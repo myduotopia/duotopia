@@ -1789,7 +1789,7 @@ export default function StudentActivityPageContent({
           }
           onFileUpload={handleFileUpload}
           formatTime={formatTime}
-          timeLimit={activity.duration || 30}
+          timeLimit={timeLimitPerQuestion}
           progressIds={
             // 🔧 Issue #118 Fix: Always use activity.items as base, merge in updated progressIds
             // Previous bug: answer?.progressIds || ... would use incomplete array [101] after first upload

@@ -84,6 +84,7 @@ interface ActivityResponse {
   practice_mode?: string | null;
   score_category?: string | null;
   show_answer?: boolean; // 例句重組：答題結束後是否顯示正確答案
+  time_limit_per_question?: number;
   total_activities: number;
   activities: Activity[];
   can_use_ai_analysis?: boolean; // 教師/機構是否有 AI 分析額度
@@ -102,6 +103,7 @@ export default function StudentActivityPage() {
   const [practiceMode, setPracticeMode] = useState<string | null>(null);
   const [showAnswer, setShowAnswer] = useState<boolean>(false);
   const [canUseAiAnalysis, setCanUseAiAnalysis] = useState<boolean>(true);
+  const [timeLimitPerQuestion, setTimeLimitPerQuestion] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [_isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -161,6 +163,7 @@ export default function StudentActivityPage() {
       setPracticeMode(data.practice_mode || null);
       setShowAnswer(data.show_answer || false);
       setCanUseAiAnalysis(data.can_use_ai_analysis ?? true);
+      setTimeLimitPerQuestion(data.time_limit_per_question ?? 0);
     } catch (error) {
       console.error("Failed to load activities:", error);
       toast.error(t("studentActivityPage.errors.loadFailed"));
@@ -296,6 +299,7 @@ export default function StudentActivityPage() {
       practiceMode={practiceMode}
       showAnswer={showAnswer}
       canUseAiAnalysis={canUseAiAnalysis}
+      timeLimitPerQuestion={timeLimitPerQuestion}
       onBack={() => navigate("/student/assignments")}
       onSubmit={handleSubmit}
     />
