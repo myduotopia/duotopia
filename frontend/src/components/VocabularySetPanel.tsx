@@ -3467,10 +3467,14 @@ const VocabularySetPanel = forwardRef<
           if (shouldGenerateExamples && !row.example_sentence?.trim()) steps++;
           if (shouldGenerateExamples && row.example_sentence?.trim()) {
             const sentenceLang =
-              row.selectedSentenceLanguage || aiGenerateTranslateLang || "chinese";
+              row.selectedSentenceLanguage ||
+              aiGenerateTranslateLang ||
+              "chinese";
             const hasExampleTranslation = (() => {
-              if (sentenceLang === "japanese") return !!row.example_sentence_japanese?.trim();
-              if (sentenceLang === "korean") return !!row.example_sentence_korean?.trim();
+              if (sentenceLang === "japanese")
+                return !!row.example_sentence_japanese?.trim();
+              if (sentenceLang === "korean")
+                return !!row.example_sentence_korean?.trim();
               return !!row.example_sentence_translation?.trim();
             })();
             if (!hasExampleTranslation) steps++;
@@ -3545,10 +3549,14 @@ const VocabularySetPanel = forwardRef<
             needsExamples.push(idx);
           if (shouldGenerateExamples && row.example_sentence?.trim()) {
             const sentenceLang =
-              row.selectedSentenceLanguage || aiGenerateTranslateLang || "chinese";
+              row.selectedSentenceLanguage ||
+              aiGenerateTranslateLang ||
+              "chinese";
             const hasExampleTranslation = (() => {
-              if (sentenceLang === "japanese") return !!row.example_sentence_japanese?.trim();
-              if (sentenceLang === "korean") return !!row.example_sentence_korean?.trim();
+              if (sentenceLang === "japanese")
+                return !!row.example_sentence_japanese?.trim();
+              if (sentenceLang === "korean")
+                return !!row.example_sentence_korean?.trim();
               return !!row.example_sentence_translation?.trim();
             })();
             if (!hasExampleTranslation) needsExampleTranslation.push(idx);
