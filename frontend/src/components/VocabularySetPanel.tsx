@@ -1952,7 +1952,7 @@ const VocabularySetPanel = forwardRef<
   };
 
   const handleAddRow = () => {
-    if (rows.length >= 15) {
+    if (rows.length >= BATCH_PASTE_MAX) {
       toast.error(t("contentEditor.messages.maxRowsReached"));
       return;
     }
@@ -1981,7 +1981,7 @@ const VocabularySetPanel = forwardRef<
   };
 
   const handleCopyRow = (index: number) => {
-    if (rows.length >= 15) {
+    if (rows.length >= BATCH_PASTE_MAX) {
       toast.error(t("contentEditor.messages.maxRowsReached"));
       return;
     }
@@ -2566,14 +2566,12 @@ const VocabularySetPanel = forwardRef<
       const translationResult =
         await autoGenerateTranslationsSilently(validRows);
       if (!translationResult.success) {
-        setIsSaving(false);
         return;
       }
       validRows = translationResult.updatedRows;
 
       const audioResult = await autoGenerateAudioSilently(validRows);
       if (!audioResult.success) {
-        setIsSaving(false);
         return;
       }
       validRows = audioResult.updatedRows;
@@ -3467,12 +3465,16 @@ const VocabularySetPanel = forwardRef<
           }
           if (autoTTS && !row.audioUrl && !row.audio_url) steps++;
           if (shouldGenerateExamples && !row.example_sentence?.trim()) steps++;
-          if (
-            shouldGenerateExamples &&
-            row.example_sentence?.trim() &&
-            !row.example_sentence_translation?.trim()
-          )
-            steps++;
+          if (shouldGenerateExamples && row.example_sentence?.trim()) {
+            const sentenceLang =
+              row.selectedSentenceLanguage || aiGenerateTranslateLang || "chinese";
+            const hasExampleTranslation = (() => {
+              if (sentenceLang === "japanese") return !!row.example_sentence_japanese?.trim();
+              if (sentenceLang === "korean") return !!row.example_sentence_korean?.trim();
+              return !!row.example_sentence_translation?.trim();
+            })();
+            if (!hasExampleTranslation) steps++;
+          }
           return steps;
         };
 
@@ -3541,12 +3543,16 @@ const VocabularySetPanel = forwardRef<
           if (autoTTS && !row.audioUrl && !row.audio_url) needsTTS.push(idx);
           if (shouldGenerateExamples && !row.example_sentence?.trim())
             needsExamples.push(idx);
-          if (
-            shouldGenerateExamples &&
-            row.example_sentence?.trim() &&
-            !row.example_sentence_translation?.trim()
-          )
-            needsExampleTranslation.push(idx);
+          if (shouldGenerateExamples && row.example_sentence?.trim()) {
+            const sentenceLang =
+              row.selectedSentenceLanguage || aiGenerateTranslateLang || "chinese";
+            const hasExampleTranslation = (() => {
+              if (sentenceLang === "japanese") return !!row.example_sentence_japanese?.trim();
+              if (sentenceLang === "korean") return !!row.example_sentence_korean?.trim();
+              return !!row.example_sentence_translation?.trim();
+            })();
+            if (!hasExampleTranslation) needsExampleTranslation.push(idx);
+          }
         }
 
         // --- Phase 1: Translation (parallel batch) ---
@@ -4344,7 +4350,7 @@ const VocabularySetPanel = forwardRef<
                 <button
                   onClick={handleAddRow}
                   className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600"
-                  disabled={rows.length >= 15}
+                  disabled={rows.length >= BATCH_PASTE_MAX}
                 >
                   <Plus className="h-5 w-5" />
                   {t("contentEditor.buttons.addItem")}
