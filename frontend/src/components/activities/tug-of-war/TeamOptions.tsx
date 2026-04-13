@@ -91,7 +91,7 @@ export function TeamOptions({
             onClick={() => !disabled && !isCooldown && onSelect(team, option)}
             disabled={disabled || isCooldown}
             className={`
-              relative flex items-start gap-2 px-3 py-2 rounded-lg border-2 text-left
+              relative flex ${showImages ? "flex-col items-center" : "items-start"} gap-2 px-3 py-2 rounded-lg border-2 text-left
               transition-all duration-150
               ${
                 disabled || isCooldown
@@ -124,7 +124,7 @@ export function TeamOptions({
                   <img
                     src={item.image_url}
                     alt=""
-                    className="w-16 h-16 sm:w-24 sm:h-24 rounded object-cover flex-shrink-0"
+                    className="w-full rounded object-cover"
                   />
                 ) : null;
               })()}
