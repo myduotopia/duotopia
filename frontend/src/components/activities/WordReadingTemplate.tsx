@@ -179,6 +179,7 @@ export default function WordReadingTemplate({
 
   // Recording start timestamp (for duration check against timeLimit)
   const recordingStartTimeRef = useRef<number>(0);
+  const autoStopTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Image error handling
   const [imageError, setImageError] = useState(false);
@@ -412,6 +413,27 @@ export default function WordReadingTemplate({
       recordingIntervalRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
+
+      // Auto-stop recording when time limit is reached
+      if (timeLimit > 0) {
+        if (autoStopTimerRef.current) {
+          clearTimeout(autoStopTimerRef.current);
+        }
+        autoStopTimerRef.current = setTimeout(() => {
+          if (
+            mediaRecorderRef.current &&
+            mediaRecorderRef.current.state === "recording"
+          ) {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+            if (recordingIntervalRef.current) {
+              clearInterval(recordingIntervalRef.current);
+              recordingIntervalRef.current = null;
+            }
+          }
+          autoStopTimerRef.current = null;
+        }, timeLimit * 1000);
+      }
     } catch (error) {
       console.error("Error starting recording:", error);
       toast.error("無法啟動錄音，請檢查麥克風權限");
@@ -427,6 +449,10 @@ export default function WordReadingTemplate({
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
         recordingIntervalRef.current = null;
+      }
+      if (autoStopTimerRef.current) {
+        clearTimeout(autoStopTimerRef.current);
+        autoStopTimerRef.current = null;
       }
     }
   };
