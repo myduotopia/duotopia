@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Info } from "lucide-react";
+import { ArrowLeft, Info, X } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
@@ -51,6 +51,7 @@ export default function TeacherAssignmentPreviewPage() {
     null,
   );
   const [loading, setLoading] = useState(true);
+  const [showBanner, setShowBanner] = useState(true);
 
   useEffect(() => {
     fetchPreviewData();
@@ -116,14 +117,22 @@ export default function TeacherAssignmentPreviewPage() {
             </Button>
           </div>
 
-          {/* Info Banner */}
-          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-start gap-2">
-            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-            <p className="text-sm text-blue-700 dark:text-blue-300">
-              <strong>{t("previewPage.badge.previewMode")}</strong>
-              {t("previewPage.info.suffix")}
-            </p>
-          </div>
+          {/* Info Banner — dismissible */}
+          {showBanner && (
+            <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-start gap-2">
+              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-blue-700 dark:text-blue-300 flex-1">
+                <strong>{t("previewPage.badge.previewMode")}</strong>
+                {t("previewPage.info.suffix")}
+              </p>
+              <button
+                onClick={() => setShowBanner(false)}
+                className="text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300 flex-shrink-0"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
