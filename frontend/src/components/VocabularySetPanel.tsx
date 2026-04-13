@@ -910,7 +910,8 @@ const TTSModal = ({
                         size="sm"
                         onClick={() => {
                           setRecordedAudio((prev) => {
-                            if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+                            if (prev && prev.startsWith("blob:"))
+                              URL.revokeObjectURL(prev);
                             return "";
                           });
                           setSelectedSource(null);
