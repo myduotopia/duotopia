@@ -14,14 +14,12 @@
  * 已指派 -> 未開始 -> 已開始 -> 已提交 -> 待訂正 -> 已訂正 -> 已完成
  */
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Brain,
   Clock,
-  RotateCcw,
-  SkipForward,
   Volume2,
   Mic,
   Square,
@@ -44,14 +42,6 @@ import {
 import { useDemoAzurePronunciation } from "@/hooks/useDemoAzurePronunciation";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import PronunciationScoreChart from "./shared/PronunciationScoreChart";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 interface AssessmentResult {
   overallScore: number;
@@ -122,9 +112,6 @@ interface WordReadingTemplateProps {
   isDemoMode?: boolean; // Demo mode - uses public demo API endpoints
 
   // Callbacks
-  onTimeout?: () => void;
-  onRetry?: () => void;
-  onSkip?: () => void;
   onAssessmentComplete?: (result: AssessmentResult) => void;
   onClearRecording?: () => void;
 
@@ -144,9 +131,6 @@ export default function WordReadingTemplate({
   readOnly = false,
   isDemoMode = false,
   timeLimit = 0, // Default unlimited
-  onTimeout,
-  onRetry,
-  onSkip,
   onAssessmentComplete,
   onClearRecording,
   canUseAiAnalysis = true,
@@ -193,10 +177,8 @@ export default function WordReadingTemplate({
   const demoHook = useDemoAzurePronunciation();
   const { analyzePronunciation } = isDemoMode ? demoHook : regularHook;
 
-  // Timer state
-  const [timeRemaining, setTimeRemaining] = useState(timeLimit);
-  const [showTimeoutDialog, setShowTimeoutDialog] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // Recording start timestamp (for duration check against timeLimit)
+  const recordingStartTimeRef = useRef<number>(0);
 
   // Image error handling
   const [imageError, setImageError] = useState(false);
@@ -239,62 +221,6 @@ export default function WordReadingTemplate({
     return { overallScore, dimensions, details };
   }, [assessmentResult, phonemeResult, t]);
 
-  // Format time helper
-  const formatTime = useCallback((seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  }, []);
-
-  // Start timer
-  const startTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
-    timerRef.current = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-          }
-          setShowTimeoutDialog(true);
-          onTimeout?.();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, [onTimeout]);
-
-  // Reset timer
-  const resetTimer = useCallback(() => {
-    setTimeRemaining(timeLimit);
-    setShowTimeoutDialog(false);
-    if (timeLimit > 0) {
-      startTimer();
-    }
-  }, [timeLimit, startTimer]);
-
-  // Initialize timer when component mounts or item changes
-  useEffect(() => {
-    if (!readOnly && !audioUrl && timeLimit > 0) {
-      startTimer();
-    }
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, [readOnly, timeLimit, startTimer, currentItem.id]);
-
-  // Stop timer when recording is complete
-  useEffect(() => {
-    if (audioUrl && timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-  }, [audioUrl]);
 
   // Reset state when item changes (only triggered by currentItem.id change)
   useEffect(() => {
@@ -307,7 +233,6 @@ export default function WordReadingTemplate({
     setPhonemeResult(null);
     setScoreOverlayOpen(false);
     setScoreModalOpen(false);
-    setTimeRemaining(timeLimit);
     setImageError(false);
     setIsPlaying(false);
     setCurrentTime(0);
@@ -338,12 +263,6 @@ export default function WordReadingTemplate({
       }
     }
 
-    // Start timer for new item without existing audio.
-    // Must be done here because the timer init useEffect (line 280) reads
-    // stale audioUrl from closure when both effects fire in the same render.
-    if (!readOnly && !existingAudioUrl && timeLimit > 0) {
-      startTimer();
-    }
   }, [currentItem.id]); // Only run when item changes, not when existingAudioUrl/timeLimit changes
 
   // Sync assessment from background analysis completing after navigation
@@ -408,24 +327,6 @@ export default function WordReadingTemplate({
     };
   }, [currentItem.id, currentItem.audio_url, playbackRate]);
 
-  // Handle retry
-  const handleRetry = () => {
-    setShowTimeoutDialog(false);
-    setAudioUrl(undefined);
-    setAssessmentResult(null);
-    setScoreOverlayOpen(false);
-    setScoreModalOpen(false);
-    resetTimer();
-    onRetry?.();
-  };
-
-  // Handle skip
-  const handleSkip = () => {
-    setShowTimeoutDialog(false);
-    onSkip?.();
-  };
-
-  const isLowTime = timeRemaining <= 5 && timeRemaining > 0;
 
   // Play example audio
   const handlePlayExample = () => {
@@ -477,6 +378,22 @@ export default function WordReadingTemplate({
         const audioBlob = new Blob(audioChunksRef.current, {
           type: "audio/webm",
         });
+
+        // Check recording duration against time limit
+        const elapsedSeconds =
+          (Date.now() - recordingStartTimeRef.current) / 1000;
+        if (timeLimit > 0 && elapsedSeconds > timeLimit) {
+          toast.error(
+            t("wordReading.toast.recordingExceedsLimit", {
+              recorded: Math.round(elapsedSeconds),
+              limit: timeLimit,
+            }) ||
+              `錄音時間 ${Math.round(elapsedSeconds)} 秒超過限制 ${timeLimit} 秒，請重新錄音`,
+          );
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
         // Revoke previous blob URL to prevent memory leak
         if (audioUrl && audioUrl.startsWith("blob:")) {
           URL.revokeObjectURL(audioUrl);
@@ -492,6 +409,7 @@ export default function WordReadingTemplate({
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingTime(0);
+      recordingStartTimeRef.current = Date.now();
 
       // Start recording timer
       recordingIntervalRef.current = setInterval(() => {
@@ -807,18 +725,14 @@ export default function WordReadingTemplate({
                   <option value={2.0}>2.0x</option>
                 </select>
 
-                {/* Timer Display */}
-                {!readOnly && timeLimit > 0 && !audioUrl && (
-                  <div
-                    className={cn(
-                      "flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium",
-                      isLowTime
-                        ? "bg-red-100 text-red-700 animate-pulse"
-                        : "bg-gray-100 text-gray-700",
-                    )}
-                  >
+                {/* Time Limit Display (static) */}
+                {!readOnly && timeLimit > 0 && (
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
                     <Clock className="h-3 w-3" />
-                    <span>{formatTime(timeRemaining)}</span>
+                    <span>
+                      {t("wordReading.timeLimit", { seconds: timeLimit }) ||
+                        `限時 ${timeLimit} 秒`}
+                    </span>
                   </div>
                 )}
               </div>
@@ -961,7 +875,7 @@ export default function WordReadingTemplate({
                     {/* 錄音中狀態 */}
                     <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse" />
                     <span className="text-base font-medium text-red-600">
-                      {formatTime(recordingTime)}
+                      {`${Math.floor(recordingTime / 60)}:${(recordingTime % 60).toString().padStart(2, "0")}`}
                     </span>
                     <Button
                       size="sm"
@@ -1219,37 +1133,6 @@ export default function WordReadingTemplate({
         </div>
       </div>
 
-      {/* Timeout Dialog */}
-      <Dialog open={showTimeoutDialog} onOpenChange={setShowTimeoutDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-orange-600">
-              <Clock className="h-5 w-5" />
-              {t("wordReading.timeUp") || "時間到！"}
-            </DialogTitle>
-            <DialogDescription>
-              {t("wordReading.timeUpDescription") ||
-                "錄音時間已結束，您可以選擇重試或跳過此題。"}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={handleRetry}
-              className="flex items-center gap-2"
-            >
-              <RotateCcw className="h-4 w-4" />
-              {t("wordReading.retry") || "重試"}
-            </Button>
-            {onSkip && (
-              <Button onClick={handleSkip} className="flex items-center gap-2">
-                <SkipForward className="h-4 w-4" />
-                {t("wordReading.skip") || "跳過"}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* 🎯 Issue #461: 分析完成星星鼓勵動畫 overlay */}
       <ScoreOverlay

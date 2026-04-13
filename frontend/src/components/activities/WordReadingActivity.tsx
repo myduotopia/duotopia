@@ -419,11 +419,6 @@ export default function WordReadingActivity({
     }
   }, [items, currentIndex, assignmentId, token, isPreviewMode, isDemoMode]);
 
-  // Handle skip
-  const handleSkip = () => {
-    handleNext();
-  };
-
   // Submit assignment
   const handleSubmit = async () => {
     if (isPreviewMode || isDemoMode) {
@@ -684,7 +679,6 @@ export default function WordReadingActivity({
         readOnly={readOnly}
         isDemoMode={isDemoMode}
         timeLimit={timeLimitPerQuestion}
-        onSkip={handleSkip}
         onAssessmentComplete={handleAssessmentComplete}
         onClearRecording={handleClearRecording}
         canUseAiAnalysis={canUseAiAnalysisProp ?? canUseAiAnalysisFromApi}
