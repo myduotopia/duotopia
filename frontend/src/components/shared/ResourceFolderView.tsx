@@ -185,22 +185,38 @@ function ContentPreviewCard({
                 draggable={false}
               />
             )}
-            <div className="space-y-1 text-[13px] flex-1 min-w-0">
-              {items.slice(0, items[0].image_url ? 4 : 5).map((item, i) => (
-                <div
-                  key={i}
-                  className={`break-words leading-tight ${i >= 3 ? "text-gray-400" : i >= 2 ? "text-gray-500" : "text-gray-700"}`}
-                >
-                  <span>{item.text}</span>
-                  {item.translation && (
-                    <>
-                      <span className="mx-1 text-gray-300">·</span>
-                      <span className="text-gray-400">{item.translation}</span>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
+            {items[0].image_url ? (
+              <div className="space-y-0.5 text-[12px] flex-1 min-w-0">
+                {items.slice(0, 4).map((item, i) => (
+                  <div
+                    key={item.id ?? i}
+                    className={`truncate leading-tight ${i >= 3 ? "text-gray-400" : i >= 2 ? "text-gray-500" : "text-gray-700"}`}
+                  >
+                    {item.text}
+                    {item.translation && (
+                      <span className="text-gray-400"> {item.translation}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-1 text-[13px] flex-1 min-w-0">
+                {items.slice(0, 5).map((item, i) => (
+                  <div
+                    key={item.id ?? i}
+                    className={`break-words leading-tight ${i >= 3 ? "text-gray-400" : i >= 2 ? "text-gray-500" : "text-gray-700"}`}
+                  >
+                    <span>{item.text}</span>
+                    {item.translation && (
+                      <>
+                        <span className="mx-1 text-gray-300">·</span>
+                        <span className="text-gray-400">{item.translation}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-300">
@@ -401,6 +417,7 @@ export default function ResourceFolderView({
   selectedId,
   pageSize = 12,
 }: ResourceFolderViewProps) {
+  const { t } = useTranslation();
   const [page, setPage] = useState(0);
 
   // Reset page when materials change
@@ -445,7 +462,7 @@ export default function ResourceFolderView({
   return (
     <div ref={containerRef} className="space-y-5">
       {rows.map((row, rowIndex) => (
-        <div key={rowIndex}>
+        <div key={row[0]?.id ?? rowIndex}>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
             {row.map((material) => (
               <ResourceProgramCard
@@ -478,7 +495,7 @@ export default function ResourceFolderView({
       ))}
 
       {materials.length === 0 && (
-        <div className="text-center py-12 text-gray-400">尚無公版教材</div>
+        <div className="text-center py-12 text-gray-400">{t("resourceFolderView.empty", "尚無公版教材")}</div>
       )}
 
       <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
