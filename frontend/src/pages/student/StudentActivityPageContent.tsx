@@ -159,6 +159,7 @@ interface StudentActivityPageContentProps {
   practiceMode?: string | null; // 例句重組/朗讀模式
   showAnswer?: boolean; // 例句重組：答題結束後是否顯示正確答案
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
+  timeLimitPerQuestion?: number; // 每題錄音時間限制（秒）
 }
 
 // =============================================================================
@@ -199,6 +200,7 @@ export default function StudentActivityPageContent({
   practiceMode = null,
   showAnswer = false,
   canUseAiAnalysis = true,
+  timeLimitPerQuestion = 0,
 }: StudentActivityPageContentProps) {
   const { t } = useTranslation();
 
@@ -1933,13 +1935,8 @@ export default function StudentActivityPageContent({
             progressId={activity.id}
             readOnly={isReadOnly}
             isDemoMode={isDemoMode}
-            timeLimit={activity.duration || 60}
+            timeLimit={timeLimitPerQuestion}
             canUseAiAnalysis={canUseAiAnalysis}
-            onSkip={
-              currentActivityIndex < activities.length - 1
-                ? () => handleActivitySelect(currentActivityIndex + 1)
-                : undefined
-            }
           />
         );
       }
@@ -2127,12 +2124,7 @@ export default function StudentActivityPageContent({
             progressId={activity.id}
             readOnly={isReadOnly}
             isDemoMode={isDemoMode}
-            timeLimit={activity.duration || 60}
-            onSkip={
-              currentActivityIndex < activities.length - 1
-                ? () => handleActivitySelect(currentActivityIndex + 1)
-                : undefined
-            }
+            timeLimit={timeLimitPerQuestion}
           />
         );
     }

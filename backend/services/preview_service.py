@@ -182,6 +182,7 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
         "practice_mode": assignment.practice_mode,
         "show_answer": assignment.show_answer or False,
         "score_category": assignment.score_category,
+        "time_limit_per_question": assignment.time_limit_per_question,
         "total_activities": len(activities),
         "activities": activities,
     }
