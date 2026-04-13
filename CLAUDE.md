@@ -15,20 +15,19 @@
 
 | Field | Value |
 |-------|-------|
-| gcloud config | `duotopia` |
-| Account | `dev02@careercreator.tw` |
-| GCP Project | `groovy-iris-473015-h3` |
+| gcloud config | `default` |
+| GCP Project | `duotopia-472708` |
 | Region | `asia-east1` |
 
-> Hook auto-switches. If permission error → `gcloud config configurations activate duotopia`
+> Hook auto-switches. If permission error → `gcloud config configurations activate default`
 
 ## Environments
 
 | Environment | URL | Branch | Database |
 |-------------|-----|--------|----------|
-| Production | https://duotopia.com | main | Supabase (prod) |
-| Staging | https://staging.duotopia.com | staging | Supabase (staging) |
-| Develop | https://develop.duotopia.com | develop | Supabase (develop) |
+| Production | https://duotopia.co | main | Supabase (prod) |
+| Staging | https://duotopia-staging-frontend-316409492201.asia-east1.run.app | staging | Supabase (staging) |
+| Develop | https://duotopia-frontend-develop-b2ovkkgl6a-de.a.run.app | develop | Supabase (develop) |
 
 > **Note**: 每個環境使用獨立的 Supabase project，資料庫不共用。
 
