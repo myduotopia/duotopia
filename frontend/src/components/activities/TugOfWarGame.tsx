@@ -202,7 +202,7 @@ export function TugOfWarGame({
 
       const game = new Phaser.Game({
         type: Phaser.AUTO,
-        width: 500,
+        width: 350,
         height: 300,
         parent: phaserContainerRef.current,
         transparent: false,
@@ -378,7 +378,7 @@ export function TugOfWarGame({
       <div className="flex gap-3 items-stretch">
         {/* Team A options — left */}
         {currentQuestion && (
-          <div className="w-[35%] p-2 rounded-xl border-2 border-red-500 bg-red-500/20 flex items-center">
+          <div className="flex-1 p-2 rounded-xl border-2 border-red-500 bg-red-500/20 flex items-center">
             <TeamOptions
               team="a"
               options={currentQuestion.optionsA}
@@ -426,7 +426,7 @@ export function TugOfWarGame({
 
         {/* Team B options — right */}
         {currentQuestion && (
-          <div className="w-[35%] p-2 rounded-xl border-2 border-blue-500 bg-blue-500/20 flex items-center">
+          <div className="flex-1 p-2 rounded-xl border-2 border-blue-500 bg-blue-500/20 flex items-center">
             <TeamOptions
               team="b"
               options={currentQuestion.optionsB}
