@@ -5,7 +5,6 @@ These endpoints have no database dependency.
 
 from unittest.mock import patch
 
-import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
@@ -44,18 +43,22 @@ class TestRobotsTxt:
         assert "Sitemap:" in response.text
         assert "sitemap-index.xml" in response.text
 
+    def test_production_has_cache_control(self):
+        with patch.dict("os.environ", {"ENVIRONMENT": "production"}):
+            response = client.get("/api/public/robots.txt")
+        assert "max-age=3600" in response.headers.get("cache-control", "")
+
     def test_staging_disallows_all(self):
         with patch.dict("os.environ", {"ENVIRONMENT": "staging"}):
             response = client.get("/api/public/robots.txt")
         assert response.status_code == status.HTTP_200_OK
-        assert "Disallow: /" in response.text
-        assert "Allow" not in response.text
+        assert response.text.strip() == "User-agent: *\nDisallow: /"
 
     def test_develop_disallows_all(self):
         with patch.dict("os.environ", {"ENVIRONMENT": "develop"}):
             response = client.get("/api/public/robots.txt")
         assert response.status_code == status.HTTP_200_OK
-        assert "Disallow: /" in response.text
+        assert response.text.strip() == "User-agent: *\nDisallow: /"
 
 
 class TestSitemapIndex:
@@ -75,6 +78,10 @@ class TestSitemapIndex:
     def test_uses_correct_domain(self):
         response = client.get("/api/public/sitemap-index.xml")
         assert SITE_DOMAIN in response.text
+
+    def test_has_cache_control(self):
+        response = client.get("/api/public/sitemap-index.xml")
+        assert "max-age=3600" in response.headers.get("cache-control", "")
 
 
 class TestSitemapStatic:
@@ -103,6 +110,10 @@ class TestSitemapStatic:
         assert "<lastmod>" in text
         assert "<changefreq>" in text
         assert "<priority>" in text
+
+    def test_has_cache_control(self):
+        response = client.get("/api/public/sitemap-static.xml")
+        assert "max-age=3600" in response.headers.get("cache-control", "")
 
     def test_excludes_private_routes(self):
         response = client.get("/api/public/sitemap-static.xml")

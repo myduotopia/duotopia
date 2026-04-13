@@ -17,7 +17,7 @@ from services.blog_service import BlogService
 import logging
 import os
 
-SITE_DOMAIN = "https://duotopia.co"
+SITE_DOMAIN = os.getenv("SITE_DOMAIN", "https://duotopia.co")
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +203,11 @@ def get_robots_txt():
     else:
         content = "User-agent: *\nDisallow: /\n"
 
-    return Response(content=content, media_type="text/plain")
+    return Response(
+        content=content,
+        media_type="text/plain",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/sitemap-index.xml")
@@ -223,7 +227,11 @@ def get_sitemap_index():
         "  </sitemap>\n"
         "</sitemapindex>"
     )
-    return Response(content=xml, media_type="application/xml")
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/sitemap-static.xml")
@@ -256,7 +264,11 @@ def get_sitemap_static():
         + "\n".join(urls)
         + "\n</urlset>"
     )
-    return Response(content=xml, media_type="application/xml")
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 # ============ Blog Public Endpoints ============
