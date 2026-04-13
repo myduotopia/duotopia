@@ -2598,6 +2598,7 @@ const VocabularySetPanel = forwardRef<
       if (existingContentId) {
         try {
           await apiClient.updateContent(existingContentId, saveData);
+          toast.success(t("contentEditor.messages.savingSuccess"));
           if (onSave) {
             await onSave({
               id: existingContentId,
@@ -2615,6 +2616,7 @@ const VocabularySetPanel = forwardRef<
             type: "VOCABULARY_SET",
             ...saveData,
           });
+          toast.success(t("contentEditor.messages.contentCreatedSuccess"));
           if (onSave) {
             await onSave(newContent);
           }

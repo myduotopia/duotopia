@@ -2,6 +2,7 @@ import {
   useState,
   useRef,
   useEffect,
+  useCallback,
   forwardRef,
   useImperativeHandle,
 } from "react";
@@ -838,7 +839,7 @@ interface SortableRowInnerProps {
   handleOpenTTSModal: (row: ContentRow) => void;
   handleRemoveAudio: (index: number) => void;
   handleGenerateSingleDefinition: (index: number) => Promise<void>;
-  handleGenerateSingleDefinitionWithLang: (
+  handleGenerateSingleDefinitionWithLang?: (
     index: number,
     lang: TranslationLanguage,
   ) => Promise<void>;
@@ -856,8 +857,6 @@ function SortableRowInner({
   handleOpenTTSModal,
   handleRemoveAudio,
   handleGenerateSingleDefinition,
-  handleGenerateSingleDefinitionWithLang:
-    _handleGenerateSingleDefinitionWithLang,
   rowsLength,
   panelTranslateLang = "",
   panelCustomLang = "",
@@ -877,6 +876,13 @@ function SortableRowInner({
     transition,
     opacity: isDragging ? 0.4 : 1,
   };
+
+  const autoHeightRef = useCallback((el: HTMLTextAreaElement | null) => {
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = el.scrollHeight + "px";
+    }
+  }, []);
 
   return (
     <div
@@ -911,12 +917,7 @@ function SortableRowInner({
               e.target.style.height = "auto";
               e.target.style.height = e.target.scrollHeight + "px";
             }}
-            ref={(el) => {
-              if (el) {
-                el.style.height = "auto";
-                el.style.height = el.scrollHeight + "px";
-              }
-            }}
+            ref={autoHeightRef}
             className="w-full px-3 py-2 pr-20 border rounded-md text-sm resize-y min-h-[38px] overflow-hidden"
             placeholder={t("contentEditor.placeholders.enterText")}
             rows={1}
@@ -997,12 +998,7 @@ function SortableRowInner({
                 e.target.style.height = "auto";
                 e.target.style.height = e.target.scrollHeight + "px";
               }}
-              ref={(el) => {
-                if (el) {
-                  el.style.height = "auto";
-                  el.style.height = el.scrollHeight + "px";
-                }
-              }}
+              ref={autoHeightRef}
               className="w-full px-3 py-2 pr-24 border rounded-md text-sm resize-y min-h-[38px] overflow-hidden"
               placeholder={(() => {
                 const lang = panelTranslateLang || row.selectedLanguage || "";
@@ -1242,6 +1238,7 @@ const ReadingAssessmentPanel = forwardRef<
     if (existingContentId) {
       try {
         await apiClient.updateContent(existingContentId, saveData);
+        toast.success(t("contentEditor.messages.savingSuccess"));
         if (onSave) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (onSave as (content?: any) => void | Promise<void>)({
@@ -1273,6 +1270,7 @@ const ReadingAssessmentPanel = forwardRef<
           type: "EXAMPLE_SENTENCES",
           ...saveData,
         });
+        toast.success(t("contentEditor.messages.contentCreatedSuccess"));
         if (onSave) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (onSave as (content?: any) => void | Promise<void>)(newContent);
@@ -2573,14 +2571,7 @@ const ReadingAssessmentPanel = forwardRef<
           }}
           translationLanguages={TRANSLATION_LANGUAGES.map((l) => ({
             value: l.value,
-            label:
-              l.labelKey === "chinese"
-                ? "中文"
-                : l.labelKey === "japanese"
-                  ? "日本語"
-                  : l.labelKey === "korean"
-                    ? "한국어"
-                    : "Other",
+            label: t(`contentEditor.translationLanguages.${l.labelKey}`),
             code: l.code,
           }))}
           customLanguage={customTranslateLang}
@@ -2646,7 +2637,7 @@ const ReadingAssessmentPanel = forwardRef<
                 <button
                   onClick={handleAddRow}
                   className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600"
-                  disabled={rows.length >= 15}
+                  disabled={rows.length >= MAX_ROWS}
                 >
                   <Plus className="h-5 w-5" />
                   {t("contentEditor.buttons.addItem")}

@@ -141,11 +141,14 @@ VALID_LANGUAGE_NAMES = {
 }
 
 
+_VALID_LANGS_LOWER: frozenset = frozenset(
+    v.lower() for v in VALID_LANGUAGE_CODES | VALID_LANGUAGE_NAMES
+)
+
+
 def is_valid_language(lang: str) -> bool:
     """檢查 target_lang 是否為可辨識的語言代碼或名稱"""
-    return lang.lower().strip() in {
-        v.lower() for v in VALID_LANGUAGE_CODES | VALID_LANGUAGE_NAMES
-    }
+    return lang.lower().strip() in _VALID_LANGS_LOWER
 
 
 @router.post("/translate")
