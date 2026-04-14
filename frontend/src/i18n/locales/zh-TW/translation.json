@@ -2773,9 +2773,9 @@
       "createProgram": "建立課程",
       "assignNewHomework": "指派新作業",
       "batchArchive": "批次封存",
-      "viewDetails": "查看詳情",
+      "viewDetails": "編輯",
       "editContent": "編輯內容",
-      "previewDemo": "預覽示範",
+      "previewDemo": "預覽",
       "viewSubmissions": "查看學生提交",
       "editAssignment": "編輯作業",
       "deleteAssignment": "刪除作業",
@@ -2785,7 +2785,7 @@
       "saveChanges": "儲存變更",
       "addItem": "新增項目",
       "record": "錄音",
-      "stickyNote": "進度",
+      "stickyNote": "進度與批改",
       "analysisReport": "作業分析"
     },
     "stats": {

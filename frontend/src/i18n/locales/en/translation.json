@@ -2721,8 +2721,8 @@
       "createProgram": "Create Program",
       "assignNewHomework": "Assign New Homework",
       "batchArchive": "Batch Archive",
-      "viewDetails": "View Details",
-      "previewDemo": "Preview Demo",
+      "viewDetails": "Edit",
+      "previewDemo": "Preview",
       "viewSubmissions": "View Student Submissions",
       "editAssignment": "Edit Assignment",
       "deleteAssignment": "Delete Assignment",
@@ -2732,7 +2732,7 @@
       "saveChanges": "Save Changes",
       "addItem": "Add Item",
       "record": "Record",
-      "stickyNote": "Progress",
+      "stickyNote": "Progress & Grade",
       "analysisReport": "Analysis Report"
     },
     "stats": {
@@ -2934,7 +2934,7 @@
     "buttons": {
       "backToList": "Back to Assignment List",
       "gradeAssignment": "Grade Assignment",
-      "batchGrade": "AI Batch Grade",
+      "batchGrade": "AI Grade",
       "cancel": "Cancel",
       "save": "Save",
       "edit": "Edit",
