@@ -4580,8 +4580,10 @@
       "submitFailed": "提交失敗",
       "completed": "作業已完成！",
       "missingData": "請先錄音",
-      "recordingTooLong": "錄音時間過長，限制最長 10 秒"
-    }
+      "recordingTooLong": "錄音時間過長，限制最長 10 秒",
+      "recordingExceedsLimit": "錄音時間 {{recorded}} 秒超過限制 {{limit}} 秒，請重新錄音"
+    },
+    "timeLimit": "限時 {{seconds}} 秒"
   },
   "wordSelection": {
     "loading": "正在載入單字...",

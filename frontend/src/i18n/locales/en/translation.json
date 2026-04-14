@@ -4561,8 +4561,10 @@
       "submitFailed": "Submit failed",
       "completed": "Assignment completed!",
       "missingData": "Please record first",
-      "recordingTooLong": "Recording too long, maximum 10 seconds"
-    }
+      "recordingTooLong": "Recording too long, maximum 10 seconds",
+      "recordingExceedsLimit": "Recording {{recorded}}s exceeds the {{limit}}s limit. Please re-record."
+    },
+    "timeLimit": "Time limit: {{seconds}}s"
   },
   "wordSelection": {
     "loading": "Loading vocabulary...",
