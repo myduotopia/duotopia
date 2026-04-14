@@ -136,7 +136,8 @@ export default function ReadingAssessmentTemplate({
       const audioBlob = await response.blob();
 
       // 🚀 先分析（快速顯示結果）
-      const azureResult = await analyzePronunciation(audioBlob, targetText);
+      const normalizedTargetText = targetText.replace(/\n+/g, " ").trim();
+      const azureResult = await analyzePronunciation(audioBlob, normalizedTargetText);
 
       if (!azureResult) {
         throw new Error("Azure analysis failed");
