@@ -11,7 +11,13 @@
  * - Content 卡片（文字預覽 + type badge + title + play 按鈕）
  */
 
-import { useState, useRef, useEffect, useCallback, type CSSProperties } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  type CSSProperties,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   Folder,
@@ -575,8 +581,16 @@ function ExpandArea({
   onInstantPractice?: (content: Content) => void;
   onCreateContent: (programId: number, lessonId: number) => void;
   onAssignContent?: (content: Content, lessonId: number) => void;
-  onReorderLessons?: (programId: number, fromIndex: number, toIndex: number) => void;
-  onReorderContents?: (lessonId: number, fromIndex: number, toIndex: number) => void;
+  onReorderLessons?: (
+    programId: number,
+    fromIndex: number,
+    toIndex: number,
+  ) => void;
+  onReorderContents?: (
+    lessonId: number,
+    fromIndex: number,
+    toIndex: number,
+  ) => void;
 }) {
   const { t } = useTranslation();
   const lessons = program.lessons ?? [];
@@ -750,8 +764,16 @@ export interface ProgramFolderViewProps {
   onCreateContent: (programId: number, lessonId: number) => void;
   onAssignContent?: (content: Content, lessonId: number) => void;
   onReorderPrograms?: (fromIndex: number, toIndex: number) => void;
-  onReorderLessons?: (programId: number, fromIndex: number, toIndex: number) => void;
-  onReorderContents?: (lessonId: number, fromIndex: number, toIndex: number) => void;
+  onReorderLessons?: (
+    programId: number,
+    fromIndex: number,
+    toIndex: number,
+  ) => void;
+  onReorderContents?: (
+    lessonId: number,
+    fromIndex: number,
+    toIndex: number,
+  ) => void;
 }
 
 export default function ProgramFolderView({
@@ -853,32 +875,32 @@ export default function ProgramFolderView({
                 ))}
               </div>
 
-          {/* Expand area below the visual row containing the selected program */}
-          {selectedRowIndex === rowIndex && selectedProgram && (
-            <div className="relative mt-4 animate-fade-up">
-              {/* Triangle pointer to selected program card */}
-              <div
-                className="absolute -top-3 w-0 h-0 border-l-[30px] border-l-transparent border-r-[30px] border-r-transparent border-b-[12px] border-b-white z-10"
-                style={{
-                  left: `calc((100% / ${columns}) * (${selectedIndex % columns} + 0.5) - 30px)`,
-                }}
-              />
-              <ExpandArea
-                program={selectedProgram}
-                onEditLesson={onEditLesson}
-                onDeleteLesson={onDeleteLesson}
-                onCreateLesson={onCreateLesson}
-                onContentClick={onContentClick}
-                onDeleteContent={onDeleteContent}
-                onCopyContent={onCopyContent}
-                onInstantPractice={onInstantPractice}
-                onCreateContent={onCreateContent}
-                onAssignContent={onAssignContent}
-                onReorderLessons={onReorderLessons}
-                onReorderContents={onReorderContents}
-              />
-            </div>
-          )}
+              {/* Expand area below the visual row containing the selected program */}
+              {selectedRowIndex === rowIndex && selectedProgram && (
+                <div className="relative mt-4 animate-fade-up">
+                  {/* Triangle pointer to selected program card */}
+                  <div
+                    className="absolute -top-3 w-0 h-0 border-l-[30px] border-l-transparent border-r-[30px] border-r-transparent border-b-[12px] border-b-white z-10"
+                    style={{
+                      left: `calc((100% / ${columns}) * (${selectedIndex % columns} + 0.5) - 30px)`,
+                    }}
+                  />
+                  <ExpandArea
+                    program={selectedProgram}
+                    onEditLesson={onEditLesson}
+                    onDeleteLesson={onDeleteLesson}
+                    onCreateLesson={onCreateLesson}
+                    onContentClick={onContentClick}
+                    onDeleteContent={onDeleteContent}
+                    onCopyContent={onCopyContent}
+                    onInstantPractice={onInstantPractice}
+                    onCreateContent={onCreateContent}
+                    onAssignContent={onAssignContent}
+                    onReorderLessons={onReorderLessons}
+                    onReorderContents={onReorderContents}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </SortableContext>
