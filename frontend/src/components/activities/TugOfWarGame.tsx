@@ -279,9 +279,7 @@ export function TugOfWarGame({
       {isPortrait && (
         <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white">
           <Smartphone className="h-16 w-16 mb-4 rotate-90" />
-          <p className="text-lg font-medium">
-            {t("tugOfWar.rotateDevice")}
-          </p>
+          <p className="text-lg font-medium">{t("tugOfWar.rotateDevice")}</p>
           <p className="text-sm text-white/60 mt-2">
             {t("tugOfWar.rotateDeviceHint")}
           </p>
@@ -331,7 +329,9 @@ export function TugOfWarGame({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <label className={`flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none ${isImageMode ? "opacity-40 pointer-events-none" : ""}`}>
+        <label
+          className={`flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none ${isImageMode ? "opacity-40 pointer-events-none" : ""}`}
+        >
           <input
             type="checkbox"
             checked={showImages}

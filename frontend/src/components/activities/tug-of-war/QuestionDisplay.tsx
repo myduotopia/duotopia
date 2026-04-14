@@ -99,15 +99,27 @@ export function QuestionDisplay({
       stopLoop();
       speechSynthesis.cancel();
     };
-  }, [question.vocabItem.id, showPrompt, question.hasAudio, startLoop, stopLoop]);
+  }, [
+    question.vocabItem.id,
+    showPrompt,
+    question.hasAudio,
+    startLoop,
+    stopLoop,
+  ]);
 
   // Fixed height for image mode to prevent container from jumping
-  const imageContainerClass = "text-center py-2 h-72 flex items-center justify-center";
-  const defaultContainerClass = "text-center py-2 h-16 flex items-end justify-center pb-4";
+  const imageContainerClass =
+    "text-center py-2 h-72 flex items-center justify-center";
+  const defaultContainerClass =
+    "text-center py-2 h-16 flex items-end justify-center pb-4";
 
   if (!showPrompt) {
     return (
-      <div className={question.hasImage ? imageContainerClass : defaultContainerClass}>
+      <div
+        className={
+          question.hasImage ? imageContainerClass : defaultContainerClass
+        }
+      >
         <span className="text-4xl font-bold text-green-600 handwrite-font">
           {question.correctAnswer}
         </span>

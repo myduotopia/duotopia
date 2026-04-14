@@ -85,20 +85,22 @@ export function TeamOptions({
   const useVertical = !showImages && maxLen > 7;
 
   // Dynamic font size based on text length
-  const fontSize = maxLen <= 4
-    ? "text-3xl sm:text-4xl"
-    : maxLen <= 7
-      ? "text-2xl sm:text-3xl"
-      : maxLen <= 12
-        ? "text-xl sm:text-2xl"
-        : "text-lg sm:text-xl";
-  const handwriteSize = maxLen <= 4
-    ? "handwrite-font text-4xl sm:text-5xl"
-    : maxLen <= 7
-      ? "handwrite-font text-3xl sm:text-4xl"
-      : maxLen <= 12
-        ? "handwrite-font text-2xl sm:text-3xl"
-        : "handwrite-font text-xl sm:text-2xl";
+  const fontSize =
+    maxLen <= 4
+      ? "text-3xl sm:text-4xl"
+      : maxLen <= 7
+        ? "text-2xl sm:text-3xl"
+        : maxLen <= 12
+          ? "text-xl sm:text-2xl"
+          : "text-lg sm:text-xl";
+  const handwriteSize =
+    maxLen <= 4
+      ? "handwrite-font text-4xl sm:text-5xl"
+      : maxLen <= 7
+        ? "handwrite-font text-3xl sm:text-4xl"
+        : maxLen <= 12
+          ? "handwrite-font text-2xl sm:text-3xl"
+          : "handwrite-font text-xl sm:text-2xl";
 
   return (
     <div className="flex flex-col gap-2 relative w-full">
