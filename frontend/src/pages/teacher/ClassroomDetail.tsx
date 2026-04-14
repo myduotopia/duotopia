@@ -113,7 +113,7 @@ export default function ClassroomDetail({
   const navigate = useNavigate();
   const location = useLocation();
   const { mode } = useWorkspace();
-  const { panelLeft, setSidebarDisabled, editorBusy } = useSidebar();
+  const { sidebarWidth, setSidebarDisabled, editorBusy } = useSidebar();
   const isOrgMode = mode === "organization";
   const [classroom, setClassroom] = useState<ClassroomInfo | null>(null);
   const [templateProgram, setTemplateProgram] = useState<Program | null>(null);
@@ -2705,7 +2705,7 @@ export default function ClassroomDetail({
           className={`fixed right-0 top-0 h-full bg-white shadow-xl border-l transform transition-transform duration-300 z-50 ${
             isPanelOpen ? "translate-x-0" : "translate-x-full"
           }`}
-          style={{ left: `${panelLeft}px` }}
+          style={{ left: `${sidebarWidth}px` }}
         >
           {selectedContent && (
             <div className="h-full flex flex-col">
@@ -3233,7 +3233,7 @@ export default function ClassroomDetail({
         <>
           <div
             className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
-            style={{ left: `${panelLeft}px` }}
+            style={{ left: `${sidebarWidth}px` }}
           >
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold">
@@ -3291,7 +3291,7 @@ export default function ClassroomDetail({
         <>
           <div
             className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
-            style={{ left: `${panelLeft}px` }}
+            style={{ left: `${sidebarWidth}px` }}
           >
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold">

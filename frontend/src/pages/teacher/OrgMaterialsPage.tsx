@@ -652,7 +652,7 @@ export default function OrgMaterialsPage() {
           <>
             <div
               className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
-              style={{ left: `${panelLeft}px` }}
+              style={{ left: `${sidebarWidth}px` }}
             >
               <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
@@ -743,7 +743,7 @@ export default function OrgMaterialsPage() {
               {/* Panel */}
               <div
                 className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
-                style={{ left: `${panelLeft}px` }}
+                style={{ left: `${sidebarWidth}px` }}
               >
                 <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                   <h2 className="text-lg font-semibold text-gray-900">
@@ -844,7 +844,7 @@ export default function OrgMaterialsPage() {
             <>
               <div
                 className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
-                style={{ left: `${panelLeft}px` }}
+                style={{ left: `${sidebarWidth}px` }}
               >
                 <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
                   <h2 className="text-lg font-semibold">
@@ -934,7 +934,7 @@ export default function OrgMaterialsPage() {
               {/* Panel */}
               <div
                 className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
-                style={{ left: `${panelLeft}px` }}
+                style={{ left: `${sidebarWidth}px` }}
               >
                 <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                   <h2 className="text-lg font-semibold text-gray-900">
