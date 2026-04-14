@@ -4795,7 +4795,7 @@
     "button": "Copy to..."
   },
   "tree": {
-    "dispatch": "Dispatch"
+    "assign": "Assign"
   },
   "instantPractice": {
     "title": "Instant Practice",

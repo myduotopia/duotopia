@@ -202,9 +202,9 @@ export default function ClassroomDetail({
     type?: string;
   } | null>(null);
 
-  // Dispatch assignment states (from Programs tab)
-  const [showDispatchDialog, setShowDispatchDialog] = useState(false);
-  const [dispatchContents, setDispatchContents] = useState<CartItem[]>([]);
+  // Assign states (from Programs tab)
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [assignContents, setAssignContents] = useState<CartItem[]>([]);
 
   // Assignment states
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
@@ -1703,7 +1703,7 @@ export default function ClassroomDetail({
                       setShowContentCopyDialog(true);
                     }
                   }}
-                  onDispatch={
+                  onAssign={
                     !isTemplateMode
                       ? (item, level, parentId) => {
                           if (level === 2 && typeof item.id === "number") {
@@ -1725,8 +1725,8 @@ export default function ClassroomDetail({
                               order: 0,
                               hasMissingAudio: false,
                             };
-                            setDispatchContents([cartItem]);
-                            setShowDispatchDialog(true);
+                            setAssignContents([cartItem]);
+                            setShowAssignDialog(true);
                           }
                         }
                       : undefined
@@ -3005,19 +3005,19 @@ export default function ClassroomDetail({
         }}
       />
 
-      {/* Assignment Dispatch Dialog (from Programs tab - with preSelectedContents) */}
+      {/* Assignment Dialog (from Programs tab - with preSelectedContents) */}
       <AssignmentDialog
-        open={showDispatchDialog}
+        open={showAssignDialog}
         onClose={() => {
-          setShowDispatchDialog(false);
-          setDispatchContents([]);
+          setShowAssignDialog(false);
+          setAssignContents([]);
         }}
         classroomId={Number(id)}
         students={students}
-        preSelectedContents={dispatchContents}
+        preSelectedContents={assignContents}
         onSuccess={() => {
-          setShowDispatchDialog(false);
-          setDispatchContents([]);
+          setShowAssignDialog(false);
+          setAssignContents([]);
           fetchAssignments();
         }}
       />

@@ -161,9 +161,9 @@ function TeacherTemplateProgramsInner() {
     title: string;
   } | null>(null);
 
-  // Dispatch assignment states
+  // Assign states
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
-  const [dispatchContents, setDispatchContents] = useState<CartItem[]>([]);
+  const [assignContents, setAssignContents] = useState<CartItem[]>([]);
 
   useEffect(() => {
     fetchTemplatePrograms();
@@ -662,7 +662,7 @@ function TeacherTemplateProgramsInner() {
                 setShowCopyDialog(true);
               }
             }}
-            onDispatch={(item, level, parentId) => {
+            onAssign={(item, level, parentId) => {
               if (level === 2 && typeof item.id === "number") {
                 const program = programs.find((p) =>
                   p.lessons?.some((l) => l.id === parentId),
@@ -678,7 +678,7 @@ function TeacherTemplateProgramsInner() {
                   order: 0,
                   hasMissingAudio: false,
                 };
-                setDispatchContents([cartItem]);
+                setAssignContents([cartItem]);
                 setShowAssignmentDialog(true);
               }
             }}
@@ -717,6 +717,27 @@ function TeacherTemplateProgramsInner() {
               setShowInstantPractice(true);
             }}
             onCreateContent={handleCreateContent}
+            onReorderPrograms={handleReorderPrograms}
+            onReorderLessons={handleReorderLessons}
+            onReorderContents={handleReorderContents}
+            onAssignContent={(content, lessonId) => {
+              const program = programs.find((p) =>
+                p.lessons?.some((l) => l.id === lessonId),
+              );
+              const lesson = program?.lessons?.find((l) => l.id === lessonId);
+              const cartItem: CartItem = {
+                contentId: content.id,
+                programName: program?.name || "",
+                lessonName: lesson?.name || "",
+                contentTitle: content.title,
+                contentType: content.type || "",
+                itemsCount: content.items_count,
+                order: 0,
+                hasMissingAudio: false,
+              };
+              setAssignContents([cartItem]);
+              setShowAssignmentDialog(true);
+            }}
           />
         )}
       </div>
@@ -1201,17 +1222,17 @@ function TeacherTemplateProgramsInner() {
         />
       )}
 
-      {/* Assignment Dispatch Dialog (no classroomId = multi-classroom mode) */}
+      {/* Assignment Dialog (no classroomId = multi-classroom mode) */}
       <AssignmentDialog
         open={showAssignmentDialog}
         onClose={() => {
           setShowAssignmentDialog(false);
-          setDispatchContents([]);
+          setAssignContents([]);
         }}
-        preSelectedContents={dispatchContents}
+        preSelectedContents={assignContents}
         onSuccess={() => {
           setShowAssignmentDialog(false);
-          setDispatchContents([]);
+          setAssignContents([]);
         }}
       />
     </div>

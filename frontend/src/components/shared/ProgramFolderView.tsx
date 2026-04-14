@@ -11,7 +11,7 @@
  * - Content 卡片（文字預覽 + type badge + title + play 按鈕）
  */
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Folder,
@@ -23,8 +23,54 @@ import {
   ArrowRightLeft,
   Play,
   Plus,
+  SendHorizontal,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Program, Lesson, Content } from "@/types";
+
+/* ── Sortable wrapper: gives drag handle to its children ── */
+function SortableItem({
+  id,
+  children,
+}: {
+  id: number;
+  children: React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
+    </div>
+  );
+}
 
 /* ── Cover image mapping by level ── */
 const LEVEL_COVERS: Record<string, string> = {
@@ -288,12 +334,14 @@ function ContentCard({
   onDelete,
   onCopy,
   onInstantPractice,
+  onAssign,
 }: {
   content: Content;
   onClick: () => void;
   onDelete?: () => void;
   onCopy?: () => void;
   onInstantPractice?: () => void;
+  onAssign?: () => void;
 }) {
   const { t } = useTranslation();
   const [showMenu, setShowMenu] = useState(false);
@@ -375,17 +423,34 @@ function ContentCard({
           <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white to-transparent" />
         )}
 
-        {/* Play button — centered in preview area */}
-        {onInstantPractice && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onInstantPractice();
-            }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 bg-amber-500/60 hover:bg-amber-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors"
-          >
-            <Play size={24} className="text-white ml-0.5" />
-          </button>
+        {/* Action buttons — Play + Assign, centered side-by-side */}
+        {(onInstantPractice || onAssign) && (
+          <div className="absolute inset-0 flex items-center justify-center gap-8 pointer-events-none">
+            {onInstantPractice && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onInstantPractice();
+                }}
+                title={t("instantPractice.title")}
+                className="pointer-events-auto w-14 h-14 bg-amber-500/60 hover:bg-amber-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors"
+              >
+                <Play size={24} className="text-white ml-0.5" />
+              </button>
+            )}
+            {onAssign && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAssign();
+                }}
+                title={t("tree.assign")}
+                className="pointer-events-auto w-14 h-14 bg-green-500/60 hover:bg-green-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors"
+              >
+                <SendHorizontal size={22} className="text-white" />
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -496,6 +561,9 @@ function ExpandArea({
   onCopyContent,
   onInstantPractice,
   onCreateContent,
+  onAssignContent,
+  onReorderLessons,
+  onReorderContents,
 }: {
   program: Program;
   onEditLesson: (programId: number, lessonId: number) => void;
@@ -506,6 +574,9 @@ function ExpandArea({
   onCopyContent: (contentId: number, title: string) => void;
   onInstantPractice?: (content: Content) => void;
   onCreateContent: (programId: number, lessonId: number) => void;
+  onAssignContent?: (content: Content, lessonId: number) => void;
+  onReorderLessons?: (programId: number, fromIndex: number, toIndex: number) => void;
+  onReorderContents?: (lessonId: number, fromIndex: number, toIndex: number) => void;
 }) {
   const { t } = useTranslation();
   const lessons = program.lessons ?? [];
@@ -524,6 +595,32 @@ function ExpandArea({
   // lessonId for callbacks: use selected lesson, or 0 for program-level
   const contentsLessonId = selectedLesson?.id ?? 0;
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleLessonDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !onReorderLessons) return;
+    const fromIndex = lessons.findIndex((l) => l.id === active.id);
+    const toIndex = lessons.findIndex((l) => l.id === over.id);
+    if (fromIndex < 0 || toIndex < 0) return;
+    onReorderLessons(program.id, fromIndex, toIndex);
+  };
+
+  const handleContentDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !onReorderContents) return;
+    if (contentsLessonId === 0) return;
+    const fromIndex = displayContents.findIndex((c) => c.id === active.id);
+    const toIndex = displayContents.findIndex((c) => c.id === over.id);
+    if (fromIndex < 0 || toIndex < 0) return;
+    onReorderContents(contentsLessonId, fromIndex, toIndex);
+  };
+
   return (
     <div className="bg-white rounded-2xl p-5 space-y-4">
       {/* Lessons section */}
@@ -536,22 +633,34 @@ function ExpandArea({
             addLabel={t("programFolderView.addLesson", "新增單元")}
           />
 
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
-            {lessons.map((lesson) => (
-              <LessonCard
-                key={lesson.id}
-                lesson={lesson}
-                isSelected={lesson.id === selectedLessonId}
-                onClick={() =>
-                  setSelectedLessonId(
-                    lesson.id === selectedLessonId ? null : lesson.id,
-                  )
-                }
-                onEdit={() => onEditLesson(program.id, lesson.id)}
-                onDelete={() => onDeleteLesson(program.id, lesson.id)}
-              />
-            ))}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleLessonDragEnd}
+          >
+            <SortableContext
+              items={lessons.map((l) => l.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
+                {lessons.map((lesson) => (
+                  <SortableItem key={lesson.id} id={lesson.id}>
+                    <LessonCard
+                      lesson={lesson}
+                      isSelected={lesson.id === selectedLessonId}
+                      onClick={() =>
+                        setSelectedLessonId(
+                          lesson.id === selectedLessonId ? null : lesson.id,
+                        )
+                      }
+                      onEdit={() => onEditLesson(program.id, lesson.id)}
+                      onDelete={() => onDeleteLesson(program.id, lesson.id)}
+                    />
+                  </SortableItem>
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         </>
       )}
 
@@ -580,29 +689,48 @@ function ExpandArea({
         addLabel={t("programFolderView.addContent", "新增內容")}
       />
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5">
-        {displayContents.map((content) => (
-          <ContentCard
-            key={content.id}
-            content={content}
-            onClick={() => onContentClick(content, contentsLessonId)}
-            onDelete={() =>
-              onDeleteContent(contentsLessonId, content.id, content.title)
-            }
-            onCopy={() => onCopyContent(content.id, content.title)}
-            onInstantPractice={
-              onInstantPractice ? () => onInstantPractice(content) : undefined
-            }
-          />
-        ))}
-        {displayContents.length === 0 && (
-          <p className="text-sm text-gray-400 col-span-full text-center py-8">
-            {selectedLesson
-              ? t("programFolderView.noContents", "此單元尚無內容")
-              : t("programFolderView.noProgramContents", "此教材尚無內容")}
-          </p>
-        )}
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleContentDragEnd}
+      >
+        <SortableContext
+          items={displayContents.map((c) => c.id)}
+          strategy={rectSortingStrategy}
+        >
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
+            {displayContents.map((content) => (
+              <SortableItem key={content.id} id={content.id}>
+                <ContentCard
+                  content={content}
+                  onClick={() => onContentClick(content, contentsLessonId)}
+                  onDelete={() =>
+                    onDeleteContent(contentsLessonId, content.id, content.title)
+                  }
+                  onCopy={() => onCopyContent(content.id, content.title)}
+                  onInstantPractice={
+                    onInstantPractice
+                      ? () => onInstantPractice(content)
+                      : undefined
+                  }
+                  onAssign={
+                    onAssignContent
+                      ? () => onAssignContent(content, contentsLessonId)
+                      : undefined
+                  }
+                />
+              </SortableItem>
+            ))}
+            {displayContents.length === 0 && (
+              <p className="text-sm text-gray-400 col-span-full text-center py-8">
+                {selectedLesson
+                  ? t("programFolderView.noContents", "此單元尚無內容")
+                  : t("programFolderView.noProgramContents", "此教材尚無內容")}
+              </p>
+            )}
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }
@@ -620,6 +748,10 @@ export interface ProgramFolderViewProps {
   onCopyContent: (contentId: number, title: string) => void;
   onInstantPractice?: (content: Content) => void;
   onCreateContent: (programId: number, lessonId: number) => void;
+  onAssignContent?: (content: Content, lessonId: number) => void;
+  onReorderPrograms?: (fromIndex: number, toIndex: number) => void;
+  onReorderLessons?: (programId: number, fromIndex: number, toIndex: number) => void;
+  onReorderContents?: (lessonId: number, fromIndex: number, toIndex: number) => void;
 }
 
 export default function ProgramFolderView({
@@ -634,6 +766,10 @@ export default function ProgramFolderView({
   onCopyContent,
   onInstantPractice,
   onCreateContent,
+  onAssignContent,
+  onReorderPrograms,
+  onReorderLessons,
+  onReorderContents,
 }: ProgramFolderViewProps) {
   const { t } = useTranslation();
   const [selectedProgramId, setSelectedProgramId] = useState<number | null>(
@@ -670,26 +806,52 @@ export default function ProgramFolderView({
   const selectedRowIndex =
     selectedIndex >= 0 ? Math.floor(selectedIndex / columns) : -1;
 
+  const programSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleProgramDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !onReorderPrograms) return;
+    const fromIndex = programs.findIndex((p) => p.id === active.id);
+    const toIndex = programs.findIndex((p) => p.id === over.id);
+    if (fromIndex < 0 || toIndex < 0) return;
+    onReorderPrograms(fromIndex, toIndex);
+  };
+
   return (
     <div ref={containerRef} className="space-y-5">
-      {rows.map((row, rowIndex) => (
-        <div key={rowIndex}>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
-            {row.map((program) => (
-              <ProgramCard
-                key={program.id}
-                program={program}
-                isSelected={program.id === selectedProgramId}
-                onClick={() =>
-                  setSelectedProgramId(
-                    program.id === selectedProgramId ? null : program.id,
-                  )
-                }
-                onEdit={() => onEditProgram(program.id)}
-                onDelete={() => onDeleteProgram(program.id)}
-              />
-            ))}
-          </div>
+      <DndContext
+        sensors={programSensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleProgramDragEnd}
+      >
+        <SortableContext
+          items={programs.map((p) => p.id)}
+          strategy={rectSortingStrategy}
+        >
+          {rows.map((row, rowIndex) => (
+            <div key={rowIndex}>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
+                {row.map((program) => (
+                  <SortableItem key={program.id} id={program.id}>
+                    <ProgramCard
+                      program={program}
+                      isSelected={program.id === selectedProgramId}
+                      onClick={() =>
+                        setSelectedProgramId(
+                          program.id === selectedProgramId ? null : program.id,
+                        )
+                      }
+                      onEdit={() => onEditProgram(program.id)}
+                      onDelete={() => onDeleteProgram(program.id)}
+                    />
+                  </SortableItem>
+                ))}
+              </div>
 
           {/* Expand area below the visual row containing the selected program */}
           {selectedRowIndex === rowIndex && selectedProgram && (
@@ -711,11 +873,16 @@ export default function ProgramFolderView({
                 onCopyContent={onCopyContent}
                 onInstantPractice={onInstantPractice}
                 onCreateContent={onCreateContent}
+                onAssignContent={onAssignContent}
+                onReorderLessons={onReorderLessons}
+                onReorderContents={onReorderContents}
               />
             </div>
           )}
-        </div>
-      ))}
+            </div>
+          ))}
+        </SortableContext>
+      </DndContext>
 
       {programs.length === 0 && (
         <div className="text-center py-12 text-gray-400">
