@@ -2002,6 +2002,7 @@ export default function StudentActivityPageContent({
             authToken={authToken}
             canUseAiAnalysis={canUseAiAnalysis}
             readOnly={isReadOnly}
+            timeLimitPerQuestion={timeLimitPerQuestion}
             onComplete={async () => {
               if (onSubmit) {
                 try {

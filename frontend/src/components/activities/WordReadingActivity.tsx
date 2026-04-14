@@ -69,6 +69,7 @@ interface WordReadingActivityProps {
   onComplete?: () => void;
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
   readOnly?: boolean; // 已提交/已完成/已訂正時禁止修改
+  timeLimitPerQuestion?: number; // 每題錄音限時（秒），由父元件傳入，覆蓋 API 值
 }
 
 export default function WordReadingActivity({
@@ -81,6 +82,7 @@ export default function WordReadingActivity({
   onComplete,
   readOnly = false,
   canUseAiAnalysis: canUseAiAnalysisProp,
+  timeLimitPerQuestion: timeLimitProp,
 }: WordReadingActivityProps) {
   const { t } = useTranslation();
   const { token: studentToken } = useStudentAuthStore();
@@ -93,7 +95,9 @@ export default function WordReadingActivity({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [timeLimitPerQuestion, setTimeLimitPerQuestion] = useState(0); // 0 = 不限時
+  const [timeLimitFromApi, setTimeLimitFromApi] = useState(0);
+  // 優先使用父元件傳入的 prop，與例句朗讀統一資料來源
+  const timeLimitPerQuestion = timeLimitProp ?? timeLimitFromApi;
   // 從 API 讀取的顯示設定（解決圖片不顯示的 bug）
   const [showImageFromApi, setShowImageFromApi] = useState(true);
   const [showTranslationFromApi, setShowTranslationFromApi] = useState(true);
@@ -200,7 +204,7 @@ export default function WordReadingActivity({
 
       const data = await response.json();
       setItems(data.items || []);
-      setTimeLimitPerQuestion(data.time_limit_per_question || 0);
+      setTimeLimitFromApi(data.time_limit_per_question || 0);
       // 讀取 API 返回的顯示設定
       setShowImageFromApi(data.show_image ?? true);
       setShowTranslationFromApi(data.show_translation ?? true);
