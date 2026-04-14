@@ -704,32 +704,39 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
               {/* 題目文字 - 響應式字體大小 */}
               <div className="text-base sm:text-lg font-medium text-gray-800 flex-1">
                 {currentQuestion?.text ? (
-                  <div className="flex flex-wrap gap-1">
-                    {currentQuestion.text.split(" ").map((word, index) => (
-                      <span
-                        key={index}
-                        className="cursor-pointer hover:text-blue-600 hover:underline transition-colors px-1"
-                        onClick={() => {
-                          // 使用 Web Speech API 發音
-                          if ("speechSynthesis" in window) {
-                            // 取消之前的發音
-                            window.speechSynthesis.cancel();
-
-                            const utterance = new SpeechSynthesisUtterance(
-                              word,
-                            );
-                            utterance.lang = "en-US"; // 設定為英文發音
-                            utterance.rate = 1.0; // 正常速度
-                            utterance.pitch = 1.0; // 正常音調
-                            utterance.volume = 1.0; // 最大音量
-
-                            window.speechSynthesis.speak(utterance);
-                          }
-                        }}
-                        title={`${t("groupedQuestionsTemplate.labels.clickToPronounciate")}: ${word}`}
+                  <div className="flex flex-col gap-1">
+                    {currentQuestion.text.split("\n").map((line, lineIndex) => (
+                      <div
+                        key={lineIndex}
+                        className="flex flex-wrap gap-1 min-h-[1em]"
                       >
-                        {word}
-                      </span>
+                        {line.split(" ").map((word, wordIndex) => (
+                          <span
+                            key={wordIndex}
+                            className="cursor-pointer hover:text-blue-600 hover:underline transition-colors px-1"
+                            onClick={() => {
+                              // 使用 Web Speech API 發音
+                              if ("speechSynthesis" in window) {
+                                // 取消之前的發音
+                                window.speechSynthesis.cancel();
+
+                                const utterance = new SpeechSynthesisUtterance(
+                                  word,
+                                );
+                                utterance.lang = "en-US"; // 設定為英文發音
+                                utterance.rate = 1.0; // 正常速度
+                                utterance.pitch = 1.0; // 正常音調
+                                utterance.volume = 1.0; // 最大音量
+
+                                window.speechSynthesis.speak(utterance);
+                              }
+                            }}
+                            title={`${t("groupedQuestionsTemplate.labels.clickToPronounciate")}: ${word}`}
+                          >
+                            {word}
+                          </span>
+                        ))}
+                      </div>
                     ))}
                   </div>
                 ) : (
@@ -757,9 +764,11 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
 
             {/* 翻譯 - 響應式字體和內距 */}
             {currentQuestion?.translation && (
-              <div className="flex items-center gap-2 text-sm sm:text-base text-purple-600 bg-purple-50 rounded px-2 sm:px-3 py-1.5 sm:py-2">
-                <Languages className="w-4 h-4" />
-                <span>{currentQuestion.translation}</span>
+              <div className="flex items-start gap-2 text-sm sm:text-base text-purple-600 bg-purple-50 rounded px-2 sm:px-3 py-1.5 sm:py-2">
+                <Languages className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span className="whitespace-pre-wrap">
+                  {currentQuestion.translation}
+                </span>
               </div>
             )}
           </div>

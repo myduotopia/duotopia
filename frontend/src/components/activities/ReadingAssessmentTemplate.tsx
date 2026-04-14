@@ -223,10 +223,12 @@ export default function ReadingAssessmentTemplate({
 
           {/* Main Content */}
           <div className="space-y-4">
-            <h2 className="text-3xl font-medium text-gray-900 leading-relaxed">
+            <h2 className="text-3xl font-medium text-gray-900 leading-relaxed whitespace-pre-wrap">
               {targetText}
             </h2>
-            <p className="text-lg text-gray-600">{content}</p>
+            <p className="text-lg text-gray-600 whitespace-pre-wrap">
+              {content}
+            </p>
           </div>
 
           {/* 🎯 錄音元件 - 使用統一的 AudioRecorder */}
