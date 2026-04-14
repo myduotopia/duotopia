@@ -618,7 +618,7 @@ function RecursiveTreeNode({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="end"
-                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                    className="z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
                   >
                     {onCopy && (
                       <DropdownMenuItem
