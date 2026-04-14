@@ -242,11 +242,12 @@ export default function ReadingAssessmentTemplate({
           <AudioRecorder
             existingAudioUrl={audioUrl}
             onRecordingComplete={(blob, url) => {
-              // Check recording duration against time limit
+              // Check recording duration against time limit (0.5s tolerance
+              // for auto-stop timer imprecision)
               if (timeLimit > 0 && recordingStartTimeRef.current > 0) {
                 const elapsedSeconds =
                   (Date.now() - recordingStartTimeRef.current) / 1000;
-                if (elapsedSeconds > timeLimit) {
+                if (elapsedSeconds > timeLimit + 0.5) {
                   toast.error(
                     t("wordReading.toast.recordingExceedsLimit", {
                       recorded: Math.round(elapsedSeconds),
@@ -265,6 +266,7 @@ export default function ReadingAssessmentTemplate({
               recordingStartTimeRef.current = Date.now();
             }}
             readOnly={readOnly}
+            autoStop={timeLimit > 0 ? timeLimit : undefined}
             variant="default"
             showProgress={true}
             showTimer={true}

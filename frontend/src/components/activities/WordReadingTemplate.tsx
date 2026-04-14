@@ -377,10 +377,12 @@ export default function WordReadingTemplate({
           type: "audio/webm",
         });
 
-        // Check recording duration against time limit
+        // Check recording duration against time limit (0.5s tolerance for
+        // auto-stop timer imprecision — auto-stopped recordings land at
+        // timeLimit + a few ms and should be accepted)
         const elapsedSeconds =
           (Date.now() - recordingStartTimeRef.current) / 1000;
-        if (timeLimit > 0 && elapsedSeconds > timeLimit) {
+        if (timeLimit > 0 && elapsedSeconds > timeLimit + 0.5) {
           toast.error(
             t("wordReading.toast.recordingExceedsLimit", {
               recorded: Math.round(elapsedSeconds),
@@ -389,6 +391,10 @@ export default function WordReadingTemplate({
               `錄音時間 ${Math.round(elapsedSeconds)} 秒超過限制 ${timeLimit} 秒，請重新錄音`,
           );
           stream.getTracks().forEach((track) => track.stop());
+          if (recordingIntervalRef.current) {
+            clearInterval(recordingIntervalRef.current);
+            recordingIntervalRef.current = null;
+          }
           return;
         }
 
