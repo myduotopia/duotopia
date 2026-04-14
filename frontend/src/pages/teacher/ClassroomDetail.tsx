@@ -1706,7 +1706,7 @@ export default function ClassroomDetail({
                   onDispatch={
                     !isTemplateMode
                       ? (item, level, parentId) => {
-                          if (level === 2) {
+                          if (level === 2 && typeof item.id === "number") {
                             const program = programs.find((p) =>
                               p.lessons?.some((l) => l.id === parentId),
                             );

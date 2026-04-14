@@ -410,7 +410,7 @@ export function AssignmentDialog({
         student_ids: data.map((s) => s.id),
       }));
     } catch {
-      toast.error("載入學生列表失敗");
+      toast.error(t("dialogs.assignmentDialog.errors.loadStudentsFailed", { name: "" }));
       onClose();
     } finally {
       setLoadingStudents(false);
@@ -458,7 +458,7 @@ export function AssignmentDialog({
           },
         ]);
       } catch {
-        toast.error(`載入 ${classroom.name} 學生列表失敗`);
+        toast.error(t("dialogs.assignmentDialog.errors.loadStudentsFailed", { name: classroom.name }));
       }
     }
   };
@@ -1062,29 +1062,49 @@ export function AssignmentDialog({
           (c) => c.selectedStudentIds.length > 0,
         );
         let totalStudents = 0;
+        let successCount = 0;
 
         for (const classroom of classroomsToCreate) {
-          const payload = {
-            ...basePayload,
-            classroom_id: classroom.id,
-            student_ids: classroom.assignToAll
-              ? []
-              : classroom.selectedStudentIds,
-            school_id: classroom.school_id,
-          };
-          const result = await apiClient.post<{ student_count: number }>(
-            "/api/teachers/assignments/create",
-            payload,
-          );
-          totalStudents += result.student_count || 0;
+          try {
+            const payload = {
+              ...basePayload,
+              classroom_id: classroom.id,
+              student_ids: classroom.assignToAll
+                ? []
+                : classroom.selectedStudentIds,
+              school_id: classroom.school_id,
+            };
+            const result = await apiClient.post<{ student_count: number }>(
+              "/api/teachers/assignments/create",
+              payload,
+            );
+            totalStudents += result.student_count || 0;
+            successCount++;
+          } catch (err) {
+            console.error(`Failed to create assignment for ${classroom.name}:`, err);
+          }
         }
 
-        toast.success(
-          t("dialogs.assignmentDialog.success.multiCreated", {
-            classroomCount: classroomsToCreate.length,
-            studentCount: totalStudents,
-          }),
-        );
+        if (successCount === 0) {
+          throw new Error("All classroom assignments failed");
+        }
+
+        if (successCount < classroomsToCreate.length) {
+          toast.warning(
+            t("dialogs.assignmentDialog.success.partialCreated", {
+              successCount,
+              totalCount: classroomsToCreate.length,
+              studentCount: totalStudents,
+            }),
+          );
+        } else {
+          toast.success(
+            t("dialogs.assignmentDialog.success.multiCreated", {
+              classroomCount: classroomsToCreate.length,
+              studentCount: totalStudents,
+            }),
+          );
+        }
       } else {
         // 單班級模式：原有邏輯
         const payload = {
@@ -1158,7 +1178,7 @@ export function AssignmentDialog({
       due_date: undefined,
       start_date: undefined,
       practice_mode: "",
-      time_limit_per_question: 30 as 0 | 20 | 30 | 40,
+      time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40,
       shuffle_questions: false,
       show_answer: false,
       play_audio: false,
@@ -1295,8 +1315,9 @@ export function AssignmentDialog({
       }
     }
 
-    // 從 step 2 移動到 step 3 時，檢查驗證
-    if (currentStep === 2) {
+    // 進入作業詳情前，檢查音檔驗證（從 step 2 或從 step 1 跳過時都需要）
+    const nextIndex = stepNumbers.indexOf(currentStep) + 1;
+    if (nextIndex < stepNumbers.length && stepNumbers[nextIndex] === 4) {
       if (!checkAudioRequirement()) {
         return;
       }

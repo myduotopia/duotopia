@@ -1740,6 +1740,8 @@
         "createFailed": "創建作業失敗",
         "loadProgramsFailed": "載入課程失敗",
         "loadTemplateFailed": "載入公版課程失敗",
+        "loadClassroomsFailed": "載入班級列表失敗",
+        "loadStudentsFailed": "載入{{name}}學生列表失敗",
         "loadClassroomProgramsFailed": "載入班級課程失敗",
         "loadLessonsFailed": "載入單元失敗",
         "loadContentsFailed": "載入內容失敗",
@@ -1757,7 +1759,8 @@
       },
       "success": {
         "created": "成功創建作業，已指派給 {{count}} 位學生",
-        "multiCreated": "成功建立 {{classroomCount}} 個班級的作業，共 {{studentCount}} 位學生"
+        "multiCreated": "成功建立 {{classroomCount}} 個班級的作業，共 {{studentCount}} 位學生",
+        "partialCreated": "部分成功：{{successCount}}/{{totalCount}} 個班級已建立作業（{{studentCount}} 位學生），其餘班級建立失敗"
       },
       "contentTypes": {
         "reading_assessment": "段落集",

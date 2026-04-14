@@ -1691,6 +1691,8 @@
         "createFailed": "Failed to create assignment",
         "loadProgramsFailed": "Failed to load programs",
         "loadTemplateFailed": "Failed to load template programs",
+        "loadClassroomsFailed": "Failed to load classrooms",
+        "loadStudentsFailed": "Failed to load students for {{name}}",
         "loadClassroomProgramsFailed": "Failed to load classroom programs",
         "loadLessonsFailed": "Failed to load lessons",
         "loadContentsFailed": "Failed to load contents",
@@ -1708,7 +1710,8 @@
       },
       "success": {
         "created": "Assignment created successfully, assigned to {{count}} students",
-        "multiCreated": "Created assignments for {{classroomCount}} classrooms, {{studentCount}} students total"
+        "multiCreated": "Created assignments for {{classroomCount}} classrooms, {{studentCount}} students total",
+        "partialCreated": "Partial success: {{successCount}}/{{totalCount}} classrooms created ({{studentCount}} students), some failed"
       },
       "contentTypes": {
         "reading_assessment": "Paragraph Set",
