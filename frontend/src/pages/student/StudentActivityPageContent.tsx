@@ -695,8 +695,8 @@ export default function StudentActivityPageContent({
             recordingInterval.current = null;
           }
           setTimeout(() => {
-            if (mediaRecorder && mediaRecorder.state === "recording") {
-              mediaRecorder.stop();
+            if (recorder && recorder.state === "recording") {
+              recorder.stop();
               setMediaRecorder(null);
               setIsRecording(false);
               toast.info(t("studentActivityPage.warnings.recordingLimit"));

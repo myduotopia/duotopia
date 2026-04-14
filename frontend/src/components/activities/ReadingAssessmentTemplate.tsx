@@ -7,6 +7,8 @@ import AudioRecorder from "@/components/shared/AudioRecorder";
 import { useTranslation } from "react-i18next";
 import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { useDemoAzurePronunciation } from "@/hooks/useDemoAzurePronunciation";
+import { useStudentAuthStore } from "@/stores/studentAuthStore";
+import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
 interface AssessmentResult {
   overallScore: number;
@@ -103,7 +105,7 @@ export default function ReadingAssessmentTemplate({
       fetch(`${apiUrl}/api/speech/upload-analysis`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_STUDENT_TOKEN || ""}`,
+          Authorization: `Bearer ${useStudentAuthStore.getState().token || useTeacherAuthStore.getState().token || ""}`,
         },
         body: formData,
       })

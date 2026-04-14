@@ -269,11 +269,17 @@ export default function WordReadingTemplate({
     }
   }, [currentItem.id]); // Only run when item changes, not when existingAudioUrl/timeLimit changes
 
-  // Cleanup autoStopTimerRef on unmount
+  // Cleanup all recording resources on unmount
   useEffect(() => {
     return () => {
       if (autoStopTimerRef.current) {
         clearTimeout(autoStopTimerRef.current);
+      }
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
+      if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.stop();
       }
     };
   }, []);
@@ -458,7 +464,9 @@ export default function WordReadingTemplate({
       }
     } catch (error) {
       console.error("Error starting recording:", error);
-      toast.error("無法啟動錄音，請檢查麥克風權限");
+      toast.error(
+        t("audioRecorder.toast.cannotStart") || "無法啟動錄音，請檢查麥克風權限",
+      );
     }
   };
 
