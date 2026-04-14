@@ -224,6 +224,11 @@ export default function WordReadingTemplate({
 
   // Reset state when item changes (only triggered by currentItem.id change)
   useEffect(() => {
+    // Clear auto-stop timer from previous item's recording
+    if (autoStopTimerRef.current) {
+      clearTimeout(autoStopTimerRef.current);
+      autoStopTimerRef.current = null;
+    }
     // Revoke previous blob URL to prevent memory leak
     if (audioUrl && audioUrl.startsWith("blob:")) {
       URL.revokeObjectURL(audioUrl);
@@ -263,6 +268,15 @@ export default function WordReadingTemplate({
       }
     }
   }, [currentItem.id]); // Only run when item changes, not when existingAudioUrl/timeLimit changes
+
+  // Cleanup autoStopTimerRef on unmount
+  useEffect(() => {
+    return () => {
+      if (autoStopTimerRef.current) {
+        clearTimeout(autoStopTimerRef.current);
+      }
+    };
+  }, []);
 
   // Sync assessment from background analysis completing after navigation
   // The reset effect (above) only runs on currentItem.id change, so if
@@ -380,22 +394,24 @@ export default function WordReadingTemplate({
         // Check recording duration against time limit (0.5s tolerance for
         // auto-stop timer imprecision — auto-stopped recordings land at
         // timeLimit + a few ms and should be accepted)
-        const elapsedSeconds =
-          (Date.now() - recordingStartTimeRef.current) / 1000;
-        if (timeLimit > 0 && elapsedSeconds > timeLimit + 0.5) {
-          toast.error(
-            t("wordReading.toast.recordingExceedsLimit", {
-              recorded: Math.round(elapsedSeconds),
-              limit: timeLimit,
-            }) ||
-              `錄音時間 ${Math.round(elapsedSeconds)} 秒超過限制 ${timeLimit} 秒，請重新錄音`,
-          );
-          stream.getTracks().forEach((track) => track.stop());
-          if (recordingIntervalRef.current) {
-            clearInterval(recordingIntervalRef.current);
-            recordingIntervalRef.current = null;
+        if (timeLimit > 0 && recordingStartTimeRef.current > 0) {
+          const elapsedSeconds =
+            (Date.now() - recordingStartTimeRef.current) / 1000;
+          if (elapsedSeconds > timeLimit + 0.5) {
+            toast.error(
+              t("wordReading.toast.recordingExceedsLimit", {
+                recorded: Math.round(elapsedSeconds),
+                limit: timeLimit,
+              }) ||
+                `錄音時間 ${Math.round(elapsedSeconds)} 秒超過限制 ${timeLimit} 秒，請重新錄音`,
+            );
+            stream.getTracks().forEach((track) => track.stop());
+            if (recordingIntervalRef.current) {
+              clearInterval(recordingIntervalRef.current);
+              recordingIntervalRef.current = null;
+            }
+            return;
           }
-          return;
         }
 
         // Revoke previous blob URL to prevent memory leak
