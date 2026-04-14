@@ -2,8 +2,10 @@
 QuotaService 單元測試
 """
 import pytest
+from unittest.mock import MagicMock, patch, PropertyMock
 from services.quota_service import QuotaService
 from models import Teacher
+from models.organization import Organization, TeacherOrganization
 from database import get_session_local
 from fastapi import HTTPException
 
@@ -194,6 +196,165 @@ class TestQuotaDeduction:
             assert period.quota_used == 70  # 50 + 20
 
         db.close()
+
+
+class TestCheckAiAnalysisAvailability:
+    """check_ai_analysis_availability 測試 — Issue #615"""
+
+    def _make_org(self, total_points: int, used_points: int, is_active: bool = True):
+        org = MagicMock(spec=Organization)
+        org.total_points = total_points
+        org.used_points = used_points
+        org.is_active = is_active
+        return org
+
+    def _make_teacher_org(self, org_id: str, is_active: bool = True):
+        to = MagicMock(spec=TeacherOrganization)
+        to.organization_id = org_id
+        to.is_active = is_active
+        return to
+
+    def _setup_db(self, teacher, teacher_orgs, orgs_by_id):
+        """Build a mock db session that handles the queries in check_ai_analysis_availability.
+
+        Organization lookups are dispatched by call order matching the teacher_orgs list,
+        so orgs_by_id[teacher_org.organization_id] returns the correct org for each iteration.
+        """
+        db = MagicMock()
+        org_call_index = {"i": 0}
+
+        def query_side_effect(model):
+            q = MagicMock()
+            if model is Teacher:
+                q.filter.return_value.first.return_value = teacher
+            elif model is TeacherOrganization:
+                q.filter.return_value.all.return_value = teacher_orgs
+            elif model is Organization:
+
+                def org_filter(*args, **kwargs):
+                    inner = MagicMock()
+                    idx = org_call_index["i"]
+                    org_call_index["i"] += 1
+                    if idx < len(teacher_orgs):
+                        oid = teacher_orgs[idx].organization_id
+                        inner.first.return_value = orgs_by_id.get(oid)
+                    else:
+                        inner.first.return_value = None
+                    return inner
+
+                q.filter.side_effect = org_filter
+            return q
+
+        db.query.side_effect = query_side_effect
+        return db
+
+    def test_org_has_points_returns_true(self):
+        """教師屬於有餘額的機構 → True"""
+        teacher = MagicMock(spec=Teacher)
+        teacher.id = 99
+        teacher_orgs = [self._make_teacher_org("org-1")]
+        org = self._make_org(total_points=100, used_points=50)
+        db = self._setup_db(teacher, teacher_orgs, {"org-1": org})
+
+        assert QuotaService.check_ai_analysis_availability(99, db) is True
+
+    def test_org_no_points_but_personal_quota_returns_true(self):
+        """Issue #615: 機構點數為 0，但個人配額有剩餘 → True"""
+        teacher = MagicMock(spec=Teacher)
+        teacher.id = 99
+        teacher_orgs = [
+            self._make_teacher_org("org-1"),
+            self._make_teacher_org("org-2"),
+        ]
+        org1 = self._make_org(total_points=0, used_points=0)
+        org2 = self._make_org(total_points=0, used_points=0)
+        db = self._setup_db(teacher, teacher_orgs, {"org-1": org1, "org-2": org2})
+
+        with patch.object(QuotaService, "_get_total_remaining", return_value=960):
+            assert QuotaService.check_ai_analysis_availability(99, db) is True
+
+    def test_org_no_points_and_no_personal_quota_returns_false(self):
+        """機構點數為 0，個人配額也用完 → False"""
+        teacher = MagicMock(spec=Teacher)
+        teacher.id = 99
+        teacher_orgs = [self._make_teacher_org("org-1")]
+        org = self._make_org(total_points=0, used_points=0)
+        db = self._setup_db(teacher, teacher_orgs, {"org-1": org})
+
+        with patch.object(QuotaService, "_get_total_remaining", return_value=0):
+            assert QuotaService.check_ai_analysis_availability(99, db) is False
+
+    def test_no_org_personal_quota_returns_true(self):
+        """無機構，個人有額度 → True"""
+        teacher = MagicMock(spec=Teacher)
+        teacher.id = 99
+        db = self._setup_db(teacher, [], {})
+
+        with patch.object(QuotaService, "_get_total_remaining", return_value=500):
+            assert QuotaService.check_ai_analysis_availability(99, db) is True
+
+    def test_no_org_no_personal_quota_returns_false(self):
+        """無機構，個人沒額度 → False"""
+        teacher = MagicMock(spec=Teacher)
+        teacher.id = 99
+        db = self._setup_db(teacher, [], {})
+
+        with patch.object(QuotaService, "_get_total_remaining", return_value=0):
+            assert QuotaService.check_ai_analysis_availability(99, db) is False
+
+    def test_inactive_org_skipped_fallback_to_personal(self):
+        """機構 is_active=False（被 filter 排除）→ fallback 到個人配額"""
+        teacher = MagicMock(spec=Teacher)
+        teacher.id = 99
+        teacher_orgs = [self._make_teacher_org("org-1")]
+        # org not in orgs_by_id → filter returns None (simulates inactive org)
+        db = self._setup_db(teacher, teacher_orgs, {})
+
+        with patch.object(QuotaService, "_get_total_remaining", return_value=500):
+            assert QuotaService.check_ai_analysis_availability(99, db) is True
+
+    def test_mixed_orgs_first_has_points_short_circuits(self):
+        """多機構：第一個有餘額 → 直接 return True，不查第二個"""
+        teacher = MagicMock(spec=Teacher)
+        teacher.id = 99
+        teacher_orgs = [
+            self._make_teacher_org("org-rich"),
+            self._make_teacher_org("org-empty"),
+        ]
+        org_rich = self._make_org(total_points=100, used_points=10)
+        org_empty = self._make_org(total_points=0, used_points=0)
+        db = self._setup_db(
+            teacher,
+            teacher_orgs,
+            {"org-rich": org_rich, "org-empty": org_empty},
+        )
+
+        assert QuotaService.check_ai_analysis_availability(99, db) is True
+
+    def test_mixed_orgs_second_has_points(self):
+        """多機構：第一個沒餘額，第二個有 → True"""
+        teacher = MagicMock(spec=Teacher)
+        teacher.id = 99
+        teacher_orgs = [
+            self._make_teacher_org("org-empty"),
+            self._make_teacher_org("org-rich"),
+        ]
+        org_empty = self._make_org(total_points=0, used_points=0)
+        org_rich = self._make_org(total_points=200, used_points=50)
+        db = self._setup_db(
+            teacher,
+            teacher_orgs,
+            {"org-empty": org_empty, "org-rich": org_rich},
+        )
+
+        assert QuotaService.check_ai_analysis_availability(99, db) is True
+
+    def test_teacher_not_found_returns_false(self):
+        """教師不存在 → False"""
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+
+        assert QuotaService.check_ai_analysis_availability(999, db) is False
 
 
 class TestQuotaInfo:
