@@ -23,6 +23,7 @@ interface DemoActivityResponse {
   title: string;
   practice_mode?: string | null;
   show_answer?: boolean;
+  time_limit_per_question?: number;
   total_activities: number;
   activities: Activity[];
 }
@@ -128,6 +129,7 @@ export default function DemoAssignmentPage() {
         assignmentId={activityData.assignment_id}
         practiceMode={activityData.practice_mode || null}
         showAnswer={activityData.show_answer || false}
+        timeLimitPerQuestion={activityData.time_limit_per_question ?? 0}
         isDemoMode={true}
         isPreviewMode={true}
         onBack={handleBack}

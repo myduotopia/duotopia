@@ -1,6 +1,6 @@
 import { ReactNode, useMemo, useCallback, useRef } from "react";
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import DigitalTeachingToolbar from "@/components/teachingTools/DigitalTeachingToolbar";
 import {
@@ -192,13 +192,13 @@ function TeacherLayoutInner({
           <div className="p-4 border-b dark:border-gray-700">
             <div className="flex items-start justify-between">
               {!sidebarCollapsed ? (
-                <div className="flex-1">
+                <Link to="/" className="flex-1">
                   <img
                     src="https://storage.googleapis.com/duotopia-social-media-videos/website/logo/logo_row_nobg.png"
                     alt="Duotopia"
                     className="h-8 sm:h-10"
                   />
-                </div>
+                </Link>
               ) : null}
               <Button
                 variant="ghost"
@@ -223,7 +223,9 @@ function TeacherLayoutInner({
           )}
 
           {/* Navigation */}
-          <nav className="flex-1 p-4 overflow-y-auto">
+          <nav
+            className={`flex-1 overflow-y-auto ${sidebarCollapsed ? "p-2" : "p-4"}`}
+          >
             <ul className="space-y-1">
               {filteredGroups.map((group) => (
                 <SidebarGroup
@@ -392,13 +394,13 @@ function TeacherLayoutInner({
       {/* Mobile Header */}
       <div className="md:hidden bg-white dark:bg-gray-800 border-b dark:border-gray-700 sticky top-0 z-50">
         <div className="flex items-center justify-between p-4">
-          <div>
+          <Link to="/">
             <img
               src="https://storage.googleapis.com/duotopia-social-media-videos/website/logo/logo_row_nobg.png"
               alt="Duotopia"
               className="h-7"
             />
-          </div>
+          </Link>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
             <Sheet>

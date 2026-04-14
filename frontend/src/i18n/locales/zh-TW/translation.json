@@ -24,6 +24,7 @@
     "upload": "上傳",
     "preview": "預覽",
     "copy": "複製",
+    "move": "移動",
     "paste": "貼上",
     "cut": "剪下",
     "yes": "是",
@@ -1642,10 +1643,23 @@
     "assignmentDialog": {
       "title": "指派新作業",
       "steps": {
+        "selectClassroom": "選擇班級與學生",
         "selectContent": "選擇內容",
         "practiceMode": "練習模式",
         "selectStudents": "選擇學生",
         "details": "作業詳情"
+      },
+      "classroomSelection": {
+        "description": "選擇要派發作業的班級（可多選）",
+        "selectedCount": "已選 {{count}} 個班級",
+        "loading": "載入班級中...",
+        "noClassrooms": "尚無班級，請先建立班級",
+        "studentCount": "{{count}} 位學生"
+      },
+      "multiClass": {
+        "willCreate": "將建立 {{count}} 份作業",
+        "selectAll": "全選",
+        "deselectAll": "取消全選"
       },
       "quota": {
         "remaining": "配額餘額",
@@ -1680,13 +1694,15 @@
       },
       "selectStudents": {
         "description": "選擇要接收作業的學生",
+        "multiDescription": "各班級學生選擇（切換分頁查看）",
         "selected": "{{selected}}/{{total}} 已選",
         "assignAll": "指派給全班所有學生",
         "totalStudents": "共 {{count}} 位學生",
         "allSelected": "全選",
         "selectAllBtn": "全選",
         "deselectAllBtn": "取消全選",
-        "invertSelection": "反選"
+        "invertSelection": "反選",
+        "willCreate": "將建立 {{count}} 份作業"
       },
       "details": {
         "description": "填寫作業標題和詳細資訊",
@@ -1725,6 +1741,8 @@
         "createFailed": "創建作業失敗",
         "loadProgramsFailed": "載入課程失敗",
         "loadTemplateFailed": "載入公版課程失敗",
+        "loadClassroomsFailed": "載入班級列表失敗",
+        "loadStudentsFailed": "載入{{name}}學生列表失敗",
         "loadClassroomProgramsFailed": "載入班級課程失敗",
         "loadLessonsFailed": "載入單元失敗",
         "loadContentsFailed": "載入內容失敗",
@@ -1741,7 +1759,9 @@
         "quotaLowDesc": "作業已建立，但學生目前無法使用 AI 分析功能，僅能上傳音檔練習"
       },
       "success": {
-        "created": "成功創建作業，已指派給 {{count}} 位學生"
+        "created": "成功創建作業，已指派給 {{count}} 位學生",
+        "multiCreated": "成功建立 {{classroomCount}} 個班級的作業，共 {{studentCount}} 位學生",
+        "partialCreated": "部分成功：{{successCount}}/{{totalCount}} 個班級已建立作業（{{studentCount}} 位學生），失敗：{{failedNames}}"
       },
       "contentTypes": {
         "reading_assessment": "段落集",
@@ -3208,6 +3228,19 @@
       "noStudents": "尚未建立學生"
     }
   },
+  "programFolderView": {
+    "units": "個單元",
+    "contents": "內容",
+    "questions": "題",
+    "noDescription": "尚無描述",
+    "lessonsSection": "單元",
+    "contentsSection": "內容",
+    "addLesson": "新增單元",
+    "addContent": "新增內容",
+    "noContents": "此單元尚無內容",
+    "noProgramContents": "此教材尚無內容",
+    "noLessons": "此教材尚無單元"
+  },
   "teacherTemplatePrograms": {
     "title": "我的教材",
     "buttons": {
@@ -3232,6 +3265,11 @@
     "dialogs": {
       "addReadingTitle": "新增段落集",
       "editContentTitle": "編輯內容"
+    },
+    "toolbar": {
+      "searchPlaceholder": "搜尋我的教材...",
+      "treeView": "條列式",
+      "folderView": "資料夾式"
     }
   },
   "teacherSubscription": {
@@ -4280,8 +4318,8 @@
       "title": "標題",
       "pasteContent": "請貼上單字",
       "batchOperations": "批次操作",
-      "aiGenerateTTS": "AI 生成單字語音",
-      "aiGenerateTranslation": "AI 生成單字翻譯",
+      "aiGenerateTTS": "AI 生成語音",
+      "aiGenerateTranslation": "AI 自動翻譯",
       "translationLanguage": "翻譯語言",
       "otherLanguage": "其他語言...",
       "enterLanguage": "輸入語言名稱，如 Thai、Tiếng Việt...",
@@ -4348,6 +4386,8 @@
       "loadingContentFailed": "載入內容失敗",
       "enterTitle": "請輸入標題",
       "addAtLeastOneItem": "請至少新增一個內容項目",
+      "addAtLeastFiveItems": "單字集至少需要 5 個單字",
+      "wordLimitExceeded": "單一題目的英文原文不可超過 {{limit}} 個單字",
       "duplicateItems": "有重複的單字或翻譯，請先處理重複項目",
       "duplicateWord": "重複",
       "maxRowsReached": "最多只能新增 15 列",
@@ -4559,8 +4599,10 @@
       "submitFailed": "提交失敗",
       "completed": "作業已完成！",
       "missingData": "請先錄音",
-      "recordingTooLong": "錄音時間過長，限制最長 10 秒"
-    }
+      "recordingTooLong": "錄音時間過長，限制最長 10 秒",
+      "recordingExceedsLimit": "錄音時間 {{recorded}} 秒超過限制 {{limit}} 秒，請重新錄音"
+    },
+    "timeLimit": "限時 {{seconds}} 秒"
   },
   "wordSelection": {
     "loading": "正在載入單字...",
@@ -4713,6 +4755,7 @@
     "title": "資源教材包",
     "subtitle": "瀏覽並複製公開的教材資源到你的教材庫",
     "subtitleOrg": "瀏覽並複製教材資源到組織教材庫",
+    "searchPlaceholder": "搜尋公版教材...",
     "browseAndCopy": "瀏覽與複製教材",
     "loading": "載入中...",
     "empty": {
@@ -4769,6 +4812,9 @@
   },
   "contentCopy": {
     "button": "複製到..."
+  },
+  "tree": {
+    "dispatch": "派發"
   },
   "instantPractice": {
     "title": "即刻練習",

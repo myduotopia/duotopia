@@ -12,6 +12,13 @@
   }
 }
 
+/* #580: 手機版編輯面板滿版 — 覆蓋 inline style 的 left */
+@media (max-width: 639px) {
+  .editor-panel {
+    left: 0 !important;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

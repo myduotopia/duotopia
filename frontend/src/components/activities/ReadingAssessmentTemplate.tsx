@@ -1,21 +1,14 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Brain, Star, Mic, Clock, RotateCcw, SkipForward } from "lucide-react";
+import { Brain, Star, Mic, Clock } from "lucide-react";
 import { toast } from "sonner";
 import AudioRecorder from "@/components/shared/AudioRecorder";
 import { useTranslation } from "react-i18next";
-import { cn } from "@/lib/utils";
 import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { useDemoAzurePronunciation } from "@/hooks/useDemoAzurePronunciation";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useStudentAuthStore } from "@/stores/studentAuthStore";
+import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
 interface AssessmentResult {
   overallScore: number;
@@ -35,10 +28,7 @@ interface ReadingAssessmentProps {
   progressId?: number;
   readOnly?: boolean; // 唯讀模式
   isDemoMode?: boolean; // Demo mode - uses public demo API endpoints
-  timeLimit?: number; // 作答時間限制（秒）
-  onTimeout?: () => void; // 超時回調
-  onRetry?: () => void; // 重試回調
-  onSkip?: () => void; // 跳過回調
+  timeLimit?: number; // 錄音時間限制（秒），0 = 不限時
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
 }
 
@@ -51,10 +41,7 @@ export default function ReadingAssessmentTemplate({
   progressId: _progressId, // Legacy prop (not used with Azure direct calls)
   readOnly = false,
   isDemoMode = false,
-  timeLimit = 30, // 預設 30 秒
-  onTimeout,
-  onRetry,
-  onSkip,
+  timeLimit = 0, // 預設不限時
   canUseAiAnalysis = true,
 }: ReadingAssessmentProps) {
   const { t } = useTranslation();
@@ -73,94 +60,8 @@ export default function ReadingAssessmentTemplate({
   const demoHook = useDemoAzurePronunciation();
   const { analyzePronunciation } = isDemoMode ? demoHook : regularHook;
 
-  // 計時器狀態
-  const [timeRemaining, setTimeRemaining] = useState(timeLimit);
-  const [showTimeoutDialog, setShowTimeoutDialog] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // 格式化時間
-  const formatTime = useCallback((seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  }, []);
-
-  // 啟動計時器
-  const startTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
-    timerRef.current = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          // 時間到
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-          }
-          setShowTimeoutDialog(true);
-          onTimeout?.();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, [onTimeout]);
-
-  // 重置計時器
-  const resetTimer = useCallback(() => {
-    setTimeRemaining(timeLimit);
-    setShowTimeoutDialog(false);
-    startTimer();
-  }, [timeLimit, startTimer]);
-
-  // 初始化計時器
-  useEffect(() => {
-    if (!readOnly && !audioUrl && timeLimit > 0) {
-      startTimer();
-    }
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, [readOnly, timeLimit, startTimer]);
-
-  // 錄音完成時停止計時器
-  useEffect(() => {
-    if (audioUrl && timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-  }, [audioUrl]);
-
-  // 處理重試
-  const handleRetry = () => {
-    setShowTimeoutDialog(false);
-    setAudioUrl(undefined);
-    setAssessmentResult(null);
-    resetTimer();
-    onRetry?.();
-  };
-
-  // 處理跳過
-  const handleSkip = () => {
-    setShowTimeoutDialog(false);
-    onSkip?.();
-  };
-
-  const isLowTime = timeRemaining <= 10 && timeRemaining > 0;
-
-  // const handlePlayExample = () => {
-  //   if (!exampleAudioRef.current) return;
-
-  //   if (isPlayingExample) {
-  //     exampleAudioRef.current.pause();
-  //   } else {
-  //     exampleAudioRef.current.play();
-  //   }
-  //   setIsPlayingExample(!isPlayingExample);
-  // };
+  // Recording start timestamp (for duration check against timeLimit)
+  const recordingStartTimeRef = useRef<number>(0);
 
   /**
    * 背景上傳音檔和分析結果（不阻塞 UI）
@@ -204,7 +105,7 @@ export default function ReadingAssessmentTemplate({
       fetch(`${apiUrl}/api/speech/upload-analysis`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_STUDENT_TOKEN || ""}`,
+          Authorization: `Bearer ${useStudentAuthStore.getState().token || useTeacherAuthStore.getState().token || ""}`,
         },
         body: formData,
       })
@@ -294,19 +195,15 @@ export default function ReadingAssessmentTemplate({
 
         {/* Right Side - Content Area */}
         <div className="flex-1 space-y-6">
-          {/* Timer Display */}
+          {/* Time Limit Display (static) */}
           {!readOnly && timeLimit > 0 && !audioUrl && (
             <div className="flex justify-end">
-              <div
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium",
-                  isLowTime
-                    ? "bg-red-100 text-red-700 animate-pulse"
-                    : "bg-gray-100 text-gray-700",
-                )}
-              >
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
                 <Clock className="h-4 w-4" />
-                <span>{formatTime(timeRemaining)}</span>
+                <span>
+                  {t("wordReading.timeLimit", { seconds: timeLimit }) ||
+                    `限時 ${timeLimit} 秒`}
+                </span>
               </div>
             </div>
           )}
@@ -336,11 +233,31 @@ export default function ReadingAssessmentTemplate({
           <AudioRecorder
             existingAudioUrl={audioUrl}
             onRecordingComplete={(blob, url) => {
+              // Check recording duration against time limit (0.5s tolerance
+              // for auto-stop timer imprecision)
+              if (timeLimit > 0 && recordingStartTimeRef.current > 0) {
+                const elapsedSeconds =
+                  (Date.now() - recordingStartTimeRef.current) / 1000;
+                if (elapsedSeconds > timeLimit + 0.5) {
+                  toast.error(
+                    t("wordReading.toast.recordingExceedsLimit", {
+                      recorded: Math.round(elapsedSeconds),
+                      limit: timeLimit,
+                    }) ||
+                      `錄音時間 ${Math.round(elapsedSeconds)} 秒超過限制 ${timeLimit} 秒，請重新錄音`,
+                  );
+                  URL.revokeObjectURL(url);
+                  return; // Don't set audioUrl — discard over-limit recording
+                }
+              }
               setAudioUrl(url);
               onRecordingComplete?.(blob, url);
             }}
+            onRecordingStart={() => {
+              recordingStartTimeRef.current = Date.now();
+            }}
             readOnly={readOnly}
-            autoStop={timeLimit}
+            autoStop={timeLimit > 0 ? timeLimit : undefined}
             variant="default"
             showProgress={true}
             showTimer={true}
@@ -463,37 +380,6 @@ export default function ReadingAssessmentTemplate({
           )}
         </div>
       </div>
-
-      {/* Timeout Dialog */}
-      <Dialog open={showTimeoutDialog} onOpenChange={setShowTimeoutDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-orange-600">
-              <Clock className="h-5 w-5" />
-              時間到了！
-            </DialogTitle>
-            <DialogDescription>
-              作答時間已結束。您可以選擇重新作答此題，或跳到下一題繼續。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={handleRetry}
-              className="flex items-center gap-2"
-            >
-              <RotateCcw className="h-4 w-4" />
-              重新作答
-            </Button>
-            {onSkip && (
-              <Button onClick={handleSkip} className="flex items-center gap-2">
-                <SkipForward className="h-4 w-4" />
-                跳到下一題
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

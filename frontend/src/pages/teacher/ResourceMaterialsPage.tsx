@@ -1,10 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useResourceMaterialsAPI,
   ResourceMaterial,
   ResourceMaterialDetail,
 } from "@/hooks/useResourceMaterialsAPI";
+import ResourceFolderView from "@/components/shared/ResourceFolderView";
+import type { ResourceContentItem } from "@/components/shared/ResourceFolderView";
+import MaterialsToolbar from "@/components/shared/MaterialsToolbar";
+import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -39,6 +43,7 @@ import {
   ListOrdered,
   Clock,
   ChevronDown,
+  X,
 } from "lucide-react";
 import { getContentTypeIcon } from "@/lib/contentTypeIcon";
 import { toast } from "sonner";
@@ -47,7 +52,7 @@ export default function ResourceMaterialsPage() {
   return <ResourceMaterialsInner />;
 }
 
-/** Expandable content card showing items inside */
+/** Expandable content card showing items inside (used in list/detail view) */
 function ContentItemAccordion({
   content,
 }: {
@@ -99,7 +104,6 @@ function ContentItemAccordion({
       {expanded && content.items && content.items.length > 0 && (
         <div className="px-3 pb-3">
           <div className="rounded-md border border-gray-200 bg-white overflow-hidden">
-            {/* Header */}
             <div className="flex items-center gap-x-2 border-b border-gray-100 bg-gray-50/80 px-3 py-1.5">
               <span className="w-8 text-xs font-medium text-gray-500 flex-shrink-0">
                 #
@@ -112,7 +116,6 @@ function ContentItemAccordion({
                 {t("resourceMaterials.detail.tableHeader.translation")}
               </span>
             </div>
-            {/* Items */}
             {content.items.map((item, idx) => (
               <div
                 key={item.id}
@@ -150,9 +153,26 @@ function ResourceMaterialsInner() {
     useResourceMaterialsAPI();
 
   const [materials, setMaterials] = useState<ResourceMaterial[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>("folder");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Folder view states
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedDetail, setSelectedDetail] =
     useState<ResourceMaterialDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  // List view states
   const [showDetail, setShowDetail] = useState(false);
+  const [listDetail, setListDetail] = useState<ResourceMaterialDetail | null>(
+    null,
+  );
+
+  // Content viewer sheet
+  const [viewerContent, setViewerContent] =
+    useState<ResourceContentItem | null>(null);
+
+  // Copy dialog states
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [copyTarget, setCopyTarget] = useState<ResourceMaterial | null>(null);
   const [copying, setCopying] = useState(false);
@@ -166,10 +186,39 @@ function ResourceMaterialsInner() {
     fetchMaterials();
   }, [fetchMaterials]);
 
-  const handleViewDetail = async (material: ResourceMaterial) => {
+  const filteredMaterials = useMemo(() => {
+    if (!searchQuery.trim()) return materials;
+    const q = searchQuery.toLowerCase();
+    return materials.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) ||
+        m.description?.toLowerCase().includes(q),
+    );
+  }, [materials, searchQuery]);
+
+  // Folder view: select card → fetch detail
+  const handleFolderSelect = async (material: ResourceMaterial) => {
+    if (material.id === selectedId) {
+      setSelectedId(null);
+      setSelectedDetail(null);
+      return;
+    }
+    setSelectedId(material.id);
+    setSelectedDetail(null);
+    setLoadingDetail(true);
+    try {
+      const detail = await getMaterialDetail(material.id);
+      if (detail) setSelectedDetail(detail);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  // List view: click card → fetch detail → show detail page
+  const handleListViewDetail = async (material: ResourceMaterial) => {
     const detail = await getMaterialDetail(material.id);
     if (detail) {
-      setSelectedDetail(detail);
+      setListDetail(detail);
       setShowDetail(true);
     }
   };
@@ -187,7 +236,6 @@ function ResourceMaterialsInner() {
       toast.success(
         t("resourceMaterials.toast.copySuccess", { name: copyTarget.name }),
       );
-      // Optimistic update: increment local copy count
       setMaterials((prev) =>
         prev.map((m) => {
           if (m.id === copyTarget.id) {
@@ -223,7 +271,7 @@ function ResourceMaterialsInner() {
     return level ? (colors[level] ?? "bg-gray-100 text-gray-700") : "";
   };
 
-  // Copy dialog — rendered in both detail and list views
+  // Copy dialog (shared between views)
   const copyDialog = (
     <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
       <DialogContent>
@@ -290,23 +338,22 @@ function ResourceMaterialsInner() {
     </Dialog>
   );
 
-  if (showDetail && selectedDetail) {
+  // List view: detail page
+  if (viewMode === "tree" && showDetail && listDetail) {
     return (
-      <div className="p-6 space-y-4 bg-gray-50 min-h-full">
-        {/* Back button */}
+      <div className="p-6 space-y-4 min-h-full">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => {
             setShowDetail(false);
-            setSelectedDetail(null);
+            setListDetail(null);
           }}
         >
           <ArrowLeft className="w-4 h-4 mr-1" />
           {t("resourceMaterials.detail.backToList")}
         </Button>
 
-        {/* Program-level card (mimics RecursiveTreeAccordion program row) */}
         <div className="border-l-4 border-l-blue-500 bg-white shadow-sm rounded-[0.15rem]">
           <div className="px-4 py-3">
             <div className="flex items-center justify-between">
@@ -315,39 +362,36 @@ function ResourceMaterialsInner() {
                   <BookOpen className="h-5 w-5 text-blue-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-base">
-                    {selectedDetail.name}
-                  </h4>
-                  {selectedDetail.description && (
+                  <h4 className="font-semibold text-base">{listDetail.name}</h4>
+                  {listDetail.description && (
                     <p className="text-sm text-gray-500 truncate">
-                      {selectedDetail.description}
+                      {listDetail.description}
                     </p>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
-                {selectedDetail.level && (
+                {listDetail.level && (
                   <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getLevelBadgeColor(selectedDetail.level)}`}
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getLevelBadgeColor(listDetail.level)}`}
                   >
-                    {selectedDetail.level}
+                    {listDetail.level}
                   </span>
                 )}
-                {selectedDetail.estimated_hours && (
+                {listDetail.estimated_hours && (
                   <div className="flex items-center text-sm text-gray-500">
                     <Clock className="h-4 w-4 mr-1" />
                     <span>
-                      {selectedDetail.estimated_hours}{" "}
+                      {listDetail.estimated_hours}{" "}
                       {t("resourceMaterials.detail.hours")}
                     </span>
                   </div>
                 )}
               </div>
             </div>
-            {/* Tags */}
-            {selectedDetail.tags && selectedDetail.tags.length > 0 && (
+            {listDetail.tags && listDetail.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2 pl-12">
-                {selectedDetail.tags.map((tag, index) => (
+                {listDetail.tags.map((tag, index) => (
                   <span
                     key={index}
                     className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
@@ -359,10 +403,9 @@ function ResourceMaterialsInner() {
             )}
           </div>
 
-          {/* Lessons inside program */}
           <div className="px-3 pb-3 space-y-0">
             <Accordion type="multiple">
-              {selectedDetail.lessons.map((lesson) => (
+              {listDetail.lessons.map((lesson) => (
                 <div
                   key={lesson.id}
                   className="border-l-4 border-l-emerald-500 bg-gray-50/80 shadow-sm rounded-[0.15rem] mb-3"
@@ -417,7 +460,7 @@ function ResourceMaterialsInner() {
                 </div>
               ))}
             </Accordion>
-            {selectedDetail.lessons.length === 0 && (
+            {listDetail.lessons.length === 0 && (
               <p className="text-sm text-gray-500 py-4 text-center">
                 {t("resourceMaterials.detail.noUnits")}
               </p>
@@ -425,17 +468,12 @@ function ResourceMaterialsInner() {
           </div>
         </div>
 
-        {/* Copy button at bottom */}
         <div className="flex justify-center pt-2">
           <Button
             size="lg"
             onClick={() => {
-              const material = materials.find(
-                (m) => m.id === selectedDetail.id,
-              );
-              if (material) {
-                handleCopyClick(material);
-              }
+              const material = materials.find((m) => m.id === listDetail.id);
+              if (material) handleCopyClick(material);
             }}
             className="px-8"
           >
@@ -449,99 +487,210 @@ function ResourceMaterialsInner() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Package className="w-6 h-6 text-orange-500" />
-        <div>
-          <h1 className="text-2xl font-bold">{t("resourceMaterials.title")}</h1>
-          <p className="text-muted-foreground text-sm">
-            {t("resourceMaterials.subtitle")}
-          </p>
-        </div>
-      </div>
+    <div
+      className="relative h-full overflow-y-auto"
+      style={{ scrollbarGutter: "stable" }}
+    >
+      <div className="p-5 space-y-4">
+        <MaterialsToolbar
+          title={t("resourceMaterials.title")}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder={t(
+            "resourceMaterials.searchPlaceholder",
+            "搜尋公版教材...",
+          )}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+        />
 
-      {/* Loading */}
-      {loading && materials.length === 0 && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-muted-foreground">
-            {t("resourceMaterials.loading")}
-          </span>
-        </div>
-      )}
+        {/* Loading */}
+        {loading && materials.length === 0 && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            <span className="ml-2 text-gray-400">
+              {t("resourceMaterials.loading")}
+            </span>
+          </div>
+        )}
 
-      {/* Empty State */}
-      {!loading && materials.length === 0 && (
-        <div className="text-center py-12">
-          <Package className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-          <h3 className="text-lg font-medium text-muted-foreground">
-            {t("resourceMaterials.empty.title")}
-          </h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            {t("resourceMaterials.empty.subtitle")}
-          </p>
-        </div>
-      )}
+        {/* Empty State */}
+        {!loading && materials.length === 0 && (
+          <div className="text-center py-12">
+            <Package className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+            <h3 className="text-lg font-medium text-gray-400">
+              {t("resourceMaterials.empty.title")}
+            </h3>
+            <p className="text-sm text-gray-400 mt-1">
+              {t("resourceMaterials.empty.subtitle")}
+            </p>
+          </div>
+        )}
 
-      {/* Materials Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {materials.map((material) => (
-          <Card
-            key={material.id}
-            className="hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => handleViewDetail(material)}
-          >
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <CardTitle className="text-base line-clamp-2">
-                  {material.name}
-                </CardTitle>
-                {material.level && (
-                  <Badge
-                    className={getLevelBadgeColor(material.level)}
-                    variant="secondary"
-                  >
-                    {material.level}
-                  </Badge>
-                )}
-              </div>
-              {material.description && (
-                <CardDescription className="line-clamp-2">
-                  {material.description}
-                </CardDescription>
-              )}
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-                <span className="flex items-center gap-1">
-                  <Layers className="w-3.5 h-3.5" />
-                  {material.lesson_count} {t("resourceMaterials.card.units")}
-                </span>
-                <span className="flex items-center gap-1">
-                  <FileText className="w-3.5 h-3.5" />
-                  {material.content_count}{" "}
-                  {t("resourceMaterials.card.contents")}
-                </span>
-              </div>
-              <Button
-                size="sm"
-                className="w-full"
-                variant={material.copied_today ? "secondary" : "default"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCopyClick(material);
-                }}
+        {/* Folder View */}
+        {viewMode === "folder" && materials.length > 0 && (
+          <ResourceFolderView
+            materials={filteredMaterials}
+            onSelect={handleFolderSelect}
+            onCopy={handleCopyClick}
+            onContentClick={setViewerContent}
+            selectedDetail={selectedDetail}
+            loadingDetail={loadingDetail}
+            selectedId={selectedId}
+          />
+        )}
+
+        {/* List View (original card grid) */}
+        {viewMode === "tree" && materials.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredMaterials.map((material) => (
+              <Card
+                key={material.id}
+                className="hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => handleListViewDetail(material)}
               >
-                <Copy className="w-4 h-4 mr-1" />
-                {t("resourceMaterials.card.copyToMy")}
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="text-base line-clamp-2">
+                      {material.name}
+                    </CardTitle>
+                    {material.level && (
+                      <Badge
+                        className={getLevelBadgeColor(material.level)}
+                        variant="secondary"
+                      >
+                        {material.level}
+                      </Badge>
+                    )}
+                  </div>
+                  {material.description && (
+                    <CardDescription className="line-clamp-2">
+                      {material.description}
+                    </CardDescription>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
+                    <span className="flex items-center gap-1">
+                      <Layers className="w-3.5 h-3.5" />
+                      {material.lesson_count}{" "}
+                      {t("resourceMaterials.card.units")}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <FileText className="w-3.5 h-3.5" />
+                      {material.content_count}{" "}
+                      {t("resourceMaterials.card.contents")}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    variant={material.copied_today ? "secondary" : "default"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopyClick(material);
+                    }}
+                  >
+                    <Copy className="w-4 h-4 mr-1" />
+                    {t("resourceMaterials.card.copyToMy")}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
       {copyDialog}
+
+      {/* Read-only content viewer sheet */}
+      {viewerContent && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/20 z-40"
+            onClick={() => setViewerContent(null)}
+          />
+          <div
+            className="fixed top-0 right-0 h-screen w-full max-w-lg bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300 select-none"
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900 truncate">
+                {viewerContent.title}
+              </h2>
+              <button
+                onClick={() => setViewerContent(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              {/* Type badge + count */}
+              <div className="flex items-center gap-2 mb-4">
+                {viewerContent.type && (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-600">
+                    {viewerContent.type}
+                  </span>
+                )}
+                <span className="text-sm text-gray-400">
+                  {viewerContent.item_count}{" "}
+                  {t("programFolderView.questions", "題")}
+                </span>
+              </div>
+              {/* Items list */}
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 border-b border-gray-200">
+                  <span className="w-8 text-xs font-medium text-gray-500">
+                    #
+                  </span>
+                  <span className="flex-1 text-xs font-medium text-gray-500">
+                    {t("resourceMaterials.detail.tableHeader.content", "內容")}
+                  </span>
+                  <span className="flex-1 text-xs font-medium text-gray-500">
+                    {t(
+                      "resourceMaterials.detail.tableHeader.translation",
+                      "翻譯",
+                    )}
+                  </span>
+                </div>
+                {viewerContent.items.map((item, idx) => (
+                  <div
+                    key={item.id}
+                    className="px-4 py-2.5 border-b border-gray-50 last:border-0"
+                  >
+                    <div className="flex items-baseline gap-2">
+                      <span className="w-8 text-xs text-gray-400 shrink-0">
+                        {idx + 1}
+                      </span>
+                      <span className="flex-1 text-sm text-gray-900 break-words">
+                        {item.text}
+                      </span>
+                      <span className="flex-1 text-sm text-gray-500 break-words">
+                        {item.translation || "—"}
+                      </span>
+                    </div>
+                    {/* TODO: 當 item 有 image_url 欄位時，在此顯示圖片
+                    {item.image_url && (
+                      <img
+                        src={item.image_url}
+                        alt={item.text}
+                        className="mt-2 ml-8 max-w-[200px] rounded-lg border border-gray-200"
+                        draggable={false}
+                      />
+                    )} */}
+                  </div>
+                ))}
+                {viewerContent.items.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-6">
+                    {t("resourceMaterials.detail.noItems", "尚無內容項目")}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

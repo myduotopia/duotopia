@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
@@ -10,12 +10,21 @@ import { programTreeConfig } from "@/components/shared/programTreeConfig";
 import { ProgramDialog } from "@/components/ProgramDialog";
 import { LessonDialog } from "@/components/LessonDialog";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
-import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
-import VocabularySetPanel from "@/components/VocabularySetPanel";
+import ReadingAssessmentPanel, {
+  type ReadingAssessmentPanelHandle,
+} from "@/components/ReadingAssessmentPanel";
+import VocabularySetPanel, {
+  type VocabularySetPanelHandle,
+} from "@/components/VocabularySetPanel";
 import ContentCopyDialog from "@/components/ContentCopyDialog";
+import { AssignmentDialog, CartItem } from "@/components/AssignmentDialog";
 import { ProgramVisibilitySelector } from "@/components/ProgramVisibilitySelector";
+import { RefSaveButton } from "@/components/shared/RefSaveButton";
+import ProgramFolderView from "@/components/shared/ProgramFolderView";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import MaterialsToolbar from "@/components/shared/MaterialsToolbar";
+import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import { apiClient } from "@/lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useResourceMaterialsAPI } from "@/hooks/useResourceMaterialsAPI";
@@ -41,9 +50,16 @@ function TeacherTemplateProgramsInner() {
 
   const navigate = useNavigate();
 
+  const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
+  const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
+
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [isReordering, setIsReordering] = useState(false);
+
+  // View mode: 'tree' (original accordion) or 'folder' (folder-style grid)
+  const [viewMode, setViewMode] = useState<ViewMode>("folder");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Instant practice states
   const [showInstantPractice, setShowInstantPractice] = useState(false);
@@ -144,6 +160,10 @@ function TeacherTemplateProgramsInner() {
     id: number;
     title: string;
   } | null>(null);
+
+  // Dispatch assignment states
+  const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
+  const [dispatchContents, setDispatchContents] = useState<CartItem[]>([]);
 
   useEffect(() => {
     fetchTemplatePrograms();
@@ -517,6 +537,21 @@ function TeacherTemplateProgramsInner() {
     }
   };
 
+  // Filter programs by search query
+  const filteredPrograms = useMemo(() => {
+    if (!searchQuery.trim()) return programs;
+    const q = searchQuery.toLowerCase();
+    return programs.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.lessons?.some(
+          (l) =>
+            l.name.toLowerCase().includes(q) ||
+            l.contents?.some((c) => c.title?.toLowerCase().includes(q)),
+        ),
+    );
+  }, [programs, searchQuery]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -529,123 +564,201 @@ function TeacherTemplateProgramsInner() {
   }
 
   return (
-    <div className="relative h-full bg-gray-50">
+    <div
+      className="relative h-full overflow-y-auto"
+      style={{ scrollbarGutter: "stable" }}
+    >
       <div
-        className={`p-6 space-y-4 transition-all duration-300 ${
+        className={`p-5 space-y-4 transition-all duration-300 ${
           showReadingEditor && editorContentId !== null
             ? "pr-[calc(50%+2rem)]"
             : ""
         }`}
       >
-        <RecursiveTreeAccordion
-          data={programs}
-          config={treeConfig}
+        <MaterialsToolbar
           title={t("teacherTemplatePrograms.title")}
-          showCreateButton
-          createButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
-          onCreateClick={handleCreateProgram}
-          onEdit={(item, level, parentId) => {
-            if (level === 0) handleEditProgram(item.id);
-            else if (level === 1) handleEditLesson(parentId as number, item.id);
-          }}
-          onDelete={(item, level, parentId) => {
-            if (level === 0) handleDeleteProgram(item.id);
-            else if (level === 1)
-              handleDeleteLesson(parentId as number, item.id);
-            else if (level === 2)
-              handleDeleteContent(parentId as number, item.id, item.title);
-          }}
-          onClick={(item, level, parentId) => {
-            if (level === 2) {
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder={t(
+            "teacherTemplatePrograms.toolbar.searchPlaceholder",
+            "搜尋我的教材...",
+          )}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onAdd={handleCreateProgram}
+          addButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
+        />
+
+        {/* ── Content area ── */}
+        {viewMode === "tree" ? (
+          <RecursiveTreeAccordion
+            data={filteredPrograms}
+            config={treeConfig}
+            showCreateButton={false}
+            onCreateClick={handleCreateProgram}
+            onEdit={(item, level, parentId) => {
+              if (level === 0) handleEditProgram(item.id);
+              else if (level === 1)
+                handleEditLesson(parentId as number, item.id);
+            }}
+            onDelete={(item, level, parentId) => {
+              if (level === 0) handleDeleteProgram(item.id);
+              else if (level === 1)
+                handleDeleteLesson(parentId as number, item.id);
+              else if (level === 2)
+                handleDeleteContent(parentId as number, item.id, item.title);
+            }}
+            onClick={(item, level, parentId) => {
+              if (level === 2) {
+                const program = programs.find((p) =>
+                  p.lessons?.some((l) => l.id === parentId),
+                );
+                const lesson = program?.lessons?.find((l) => l.id === parentId);
+                handleContentClick({
+                  ...item,
+                  lesson_id: parentId as number,
+                  lessonName: lesson?.name,
+                  programName: program?.name,
+                });
+              }
+            }}
+            onCreate={(level, parentId) => {
+              if (level === 1) {
+                // Creating lesson inside program
+                handleCreateLesson(parentId as number);
+              } else if (level === 2) {
+                // Creating content inside lesson - need to find program
+                const program = programs.find((p) =>
+                  p.lessons?.some((l) => l.id === parentId),
+                );
+                if (program) {
+                  handleCreateContent(program.id, parentId as number);
+                }
+              }
+            }}
+            onReorder={(fromIndex, toIndex, level, parentId) => {
+              if (level === 0) handleReorderPrograms(fromIndex, toIndex);
+              else if (level === 1)
+                handleReorderLessons(parentId as number, fromIndex, toIndex);
+              else if (level === 2)
+                handleReorderContents(parentId as number, fromIndex, toIndex);
+            }}
+            onInstantPractice={(item, level) => {
+              if (level === 2) {
+                setInstantPracticeContent({
+                  id: item.id as number,
+                  title: (item.title || item.name) as string,
+                  type: item.type as string | undefined,
+                });
+                setShowInstantPractice(true);
+              }
+            }}
+            onCopy={(item, level) => {
+              if (level === 2) {
+                setCopyContentInfo({
+                  id: item.id as number,
+                  title: (item.title || item.name) as string,
+                });
+                setShowCopyDialog(true);
+              }
+            }}
+            onDispatch={(item, level, parentId) => {
+              if (level === 2 && typeof item.id === "number") {
+                const program = programs.find((p) =>
+                  p.lessons?.some((l) => l.id === parentId),
+                );
+                const lesson = program?.lessons?.find((l) => l.id === parentId);
+                const cartItem: CartItem = {
+                  contentId: item.id as number,
+                  programName: program?.name || "",
+                  lessonName: lesson?.name || "",
+                  contentTitle: (item.title || item.name) as string,
+                  contentType: (item.type as string) || "",
+                  itemsCount: item.items_count as number | undefined,
+                  order: 0,
+                  hasMissingAudio: false,
+                };
+                setDispatchContents([cartItem]);
+                setShowAssignmentDialog(true);
+              }
+            }}
+          />
+        ) : (
+          <ProgramFolderView
+            programs={filteredPrograms}
+            onEditProgram={handleEditProgram}
+            onDeleteProgram={handleDeleteProgram}
+            onEditLesson={handleEditLesson}
+            onDeleteLesson={handleDeleteLesson}
+            onCreateLesson={handleCreateLesson}
+            onContentClick={(content, lessonId) => {
               const program = programs.find((p) =>
-                p.lessons?.some((l) => l.id === parentId),
+                p.lessons?.some((l) => l.id === lessonId),
               );
-              const lesson = program?.lessons?.find((l) => l.id === parentId);
+              const lesson = program?.lessons?.find((l) => l.id === lessonId);
               handleContentClick({
-                ...item,
-                lesson_id: parentId as number,
+                ...content,
+                lesson_id: lessonId,
                 lessonName: lesson?.name,
                 programName: program?.name,
               });
-            }
-          }}
-          onCreate={(level, parentId) => {
-            if (level === 1) {
-              // Creating lesson inside program
-              handleCreateLesson(parentId as number);
-            } else if (level === 2) {
-              // Creating content inside lesson - need to find program
-              const program = programs.find((p) =>
-                p.lessons?.some((l) => l.id === parentId),
-              );
-              if (program) {
-                handleCreateContent(program.id, parentId as number);
-              }
-            }
-          }}
-          onReorder={(fromIndex, toIndex, level, parentId) => {
-            if (level === 0) handleReorderPrograms(fromIndex, toIndex);
-            else if (level === 1)
-              handleReorderLessons(parentId as number, fromIndex, toIndex);
-            else if (level === 2)
-              handleReorderContents(parentId as number, fromIndex, toIndex);
-          }}
-          onInstantPractice={(item, level) => {
-            if (level === 2) {
+            }}
+            onDeleteContent={handleDeleteContent}
+            onCopyContent={(contentId, title) => {
+              setCopyContentInfo({ id: contentId, title });
+              setShowCopyDialog(true);
+            }}
+            onInstantPractice={(content) => {
               setInstantPracticeContent({
-                id: item.id as number,
-                title: (item.title || item.name) as string,
-                type: item.type as string | undefined,
+                id: content.id,
+                title: content.title,
+                type: content.type,
               });
               setShowInstantPractice(true);
-            }
-          }}
-          onCopy={(item, level) => {
-            if (level === 2) {
-              setCopyContentInfo({
-                id: item.id as number,
-                title: (item.title || item.name) as string,
-              });
-              setShowCopyDialog(true);
-            }
-          }}
-        />
+            }}
+            onCreateContent={handleCreateContent}
+          />
+        )}
       </div>
 
       {/* Reading Assessment Modal (新增模式) */}
       {showReadingEditor && editorLessonId && editorContentId === null && (
         <>
           <div
-            className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+            className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
             style={{ left: `${sidebarWidth}px` }}
           >
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold">
                 {t("teacherTemplatePrograms.dialogs.addReadingTitle")}
               </h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={editorBusy}
-                onClick={() => {
-                  if (editorBusy) return;
-                  if (
-                    !window.confirm(
-                      t("contentEditor.labels.unsavedChangesConfirm"),
+              <div className="flex items-center gap-2">
+                <RefSaveButton panelRef={readingPanelRef} />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={editorBusy}
+                  onClick={() => {
+                    if (editorBusy) return;
+                    if (
+                      !window.confirm(
+                        t("contentEditor.labels.unsavedChangesConfirm"),
+                      )
                     )
-                  )
-                    return;
-                  setShowReadingEditor(false);
-                  setEditorLessonId(null);
-                  setEditorContentId(null);
-                  setSelectedContent(null);
-                }}
-              >
-                <X className="h-5 w-5" />
-              </Button>
+                      return;
+                    setShowReadingEditor(false);
+                    setEditorLessonId(null);
+                    setEditorContentId(null);
+                    setSelectedContent(null);
+                  }}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
             <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
               <ReadingAssessmentPanel
+                ref={readingPanelRef}
                 lessonId={editorLessonId}
                 programLevel={getProgramLevelByLessonId(
                   programs,
@@ -707,49 +820,53 @@ function TeacherTemplateProgramsInner() {
 
             {/* Panel */}
             <div
-              className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
+              className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
               style={{ left: `${sidebarWidth}px` }}
             >
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-lg font-semibold text-gray-900">
                   {t("teacherTemplatePrograms.dialogs.editContentTitle")}
                 </h2>
-                <button
-                  disabled={editorBusy}
-                  onClick={() => {
-                    if (editorBusy) return;
-                    if (
-                      !window.confirm(
-                        t("contentEditor.labels.unsavedChangesConfirm"),
+                <div className="flex items-center gap-2">
+                  <RefSaveButton panelRef={readingPanelRef} />
+                  <button
+                    disabled={editorBusy}
+                    onClick={() => {
+                      if (editorBusy) return;
+                      if (
+                        !window.confirm(
+                          t("contentEditor.labels.unsavedChangesConfirm"),
+                        )
                       )
-                    )
-                      return;
-                    setShowReadingEditor(false);
-                    setEditorLessonId(null);
-                    setEditorContentId(null);
-                    setSelectedContent(null);
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  aria-label="關閉"
-                >
-                  <svg
-                    className="w-5 h-5 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                        return;
+                      setShowReadingEditor(false);
+                      setEditorLessonId(null);
+                      setEditorContentId(null);
+                      setSelectedContent(null);
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    aria-label="關閉"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
+                    <svg
+                      className="w-5 h-5 text-gray-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               <div className="p-6">
                 <ReadingAssessmentPanel
+                  ref={readingPanelRef}
                   lessonId={editorLessonId}
                   contentId={editorContentId}
                   content={{
@@ -808,35 +925,39 @@ function TeacherTemplateProgramsInner() {
         !vocabularySetContentId && (
           <>
             <div
-              className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+              className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
               style={{ left: `${sidebarWidth}px` }}
             >
               <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
                   {t("vocabularySet.dialogTitle")}
                 </h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={editorBusy}
-                  onClick={() => {
-                    if (editorBusy) return;
-                    if (
-                      !window.confirm(
-                        t("contentEditor.labels.unsavedChangesConfirm"),
+                <div className="flex items-center gap-2">
+                  <RefSaveButton panelRef={vocabPanelRef} />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={editorBusy}
+                    onClick={() => {
+                      if (editorBusy) return;
+                      if (
+                        !window.confirm(
+                          t("contentEditor.labels.unsavedChangesConfirm"),
+                        )
                       )
-                    )
-                      return;
-                    setShowVocabularySetEditor(false);
-                    setVocabularySetLessonId(null);
-                    setVocabularySetContentId(null);
-                  }}
-                >
-                  <X className="h-5 w-5" />
-                </Button>
+                        return;
+                      setShowVocabularySetEditor(false);
+                      setVocabularySetLessonId(null);
+                      setVocabularySetContentId(null);
+                    }}
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
               <div className="flex-1 overflow-auto p-6">
                 <VocabularySetPanel
+                  ref={vocabPanelRef}
                   content={undefined}
                   editingContent={{
                     id: vocabularySetContentId || undefined,
@@ -898,36 +1019,40 @@ function TeacherTemplateProgramsInner() {
 
             {/* Panel */}
             <div
-              className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
+              className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
               style={{ left: `${sidebarWidth}px` }}
             >
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-lg font-semibold text-gray-900">
                   {t("vocabularySet.editTitle")}
                 </h2>
-                <button
-                  disabled={editorBusy}
-                  onClick={() => {
-                    if (editorBusy) return;
-                    if (
-                      !window.confirm(
-                        t("contentEditor.labels.unsavedChangesConfirm"),
+                <div className="flex items-center gap-2">
+                  <RefSaveButton panelRef={vocabPanelRef} />
+                  <button
+                    disabled={editorBusy}
+                    onClick={() => {
+                      if (editorBusy) return;
+                      if (
+                        !window.confirm(
+                          t("contentEditor.labels.unsavedChangesConfirm"),
+                        )
                       )
-                    )
-                      return;
-                    setShowVocabularySetEditor(false);
-                    setVocabularySetLessonId(null);
-                    setVocabularySetContentId(null);
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  aria-label="關閉"
-                >
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
+                        return;
+                      setShowVocabularySetEditor(false);
+                      setVocabularySetLessonId(null);
+                      setVocabularySetContentId(null);
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    aria-label="關閉"
+                  >
+                    <X className="w-5 h-5 text-gray-500" />
+                  </button>
+                </div>
               </div>
 
               <div className="p-6">
                 <VocabularySetPanel
+                  ref={vocabPanelRef}
                   content={{ id: vocabularySetContentId }}
                   editingContent={{ id: vocabularySetContentId }}
                   lessonId={vocabularySetLessonId}
@@ -1075,6 +1200,20 @@ function TeacherTemplateProgramsInner() {
           programs={programs}
         />
       )}
+
+      {/* Assignment Dispatch Dialog (no classroomId = multi-classroom mode) */}
+      <AssignmentDialog
+        open={showAssignmentDialog}
+        onClose={() => {
+          setShowAssignmentDialog(false);
+          setDispatchContents([]);
+        }}
+        preSelectedContents={dispatchContents}
+        onSuccess={() => {
+          setShowAssignmentDialog(false);
+          setDispatchContents([]);
+        }}
+      />
     </div>
   );
 }

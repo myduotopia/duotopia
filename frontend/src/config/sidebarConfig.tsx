@@ -50,6 +50,12 @@ export const getSidebarGroups = (
         icon: GraduationCap,
         path: "/teacher/classrooms",
       },
+      {
+        id: "students",
+        label: t("teacherLayout.nav.allStudents"),
+        icon: Users,
+        path: "/teacher/students",
+      },
       ...(FEATURE_FLAGS.ASSIGNMENTS
         ? [
             {
@@ -60,12 +66,6 @@ export const getSidebarGroups = (
             },
           ]
         : []),
-      {
-        id: "students",
-        label: t("teacherLayout.nav.allStudents"),
-        icon: Users,
-        path: "/teacher/students",
-      },
       {
         id: "programs",
         label: t("teacherLayout.nav.publicPrograms"),

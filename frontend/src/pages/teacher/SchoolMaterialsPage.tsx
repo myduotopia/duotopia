@@ -1,12 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { RecursiveTreeAccordion } from "@/components/shared/RecursiveTreeAccordion";
 import { programTreeConfig } from "@/components/shared/programTreeConfig";
 import { ProgramDialog } from "@/components/ProgramDialog";
 import { LessonDialog } from "@/components/LessonDialog";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
-import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
-import VocabularySetPanel from "@/components/VocabularySetPanel";
+import ReadingAssessmentPanel, {
+  type ReadingAssessmentPanelHandle,
+} from "@/components/ReadingAssessmentPanel";
+import VocabularySetPanel, {
+  type VocabularySetPanelHandle,
+} from "@/components/VocabularySetPanel";
+import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import { Button } from "@/components/ui/button";
 import { X, AlertCircle } from "lucide-react";
 import { apiClient } from "@/lib/api";
@@ -20,6 +25,9 @@ export default function SchoolMaterialsPage() {
   const { selectedSchool, selectedOrganization, mode } = useWorkspace();
   const { sidebarWidth, setSidebarDisabled, editorBusy } = useSidebar();
   const isOrgMode = mode === "organization";
+
+  const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
+  const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
@@ -568,36 +576,40 @@ export default function SchoolMaterialsPage() {
         {showReadingEditor && editorLessonId && editorContentId === null && (
           <>
             <div
-              className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+              className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
               style={{ left: `${sidebarWidth}px` }}
             >
               <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
                   {t("teacherTemplatePrograms.dialogs.addReadingTitle")}
                 </h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={editorBusy}
-                  onClick={() => {
-                    if (editorBusy) return;
-                    if (
-                      !window.confirm(
-                        t("contentEditor.labels.unsavedChangesConfirm"),
+                <div className="flex items-center gap-2">
+                  <RefSaveButton panelRef={readingPanelRef} />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={editorBusy}
+                    onClick={() => {
+                      if (editorBusy) return;
+                      if (
+                        !window.confirm(
+                          t("contentEditor.labels.unsavedChangesConfirm"),
+                        )
                       )
-                    )
-                      return;
-                    setShowReadingEditor(false);
-                    setEditorLessonId(null);
-                    setEditorContentId(null);
-                    setSelectedContent(null);
-                  }}
-                >
-                  <X className="h-5 w-5" />
-                </Button>
+                        return;
+                      setShowReadingEditor(false);
+                      setEditorLessonId(null);
+                      setEditorContentId(null);
+                      setSelectedContent(null);
+                    }}
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
               <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
                 <ReadingAssessmentPanel
+                  ref={readingPanelRef}
                   lessonId={editorLessonId}
                   isCreating={true}
                   onSave={async (
@@ -655,49 +667,53 @@ export default function SchoolMaterialsPage() {
 
               {/* Panel */}
               <div
-                className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
+                className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
                 style={{ left: `${sidebarWidth}px` }}
               >
                 <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                   <h2 className="text-lg font-semibold text-gray-900">
                     {t("teacherTemplatePrograms.dialogs.editContentTitle")}
                   </h2>
-                  <button
-                    disabled={editorBusy}
-                    onClick={() => {
-                      if (editorBusy) return;
-                      if (
-                        !window.confirm(
-                          t("contentEditor.labels.unsavedChangesConfirm"),
+                  <div className="flex items-center gap-2">
+                    <RefSaveButton panelRef={readingPanelRef} />
+                    <button
+                      disabled={editorBusy}
+                      onClick={() => {
+                        if (editorBusy) return;
+                        if (
+                          !window.confirm(
+                            t("contentEditor.labels.unsavedChangesConfirm"),
+                          )
                         )
-                      )
-                        return;
-                      setShowReadingEditor(false);
-                      setEditorLessonId(null);
-                      setEditorContentId(null);
-                      setSelectedContent(null);
-                    }}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    aria-label="關閉"
-                  >
-                    <svg
-                      className="w-5 h-5 text-gray-500"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                          return;
+                        setShowReadingEditor(false);
+                        setEditorLessonId(null);
+                        setEditorContentId(null);
+                        setSelectedContent(null);
+                      }}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      aria-label="關閉"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
+                      <svg
+                        className="w-5 h-5 text-gray-500"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="p-6">
                   <ReadingAssessmentPanel
+                    ref={readingPanelRef}
                     lessonId={editorLessonId}
                     contentId={editorContentId}
                     content={{
@@ -752,35 +768,39 @@ export default function SchoolMaterialsPage() {
           !vocabularySetContentId && (
             <>
               <div
-                className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+                className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
                 style={{ left: `${sidebarWidth}px` }}
               >
                 <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
                   <h2 className="text-lg font-semibold">
                     {t("vocabularySet.dialogTitle")}
                   </h2>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    disabled={editorBusy}
-                    onClick={() => {
-                      if (editorBusy) return;
-                      if (
-                        !window.confirm(
-                          t("contentEditor.labels.unsavedChangesConfirm"),
+                  <div className="flex items-center gap-2">
+                    <RefSaveButton panelRef={vocabPanelRef} />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      disabled={editorBusy}
+                      onClick={() => {
+                        if (editorBusy) return;
+                        if (
+                          !window.confirm(
+                            t("contentEditor.labels.unsavedChangesConfirm"),
+                          )
                         )
-                      )
-                        return;
-                      setShowVocabularySetEditor(false);
-                      setVocabularySetLessonId(null);
-                      setVocabularySetContentId(null);
-                    }}
-                  >
-                    <X className="h-5 w-5" />
-                  </Button>
+                          return;
+                        setShowVocabularySetEditor(false);
+                        setVocabularySetLessonId(null);
+                        setVocabularySetContentId(null);
+                      }}
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex-1 overflow-auto p-6">
                   <VocabularySetPanel
+                    ref={vocabPanelRef}
                     content={undefined}
                     editingContent={{
                       id: vocabularySetContentId || undefined,
@@ -838,36 +858,40 @@ export default function SchoolMaterialsPage() {
 
               {/* Panel */}
               <div
-                className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
+                className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
                 style={{ left: `${sidebarWidth}px` }}
               >
                 <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
                   <h2 className="text-lg font-semibold text-gray-900">
                     {t("vocabularySet.editTitle")}
                   </h2>
-                  <button
-                    disabled={editorBusy}
-                    onClick={() => {
-                      if (editorBusy) return;
-                      if (
-                        !window.confirm(
-                          t("contentEditor.labels.unsavedChangesConfirm"),
+                  <div className="flex items-center gap-2">
+                    <RefSaveButton panelRef={vocabPanelRef} />
+                    <button
+                      disabled={editorBusy}
+                      onClick={() => {
+                        if (editorBusy) return;
+                        if (
+                          !window.confirm(
+                            t("contentEditor.labels.unsavedChangesConfirm"),
+                          )
                         )
-                      )
-                        return;
-                      setShowVocabularySetEditor(false);
-                      setVocabularySetLessonId(null);
-                      setVocabularySetContentId(null);
-                    }}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    aria-label="關閉"
-                  >
-                    <X className="w-5 h-5 text-gray-500" />
-                  </button>
+                          return;
+                        setShowVocabularySetEditor(false);
+                        setVocabularySetLessonId(null);
+                        setVocabularySetContentId(null);
+                      }}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      aria-label="關閉"
+                    >
+                      <X className="w-5 h-5 text-gray-500" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="p-6">
                   <VocabularySetPanel
+                    ref={vocabPanelRef}
                     content={{ id: vocabularySetContentId }}
                     editingContent={{ id: vocabularySetContentId }}
                     lessonId={vocabularySetLessonId}

@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { RecursiveTreeAccordion } from "./RecursiveTreeAccordion";
 import { programTreeConfig } from "./programTreeConfig";
-import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
+import ReadingAssessmentPanel, {
+  type ReadingAssessmentPanelHandle,
+} from "@/components/ReadingAssessmentPanel";
+import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import SentenceMakingPanel from "@/components/activities/SentenceMakingActivity";
-import VocabularySetPanel from "@/components/VocabularySetPanel";
+import VocabularySetPanel, {
+  type VocabularySetPanelHandle,
+} from "@/components/VocabularySetPanel";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
 import {
   ProgramTreeLesson,
@@ -189,6 +194,9 @@ export function ProgramTreeView({
     closeSentenceMakingEditor,
     closeVocabularySetEditor,
   } = useContentEditor();
+
+  const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
+  const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
 
   const [showContentTypeDialog, setShowContentTypeDialog] = useState(false);
   const [contentLessonInfo, setContentLessonInfo] = useState<{
@@ -696,29 +704,33 @@ export function ProgramTreeView({
           <div className="relative w-full max-w-7xl max-h-[90vh] bg-white rounded-lg p-6 flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold">新增內容</h2>
-              <button
-                onClick={closeReadingEditor}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                aria-label="關閉"
-              >
-                <svg
-                  className="w-5 h-5 text-gray-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+              <div className="flex items-center gap-2">
+                <RefSaveButton panelRef={readingPanelRef} />
+                <button
+                  onClick={closeReadingEditor}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  aria-label="關閉"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
+                  <svg
+                    className="w-5 h-5 text-gray-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-hidden flex flex-col min-h-0">
               <div className="flex-1 overflow-auto p-6 min-h-0">
                 <ReadingAssessmentPanel
+                  ref={readingPanelRef}
                   lessonId={editorLessonId}
                   programLevel={getProgramLevelByLessonId(
                     programs,
@@ -756,29 +768,39 @@ export function ProgramTreeView({
                 <h2 className="text-xl font-semibold text-gray-900">
                   編輯內容
                 </h2>
-                <button
-                  onClick={closeReadingEditor}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <svg
-                    className="h-6 w-6"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={() => readingPanelRef.current?.save()}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
+                    儲存
+                  </Button>
+                  <button
+                    onClick={closeReadingEditor}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <svg
+                      className="h-6 w-6"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
               {/* Content */}
               <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                 <div className="flex-1 overflow-auto p-6 min-h-0">
                   <ReadingAssessmentPanel
+                    ref={readingPanelRef}
                     content={readingPanelContent}
                     lessonId={editorLessonId}
                     programLevel={getProgramLevelByLessonId(
@@ -925,10 +947,14 @@ export function ProgramTreeView({
           <Dialog open={true} onOpenChange={() => closeVocabularySetEditor()}>
             <DialogContent className="max-w-7xl max-h-[90vh] flex flex-col">
               <DialogHeader className="flex-shrink-0">
-                <DialogTitle>新增單字集</DialogTitle>
+                <div className="flex items-center justify-between">
+                  <DialogTitle>新增單字集</DialogTitle>
+                  <RefSaveButton panelRef={vocabPanelRef} />
+                </div>
               </DialogHeader>
               <div className="flex-1 overflow-y-auto min-h-0">
                 <VocabularySetPanel
+                  ref={vocabPanelRef}
                   lessonId={vocabularySetLessonId}
                   programLevel={getProgramLevelByLessonId(
                     programs,
@@ -963,29 +989,33 @@ export function ProgramTreeView({
                 <h2 className="text-xl font-semibold text-gray-900">
                   編輯單字集
                 </h2>
-                <button
-                  onClick={closeVocabularySetEditor}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <svg
-                    className="h-6 w-6"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                <div className="flex items-center gap-2">
+                  <RefSaveButton panelRef={vocabPanelRef} />
+                  <button
+                    onClick={closeVocabularySetEditor}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
+                    <svg
+                      className="h-6 w-6"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
               {/* Content */}
               <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                 <div className="flex-1 overflow-auto p-6 min-h-0">
                   <VocabularySetPanel
+                    ref={vocabPanelRef}
                     content={
                       vocabularySetContentId
                         ? { id: vocabularySetContentId }

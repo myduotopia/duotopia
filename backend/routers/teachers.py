@@ -11,7 +11,7 @@ from fastapi import (
     Form,
 )
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session, selectinload, joinedload
+from sqlalchemy.orm import Session, selectinload, joinedload, contains_eager
 from sqlalchemy import func, text
 from pydantic import BaseModel, Field, field_validator
 from database import get_db
@@ -47,6 +47,7 @@ from datetime import date, datetime, timedelta, timezone  # noqa: F401
 from services.translation import translation_service
 from services.quota_analytics_service import QuotaAnalyticsService
 from services.quota_service import QuotaService
+from services.preview_service import get_sentence_fields
 
 logger = logging.getLogger(__name__)
 
@@ -3893,15 +3894,21 @@ async def get_assignment_preview(
             # 🔥 Use preloaded content_items (no query)
             content_items = sorted(content.content_items, key=lambda x: x.order_index)
 
-            # 構建 items 資料
+            # 構建 items 資料（使用 get_sentence_fields 確保朗讀模式下回傳例句欄位）
+            _practice_mode = assignment.practice_mode or ""
             items_data = []
             for item in content_items:
+                fields = get_sentence_fields(item, content.type, _practice_mode)
+                if fields is None:
+                    continue  # 單字集朗讀模式下沒有例句的 item 跳過
+                q_text, q_translation, q_audio = fields
+
                 item_data = {
                     "id": item.id,
-                    "text": item.text,
-                    "translation": item.translation,
-                    "audio_url": item.audio_url,
-                    "image_url": item.image_url,  # 修復：添加圖片 URL
+                    "text": q_text,
+                    "translation": q_translation,
+                    "audio_url": q_audio,
+                    "image_url": item.image_url,
                     "part_of_speech": item.part_of_speech,
                     "order_index": item.order_index,
                     "example_sentence": item.example_sentence,
@@ -3917,13 +3924,11 @@ async def get_assignment_preview(
             if content.type == ContentType.EXAMPLE_SENTENCES:
                 activity_data["target_wpm"] = content.target_wpm
                 activity_data["target_accuracy"] = content.target_accuracy
-                # 🔧 修復：為 reading 模式添加 example_audio_url（取第一個 item 的 audio_url）
-                if content_items and len(content_items) > 0:
-                    first_item = content_items[0]
-                    activity_data["example_audio_url"] = first_item.audio_url
-                    # 同時設置 content 和 target_text（ReadingAssessmentTemplate 需要）
-                    activity_data["content"] = first_item.translation or ""
-                    activity_data["target_text"] = first_item.text or ""
+                if items_data:
+                    first = items_data[0]
+                    activity_data["example_audio_url"] = first["audio_url"]
+                    activity_data["content"] = first["translation"] or ""
+                    activity_data["target_text"] = first["text"] or ""
 
             activities.append(activity_data)
 
@@ -3982,12 +3987,13 @@ async def preview_rearrangement_questions(
             status_code=400, detail="This assignment is not in rearrangement mode"
         )
 
-    # 取得所有內容項目
+    # 取得所有內容項目（含 Content 以取得 type）
     content_items = (
         db.query(ContentItem)
         .join(Content)
         .join(AssignmentContent)
         .filter(AssignmentContent.assignment_id == assignment.id)
+        .options(contains_eager(ContentItem.content))
         .order_by(ContentItem.order_index)
         .all()
     )
@@ -3998,8 +4004,16 @@ async def preview_rearrangement_questions(
 
     questions = []
     for item in content_items:
+        # 根據練習模式切換欄位（單字集 → 使用例句欄位）
+        fields = get_sentence_fields(
+            item, item.content.type if item.content else None, "rearrangement"
+        )
+        if fields is None:
+            continue  # 單字集無例句的 item 跳過
+        q_text, q_translation, q_audio = fields
+
         # 打亂單字順序
-        words = item.text.strip().split()
+        words = q_text.strip().split()
         shuffled_words = words.copy()
         random.shuffle(shuffled_words)
 
@@ -4015,9 +4029,9 @@ async def preview_rearrangement_questions(
                     else 30
                 ),
                 play_audio=assignment.play_audio or False,
-                audio_url=item.audio_url,
-                translation=item.translation,
-                original_text=item.text.strip(),  # 正確答案
+                audio_url=q_audio,
+                translation=q_translation,
+                original_text=q_text.strip(),  # 正確答案
             )
         )
 
