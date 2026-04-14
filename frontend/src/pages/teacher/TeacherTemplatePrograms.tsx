@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 import {
   RecursiveTreeAccordion,
   TreeNodeConfig,
@@ -47,8 +46,6 @@ function TeacherTemplateProgramsInner() {
   const user = useTeacherAuthStore((s) => s.user);
   const isResourceAccount = user?.email === RESOURCE_ACCOUNT_EMAIL;
   const { updateVisibility } = useResourceMaterialsAPI();
-
-  const navigate = useNavigate();
 
   const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
   const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
@@ -1179,7 +1176,13 @@ function TeacherTemplateProgramsInner() {
           contentTitle={instantPracticeContent.title}
           contentType={instantPracticeContent.type}
           onStartPractice={(assignmentId) => {
-            navigate(`/teacher/assignment/${assignmentId}/preview`);
+            window.open(
+              `/teacher/assignment/${assignmentId}/preview`,
+              "_blank",
+              "noopener,noreferrer",
+            );
+            setShowInstantPractice(false);
+            setInstantPracticeContent(null);
           }}
         />
       )}
