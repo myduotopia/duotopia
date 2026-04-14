@@ -431,7 +431,9 @@ export default function ClassroomDetail({
       const succeeded = results.length - failed;
       if (failed === 0) {
         toast.success(
-          t("classroomDetail.messages.batchArchiveSuccess", { count: succeeded }),
+          t("classroomDetail.messages.batchArchiveSuccess", {
+            count: succeeded,
+          }),
         );
       } else if (succeeded > 0) {
         toast.warning(
@@ -2523,7 +2525,9 @@ export default function ClassroomDetail({
                                             assignment.id,
                                           )}
                                           onCheckedChange={() =>
-                                            toggleAssignmentSelection(assignment.id)
+                                            toggleAssignmentSelection(
+                                              assignment.id,
+                                            )
                                           }
                                         />
                                       </td>
