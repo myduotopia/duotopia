@@ -306,11 +306,12 @@ export default function ClassroomDetail({
     open: false,
     assignmentIndex: 0,
   });
-  // Batch print selection
-  const [selectedForPrint, setSelectedForPrint] = useState<Set<number>>(
+  // Batch selection (shared by batch print and batch archive)
+  const [selectedAssignments, setSelectedAssignments] = useState<Set<number>>(
     new Set(),
   );
   const [batchPrinting, setBatchPrinting] = useState(false);
+  const [batchArchiving, setBatchArchiving] = useState(false);
 
   // Pagination (on filtered results)
   const [assignmentPage, setAssignmentPage] = useState(1);
@@ -335,8 +336,8 @@ export default function ClassroomDetail({
     filterStatus,
   ]);
 
-  const togglePrintSelection = (assignmentId: number) => {
-    setSelectedForPrint((prev) => {
+  const toggleAssignmentSelection = (assignmentId: number) => {
+    setSelectedAssignments((prev) => {
       const next = new Set(prev);
       if (next.has(assignmentId)) next.delete(assignmentId);
       else next.add(assignmentId);
@@ -345,18 +346,18 @@ export default function ClassroomDetail({
   };
 
   const toggleSelectAll = () => {
-    if (selectedForPrint.size === filteredAssignments.length) {
-      setSelectedForPrint(new Set());
+    if (selectedAssignments.size === filteredAssignments.length) {
+      setSelectedAssignments(new Set());
     } else {
-      setSelectedForPrint(new Set(filteredAssignments.map((a) => a.id)));
+      setSelectedAssignments(new Set(filteredAssignments.map((a) => a.id)));
     }
   };
 
   const handleBatchPrint = async () => {
-    if (selectedForPrint.size === 0) return;
+    if (selectedAssignments.size === 0) return;
     setBatchPrinting(true);
     try {
-      const selected = assignments.filter((a) => selectedForPrint.has(a.id));
+      const selected = assignments.filter((a) => selectedAssignments.has(a.id));
       const progressResults = await Promise.all(
         selected.map(async (a) => {
           const response = await apiClient.get(
@@ -401,11 +402,51 @@ export default function ClassroomDetail({
       });
 
       openPrintWindow(pages);
-      setSelectedForPrint(new Set());
+      setSelectedAssignments(new Set());
     } catch {
       toast.error(t("stickyNote.batchPrintError", "列印失敗"));
     } finally {
       setBatchPrinting(false);
+    }
+  };
+
+  const handleBatchArchive = async () => {
+    if (selectedAssignments.size === 0) return;
+    const count = selectedAssignments.size;
+    if (
+      !confirm(
+        t("classroomDetail.messages.confirmBatchArchiveAssignments", { count }),
+      )
+    )
+      return;
+    setBatchArchiving(true);
+    try {
+      const ids = Array.from(selectedAssignments);
+      const results = await Promise.allSettled(
+        ids.map((id) =>
+          apiClient.patch(`/api/teachers/assignments/${id}/archive`),
+        ),
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      const succeeded = results.length - failed;
+      if (failed === 0) {
+        toast.success(
+          t("classroomDetail.messages.batchArchiveSuccess", { count: succeeded }),
+        );
+      } else if (succeeded > 0) {
+        toast.warning(
+          t("classroomDetail.messages.batchArchivePartial", {
+            succeeded,
+            failed,
+          }),
+        );
+      } else {
+        toast.error(t("classroomDetail.messages.batchArchiveFailed"));
+      }
+      setSelectedAssignments(new Set());
+      await fetchAssignments();
+    } finally {
+      setBatchArchiving(false);
     }
   };
 
@@ -1769,14 +1810,29 @@ export default function ClassroomDetail({
                           variant="outline"
                           onClick={handleBatchPrint}
                           disabled={
-                            selectedForPrint.size === 0 || batchPrinting
+                            selectedAssignments.size === 0 || batchPrinting
                           }
                           className="h-10"
                         >
                           <Printer className="h-4 w-4 mr-2" />
                           {t("stickyNote.batchPrint")}
-                          {selectedForPrint.size > 0 &&
-                            ` (${selectedForPrint.size})`}
+                          {selectedAssignments.size > 0 &&
+                            ` (${selectedAssignments.size})`}
+                        </Button>
+                      )}
+                      {assignments.length > 0 && !showArchived && (
+                        <Button
+                          variant="outline"
+                          onClick={handleBatchArchive}
+                          disabled={
+                            selectedAssignments.size === 0 || batchArchiving
+                          }
+                          className="h-10"
+                        >
+                          <Archive className="h-4 w-4 mr-2" />
+                          {t("classroomDetail.buttons.batchArchive")}
+                          {selectedAssignments.size > 0 &&
+                            ` (${selectedAssignments.size})`}
                         </Button>
                       )}
                       {!canAssignHomework && !showArchived && teacherData && (
@@ -2126,11 +2182,11 @@ export default function ClassroomDetail({
                                 <div className="flex items-start justify-between gap-2">
                                   {!showArchived && (
                                     <Checkbox
-                                      checked={selectedForPrint.has(
+                                      checked={selectedAssignments.has(
                                         assignment.id,
                                       )}
                                       onCheckedChange={() =>
-                                        togglePrintSelection(assignment.id)
+                                        toggleAssignmentSelection(assignment.id)
                                       }
                                       className="mt-1"
                                     />
@@ -2310,7 +2366,7 @@ export default function ClassroomDetail({
                                     <Checkbox
                                       checked={
                                         filteredAssignments.length > 0 &&
-                                        selectedForPrint.size ===
+                                        selectedAssignments.size ===
                                           filteredAssignments.length
                                       }
                                       onCheckedChange={toggleSelectAll}
@@ -2463,11 +2519,11 @@ export default function ClassroomDetail({
                                     {!showArchived && (
                                       <td className="w-10 px-4 py-3">
                                         <Checkbox
-                                          checked={selectedForPrint.has(
+                                          checked={selectedAssignments.has(
                                             assignment.id,
                                           )}
                                           onCheckedChange={() =>
-                                            togglePrintSelection(assignment.id)
+                                            toggleAssignmentSelection(assignment.id)
                                           }
                                         />
                                       </td>
