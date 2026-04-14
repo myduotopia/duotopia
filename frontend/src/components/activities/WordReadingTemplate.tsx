@@ -465,7 +465,8 @@ export default function WordReadingTemplate({
     } catch (error) {
       console.error("Error starting recording:", error);
       toast.error(
-        t("audioRecorder.toast.cannotStart") || "無法啟動錄音，請檢查麥克風權限",
+        t("audioRecorder.toast.cannotStart") ||
+          "無法啟動錄音，請檢查麥克風權限",
       );
     }
   };
