@@ -1652,7 +1652,8 @@
         "allSelected": "All Selected",
         "selectAllBtn": "Select All",
         "deselectAllBtn": "Deselect All",
-        "invertSelection": "Invert Selection"
+        "invertSelection": "Invert Selection",
+        "willCreate": "Will create {{count}} assignments"
       },
       "details": {
         "description": "Fill in assignment title and detailed information",
@@ -1711,7 +1712,7 @@
       "success": {
         "created": "Assignment created successfully, assigned to {{count}} students",
         "multiCreated": "Created assignments for {{classroomCount}} classrooms, {{studentCount}} students total",
-        "partialCreated": "Partial success: {{successCount}}/{{totalCount}} classrooms created ({{studentCount}} students), some failed"
+        "partialCreated": "Partial success: {{successCount}}/{{totalCount}} classrooms created ({{studentCount}} students). Failed: {{failedNames}}"
       },
       "contentTypes": {
         "reading_assessment": "Paragraph Set",

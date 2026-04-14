@@ -268,6 +268,15 @@ function SortableCartItem({ item, index, onRemove, t }: SortableCartItemProps) {
 
 const EMPTY_STUDENTS: Student[] = [];
 
+const sortByStudentNumber = (a: Student, b: Student) => {
+  if (!a.student_number && !b.student_number) return 0;
+  if (!a.student_number) return 1;
+  if (!b.student_number) return -1;
+  return a.student_number.localeCompare(b.student_number, undefined, {
+    numeric: true,
+  });
+};
+
 export function AssignmentDialog({
   open,
   onClose,
@@ -439,26 +448,34 @@ export function AssignmentDialog({
     const existing = selectedClassrooms.find((c) => c.id === classroom.id);
     if (existing) {
       // 取消選擇
-      setSelectedClassrooms((prev) =>
-        prev.filter((c) => c.id !== classroom.id),
-      );
+      setSelectedClassrooms((prev) => {
+        const newList = prev.filter((c) => c.id !== classroom.id);
+        setActiveClassroomTab((t) =>
+          Math.min(t, Math.max(0, newList.length - 1)),
+        );
+        return newList;
+      });
     } else {
       // 新增選擇，載入學生
       try {
         const students = (await apiClient.getTeacherClassroomStudents(
           classroom.id,
         )) as Student[];
-        setSelectedClassrooms((prev) => [
-          ...prev,
-          {
-            id: classroom.id,
-            name: classroom.name,
-            school_id: classroom.school_id || effectiveSchoolId || "",
-            students: students || [],
-            selectedStudentIds: (students || []).map((s) => s.id),
-            assignToAll: true,
-          },
-        ]);
+        setSelectedClassrooms((prev) => {
+          // Guard: skip if already added (handles rapid double-click)
+          if (prev.some((c) => c.id === classroom.id)) return prev;
+          return [
+            ...prev,
+            {
+              id: classroom.id,
+              name: classroom.name,
+              school_id: classroom.school_id || effectiveSchoolId || "",
+              students: students || [],
+              selectedStudentIds: (students || []).map((s) => s.id),
+              assignToAll: true,
+            },
+          ];
+        });
       } catch {
         toast.error(
           t("dialogs.assignmentDialog.errors.loadStudentsFailed", {
@@ -1069,6 +1086,7 @@ export function AssignmentDialog({
         );
         let totalStudents = 0;
         let successCount = 0;
+        const failedClassroomNames: string[] = [];
 
         for (const classroom of classroomsToCreate) {
           try {
@@ -1087,6 +1105,7 @@ export function AssignmentDialog({
             totalStudents += result.student_count || 0;
             successCount++;
           } catch (err) {
+            failedClassroomNames.push(classroom.name);
             console.error(
               `Failed to create assignment for ${classroom.name}:`,
               err,
@@ -1104,6 +1123,7 @@ export function AssignmentDialog({
               successCount,
               totalCount: classroomsToCreate.length,
               studentCount: totalStudents,
+              failedNames: failedClassroomNames.join(", "),
             }),
           );
         } else {
@@ -1219,12 +1239,7 @@ export function AssignmentDialog({
       case 2:
         return cartItems.length > 0;
       case 3:
-        // 多班級模式：至少有一個班級選了學生
-        if (needsClassroomStep) {
-          return selectedClassrooms.some(
-            (c) => c.selectedStudentIds.length > 0,
-          );
-        }
+        // 單班級模式：至少選一個學生（多班級模式不會進到 step 3）
         return formData.student_ids.length > 0;
       case 4:
         return formData.title.trim().length > 0;
@@ -2541,20 +2556,7 @@ export function AssignmentDialog({
                                 {/* Student grid */}
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
                                   {[...selected.students]
-                                    .sort((a, b) => {
-                                      if (
-                                        !a.student_number &&
-                                        !b.student_number
-                                      )
-                                        return 0;
-                                      if (!a.student_number) return 1;
-                                      if (!b.student_number) return -1;
-                                      return a.student_number.localeCompare(
-                                        b.student_number,
-                                        undefined,
-                                        { numeric: true },
-                                      );
-                                    })
+                                    .sort(sortByStudentNumber)
                                     .map((student) => (
                                       <div
                                         key={student.id}
@@ -3283,17 +3285,7 @@ export function AssignmentDialog({
                           <ScrollArea className="h-full">
                             <div className="grid grid-cols-3 gap-1.5 p-1">
                               {[...classroom.students]
-                                .sort((a, b) => {
-                                  if (!a.student_number && !b.student_number)
-                                    return 0;
-                                  if (!a.student_number) return 1;
-                                  if (!b.student_number) return -1;
-                                  return a.student_number.localeCompare(
-                                    b.student_number,
-                                    undefined,
-                                    { numeric: true },
-                                  );
-                                })
+                                .sort(sortByStudentNumber)
                                 .map((student) => (
                                   <div
                                     key={student.id}
@@ -3410,17 +3402,7 @@ export function AssignmentDialog({
                     <ScrollArea className="h-full">
                       <div className="grid grid-cols-3 gap-1.5 p-1">
                         {[...effectiveStudents]
-                          .sort((a, b) => {
-                            if (!a.student_number && !b.student_number)
-                              return 0;
-                            if (!a.student_number) return 1;
-                            if (!b.student_number) return -1;
-                            return a.student_number.localeCompare(
-                              b.student_number,
-                              undefined,
-                              { numeric: true },
-                            );
-                          })
+                          .sort(sortByStudentNumber)
                           .map((student) => (
                             <div
                               key={student.id}

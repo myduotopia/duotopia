@@ -1701,7 +1701,8 @@
         "allSelected": "全選",
         "selectAllBtn": "全選",
         "deselectAllBtn": "取消全選",
-        "invertSelection": "反選"
+        "invertSelection": "反選",
+        "willCreate": "將建立 {{count}} 份作業"
       },
       "details": {
         "description": "填寫作業標題和詳細資訊",
@@ -1760,7 +1761,7 @@
       "success": {
         "created": "成功創建作業，已指派給 {{count}} 位學生",
         "multiCreated": "成功建立 {{classroomCount}} 個班級的作業，共 {{studentCount}} 位學生",
-        "partialCreated": "部分成功：{{successCount}}/{{totalCount}} 個班級已建立作業（{{studentCount}} 位學生），其餘班級建立失敗"
+        "partialCreated": "部分成功：{{successCount}}/{{totalCount}} 個班級已建立作業（{{studentCount}} 位學生），失敗：{{failedNames}}"
       },
       "contentTypes": {
         "reading_assessment": "段落集",
