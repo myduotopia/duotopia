@@ -10,7 +10,7 @@
  * - 點擊學生進入批改頁面（gradable modes）
  * - 狀態圖例說明
  */
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, forwardRef } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGrid, List, Loader2, Save, X } from "lucide-react";
 
@@ -46,6 +46,8 @@ export interface StudentStatusPanelProps {
   onSave?: () => void;
   saving?: boolean;
   loading: boolean;
+  /** When true, data area scrolls internally. When false, expands naturally (parent handles scroll). */
+  scrollable?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +74,7 @@ const STATUS_ORDER: Record<string, number> = {
 // TrafficLightDot - 紅綠燈狀態圓
 // ---------------------------------------------------------------------------
 
-function TrafficLightDot({
+export function TrafficLightDot({
   status,
   size = 14,
 }: {
@@ -296,9 +298,11 @@ function StudentCard({
       </span>
 
       {/* Seat number */}
-      <span className="text-xs text-gray-700 dark:text-gray-300 leading-tight">
-        {student.student_number}
-      </span>
+      {Number(student.student_number) > 0 && (
+        <span className="text-xs text-gray-700 dark:text-gray-300 leading-tight">
+          {student.student_number}
+        </span>
+      )}
 
       {/* Name */}
       <span className="text-xs truncate w-full text-gray-600 dark:text-gray-400 leading-tight">
@@ -371,9 +375,11 @@ function StudentRow({
       </span>
 
       {/* Seat number */}
-      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 w-6 shrink-0">
-        {student.student_number}
-      </span>
+      {Number(student.student_number) > 0 && (
+        <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 w-6 shrink-0">
+          {student.student_number}
+        </span>
+      )}
 
       {/* Name */}
       <span className="text-sm text-gray-800 dark:text-gray-200 flex-1 text-left truncate">
@@ -400,24 +406,29 @@ function StudentRow({
 // Main Component
 // ---------------------------------------------------------------------------
 
-export default function StudentStatusPanel({
-  students,
-  assignmentId,
-  classroomId,
-  practiceMode,
-  isEditingStudents: _isEditingStudents,
-  onEditingStudentsChange: _onEditingStudentsChange,
-  onStudentIdsChanged,
-  onSave,
-  saving = false,
-  loading,
-}: StudentStatusPanelProps) {
+const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
+  function StudentStatusPanel(
+    {
+      students,
+      assignmentId,
+      classroomId,
+      practiceMode,
+      isEditingStudents: _isEditingStudents,
+      onEditingStudentsChange: _onEditingStudentsChange,
+      onStudentIdsChanged,
+      onSave,
+      saving = false,
+      loading,
+      scrollable = false,
+    },
+    ref,
+  ) {
   void _isEditingStudents;
   void _onEditingStudentsChange;
   const { t } = useTranslation();
 
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [activeTab, setActiveTab] = useState<TabValue>("all");
+  const [activeTab, setActiveTab] = useState<TabValue>("assigned");
   const [sortMode, setSortMode] = useState<SortMode>("number");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -645,7 +656,7 @@ export default function StudentStatusPanel({
   }, [isCheckboxActive, filteredStudents, selectedIds, isCheckboxDisabled]);
 
   return (
-    <div className="border-t dark:border-gray-700 pt-4">
+    <div className={`border-t dark:border-gray-700 pt-4 ${scrollable ? "flex flex-col h-full" : ""}`}>
       {/* Header: title + sort + view toggle */}
       <div className="flex items-center justify-between mb-3 gap-2">
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 shrink-0">
@@ -755,88 +766,94 @@ export default function StudentStatusPanel({
       </div>
 
       {/* Content: loading / empty / grid / list */}
-      {loading ? (
-        <div className="flex items-center justify-center py-8 text-gray-400">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
-      ) : sortedStudents.length === 0 ? (
-        <p className="text-sm text-gray-400 py-6 text-center">
-          {t("assignmentDetail.sheet.noStudents", "尚無學生資料")}
-        </p>
-      ) : viewMode === "grid" ? (
-        <div className="grid grid-cols-5 gap-2 max-h-[45vh] overflow-y-auto py-1">
-          {sortedStudents.map((student) => (
-            <StudentCard
-              key={student.student_id}
-              student={student}
-              isSelected={selectedIds.has(student.student_id)}
-              isDisabled={isCheckboxDisabled(student)}
-              onToggle={() => toggleStudent(student.student_id)}
-              onClick={() => handleStudentClick(student)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="max-h-[45vh] overflow-y-auto space-y-0.5">
-          {sortedStudents.map((student) => (
-            <StudentRow
-              key={student.student_id}
-              student={student}
-              isEditing={isCheckboxActive}
-              isSelected={selectedIds.has(student.student_id)}
-              isDisabled={isCheckboxDisabled(student)}
-              onToggle={() => toggleStudent(student.student_id)}
-              onClick={() => handleStudentClick(student)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Save / Cancel bar (visible when selections changed) */}
-      {hasChanges && (
-        <div className="flex items-center justify-between mt-3">
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            {activeTab === "assigned"
-              ? t(
-                  "assignmentDetail.sheet.removedCount",
-                  "移除 {{count}} 位",
-                  { count: selectedIds.size },
-                )
-              : t(
-                  "assignmentDetail.sheet.addedCount",
-                  "新增 {{count}} 位",
-                  { count: selectedIds.size },
-                )}
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleCancel}
-              disabled={saving}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-            >
-              <X className="h-3.5 w-3.5" />
-              {t("common.cancel", "取消")}
-            </button>
-            <button
-              type="button"
-              onClick={onSave}
-              disabled={saving}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
-            >
-              {saving ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Save className="h-3.5 w-3.5" />
-              )}
-              {t("assignmentDetail.sheet.saveStudents", "儲存派發")}
-            </button>
+      {/* Data + legend area */}
+      <div ref={ref} className={scrollable ? "flex-1 min-h-0 overflow-y-auto" : ""}>
+        {loading ? (
+          <div className="flex items-center justify-center py-8 text-gray-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
           </div>
-        </div>
-      )}
+        ) : sortedStudents.length === 0 ? (
+          <p className="text-sm text-gray-400 py-6 text-center">
+            {t("assignmentDetail.sheet.noStudents", "尚無學生資料")}
+          </p>
+        ) : viewMode === "grid" ? (
+          <div className="grid grid-cols-5 gap-2 py-1 items-start">
+            {sortedStudents.map((student) => (
+              <StudentCard
+                key={student.student_id}
+                student={student}
+                isSelected={selectedIds.has(student.student_id)}
+                isDisabled={isCheckboxDisabled(student)}
+                onToggle={() => toggleStudent(student.student_id)}
+                onClick={() => handleStudentClick(student)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-0.5">
+            {sortedStudents.map((student) => (
+              <StudentRow
+                key={student.student_id}
+                student={student}
+                isEditing={isCheckboxActive}
+                isSelected={selectedIds.has(student.student_id)}
+                isDisabled={isCheckboxDisabled(student)}
+                onToggle={() => toggleStudent(student.student_id)}
+                onClick={() => handleStudentClick(student)}
+              />
+            ))}
+          </div>
+        )}
 
-      {/* Status legend */}
-      <StatusLegend />
+        {/* Save / Cancel bar (after student list, before legend) */}
+        {hasChanges && (
+          <div className="flex items-center justify-between mt-3 mb-2">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {activeTab === "assigned"
+                ? t(
+                    "assignmentDetail.sheet.removedCount",
+                    "移除 {{count}} 位",
+                    { count: selectedIds.size },
+                  )
+                : t(
+                    "assignmentDetail.sheet.addedCount",
+                    "新增 {{count}} 位",
+                    { count: selectedIds.size },
+                  )}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={saving}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+              >
+                <X className="h-3.5 w-3.5" />
+                {t("common.cancel", "取消")}
+              </button>
+              <button
+                type="button"
+                onClick={onSave}
+                disabled={saving}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Save className="h-3.5 w-3.5" />
+                )}
+                {t("assignmentDetail.sheet.saveStudents", "儲存派發")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Status legend */}
+        <StatusLegend />
+      </div>
     </div>
   );
-}
+  },
+);
+
+export default StudentStatusPanel;

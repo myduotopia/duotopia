@@ -9,58 +9,28 @@ function escapeHtml(s: string | number | undefined | null): string {
     .replace(/"/g, "&quot;");
 }
 
+// Traffic light status config for print (matches TrafficLightDot in StudentStatusPanel)
 export const STATUS_HEX: Record<
   string,
-  { dot: string; bg: string; border: string; symbol: string; fontSize?: string }
+  { color: string; symbol?: string; dashed?: boolean; quarter?: boolean }
 > = {
-  NOT_STARTED: {
-    dot: "#9ca3af",
-    bg: "#f9fafb",
-    border: "#e5e7eb",
-    symbol: "○",
-  },
-  IN_PROGRESS: {
-    dot: "#3b82f6",
-    bg: "#eff6ff",
-    border: "#bfdbfe",
-    symbol: "►",
-  },
-  SUBMITTED: {
-    dot: "#eab308",
-    bg: "#fefce8",
-    border: "#fde68a",
-    symbol: "★",
-  },
-  RETURNED: {
-    dot: "#f97316",
-    bg: "#fff7ed",
-    border: "#fed7aa",
-    symbol: "✗",
-  },
-  RESUBMITTED: {
-    dot: "#a855f7",
-    bg: "#faf5ff",
-    border: "#e9d5ff",
-    symbol: "◆",
-    fontSize: "20px",
-  },
-  GRADED: {
-    dot: "#22c55e",
-    bg: "#f0fdf4",
-    border: "#bbf7d0",
-    symbol: "✓",
-  },
+  NOT_STARTED: { color: "#F59E0B", dashed: true },
+  IN_PROGRESS: { color: "#F59E0B", quarter: true },
+  SUBMITTED: { color: "#EF4444" },
+  RETURNED: { color: "#F59E0B", symbol: "✗" },
+  RESUBMITTED: { color: "#22C55E" },
+  GRADED: { color: "#22C55E", symbol: "✓" },
 };
 
-// Status label config (matches STATUS_CONFIG in AssignmentStickyNote.tsx)
-const STATUS_LABELS: Record<string, string> = {
-  NOT_STARTED: "stickyNote.status.notStarted",
-  IN_PROGRESS: "stickyNote.status.inProgress",
-  SUBMITTED: "stickyNote.status.submitted",
-  RETURNED: "stickyNote.status.returned",
-  RESUBMITTED: "stickyNote.status.resubmitted",
-  GRADED: "stickyNote.status.graded",
-};
+// Status labels for legend
+const STATUS_LEGEND: { status: string; labelKey: string }[] = [
+  { status: "NOT_STARTED", labelKey: "assignmentDetail.sheet.statusNotStarted" },
+  { status: "IN_PROGRESS", labelKey: "assignmentDetail.sheet.statusInProgress" },
+  { status: "SUBMITTED", labelKey: "assignmentDetail.sheet.statusSubmitted" },
+  { status: "RETURNED", labelKey: "assignmentDetail.sheet.statusReturned" },
+  { status: "RESUBMITTED", labelKey: "assignmentDetail.sheet.statusResubmitted" },
+  { status: "GRADED", labelKey: "assignmentDetail.sheet.statusGraded" },
+];
 
 export interface PrintStudent {
   student_number: number;
@@ -76,75 +46,94 @@ export interface PrintOptions {
 }
 
 /**
+ * Generate an SVG string for the traffic light dot (for print HTML).
+ */
+function trafficLightSvg(status: string, size = 12): string {
+  const r = size / 2;
+  const cfg = STATUS_HEX[status] || STATUS_HEX.NOT_STARTED;
+
+  if (cfg.dashed) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${r}" cy="${r}" r="${r - 1.5}" fill="none" stroke="${cfg.color}" stroke-width="1.5" stroke-dasharray="3 2"/></svg>`;
+  }
+  if (cfg.quarter) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${r}" cy="${r}" r="${r - 0.75}" fill="none" stroke="${cfg.color}" stroke-width="1.5"/>
+      <path d="M${r},${r} L${r},0 A${r},${r} 0 0,1 ${size},${r} Z" fill="${cfg.color}"/>
+    </svg>`;
+  }
+  if (cfg.symbol) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${r}" cy="${r}" r="${r}" fill="${cfg.color}"/>
+      <text x="${r}" y="${r}" text-anchor="middle" dominant-baseline="central" fill="white" font-size="${size * 0.55}" font-weight="bold">${cfg.symbol}</text>
+    </svg>`;
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${r}" cy="${r}" r="${r}" fill="${cfg.color}"/></svg>`;
+}
+
+/**
  * Build the HTML for a single sticky note page.
- * @param title Assignment title
- * @param students Sorted, filtered student list
- * @param statusCounts Record of status → count
- * @param options Display toggle options
- * @param t i18n translation function
+ * Uses new traffic light style with white cards and square aspect ratio.
  */
 export function buildStickyNotePageHtml(
   title: string,
   students: PrintStudent[],
-  statusCounts: Record<string, number>,
+  _statusCounts: Record<string, number>,
   options: PrintOptions,
-  t: (key: string) => string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  t: (key: string, ...args: any[]) => string,
 ): string {
   const { showNumber, showName, showScore } = options;
 
-  // Legend
-  const legendHtml = Object.entries(STATUS_LABELS)
-    .map(([key, labelKey]) => {
-      const hex = STATUS_HEX[key] || STATUS_HEX.NOT_STARTED;
-      const count = statusCounts[key] || 0;
-      return `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px">
-        <span style="font-size:${hex.fontSize || "14px"};font-weight:bold;color:${hex.dot};line-height:1">${hex.symbol}</span>
-        <span>${t(labelKey)}${count ? ` (${count})` : ""}</span>
-      </span>`;
-    })
-    .join("");
+  // Legend — 2-column grid
+  const legendHtml = STATUS_LEGEND.map(({ status, labelKey }) => {
+    return `<div style="display:flex;align-items:center;gap:6px">
+      ${trafficLightSvg(status, 10)}
+      <span>${t(labelKey, labelKey)}</span>
+    </div>`;
+  }).join("");
 
-  // Student cards
+  // Student cards — white bg, square, traffic light dot
   const cardsHtml = students
     .map((student) => {
-      const hex = STATUS_HEX[student.status] || STATUS_HEX.NOT_STARTED;
       const hasNumber = student.student_number > 0;
+      const hasScore =
+        student.score != null &&
+        ["GRADED", "RETURNED", "RESUBMITTED"].includes(student.status);
+
       const parts: string[] = [];
       if (showNumber && hasNumber) {
         parts.push(
-          `<div style="font-weight:bold;font-size:16px">${escapeHtml(student.student_number)}</div>`,
+          `<div style="font-size:11px;color:#374151">${escapeHtml(student.student_number)}</div>`,
         );
       }
       if (showName) {
         parts.push(
-          `<div style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${escapeHtml(student.student_name)}</div>`,
+          `<div style="font-size:11px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${escapeHtml(student.student_name)}</div>`,
         );
       }
       if (showScore) {
         parts.push(
-          `<div style="font-size:10px;color:#6b7280">${student.score != null ? escapeHtml(student.score) : "-"}</div>`,
+          `<div style="font-size:16px;font-weight:bold;color:${hasScore ? "#1F2937" : "#D1D5DB"}">${hasScore ? escapeHtml(Number(student.score!).toFixed(0)) : "-"}</div>`,
         );
       }
-      return `<div style="position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px;border-radius:8px;border:1px solid ${hex.border};background:${hex.bg};min-height:56px;text-align:center;overflow:hidden">
-        <span style="position:absolute;top:1px;right:4px;font-size:${hex.fontSize || "14px"};font-weight:bold;color:${hex.dot};line-height:1">${hex.symbol}</span>
+
+      return `<div style="position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px;border-radius:8px;border:1px solid #e5e7eb;background:#ffffff;aspect-ratio:1/1;text-align:center;overflow:hidden">
+        <span style="position:absolute;top:3px;right:3px">${trafficLightSvg(student.status, 10)}</span>
         ${parts.join("")}
       </div>`;
     })
     .join("");
 
-  return `<div class="page">
-  <h2>${escapeHtml(title)}</h2>
+  return `<div class="sticky-note">
+  <h3>${escapeHtml(title)}</h3>
+  <div class="card-grid">${cardsHtml}</div>
   <div class="legend">${legendHtml}</div>
-  <div class="grid">${cardsHtml}</div>
-  <div class="footer">
-    <img src="https://storage.googleapis.com/duotopia-social-media-videos/website/logo/logo_row_nobg.png" alt="Duotopia" class="logo" />
-    <div>${t("stickyNote.copyright")}</div>
-  </div>
 </div>`;
 }
 
 /**
  * Open a print window with one or more sticky note pages.
+ * Layout: 2 sticky notes per row on A4, like real sticky notes.
  */
 export function openPrintWindow(pagesHtml: string[]): void {
   const printWindow = window.open("", "_blank");
@@ -158,15 +147,47 @@ export function openPrintWindow(pagesHtml: string[]): void {
 <html><head><meta charset="utf-8"><title>Print</title>
 <style>
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-  body { font-family: -apple-system, "Microsoft JhengHei", sans-serif; padding: 20px; margin: 0; }
-  h2 { text-align: center; margin-bottom: 8px; }
-  .legend { text-align: center; font-size: 12px; margin-bottom: 16px; }
-  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-  .footer { text-align: center; font-size: 10px; color: #9ca3af; margin-top: 16px; padding-top: 8px; border-top: 1px solid #e5e7eb; }
-  .footer .logo { height: 20px; margin: 0 auto 4px; display: block; }
-  .page { page-break-after: always; }
-  .page:last-child { page-break-after: auto; }
-  @media print { body { padding: 10px; } }
+  body {
+    font-family: -apple-system, "Microsoft JhengHei", sans-serif;
+    padding: 10mm;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10mm;
+    align-content: flex-start;
+  }
+  .sticky-note {
+    width: calc(50% - 5mm);
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    page-break-inside: avoid;
+    box-sizing: border-box;
+  }
+  .sticky-note h3 {
+    text-align: center;
+    margin: 0 0 8px;
+    font-size: 14px;
+  }
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .legend {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 16px;
+    font-size: 9px;
+    color: #6b7280;
+    padding-top: 6px;
+    border-top: 1px solid #f3f4f6;
+  }
+  @media print {
+    body { padding: 8mm; }
+    .sticky-note { border-color: #d1d5db; }
+  }
 </style>
 </head><body>
   ${allPages}
