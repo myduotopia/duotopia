@@ -176,7 +176,7 @@ export default function WordReadingActivity({
 
       return assessment;
     },
-    [analyzePronunciation, assignmentId, token],
+    [analyzePronunciation, token],
   );
 
   // Load vocabulary items from backend
@@ -327,11 +327,13 @@ export default function WordReadingActivity({
       phonemes?: Array<{ phoneme: string; accuracy_score: number }>;
     }>;
   }) => {
+    // 🔧 Review fix: 捕獲 index 避免 async assessment 完成時使用 stale closure
+    const capturedIndex = currentIndex;
     // Update local state（含音素詳細資料，切換題目時可還原）
     setItems((prev) => {
       const updated = [...prev];
-      updated[currentIndex] = {
-        ...updated[currentIndex],
+      updated[capturedIndex] = {
+        ...updated[capturedIndex],
         ai_assessment: {
           accuracy_score: result.accuracyScore,
           fluency_score: result.fluencyScore,
