@@ -710,9 +710,7 @@ class ApiClient {
   }
 
   async getTeacherClassroomStudents(classroomId: number) {
-    return this.request(
-      `/api/teachers/classrooms/${classroomId}/students`,
-    );
+    return this.request(`/api/teachers/classrooms/${classroomId}/students`);
   }
 
   async batchAddStudentsToClassroom(

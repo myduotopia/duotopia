@@ -667,9 +667,7 @@ function TeacherTemplateProgramsInner() {
                 const program = programs.find((p) =>
                   p.lessons?.some((l) => l.id === parentId),
                 );
-                const lesson = program?.lessons?.find(
-                  (l) => l.id === parentId,
-                );
+                const lesson = program?.lessons?.find((l) => l.id === parentId);
                 const cartItem: CartItem = {
                   contentId: item.id as number,
                   programName: program?.name || "",

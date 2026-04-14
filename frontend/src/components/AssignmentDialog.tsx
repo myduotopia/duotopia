@@ -410,7 +410,9 @@ export function AssignmentDialog({
         student_ids: data.map((s) => s.id),
       }));
     } catch {
-      toast.error(t("dialogs.assignmentDialog.errors.loadStudentsFailed", { name: "" }));
+      toast.error(
+        t("dialogs.assignmentDialog.errors.loadStudentsFailed", { name: "" }),
+      );
       onClose();
     } finally {
       setLoadingStudents(false);
@@ -458,7 +460,11 @@ export function AssignmentDialog({
           },
         ]);
       } catch {
-        toast.error(t("dialogs.assignmentDialog.errors.loadStudentsFailed", { name: classroom.name }));
+        toast.error(
+          t("dialogs.assignmentDialog.errors.loadStudentsFailed", {
+            name: classroom.name,
+          }),
+        );
       }
     }
   };
@@ -1081,7 +1087,10 @@ export function AssignmentDialog({
             totalStudents += result.student_count || 0;
             successCount++;
           } catch (err) {
-            console.error(`Failed to create assignment for ${classroom.name}:`, err);
+            console.error(
+              `Failed to create assignment for ${classroom.name}:`,
+              err,
+            );
           }
         }
 
