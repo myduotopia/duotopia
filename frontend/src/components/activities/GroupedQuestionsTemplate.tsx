@@ -710,32 +710,34 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                         key={lineIndex}
                         className="flex flex-wrap gap-1 min-h-[1em]"
                       >
-                        {line.split(" ").map((word, wordIndex) => (
-                          <span
-                            key={wordIndex}
-                            className="cursor-pointer hover:text-blue-600 hover:underline transition-colors px-1"
-                            onClick={() => {
-                              // 使用 Web Speech API 發音
-                              if ("speechSynthesis" in window) {
-                                // 取消之前的發音
-                                window.speechSynthesis.cancel();
+                        {line
+                          .split(" ")
+                          .filter(Boolean)
+                          .map((word, wordIndex) => (
+                            <span
+                              key={wordIndex}
+                              className="cursor-pointer hover:text-blue-600 hover:underline transition-colors px-1"
+                              onClick={() => {
+                                // 使用 Web Speech API 發音
+                                if ("speechSynthesis" in window) {
+                                  // 取消之前的發音
+                                  window.speechSynthesis.cancel();
 
-                                const utterance = new SpeechSynthesisUtterance(
-                                  word,
-                                );
-                                utterance.lang = "en-US"; // 設定為英文發音
-                                utterance.rate = 1.0; // 正常速度
-                                utterance.pitch = 1.0; // 正常音調
-                                utterance.volume = 1.0; // 最大音量
+                                  const utterance =
+                                    new SpeechSynthesisUtterance(word);
+                                  utterance.lang = "en-US"; // 設定為英文發音
+                                  utterance.rate = 1.0; // 正常速度
+                                  utterance.pitch = 1.0; // 正常音調
+                                  utterance.volume = 1.0; // 最大音量
 
-                                window.speechSynthesis.speak(utterance);
-                              }
-                            }}
-                            title={`${t("groupedQuestionsTemplate.labels.clickToPronounciate")}: ${word}`}
-                          >
-                            {word}
-                          </span>
-                        ))}
+                                  window.speechSynthesis.speak(utterance);
+                                }
+                              }}
+                              title={`${t("groupedQuestionsTemplate.labels.clickToPronounciate")}: ${word}`}
+                            >
+                              {word}
+                            </span>
+                          ))}
                       </div>
                     ))}
                   </div>
