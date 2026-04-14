@@ -61,8 +61,6 @@ export default function ReadingAssessmentTemplate({
   // Recording start timestamp (for duration check against timeLimit)
   const recordingStartTimeRef = useRef<number>(0);
 
-
-
   /**
    * 背景上傳音檔和分析結果（不阻塞 UI）
    */
