@@ -225,6 +225,7 @@ class TestCheckAiAnalysisAvailability:
             elif model is TeacherOrganization:
                 q.filter.return_value.all.return_value = teacher_orgs
             elif model is Organization:
+
                 def org_filter(*args, **kwargs):
                     inner = MagicMock()
                     # Return org matching the id from the filter call
@@ -233,6 +234,7 @@ class TestCheckAiAnalysisAvailability:
                         return inner
                     inner.first.return_value = None
                     return inner
+
                 q.filter.side_effect = org_filter
             return q
 
@@ -261,9 +263,7 @@ class TestCheckAiAnalysisAvailability:
         org2 = self._make_org(total_points=0, used_points=0)
         db = self._setup_db(teacher, teacher_orgs, {"org-1": org1, "org-2": org2})
 
-        with patch.object(
-            QuotaService, "_get_total_remaining", return_value=960
-        ):
+        with patch.object(QuotaService, "_get_total_remaining", return_value=960):
             assert QuotaService.check_ai_analysis_availability(99, db) is True
 
     def test_org_no_points_and_no_personal_quota_returns_false(self):
@@ -274,9 +274,7 @@ class TestCheckAiAnalysisAvailability:
         org = self._make_org(total_points=0, used_points=0)
         db = self._setup_db(teacher, teacher_orgs, {"org-1": org})
 
-        with patch.object(
-            QuotaService, "_get_total_remaining", return_value=0
-        ):
+        with patch.object(QuotaService, "_get_total_remaining", return_value=0):
             assert QuotaService.check_ai_analysis_availability(99, db) is False
 
     def test_no_org_personal_quota_returns_true(self):
@@ -285,9 +283,7 @@ class TestCheckAiAnalysisAvailability:
         teacher.id = 99
         db = self._setup_db(teacher, [], {})
 
-        with patch.object(
-            QuotaService, "_get_total_remaining", return_value=500
-        ):
+        with patch.object(QuotaService, "_get_total_remaining", return_value=500):
             assert QuotaService.check_ai_analysis_availability(99, db) is True
 
     def test_no_org_no_personal_quota_returns_false(self):
@@ -296,9 +292,7 @@ class TestCheckAiAnalysisAvailability:
         teacher.id = 99
         db = self._setup_db(teacher, [], {})
 
-        with patch.object(
-            QuotaService, "_get_total_remaining", return_value=0
-        ):
+        with patch.object(QuotaService, "_get_total_remaining", return_value=0):
             assert QuotaService.check_ai_analysis_availability(99, db) is False
 
     def test_teacher_not_found_returns_false(self):
