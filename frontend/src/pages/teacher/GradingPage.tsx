@@ -35,6 +35,7 @@ interface StudentInfo {
   student_id: number;
   student_name: string;
   status: string;
+  score?: number | null;
 }
 
 interface StudentsResponse {
@@ -101,6 +102,7 @@ interface StudentListItem {
   student_id: number;
   student_name: string;
   status: string;
+  score?: number | null;
 }
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -527,7 +529,7 @@ export default function GradingPage() {
       setStudentList((prev) =>
         prev.map((student) =>
           student.student_id === parseInt(studentId!)
-            ? { ...student, status: "GRADED" }
+            ? { ...student, status: "GRADED", score: score ?? null }
             : student,
         ),
       );
@@ -879,9 +881,14 @@ export default function GradingPage() {
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
                         <TrafficLightDot status={student.status} size={12} />
-                        <span className="truncate font-medium">
+                        <span className="truncate font-medium flex-1">
                           {student.student_name}
                         </span>
+                        {student.score != null && (
+                          <span className="text-xs font-bold text-gray-700 shrink-0 tabular-nums">
+                            {(Math.round(student.score * 10) / 10).toFixed(1)}
+                          </span>
+                        )}
                       </div>
                     </button>
                   );

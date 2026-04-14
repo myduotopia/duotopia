@@ -2785,7 +2785,7 @@
       "saveChanges": "儲存變更",
       "addItem": "新增項目",
       "record": "錄音",
-      "stickyNote": "便利貼",
+      "stickyNote": "進度",
       "analysisReport": "作業分析"
     },
     "stats": {
@@ -2817,7 +2817,7 @@
       "assignmentInfo": "作業資訊",
       "assignedTo": "指派對象",
       "dueDate": "截止日期",
-      "completionProgress": "完成進度",
+      "completionProgress": "完成狀況",
       "assignmentTitle": "作業標題",
       "contentType": "內容類型",
       "assignedDate": "指派日期",

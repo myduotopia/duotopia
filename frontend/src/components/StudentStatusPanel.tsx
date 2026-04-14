@@ -346,7 +346,7 @@ function StudentCard({
         }`}
       >
         {hasScore
-          ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(0)}`
+          ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(1)}`
           : "-"}
       </span>
     </div>
@@ -449,7 +449,7 @@ function StudentRow({
         }`}
       >
         {hasScore
-          ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(0)}`
+          ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(1)}`
           : "-"}
       </span>
     </div>

@@ -2668,7 +2668,11 @@ export default function ClassroomDetail({
                                             })
                                           }
                                         >
-                                          <StickyNote className="h-5 w-5" />
+                                          <StickyNote className="h-5 w-5 mr-1" />
+                                          {t(
+                                            "classroomDetail.buttons.stickyNote",
+                                            "進度",
+                                          )}
                                         </Button>
                                         {showArchived ? (
                                           <>

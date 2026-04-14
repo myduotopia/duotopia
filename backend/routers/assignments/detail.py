@@ -446,23 +446,28 @@ async def get_assignment_students(
     )
 
     for sa in student_assignments:
-        student_assignments_dict[sa.student_id] = (
-            sa.status.value if sa.status else "NOT_STARTED"
-        )
+        student_assignments_dict[sa.student_id] = {
+            "status": sa.status.value if sa.status else "NOT_STARTED",
+            "score": sa.score,
+        }
 
     students = []
     for student in classroom_students:
         # 如果學生有作業記錄，使用實際狀態；否則標示為未指派
         if student.id in student_assignments_dict:
-            status = student_assignments_dict[student.id]
+            info = student_assignments_dict[student.id]
+            status = info["status"]
+            score = info["score"]
         else:
             status = "NOT_ASSIGNED"
+            score = None
 
         students.append(
             {
                 "student_id": student.id,
                 "student_name": student.name,
                 "status": status,
+                "score": score,
             }
         )
 

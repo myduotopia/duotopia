@@ -2732,7 +2732,7 @@
       "saveChanges": "Save Changes",
       "addItem": "Add Item",
       "record": "Record",
-      "stickyNote": "Sticky Note",
+      "stickyNote": "Progress",
       "analysisReport": "Analysis Report"
     },
     "stats": {
@@ -2764,7 +2764,7 @@
       "assignmentInfo": "Assignment Info",
       "assignedTo": "Assigned To",
       "dueDate": "Due Date",
-      "completionProgress": "Completion Progress",
+      "completionProgress": "Completion",
       "assignmentTitle": "Assignment Title",
       "contentType": "Content Type",
       "assignedDate": "Assigned Date",
