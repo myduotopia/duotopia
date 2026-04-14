@@ -2019,6 +2019,24 @@ export default function ClassroomDetail({
                                       "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
                                   };
                                 }
+                                if (practiceMode === "rearrangement") {
+                                  return {
+                                    label: t(
+                                      "classroomDetail.contentTypes.REARRANGEMENT",
+                                    ),
+                                    color:
+                                      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+                                  };
+                                }
+                                if (practiceMode === "reading") {
+                                  return {
+                                    label: t(
+                                      "classroomDetail.contentTypes.SPEAKING",
+                                    ),
+                                    color:
+                                      "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+                                  };
+                                }
                                 // default: word_reading
                                 return {
                                   label: t(
@@ -2337,6 +2355,24 @@ export default function ClassroomDetail({
                                         ),
                                         color:
                                           "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
+                                      };
+                                    }
+                                    if (practiceMode === "rearrangement") {
+                                      return {
+                                        label: t(
+                                          "classroomDetail.contentTypes.REARRANGEMENT",
+                                        ),
+                                        color:
+                                          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+                                      };
+                                    }
+                                    if (practiceMode === "reading") {
+                                      return {
+                                        label: t(
+                                          "classroomDetail.contentTypes.SPEAKING",
+                                        ),
+                                        color:
+                                          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
                                       };
                                     }
                                     // default: word_reading
