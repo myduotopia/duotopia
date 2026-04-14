@@ -1645,13 +1645,15 @@
       },
       "selectStudents": {
         "description": "Select students to receive the assignment",
+        "multiDescription": "Select students per classroom (switch tabs to view)",
         "selected": "{{selected}}/{{total}} selected",
         "assignAll": "Assign to all students in class",
         "totalStudents": "Total {{count}} students",
         "allSelected": "All Selected",
         "selectAllBtn": "Select All",
         "deselectAllBtn": "Deselect All",
-        "invertSelection": "Invert Selection"
+        "invertSelection": "Invert Selection",
+        "willCreate": "Will create {{count}} assignments"
       },
       "details": {
         "description": "Fill in assignment title and detailed information",
@@ -1690,6 +1692,8 @@
         "createFailed": "Failed to create assignment",
         "loadProgramsFailed": "Failed to load programs",
         "loadTemplateFailed": "Failed to load template programs",
+        "loadClassroomsFailed": "Failed to load classrooms",
+        "loadStudentsFailed": "Failed to load students for {{name}}",
         "loadClassroomProgramsFailed": "Failed to load classroom programs",
         "loadLessonsFailed": "Failed to load lessons",
         "loadContentsFailed": "Failed to load contents",
@@ -1706,7 +1710,9 @@
         "quotaLowDesc": "Assignment created, but students cannot use AI analysis at this time. They can still upload audio for practice."
       },
       "success": {
-        "created": "Assignment created successfully, assigned to {{count}} students"
+        "created": "Assignment created successfully, assigned to {{count}} students",
+        "multiCreated": "Created assignments for {{classroomCount}} classrooms, {{studentCount}} students total",
+        "partialCreated": "Partial success: {{successCount}}/{{totalCount}} classrooms created ({{studentCount}} students). Failed: {{failedNames}}"
       },
       "contentTypes": {
         "reading_assessment": "Paragraph Set",
@@ -1726,10 +1732,23 @@
         "viewPlans": "View Plans"
       },
       "steps": {
+        "selectClassroom": "Select Classroom & Students",
         "selectContent": "Select Content",
         "practiceMode": "Practice Mode",
         "selectStudents": "Select Students",
         "details": "Assignment Details"
+      },
+      "classroomSelection": {
+        "description": "Select classrooms to dispatch the assignment to (multiple selection allowed)",
+        "selectedCount": "{{count}} classroom(s) selected",
+        "loading": "Loading classrooms...",
+        "noClassrooms": "No classrooms yet. Please create a classroom first.",
+        "studentCount": "{{count}} students"
+      },
+      "multiClass": {
+        "willCreate": "Will create {{count}} assignments",
+        "selectAll": "Select All",
+        "deselectAll": "Deselect All"
       },
       "practiceMode": {
         "title": "Practice Mode Settings",
@@ -4774,6 +4793,9 @@
   },
   "contentCopy": {
     "button": "Copy to..."
+  },
+  "tree": {
+    "dispatch": "Dispatch"
   },
   "instantPractice": {
     "title": "Instant Practice",

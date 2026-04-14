@@ -17,6 +17,7 @@ import VocabularySetPanel, {
   type VocabularySetPanelHandle,
 } from "@/components/VocabularySetPanel";
 import ContentCopyDialog from "@/components/ContentCopyDialog";
+import { AssignmentDialog, CartItem } from "@/components/AssignmentDialog";
 import { ProgramVisibilitySelector } from "@/components/ProgramVisibilitySelector";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import ProgramFolderView from "@/components/shared/ProgramFolderView";
@@ -159,6 +160,10 @@ function TeacherTemplateProgramsInner() {
     id: number;
     title: string;
   } | null>(null);
+
+  // Dispatch assignment states
+  const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
+  const [dispatchContents, setDispatchContents] = useState<CartItem[]>([]);
 
   useEffect(() => {
     fetchTemplatePrograms();
@@ -657,6 +662,26 @@ function TeacherTemplateProgramsInner() {
                 setShowCopyDialog(true);
               }
             }}
+            onDispatch={(item, level, parentId) => {
+              if (level === 2 && typeof item.id === "number") {
+                const program = programs.find((p) =>
+                  p.lessons?.some((l) => l.id === parentId),
+                );
+                const lesson = program?.lessons?.find((l) => l.id === parentId);
+                const cartItem: CartItem = {
+                  contentId: item.id as number,
+                  programName: program?.name || "",
+                  lessonName: lesson?.name || "",
+                  contentTitle: (item.title || item.name) as string,
+                  contentType: (item.type as string) || "",
+                  itemsCount: item.items_count as number | undefined,
+                  order: 0,
+                  hasMissingAudio: false,
+                };
+                setDispatchContents([cartItem]);
+                setShowAssignmentDialog(true);
+              }
+            }}
           />
         ) : (
           <ProgramFolderView
@@ -700,7 +725,7 @@ function TeacherTemplateProgramsInner() {
       {showReadingEditor && editorLessonId && editorContentId === null && (
         <>
           <div
-            className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+            className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
             style={{ left: `${sidebarWidth}px` }}
           >
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
@@ -795,7 +820,7 @@ function TeacherTemplateProgramsInner() {
 
             {/* Panel */}
             <div
-              className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
+              className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
               style={{ left: `${sidebarWidth}px` }}
             >
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
@@ -900,7 +925,7 @@ function TeacherTemplateProgramsInner() {
         !vocabularySetContentId && (
           <>
             <div
-              className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+              className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
               style={{ left: `${sidebarWidth}px` }}
             >
               <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
@@ -994,7 +1019,7 @@ function TeacherTemplateProgramsInner() {
 
             {/* Panel */}
             <div
-              className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
+              className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 overflow-auto animate-in slide-in-from-right duration-300"
               style={{ left: `${sidebarWidth}px` }}
             >
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
@@ -1175,6 +1200,20 @@ function TeacherTemplateProgramsInner() {
           programs={programs}
         />
       )}
+
+      {/* Assignment Dispatch Dialog (no classroomId = multi-classroom mode) */}
+      <AssignmentDialog
+        open={showAssignmentDialog}
+        onClose={() => {
+          setShowAssignmentDialog(false);
+          setDispatchContents([]);
+        }}
+        preSelectedContents={dispatchContents}
+        onSuccess={() => {
+          setShowAssignmentDialog(false);
+          setDispatchContents([]);
+        }}
+      />
     </div>
   );
 }

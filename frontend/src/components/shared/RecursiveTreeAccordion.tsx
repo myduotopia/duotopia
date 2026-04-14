@@ -16,6 +16,7 @@ import {
   ArrowRightLeft,
   Copy,
   Edit,
+  Send,
   Trash2,
   GripVertical,
   LucideIcon,
@@ -141,6 +142,11 @@ interface RecursiveTreeNodeProps {
   ) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onCopy?: (item: any, level: number, parentId?: string | number) => void;
+  onDispatch?: (
+    item: Record<string, unknown>,
+    level: number,
+    parentId?: string | number,
+  ) => void;
 
   // Accordion state
   expandedValue: string;
@@ -164,6 +170,7 @@ function RecursiveTreeNode({
   onReorder,
   onInstantPractice,
   onCopy,
+  onDispatch,
   disableActions = false,
   disableReason = "",
 }: RecursiveTreeNodeProps) {
@@ -451,6 +458,7 @@ function RecursiveTreeNode({
                               onReorder={onReorder}
                               onInstantPractice={onInstantPractice}
                               onCopy={onCopy}
+                              onDispatch={onDispatch}
                               expandedValue={childExpandedValue}
                               onExpandedChange={setChildExpandedValue}
                               disableActions={disableActions}
@@ -582,6 +590,23 @@ function RecursiveTreeNode({
                 </button>
               )}
 
+              {/* Dispatch button - hover on desktop, always visible on mobile (icon only) */}
+              {onDispatch && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDispatch(data, level, parentId);
+                  }}
+                  className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity h-7 w-7 sm:h-auto sm:w-auto sm:px-2.5 sm:py-1 inline-flex items-center justify-center sm:gap-1.5 rounded-md bg-green-50 hover:bg-green-100 dark:bg-green-950/30 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800"
+                  title={t("tree.dispatch")}
+                >
+                  <Send className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
+                  <span className="hidden sm:inline text-xs font-medium">
+                    {t("tree.dispatch")}
+                  </span>
+                </button>
+              )}
+
               {/* More menu (⋯) with copy, move, delete */}
               {(config.canDelete || onCopy) && (
                 <DropdownMenu>
@@ -593,7 +618,7 @@ function RecursiveTreeNode({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="end"
-                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                    className="z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
                   >
                     {onCopy && (
                       <DropdownMenuItem
@@ -668,6 +693,11 @@ interface RecursiveTreeAccordionProps {
   ) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onCopy?: (item: any, level: number, parentId?: string | number) => void;
+  onDispatch?: (
+    item: Record<string, unknown>,
+    level: number,
+    parentId?: string | number,
+  ) => void;
   disableActions?: boolean;
   disableReason?: string;
 }
@@ -686,6 +716,7 @@ export function RecursiveTreeAccordion({
   onReorder,
   onInstantPractice,
   onCopy,
+  onDispatch,
   disableActions = false,
   disableReason = "",
 }: RecursiveTreeAccordionProps) {
@@ -814,6 +845,7 @@ export function RecursiveTreeAccordion({
                   onReorder={onReorder}
                   onInstantPractice={onInstantPractice}
                   onCopy={onCopy}
+                  onDispatch={onDispatch}
                   expandedValue={expandedValue}
                   onExpandedChange={setExpandedValue}
                   disableActions={disableActions}
