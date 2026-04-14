@@ -6,8 +6,8 @@
  * - 三個 Tab：全部 / 已派發 / 未派發
  * - 紅綠燈狀態圓（TrafficLightDot）
  * - 排序：成績 / 座號 / 姓名 / 狀態
- * - Checkbox 批次派發 / 取消派發
- * - 點擊學生進入批改頁面（gradable modes）
+ * - Checkbox 批次派發 / 取消派發（僅點 checkbox 本身才會 toggle）
+ * - 點擊卡片/行其他區域 → gradable modes (reading / word_reading) 且狀態非 unassigned/NOT_STARTED 才開新分頁批改，不會影響 checkbox
  * - 狀態圖例說明
  */
 import { useState, useMemo, useEffect, useCallback, forwardRef } from "react";
@@ -92,7 +92,7 @@ export function TrafficLightDot({
           <circle
             cx={r}
             cy={r}
-            r={r - strokeW}
+            r={r - strokeW / 2}
             fill="none"
             stroke="#F59E0B"
             strokeWidth={strokeW}
@@ -109,6 +109,7 @@ export function TrafficLightDot({
           style={{
             width: size,
             height: size,
+            boxSizing: "border-box",
             background: `conic-gradient(#F59E0B 0deg 90deg, transparent 90deg 360deg)`,
           }}
         />
@@ -176,7 +177,7 @@ export function TrafficLightDot({
           <circle
             cx={r}
             cy={r}
-            r={r - strokeW}
+            r={r - strokeW / 2}
             fill="none"
             stroke="#D1D5DB"
             strokeWidth={strokeW}
@@ -190,7 +191,7 @@ export function TrafficLightDot({
 // StatusLegend - 狀態圖例
 // ---------------------------------------------------------------------------
 
-function StatusLegend() {
+export function StatusLegend({ columns = 2 }: { columns?: 1 | 2 } = {}) {
   const { t } = useTranslation();
   const items = [
     {
@@ -233,7 +234,11 @@ function StatusLegend() {
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2">
         {t("assignmentDetail.sheet.legendTitle", "狀態圖示說明")}
       </p>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+      <div
+        className={`grid gap-x-6 gap-y-1.5 ${
+          columns === 1 ? "grid-cols-1" : "grid-cols-2"
+        }`}
+      >
         {items.map((item) => (
           <div key={item.status} className="flex items-center gap-2">
             <TrafficLightDot status={item.status} size={12} />
@@ -257,30 +262,53 @@ function StudentCard({
   isDisabled,
   onToggle,
   onClick,
+  tooltip,
 }: {
   student: StudentProgress;
   isSelected: boolean;
   isDisabled: boolean;
   onToggle: () => void;
   onClick: () => void;
+  tooltip?: string;
 }) {
   const isUnassigned = student.status === "unassigned";
+  const cardTooltip = tooltip && !isUnassigned ? tooltip : undefined;
+  const isClickable = !!cardTooltip;
   const hasScore =
     student.score != null &&
     ["GRADED", "RETURNED", "RESUBMITTED"].includes(student.status);
 
   return (
-    <button
-      type="button"
-      onClick={isDisabled ? onClick : onToggle}
-      className={`relative flex flex-col items-center justify-center p-2 rounded-lg text-center transition-all aspect-square overflow-hidden min-w-0 cursor-pointer hover:shadow-md ${
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      title={cardTooltip}
+      className={`relative flex flex-col items-center justify-center p-2 rounded-lg text-center transition-all aspect-square overflow-hidden min-w-0 ${
+        isClickable ? "cursor-pointer hover:shadow-md" : "cursor-default"
+      } ${
         isUnassigned
           ? "border border-dashed border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/50"
           : "border border-gray-200 bg-white dark:border-gray-600 dark:bg-gray-800"
       }`}
     >
-      {/* Checkbox (always visible) */}
-      <span className="absolute top-1 left-1">
+      {/* Checkbox (always visible) — clicking only here toggles */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!isDisabled) onToggle();
+        }}
+        disabled={isDisabled}
+        aria-label="toggle"
+        className="absolute top-1 left-1 p-0.5 -m-0.5 leading-none"
+      >
         {isDisabled ? (
           <span className="inline-block w-3.5 h-3.5 rounded-sm bg-gray-300 dark:bg-gray-600" />
         ) : isSelected ? (
@@ -290,7 +318,7 @@ function StudentCard({
         ) : (
           <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
         )}
-      </span>
+      </button>
 
       {/* Status dot (top-right) */}
       <span className="absolute top-1 right-1">
@@ -321,7 +349,7 @@ function StudentCard({
           ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(0)}`
           : "-"}
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -336,6 +364,7 @@ function StudentRow({
   isDisabled,
   onToggle,
   onClick,
+  tooltip,
 }: {
   student: StudentProgress;
   isEditing: boolean;
@@ -343,20 +372,45 @@ function StudentRow({
   isDisabled: boolean;
   onToggle: () => void;
   onClick: () => void;
+  tooltip?: string;
 }) {
+  const isUnassigned = student.status === "unassigned";
+  const rowTooltip = tooltip && !isUnassigned ? tooltip : undefined;
+  const isClickable = !!rowTooltip;
   const hasScore =
     student.score != null &&
     ["GRADED", "RETURNED", "RESUBMITTED"].includes(student.status);
 
   return (
-    <button
-      type="button"
-      onClick={isEditing && !isDisabled ? onToggle : onClick}
-      className="flex items-center w-full gap-3 py-2 px-3 rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      title={rowTooltip}
+      className={`flex items-center w-full gap-3 py-2 px-3 rounded transition-colors ${
+        isClickable
+          ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+          : "cursor-default"
+      }`}
     >
-      {/* Checkbox (edit mode) */}
+      {/* Checkbox (edit mode) — clicking only here toggles */}
       {isEditing && (
-        <span className="shrink-0">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isDisabled) onToggle();
+          }}
+          disabled={isDisabled}
+          aria-label="toggle"
+          className="shrink-0 p-0.5 -m-0.5 leading-none"
+        >
           {isDisabled ? (
             <span className="inline-block w-4 h-4 rounded-sm bg-gray-300 dark:bg-gray-600" />
           ) : isSelected ? (
@@ -366,7 +420,7 @@ function StudentRow({
           ) : (
             <span className="inline-block w-4 h-4 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
           )}
-        </span>
+        </button>
       )}
 
       {/* Status dot */}
@@ -398,7 +452,7 @@ function StudentRow({
           ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(0)}`
           : "-"}
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -574,16 +628,24 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     });
   }, [filteredStudents, selectedIds, isCheckboxDisabled]);
 
-  // ---- Navigation (only on "all" tab) ----
+  // ---- Navigation ----
+  // Gradable modes (reading / word_reading): open grading page for this student in a new tab.
+  // Skip unassigned and NOT_STARTED — nothing to grade yet.
+  const isGradableStudent = useCallback(
+    (s: StudentProgress) =>
+      isGradable && s.status !== "unassigned" && s.status !== "NOT_STARTED",
+    [isGradable],
+  );
+
   const handleStudentClick = useCallback(
-    (_student: StudentProgress) => {
-      if (!isGradable) return;
+    (student: StudentProgress) => {
+      if (!isGradableStudent(student)) return;
       window.open(
-        `/teacher/classroom/${classroomId}/assignment/${assignmentId}/grading`,
+        `/teacher/classroom/${classroomId}/assignment/${assignmentId}/grading?studentId=${student.student_id}`,
         "_blank",
       );
     },
-    [isGradable, classroomId, assignmentId],
+    [isGradableStudent, classroomId, assignmentId],
   );
 
   // ---- Tab counts ----
@@ -786,6 +848,11 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                 isDisabled={isCheckboxDisabled(student)}
                 onToggle={() => toggleStudent(student.student_id)}
                 onClick={() => handleStudentClick(student)}
+                tooltip={
+                  isGradableStudent(student)
+                    ? t("assignmentDetail.sheet.checkHomework", "批改作業")
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -800,6 +867,11 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                 isDisabled={isCheckboxDisabled(student)}
                 onToggle={() => toggleStudent(student.student_id)}
                 onClick={() => handleStudentClick(student)}
+                tooltip={
+                  isGradableStudent(student)
+                    ? t("assignmentDetail.sheet.checkHomework", "批改作業")
+                    : undefined
+                }
               />
             ))}
           </div>

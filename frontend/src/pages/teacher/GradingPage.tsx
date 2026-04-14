@@ -3,12 +3,12 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import AIScoreDisplay from "@/components/shared/AIScoreDisplay";
 import AudioRecorder from "@/components/shared/AudioRecorder";
+import { TrafficLightDot, StatusLegend } from "@/components/StudentStatusPanel";
 import {
   User,
   ChevronLeft,
@@ -228,7 +228,11 @@ export default function GradingPage() {
         response.current_score !== undefined &&
         response.current_score !== null
       ) {
-        setScore(response.current_score);
+        setScore(
+          response.current_score != null
+            ? Math.round(response.current_score * 10) / 10
+            : null,
+        );
 
         const feedbackText = response.current_feedback || "";
 
@@ -241,7 +245,7 @@ export default function GradingPage() {
           setFeedback(feedbackText);
         }
       } else {
-        setScore(80);
+        setScore(null);
         setFeedback("");
       }
 
@@ -301,7 +305,7 @@ export default function GradingPage() {
           item_index: parseInt(index),
           feedback: fb.feedback || "",
           passed: fb.passed,
-          score: fb.passed === true ? 100 : fb.passed === false ? 60 : 80,
+          score: fb.passed === true ? 100 : fb.passed === false ? 60 : 0,
         });
       });
 
@@ -502,7 +506,7 @@ export default function GradingPage() {
           item_index: parseInt(index),
           feedback: fb.feedback || "",
           passed: fb.passed,
-          score: fb.passed === true ? 100 : fb.passed === false ? 60 : 80,
+          score: fb.passed === true ? 100 : fb.passed === false ? 60 : 0,
         });
       });
 
@@ -616,41 +620,6 @@ export default function GradingPage() {
     setActiveTab("content"); // 選擇學生後自動切換到題組 tab
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusMap: Record<string, { label: string; className: string }> = {
-      NOT_STARTED: {
-        label: t("gradingPage.status.notStarted"),
-        className: "bg-gray-100 text-gray-600",
-      },
-      IN_PROGRESS: {
-        label: t("gradingPage.status.inProgress"),
-        className: "bg-blue-100 text-blue-600",
-      },
-      SUBMITTED: {
-        label: t("gradingPage.status.submitted"),
-        className: "bg-green-100 text-green-600",
-      },
-      GRADED: {
-        label: t("gradingPage.status.graded"),
-        className: "bg-purple-100 text-purple-600",
-      },
-      RETURNED: {
-        label: t("gradingPage.status.returned"),
-        className: "bg-yellow-100 text-yellow-600",
-      },
-      RESUBMITTED: {
-        label: t("gradingPage.status.resubmitted"),
-        className: "bg-orange-100 text-orange-600",
-      },
-    };
-
-    const config = statusMap[status] || {
-      label: status,
-      className: "bg-gray-100 text-gray-600",
-    };
-    return <Badge className={config.className}>{config.label}</Badge>;
-  };
-
   // 取得當前題組
   const getCurrentGroup = () => {
     if (!submission?.content_groups) return null;
@@ -733,14 +702,12 @@ export default function GradingPage() {
                   {assignmentTitle}
                 </h1>
                 {submission && (
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <TrafficLightDot status={submission.status} size={12} />
                     <User className="h-3 w-3 text-gray-500" />
                     <span className="text-xs sm:text-sm text-gray-600 font-medium">
                       {submission.student_name}
                     </span>
-                    <div className="hidden sm:block">
-                      {getStatusBadge(submission.status)}
-                    </div>
                   </div>
                 )}
               </div>
@@ -888,73 +855,33 @@ export default function GradingPage() {
                   /{studentList.length})
                 </span>
               </h3>
-              <div className="space-y-1">
+              <StatusLegend columns={1} />
+              <div className="space-y-1 mt-3">
                 {studentList.map((student) => {
-                  const isAssigned =
-                    student.status && student.status !== "NOT_ASSIGNED";
-
-                  const getStatusLabel = (status: string) => {
-                    const statusLabelMap: Record<string, string> = {
-                      NOT_STARTED: t("gradingPage.status.notStarted"),
-                      IN_PROGRESS: t("gradingPage.status.inProgress"),
-                      SUBMITTED: t("gradingPage.status.submitted"),
-                      GRADED: t("gradingPage.status.graded"),
-                      RETURNED: t("gradingPage.status.returned"),
-                      RESUBMITTED: t("gradingPage.status.resubmittedShort"),
-                      NOT_ASSIGNED: t("gradingPage.status.notAssigned"),
-                    };
-                    return statusLabelMap[status] || "";
-                  };
+                  // Not yet assigned OR assigned but not started → nothing to grade, disable
+                  const isClickable =
+                    !!student.status &&
+                    student.status !== "NOT_ASSIGNED" &&
+                    student.status !== "NOT_STARTED";
 
                   return (
                     <button
                       key={student.student_id}
-                      onClick={() => isAssigned && handleStudentSelect(student)}
-                      disabled={!isAssigned}
+                      onClick={() => isClickable && handleStudentSelect(student)}
+                      disabled={!isClickable}
                       className={`w-full text-left px-2 py-1.5 rounded-md text-sm transition-colors ${
-                        !isAssigned
+                        !isClickable
                           ? "opacity-50 cursor-not-allowed bg-gray-50"
                           : student.student_id === parseInt(studentId!)
                             ? "bg-blue-100 text-blue-700"
                             : "hover:bg-gray-100"
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate font-medium">
-                              {student.student_name}
-                            </span>
-                            <Badge
-                              className={`text-xs px-1.5 py-0.5 ${
-                                student.status === "GRADED"
-                                  ? "bg-green-100 text-green-700 border-green-200"
-                                  : student.status === "RETURNED"
-                                    ? "bg-orange-100 text-orange-700 border-orange-200"
-                                    : student.status === "SUBMITTED" ||
-                                        student.status === "RESUBMITTED"
-                                      ? "bg-blue-100 text-blue-700 border-blue-200"
-                                      : student.status === "IN_PROGRESS"
-                                        ? "bg-yellow-100 text-yellow-700 border-yellow-200"
-                                        : student.status === "NOT_ASSIGNED"
-                                          ? "bg-red-50 text-red-600 border-red-200"
-                                          : "bg-gray-100 text-gray-600 border-gray-200"
-                              }`}
-                            >
-                              {getStatusLabel(student.status)}
-                            </Badge>
-                          </div>
-                        </div>
-                        {student.status === "GRADED" && (
-                          <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-                        )}
-                        {student.status === "RETURNED" && (
-                          <AlertCircle className="h-3 w-3 text-orange-600 flex-shrink-0" />
-                        )}
-                        {(student.status === "SUBMITTED" ||
-                          student.status === "RESUBMITTED") && (
-                          <div className="h-2 w-2 bg-blue-600 rounded-full flex-shrink-0" />
-                        )}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <TrafficLightDot status={student.status} size={12} />
+                        <span className="truncate font-medium">
+                          {student.student_name}
+                        </span>
                       </div>
                     </button>
                   );
@@ -1354,12 +1281,12 @@ export default function GradingPage() {
               {/* 手機版學生資訊 */}
               {submission && (
                 <div className="mb-4 pb-4 border-b lg:hidden">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <TrafficLightDot status={submission.status} size={14} />
                     <User className="h-4 w-4 text-gray-500" />
                     <span className="font-medium">
                       {submission.student_name}
                     </span>
-                    {getStatusBadge(submission.status)}
                   </div>
                 </div>
               )}
@@ -1429,63 +1356,42 @@ export default function GradingPage() {
                   </div>
                 )}
 
-                {/* 分數評定 */}
+                {/* 分數評定 — 老師直接填分數，不填就是未評分 */}
                 <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <input
-                      type="checkbox"
-                      checked={score !== null}
-                      onChange={async (e) => {
-                        const newScore = e.target.checked ? 80 : null;
-                        setScore(newScore);
-                        // 分數變更立即儲存
-                        await performAutoSave();
-                      }}
-                      className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                    />
-                    <label className="text-sm font-medium">
-                      {t("gradingPage.labels.giveScore")}
-                    </label>
-                  </div>
-                  <div className="mt-2">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={score === null ? "" : score}
-                      onBlur={async () => {
-                        // 離開輸入框時立即儲存
-                        await performAutoSave();
-                      }}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        if (value === "") {
-                          if (score !== null) {
-                            setScore(0);
-                          }
-                        } else if (/^\d+(\.\d{0,1})?$/.test(value)) {
-                          const numValue = parseFloat(value);
-                          if (numValue >= 0 && numValue <= 100) {
-                            setScore(numValue);
-                            setIsAutoCalculatedScore(false); // Reset flag when manually changed
-                          }
+                  <label className="text-sm font-medium mb-2 block">
+                    {t("gradingPage.labels.giveScore")}
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={score === null ? "" : score}
+                    onBlur={async () => {
+                      // 離開輸入框時立即儲存
+                      await performAutoSave();
+                    }}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === "") {
+                        setScore(null);
+                        setIsAutoCalculatedScore(false);
+                      } else if (/^\d+(\.\d{0,1})?$/.test(value)) {
+                        const numValue = parseFloat(value);
+                        if (numValue >= 0 && numValue <= 100) {
+                          setScore(numValue);
+                          setIsAutoCalculatedScore(false);
                         }
-                      }}
-                      disabled={score === null}
-                      placeholder={t("gradingPage.labels.enterScore")}
-                      className={`w-full px-3 py-2 text-lg font-bold border-2 rounded focus:outline-none focus:ring-2 text-center ${
-                        score === null
-                          ? "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed"
-                          : "bg-white border-blue-500 text-blue-600 focus:ring-blue-500"
-                      }`}
-                    />
-                    {isAutoCalculatedScore && (
-                      <div className="text-xs text-green-600 dark:text-green-400 text-center mt-1 font-medium">
-                        {t("gradingPage.labels.usingAverageScore")}
-                      </div>
-                    )}
-                    <div className="text-xs text-gray-500 text-center mt-1">
-                      {t("gradingPage.labels.scoreRange")}
+                      }
+                    }}
+                    placeholder={t("gradingPage.labels.enterScore")}
+                    className="w-full px-3 py-2 text-lg font-bold border-2 rounded focus:outline-none focus:ring-2 text-center bg-white border-blue-500 text-blue-600 focus:ring-blue-500"
+                  />
+                  {isAutoCalculatedScore && (
+                    <div className="text-xs text-green-600 dark:text-green-400 text-center mt-1 font-medium">
+                      {t("gradingPage.labels.usingAverageScore")}
                     </div>
+                  )}
+                  <div className="text-xs text-gray-500 text-center mt-1">
+                    {t("gradingPage.labels.scoreRange")}
                   </div>
                 </div>
 
