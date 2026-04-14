@@ -25,7 +25,7 @@ from models import (
     PracticeSession,
     PracticeAnswer,
 )
-from services.preview_service import get_sentence_fields
+from services.preview_service import get_sentence_fields, _VOCABULARY_CONTENT_TYPES
 from services.quota_service import QuotaService
 from .dependencies import get_current_student
 from .validators import (
@@ -267,6 +267,71 @@ async def get_assignment_activities(
             .order_by(ContentItem.content_id, ContentItem.order_index)
             .all()
         )
+
+        # Lazy TTS：朗讀/重組模式下，補生成缺少例句音檔的單字集 items
+        if _practice_mode in ("reading", "rearrangement"):
+            vocab_content_ids = [
+                cid
+                for cid, c in content_dict.items()
+                if c.type in _VOCABULARY_CONTENT_TYPES
+            ]
+            if vocab_content_ids:
+                missing_audio_items = [
+                    ci
+                    for ci in all_content_items
+                    if ci.content_id in vocab_content_ids
+                    and ci.example_sentence
+                    and ci.example_sentence.strip()
+                    and not ci.example_sentence_audio_url
+                ]
+                if missing_audio_items:
+                    from services.tts import TTSService
+                    from utils.ttsVoiceResolver import get_voice_and_rate
+
+                    tts_service = TTSService()
+                    tts_generated = 0
+                    for item in missing_audio_items:
+                        try:
+                            audio_settings = (
+                                item.item_metadata.get("audio_settings", {})
+                                if item.item_metadata
+                                else {}
+                            )
+                            voice, rate = get_voice_and_rate(
+                                audio_settings.get("accent", "American English"),
+                                audio_settings.get("gender", "Male"),
+                                audio_settings.get("speed", "Normal x1"),
+                            )
+                            url = await tts_service.generate_tts(
+                                item.example_sentence, voice, rate
+                            )
+                            # 條件式更新：只在仍為 NULL 時寫入，避免並行覆蓋
+                            rows = db.execute(
+                                text(
+                                    "UPDATE content_items "
+                                    "SET example_sentence_audio_url = :url "
+                                    "WHERE id = :id "
+                                    "AND example_sentence_audio_url IS NULL"
+                                ),
+                                {"url": url, "id": item.id},
+                            ).rowcount
+                            if rows > 0:
+                                item.example_sentence_audio_url = url
+                                tts_generated += 1
+                            else:
+                                # 已被其他 request 更新，重讀最新值
+                                db.refresh(item)
+                        except Exception as e:
+                            logger.warning(
+                                f"Lazy TTS generation failed for item {item.id}: {e}"
+                            )
+                    if tts_generated > 0:
+                        db.commit()
+                        logger.info(
+                            f"Lazy-generated example sentence TTS for "
+                            f"{tts_generated} items in assignment "
+                            f"{student_assignment.assignment_id}"
+                        )
 
         # 建立 content_id -> [items] 的索引
         content_items_map = {}

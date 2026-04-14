@@ -11,7 +11,7 @@ from fastapi import (
     Form,
 )
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session, selectinload, joinedload
+from sqlalchemy.orm import Session, selectinload, joinedload, contains_eager
 from sqlalchemy import func, text
 from pydantic import BaseModel, Field, field_validator
 from database import get_db
@@ -3987,12 +3987,13 @@ async def preview_rearrangement_questions(
             status_code=400, detail="This assignment is not in rearrangement mode"
         )
 
-    # 取得所有內容項目
+    # 取得所有內容項目（含 Content 以取得 type）
     content_items = (
         db.query(ContentItem)
         .join(Content)
         .join(AssignmentContent)
         .filter(AssignmentContent.assignment_id == assignment.id)
+        .options(contains_eager(ContentItem.content))
         .order_by(ContentItem.order_index)
         .all()
     )
@@ -4003,8 +4004,16 @@ async def preview_rearrangement_questions(
 
     questions = []
     for item in content_items:
+        # 根據練習模式切換欄位（單字集 → 使用例句欄位）
+        fields = get_sentence_fields(
+            item, item.content.type if item.content else None, "rearrangement"
+        )
+        if fields is None:
+            continue  # 單字集無例句的 item 跳過
+        q_text, q_translation, q_audio = fields
+
         # 打亂單字順序
-        words = item.text.strip().split()
+        words = q_text.strip().split()
         shuffled_words = words.copy()
         random.shuffle(shuffled_words)
 
@@ -4020,9 +4029,9 @@ async def preview_rearrangement_questions(
                     else 30
                 ),
                 play_audio=assignment.play_audio or False,
-                audio_url=item.audio_url,
-                translation=item.translation,
-                original_text=item.text.strip(),  # 正確答案
+                audio_url=q_audio,
+                translation=q_translation,
+                original_text=q_text.strip(),  # 正確答案
             )
         )
 
