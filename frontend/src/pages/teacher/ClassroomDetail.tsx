@@ -3232,7 +3232,7 @@ export default function ClassroomDetail({
       {showReadingEditor && editorLessonId && (
         <>
           <div
-            className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+            className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
             style={{ left: `${sidebarWidth}px` }}
           >
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
@@ -3290,7 +3290,7 @@ export default function ClassroomDetail({
       {showVocabularySetEditor && vocabularySetLessonId && (
         <>
           <div
-            className="fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+            className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
             style={{ left: `${sidebarWidth}px` }}
           >
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
