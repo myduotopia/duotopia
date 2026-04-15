@@ -313,6 +313,11 @@ export default function ClassroomDetail({
   const [batchPrinting, setBatchPrinting] = useState(false);
   const [batchArchiving, setBatchArchiving] = useState(false);
 
+  // Clear selection when switching between active/archived tabs
+  useEffect(() => {
+    setSelectedAssignments(new Set());
+  }, [showArchived]);
+
   // Pagination (on filtered results)
   const [assignmentPage, setAssignmentPage] = useState(1);
   const assignmentPageSize = 10;
