@@ -36,15 +36,9 @@ import {
   Settings2,
 } from "lucide-react";
 import { Assignment } from "@/types";
-
-interface StudentProgress {
-  student_id: number;
-  student_number: string;
-  student_name: string;
-  status: string;
-  score?: number;
-  is_assigned?: boolean;
-}
+import StudentStatusPanel, {
+  StudentProgress,
+} from "@/components/StudentStatusPanel";
 
 interface AssignmentContent {
   id: number;
@@ -94,7 +88,7 @@ export function AssignmentDetailSheet({
   open,
   onOpenChange,
   assignment,
-  classroomId: _classroomId,
+  classroomId,
   canUseAiGrading = false,
   onGradeClick,
   onBatchGradeClick,
@@ -105,6 +99,10 @@ export function AssignmentDetailSheet({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [studentProgress, setStudentProgress] = useState<StudentProgress[]>([]);
+  const [isEditingStudents, setIsEditingStudents] = useState(false);
+  const [pendingStudentIds, setPendingStudentIds] = useState<number[] | null>(
+    null,
+  );
 
   // Content state
   const [assignmentContents, setAssignmentContents] = useState<
@@ -189,11 +187,7 @@ export function AssignmentDetailSheet({
           ).students_progress ||
           (progressResponse as { data?: unknown[] }).data ||
           [];
-      setStudentProgress(
-        (progressData as StudentProgress[]).filter(
-          (p) => p.status !== "unassigned" && p.is_assigned !== false,
-        ),
-      );
+      setStudentProgress(progressData as StudentProgress[]);
     } catch {
       setStudentProgress([]);
       setAssignmentContents([]);
@@ -315,40 +309,28 @@ export function AssignmentDetailSheet({
     setIsEditing(false);
   };
 
-  const getStatusBadge = (status: string) => {
-    const config: Record<string, { label: string; className: string }> = {
-      SUBMITTED: {
-        label: t("assignmentDetail.status.submitted", "已繳交"),
-        className:
-          "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-      },
-      GRADED: {
-        label: t("assignmentDetail.status.graded", "已批改"),
-        className:
-          "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
-      },
-      IN_PROGRESS: {
-        label: t("assignmentDetail.status.inProgress", "進行中"),
-        className:
-          "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
-      },
-      NOT_STARTED: {
-        label: t("assignmentDetail.status.notStarted", "未開始"),
-        className:
-          "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
-      },
-      RETURNED: {
-        label: t("assignmentDetail.status.returned", "已退回"),
-        className:
-          "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
-      },
-      RESUBMITTED: {
-        label: t("assignmentDetail.status.resubmitted", "已重交"),
-        className:
-          "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
-      },
-    };
-    return config[status] || config.NOT_STARTED;
+  const handleSaveStudents = async () => {
+    if (!assignment || !pendingStudentIds) return;
+    setSaving(true);
+    try {
+      await apiClient.patch(`/api/teachers/assignments/${assignment.id}`, {
+        student_ids: pendingStudentIds,
+      });
+      toast.success(t("assignmentDetail.messages.updateSuccess", "派發已更新"));
+      setIsEditingStudents(false);
+      setPendingStudentIds(null);
+      fetchAssignmentData();
+      onAssignmentUpdated?.();
+    } catch {
+      toast.error(t("assignmentDetail.messages.updateError", "更新失敗"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelEditStudents = () => {
+    setIsEditingStudents(false);
+    setPendingStudentIds(null);
   };
 
   const getContentTypeBadge = () => {
@@ -1089,66 +1071,43 @@ export function AssignmentDetailSheet({
               </div>
             )}
 
-            {/* Student Progress List (always shown) */}
-            <div className="border-t dark:border-gray-700 pt-4">
-              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                {t("assignmentDetail.sheet.studentProgress", "學生完成狀況")}
-              </h4>
-              {loading ? (
-                <div className="flex items-center justify-center py-8 text-gray-400">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                </div>
-              ) : studentProgress.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 text-center">
-                  {t("assignmentDetail.sheet.noStudents", "尚無學生資料")}
-                </p>
-              ) : (
-                <div className="space-y-1">
-                  {studentProgress.map((sp) => {
-                    const badge = getStatusBadge(sp.status);
-                    const hasScore =
-                      sp.score !== undefined &&
-                      sp.score !== null &&
-                      (sp.status === "GRADED" ||
-                        sp.status === "RETURNED" ||
-                        sp.status === "RESUBMITTED");
-                    return (
-                      <div
-                        key={sp.student_id || sp.student_number}
-                        className="flex items-center justify-between py-2 px-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
-                      >
-                        <span className="text-sm text-gray-700 dark:text-gray-300">
-                          {sp.student_name}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {hasScore && (
-                            <span
-                              className={`text-sm font-bold ${
-                                sp.score! >= 80
-                                  ? "text-green-600 dark:text-green-400"
-                                  : "text-red-600 dark:text-red-400"
-                              }`}
-                            >
-                              {sp.score!.toFixed(1)}
-                            </span>
-                          )}
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}
-                          >
-                            {badge.label}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            {/* Student Status Panel (always shown) */}
+            <StudentStatusPanel
+              students={studentProgress}
+              assignmentId={assignment?.id ?? 0}
+              classroomId={classroomId}
+              practiceMode={assignment?.practice_mode ?? undefined}
+              isEditingStudents={isEditingStudents}
+              onEditingStudentsChange={setIsEditingStudents}
+              onStudentIdsChanged={setPendingStudentIds}
+              onSave={handleSaveStudents}
+              saving={saving}
+              loading={loading}
+            />
           </div>
 
           {/* Footer */}
           <div className="border-t dark:border-gray-700 px-6 py-4 flex justify-end gap-3">
-            {isEditing ? (
+            {isEditingStudents ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleCancelEditStudents}
+                  disabled={saving}
+                >
+                  <X className="h-4 w-4 mr-1.5" />
+                  {t("common.cancel", "取消")}
+                </Button>
+                <Button onClick={handleSaveStudents} disabled={saving}>
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-1.5" />
+                  )}
+                  {t("assignmentDetail.sheet.saveStudents", "儲存派發")}
+                </Button>
+              </>
+            ) : isEditing ? (
               <>
                 <Button
                   variant="outline"
