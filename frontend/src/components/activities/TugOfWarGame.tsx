@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { X, ChevronDown, Loader2, RotateCcw } from "lucide-react";
+import { X, ChevronDown, Loader2, RotateCcw, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -49,6 +49,7 @@ const QUESTION_MODES: { value: QuestionMode; labelKey: string }[] = [
   { value: "audio_to_chinese", labelKey: "tugOfWar.modes.audioToChinese" },
   { value: "english_to_chinese", labelKey: "tugOfWar.modes.englishToChinese" },
   { value: "chinese_to_english", labelKey: "tugOfWar.modes.chineseToEnglish" },
+  { value: "image_to_english", labelKey: "tugOfWar.modes.imageToEnglish" },
 ];
 
 export function TugOfWarGame({
@@ -62,6 +63,49 @@ export function TugOfWarGame({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showImages, setShowImages] = useState(false);
+  const [viewport, setViewport] = useState({
+    width: typeof window !== "undefined" ? window.innerWidth : 1024,
+    height: typeof window !== "undefined" ? window.innerHeight : 768,
+  });
+  // Show rotate prompt when portrait OR viewport too narrow for three-column layout
+  const isPortrait = viewport.height > viewport.width || viewport.width < 768;
+  const [portraitDismissed, setPortraitDismissed] = useState(false);
+
+  // Viewport size tracking
+  useEffect(() => {
+    const updateViewport = () => {
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
+    };
+    window.addEventListener("resize", updateViewport);
+    screen.orientation?.addEventListener("change", updateViewport);
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      screen.orientation?.removeEventListener("change", updateViewport);
+    };
+  }, []);
+
+  // Attempt fullscreen + landscape lock on mount
+  useEffect(() => {
+    const requestLandscape = async () => {
+      try {
+        await document.documentElement.requestFullscreen?.();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (screen.orientation as any)?.lock?.("landscape");
+      } catch {
+        // Not supported — rely on rotate overlay
+      }
+    };
+    requestLandscape();
+
+    return () => {
+      document.exitFullscreen?.().catch(() => {});
+      try {
+        screen.orientation?.unlock?.();
+      } catch {
+        // Ignore
+      }
+    };
+  }, []);
 
   // Fetch vocabulary items
   useEffect(() => {
@@ -112,6 +156,8 @@ export function TugOfWarGame({
     handleAnswer,
   } = useGameLogic(vocabItems);
 
+  const hasEnoughImages = vocabItems.filter((v) => !!v.image_url).length >= 4;
+
   // Auto-start when vocab loads
   useEffect(() => {
     if (vocabItems.length > 0 && gameState.gameStatus === "waiting") {
@@ -127,6 +173,12 @@ export function TugOfWarGame({
   );
 
   const handleClose = useCallback(() => {
+    document.exitFullscreen?.().catch(() => {});
+    try {
+      screen.orientation?.unlock?.();
+    } catch {
+      // Ignore
+    }
     onComplete?.();
   }, [onComplete]);
 
@@ -135,6 +187,8 @@ export function TugOfWarGame({
   }, [startGame, gameState.questionMode]);
 
   const isAnswered = gameState.answeredBy !== null;
+  const isImageMode = gameState.questionMode === "image_to_english";
+  const effectiveShowImages = showImages && !isImageMode;
 
   // Phaser game instance - must be before any early returns
   const phaserContainerRef = useRef<HTMLDivElement>(null);
@@ -152,14 +206,14 @@ export function TugOfWarGame({
 
       const game = new Phaser.Game({
         type: Phaser.AUTO,
-        width: 1000,
+        width: 350,
         height: 300,
         parent: phaserContainerRef.current,
         transparent: false,
         scene: [TugOfWarScene],
         scale: {
           mode: Phaser.Scale.FIT,
-          autoCenter: Phaser.Scale.CENTER_HORIZONTALLY,
+          autoCenter: Phaser.Scale.CENTER_BOTH,
         },
       });
       phaserGameRef.current = game;
@@ -221,7 +275,25 @@ export function TugOfWarGame({
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+    <div className="w-full h-full overflow-hidden px-2 py-2 flex flex-col gap-2">
+      {/* Portrait orientation overlay */}
+      {isPortrait && !portraitDismissed && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white">
+          <Smartphone className="h-16 w-16 mb-4 rotate-90" />
+          <p className="text-lg font-medium">{t("tugOfWar.rotateDevice")}</p>
+          <p className="text-sm text-white/60 mt-2">
+            {t("tugOfWar.rotateDeviceHint")}
+          </p>
+          <Button
+            variant="ghost"
+            className="mt-6 text-white/70 hover:text-white hover:bg-white/10"
+            onClick={() => setPortraitDismissed(true)}
+          >
+            {t("tugOfWar.continueAnyway", "繼續遊玩")}
+          </Button>
+        </div>
+      )}
+
       {/* CSS for game fonts */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Silkscreen&family=Patrick+Hand&display=swap');
@@ -242,25 +314,45 @@ export function TugOfWarGame({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="bg-white dark:bg-gray-900 border shadow-lg">
-            {QUESTION_MODES.map((mode) => (
-              <DropdownMenuItem
-                key={mode.value}
-                onClick={() => handleModeChange(mode.value)}
-                className={
-                  mode.value === gameState.questionMode ? "bg-amber-50" : ""
-                }
-              >
-                {t(mode.labelKey)}
-              </DropdownMenuItem>
-            ))}
+            {QUESTION_MODES.map((mode) => {
+              const isDisabled =
+                mode.value === "image_to_english" && !hasEnoughImages;
+              return (
+                <DropdownMenuItem
+                  key={mode.value}
+                  onClick={() => !isDisabled && handleModeChange(mode.value)}
+                  disabled={isDisabled}
+                  className={
+                    mode.value === gameState.questionMode
+                      ? "bg-amber-50"
+                      : isDisabled
+                        ? "opacity-40 cursor-not-allowed"
+                        : ""
+                  }
+                  title={
+                    isDisabled
+                      ? t(
+                          "tugOfWar.imagesModeRequirement",
+                          "需要至少 4 個單字有圖片",
+                        )
+                      : undefined
+                  }
+                >
+                  {t(mode.labelKey)}
+                </DropdownMenuItem>
+              );
+            })}
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none">
+        <label
+          className={`flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none ${isImageMode ? "opacity-40 pointer-events-none" : ""}`}
+        >
           <input
             type="checkbox"
             checked={showImages}
             onChange={(e) => setShowImages(e.target.checked)}
+            disabled={isImageMode}
             className="rounded border-gray-300"
           />
           {t("tugOfWar.showImages")}
@@ -301,133 +393,131 @@ export function TugOfWarGame({
         </div>
       </div>
 
-      {/* Game scene: canvas + question/options in unified background */}
-      <div className="relative w-full rounded-xl overflow-hidden bg-sky-100">
-        <div ref={phaserContainerRef} className="w-full" />
-        {/* Replay icon overlaid on canvas center */}
-        {winner && (
-          <button
-            onClick={handleRestart}
-            className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 p-2 rounded-full hover:scale-110 transition-transform cursor-pointer"
-          >
-            <RotateCcw
-              className="h-10 w-10 text-white drop-shadow-md"
-              strokeWidth={3}
+      {/* Game area: three-column layout, fills remaining parent space */}
+      <div className="flex gap-3 items-stretch flex-1 min-h-0">
+        {/* Team A — left */}
+        <div className="flex-1 min-w-[180px] p-2 flex items-center overflow-y-auto">
+          {currentQuestion ? (
+            <TeamOptions
+              team="a"
+              options={currentQuestion.optionsA}
+              onSelect={handleAnswer}
+              disabled={isAnswered}
+              isCooldown={gameState.teamACooldown}
+              cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
+              teamLabel={t("tugOfWar.teamA")}
+              showImages={effectiveShowImages}
+              vocabItems={vocabItems}
+              useHandwriteFont={
+                gameState.questionMode === "audio_to_english" ||
+                gameState.questionMode === "chinese_to_english" ||
+                gameState.questionMode === "image_to_english"
+              }
             />
-          </button>
-        )}
+          ) : winner && answerHistory.length > 0 ? (
+            <div className="grid grid-cols-1 gap-2 w-full">
+              {answerHistory
+                .filter((r) => r.team === "a")
+                .filter(
+                  (r, i, arr) =>
+                    arr.findIndex(
+                      (x) =>
+                        x.question.vocabItem.id === r.question.vocabItem.id,
+                    ) === i,
+                )
+                .map((r, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm"
+                  >
+                    <span className="font-bold text-red-600">
+                      {r.question.vocabItem.text}
+                    </span>
+                    <span className="text-gray-400">-</span>
+                    <span className="text-gray-600">
+                      {r.question.vocabItem.translation}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          ) : null}
+        </div>
 
-        {/* Question overlaid on canvas, centered above the rope flag */}
-        {currentQuestion && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
-            <QuestionDisplay
-              question={currentQuestion}
-              showPrompt={!isAnswered}
-            />
-          </div>
-        )}
-
-        {/* Team options below canvas (during game) */}
-        {currentQuestion && (
-          <div className="grid grid-cols-2 gap-4 p-4">
-            <div className="p-3 rounded-xl border-2 border-red-500 bg-red-500/20">
-              <TeamOptions
-                team="a"
-                options={currentQuestion.optionsA}
-                onSelect={handleAnswer}
-                disabled={isAnswered}
-                isCooldown={gameState.teamACooldown}
-                cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
-                teamLabel={t("tugOfWar.teamA")}
-                showImages={showImages}
-                vocabItems={vocabItems}
-                useHandwriteFont={
-                  gameState.questionMode === "audio_to_english" ||
-                  gameState.questionMode === "chinese_to_english"
-                }
+        {/* Canvas center — question + animation */}
+        <div className="w-[350px] flex-shrink-0 self-stretch rounded-xl overflow-hidden bg-sky-100 flex flex-col items-center">
+          {/* Question — normal flow, pushes canvas down */}
+          {currentQuestion && (
+            <div className="py-2">
+              <QuestionDisplay
+                question={currentQuestion}
+                showPrompt={!isAnswered}
               />
             </div>
-            <div className="p-3 rounded-xl border-2 border-blue-500 bg-blue-500/20">
-              <TeamOptions
-                team="b"
-                options={currentQuestion.optionsB}
-                onSelect={handleAnswer}
-                disabled={isAnswered}
-                isCooldown={gameState.teamBCooldown}
-                cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
-                teamLabel={t("tugOfWar.teamB")}
-                showImages={showImages}
-                vocabItems={vocabItems}
-                useHandwriteFont={
-                  gameState.questionMode === "audio_to_english" ||
-                  gameState.questionMode === "chinese_to_english"
-                }
-              />
-            </div>
+          )}
+          {/* Phaser canvas + replay */}
+          <div className="relative w-full flex-1 flex items-center justify-center">
+            <div ref={phaserContainerRef} className="w-full" />
+            {winner && (
+              <button
+                onClick={handleRestart}
+                className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 p-2 rounded-full hover:scale-110 transition-transform cursor-pointer"
+              >
+                <RotateCcw
+                  className="h-10 w-10 text-white drop-shadow-md"
+                  strokeWidth={3}
+                />
+              </button>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* Answer history (after game ends) */}
-        {winner && answerHistory.length > 0 && (
-          <div className="grid grid-cols-2 gap-4 p-4">
-            {/* Team A answers */}
-            <div className="p-3 rounded-xl border-2 border-red-500 bg-red-500/20">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {answerHistory
-                  .filter((r) => r.team === "a")
-                  .filter(
-                    (r, i, arr) =>
-                      arr.findIndex(
-                        (x) =>
-                          x.question.vocabItem.id === r.question.vocabItem.id,
-                      ) === i,
-                  )
-                  .map((r, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm"
-                    >
-                      <span className="font-bold text-red-600">
-                        {r.question.vocabItem.text}
-                      </span>
-                      <span className="text-gray-400">-</span>
-                      <span className="text-gray-600">
-                        {r.question.vocabItem.translation}
-                      </span>
-                    </div>
-                  ))}
-              </div>
+        {/* Team B — right */}
+        <div className="flex-1 min-w-[180px] p-2 flex items-center overflow-y-auto">
+          {currentQuestion ? (
+            <TeamOptions
+              team="b"
+              options={currentQuestion.optionsB}
+              onSelect={handleAnswer}
+              disabled={isAnswered}
+              isCooldown={gameState.teamBCooldown}
+              cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
+              teamLabel={t("tugOfWar.teamB")}
+              showImages={effectiveShowImages}
+              vocabItems={vocabItems}
+              useHandwriteFont={
+                gameState.questionMode === "audio_to_english" ||
+                gameState.questionMode === "chinese_to_english" ||
+                gameState.questionMode === "image_to_english"
+              }
+            />
+          ) : winner && answerHistory.length > 0 ? (
+            <div className="grid grid-cols-1 gap-2 w-full">
+              {answerHistory
+                .filter((r) => r.team === "b")
+                .filter(
+                  (r, i, arr) =>
+                    arr.findIndex(
+                      (x) =>
+                        x.question.vocabItem.id === r.question.vocabItem.id,
+                    ) === i,
+                )
+                .map((r, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-sm"
+                  >
+                    <span className="font-bold text-blue-600">
+                      {r.question.vocabItem.text}
+                    </span>
+                    <span className="text-gray-400">-</span>
+                    <span className="text-gray-600">
+                      {r.question.vocabItem.translation}
+                    </span>
+                  </div>
+                ))}
             </div>
-            {/* Team B answers */}
-            <div className="p-3 rounded-xl border-2 border-blue-500 bg-blue-500/20">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {answerHistory
-                  .filter((r) => r.team === "b")
-                  .filter(
-                    (r, i, arr) =>
-                      arr.findIndex(
-                        (x) =>
-                          x.question.vocabItem.id === r.question.vocabItem.id,
-                      ) === i,
-                  )
-                  .map((r, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-sm"
-                    >
-                      <span className="font-bold text-blue-600">
-                        {r.question.vocabItem.text}
-                      </span>
-                      <span className="text-gray-400">-</span>
-                      <span className="text-gray-600">
-                        {r.question.vocabItem.translation}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-        )}
+          ) : null}
+        </div>
       </div>
     </div>
   );

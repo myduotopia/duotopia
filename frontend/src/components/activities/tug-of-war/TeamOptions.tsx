@@ -81,17 +81,40 @@ export function TeamOptions({
     ? Math.max(0, (cooldownMs * (1 - cooldownProgress)) / 1000).toFixed(1)
     : null;
 
+  const maxLen = Math.max(...options.map((o) => o.length));
+  const useVertical = !showImages && maxLen > 7;
+
+  // Dynamic font size based on text length
+  const fontSize =
+    maxLen <= 4
+      ? "text-3xl sm:text-4xl"
+      : maxLen <= 7
+        ? "text-2xl sm:text-3xl"
+        : maxLen <= 12
+          ? "text-xl sm:text-2xl"
+          : "text-lg sm:text-xl";
+  const handwriteSize =
+    maxLen <= 4
+      ? "handwrite-font text-4xl sm:text-5xl"
+      : maxLen <= 7
+        ? "handwrite-font text-3xl sm:text-4xl"
+        : maxLen <= 12
+          ? "handwrite-font text-2xl sm:text-3xl"
+          : "handwrite-font text-xl sm:text-2xl";
+
   return (
-    <div className="flex flex-col gap-2 relative">
-      {/* Options in 2x2 grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-rows-2 gap-2">
+    <div className="flex flex-col gap-2 relative w-full">
+      {/* Options grid — 2x2 default, 1x4 when text is long */}
+      <div
+        className={`grid ${useVertical ? "grid-cols-1" : "grid-cols-2"} gap-2`}
+      >
         {options.map((option, index) => (
           <button
             key={`${option}-${index}`}
             onClick={() => !disabled && !isCooldown && onSelect(team, option)}
             disabled={disabled || isCooldown}
             className={`
-              relative flex items-start gap-2 px-3 py-2 rounded-lg border-2 text-left
+              relative flex ${showImages ? "flex-col items-center" : "items-start"} gap-2 px-3 py-2 rounded-lg border-2 text-left
               transition-all duration-150
               ${
                 disabled || isCooldown
@@ -124,12 +147,12 @@ export function TeamOptions({
                   <img
                     src={item.image_url}
                     alt=""
-                    className="w-8 h-8 rounded object-cover flex-shrink-0"
+                    className="w-full h-20 rounded object-cover"
                   />
                 ) : null;
               })()}
             <span
-              className={`text-lg font-medium break-words whitespace-normal ${useHandwriteFont ? "handwrite-font text-xl" : ""}`}
+              className={`${fontSize} font-medium break-words whitespace-normal min-w-0 ${useHandwriteFont ? handwriteSize : ""}`}
             >
               {option}
             </span>
