@@ -279,7 +279,11 @@ class PracticeAnswer(Base):
     practice_session_id = Column(
         Integer, ForeignKey("practice_sessions.id", ondelete="CASCADE"), nullable=False
     )
-    content_item_id = Column(Integer, ForeignKey("content_items.id"), nullable=False)
+    content_item_id = Column(
+        Integer,
+        ForeignKey("content_items.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     # 答題結果
     is_correct = Column(Boolean, nullable=False)
