@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Download, Printer } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import { apiClient } from "@/lib/api";
 import {
@@ -122,7 +123,7 @@ export default function AssignmentStickyNote({
       // Refresh data after save
       fetchProgress(currentAssignment.id);
     } catch {
-      // Error handled silently; toast can be added later
+      toast.error(t("stickyNote.saveError", "儲存失敗"));
     } finally {
       setSaving(false);
     }

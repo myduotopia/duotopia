@@ -465,7 +465,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       classroomId,
       practiceMode,
       isEditingStudents: _isEditingStudents,
-      onEditingStudentsChange: _onEditingStudentsChange,
+      onEditingStudentsChange,
       onStudentIdsChanged,
       onSave,
       saving = false,
@@ -475,7 +475,6 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     ref,
   ) {
     void _isEditingStudents;
-    void _onEditingStudentsChange;
     const { t } = useTranslation();
 
     const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -506,12 +505,16 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     // hasChanges = any student marked
     const hasChanges = selectedIds.size > 0;
 
+    // Sync editing state to parent
+    useEffect(() => {
+      onEditingStudentsChange(hasChanges);
+    }, [hasChanges, onEditingStudentsChange]);
+
     // Compute final student_ids list based on active tab + marked students
     // Assigned tab: marked = to remove → final = initial minus marked
     // Unassigned tab: marked = to add → final = initial plus marked
     useEffect(() => {
       if (!hasChanges) {
-        onStudentIdsChanged(Array.from(initialAssignedIds));
         return;
       }
       let finalIds: Set<number>;
