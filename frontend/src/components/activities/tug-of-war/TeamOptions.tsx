@@ -147,7 +147,7 @@ export function TeamOptions({
                   <img
                     src={item.image_url}
                     alt=""
-                    className="w-full rounded object-cover"
+                    className="w-full h-20 rounded object-cover"
                   />
                 ) : null;
               })()}
