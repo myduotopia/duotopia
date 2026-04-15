@@ -136,7 +136,11 @@ export default function ReadingAssessmentTemplate({
       const audioBlob = await response.blob();
 
       // 🚀 先分析（快速顯示結果）
-      const azureResult = await analyzePronunciation(audioBlob, targetText);
+      const normalizedTargetText = targetText.replace(/\n+/g, " ").trim();
+      const azureResult = await analyzePronunciation(
+        audioBlob,
+        normalizedTargetText,
+      );
 
       if (!azureResult) {
         throw new Error("Azure analysis failed");
@@ -223,10 +227,12 @@ export default function ReadingAssessmentTemplate({
 
           {/* Main Content */}
           <div className="space-y-4">
-            <h2 className="text-3xl font-medium text-gray-900 leading-relaxed">
+            <h2 className="text-3xl font-medium text-gray-900 leading-relaxed whitespace-pre-wrap">
               {targetText}
             </h2>
-            <p className="text-lg text-gray-600">{content}</p>
+            <p className="text-lg text-gray-600 whitespace-pre-wrap">
+              {content}
+            </p>
           </div>
 
           {/* 🎯 錄音元件 - 使用統一的 AudioRecorder */}
