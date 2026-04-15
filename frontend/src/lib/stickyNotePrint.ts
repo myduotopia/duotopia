@@ -1,5 +1,6 @@
 // Shared print HTML generation for sticky note views
 // Used by both single-print (AssignmentStickyNote modal) and batch-print (ClassroomDetail)
+import type { TFunction } from "i18next";
 
 function escapeHtml(s: string | number | undefined | null): string {
   return String(s ?? "")
@@ -88,8 +89,7 @@ export function buildStickyNotePageHtml(
   students: PrintStudent[],
   _statusCounts: Record<string, number>,
   options: PrintOptions,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  t: (key: string, ...args: any[]) => string,
+  t: TFunction,
 ): string {
   const { showNumber, showName, showScore } = options;
 
