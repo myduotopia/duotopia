@@ -6,12 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  Printer,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Printer } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import html2canvas from "html2canvas";
 import { apiClient } from "@/lib/api";
@@ -235,20 +230,20 @@ export default function AssignmentStickyNote({
 
         {/* Student Status Panel (shared component) */}
         <div className="flex-1 min-h-0">
-        <StudentStatusPanel
-          ref={captureRef}
-          students={studentData}
-          assignmentId={currentAssignment?.id ?? 0}
-          classroomId={String(classroomId)}
-          practiceMode={currentAssignment?.practice_mode ?? undefined}
-          isEditingStudents={false}
-          onEditingStudentsChange={() => {}}
-          onStudentIdsChanged={setPendingStudentIds}
-          onSave={handleSaveStudents}
-          saving={saving}
-          loading={loading}
-          scrollable
-        />
+          <StudentStatusPanel
+            ref={captureRef}
+            students={studentData}
+            assignmentId={currentAssignment?.id ?? 0}
+            classroomId={String(classroomId)}
+            practiceMode={currentAssignment?.practice_mode ?? undefined}
+            isEditingStudents={false}
+            onEditingStudentsChange={() => {}}
+            onStudentIdsChanged={setPendingStudentIds}
+            onSave={handleSaveStudents}
+            saving={saving}
+            loading={loading}
+            scrollable
+          />
         </div>
 
         {/* Action buttons */}

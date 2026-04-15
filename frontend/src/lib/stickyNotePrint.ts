@@ -24,11 +24,20 @@ export const STATUS_HEX: Record<
 
 // Status labels for legend
 const STATUS_LEGEND: { status: string; labelKey: string }[] = [
-  { status: "NOT_STARTED", labelKey: "assignmentDetail.sheet.statusNotStarted" },
-  { status: "IN_PROGRESS", labelKey: "assignmentDetail.sheet.statusInProgress" },
+  {
+    status: "NOT_STARTED",
+    labelKey: "assignmentDetail.sheet.statusNotStarted",
+  },
+  {
+    status: "IN_PROGRESS",
+    labelKey: "assignmentDetail.sheet.statusInProgress",
+  },
   { status: "SUBMITTED", labelKey: "assignmentDetail.sheet.statusSubmitted" },
   { status: "RETURNED", labelKey: "assignmentDetail.sheet.statusReturned" },
-  { status: "RESUBMITTED", labelKey: "assignmentDetail.sheet.statusResubmitted" },
+  {
+    status: "RESUBMITTED",
+    labelKey: "assignmentDetail.sheet.statusResubmitted",
+  },
   { status: "GRADED", labelKey: "assignmentDetail.sheet.statusGraded" },
 ];
 

@@ -316,9 +316,7 @@ export function AssignmentDetailSheet({
       await apiClient.patch(`/api/teachers/assignments/${assignment.id}`, {
         student_ids: pendingStudentIds,
       });
-      toast.success(
-        t("assignmentDetail.messages.updateSuccess", "派發已更新"),
-      );
+      toast.success(t("assignmentDetail.messages.updateSuccess", "派發已更新"));
       setIsEditingStudents(false);
       setPendingStudentIds(null);
       fetchAssignmentData();

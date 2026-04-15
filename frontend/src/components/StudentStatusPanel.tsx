@@ -196,10 +196,7 @@ export function StatusLegend({ columns = 2 }: { columns?: 1 | 2 } = {}) {
   const items = [
     {
       status: "NOT_STARTED",
-      label: t(
-        "assignmentDetail.sheet.statusNotStarted",
-        "學生尚未開始寫作業",
-      ),
+      label: t("assignmentDetail.sheet.statusNotStarted", "學生尚未開始寫作業"),
     },
     {
       status: "RETURNED",
@@ -477,124 +474,125 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     },
     ref,
   ) {
-  void _isEditingStudents;
-  void _onEditingStudentsChange;
-  const { t } = useTranslation();
+    void _isEditingStudents;
+    void _onEditingStudentsChange;
+    const { t } = useTranslation();
 
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [activeTab, setActiveTab] = useState<TabValue>("assigned");
-  const [sortMode, setSortMode] = useState<SortMode>("number");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [viewMode, setViewMode] = useState<ViewMode>("list");
+    const [activeTab, setActiveTab] = useState<TabValue>("assigned");
+    const [sortMode, setSortMode] = useState<SortMode>("number");
+    const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  const isGradable = practiceMode
-    ? GRADABLE_MODES.has(practiceMode)
-    : false;
+    const isGradable = practiceMode ? GRADABLE_MODES.has(practiceMode) : false;
 
-  // Reset marked students when switching tabs
-  useEffect(() => {
-    setSelectedIds(new Set());
-  }, [activeTab, students]);
+    // Reset marked students when switching tabs
+    useEffect(() => {
+      setSelectedIds(new Set());
+    }, [activeTab, students]);
 
-  // The initial set of assigned student IDs (source of truth)
-  const initialAssignedIds = useMemo(
-    () =>
-      new Set(
-        students
-          .filter(
-            (s) => s.status !== "unassigned" && s.is_assigned !== false,
-          )
-          .map((s) => s.student_id),
-      ),
-    [students],
-  );
+    // The initial set of assigned student IDs (source of truth)
+    const initialAssignedIds = useMemo(
+      () =>
+        new Set(
+          students
+            .filter((s) => s.status !== "unassigned" && s.is_assigned !== false)
+            .map((s) => s.student_id),
+        ),
+      [students],
+    );
 
-  // selectedIds = students marked for action (add or remove)
-  // hasChanges = any student marked
-  const hasChanges = selectedIds.size > 0;
+    // selectedIds = students marked for action (add or remove)
+    // hasChanges = any student marked
+    const hasChanges = selectedIds.size > 0;
 
-  // Compute final student_ids list based on active tab + marked students
-  // Assigned tab: marked = to remove → final = initial minus marked
-  // Unassigned tab: marked = to add → final = initial plus marked
-  useEffect(() => {
-    if (!hasChanges) {
-      onStudentIdsChanged(Array.from(initialAssignedIds));
-      return;
-    }
-    let finalIds: Set<number>;
-    if (activeTab === "assigned") {
-      finalIds = new Set(initialAssignedIds);
-      selectedIds.forEach((id) => finalIds.delete(id));
-    } else if (activeTab === "unassigned") {
-      finalIds = new Set(initialAssignedIds);
-      selectedIds.forEach((id) => finalIds.add(id));
-    } else {
-      finalIds = new Set(initialAssignedIds);
-    }
-    onStudentIdsChanged(Array.from(finalIds));
-  }, [selectedIds, activeTab, initialAssignedIds, hasChanges, onStudentIdsChanged]);
-
-  // Cancel = clear all marks
-  const handleCancel = useCallback(() => {
-    setSelectedIds(new Set());
-  }, []);
-
-  // ---- Filtering by tab ----
-  const filteredStudents = useMemo(() => {
-    switch (activeTab) {
-      case "assigned":
-        return students.filter(
-          (s) => s.status !== "unassigned" && s.is_assigned !== false,
-        );
-      case "unassigned":
-        return students.filter(
-          (s) => s.status === "unassigned" || s.is_assigned === false,
-        );
-      default:
-        return students;
-    }
-  }, [students, activeTab]);
-
-  // ---- Sorting ----
-  const sortedStudents = useMemo(() => {
-    const dir = sortDirection === "asc" ? 1 : -1;
-    return [...filteredStudents].sort((a, b) => {
-      let cmp = 0;
-      switch (sortMode) {
-        case "number":
-          cmp = Number(a.student_number) - Number(b.student_number);
-          break;
-        case "name":
-          cmp = a.student_name.localeCompare(b.student_name, "zh-TW");
-          break;
-        case "score":
-          cmp = (a.score ?? -1) - (b.score ?? -1);
-          break;
-        case "status":
-          cmp =
-            (STATUS_ORDER[a.status] ?? -1) - (STATUS_ORDER[b.status] ?? -1);
-          break;
+    // Compute final student_ids list based on active tab + marked students
+    // Assigned tab: marked = to remove → final = initial minus marked
+    // Unassigned tab: marked = to add → final = initial plus marked
+    useEffect(() => {
+      if (!hasChanges) {
+        onStudentIdsChanged(Array.from(initialAssignedIds));
+        return;
       }
-      return cmp * dir;
-    });
-  }, [filteredStudents, sortMode, sortDirection]);
+      let finalIds: Set<number>;
+      if (activeTab === "assigned") {
+        finalIds = new Set(initialAssignedIds);
+        selectedIds.forEach((id) => finalIds.delete(id));
+      } else if (activeTab === "unassigned") {
+        finalIds = new Set(initialAssignedIds);
+        selectedIds.forEach((id) => finalIds.add(id));
+      } else {
+        finalIds = new Set(initialAssignedIds);
+      }
+      onStudentIdsChanged(Array.from(finalIds));
+    }, [
+      selectedIds,
+      activeTab,
+      initialAssignedIds,
+      hasChanges,
+      onStudentIdsChanged,
+    ]);
 
-  // ---- Checkbox helpers ----
-  // All tab: all disabled (display only)
-  // Assigned tab: only NOT_STARTED can be toggled
-  // Unassigned tab: all can be toggled
-  const isCheckboxDisabled = useCallback(
-    (s: StudentProgress) => {
-      if (activeTab === "all") return true;
-      if (activeTab === "unassigned") return false;
-      // assigned tab: only NOT_STARTED can be unchecked
-      return s.status !== "NOT_STARTED";
-    },
-    [activeTab],
-  );
+    // Cancel = clear all marks
+    const handleCancel = useCallback(() => {
+      setSelectedIds(new Set());
+    }, []);
 
-  const toggleStudent = useCallback(
-    (studentId: number) => {
+    // ---- Filtering by tab ----
+    const filteredStudents = useMemo(() => {
+      switch (activeTab) {
+        case "assigned":
+          return students.filter(
+            (s) => s.status !== "unassigned" && s.is_assigned !== false,
+          );
+        case "unassigned":
+          return students.filter(
+            (s) => s.status === "unassigned" || s.is_assigned === false,
+          );
+        default:
+          return students;
+      }
+    }, [students, activeTab]);
+
+    // ---- Sorting ----
+    const sortedStudents = useMemo(() => {
+      const dir = sortDirection === "asc" ? 1 : -1;
+      return [...filteredStudents].sort((a, b) => {
+        let cmp = 0;
+        switch (sortMode) {
+          case "number":
+            cmp = Number(a.student_number) - Number(b.student_number);
+            break;
+          case "name":
+            cmp = a.student_name.localeCompare(b.student_name, "zh-TW");
+            break;
+          case "score":
+            cmp = (a.score ?? -1) - (b.score ?? -1);
+            break;
+          case "status":
+            cmp =
+              (STATUS_ORDER[a.status] ?? -1) - (STATUS_ORDER[b.status] ?? -1);
+            break;
+        }
+        return cmp * dir;
+      });
+    }, [filteredStudents, sortMode, sortDirection]);
+
+    // ---- Checkbox helpers ----
+    // All tab: all disabled (display only)
+    // Assigned tab: only NOT_STARTED can be toggled
+    // Unassigned tab: all can be toggled
+    const isCheckboxDisabled = useCallback(
+      (s: StudentProgress) => {
+        if (activeTab === "all") return true;
+        if (activeTab === "unassigned") return false;
+        // assigned tab: only NOT_STARTED can be unchecked
+        return s.status !== "NOT_STARTED";
+      },
+      [activeTab],
+    );
+
+    const toggleStudent = useCallback((studentId: number) => {
       setSelectedIds((prev) => {
         const next = new Set(prev);
         if (next.has(studentId)) {
@@ -604,327 +602,330 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
         }
         return next;
       });
-    },
-    [],
-  );
+    }, []);
 
-  const handleSelectAll = useCallback(() => {
-    const toggleableInTab = filteredStudents.filter(
-      (s) => !isCheckboxDisabled(s),
-    );
-    const allSelected = toggleableInTab.every((s) =>
-      selectedIds.has(s.student_id),
-    );
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      toggleableInTab.forEach((s) => {
-        if (allSelected) {
-          next.delete(s.student_id);
-        } else {
-          next.add(s.student_id);
-        }
-      });
-      return next;
-    });
-  }, [filteredStudents, selectedIds, isCheckboxDisabled]);
-
-  // ---- Navigation ----
-  // Gradable modes (reading / word_reading): open grading page for this student in a new tab.
-  // Skip unassigned and NOT_STARTED — nothing to grade yet.
-  const isGradableStudent = useCallback(
-    (s: StudentProgress) =>
-      isGradable && s.status !== "unassigned" && s.status !== "NOT_STARTED",
-    [isGradable],
-  );
-
-  const handleStudentClick = useCallback(
-    (student: StudentProgress) => {
-      if (!isGradableStudent(student)) return;
-      window.open(
-        `/teacher/classroom/${classroomId}/assignment/${assignmentId}/grading?studentId=${student.student_id}`,
-        "_blank",
+    const handleSelectAll = useCallback(() => {
+      const toggleableInTab = filteredStudents.filter(
+        (s) => !isCheckboxDisabled(s),
       );
-    },
-    [isGradableStudent, classroomId, assignmentId],
-  );
+      const allSelected = toggleableInTab.every((s) =>
+        selectedIds.has(s.student_id),
+      );
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        toggleableInTab.forEach((s) => {
+          if (allSelected) {
+            next.delete(s.student_id);
+          } else {
+            next.add(s.student_id);
+          }
+        });
+        return next;
+      });
+    }, [filteredStudents, selectedIds, isCheckboxDisabled]);
 
-  // ---- Tab counts ----
-  const assignedCount = useMemo(
-    () =>
-      students.filter(
-        (s) => s.status !== "unassigned" && s.is_assigned !== false,
-      ).length,
-    [students],
-  );
-  const unassignedCount = useMemo(
-    () =>
-      students.filter(
-        (s) => s.status === "unassigned" || s.is_assigned === false,
-      ).length,
-    [students],
-  );
-
-  // ---- Sort buttons config ----
-  const sortOptions: { value: SortMode; label: string }[] = [
-    {
-      value: "score",
-      label: t("assignmentDetail.sheet.sortByScore", "成績"),
-    },
-    {
-      value: "number",
-      label: t("assignmentDetail.sheet.sortByNumber", "座號"),
-    },
-    {
-      value: "name",
-      label: t("assignmentDetail.sheet.sortByName", "姓名"),
-    },
-    {
-      value: "status",
-      label: t("assignmentDetail.sheet.sortByStatus", "狀態"),
-    },
-  ];
-
-  // ---- Tab config ----
-  const tabs: { value: TabValue; label: string; count?: number }[] = [
-    {
-      value: "all",
-      label: t("assignmentDetail.sheet.tabAll", "全部"),
-      count: students.length,
-    },
-    {
-      value: "assigned",
-      label: t("assignmentDetail.sheet.tabAssigned", "已派發"),
-      count: assignedCount,
-    },
-    {
-      value: "unassigned",
-      label: t("assignmentDetail.sheet.tabUnassigned", "未派發"),
-      count: unassignedCount,
-    },
-  ];
-
-  // Whether checkboxes are interactive on current tab
-  const isCheckboxActive = activeTab !== "all";
-
-  // ---- Select all checkbox state ----
-  const selectAllState = useMemo(() => {
-    if (!isCheckboxActive) return "hidden";
-    const toggleable = filteredStudents.filter((s) => !isCheckboxDisabled(s));
-    if (toggleable.length === 0) return "disabled";
-    const allSelected = toggleable.every((s) =>
-      selectedIds.has(s.student_id),
+    // ---- Navigation ----
+    // Gradable modes (reading / word_reading): open grading page for this student in a new tab.
+    // Skip unassigned and NOT_STARTED — nothing to grade yet.
+    const isGradableStudent = useCallback(
+      (s: StudentProgress) =>
+        isGradable && s.status !== "unassigned" && s.status !== "NOT_STARTED",
+      [isGradable],
     );
-    return allSelected ? "checked" : "unchecked";
-  }, [isCheckboxActive, filteredStudents, selectedIds, isCheckboxDisabled]);
 
-  return (
-    <div className={`border-t dark:border-gray-700 pt-4 ${scrollable ? "flex flex-col h-full" : ""}`}>
-      {/* Header: title + sort + view toggle */}
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 shrink-0">
-          {t("assignmentDetail.sheet.studentProgress", "學生完成狀況")}
-        </h4>
+    const handleStudentClick = useCallback(
+      (student: StudentProgress) => {
+        if (!isGradableStudent(student)) return;
+        window.open(
+          `/teacher/classroom/${classroomId}/assignment/${assignmentId}/grading?studentId=${student.student_id}`,
+          "_blank",
+        );
+      },
+      [isGradableStudent, classroomId, assignmentId],
+    );
 
-        {/* Sort segmented buttons */}
-        <div className="flex items-center rounded-md overflow-hidden border border-gray-200 dark:border-gray-600">
-          {sortOptions.map((opt, i) => {
-            const isActive = sortMode === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => {
-                  if (isActive) {
-                    setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
-                  } else {
-                    setSortMode(opt.value);
-                    setSortDirection("asc");
-                  }
-                }}
-                className={`px-2 py-1 text-[10px] font-medium transition-colors ${
-                  isActive
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-                } ${i > 0 ? "border-l border-gray-200 dark:border-gray-600" : ""}`}
-              >
-                {opt.label}
-                {isActive && (
-                  <span className="ml-0.5">
-                    {sortDirection === "asc" ? "↑" : "↓"}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+    // ---- Tab counts ----
+    const assignedCount = useMemo(
+      () =>
+        students.filter(
+          (s) => s.status !== "unassigned" && s.is_assigned !== false,
+        ).length,
+      [students],
+    );
+    const unassignedCount = useMemo(
+      () =>
+        students.filter(
+          (s) => s.status === "unassigned" || s.is_assigned === false,
+        ).length,
+      [students],
+    );
 
-        {/* View mode toggle */}
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => setViewMode("grid")}
-            className={`p-1 rounded transition-colors ${
-              viewMode === "grid"
-                ? "bg-blue-500 text-white"
-                : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
-            }`}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("list")}
-            className={`p-1 rounded transition-colors ${
-              viewMode === "list"
-                ? "bg-blue-500 text-white"
-                : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
-            }`}
-          >
-            <List className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+    // ---- Sort buttons config ----
+    const sortOptions: { value: SortMode; label: string }[] = [
+      {
+        value: "score",
+        label: t("assignmentDetail.sheet.sortByScore", "成績"),
+      },
+      {
+        value: "number",
+        label: t("assignmentDetail.sheet.sortByNumber", "座號"),
+      },
+      {
+        value: "name",
+        label: t("assignmentDetail.sheet.sortByName", "姓名"),
+      },
+      {
+        value: "status",
+        label: t("assignmentDetail.sheet.sortByStatus", "狀態"),
+      },
+    ];
 
-      {/* Tabs + Select All */}
-      <div className="flex items-center border-b border-gray-200 dark:border-gray-700 mb-3">
-        {tabs.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            onClick={() => setActiveTab(tab.value)}
-            className={`flex-1 text-center py-2 text-xs font-medium border-b-2 transition-colors ${
-              activeTab === tab.value
-                ? "border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20"
-                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-            }`}
-          >
-            {tab.label}
-            {tab.count != null && (
-              <span className="ml-1 text-[10px] text-gray-400">
-                {tab.count}
-              </span>
-            )}
-          </button>
-        ))}
+    // ---- Tab config ----
+    const tabs: { value: TabValue; label: string; count?: number }[] = [
+      {
+        value: "all",
+        label: t("assignmentDetail.sheet.tabAll", "全部"),
+        count: students.length,
+      },
+      {
+        value: "assigned",
+        label: t("assignmentDetail.sheet.tabAssigned", "已派發"),
+        count: assignedCount,
+      },
+      {
+        value: "unassigned",
+        label: t("assignmentDetail.sheet.tabUnassigned", "未派發"),
+        count: unassignedCount,
+      },
+    ];
 
-        {/* Select All */}
-        {selectAllState !== "hidden" && (
-          <button
-            type="button"
-            onClick={handleSelectAll}
-            disabled={selectAllState === "disabled"}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 shrink-0 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-40"
-          >
-            {selectAllState === "checked" ? (
-              <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold">
-                ✓
-              </span>
-            ) : (
-              <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
-            )}
-            {t("assignmentDetail.sheet.selectAll", "全選")}
-          </button>
-        )}
-      </div>
+    // Whether checkboxes are interactive on current tab
+    const isCheckboxActive = activeTab !== "all";
 
-      {/* Content: loading / empty / grid / list */}
-      {/* Data + legend area */}
-      <div ref={ref} className={scrollable ? "flex-1 min-h-0 overflow-y-auto" : ""}>
-        {loading ? (
-          <div className="flex items-center justify-center py-8 text-gray-400">
-            <Loader2 className="h-5 w-5 animate-spin" />
-          </div>
-        ) : sortedStudents.length === 0 ? (
-          <p className="text-sm text-gray-400 py-6 text-center">
-            {t("assignmentDetail.sheet.noStudents", "尚無學生資料")}
-          </p>
-        ) : viewMode === "grid" ? (
-          <div className="grid grid-cols-5 gap-2 py-1 items-start">
-            {sortedStudents.map((student) => (
-              <StudentCard
-                key={student.student_id}
-                student={student}
-                isSelected={selectedIds.has(student.student_id)}
-                isDisabled={isCheckboxDisabled(student)}
-                onToggle={() => toggleStudent(student.student_id)}
-                onClick={() => handleStudentClick(student)}
-                tooltip={
-                  isGradableStudent(student)
-                    ? t("assignmentDetail.sheet.checkHomework", "批改作業")
-                    : undefined
-                }
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-0.5">
-            {sortedStudents.map((student) => (
-              <StudentRow
-                key={student.student_id}
-                student={student}
-                isEditing={isCheckboxActive}
-                isSelected={selectedIds.has(student.student_id)}
-                isDisabled={isCheckboxDisabled(student)}
-                onToggle={() => toggleStudent(student.student_id)}
-                onClick={() => handleStudentClick(student)}
-                tooltip={
-                  isGradableStudent(student)
-                    ? t("assignmentDetail.sheet.checkHomework", "批改作業")
-                    : undefined
-                }
-              />
-            ))}
-          </div>
-        )}
+    // ---- Select all checkbox state ----
+    const selectAllState = useMemo(() => {
+      if (!isCheckboxActive) return "hidden";
+      const toggleable = filteredStudents.filter((s) => !isCheckboxDisabled(s));
+      if (toggleable.length === 0) return "disabled";
+      const allSelected = toggleable.every((s) =>
+        selectedIds.has(s.student_id),
+      );
+      return allSelected ? "checked" : "unchecked";
+    }, [isCheckboxActive, filteredStudents, selectedIds, isCheckboxDisabled]);
 
-        {/* Save / Cancel bar (after student list, before legend) */}
-        {hasChanges && (
-          <div className="flex items-center justify-between mt-3 mb-2">
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              {activeTab === "assigned"
-                ? t(
-                    "assignmentDetail.sheet.removedCount",
-                    "移除 {{count}} 位",
-                    { count: selectedIds.size },
-                  )
-                : t(
-                    "assignmentDetail.sheet.addedCount",
-                    "新增 {{count}} 位",
-                    { count: selectedIds.size },
+    return (
+      <div
+        className={`border-t dark:border-gray-700 pt-4 ${scrollable ? "flex flex-col h-full" : ""}`}
+      >
+        {/* Header: title + sort + view toggle */}
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 shrink-0">
+            {t("assignmentDetail.sheet.studentProgress", "學生完成狀況")}
+          </h4>
+
+          {/* Sort segmented buttons */}
+          <div className="flex items-center rounded-md overflow-hidden border border-gray-200 dark:border-gray-600">
+            {sortOptions.map((opt, i) => {
+              const isActive = sortMode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    if (isActive) {
+                      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                    } else {
+                      setSortMode(opt.value);
+                      setSortDirection("asc");
+                    }
+                  }}
+                  className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+                    isActive
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  } ${i > 0 ? "border-l border-gray-200 dark:border-gray-600" : ""}`}
+                >
+                  {opt.label}
+                  {isActive && (
+                    <span className="ml-0.5">
+                      {sortDirection === "asc" ? "↑" : "↓"}
+                    </span>
                   )}
-            </span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleCancel}
-                disabled={saving}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-              >
-                <X className="h-3.5 w-3.5" />
-                {t("common.cancel", "取消")}
-              </button>
-              <button
-                type="button"
-                onClick={onSave}
-                disabled={saving}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
-              >
-                {saving ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Save className="h-3.5 w-3.5" />
-                )}
-                {t("assignmentDetail.sheet.saveStudents", "儲存派發")}
-              </button>
-            </div>
+                </button>
+              );
+            })}
           </div>
-        )}
 
-        {/* Status legend */}
-        <StatusLegend />
+          {/* View mode toggle */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              className={`p-1 rounded transition-colors ${
+                viewMode === "grid"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+              }`}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("list")}
+              className={`p-1 rounded transition-colors ${
+                viewMode === "list"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+              }`}
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Tabs + Select All */}
+        <div className="flex items-center border-b border-gray-200 dark:border-gray-700 mb-3">
+          {tabs.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setActiveTab(tab.value)}
+              className={`flex-1 text-center py-2 text-xs font-medium border-b-2 transition-colors ${
+                activeTab === tab.value
+                  ? "border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20"
+                  : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+              }`}
+            >
+              {tab.label}
+              {tab.count != null && (
+                <span className="ml-1 text-[10px] text-gray-400">
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+
+          {/* Select All */}
+          {selectAllState !== "hidden" && (
+            <button
+              type="button"
+              onClick={handleSelectAll}
+              disabled={selectAllState === "disabled"}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 shrink-0 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-40"
+            >
+              {selectAllState === "checked" ? (
+                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold">
+                  ✓
+                </span>
+              ) : (
+                <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
+              )}
+              {t("assignmentDetail.sheet.selectAll", "全選")}
+            </button>
+          )}
+        </div>
+
+        {/* Content: loading / empty / grid / list */}
+        {/* Data + legend area */}
+        <div
+          ref={ref}
+          className={scrollable ? "flex-1 min-h-0 overflow-y-auto" : ""}
+        >
+          {loading ? (
+            <div className="flex items-center justify-center py-8 text-gray-400">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          ) : sortedStudents.length === 0 ? (
+            <p className="text-sm text-gray-400 py-6 text-center">
+              {t("assignmentDetail.sheet.noStudents", "尚無學生資料")}
+            </p>
+          ) : viewMode === "grid" ? (
+            <div className="grid grid-cols-5 gap-2 py-1 items-start">
+              {sortedStudents.map((student) => (
+                <StudentCard
+                  key={student.student_id}
+                  student={student}
+                  isSelected={selectedIds.has(student.student_id)}
+                  isDisabled={isCheckboxDisabled(student)}
+                  onToggle={() => toggleStudent(student.student_id)}
+                  onClick={() => handleStudentClick(student)}
+                  tooltip={
+                    isGradableStudent(student)
+                      ? t("assignmentDetail.sheet.checkHomework", "批改作業")
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              {sortedStudents.map((student) => (
+                <StudentRow
+                  key={student.student_id}
+                  student={student}
+                  isEditing={isCheckboxActive}
+                  isSelected={selectedIds.has(student.student_id)}
+                  isDisabled={isCheckboxDisabled(student)}
+                  onToggle={() => toggleStudent(student.student_id)}
+                  onClick={() => handleStudentClick(student)}
+                  tooltip={
+                    isGradableStudent(student)
+                      ? t("assignmentDetail.sheet.checkHomework", "批改作業")
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Save / Cancel bar (after student list, before legend) */}
+          {hasChanges && (
+            <div className="flex items-center justify-between mt-3 mb-2">
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {activeTab === "assigned"
+                  ? t(
+                      "assignmentDetail.sheet.removedCount",
+                      "移除 {{count}} 位",
+                      { count: selectedIds.size },
+                    )
+                  : t(
+                      "assignmentDetail.sheet.addedCount",
+                      "新增 {{count}} 位",
+                      { count: selectedIds.size },
+                    )}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  {t("common.cancel", "取消")}
+                </button>
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
+                >
+                  {saving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  {t("assignmentDetail.sheet.saveStudents", "儲存派發")}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Status legend */}
+          <StatusLegend />
+        </div>
       </div>
-    </div>
-  );
+    );
   },
 );
 

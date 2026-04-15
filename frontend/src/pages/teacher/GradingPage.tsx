@@ -869,7 +869,9 @@ export default function GradingPage() {
                   return (
                     <button
                       key={student.student_id}
-                      onClick={() => isClickable && handleStudentSelect(student)}
+                      onClick={() =>
+                        isClickable && handleStudentSelect(student)
+                      }
                       disabled={!isClickable}
                       className={`w-full text-left px-2 py-1.5 rounded-md text-sm transition-colors ${
                         !isClickable
