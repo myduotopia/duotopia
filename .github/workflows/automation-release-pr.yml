@@ -276,6 +276,7 @@ jobs:
         with:
           ref: ${{ needs.create-release-pr.outputs.branch }}
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT }}
 
       - name: Configure git
         run: |
