@@ -69,6 +69,7 @@ export function TugOfWarGame({
   });
   // Show rotate prompt when portrait OR viewport too narrow for three-column layout
   const isPortrait = viewport.height > viewport.width || viewport.width < 768;
+  const [portraitDismissed, setPortraitDismissed] = useState(false);
 
   // Viewport size tracking
   useEffect(() => {
@@ -155,7 +156,8 @@ export function TugOfWarGame({
     handleAnswer,
   } = useGameLogic(vocabItems);
 
-  const allHaveImages = vocabItems.every((v) => !!v.image_url);
+  const hasEnoughImages =
+    vocabItems.filter((v) => !!v.image_url).length >= 4;
 
   // Auto-start when vocab loads
   useEffect(() => {
@@ -276,13 +278,20 @@ export function TugOfWarGame({
   return (
     <div className="w-full h-full overflow-hidden px-2 py-2 flex flex-col gap-2">
       {/* Portrait orientation overlay */}
-      {isPortrait && (
+      {isPortrait && !portraitDismissed && (
         <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white">
           <Smartphone className="h-16 w-16 mb-4 rotate-90" />
           <p className="text-lg font-medium">{t("tugOfWar.rotateDevice")}</p>
           <p className="text-sm text-white/60 mt-2">
             {t("tugOfWar.rotateDeviceHint")}
           </p>
+          <Button
+            variant="ghost"
+            className="mt-6 text-white/70 hover:text-white hover:bg-white/10"
+            onClick={() => setPortraitDismissed(true)}
+          >
+            {t("tugOfWar.continueAnyway", "繼續遊玩")}
+          </Button>
         </div>
       )}
 
@@ -308,7 +317,7 @@ export function TugOfWarGame({
           <DropdownMenuContent className="bg-white dark:bg-gray-900 border shadow-lg">
             {QUESTION_MODES.map((mode) => {
               const isDisabled =
-                mode.value === "image_to_english" && !allHaveImages;
+                mode.value === "image_to_english" && !hasEnoughImages;
               return (
                 <DropdownMenuItem
                   key={mode.value}
@@ -320,6 +329,14 @@ export function TugOfWarGame({
                       : isDisabled
                         ? "opacity-40 cursor-not-allowed"
                         : ""
+                  }
+                  title={
+                    isDisabled
+                      ? t(
+                          "tugOfWar.imagesModeRequirement",
+                          "需要至少 4 個單字有圖片",
+                        )
+                      : undefined
                   }
                 >
                   {t(mode.labelKey)}
