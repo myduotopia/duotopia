@@ -156,8 +156,7 @@ export function TugOfWarGame({
     handleAnswer,
   } = useGameLogic(vocabItems);
 
-  const hasEnoughImages =
-    vocabItems.filter((v) => !!v.image_url).length >= 4;
+  const hasEnoughImages = vocabItems.filter((v) => !!v.image_url).length >= 4;
 
   // Auto-start when vocab loads
   useEffect(() => {
