@@ -152,26 +152,26 @@ export default function AssignmentStickyNote({
     el.style.overflow = "visible";
     el.style.flex = "none";
 
-    let canvas: HTMLCanvasElement;
     try {
-      canvas = await html2canvas(el, {
+      const canvas = await html2canvas(el, {
         backgroundColor: "#ffffff",
         scale: 2,
         useCORS: true,
       });
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${currentAssignment?.title || "assignment"}_${t("stickyNote.submissionStatus")}.png`;
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+    } catch {
+      toast.error(t("stickyNote.downloadError", "下載失敗"));
     } finally {
       el.style.cssText = origStyle;
     }
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${currentAssignment?.title || "assignment"}_${t("stickyNote.submissionStatus")}.png`;
-      link.click();
-      URL.revokeObjectURL(url);
-    });
   };
 
   // Print via new window (uses shared utility)

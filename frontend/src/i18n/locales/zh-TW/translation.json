@@ -2354,6 +2354,8 @@
     "print": "列印",
     "batchPrint": "批次列印",
     "batchPrintError": "批次列印失敗",
+    "saveError": "儲存失敗",
+    "downloadError": "下載失敗",
     "copyright": "由 Duotopia 產生 © duotopia.com",
     "status": {
       "notStarted": "未開始",
