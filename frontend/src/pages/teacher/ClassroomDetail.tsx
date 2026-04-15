@@ -432,7 +432,10 @@ export default function ClassroomDetail({
           apiClient.patch(`/api/teachers/assignments/${id}/archive`),
         ),
       );
-      const failed = results.filter((r) => r.status === "rejected").length;
+      const failedIndices = results
+        .map((r, i) => (r.status === "rejected" ? i : -1))
+        .filter((i) => i >= 0);
+      const failed = failedIndices.length;
       const succeeded = results.length - failed;
       if (failed === 0) {
         toast.success(
@@ -440,6 +443,7 @@ export default function ClassroomDetail({
             count: succeeded,
           }),
         );
+        setSelectedAssignments(new Set());
       } else if (succeeded > 0) {
         toast.warning(
           t("classroomDetail.messages.batchArchivePartial", {
@@ -447,11 +451,14 @@ export default function ClassroomDetail({
             failed,
           }),
         );
+        // Keep failed IDs selected for easy retry
+        setSelectedAssignments(new Set(failedIndices.map((i) => ids[i])));
       } else {
         toast.error(t("classroomDetail.messages.batchArchiveFailed"));
       }
-      setSelectedAssignments(new Set());
       await fetchAssignments();
+    } catch {
+      toast.error(t("classroomDetail.messages.batchArchiveFailed"));
     } finally {
       setBatchArchiving(false);
     }
