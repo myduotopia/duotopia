@@ -329,7 +329,7 @@ export default function ClassroomDetail({
     assignmentPage * assignmentPageSize,
   );
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when filters or tab changes
   useEffect(() => {
     setAssignmentPage(1);
   }, [
@@ -339,6 +339,7 @@ export default function ClassroomDetail({
     filterDateTo,
     filterOverdue,
     filterStatus,
+    showArchived,
   ]);
 
   const toggleAssignmentSelection = (assignmentId: number) => {
