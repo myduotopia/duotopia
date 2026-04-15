@@ -728,7 +728,7 @@ function ExpandArea({
                       : undefined
                   }
                   onAssign={
-                    onAssignContent
+                    onAssignContent && contentsLessonId !== 0
                       ? () => onAssignContent(content, contentsLessonId)
                       : undefined
                   }
