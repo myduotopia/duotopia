@@ -189,6 +189,10 @@ class QuotaService:
         檢查教師是否有 AI 分析額度（舊版：基於教師身份判斷）。
         用於教師端 dashboard 等不需要作業 context 的場景。
 
+        規則：
+        - 任一 active 機構有剩餘點數 → True
+        - 所有機構都沒點數（或無機構）→ fallback 檢查個人配額
+
         注意：學生端應使用 check_ai_analysis_availability_by_assignment，
         根據作業所屬班級判斷。
         """
@@ -196,16 +200,16 @@ class QuotaService:
         if not teacher:
             return False
 
-        teacher_org = (
+        teacher_orgs = (
             db.query(TeacherOrganization)
             .filter(
                 TeacherOrganization.teacher_id == teacher_id,
                 TeacherOrganization.is_active.is_(True),
             )
-            .first()
+            .all()
         )
 
-        if teacher_org:
+        for teacher_org in teacher_orgs:
             org = (
                 db.query(Organization)
                 .filter(
@@ -214,9 +218,8 @@ class QuotaService:
                 )
                 .first()
             )
-            if org:
-                remaining = org.total_points - org.used_points
-                return remaining > 0
+            if org and (org.total_points - org.used_points) > 0:
+                return True
 
         return QuotaService._get_total_remaining(teacher, db) > 0
 
