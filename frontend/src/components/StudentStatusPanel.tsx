@@ -464,7 +464,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       assignmentId,
       classroomId,
       practiceMode,
-      isEditingStudents: _isEditingStudents,
+      isEditingStudents,
       onEditingStudentsChange,
       onStudentIdsChanged,
       onSave,
@@ -474,7 +474,6 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     },
     ref,
   ) {
-    void _isEditingStudents;
     const { t } = useTranslation();
 
     const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -484,6 +483,13 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
     const isGradable = practiceMode ? GRADABLE_MODES.has(practiceMode) : false;
+
+    // Clear selection when parent resets editing state (e.g. after save)
+    useEffect(() => {
+      if (!isEditingStudents) {
+        setSelectedIds(new Set());
+      }
+    }, [isEditingStudents]);
 
     // Reset marked students when switching tabs
     useEffect(() => {

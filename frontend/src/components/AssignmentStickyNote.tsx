@@ -83,7 +83,7 @@ export default function AssignmentStickyNote({
         progressArray.map(
           (p: Record<string, unknown>) =>
             ({
-              student_id: (p.student_id as number) || 0,
+              student_id: (p.student_id as number) || undefined,
               student_number: (p.student_number as number) || 0,
               student_name:
                 (p.student_name as string) || (p.name as string) || "",
