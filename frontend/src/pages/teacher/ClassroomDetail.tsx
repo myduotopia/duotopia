@@ -2799,12 +2799,15 @@ export default function ClassroomDetail({
                   {t("classroomDetail.labels.editContent")}
                 </h2>
                 <div className="flex items-center gap-2">
-                  {(selectedContent.type?.toLowerCase() === "reading_assessment" ||
-                    selectedContent.type?.toLowerCase() === "example_sentences") && (
+                  {(selectedContent.type?.toLowerCase() ===
+                    "reading_assessment" ||
+                    selectedContent.type?.toLowerCase() ===
+                      "example_sentences") && (
                     <RefSaveButton panelRef={readingPanelRef} />
                   )}
                   {(selectedContent.type?.toLowerCase() === "sentence_making" ||
-                    selectedContent.type?.toLowerCase() === "vocabulary_set") && (
+                    selectedContent.type?.toLowerCase() ===
+                      "vocabulary_set") && (
                     <RefSaveButton panelRef={vocabPanelRef} />
                   )}
                   <Button
