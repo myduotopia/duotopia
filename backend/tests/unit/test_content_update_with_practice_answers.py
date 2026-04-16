@@ -229,9 +229,9 @@ class TestUpdateContentWithPracticeAnswers:
             },
         )
 
-        assert response.status_code == 200, (
-            f"Expected 200, got {response.status_code}: {response.json()}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200, got {response.status_code}: {response.json()}"
         data = response.json()
         assert data["title"] == "Word Selection Updated"
         assert len(data["items"]) == 3
