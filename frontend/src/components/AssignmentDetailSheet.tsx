@@ -37,6 +37,7 @@ import { Assignment } from "@/types";
 import StudentStatusPanel, {
   StudentProgress,
 } from "@/components/StudentStatusPanel";
+import { useSidebar } from "@/contexts/SidebarContext";
 
 interface AssignmentContent {
   id: number;
@@ -93,6 +94,7 @@ export function AssignmentDetailSheet({
   onAssignmentUpdated,
 }: AssignmentDetailSheetProps) {
   const { t } = useTranslation();
+  const { sidebarWidth } = useSidebar();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -449,7 +451,7 @@ export function AssignmentDetailSheet({
                   className="gap-1.5 mr-6"
                 >
                   <Pencil className="h-3.5 w-3.5" />
-                  {t("assignmentDetail.sheet.editButton", "編輯")}
+                  {t("assignmentDetail.sheet.viewDetailsButton", "查看詳情")}
                 </Button>
               )}
             </div>
@@ -1135,16 +1137,17 @@ export function AssignmentDetailSheet({
         </SheetContent>
       </Sheet>
 
-      {/* Content Edit - Full-width right-side sheet */}
+      {/* Content Edit - Right-side sheet with sidebar offset */}
       {editingContentId && contentDetails[editingContentId] && (
-        <div className="fixed inset-0 z-[60] flex">
-          {/* Backdrop */}
+        <>
           <div
-            className="flex-shrink-0 bg-black/50"
+            className="fixed inset-0 z-[60] bg-black/50"
             onClick={() => setEditingContentId(null)}
           />
-          {/* Panel */}
-          <div className="flex-1 bg-white flex flex-col min-w-0">
+          <div
+            className="fixed top-0 right-0 h-full z-[61] bg-white shadow-xl border-l flex flex-col"
+            style={{ left: `${sidebarWidth}px` }}
+          >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
               <div>
@@ -1240,7 +1243,7 @@ export function AssignmentDetailSheet({
               })()}
             </div>
           </div>
-        </div>
+        </>
       )}
     </>
   );
