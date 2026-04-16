@@ -19,8 +19,13 @@ import { ProgramDialog } from "@/components/ProgramDialog";
 import { LessonDialog } from "@/components/LessonDialog";
 import CreateProgramDialog from "@/components/CreateProgramDialog";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
-import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
-import VocabularySetPanel from "@/components/VocabularySetPanel";
+import ReadingAssessmentPanel, {
+  type ReadingAssessmentPanelHandle,
+} from "@/components/ReadingAssessmentPanel";
+import VocabularySetPanel, {
+  type VocabularySetPanelHandle,
+} from "@/components/VocabularySetPanel";
+import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import ContentCopyDialog from "@/components/ContentCopyDialog";
 import { AssignmentDialog, CartItem } from "@/components/AssignmentDialog";
 import { InstantPracticeDialog } from "@/components/InstantPracticeDialog";
@@ -466,6 +471,8 @@ export default function ClassroomDetail({
   };
 
   const hasFetchedData = useRef<string | null>(null);
+  const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
+  const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
 
   useEffect(() => {
     const key = `${id}-${isTemplateMode}`;
@@ -2791,23 +2798,32 @@ export default function ClassroomDetail({
                 <h2 className="text-lg font-semibold text-gray-900">
                   {t("classroomDetail.labels.editContent")}
                 </h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={closePanel}
-                  className="hover:bg-gray-200"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  {(selectedContent.type?.toLowerCase() === "reading_assessment" ||
+                    selectedContent.type?.toLowerCase() === "example_sentences") && (
+                    <RefSaveButton panelRef={readingPanelRef} />
+                  )}
+                  {(selectedContent.type?.toLowerCase() === "sentence_making" ||
+                    selectedContent.type?.toLowerCase() === "vocabulary_set") && (
+                    <RefSaveButton panelRef={vocabPanelRef} />
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={closePanel}
+                    className="hover:bg-gray-200"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
 
               {/* Panel Content */}
               <div className="flex-1 overflow-y-auto p-4">
                 {selectedContent.type?.toLowerCase() === "reading_assessment" ||
                 selectedContent.type?.toLowerCase() === "example_sentences" ? (
-                  /* ReadingAssessmentPanel has its own save button */
-                  /* EXAMPLE_SENTENCES uses the same panel as READING_ASSESSMENT */
                   <ReadingAssessmentPanel
+                    ref={readingPanelRef}
                     content={selectedContent as ReadingAssessmentContent}
                     editingContent={
                       editingContent as ReadingAssessmentContent | undefined
@@ -2821,8 +2837,8 @@ export default function ClassroomDetail({
                   />
                 ) : selectedContent.type?.toLowerCase() === "sentence_making" ||
                   selectedContent.type?.toLowerCase() === "vocabulary_set" ? (
-                  /* VocabularySetPanel has its own save button */
                   <VocabularySetPanel
+                    ref={vocabPanelRef}
                     content={selectedContent as ReadingAssessmentContent}
                     editingContent={
                       editingContent as ReadingAssessmentContent | undefined
