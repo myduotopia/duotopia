@@ -7,19 +7,17 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
-import VocabularySetPanel from "@/components/VocabularySetPanel";
+import ReadingAssessmentPanel, {
+  type ReadingAssessmentPanelHandle,
+} from "@/components/ReadingAssessmentPanel";
+import VocabularySetPanel, {
+  type VocabularySetPanelHandle,
+} from "@/components/VocabularySetPanel";
+import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
@@ -115,6 +113,8 @@ export function AssignmentDetailSheet({
     Record<number, ContentDetail>
   >({});
   const [editingContentId, setEditingContentId] = useState<number | null>(null);
+  const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
+  const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
   const loadingRef = useRef<Set<number>>(new Set());
 
   // Detail data from API (includes advanced settings)
@@ -1135,28 +1135,55 @@ export function AssignmentDetailSheet({
         </SheetContent>
       </Sheet>
 
-      {/* Content Edit Dialog */}
+      {/* Content Edit - Full-width right-side sheet */}
       {editingContentId && contentDetails[editingContentId] && (
-        <Dialog
-          open={editingContentId !== null}
-          onOpenChange={(dialogOpen) =>
-            !dialogOpen && setEditingContentId(null)
-          }
-        >
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {t("assignmentDetail.labels.editContent") || "編輯作業內容"}
-              </DialogTitle>
-              <p className="text-sm text-amber-600 mt-2">
-                ⚠️{" "}
-                {t(
-                  "assignmentDetail.sheet.editContentWarning",
-                  "注意：此為作業副本。刪除已有學生進度的題目將被阻止。",
-                )}
-              </p>
-            </DialogHeader>
-            <div className="mt-4">
+        <div className="fixed inset-0 z-[60] flex">
+          {/* Backdrop */}
+          <div
+            className="flex-shrink-0 bg-black/50"
+            onClick={() => setEditingContentId(null)}
+          />
+          {/* Panel */}
+          <div className="flex-1 bg-white flex flex-col min-w-0">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {t("assignmentDetail.labels.editContent") || "編輯作業內容"}
+                </h2>
+                <p className="text-sm text-amber-600 mt-1">
+                  ⚠️{" "}
+                  {t(
+                    "assignmentDetail.sheet.editContentWarning",
+                    "注意：此為作業副本。刪除已有學生進度的題目將被阻止。",
+                  )}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const contentType =
+                    contentDetails[editingContentId]?.type?.toUpperCase();
+                  const isVocabSet =
+                    contentType === "VOCABULARY_SET" ||
+                    contentType === "SENTENCE_MAKING";
+                  return isVocabSet ? (
+                    <RefSaveButton panelRef={vocabPanelRef} />
+                  ) : (
+                    <RefSaveButton panelRef={readingPanelRef} />
+                  );
+                })()}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditingContentId(null)}
+                  className="hover:bg-gray-200"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
               {(() => {
                 const contentType =
                   contentDetails[editingContentId]?.type?.toUpperCase();
@@ -1180,6 +1207,7 @@ export function AssignmentDetailSheet({
                 if (isVocabSet) {
                   return (
                     <VocabularySetPanel
+                      ref={vocabPanelRef}
                       content={{
                         id: editingContentId,
                         title: contentDetails[editingContentId].title || "",
@@ -1196,6 +1224,7 @@ export function AssignmentDetailSheet({
 
                 return (
                   <ReadingAssessmentPanel
+                    ref={readingPanelRef}
                     content={{
                       id: editingContentId,
                       title: contentDetails[editingContentId].title || "",
@@ -1210,16 +1239,8 @@ export function AssignmentDetailSheet({
                 );
               })()}
             </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setEditingContentId(null)}
-              >
-                {t("common.cancel")}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          </div>
+        </div>
       )}
     </>
   );
