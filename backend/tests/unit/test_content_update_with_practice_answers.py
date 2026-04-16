@@ -191,19 +191,32 @@ def auth_token():
     return response.json()["access_token"]
 
 
+@pytest.fixture
+def content_id():
+    """Get the test content ID by querying the DB directly (order-independent)."""
+    db = TestingSessionLocal()
+    content = (
+        db.query(Content).filter(Content.type == ContentType.VOCABULARY_SET).first()
+    )
+    cid = content.id
+    db.close()
+    return cid
+
+
 # ---------- Tests ----------
 class TestUpdateContentWithPracticeAnswers:
     """Issue #578: 作業副本編輯後儲存失敗"""
 
-    def test_update_content_items_with_existing_practice_answers(self, auth_token):
+    def test_update_content_items_with_existing_practice_answers(
+        self, auth_token, content_id
+    ):
         """Updating content items should succeed even when practice_answers exist.
 
         Before the fix, this returned 409 because DELETE FROM content_items
         violated the FK constraint from practice_answers.
         """
         db = TestingSessionLocal()
-        content = db.query(Content).filter(Content.title == "Word Selection Test").one()
-        content_id = content.id
+        content = db.query(Content).filter(Content.id == content_id).one()
 
         # Verify practice_answers exist before update
         item_ids = [item.id for item in content.content_items]
@@ -246,13 +259,13 @@ class TestUpdateContentWithPracticeAnswers:
         assert remaining_pa == 0, "Old practice_answers should be deleted"
         db.close()
 
-    def test_update_content_title_only_preserves_practice_answers(self, auth_token):
-        """Updating only the title (no items change) should not delete practice data."""
+    def test_update_title_only_does_not_replace_items(self, auth_token, content_id):
+        """Updating only the title (no items in payload) should not replace items."""
+        # Get current item count before title-only update
         db = TestingSessionLocal()
-        content = (
-            db.query(Content).filter(Content.title == "Word Selection Updated").one()
+        items_before = (
+            db.query(ContentItem).filter(ContentItem.content_id == content_id).count()
         )
-        content_id = content.id
         db.close()
 
         response = client.put(
@@ -264,5 +277,4 @@ class TestUpdateContentWithPracticeAnswers:
         assert response.status_code == 200
         data = response.json()
         assert data["title"] == "Title Only Change"
-        # Items should remain unchanged
-        assert len(data["items"]) == 3
+        assert len(data["items"]) == items_before

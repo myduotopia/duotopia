@@ -48,4 +48,27 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    pass
+    # Restore original FK without CASCADE
+    op.execute(
+        """
+        DO $$ BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conname = 'practice_answers_content_item_id_fkey'
+            ) THEN
+                ALTER TABLE practice_answers
+                    DROP CONSTRAINT practice_answers_content_item_id_fkey;
+            END IF;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conname = 'practice_answers_content_item_id_fkey'
+            ) THEN
+                ALTER TABLE practice_answers
+                    ADD CONSTRAINT practice_answers_content_item_id_fkey
+                    FOREIGN KEY (content_item_id)
+                    REFERENCES content_items(id);
+            END IF;
+        END $$;
+    """
+    )

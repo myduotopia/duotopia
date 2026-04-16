@@ -426,6 +426,7 @@ async def update_content(
         # 先刪除參照 content_items 的 practice_answers（老師修改內容後舊答題紀錄失效）
         existing_item_ids = [item.id for item in existing_items]
         if existing_item_ids:
+            # Lazy import to avoid circular dependency (progress → program → content)
             from models.progress import PracticeAnswer
 
             db.query(PracticeAnswer).filter(
