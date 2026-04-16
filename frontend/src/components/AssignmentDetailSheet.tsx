@@ -451,7 +451,7 @@ export function AssignmentDetailSheet({
                   className="gap-1.5 mr-6"
                 >
                   <Pencil className="h-3.5 w-3.5" />
-                  {t("assignmentDetail.sheet.viewDetailsButton", "查看詳情")}
+                  {t("assignmentDetail.sheet.editButton", "編輯")}
                 </Button>
               )}
             </div>
