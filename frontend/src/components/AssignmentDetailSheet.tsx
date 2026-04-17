@@ -119,6 +119,16 @@ export function AssignmentDetailSheet({
   const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
   const loadingRef = useRef<Set<number>>(new Set());
 
+  // When content edit overlay is open, override Radix Sheet's body pointer-events lock
+  useEffect(() => {
+    if (editingContentId) {
+      document.body.style.pointerEvents = "auto";
+      return () => {
+        document.body.style.pointerEvents = "";
+      };
+    }
+  }, [editingContentId]);
+
   // Detail data from API (includes advanced settings)
   const [detailData, setDetailData] = useState<Record<string, unknown> | null>(
     null,
