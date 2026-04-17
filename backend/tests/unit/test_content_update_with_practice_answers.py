@@ -8,6 +8,10 @@ without ON DELETE CASCADE.
 
 The fix: content_ops.update_content now explicitly deletes practice_answers
 before deleting content_items.
+
+Note: Uses SQLite for testing. This validates the application-level
+pre-deletion logic but does NOT test the Alembic migration or the
+ON DELETE CASCADE FK behavior (which require PostgreSQL).
 """
 
 import pytest
