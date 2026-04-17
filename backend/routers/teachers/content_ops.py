@@ -435,11 +435,15 @@ async def update_content(
             ).delete(synchronize_session=False)
 
         # 使用參數化查詢刪除所有現有的 ContentItem，確保唯一約束不衝突
-        db.execute(
-            text("DELETE FROM content_items WHERE content_id = :content_id"),
-            {"content_id": content.id},
-        )
-        db.flush()
+        try:
+            db.execute(
+                text("DELETE FROM content_items WHERE content_id = :content_id"),
+                {"content_id": content.id},
+            )
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="無法刪除內容項目，因為存在相關引用")
 
         # 創建新的 ContentItem
         for idx, item_data in enumerate(update_data.items):

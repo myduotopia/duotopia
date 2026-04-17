@@ -14,6 +14,7 @@ pre-deletion logic but does NOT test the Alembic migration or the
 ON DELETE CASCADE FK behavior (which require PostgreSQL).
 """
 
+import os
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -183,6 +184,9 @@ def setup_database():
     yield
 
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    if os.path.exists("./test_content_update_practice.db"):
+        os.remove("./test_content_update_practice.db")
 
 
 @pytest.fixture

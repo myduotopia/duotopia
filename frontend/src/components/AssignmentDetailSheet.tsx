@@ -443,6 +443,12 @@ export function AssignmentDetailSheet({
         <SheetContent
           side="right"
           className="w-full sm:max-w-lg md:max-w-xl lg:max-w-2xl p-0 flex flex-col"
+          onEscapeKeyDown={(e) => {
+            if (editingContentId) {
+              e.preventDefault();
+              setEditingContentId(null);
+            }
+          }}
         >
           {/* Header */}
           <SheetHeader className="px-6 pt-6 pb-4 border-b dark:border-gray-700">
@@ -1179,13 +1185,13 @@ export function AssignmentDetailSheet({
                   />
                   {/* Panel */}
                   <div
-                    className="absolute top-0 right-0 h-full bg-white shadow-xl border-l flex flex-col"
+                    className="absolute top-0 right-0 h-full bg-white dark:bg-gray-950 shadow-xl border-l flex flex-col"
                     style={{ left: `${sidebarWidth}px` }}
                   >
                     {/* Header */}
-                    <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
+                    <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50 dark:bg-gray-800">
                       <div>
-                        <h2 className="text-lg font-semibold text-gray-900">
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                           {t("assignmentDetail.labels.editContent") ||
                             "編輯作業內容"}
                         </h2>
