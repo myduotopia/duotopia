@@ -2981,7 +2981,8 @@
       "instructionsPlaceholder": "Enter assignment instructions...",
       "noInstructions": "No instructions",
       "notSet": "Not set",
-      "people": "people"
+      "people": "people",
+      "editContent": "Edit Assignment Content"
     },
     "sheet": {
       "viewTitle": "Assignment Details",

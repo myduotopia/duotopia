@@ -1353,7 +1353,7 @@ export default function TeacherAssignmentDetailPage() {
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
-                  {t("assignmentDetail.labels.editContent") || "編輯作業內容"}
+                  {t("assignmentDetail.labels.editContent", "編輯作業內容")}
                 </DialogTitle>
                 <p className="text-sm text-amber-600 mt-2">
                   ⚠️ 注意：此為作業副本。刪除已有學生進度的題目將被阻止。

@@ -1192,8 +1192,10 @@ export function AssignmentDetailSheet({
                     <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50 dark:bg-gray-800">
                       <div>
                         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                          {t("assignmentDetail.labels.editContent") ||
-                            "編輯作業內容"}
+                          {t(
+                            "assignmentDetail.labels.editContent",
+                            "編輯作業內容",
+                          )}
                         </h2>
                         <p className="text-sm text-amber-600 mt-1">
                           ⚠️{" "}
