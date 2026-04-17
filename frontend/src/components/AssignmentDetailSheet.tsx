@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
   Sheet,
@@ -119,22 +120,13 @@ export function AssignmentDetailSheet({
   const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
   const loadingRef = useRef<Set<number>>(new Set());
 
-  // When content edit overlay is open: disable Sheet's focus trap + auto-focus panel
+  // Auto-focus content edit panel so scroll works immediately
   const contentEditPanelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (editingContentId) {
-      // Disable Radix Sheet's pointer-events lock and focus trap
-      const style = document.createElement("style");
-      style.setAttribute("data-content-edit-override", "true");
-      style.textContent =
-        "body { pointer-events: auto !important; } [data-radix-focus-guard] { display: none !important; }";
-      document.head.appendChild(style);
       requestAnimationFrame(() => {
         contentEditPanelRef.current?.focus();
       });
-      return () => {
-        style.remove();
-      };
     }
   }, [editingContentId]);
 
@@ -1156,120 +1148,123 @@ export function AssignmentDetailSheet({
         </SheetContent>
       </Sheet>
 
-      {/* Content Edit - Right-side sheet with sidebar offset */}
-      {editingContentId && contentDetails[editingContentId] && (
-        <>
-          <div
-            className="fixed inset-0 z-[60] bg-black/50 pointer-events-auto"
-            role="button"
-            tabIndex={0}
-            aria-label={t("common.close", "關閉")}
-            onClick={() => setEditingContentId(null)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setEditingContentId(null);
-            }}
-          />
-          {(() => {
-            const editingDetail = contentDetails[editingContentId];
-            const isVocabSet = ["VOCABULARY_SET", "SENTENCE_MAKING"].includes(
-              editingDetail?.type?.toUpperCase() ?? "",
-            );
-            const handleEditSave = async () => {
-              const savedContentId = editingContentId;
-              setEditingContentId(null);
-              if (savedContentId) {
-                setContentDetails((prev) => {
-                  const updated = { ...prev };
-                  delete updated[savedContentId];
-                  return updated;
-                });
-                await loadContentDetail(savedContentId, true);
-              }
-            };
+      {/* Content Edit - Portaled to document.body to escape Radix Sheet's focus trap */}
+      {editingContentId &&
+        contentDetails[editingContentId] &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[60] bg-black/30"
+              role="button"
+              tabIndex={0}
+              aria-label={t("common.close", "關閉")}
+              onClick={() => setEditingContentId(null)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setEditingContentId(null);
+              }}
+            />
+            {(() => {
+              const editingDetail = contentDetails[editingContentId];
+              const isVocabSet = ["VOCABULARY_SET", "SENTENCE_MAKING"].includes(
+                editingDetail?.type?.toUpperCase() ?? "",
+              );
+              const handleEditSave = async () => {
+                const savedContentId = editingContentId;
+                setEditingContentId(null);
+                if (savedContentId) {
+                  setContentDetails((prev) => {
+                    const updated = { ...prev };
+                    delete updated[savedContentId];
+                    return updated;
+                  });
+                  await loadContentDetail(savedContentId, true);
+                }
+              };
 
-            return (
-              <div
-                ref={contentEditPanelRef}
-                tabIndex={-1}
-                className="fixed top-0 right-0 h-full z-[61] bg-white shadow-xl border-l flex flex-col pointer-events-auto outline-none"
-                style={{ left: `${sidebarWidth}px` }}
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      {t("assignmentDetail.labels.editContent") ||
-                        "編輯作業內容"}
-                    </h2>
-                    <p className="text-sm text-amber-600 mt-1">
-                      ⚠️{" "}
-                      {t(
-                        "assignmentDetail.sheet.editContentWarning",
-                        "注意：此為作業副本。刪除已有學生進度的題目將被阻止。",
-                      )}
-                    </p>
+              return (
+                <div
+                  ref={contentEditPanelRef}
+                  tabIndex={-1}
+                  className="fixed top-0 right-0 h-full z-[61] bg-white shadow-xl border-l flex flex-col pointer-events-auto outline-none"
+                  style={{ left: `${sidebarWidth}px` }}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900">
+                        {t("assignmentDetail.labels.editContent") ||
+                          "編輯作業內容"}
+                      </h2>
+                      <p className="text-sm text-amber-600 mt-1">
+                        ⚠️{" "}
+                        {t(
+                          "assignmentDetail.sheet.editContentWarning",
+                          "注意：此為作業副本。刪除已有學生進度的題目將被阻止。",
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditingContentId(null)}
+                      >
+                        {t("common.cancel", "取消")}
+                      </Button>
+                      <RefSaveButton
+                        panelRef={isVocabSet ? vocabPanelRef : readingPanelRef}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditingContentId(null);
+                          onOpenChange(false);
+                        }}
+                        className="hover:bg-gray-200"
+                      >
+                        <X className="h-5 w-5" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditingContentId(null)}
-                    >
-                      {t("common.cancel", "取消")}
-                    </Button>
-                    <RefSaveButton
-                      panelRef={isVocabSet ? vocabPanelRef : readingPanelRef}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setEditingContentId(null);
-                        onOpenChange(false);
-                      }}
-                      className="hover:bg-gray-200"
-                    >
-                      <X className="h-5 w-5" />
-                    </Button>
+                  {/* Content */}
+                  <div className="flex-1 overflow-y-auto p-6">
+                    {isVocabSet ? (
+                      <VocabularySetPanel
+                        ref={vocabPanelRef}
+                        content={{
+                          id: editingContentId,
+                          title: editingDetail.title || "",
+                        }}
+                        editingContent={editingDetail as never}
+                        onUpdateContent={async () => {}}
+                        onSave={handleEditSave}
+                        lessonId={0}
+                        isCreating={false}
+                        isAssignmentCopy={true}
+                      />
+                    ) : (
+                      <ReadingAssessmentPanel
+                        ref={readingPanelRef}
+                        content={{
+                          id: editingContentId,
+                          title: editingDetail.title || "",
+                        }}
+                        editingContent={editingDetail as never}
+                        onUpdateContent={async () => {}}
+                        onSave={handleEditSave}
+                        lessonId={0}
+                        isCreating={false}
+                        isAssignmentCopy={true}
+                      />
+                    )}
                   </div>
                 </div>
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
-                  {isVocabSet ? (
-                    <VocabularySetPanel
-                      ref={vocabPanelRef}
-                      content={{
-                        id: editingContentId,
-                        title: editingDetail.title || "",
-                      }}
-                      editingContent={editingDetail as never}
-                      onUpdateContent={async () => {}}
-                      onSave={handleEditSave}
-                      lessonId={0}
-                      isCreating={false}
-                      isAssignmentCopy={true}
-                    />
-                  ) : (
-                    <ReadingAssessmentPanel
-                      ref={readingPanelRef}
-                      content={{
-                        id: editingContentId,
-                        title: editingDetail.title || "",
-                      }}
-                      editingContent={editingDetail as never}
-                      onUpdateContent={async () => {}}
-                      onSave={handleEditSave}
-                      lessonId={0}
-                      isCreating={false}
-                      isAssignmentCopy={true}
-                    />
-                  )}
-                </div>
-              </div>
-            );
-          })()}
-        </>
-      )}
+              );
+            })()}
+          </>,
+          document.body,
+        )}
     </>
   );
 }
