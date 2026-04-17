@@ -119,21 +119,13 @@ export function AssignmentDetailSheet({
   const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
   const loadingRef = useRef<Set<number>>(new Set());
 
-  // When content edit overlay is open, override Radix Sheet's body pointer-events lock
+  // Auto-focus content edit panel so scroll works immediately
   const contentEditPanelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (editingContentId) {
-      // Radix Sheet sets pointer-events:none on body; override it
-      const style = document.createElement("style");
-      style.textContent = "body { pointer-events: auto !important; }";
-      document.head.appendChild(style);
-      // Auto-focus the panel so scroll works immediately
       requestAnimationFrame(() => {
         contentEditPanelRef.current?.focus();
       });
-      return () => {
-        document.head.removeChild(style);
-      };
     }
   }, [editingContentId]);
 
@@ -447,7 +439,7 @@ export function AssignmentDetailSheet({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet open={open} onOpenChange={onOpenChange} modal={!editingContentId}>
         <SheetContent
           side="right"
           className="w-full sm:max-w-lg md:max-w-xl lg:max-w-2xl p-0 flex flex-col"
