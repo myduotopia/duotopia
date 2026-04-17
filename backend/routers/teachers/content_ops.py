@@ -424,6 +424,7 @@ async def update_content(
                     audio_manager.delete_old_audio(existing_item.audio_url)
 
         # 先刪除參照 content_items 的 practice_answers（老師修改內容後舊答題紀錄失效）
+        # 顯式刪除：防止 ON DELETE CASCADE migration (20260415_1000) 尚未執行的環境
         existing_item_ids = [item.id for item in existing_items]
         if existing_item_ids:
             # Lazy import to avoid circular dependency (progress → program → content)

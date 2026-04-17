@@ -490,6 +490,7 @@ export default function ClassroomDetail({
     }
   }, [id, isTemplateMode]);
 
+  const autoOpenedAssignmentRef = useRef<string | null>(null);
   useEffect(() => {
     // Check URL parameters for tab switching and auto-opening assignment
     const searchParams = new URLSearchParams(location.search);
@@ -498,9 +499,14 @@ export default function ClassroomDetail({
       setActiveTab("assignments");
     }
     const assignmentId = searchParams.get("assignment");
-    if (assignmentId && assignments.length > 0) {
+    if (
+      assignmentId &&
+      assignmentId !== autoOpenedAssignmentRef.current &&
+      assignments.length > 0
+    ) {
       const target = assignments.find((a) => a.id === Number(assignmentId));
       if (target) {
+        autoOpenedAssignmentRef.current = assignmentId;
         setSheetAssignment(target);
         setShowAssignmentSheet(true);
       }
