@@ -1201,17 +1201,16 @@ export function AssignmentDetailSheet({
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditingContentId(null)}
+                    >
+                      {t("common.cancel", "取消")}
+                    </Button>
                     <RefSaveButton
                       panelRef={isVocabSet ? vocabPanelRef : readingPanelRef}
                     />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingContentId(null)}
-                      className="hover:bg-gray-200"
-                    >
-                      <X className="h-5 w-5" />
-                    </Button>
                   </div>
                 </div>
                 {/* Content */}
