@@ -1767,6 +1767,7 @@
         "shuffleQuestionsDesc": "Randomize question order for each practice session",
         "showAnswer": "Show Answer",
         "showAnswerDesc": "Show correct answer after completing each question",
+        "wordSelectionShowAnswerDesc": "Reveal correct answer when student answers wrong",
         "playAudio": "Play Audio",
         "playAudioYes": "Yes (Listening Practice)",
         "playAudioNo": "No (Writing Practice)",

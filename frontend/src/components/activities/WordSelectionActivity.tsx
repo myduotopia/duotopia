@@ -65,6 +65,7 @@ interface WordSelectionActivityProps {
   isPreviewMode?: boolean;
   isDemoMode?: boolean; // Demo mode - uses public demo API endpoints
   initialPracticeMode?: boolean; // True when assignment is already GRADED (re-practice)
+  showAnswer?: boolean; // 答錯後是否揭示正確答案（Issue #538）
   onComplete?: () => void;
 }
 
@@ -73,6 +74,7 @@ export default function WordSelectionActivity({
   isPreviewMode = false,
   isDemoMode = false,
   initialPracticeMode = false,
+  showAnswer = false,
   onComplete,
 }: WordSelectionActivityProps) {
   const { t } = useTranslation();
@@ -369,7 +371,12 @@ export default function WordSelectionActivity({
     setSelectedAnswer(null); // No selection made
     setIsCorrect(false);
     setShowResult(true);
-    setScoreOverlayOpen(true);
+    // Issue #538：答錯且老師開啟「顯示答案」時，跳過「再試一次」動畫避免遮擋揭示的正解
+    if (showAnswer) {
+      setTimeout(() => handleOverlayComplete(), 2000);
+    } else {
+      setScoreOverlayOpen(true);
+    }
     setSubmitting(true);
 
     // Skip API call in preview mode and demo mode, but track local stats (SM-2 simulation)
@@ -414,7 +421,12 @@ export default function WordSelectionActivity({
     setSelectedAnswer(answer);
     setIsCorrect(correct);
     setShowResult(true);
-    setScoreOverlayOpen(true);
+    // Issue #538：答錯且老師開啟「顯示答案」時，跳過「再試一次」動畫避免遮擋揭示的正解
+    if (!correct && showAnswer) {
+      setTimeout(() => handleOverlayComplete(), 2000);
+    } else {
+      setScoreOverlayOpen(true);
+    }
     setSubmitting(true);
 
     // Skip API call in preview mode and demo mode, but track local stats (SM-2 simulation)
@@ -783,8 +795,12 @@ export default function WordSelectionActivity({
           {currentWord.options.map((option, index) => {
             const isSelected = selectedAnswer === option;
             const isCorrectAnswer = option === currentWord.translation;
-            const showCorrect = showResult && isCorrectAnswer && isCorrect;
+            // 答對時揭示；答錯時只有老師開啟 showAnswer 才揭示（Issue #538）
+            const showCorrect =
+              showResult && isCorrectAnswer && (isCorrect || showAnswer);
             const showIncorrect = showResult && isSelected && !isCorrectAnswer;
+            // 答錯後才揭示的正解需要打勾動畫引導注意
+            const animateReveal = showCorrect && !isCorrect;
 
             // 四個選項各用不同淺色
             const optionColors = [
@@ -818,7 +834,13 @@ export default function WordSelectionActivity({
                 disabled={showResult || submitting}
               >
                 {showCorrect && (
-                  <CheckCircle className="h-5 w-5 mr-2 shrink-0 text-green-600 inline" />
+                  <CheckCircle
+                    className={cn(
+                      "h-5 w-5 mr-2 shrink-0 text-green-600 inline",
+                      animateReveal &&
+                        "animate-in zoom-in-50 fade-in duration-500",
+                    )}
+                  />
                 )}
                 {showIncorrect && (
                   <XCircle className="h-5 w-5 mr-2 shrink-0 text-red-600 inline" />
