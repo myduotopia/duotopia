@@ -119,13 +119,22 @@ export function AssignmentDetailSheet({
   const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
   const loadingRef = useRef<Set<number>>(new Set());
 
-  // Auto-focus content edit panel so scroll works immediately
+  // When content edit overlay is open: disable Sheet's focus trap + auto-focus panel
   const contentEditPanelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (editingContentId) {
+      // Disable Radix Sheet's pointer-events lock and focus trap
+      const style = document.createElement("style");
+      style.setAttribute("data-content-edit-override", "true");
+      style.textContent =
+        "body { pointer-events: auto !important; } [data-radix-focus-guard] { display: none !important; }";
+      document.head.appendChild(style);
       requestAnimationFrame(() => {
         contentEditPanelRef.current?.focus();
       });
+      return () => {
+        style.remove();
+      };
     }
   }, [editingContentId]);
 
@@ -439,7 +448,7 @@ export function AssignmentDetailSheet({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange} modal={!editingContentId}>
+      <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
           className="w-full sm:max-w-lg md:max-w-xl lg:max-w-2xl p-0 flex flex-col"
@@ -1211,6 +1220,17 @@ export function AssignmentDetailSheet({
                     <RefSaveButton
                       panelRef={isVocabSet ? vocabPanelRef : readingPanelRef}
                     />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditingContentId(null);
+                        onOpenChange(false);
+                      }}
+                      className="hover:bg-gray-200"
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
                   </div>
                 </div>
                 {/* Content */}
