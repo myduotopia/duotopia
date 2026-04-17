@@ -120,11 +120,19 @@ export function AssignmentDetailSheet({
   const loadingRef = useRef<Set<number>>(new Set());
 
   // When content edit overlay is open, override Radix Sheet's body pointer-events lock
+  const contentEditPanelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (editingContentId) {
-      document.body.style.pointerEvents = "auto";
+      // Radix Sheet sets pointer-events:none on body; override it
+      const style = document.createElement("style");
+      style.textContent = "body { pointer-events: auto !important; }";
+      document.head.appendChild(style);
+      // Auto-focus the panel so scroll works immediately
+      requestAnimationFrame(() => {
+        contentEditPanelRef.current?.focus();
+      });
       return () => {
-        document.body.style.pointerEvents = "";
+        document.head.removeChild(style);
       };
     }
   }, [editingContentId]);
@@ -1180,7 +1188,9 @@ export function AssignmentDetailSheet({
 
             return (
               <div
-                className="fixed top-0 right-0 h-full z-[61] bg-white shadow-xl border-l flex flex-col pointer-events-auto"
+                ref={contentEditPanelRef}
+                tabIndex={-1}
+                className="fixed top-0 right-0 h-full z-[61] bg-white shadow-xl border-l flex flex-col pointer-events-auto outline-none"
                 style={{ left: `${sidebarWidth}px` }}
               >
                 {/* Header */}

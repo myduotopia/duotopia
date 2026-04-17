@@ -491,13 +491,21 @@ export default function ClassroomDetail({
   }, [id, isTemplateMode]);
 
   useEffect(() => {
-    // Check URL parameters for tab switching
+    // Check URL parameters for tab switching and auto-opening assignment
     const searchParams = new URLSearchParams(location.search);
     const tab = searchParams.get("tab");
     if (tab === "assignments") {
       setActiveTab("assignments");
     }
-  }, [location.search]);
+    const assignmentId = searchParams.get("assignment");
+    if (assignmentId && assignments.length > 0) {
+      const target = assignments.find((a) => a.id === Number(assignmentId));
+      if (target) {
+        setSheetAssignment(target);
+        setShowAssignmentSheet(true);
+      }
+    }
+  }, [location.search, assignments]);
 
   // Issue #150: Smart default tab based on student count
   // When class has students, default to "assignments" tab
