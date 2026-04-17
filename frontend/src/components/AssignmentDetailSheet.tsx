@@ -1140,10 +1140,14 @@ export function AssignmentDetailSheet({
       {/* Content Edit - Right-side sheet with sidebar offset */}
       {editingContentId && contentDetails[editingContentId] && (
         <>
-          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
           <div
             className="fixed inset-0 z-[60] bg-black/50 pointer-events-auto"
+            role="button"
+            tabIndex={0}
             onClick={() => setEditingContentId(null)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setEditingContentId(null);
+            }}
           />
           <div
             className="fixed top-0 right-0 h-full z-[61] bg-white shadow-xl border-l flex flex-col pointer-events-auto"
