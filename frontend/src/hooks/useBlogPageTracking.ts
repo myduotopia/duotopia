@@ -11,10 +11,12 @@ export function useBlogPageTracking() {
 
   useEffect(() => {
     if (location.pathname.startsWith("/blog")) {
-      // 延遲一個 tick，等 react-helmet-async 更新 document.title
-      setTimeout(() => {
-        sendPageView(location.pathname + location.search);
-      }, 0);
+      // 等待 react-helmet-async 更新 document.title（需要在下一次 paint 之後）
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          sendPageView(location.pathname + location.search);
+        }, 0);
+      });
     }
   }, [location.pathname, location.search]);
 }
