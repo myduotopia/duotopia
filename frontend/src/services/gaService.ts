@@ -5,7 +5,7 @@
  * 這裡只負責在 blog 路由手動發送 page_view。
  */
 
-const GA_MEASUREMENT_ID = "G-4ZR7VPNHX7";
+const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_MEASUREMENT_ID as string;
 
 declare global {
   interface Window {
@@ -14,7 +14,7 @@ declare global {
 }
 
 export function sendPageView(path: string, title?: string) {
-  if (typeof window.gtag !== "function") return;
+  if (!GA_MEASUREMENT_ID || typeof window.gtag !== "function") return;
   window.gtag("event", "page_view", {
     page_path: path,
     page_title: title ?? document.title,

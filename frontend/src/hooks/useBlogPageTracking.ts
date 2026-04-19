@@ -11,7 +11,10 @@ export function useBlogPageTracking() {
 
   useEffect(() => {
     if (location.pathname.startsWith("/blog")) {
-      sendPageView(location.pathname);
+      // 延遲一個 tick，等 react-helmet-async 更新 document.title
+      setTimeout(() => {
+        sendPageView(location.pathname + location.search);
+      }, 0);
     }
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 }
