@@ -263,7 +263,7 @@ export default function AssignmentManagementPage() {
   const handleViewDetails = (assignment: Assignment) => {
     if (assignment.classroom_id) {
       navigate(
-        `/teacher/classroom/${assignment.classroom_id}/assignment/${assignment.id}/preview`,
+        `/teacher/classroom/${assignment.classroom_id}?tab=assignments&assignment=${assignment.id}`,
       );
     } else {
       navigate(`/teacher/assignment/${assignment.id}/preview`);

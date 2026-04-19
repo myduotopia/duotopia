@@ -423,20 +423,27 @@ async def update_content(
                 if existing_item.audio_url not in new_audio_urls:
                     audio_manager.delete_old_audio(existing_item.audio_url)
 
+        # 先刪除參照 content_items 的 practice_answers（老師修改內容後舊答題紀錄失效）
+        # 顯式刪除：防止 ON DELETE CASCADE migration (20260415_1000) 尚未執行的環境
+        existing_item_ids = [item.id for item in existing_items]
+        if existing_item_ids:
+            # Lazy import to avoid circular dependency (progress → program → content)
+            from models.progress import PracticeAnswer
+
+            db.query(PracticeAnswer).filter(
+                PracticeAnswer.content_item_id.in_(existing_item_ids)
+            ).delete(synchronize_session=False)
+
         # 使用參數化查詢刪除所有現有的 ContentItem，確保唯一約束不衝突
         try:
             db.execute(
                 text("DELETE FROM content_items WHERE content_id = :content_id"),
                 {"content_id": content.id},
             )
-            # 確保刪除操作執行完成
             db.flush()
-        except IntegrityError as e:
+        except IntegrityError:
             db.rollback()
-            raise HTTPException(
-                status_code=409,
-                detail="無法刪除內容項目，因為存在相關引用",
-            )
+            raise HTTPException(status_code=409, detail="無法刪除內容項目，因為存在相關引用")
 
         # 創建新的 ContentItem
         for idx, item_data in enumerate(update_data.items):
