@@ -4848,6 +4848,70 @@
   "contentCopy": {
     "button": "複製到..."
   },
+  "contentDownload": {
+    "menu": "下載",
+    "defaultTitle": "單字學習單",
+    "loading": "載入中...",
+    "loadError": "載入單字集失敗，請稍後再試",
+    "types": {
+      "wordSelection": "單字選擇",
+      "cloze": "克漏字"
+    },
+    "hintMode": {
+      "wordbank": "字庫模式",
+      "choice": "選擇"
+    }
+  },
+  "printPdf": {
+    "sheetTitle": "列印設定",
+    "downloadButton": "下載 PDF",
+    "pdfType": "PDF 類型",
+    "twoColumn": "雙欄顯示",
+    "showSentenceTranslation": "顯示句子翻譯",
+    "drawingArea": "作畫區",
+    "zoomLabel": "預覽",
+    "fontLabel": "字級",
+    "zoomOut": "縮小預覽",
+    "zoomIn": "放大預覽",
+    "fontDown": "縮小字體",
+    "fontUp": "放大字體",
+    "fontSlider": "字體大小"
+  },
+  "activitySettings": {
+    "assignmentMode": {
+      "label": "作業模式",
+      "practice": "練習",
+      "exam": "考試"
+    },
+    "hintMode": {
+      "label": "提示方式"
+    },
+    "choiceCount": {
+      "label": "選項數量",
+      "option2": "2 個",
+      "option3": "3 個",
+      "option4": "4 個"
+    },
+    "inputMethod": {
+      "label": "輸入方式",
+      "keyboard": "鍵盤",
+      "handwriting": "手寫",
+      "drawing": "作畫"
+    },
+    "showImage": "顯示圖片",
+    "showLetterCount": "顯示字母數",
+    "forceVirtualKeyboard": "強制顯示虛擬鍵盤",
+    "shuffleQuestions": "打亂題目",
+    "questionTimeLimit": {
+      "label": "每題限時",
+      "none": "不限時",
+      "sec10": "10 秒",
+      "sec20": "20 秒",
+      "sec30": "30 秒"
+    },
+    "examTimeLabel": "考試時間（時:分）",
+    "showExamAnswers": "考後顯示答案"
+  },
   "tree": {
     "assign": "指派為作業"
   },

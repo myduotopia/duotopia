@@ -33,6 +33,7 @@ import {
   useCallback,
   useMemo,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Sheet,
   SheetContent,
@@ -50,6 +51,8 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+export type PrintActivityType = "spelling" | "cloze" | "word_selection";
+
 export interface PrintQuestion {
   index: number;
   correctAnswer: string;
@@ -59,12 +62,21 @@ export interface PrintQuestion {
   sentenceTranslation?: string;
   answerLength: number;
   imageUrl?: string;
+  // word_selection：英文單字（當 prompt），與 translation（中文答案）反向
+  text?: string;
+  // 預先計算好的選項（優先使用，否則從 answerPool 隨機產生）
+  options?: string[];
+}
+
+export interface ActivityTypeOption {
+  value: PrintActivityType;
+  label: string;
 }
 
 export interface PrintPdfSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  activityType: "spelling" | "cloze";
+  activityType: PrintActivityType;
   title: string;
   questions: PrintQuestion[];
   hintModeOptions: HintModeOption[];
@@ -76,6 +88,10 @@ export interface PrintPdfSheetProps {
   shuffleQuestions: boolean;
   showSentenceTranslation?: boolean;
   showDrawingArea?: boolean;
+  // 傳入才渲染頂層 PDF 類型切換器（例如單字集下載：單字選擇/克漏字）
+  activityTypeOptions?: ActivityTypeOption[];
+  // 每個 activityType 對應的 hintMode 預設值（切換類型時同步重置 hintMode）
+  activityTypeHintModes?: Partial<Record<PrintActivityType, string>>;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -136,6 +152,7 @@ function AnswerSlots({ count, visible }: { count: number; visible: boolean }) {
 
 function SpellingCard({
   q,
+  activityType,
   hintMode,
   showImage,
   showLetterCount,
@@ -143,13 +160,19 @@ function SpellingCard({
   choiceOptions,
 }: {
   q: PrintQuestion;
+  activityType: PrintActivityType;
   hintMode: string;
   showImage: boolean;
   showLetterCount: boolean;
   showDrawingArea: boolean;
   choiceOptions?: string[];
 }) {
-  const isChoice = hintMode === "choice" && !!choiceOptions;
+  // word_selection 版型：EN text 當 prompt，options 為中文（translation + distractors）
+  // spelling 版型：中文 translation 當 prompt，options 為英文
+  const isWordSelection = activityType === "word_selection";
+  const isChoice =
+    (isWordSelection || hintMode === "choice") && !!choiceOptions;
+  const promptText = isWordSelection ? q.text : q.translation;
   return (
     <div
       style={{
@@ -164,7 +187,7 @@ function SpellingCard({
         minHeight: 90,
       }}
     >
-      {/* 題號 */}
+      {/* 題號 + 選擇模式括號（學生寫 A/B/C/D） */}
       <span
         style={{
           position: "absolute",
@@ -173,11 +196,28 @@ function SpellingCard({
           fontSize: "0.78em",
           color: "#9ca3af",
           fontWeight: 600,
+          display: "inline-flex",
+          alignItems: "baseline",
+          gap: 3,
         }}
       >
-        {q.index}.
+        <span>{q.index}.</span>
+        {isChoice && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "baseline",
+              fontSize: "1.25em",
+              color: "#374151",
+            }}
+          >
+            <span>(</span>
+            <span style={{ display: "inline-block", width: 24 }} />
+            <span>)</span>
+          </span>
+        )}
       </span>
-      {/* 圖片 */}
+      {/* 圖片（無圖時保留 144x144 空間供畫圖，不顯示框線或「圖片」字樣） */}
       {showImage &&
         (q.imageUrl ? (
           <img
@@ -191,26 +231,18 @@ function SpellingCard({
             }}
           />
         ) : (
-          <div
-            style={{
-              width: 144,
-              height: 144,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              border: "1px dashed #d1d5db",
-              borderRadius: 4,
-              color: "#d1d5db",
-              fontSize: "0.75em",
-            }}
-          >
-            圖片
-          </div>
+          <div style={{ width: 144, height: 144 }} />
         ))}
-      {/* 翻譯 + 詞性 */}
-      <div style={{ textAlign: "center", color: "#374151" }}>
-        {q.translation}
-        {q.partOfSpeech && (
+      {/* Prompt：word_selection=英文 text、spelling=中文 translation */}
+      <div
+        style={{
+          textAlign: "center",
+          color: "#374151",
+          fontWeight: isWordSelection ? 600 : undefined,
+        }}
+      >
+        {promptText}
+        {!isWordSelection && q.partOfSpeech && (
           <span style={{ marginLeft: 4, fontSize: "0.85em", color: "#9ca3af" }}>
             {q.partOfSpeech}
           </span>
@@ -227,32 +259,23 @@ function SpellingCard({
         }}
       >
         {isChoice ? (
-          <>
-            <span
-              style={{
-                display: "inline-block",
-                borderBottom: "2px solid #374151",
-                width: 40,
-                height: 24,
-              }}
-            />
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                justifyContent: "center",
-                gap: "2px 12px",
-                fontSize: "0.9em",
-              }}
-            >
-              {choiceOptions!.map((opt, i) => (
-                <span key={i} style={{ color: "#374151" }}>
-                  <span style={{ fontWeight: 600 }}>{CHOICE_LABELS[i]}.</span>{" "}
-                  {opt}
-                </span>
-              ))}
-            </div>
-          </>
+          // 選擇模式：只顯示選項（括號已在題號旁邊）
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              gap: "2px 12px",
+              fontSize: "0.9em",
+            }}
+          >
+            {choiceOptions!.map((opt, i) => (
+              <span key={i} style={{ color: "#374151" }}>
+                <span style={{ fontWeight: 600 }}>{CHOICE_LABELS[i]}.</span>{" "}
+                {opt}
+              </span>
+            ))}
+          </div>
         ) : (
           <AnswerSlots count={q.answerLength} visible={showLetterCount} />
         )}
@@ -273,7 +296,7 @@ interface PaperPageProps {
   totalPages: number;
   qIndices: number[];
   displayQuestions: PrintQuestion[];
-  activityType: "spelling" | "cloze";
+  activityType: PrintActivityType;
   title: string;
   fontSize: number;
   localHintMode: string;
@@ -281,6 +304,7 @@ interface PaperPageProps {
   localShowLetterCount: boolean;
   localShowSentenceTranslation: boolean;
   localShowDrawingArea: boolean;
+  localTwoColumn: boolean;
   answerPool: string[];
   questionChoiceOptions: Record<number, string[]>;
   logoBase64: string | null;
@@ -303,6 +327,7 @@ function PaperPage({
   localShowLetterCount,
   localShowSentenceTranslation,
   localShowDrawingArea,
+  localTwoColumn,
   answerPool,
   questionChoiceOptions,
   logoBase64,
@@ -311,6 +336,10 @@ function PaperPage({
 }: PaperPageProps) {
   const titleFontSize = Math.round((fontSize * 22) / 14);
   const infoFontSize = Math.round((fontSize * 13) / 14);
+
+  // 克漏字底線寬度：以本集最長可能答案為準，所有題目統一寬度（wordbank 已公開長度，非資訊洩漏）
+  const maxAnswerLen = Math.max(...answerPool.map((a) => a.length), 4);
+  const blankWidthEm = maxAnswerLen * 0.55 + 1; // 粗估字寬 + 左右緩衝
 
   const paperStyle: React.CSSProperties = {
     width: PAPER_W,
@@ -343,15 +372,15 @@ function PaperPage({
             style={{ fontSize: infoFontSize }}
           >
             <span>
-              班級：
+              Class:
               <span className="inline-block w-24 border-b border-gray-700 align-bottom" />
             </span>
             <span>
-              座號：
+              No.:
               <span className="inline-block w-16 border-b border-gray-700 align-bottom" />
             </span>
             <span>
-              姓名：
+              Name:
               <span className="inline-block w-28 border-b border-gray-700 align-bottom" />
             </span>
           </div>
@@ -385,23 +414,27 @@ function PaperPage({
         </div>
       )}
 
-      {/* 題目列表 */}
-      {activityType === "spelling" ? (
-        // 單字卡：2 欄格線
+      {/* 題目列表：根據 localTwoColumn 切換雙欄/單欄
+          注意：pageDistribution 和 displayQuestions 的狀態更新有一個 render 的時間差
+          （例如 sheet 關閉時 questions 變空但 pageDistribution 還是舊的），需過濾 undefined */}
+      {activityType === "spelling" || activityType === "word_selection" ? (
+        // 單字卡
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            gridTemplateColumns: localTwoColumn ? "1fr 1fr" : "1fr",
             gap: CARD_ROW_GAP,
             fontSize,
           }}
         >
           {qIndices.map((qi) => {
             const q = displayQuestions[qi];
+            if (!q) return null;
             return (
               <SpellingCard
                 key={q.index}
                 q={q}
+                activityType={activityType}
                 hintMode={localHintMode}
                 showImage={localShowImage}
                 showLetterCount={localShowLetterCount}
@@ -411,11 +444,43 @@ function PaperPage({
             );
           })}
         </div>
+      ) : localTwoColumn ? (
+        // 克漏字：雙欄格線（題號 + 題目一組放入每格）
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: `${Q_GAP}px ${CARD_ROW_GAP}px`,
+            fontSize,
+          }}
+        >
+          {qIndices.map((qi) => {
+            const q = displayQuestions[qi];
+            if (!q) return null;
+            return (
+              <div key={q.index} className="flex gap-2">
+                <span className="w-6 shrink-0 text-right font-medium text-gray-500">
+                  {q.index}.
+                </span>
+                <div className="flex-1">
+                  <ClozeQuestion
+                    q={q}
+                    showImage={localShowImage}
+                    showSentenceTranslation={localShowSentenceTranslation}
+                    choiceOptions={questionChoiceOptions[q.index]}
+                    blankWidthEm={blankWidthEm}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
-        // 克漏字：編號列表
+        // 克漏字：單欄編號列表（預設）
         <ol className="space-y-4" style={{ fontSize }}>
           {qIndices.map((qi) => {
             const q = displayQuestions[qi];
+            if (!q) return null;
             return (
               <li key={q.index} className="flex gap-2">
                 <span className="w-6 shrink-0 text-right font-medium text-gray-500">
@@ -427,6 +492,7 @@ function PaperPage({
                     showImage={localShowImage}
                     showSentenceTranslation={localShowSentenceTranslation}
                     choiceOptions={questionChoiceOptions[q.index]}
+                    blankWidthEm={blankWidthEm}
                   />
                 </div>
               </li>
@@ -465,7 +531,7 @@ function PaperPage({
           <span>Duotopia</span>
         )}
         <span>
-          第 {pageIndex + 1} 頁 / 共 {totalPages} 頁
+          Page {pageIndex + 1} / {totalPages}
         </span>
       </div>
     </div>
@@ -489,12 +555,21 @@ export function PrintPdfSheet({
   shuffleQuestions,
   showSentenceTranslation = false,
   showDrawingArea = false,
+  activityTypeOptions,
+  activityTypeHintModes,
 }: PrintPdfSheetProps) {
+  const { t } = useTranslation();
   const printableHintModeOptions = hintModeOptions.filter(
     (opt) => opt.value !== "audio",
   );
 
   // ── Local state ──────────────────────────────────────────────────────────
+  const [localActivityType, setLocalActivityType] =
+    useState<PrintActivityType>(activityType);
+  // 雙欄排版：word_selection/spelling 預設雙欄、cloze 預設單欄
+  const [localTwoColumn, setLocalTwoColumn] = useState<boolean>(
+    activityType !== "cloze",
+  );
   const initialHintMode =
     hintMode === "audio"
       ? (printableHintModeOptions[0]?.value ?? hintMode)
@@ -544,6 +619,8 @@ export function PrintPdfSheet({
   // ── Sheet 開啟時同步父層設定 ──────────────────────────────────────────────
   useEffect(() => {
     if (open) {
+      setLocalActivityType(activityType);
+      setLocalTwoColumn(activityType !== "cloze");
       setLocalHintMode(
         hintMode === "audio"
           ? (printableHintModeOptions[0]?.value ?? hintMode)
@@ -581,31 +658,62 @@ export function PrintPdfSheet({
     data: Record<number, string[]>;
   }>({ key: "", data: {} });
 
-  const questionChoiceOptions = useMemo<Record<number, string[]>>(() => {
-    if (localHintMode !== "choice") return {};
+  // word_selection 一律當作 choice；cloze/spelling 看 hintMode
+  const isChoiceMode =
+    localActivityType === "word_selection" || localHintMode === "choice";
 
-    // 穩定 key：題目 index + correctAnswer + choiceCount
+  const questionChoiceOptions = useMemo<Record<number, string[]>>(() => {
+    if (!isChoiceMode) return {};
+
+    // 穩定 key：題目 index + correctAnswer + choiceCount + activityType
     const cacheKey =
-      displayQuestions.map((q) => `${q.index}:${q.correctAnswer}`).join("|") +
-      `|cc=${localChoiceCount}`;
+      displayQuestions
+        .map(
+          (q) =>
+            `${q.index}:${q.correctAnswer}:${(q.options ?? []).join(",")}`,
+        )
+        .join("|") + `|cc=${localChoiceCount}|at=${localActivityType}`;
 
     if (choicesCacheRef.current.key === cacheKey) {
       return choicesCacheRef.current.data;
     }
 
     const result: Record<number, string[]> = {};
+    // word_selection：q.options 為中文（translation + distractors），直接使用
+    // spelling/cloze：從 answerPool 隨機產生英文選項
+    const useQuestionOptions = localActivityType === "word_selection";
     displayQuestions.forEach((q) => {
-      const distractors = answerPool
-        .filter((a) => a !== q.correctAnswer)
-        .slice();
-      for (let i = distractors.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [distractors[i], distractors[j]] = [distractors[j], distractors[i]];
+      let options: string[];
+      if (useQuestionOptions && q.options && q.options.length > 0) {
+        // q.options 假定已包含正解；若不足則用 answerPool 補位
+        options = q.options.slice(0, localChoiceCount);
+        if (options.length < localChoiceCount) {
+          const extras = answerPool
+            .filter((a) => a !== q.correctAnswer && !options.includes(a))
+            .slice();
+          for (let i = extras.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [extras[i], extras[j]] = [extras[j], extras[i]];
+          }
+          options = [
+            ...options,
+            ...extras.slice(0, localChoiceCount - options.length),
+          ];
+        }
+      } else {
+        const distractors = answerPool
+          .filter((a) => a !== q.correctAnswer)
+          .slice();
+        for (let i = distractors.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [distractors[i], distractors[j]] = [distractors[j], distractors[i]];
+        }
+        options = [
+          q.correctAnswer,
+          ...distractors.slice(0, localChoiceCount - 1),
+        ];
       }
-      const options = [
-        q.correctAnswer,
-        ...distractors.slice(0, localChoiceCount - 1),
-      ];
+      // 打亂順序
       for (let i = options.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [options[i], options[j]] = [options[j], options[i]];
@@ -615,7 +723,13 @@ export function PrintPdfSheet({
 
     choicesCacheRef.current = { key: cacheKey, data: result };
     return result;
-  }, [localHintMode, displayQuestions, localChoiceCount, answerPool]);
+  }, [
+    isChoiceMode,
+    displayQuestions,
+    localChoiceCount,
+    answerPool,
+    localActivityType,
+  ]);
 
   // ── 量測題目高度 → 計算分頁 ───────────────────────────────────────────────
   useLayoutEffect(() => {
@@ -633,8 +747,8 @@ export function PrintPdfSheet({
     const pages: number[][] = [[]];
     let usedH = fullHeaderH + wordBankH;
 
-    if (activityType === "spelling") {
-      // 單字卡：每列 2 卡，以整列為單位計算分頁
+    if (localTwoColumn) {
+      // 雙欄：每列 2 題，以整列為單位計算分頁
       const rowCount = Math.ceil(qHeights.length / 2);
       for (let row = 0; row < rowCount; row++) {
         const i1 = row * 2;
@@ -655,6 +769,7 @@ export function PrintPdfSheet({
         }
       }
     } else {
+      // 單欄：每題單獨累計
       for (let i = 0; i < qHeights.length; i++) {
         const isFirstOnPage = pages[pages.length - 1].length === 0;
         const h = qHeights[i] + (isFirstOnPage ? 0 : Q_GAP);
@@ -673,13 +788,14 @@ export function PrintPdfSheet({
 
     setPageDistribution(pages);
   }, [
-    activityType,
+    localActivityType,
     displayQuestions,
     localHintMode,
     localShowImage,
     localShowLetterCount,
     localShowSentenceTranslation,
     localShowDrawingArea,
+    localTwoColumn,
     localChoiceCount,
     fontSize,
     questionChoiceOptions,
@@ -721,9 +837,15 @@ export function PrintPdfSheet({
 
   // ── Shared props for PaperPage ────────────────────────────────────────────
   const totalPages = pageDistribution.length;
+  // 克漏字底線寬度：以本集最長答案為準，所有題目統一寬度
+  const sheetBlankWidthEm = useMemo(() => {
+    const maxLen = Math.max(...answerPool.map((a) => a.length), 4);
+    return maxLen * 0.55 + 1;
+  }, [answerPool]);
+
   const sharedPageProps = {
     displayQuestions,
-    activityType,
+    activityType: localActivityType,
     title,
     fontSize,
     localHintMode,
@@ -731,6 +853,7 @@ export function PrintPdfSheet({
     localShowLetterCount,
     localShowSentenceTranslation,
     localShowDrawingArea,
+    localTwoColumn,
     answerPool,
     questionChoiceOptions,
     logoBase64,
@@ -748,19 +871,56 @@ export function PrintPdfSheet({
       >
         <SheetHeader className="border-b px-6 py-4">
           <div className="flex items-center justify-between">
-            <SheetTitle>列印設定</SheetTitle>
+            <SheetTitle>{t("printPdf.sheetTitle")}</SheetTitle>
             <Button onClick={handleDownload} disabled={isDownloading} size="sm">
               {isDownloading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Download className="mr-2 h-4 w-4" />
               )}
-              下載 PDF
+              {t("printPdf.downloadButton")}
             </Button>
           </div>
         </SheetHeader>
 
         <div className="flex flex-1 flex-col overflow-hidden">
+          {/* ── PDF 類型切換器（僅當父層提供 activityTypeOptions 時顯示）── */}
+          {activityTypeOptions && activityTypeOptions.length > 1 && (
+            <div className="shrink-0 border-b px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-600">
+                  {t("printPdf.pdfType")}
+                </span>
+                <div className="flex gap-2">
+                  {activityTypeOptions.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        setLocalActivityType(opt.value);
+                        // 切換類型時同步重置欄數預設（cloze 單欄、其他雙欄）
+                        setLocalTwoColumn(opt.value !== "cloze");
+                        // 切換類型時重置 hintMode（各類型有各自的預設）
+                        const nextHint = activityTypeHintModes?.[opt.value];
+                        if (nextHint) {
+                          setLocalHintMode(nextHint);
+                          if (nextHint === "choice")
+                            setLocalShowLetterCount(false);
+                        }
+                      }}
+                      className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                        localActivityType === opt.value
+                          ? "border-blue-500 bg-blue-50 text-blue-700"
+                          : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── 設定列 ── */}
           <div className="shrink-0 border-b px-4 pt-3">
             <ActivitySettingsPanel
@@ -769,13 +929,17 @@ export function PrintPdfSheet({
               assignmentModeVisible={false}
               hintMode={localHintMode}
               hintModeOptions={printableHintModeOptions}
+              hintModeVisible={localActivityType !== "word_selection"}
               onHintModeChange={(mode) => {
                 setLocalHintMode(mode);
                 if (mode === "choice") setLocalShowLetterCount(false);
               }}
               choiceCount={localChoiceCount}
               onChoiceCountChange={setLocalChoiceCount}
-              choiceCountVisible={localHintMode === "choice"}
+              choiceCountVisible={
+                localActivityType === "word_selection" ||
+                localHintMode === "choice"
+              }
               showImage={localShowImage}
               onShowImageChange={(v) => {
                 setLocalShowImage(v);
@@ -783,7 +947,20 @@ export function PrintPdfSheet({
               }}
               extraHintSettings={
                 <>
-                  {activityType === "cloze" &&
+                  {/* 雙欄顯示切換（cloze/word_selection/spelling 都支援） */}
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={localTwoColumn}
+                      onChange={(e) => {
+                        setLocalTwoColumn(e.target.checked);
+                        e.target.blur();
+                      }}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    {t("printPdf.twoColumn")}
+                  </label>
+                  {localActivityType === "cloze" &&
                     (localHintMode === "wordbank" ||
                       localHintMode === "choice") && (
                       <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
@@ -796,10 +973,10 @@ export function PrintPdfSheet({
                           }}
                           className="h-4 w-4 rounded border-gray-300"
                         />
-                        顯示句子翻譯
+                        {t("printPdf.showSentenceTranslation")}
                       </label>
                     )}
-                  {activityType === "spelling" && (
+                  {localActivityType === "spelling" && (
                     <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
                       <input
                         type="checkbox"
@@ -811,7 +988,7 @@ export function PrintPdfSheet({
                         }}
                         className="h-4 w-4 rounded border-gray-300"
                       />
-                      作畫區
+                      {t("printPdf.drawingArea")}
                     </label>
                   )}
                 </>
@@ -819,7 +996,7 @@ export function PrintPdfSheet({
               showLetterCount={localShowLetterCount}
               onShowLetterCountChange={setLocalShowLetterCount}
               showLetterCountVisible={
-                activityType === "spelling" && localHintMode !== "choice"
+                localActivityType === "spelling" && localHintMode !== "choice"
               }
               forceVirtualKeyboard={false}
               onForceVirtualKeyboardChange={() => {}}
@@ -840,7 +1017,9 @@ export function PrintPdfSheet({
           {/* ── 縮放 + 字體大小 控制列 ── */}
           <div className="flex shrink-0 items-center justify-center gap-6 border-b bg-gray-100 py-2">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400">預覽</span>
+              <span className="text-xs text-gray-400">
+                {t("printPdf.zoomLabel")}
+              </span>
               <button
                 onClick={() =>
                   setZoom((z) =>
@@ -849,7 +1028,7 @@ export function PrintPdfSheet({
                 }
                 disabled={zoom <= ZOOM_MIN}
                 className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-30"
-                aria-label="縮小預覽"
+                aria-label={t("printPdf.zoomOut")}
               >
                 <ZoomOut className="h-4 w-4" />
               </button>
@@ -864,7 +1043,7 @@ export function PrintPdfSheet({
                 }
                 disabled={zoom >= ZOOM_MAX}
                 className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-30"
-                aria-label="放大預覽"
+                aria-label={t("printPdf.zoomIn")}
               >
                 <ZoomIn className="h-4 w-4" />
               </button>
@@ -873,12 +1052,14 @@ export function PrintPdfSheet({
             <div className="h-4 w-px bg-gray-300" />
 
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400">字級</span>
+              <span className="text-xs text-gray-400">
+                {t("printPdf.fontLabel")}
+              </span>
               <button
                 onClick={() => setFontSize((f) => Math.max(FONT_MIN, f - 1))}
                 disabled={fontSize <= FONT_MIN}
                 className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-30"
-                aria-label="縮小字體"
+                aria-label={t("printPdf.fontDown")}
               >
                 <span className="text-xs font-bold leading-none">A−</span>
               </button>
@@ -889,13 +1070,13 @@ export function PrintPdfSheet({
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}
                 className="w-24 accent-blue-500"
-                aria-label="字體大小"
+                aria-label={t("printPdf.fontSlider")}
               />
               <button
                 onClick={() => setFontSize((f) => Math.min(FONT_MAX, f + 1))}
                 disabled={fontSize >= FONT_MAX}
                 className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-30"
-                aria-label="放大字體"
+                aria-label={t("printPdf.fontUp")}
               >
                 <span className="text-xs font-bold leading-none">A+</span>
               </button>
@@ -1003,7 +1184,7 @@ export function PrintPdfSheet({
             className="mb-3"
             style={{ fontSize: Math.round((fontSize * 13) / 14) }}
           >
-            班級：______ 座號：______ 姓名：______
+            Class:______ No.:______ Name:______
           </div>
         </div>
 
@@ -1034,54 +1215,59 @@ export function PrintPdfSheet({
           </div>
         )}
 
-        {activityType === "spelling" ? (
-          // 以半欄寬量測每張卡片，供 useLayoutEffect 行高計算
-          displayQuestions.map((q, i) => (
+        {(() => {
+          const measureWidth = localTwoColumn
+            ? (PAPER_W - 2 * PAPER_PAD_SIDE - CARD_ROW_GAP) / 2
+            : PAPER_W - 2 * PAPER_PAD_SIDE;
+          if (
+            localActivityType === "spelling" ||
+            localActivityType === "word_selection"
+          ) {
+            return displayQuestions.map((q, i) => (
+              <div
+                key={q.index}
+                ref={(el) => {
+                  qMeasureRefs.current[i] = el;
+                }}
+                style={{ width: measureWidth, fontSize }}
+              >
+                <SpellingCard
+                  q={q}
+                  activityType={localActivityType}
+                  hintMode={localHintMode}
+                  showImage={localShowImage}
+                  showLetterCount={localShowLetterCount}
+                  showDrawingArea={localShowDrawingArea}
+                  choiceOptions={questionChoiceOptions[q.index]}
+                />
+              </div>
+            ));
+          }
+          // 克漏字量測
+          return displayQuestions.map((q, i) => (
             <div
               key={q.index}
               ref={(el) => {
                 qMeasureRefs.current[i] = el;
               }}
-              style={{
-                width: (PAPER_W - 2 * PAPER_PAD_SIDE - CARD_ROW_GAP) / 2,
-                fontSize,
-              }}
+              className="flex gap-2"
+              style={{ width: measureWidth, fontSize, marginBottom: Q_GAP }}
             >
-              <SpellingCard
-                q={q}
-                hintMode={localHintMode}
-                showImage={localShowImage}
-                showLetterCount={localShowLetterCount}
-                showDrawingArea={localShowDrawingArea}
-                choiceOptions={questionChoiceOptions[q.index]}
-              />
+              <span className="w-6 shrink-0 text-right font-medium text-gray-500">
+                {q.index}.
+              </span>
+              <div className="flex-1">
+                <ClozeQuestion
+                  q={q}
+                  showImage={localShowImage}
+                  showSentenceTranslation={localShowSentenceTranslation}
+                  choiceOptions={questionChoiceOptions[q.index]}
+                  blankWidthEm={sheetBlankWidthEm}
+                />
+              </div>
             </div>
-          ))
-        ) : (
-          <ol className="space-y-4" style={{ fontSize }}>
-            {displayQuestions.map((q, i) => (
-              <li
-                key={q.index}
-                ref={(el) => {
-                  qMeasureRefs.current[i] = el;
-                }}
-                className="flex gap-2"
-              >
-                <span className="w-6 shrink-0 text-right font-medium text-gray-500">
-                  {q.index}.
-                </span>
-                <div className="flex-1">
-                  <ClozeQuestion
-                    q={q}
-                    showImage={localShowImage}
-                    showSentenceTranslation={localShowSentenceTranslation}
-                    choiceOptions={questionChoiceOptions[q.index]}
-                  />
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
+          ));
+        })()}
       </div>
     </Sheet>
   );
@@ -1094,39 +1280,64 @@ function ClozeQuestion({
   showImage,
   showSentenceTranslation,
   choiceOptions,
+  blankWidthEm,
 }: {
   q: PrintQuestion;
   showImage: boolean;
   showSentenceTranslation?: boolean;
   choiceOptions?: string[];
+  // 句中底線寬度（em）— 以本集最長答案算出，所有題目統一寬度
+  blankWidthEm?: number;
 }) {
   const isChoice = !!choiceOptions;
+  // 把 q.sentence 裡的 `______` 拆成 before/after，讓底線用統一寬度渲染
+  const raw = q.sentence ?? "—";
+  const blankMarker = /_{3,}/;
+  const matchIdx = raw.search(blankMarker);
+  const hasBlank = matchIdx >= 0 && blankWidthEm != null;
+  let beforeBlank = raw;
+  let afterBlank = "";
+  if (hasBlank) {
+    const matched = raw.match(blankMarker)![0];
+    beforeBlank = raw.slice(0, matchIdx);
+    afterBlank = raw.slice(matchIdx + matched.length);
+  }
   return (
     <div className="flex items-start gap-3">
-      {showImage &&
-        (q.imageUrl ? (
-          <img
-            src={q.imageUrl}
-            alt=""
-            className="shrink-0 rounded object-cover"
-            style={{ width: 72, height: 72 }}
-          />
-        ) : (
-          <div
-            className="flex shrink-0 items-center justify-center rounded border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-300"
-            style={{ width: 72, height: 72 }}
-          >
-            圖片
-          </div>
-        ))}
+      {showImage && q.imageUrl && (
+        <img
+          src={q.imageUrl}
+          alt=""
+          className="shrink-0 rounded object-cover"
+          style={{ width: 72, height: 72 }}
+        />
+      )}
       <div className="flex-1 space-y-1.5">
-        <div className="flex flex-wrap items-end gap-2 leading-relaxed text-gray-800">
-          <span>{q.sentence ?? "—"}</span>
+        <div className="flex flex-wrap items-baseline gap-x-1 leading-relaxed text-gray-800">
+          {/* 選擇模式：題目開頭括號讓學生寫 A/B/C/D（括號內留白） */}
           {isChoice && (
-            <span
-              className="inline-block border-b-2 border-gray-700 align-bottom"
-              style={{ width: 32 }}
-            />
+            <span className="inline-flex items-baseline mr-1 shrink-0">
+              <span>(</span>
+              <span className="inline-block" style={{ width: 24 }} />
+              <span>)</span>
+            </span>
+          )}
+          {hasBlank ? (
+            <span>
+              {beforeBlank}
+              <span
+                style={{
+                  display: "inline-block",
+                  borderBottom: "1.5px solid #374151",
+                  width: `${blankWidthEm}em`,
+                  marginLeft: 2,
+                  marginRight: 2,
+                }}
+              />
+              {afterBlank}
+            </span>
+          ) : (
+            <span>{raw}</span>
           )}
         </div>
         {showSentenceTranslation && q.sentenceTranslation && (

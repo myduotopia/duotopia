@@ -11,6 +11,7 @@ import ContentTypeDialog from "@/components/ContentTypeDialog";
 import ReadingAssessmentPanel, {
   type ReadingAssessmentPanelHandle,
 } from "@/components/ReadingAssessmentPanel";
+import ContentDownloadSheet from "@/components/ContentDownloadSheet";
 import VocabularySetPanel, {
   type VocabularySetPanelHandle,
 } from "@/components/VocabularySetPanel";
@@ -88,6 +89,13 @@ export default function OrgMaterialsPage() {
   // Content copy dialog state
   const [showCopyDialog, setShowCopyDialog] = useState(false);
   const [copyContentInfo, setCopyContentInfo] = useState<{
+    id: number;
+    title: string;
+  } | null>(null);
+
+  // Content download sheet state
+  const [downloadSheetOpen, setDownloadSheetOpen] = useState(false);
+  const [downloadContentInfo, setDownloadContentInfo] = useState<{
     id: number;
     title: string;
   } | null>(null);
@@ -606,6 +614,19 @@ export default function OrgMaterialsPage() {
                   setShowCopyDialog(true);
                 }
               }}
+              onDownload={(item, level) => {
+                if (
+                  level === 2 &&
+                  typeof item.type === "string" &&
+                  item.type.toLowerCase() === "vocabulary_set"
+                ) {
+                  setDownloadContentInfo({
+                    id: item.id as number,
+                    title: (item.title || item.name) as string,
+                  });
+                  setDownloadSheetOpen(true);
+                }
+              }}
             />
           ) : (
             <ProgramFolderView
@@ -639,6 +660,18 @@ export default function OrgMaterialsPage() {
               onCopyContent={(contentId, title) => {
                 setCopyContentInfo({ id: contentId, title });
                 setShowCopyDialog(true);
+              }}
+              onDownloadContent={(content) => {
+                if (
+                  typeof content.type === "string" &&
+                  content.type.toLowerCase() === "vocabulary_set"
+                ) {
+                  setDownloadContentInfo({
+                    id: content.id,
+                    title: content.title,
+                  });
+                  setDownloadSheetOpen(true);
+                }
               }}
               onCreateContent={(programId, lessonId) =>
                 canManage && handleCreateContent(programId, lessonId)
@@ -1094,6 +1127,17 @@ export default function OrgMaterialsPage() {
           programs={programs}
         />
       )}
+
+      {/* Content Download Sheet (vocabulary_set worksheet PDF) */}
+      <ContentDownloadSheet
+        open={downloadSheetOpen}
+        onOpenChange={(open) => {
+          setDownloadSheetOpen(open);
+          if (!open) setDownloadContentInfo(null);
+        }}
+        contentId={downloadContentInfo?.id ?? null}
+        contentTitle={downloadContentInfo?.title}
+      />
     </>
   );
 }

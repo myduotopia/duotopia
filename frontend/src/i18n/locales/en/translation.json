@@ -4830,6 +4830,70 @@
   "contentCopy": {
     "button": "Copy to..."
   },
+  "contentDownload": {
+    "menu": "Download",
+    "defaultTitle": "Vocabulary Worksheet",
+    "loading": "Loading...",
+    "loadError": "Failed to load vocabulary set. Please try again.",
+    "types": {
+      "wordSelection": "Word Selection",
+      "cloze": "Cloze"
+    },
+    "hintMode": {
+      "wordbank": "Word Bank",
+      "choice": "Choice"
+    }
+  },
+  "printPdf": {
+    "sheetTitle": "Print Settings",
+    "downloadButton": "Download PDF",
+    "pdfType": "PDF Type",
+    "twoColumn": "Two-column layout",
+    "showSentenceTranslation": "Show sentence translation",
+    "drawingArea": "Drawing area",
+    "zoomLabel": "Zoom",
+    "fontLabel": "Font size",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "fontDown": "Decrease font size",
+    "fontUp": "Increase font size",
+    "fontSlider": "Font size"
+  },
+  "activitySettings": {
+    "assignmentMode": {
+      "label": "Assignment Mode",
+      "practice": "Practice",
+      "exam": "Exam"
+    },
+    "hintMode": {
+      "label": "Hint Mode"
+    },
+    "choiceCount": {
+      "label": "Options",
+      "option2": "2",
+      "option3": "3",
+      "option4": "4"
+    },
+    "inputMethod": {
+      "label": "Input Method",
+      "keyboard": "Keyboard",
+      "handwriting": "Handwriting",
+      "drawing": "Drawing"
+    },
+    "showImage": "Show image",
+    "showLetterCount": "Show letter count",
+    "forceVirtualKeyboard": "Force virtual keyboard",
+    "shuffleQuestions": "Shuffle questions",
+    "questionTimeLimit": {
+      "label": "Time per question",
+      "none": "Unlimited",
+      "sec10": "10s",
+      "sec20": "20s",
+      "sec30": "30s"
+    },
+    "examTimeLabel": "Exam time (H:M)",
+    "showExamAnswers": "Show answers after exam"
+  },
   "tree": {
     "assign": "Assign"
   },

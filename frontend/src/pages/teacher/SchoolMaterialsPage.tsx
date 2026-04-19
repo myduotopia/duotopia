@@ -8,6 +8,7 @@ import ContentTypeDialog from "@/components/ContentTypeDialog";
 import ReadingAssessmentPanel, {
   type ReadingAssessmentPanelHandle,
 } from "@/components/ReadingAssessmentPanel";
+import ContentDownloadSheet from "@/components/ContentDownloadSheet";
 import VocabularySetPanel, {
   type VocabularySetPanelHandle,
 } from "@/components/VocabularySetPanel";
@@ -76,6 +77,13 @@ export default function SchoolMaterialsPage() {
   const [vocabularySetContentId, setVocabularySetContentId] = useState<
     number | null
   >(null);
+
+  // Content download sheet state
+  const [downloadSheetOpen, setDownloadSheetOpen] = useState(false);
+  const [downloadContentInfo, setDownloadContentInfo] = useState<{
+    id: number;
+    title: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchSchoolPrograms();
@@ -569,6 +577,19 @@ export default function SchoolMaterialsPage() {
               else if (level === 2)
                 handleReorderContents(parentId as number, fromIndex, toIndex);
             }}
+            onDownload={(item, level) => {
+              if (
+                level === 2 &&
+                typeof item.type === "string" &&
+                item.type.toLowerCase() === "vocabulary_set"
+              ) {
+                setDownloadContentInfo({
+                  id: item.id as number,
+                  title: (item.title || item.name) as string,
+                });
+                setDownloadSheetOpen(true);
+              }
+            }}
           />
         </div>
 
@@ -1001,6 +1022,17 @@ export default function SchoolMaterialsPage() {
             }}
           />
         )}
+
+        {/* Content Download Sheet (vocabulary_set worksheet PDF) */}
+        <ContentDownloadSheet
+          open={downloadSheetOpen}
+          onOpenChange={(open) => {
+            setDownloadSheetOpen(open);
+            if (!open) setDownloadContentInfo(null);
+          }}
+          contentId={downloadContentInfo?.id ?? null}
+          contentTitle={downloadContentInfo?.title}
+        />
       </div>
     </>
   );
