@@ -426,6 +426,10 @@ async def get_student_submission(
                     # 使用 content_item_id 來獲取對應的 StudentItemProgress 記錄
                     item_progress = progress_by_item_id.get(item.id)
 
+                    # 加入 item_progress_id 供前端呼叫 reanalyze API
+                    if item_progress:
+                        submission["item_progress_id"] = item_progress.id
+
                     # 從 StudentItemProgress 直接獲取資料
                     if item_progress:
                         # 加入老師批改的評語和通過狀態
@@ -1427,3 +1431,103 @@ async def finalize_batch_grade(
         unchanged_count=unchanged_count,
         total_count=len(student_assignments),
     )
+
+
+@router.post("/{assignment_id}/reanalyze-item/{item_progress_id}")
+@trace_function("Reanalyze Item")
+async def reanalyze_item(
+    assignment_id: int,
+    item_progress_id: int,
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """
+    老師端手動觸發單一題目的 AI 語音重新分析
+
+    條件：
+    - 該題目必須有 recording_url（音檔存在）
+    - 老師必須有權限存取該作業
+    """
+    # 1. 查詢 item_progress
+    item_progress = (
+        db.query(StudentItemProgress)
+        .filter(StudentItemProgress.id == item_progress_id)
+        .first()
+    )
+    if not item_progress:
+        raise HTTPException(status_code=404, detail="Item progress not found")
+
+    # 2. 驗證該 item 屬於正確的 assignment
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(StudentAssignment.id == item_progress.student_assignment_id)
+        .first()
+    )
+    if not student_assignment or student_assignment.assignment_id != assignment_id:
+        raise HTTPException(status_code=404, detail="Item not found in this assignment")
+
+    # 3. 驗證老師有權限（透過 classroom ownership）
+    classroom = (
+        db.query(Classroom)
+        .filter(
+            Classroom.id == student_assignment.classroom_id,
+            Classroom.teacher_id == current_teacher.id,
+        )
+        .first()
+    )
+    if not classroom:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # 4. 確認有錄音檔案
+    if not item_progress.recording_url:
+        raise HTTPException(
+            status_code=400, detail="No recording available for reanalysis"
+        )
+
+    # 5. 清除舊的評估結果，允許重新分析
+    item_progress.ai_assessed_at = None
+    db.flush()
+
+    # 6. 觸發重新分析
+    content_item = (
+        db.query(ContentItem)
+        .filter(ContentItem.id == item_progress.content_item_id)
+        .first()
+    )
+
+    success = await trigger_ai_assessment_for_item(item_progress, db, content_item)
+
+    if not success:
+        raise HTTPException(
+            status_code=500, detail="AI analysis failed, please try again later"
+        )
+
+    # 7. 回傳更新後的分數
+    ai_data = {}
+    if item_progress.ai_feedback:
+        try:
+            ai_data = (
+                json.loads(item_progress.ai_feedback)
+                if isinstance(item_progress.ai_feedback, str)
+                else item_progress.ai_feedback
+            )
+        except (json.JSONDecodeError, TypeError):
+            ai_data = {}
+
+    return {
+        "success": True,
+        "ai_scores": {
+            "accuracy_score": float(item_progress.accuracy_score or 0),
+            "fluency_score": float(item_progress.fluency_score or 0),
+            "pronunciation_score": float(item_progress.pronunciation_score or 0),
+            "completeness_score": float(item_progress.completeness_score or 0),
+            "overall_score": (
+                float(item_progress.accuracy_score or 0)
+                + float(item_progress.fluency_score or 0)
+                + float(item_progress.pronunciation_score or 0)
+                + float(item_progress.completeness_score or 0)
+            )
+            / 4,
+            "word_details": ai_data.get("word_details", []),
+        },
+    }

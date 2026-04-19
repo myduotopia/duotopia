@@ -71,6 +71,7 @@ interface SubmissionItem {
       latency_ms?: number;
     };
   };
+  item_progress_id?: number;
 }
 
 interface StudentSubmission {
@@ -133,6 +134,11 @@ export default function GradingPage() {
   const [activeTab, setActiveTab] = useState<
     "students" | "content" | "grading"
   >("content");
+
+  // 🎯 Issue #633: 重新分析狀態
+  const [reanalyzingItems, setReanalyzingItems] = useState<Set<number>>(
+    new Set(),
+  );
 
   // 學生列表相關
   const [studentList, setStudentList] = useState<StudentListItem[]>([]);
@@ -424,6 +430,58 @@ export default function GradingPage() {
           duration: 3000,
         },
       );
+    }
+  };
+
+  // 🎯 Issue #633: 老師端手動觸發重新分析
+  const handleReanalyzeItem = async (
+    itemProgressId: number,
+    itemIndex: number,
+  ) => {
+    if (!assignmentId) return;
+
+    setReanalyzingItems(
+      (prev: Set<number>) => new Set(prev).add(itemProgressId),
+    );
+
+    try {
+      const response = (await apiClient.post(
+        `/api/teachers/assignments/${assignmentId}/reanalyze-item/${itemProgressId}`,
+      )) as { success: boolean; ai_scores: SubmissionItem["ai_scores"] };
+
+      if (response.success && submission) {
+        // 更新 submission 中對應題目的 ai_scores
+        const updatedSubmissions = submission.submissions.map(
+          (item: SubmissionItem, idx: number) =>
+            idx === itemIndex
+              ? { ...item, ai_scores: response.ai_scores }
+              : item,
+        );
+        const updatedGroups = submission.content_groups?.map(
+          (group: NonNullable<StudentSubmission["content_groups"]>[number]) => ({
+            ...group,
+            submissions: group.submissions.map((item: SubmissionItem) =>
+              item.item_progress_id === itemProgressId
+                ? { ...item, ai_scores: response.ai_scores }
+                : item,
+            ),
+          }),
+        );
+        setSubmission({
+          ...submission,
+          submissions: updatedSubmissions,
+          content_groups: updatedGroups,
+        });
+        toast.success(t("gradingPage.messages.reanalyzeSuccess"));
+      }
+    } catch {
+      toast.error(t("gradingPage.messages.reanalyzeFailed"));
+    } finally {
+      setReanalyzingItems((prev: Set<number>) => {
+        const next = new Set(prev);
+        next.delete(itemProgressId);
+        return next;
+      });
     }
   };
 
@@ -1263,6 +1321,42 @@ export default function GradingPage() {
                                       {t("gradingPage.messages.noAIScore")}
                                       {!item.audio_url &&
                                         ` ${t("gradingPage.messages.missingRecordingFile")}`}
+                                      {/* 🎯 Issue #633: 有音檔但無分析結果時，顯示重新分析按鈕 */}
+                                      {item.audio_url &&
+                                        item.item_progress_id && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="mt-2"
+                                            disabled={reanalyzingItems.has(
+                                              item.item_progress_id,
+                                            )}
+                                            onClick={() =>
+                                              handleReanalyzeItem(
+                                                item.item_progress_id!,
+                                                globalIndex,
+                                              )
+                                            }
+                                          >
+                                            {reanalyzingItems.has(
+                                              item.item_progress_id,
+                                            ) ? (
+                                              <>
+                                                <Sparkles className="h-3 w-3 mr-1 animate-spin" />
+                                                {t(
+                                                  "gradingPage.messages.reanalyzing",
+                                                )}
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Mic className="h-3 w-3 mr-1" />
+                                                {t(
+                                                  "gradingPage.buttons.reanalyze",
+                                                )}
+                                              </>
+                                            )}
+                                          </Button>
+                                        )}
                                     </div>
                                   )}
                                 </div>
