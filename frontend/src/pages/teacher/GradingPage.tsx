@@ -1067,7 +1067,11 @@ export default function GradingPage() {
                         const itemFeedback = itemFeedbacks[globalIndex];
 
                         return (
-                          <div key={globalIndex} className="py-4">
+                          <div
+                            key={globalIndex}
+                            id={`item-${globalIndex}`}
+                            className="py-4"
+                          >
                             {/* 主要行 */}
                             <div
                               className="md:grid md:grid-cols-12 flex flex-col gap-3 items-start cursor-pointer hover:bg-gray-50 rounded-lg p-2 -mx-2"
@@ -1329,7 +1333,7 @@ export default function GradingPage() {
                                           <Button
                                             variant="outline"
                                             size="sm"
-                                            className="mt-2"
+                                            className="mt-3 block mx-auto"
                                             disabled={reanalyzingItems.has(
                                               item.item_progress_id,
                                             )}
@@ -1433,18 +1437,38 @@ export default function GradingPage() {
                                   key={localIndex}
                                   className={`
                                     w-8 h-8 rounded-md flex items-center justify-center text-xs font-medium
-                                    transition-all cursor-default
+                                    transition-all cursor-pointer
                                     ${
                                       isPassed
-                                        ? "bg-green-500 text-white shadow-sm"
+                                        ? "bg-green-500 text-white shadow-sm hover:bg-green-600"
                                         : isFailed
-                                          ? "bg-red-500 text-white shadow-sm"
+                                          ? "bg-red-500 text-white shadow-sm hover:bg-red-600"
                                           : hasRecording
                                             ? "bg-gray-200 text-gray-600 hover:bg-gray-300"
-                                            : "bg-gray-100 text-gray-400 border border-dashed border-gray-300"
+                                            : "bg-gray-100 text-gray-400 border border-dashed border-gray-300 hover:bg-gray-200"
                                     }
                                   `}
                                   title={`題目 ${localIndex + 1}: ${isPassed ? t("gradingPage.labels.passed") : isFailed ? t("gradingPage.labels.needsRevision") : hasRecording ? t("gradingPage.labels.hasRecording") : t("gradingPage.labels.noRecording")}`}
+                                  onClick={() => {
+                                    // 切換到對應題組
+                                    setSelectedGroupIndex(groupIndex);
+                                    // 展開對應題目
+                                    const newExpanded = new Set(expandedRows);
+                                    newExpanded.add(globalIndex);
+                                    setExpandedRows(newExpanded);
+                                    // 切換到內容 tab（手機版）
+                                    setActiveTab("content");
+                                    // 滾動到對應題目
+                                    setTimeout(() => {
+                                      const el = document.getElementById(
+                                        `item-${globalIndex}`,
+                                      );
+                                      el?.scrollIntoView({
+                                        behavior: "smooth",
+                                        block: "center",
+                                      });
+                                    }, 100);
+                                  }}
                                 >
                                   {isPassed
                                     ? "✓"
