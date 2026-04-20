@@ -907,6 +907,7 @@
       "rearrangement": "Sentence Rearrangement",
       "word_selection": "Word Selection",
       "word_reading": "Word Reading",
+      "word_spelling": "Word Spelling",
       "all": "All Types"
     },
     "sort": {
@@ -1057,7 +1058,8 @@
       "rearrangement": "Example Sentence Rearrangement",
       "vocabulary": "Vocabulary Practice",
       "wordReading": "Word Reading",
-      "wordSelection": "Word Selection"
+      "wordSelection": "Word Selection",
+      "wordSpelling": "Word Spelling"
     },
     "stats": {
       "minutes": "minutes",
@@ -1782,6 +1784,8 @@
         "wordReadingDesc": "Students read words aloud, system scores pronunciation",
         "wordSelection": "Word Selection",
         "wordSelectionDesc": "View words or listen to audio, select the correct translation",
+        "wordSpelling": "Word Spelling",
+        "wordSpellingDesc": "View translation or listen to audio, type the correct spelling",
         "targetProficiency": "Target Proficiency",
         "targetProficiencyDesc": "Students must reach this proficiency to complete the assignment",
         "showTranslation": "Show Translation",
@@ -4682,6 +4686,34 @@
     },
     "timeLimit": "Time limit: {{seconds}}s"
   },
+  "wordSpelling": {
+    "loading": "Loading vocabulary...",
+    "noItems": "No vocabulary items found",
+    "wordSpelling": "Word Spelling",
+    "questionProgress": "{{current}} / {{total}}",
+    "correctLabel": "correct",
+    "translationHint": "Translation",
+    "playAudio": "Play Audio",
+    "typeTheWord": "Type the correct spelling:",
+    "inputPlaceholder": "Type the word here...",
+    "checkAnswer": "Check",
+    "seconds": "s",
+    "timeUp": "Time's up!",
+    "incorrectTryAgain": "Incorrect, try again!",
+    "timeUpTryAgain": "Time's up! Try again.",
+    "retry": "Retry",
+    "practiceComplete": "Practice Complete!",
+    "accuracy": "Accuracy",
+    "correct": "Correct",
+    "totalWords": "Total",
+    "practiceAgain": "Practice Again",
+    "submitAssignment": "Submit Assignment",
+    "toast": {
+      "startFailed": "Failed to start practice",
+      "completed": "Assignment completed!",
+      "completeFailed": "Failed to complete assignment"
+    }
+  },
   "wordSelection": {
     "loading": "Loading vocabulary...",
     "noItems": "No vocabulary items found",
@@ -5075,7 +5107,8 @@
       "rearrangement": "Sentence Rearrangement",
       "reading": "Sentence Reading",
       "word_selection": "Word Selection",
-      "word_reading": "Word Reading"
+      "word_reading": "Word Reading",
+      "word_spelling": "Word Spelling"
     },
     "estimate": {
       "practiceMode": "Practice Mode",

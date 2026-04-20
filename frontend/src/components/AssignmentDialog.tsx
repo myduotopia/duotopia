@@ -388,7 +388,8 @@ export function AssignmentDialog({
       | "reading"
       | "rearrangement"
       | "word_reading"
-      | "word_selection", // 作答模式（空字串 = 未選擇）
+      | "word_selection"
+      | "word_spelling", // 作答模式（空字串 = 未選擇）
     time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40, // 每題時間限制 (0 = 不限時)
     shuffle_questions: false, // 是否打亂順序
     show_answer: false, // 答題結束後是否顯示正確答案（例句重組專用）
@@ -577,7 +578,8 @@ export function AssignmentDialog({
   useEffect(() => {
     if (
       formData.practice_mode === "word_reading" ||
-      formData.practice_mode === "word_selection"
+      formData.practice_mode === "word_selection" ||
+      formData.practice_mode === "word_spelling"
     ) {
       setCartItems((prev) => {
         const filtered = prev.filter((item) =>
@@ -842,7 +844,11 @@ export function AssignmentDialog({
       return true;
     }
     // 單字模式：只能選單字集
-    if (mode === "word_reading" || mode === "word_selection") {
+    if (
+      mode === "word_reading" ||
+      mode === "word_selection" ||
+      mode === "word_spelling"
+    ) {
       return isVocabularySetType(contentType);
     }
     return true;
@@ -2757,6 +2763,39 @@ export function AssignmentDialog({
                         </div>
                       </div>
                     </button>
+
+                    {/* 單字拼寫 */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          practice_mode: "word_spelling",
+                          time_limit_per_question: 0,
+                        }))
+                      }
+                      className={`p-6 rounded-xl border-2 transition-all ${
+                        formData.practice_mode === "word_spelling"
+                          ? "border-blue-500 bg-blue-50 shadow-md"
+                          : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-3">
+                        <span className="text-4xl">✏️</span>
+                        <div className="text-center">
+                          <div className="font-semibold text-lg">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.wordSpelling",
+                            ) || "單字拼寫"}
+                          </div>
+                          <div className="text-sm text-gray-500 mt-1">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.wordSpellingDesc",
+                            ) || "看翻譯或聽音檔，拼寫正確的單字"}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
                   </div>
 
                   {/* ===== 例句集細節設定 (reading / rearrangement) ===== */}
@@ -2948,9 +2987,10 @@ export function AssignmentDialog({
                     </Card>
                   )}
 
-                  {/* ===== 單字集細節設定 (word_reading / word_selection) ===== */}
+                  {/* ===== 單字集細節設定 (word_reading / word_selection / word_spelling) ===== */}
                   {(formData.practice_mode === "word_reading" ||
-                    formData.practice_mode === "word_selection") && (
+                    formData.practice_mode === "word_selection" ||
+                    formData.practice_mode === "word_spelling") && (
                     <Card className="p-4 border-gray-200">
                       <h4 className="text-sm font-medium mb-3 text-gray-700">
                         {t(
@@ -3080,7 +3120,8 @@ export function AssignmentDialog({
                               {t(
                                 "dialogs.assignmentDialog.practiceMode.unlimited",
                               )}
-                              {formData.practice_mode === "word_reading" &&
+                              {(formData.practice_mode === "word_reading" ||
+                                formData.practice_mode === "word_spelling") &&
                                 ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
                             </option>
                             <option value={20}>
@@ -3162,8 +3203,9 @@ export function AssignmentDialog({
                           </div>
                         )}
 
-                        {/* 單字朗讀專用 - 顯示翻譯 */}
-                        {formData.practice_mode === "word_reading" && (
+                        {/* 單字朗讀/拼寫 - 顯示翻譯 */}
+                        {(formData.practice_mode === "word_reading" ||
+                          formData.practice_mode === "word_spelling") && (
                           <div className="space-y-1.5">
                             <Label className="text-xs text-gray-600">
                               {t(

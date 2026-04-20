@@ -37,6 +37,7 @@ import {
   incrementRecordingAttemptForItem,
 } from "@/hooks/useRecordingAttempts";
 import { getItemPassFailStatus } from "@/utils/itemPassFailStatus";
+import WordSpellingActivity from "@/components/activities/WordSpellingActivity";
 import {
   ChevronLeft,
   ChevronRight,
@@ -2084,6 +2085,23 @@ export default function StudentActivityPageContent({
         );
       }
 
+      if (practiceMode === "word_spelling") {
+        // 單字拼寫練習（一般練習模式，非艾賓浩斯）
+        return (
+          <WordSpellingActivity
+            assignmentId={assignmentId}
+            isPreviewMode={isPreviewMode}
+            isDemoMode={isDemoMode}
+            onComplete={() => {
+              toast.success(
+                t("wordSpelling.toast.completed") || "作業已完成！",
+              );
+              onBack?.();
+            }}
+          />
+        );
+      }
+
       // 造句練習：使用艾賓浩斯記憶曲線系統
       return (
         <SentenceMakingActivity
@@ -2194,15 +2212,19 @@ export default function StudentActivityPageContent({
         {/* 🎯 單字選擇預覽模式：使用 max-w-7xl px-4 對齊預覽頁的藍色提示條 */}
         <div
           className={
-            practiceMode === "word_selection" && isPreviewMode
+            (practiceMode === "word_selection" ||
+              practiceMode === "word_spelling") &&
+            isPreviewMode
               ? "max-w-7xl mx-auto px-4 py-2"
               : "max-w-6xl mx-auto px-2 sm:px-4 py-2"
           }
         >
           {/* Mobile header layout */}
           <div className="flex flex-row items-center justify-between gap-2 mb-2">
-            {/* 🎯 單字選擇預覽模式：只顯示標題（外層已有返回按鈕）；學生端保留返回按鈕 */}
-            {practiceMode === "word_selection" && isPreviewMode ? (
+            {/* 🎯 單字選擇/拼寫預覽模式：只顯示標題（外層已有返回按鈕）；學生端保留返回按鈕 */}
+            {(practiceMode === "word_selection" ||
+              practiceMode === "word_spelling") &&
+            isPreviewMode ? (
               <h1 className="text-sm sm:text-base font-semibold truncate min-w-0">
                 {assignmentTitle}
               </h1>
@@ -2253,7 +2275,8 @@ export default function StudentActivityPageContent({
                 !isPreviewMode &&
                 practiceMode !== "rearrangement" &&
                 practiceMode !== "word_selection" &&
-                practiceMode !== "word_reading" && (
+                practiceMode !== "word_reading" &&
+                practiceMode !== "word_spelling" && (
                   <Button
                     onClick={handleSubmit}
                     disabled={submitting || isSubmitBlockedByRecording}
@@ -2564,11 +2587,12 @@ export default function StudentActivityPageContent({
 
             {/* Navigation buttons */}
             {(() => {
-              // 🎯 單字選擇/朗讀模式：WordSelectionActivity/WordReadingActivity 自帶導航，不顯示外部導航按鈕
+              // 🎯 單字選擇/朗讀/拼寫模式：自帶導航，不顯示外部導航按鈕
               if (
                 practiceMode === "word_selection" ||
                 practiceMode === "word_reading" ||
-                practiceMode === "tug_of_war"
+                practiceMode === "tug_of_war" ||
+                practiceMode === "word_spelling"
               ) {
                 return null;
               }

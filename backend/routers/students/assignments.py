@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # 自動批改的練習模式（不需要老師批改）
 # - rearrangement: 例句重組
 # - word_selection: 單字選擇
-AUTO_GRADED_MODES = frozenset({"rearrangement", "word_selection"})
+AUTO_GRADED_MODES = frozenset({"rearrangement", "word_selection", "word_spelling"})
 
 router = APIRouter()
 
@@ -54,7 +54,13 @@ async def get_student_assignments(
         "due_date_asc", "due_date_desc", "assigned_at_desc", "status"
     ] = Query("due_date_asc"),
     practice_mode: Optional[
-        Literal["reading", "rearrangement", "word_selection", "word_reading"]
+        Literal[
+            "reading",
+            "rearrangement",
+            "word_selection",
+            "word_reading",
+            "word_spelling",
+        ]
     ] = None,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -1850,6 +1856,349 @@ async def complete_word_selection_assignment(
         "status": "COMPLETED",
         "final_score": student_assignment.score,
         "achieved_target": current_mastery >= target_proficiency,
+    }
+
+
+# =============================================================================
+# 單字拼寫 (Word Spelling) APIs
+# =============================================================================
+
+
+class WordSpellingAnswerRequest(BaseModel):
+    content_item_id: int
+    typed_answer: str = Field(max_length=200)
+    time_spent_seconds: int = 0
+    session_id: Optional[int] = None
+
+
+@router.get("/assignments/{assignment_id}/vocabulary/spelling/start")
+async def start_word_spelling_practice(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    Start a word spelling practice session.
+
+    Returns ALL words in sequential order (non-Ebbinghaus, normal practice mode).
+    Students see translation/audio and type the word.
+    """
+    student_id = int(current_student.get("sub"))
+
+    # Verify student has this assignment
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    # Get the Assignment to check practice_mode
+    assignment = None
+    if student_assignment.assignment_id:
+        assignment = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+
+    if assignment and assignment.practice_mode != "word_spelling":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This is not a word spelling assignment",
+        )
+
+    # Update assignment status to IN_PROGRESS if not started
+    if student_assignment.status == AssignmentStatus.NOT_STARTED:
+        student_assignment.status = AssignmentStatus.IN_PROGRESS
+        student_assignment.started_at = datetime.now(timezone.utc)
+        db.commit()
+
+    # Get all content items for this assignment in order
+    assignment_contents = (
+        db.query(AssignmentContent)
+        .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
+        .order_by(AssignmentContent.order_index)
+        .all()
+    )
+    content_ids = [ac.content_id for ac in assignment_contents]
+
+    content_items = (
+        db.query(ContentItem)
+        .filter(ContentItem.content_id.in_(content_ids))
+        .order_by(ContentItem.id)
+        .all()
+    )
+
+    if not content_items:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No vocabulary items found for this assignment",
+        )
+
+    # Shuffle if setting is enabled
+    words_list = list(content_items)
+    if assignment and assignment.shuffle_questions:
+        random.shuffle(words_list)
+
+    # Build words data — all words, sequential order
+    words_data = []
+    for ci in words_list:
+        words_data.append(
+            {
+                "content_item_id": ci.id,
+                "text": ci.text,
+                "translation": ci.translation or "",
+                "audio_url": ci.audio_url,
+                "image_url": ci.image_url,
+            }
+        )
+
+    # Create practice session
+    practice_session = PracticeSession(
+        student_id=student_id,
+        student_assignment_id=assignment_id,
+        practice_mode="word_spelling",
+        words_practiced=0,
+        correct_count=0,
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(practice_session)
+    db.commit()
+    db.refresh(practice_session)
+
+    return {
+        "session_id": practice_session.id,
+        "words": words_data,
+        "total_words": len(words_data),
+        "show_translation": (
+            assignment.show_translation if assignment else True
+        ),
+        "show_image": assignment.show_image if assignment else True,
+        "play_audio": assignment.play_audio if assignment else False,
+        "time_limit_per_question": (
+            assignment.time_limit_per_question if assignment else None
+        ),
+    }
+
+
+@router.post("/assignments/{assignment_id}/vocabulary/spelling/answer")
+async def submit_word_spelling_answer(
+    assignment_id: int,
+    request: WordSpellingAnswerRequest,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    Submit an answer for a word spelling question.
+
+    Compares typed answer against content_item.text (case-insensitive).
+    """
+    student_id = int(current_student.get("sub"))
+
+    # Verify student has this assignment
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    # Get the correct answer from content item
+    content_item = (
+        db.query(ContentItem)
+        .join(Content, ContentItem.content_id == Content.id)
+        .join(AssignmentContent, AssignmentContent.content_id == Content.id)
+        .filter(
+            ContentItem.id == request.content_item_id,
+            AssignmentContent.assignment_id == student_assignment.assignment_id,
+        )
+        .first()
+    )
+
+    if not content_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content item not found",
+        )
+
+    correct_answer = content_item.text or ""
+
+    # Case-insensitive comparison, trim whitespace
+    is_correct = request.typed_answer.strip().lower() == correct_answer.strip().lower()
+
+    # Update memory strength via SM-2 function
+    result = db.execute(
+        text(
+            """
+            SELECT * FROM update_memory_strength(
+                :sa_id,
+                :item_id,
+                :is_correct
+            )
+            """
+        ),
+        {
+            "sa_id": assignment_id,
+            "item_id": request.content_item_id,
+            "is_correct": is_correct,
+        },
+    ).fetchone()
+
+    new_memory_strength = float(result.memory_strength) if result else 0
+
+    # Record PracticeAnswer for analytics
+    if request.session_id:
+        practice_session = (
+            db.query(PracticeSession)
+            .filter(
+                PracticeSession.id == request.session_id,
+                PracticeSession.student_id == student_id,
+                PracticeSession.student_assignment_id == assignment_id,
+            )
+            .first()
+        )
+        if practice_session:
+            practice_answer = PracticeAnswer(
+                practice_session_id=practice_session.id,
+                content_item_id=request.content_item_id,
+                is_correct=is_correct,
+                time_spent_seconds=request.time_spent_seconds,
+                answer_data={
+                    "type": "word_spelling",
+                    "typed_answer": request.typed_answer,
+                    "correct_answer": correct_answer,
+                },
+            )
+            db.add(practice_answer)
+
+            practice_session.words_practiced = (
+                practice_session.words_practiced or 0
+            ) + 1
+            if is_correct:
+                practice_session.correct_count = (
+                    practice_session.correct_count or 0
+                ) + 1
+
+    # Track progress on StudentItemProgress
+    item_progress = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == assignment_id,
+            StudentItemProgress.content_item_id == request.content_item_id,
+        )
+        .first()
+    )
+    if item_progress:
+        ws_data = item_progress.word_selection_data or {
+            "correct_count": 0,
+            "error_count": 0,
+            "error_selections": [],
+        }
+        if is_correct:
+            ws_data["correct_count"] = ws_data.get("correct_count", 0) + 1
+        else:
+            ws_data["error_count"] = ws_data.get("error_count", 0) + 1
+            if request.typed_answer.strip():
+                error_selections = ws_data.get("error_selections", [])
+                found = False
+                for entry in error_selections:
+                    if entry["selected"] == request.typed_answer:
+                        entry["count"] = entry.get("count", 0) + 1
+                        found = True
+                        break
+                if not found and len(error_selections) < 20:
+                    error_selections.append(
+                        {"selected": request.typed_answer, "count": 1}
+                    )
+                ws_data["error_selections"] = error_selections
+        ws_data["last_answered_at"] = datetime.now(timezone.utc).isoformat()
+        item_progress.word_selection_data = dict(ws_data)
+
+    db.commit()
+
+    return {
+        "success": True,
+        "is_correct": is_correct,
+        "correct_answer": correct_answer,
+        "new_memory_strength": new_memory_strength,
+    }
+
+
+@router.post("/assignments/{assignment_id}/vocabulary/spelling/complete")
+async def complete_word_spelling_assignment(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    Mark word spelling assignment as completed.
+
+    Calculates final score based on practice session accuracy.
+    """
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    if student_assignment.status == AssignmentStatus.GRADED:
+        return {
+            "success": True,
+            "message": "作業已提交",
+            "status": "COMPLETED",
+            "final_score": student_assignment.score,
+        }
+
+    # Calculate score from mastery
+    result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+
+    current_mastery = float(result.current_mastery) * 100 if result else 0
+
+    student_assignment.status = AssignmentStatus.GRADED
+    student_assignment.submitted_at = datetime.now(timezone.utc)
+    student_assignment.score = min(100, round(current_mastery))
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "作業已完成！",
+        "status": "COMPLETED",
+        "final_score": student_assignment.score,
     }
 
 

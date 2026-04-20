@@ -963,6 +963,7 @@
       "rearrangement": "例句重組",
       "word_selection": "單字選擇",
       "word_reading": "單字朗讀",
+      "word_spelling": "單字拼寫",
       "all": "全部類型"
     },
     "sort": {
@@ -1110,7 +1111,8 @@
       "rearrangement": "例句重組",
       "vocabulary": "單字練習",
       "wordReading": "單字朗讀",
-      "wordSelection": "單字選擇"
+      "wordSelection": "單字選擇",
+      "wordSpelling": "單字拼寫"
     },
     "stats": {
       "minutes": "分鐘",
@@ -1835,6 +1837,8 @@
         "wordReadingDesc": "學生朗讀單字，系統評分發音",
         "wordSelection": "單字選擇",
         "wordSelectionDesc": "看單字或聽音檔，選擇正確的翻譯",
+        "wordSpelling": "單字拼寫",
+        "wordSpellingDesc": "看翻譯或聽音檔，拼寫正確的單字",
         "targetProficiency": "達標熟悉度",
         "targetProficiencyDesc": "學生需達到此熟悉度才算完成作業",
         "showTranslation": "顯示翻譯",
@@ -4700,6 +4704,34 @@
     },
     "timeLimit": "限時 {{seconds}} 秒"
   },
+  "wordSpelling": {
+    "loading": "正在載入單字...",
+    "noItems": "找不到單字項目",
+    "wordSpelling": "單字拼寫",
+    "questionProgress": "第 {{current}}/{{total}} 題",
+    "correctLabel": "正確",
+    "translationHint": "翻譯",
+    "playAudio": "播放發音",
+    "typeTheWord": "請拼寫正確的單字：",
+    "inputPlaceholder": "在此輸入單字...",
+    "checkAnswer": "確認",
+    "seconds": "秒",
+    "timeUp": "時間到！",
+    "incorrectTryAgain": "拼寫錯誤，請再試一次！",
+    "timeUpTryAgain": "時間到！請再試一次。",
+    "retry": "重試",
+    "practiceComplete": "練習完成！",
+    "accuracy": "正確率",
+    "correct": "答對",
+    "totalWords": "總題數",
+    "practiceAgain": "再練習一次",
+    "submitAssignment": "提交作業",
+    "toast": {
+      "startFailed": "開始練習失敗",
+      "completed": "作業已完成！",
+      "completeFailed": "提交作業失敗"
+    }
+  },
   "wordSelection": {
     "loading": "正在載入單字...",
     "noItems": "找不到單字項目",
@@ -5093,7 +5125,8 @@
       "rearrangement": "例句重組",
       "reading": "例句朗讀",
       "word_selection": "單字選擇",
-      "word_reading": "單字朗讀"
+      "word_reading": "單字朗讀",
+      "word_spelling": "單字拼寫"
     },
     "estimate": {
       "practiceMode": "作業類型",
