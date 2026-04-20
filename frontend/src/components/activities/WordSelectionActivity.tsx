@@ -92,7 +92,9 @@ export default function WordSelectionActivity({
   const [completing, setCompleting] = useState(false);
   const [scoreOverlayOpen, setScoreOverlayOpen] = useState(false);
   const nextQuestionCalledRef = useRef(false);
-  const showAnswerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showAnswerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // Settings
   const [showWord, setShowWord] = useState(true);
@@ -286,7 +288,8 @@ export default function WordSelectionActivity({
 
   useEffect(() => {
     return () => {
-      if (showAnswerTimeoutRef.current) clearTimeout(showAnswerTimeoutRef.current);
+      if (showAnswerTimeoutRef.current)
+        clearTimeout(showAnswerTimeoutRef.current);
     };
   }, []);
 
@@ -380,7 +383,10 @@ export default function WordSelectionActivity({
     setShowResult(true);
     // 答錯且老師開啟「顯示答案」時，跳過「再試一次」動畫避免遮擋揭示的正解
     if (showAnswer) {
-      showAnswerTimeoutRef.current = setTimeout(() => handleOverlayComplete(), 2000);
+      showAnswerTimeoutRef.current = setTimeout(
+        () => handleOverlayComplete(),
+        2000,
+      );
     } else {
       setScoreOverlayOpen(true);
     }
@@ -430,7 +436,10 @@ export default function WordSelectionActivity({
     setShowResult(true);
     // 答錯且老師開啟「顯示答案」時，跳過「再試一次」動畫避免遮擋揭示的正解
     if (!correct && showAnswer) {
-      showAnswerTimeoutRef.current = setTimeout(() => handleOverlayComplete(), 2000);
+      showAnswerTimeoutRef.current = setTimeout(
+        () => handleOverlayComplete(),
+        2000,
+      );
     } else {
       setScoreOverlayOpen(true);
     }
