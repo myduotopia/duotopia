@@ -436,9 +436,7 @@ export default function GradingPage() {
   const handleReanalyzeItem = async (itemProgressId: number) => {
     if (!assignmentId) return;
 
-    setReanalyzingItems((prev: Set<number>) =>
-      new Set(prev).add(itemProgressId),
-    );
+    setReanalyzingItems((prev) => new Set(prev).add(itemProgressId));
 
     try {
       const response = (await apiClient.post(
@@ -446,7 +444,6 @@ export default function GradingPage() {
       )) as { success: boolean; ai_scores: SubmissionItem["ai_scores"] };
 
       if (response.success && submission) {
-        // 更新 submission 中對應題目的 ai_scores
         const updatedSubmissions = submission.submissions.map(
           (item: SubmissionItem) =>
             item.item_progress_id === itemProgressId
@@ -471,11 +468,13 @@ export default function GradingPage() {
           content_groups: updatedGroups,
         });
         toast.success(t("gradingPage.messages.reanalyzeSuccess"));
+      } else {
+        toast.error(t("gradingPage.messages.reanalyzeFailed"));
       }
     } catch {
       toast.error(t("gradingPage.messages.reanalyzeFailed"));
     } finally {
-      setReanalyzingItems((prev: Set<number>) => {
+      setReanalyzingItems((prev) => {
         const next = new Set(prev);
         next.delete(itemProgressId);
         return next;

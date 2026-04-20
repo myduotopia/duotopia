@@ -1478,7 +1478,10 @@ async def reanalyze_item(
     if not classroom:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # 4. 確認有錄音檔案
+    # 4. 確認作業未封存
+    _check_not_archived(student_assignment, db)
+
+    # 5. 確認有錄音檔案
     if not item_progress.recording_url:
         raise HTTPException(
             status_code=400, detail="No recording available for reanalysis"
@@ -1497,6 +1500,8 @@ async def reanalyze_item(
     # flush 使 ai_assessed_at=None 在當前 transaction 生效，
     # 因為 trigger_ai_assessment_for_item 會檢查此欄位決定是否執行分析。
     # 該函式內部已包含 db.commit()，成功時分數會被持久化。
+    # 若分析失敗，需手動恢復 ai_assessed_at（因為 commit 後 rollback 無效）。
+    original_ai_assessed_at = item_progress.ai_assessed_at
     try:
         item_progress.ai_assessed_at = None
         db.flush()
@@ -1504,14 +1509,18 @@ async def reanalyze_item(
         success = await trigger_ai_assessment_for_item(item_progress, db, content_item)
 
         if not success:
-            db.rollback()
+            # trigger 函式失敗時內部會 rollback，
+            # 但若它已 commit 了 ai_assessed_at=None，需手動恢復
+            item_progress.ai_assessed_at = original_ai_assessed_at
+            db.commit()
             raise HTTPException(
                 status_code=500, detail="AI analysis failed, please try again later"
             )
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        item_progress.ai_assessed_at = original_ai_assessed_at
+        db.commit()
         logger.error(f"Reanalyze failed for item_progress {item_progress_id}: {e}")
         raise HTTPException(
             status_code=500, detail="AI analysis failed, please try again later"
