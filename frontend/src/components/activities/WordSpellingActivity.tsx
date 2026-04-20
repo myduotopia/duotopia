@@ -196,12 +196,7 @@ export default function WordSpellingActivity({
 
   // Handle timeout
   useEffect(() => {
-    if (
-      timeRemaining === 0 &&
-      !showResult &&
-      !submitting &&
-      words.length > 0
-    ) {
+    if (timeRemaining === 0 && !showResult && !submitting && words.length > 0) {
       handleSubmitAnswer(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -439,7 +434,11 @@ export default function WordSpellingActivity({
           </span>
         </div>
         <Progress
-          value={((currentIndex + (showResult && isCorrect ? 1 : 0)) / words.length) * 100}
+          value={
+            ((currentIndex + (showResult && isCorrect ? 1 : 0)) /
+              words.length) *
+            100
+          }
           max={100}
           className="h-2.5 [&>div]:bg-gradient-to-r [&>div]:from-indigo-500 [&>div]:to-purple-500"
         />
@@ -557,11 +556,7 @@ export default function WordSpellingActivity({
                       "Time's up! Try again."}
                 </span>
               </div>
-              <Button
-                onClick={handleRetry}
-                variant="outline"
-                className="gap-2"
-              >
+              <Button onClick={handleRetry} variant="outline" className="gap-2">
                 <RotateCcw className="h-4 w-4" />
                 {t("wordSpelling.retry") || "Retry"}
               </Button>

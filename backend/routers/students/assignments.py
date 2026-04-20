@@ -1980,9 +1980,7 @@ async def start_word_spelling_practice(
         "session_id": practice_session.id,
         "words": words_data,
         "total_words": len(words_data),
-        "show_translation": (
-            assignment.show_translation if assignment else True
-        ),
+        "show_translation": (assignment.show_translation if assignment else True),
         "show_image": assignment.show_image if assignment else True,
         "play_audio": assignment.play_audio if assignment else False,
         "time_limit_per_question": (
