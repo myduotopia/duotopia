@@ -2888,7 +2888,8 @@
       "checkRecording": "檢查錄音",
       "applyAISuggestions": "套用 AI 建議",
       "requestRevision": "要求訂正",
-      "completeGrading": "完成批改"
+      "completeGrading": "完成批改",
+      "reanalyze": "重新分析"
     },
     "labels": {
       "questionGroup": "題組",
@@ -2957,7 +2958,10 @@
       "aiGradingFailed": "AI 批改失敗，請稍後再試",
       "noStudentToGrade": "沒有可批改的學生（狀態須為已提交或已訂正）",
       "audioUploadFailed": "錄音檔案上傳異常",
-      "audioUploadFailedDetail": "有分析結果，但錄音檔案未成功上傳"
+      "audioUploadFailedDetail": "有分析結果，但錄音檔案未成功上傳",
+      "reanalyzing": "分析中...",
+      "reanalyzeSuccess": "重新分析完成",
+      "reanalyzeFailed": "重新分析失敗，請稍後再試"
     },
     "status": {
       "notStarted": "未開始",

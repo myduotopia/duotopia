@@ -2835,7 +2835,8 @@
       "checkRecording": "Check Recording",
       "applyAISuggestions": "Apply AI Suggestions",
       "requestRevision": "Request Revision",
-      "completeGrading": "Complete Grading"
+      "completeGrading": "Complete Grading",
+      "reanalyze": "Re-analyze"
     },
     "labels": {
       "questionGroup": "Question Group",
@@ -2904,7 +2905,10 @@
       "aiGradingFailed": "AI grading failed, please try again",
       "noStudentToGrade": "No student to grade (status must be Submitted or Resubmitted)",
       "audioUploadFailed": "Recording upload failed",
-      "audioUploadFailedDetail": "Analysis results available, but recording file was not uploaded"
+      "audioUploadFailedDetail": "Analysis results available, but recording file was not uploaded",
+      "reanalyzing": "Analyzing...",
+      "reanalyzeSuccess": "Re-analysis completed",
+      "reanalyzeFailed": "Re-analysis failed, please try again later"
     },
     "status": {
       "notStarted": "Not Started",
