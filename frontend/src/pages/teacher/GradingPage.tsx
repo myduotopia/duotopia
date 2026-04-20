@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  Loader2,
   Search,
 } from "lucide-react";
 import { Assignment } from "@/types";
@@ -432,10 +433,7 @@ export default function GradingPage() {
     }
   };
 
-  const handleReanalyzeItem = async (
-    itemProgressId: number,
-    itemIndex: number,
-  ) => {
+  const handleReanalyzeItem = async (itemProgressId: number) => {
     if (!assignmentId) return;
 
     setReanalyzingItems((prev: Set<number>) =>
@@ -450,8 +448,8 @@ export default function GradingPage() {
       if (response.success && submission) {
         // 更新 submission 中對應題目的 ai_scores
         const updatedSubmissions = submission.submissions.map(
-          (item: SubmissionItem, idx: number) =>
-            idx === itemIndex
+          (item: SubmissionItem) =>
+            item.item_progress_id === itemProgressId
               ? { ...item, ai_scores: response.ai_scores }
               : item,
         );
@@ -1337,7 +1335,6 @@ export default function GradingPage() {
                                             onClick={() =>
                                               handleReanalyzeItem(
                                                 item.item_progress_id!,
-                                                globalIndex,
                                               )
                                             }
                                           >
@@ -1345,7 +1342,7 @@ export default function GradingPage() {
                                               item.item_progress_id,
                                             ) ? (
                                               <>
-                                                <Sparkles className="h-3 w-3 mr-1 animate-spin" />
+                                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                                                 {t(
                                                   "gradingPage.messages.reanalyzing",
                                                 )}

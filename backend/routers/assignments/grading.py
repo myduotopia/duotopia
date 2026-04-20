@@ -1494,6 +1494,9 @@ async def reanalyze_item(
         raise HTTPException(status_code=404, detail="Content item not found")
 
     # 6. 清除舊的評估結果，觸發重新分析
+    # flush 使 ai_assessed_at=None 在當前 transaction 生效，
+    # 因為 trigger_ai_assessment_for_item 會檢查此欄位決定是否執行分析。
+    # 該函式內部已包含 db.commit()，成功時分數會被持久化。
     try:
         item_progress.ai_assessed_at = None
         db.flush()
