@@ -1,7 +1,10 @@
 """1Campus SSO authentication endpoints.
 
 Provides:
+- GET /api/auth/1campus/login-url — return OAuth authorize URL
 - GET /api/auth/1campus/callback — handle code exchange + account matching
+  - With schoolDsns: Identity Code flow (from 1Campus platform)
+  - Without schoolDsns: OAuth 2.0 flow (from Duotopia login page)
 - POST /api/auth/1campus/merge-confirm — confirm account merge (requires signed token)
 """
 
@@ -204,24 +207,52 @@ def _build_teacher_response(db: Session, teacher: Teacher) -> dict:
 # --- Endpoints ---
 
 
+@router.get("/login-url")
+async def get_login_url():
+    """Return the 1Campus OAuth authorize URL.
+
+    The frontend redirects users to this URL to initiate SSO login.
+    """
+    try:
+        url = OneCampusService.get_oauth_authorize_url()
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"url": url}
+
+
 @router.get("/callback")
 @limiter.limit("10/minute")
 async def one_campus_callback(
     request: Request,
-    code: str = Query(..., description="1Campus one-time identity code"),
-    schoolDsns: str = Query(..., description="School DSNS identifier"),
+    code: str = Query(..., description="Authorization code or identity code"),
+    schoolDsns: Optional[str] = Query(
+        None, description="School DSNS (present for Identity Code flow only)"
+    ),
     db: Session = Depends(get_db),
 ):
     """Handle 1Campus SSO callback.
 
-    1. Exchange code for identity info
-    2. Fetch extended data (idNumberHash) via Data API
-    3. Match or create account
-    4. Return JWT token
+    Two flows are supported, detected by the presence of schoolDsns:
+    - With schoolDsns: Identity Code flow (user comes from 1Campus platform)
+    - Without schoolDsns: OAuth 2.0 flow (user clicks login on Duotopia)
     """
+    if schoolDsns:
+        return await _handle_identity_code_flow(request, code, schoolDsns, db)
+    return await _handle_oauth_flow(request, code, db)
+
+
+async def _handle_identity_code_flow(
+    request: Request,
+    code: str,
+    school_dsns: str,
+    db: Session,
+) -> OneCampusCallbackResponse:
+    """Handle the Identity Code flow (from 1Campus platform)."""
     # Step 1: Exchange identity code
     try:
-        identity_data = await OneCampusService.exchange_identity_code(schoolDsns, code)
+        identity_data = await OneCampusService.exchange_identity_code(
+            school_dsns, code
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except OneCampusCodeNotFoundError:
@@ -249,7 +280,6 @@ async def one_campus_callback(
     try:
         user_role_data = await OneCampusService.get_user_role(account=account)
         for school in user_role_data.get("school", []):
-            # Try student role first, then teacher role
             for role_key in ("studentRole", "teacherRole"):
                 role_data = school.get(role_key)
                 if role_data and role_data.get("idNumberHash"):
@@ -270,7 +300,7 @@ async def one_campus_callback(
             one_campus_account=account,
             teacher_name=teacher_name,
             national_id_hash=national_id_hash,
-            school_dsns=schoolDsns,
+            school_dsns=school_dsns,
         )
 
         teacher_response = _build_teacher_response(db, teacher)
@@ -305,7 +335,6 @@ async def one_campus_callback(
     student_name = student_data.get("studentName", "")
     student_number = student_data.get("studentNumber")
 
-    # Step 3: Match or create account
     identity, student, action = OneCampusAccountService.find_or_create_student(
         db=db,
         one_campus_student_id=one_campus_student_id,
@@ -313,10 +342,9 @@ async def one_campus_callback(
         student_name=student_name,
         student_number=student_number,
         national_id_hash=national_id_hash,
-        school_dsns=schoolDsns,
+        school_dsns=school_dsns,
     )
 
-    # Step 4: Handle result
     if action == "merge_prompt":
         merge_token = _create_merge_token(
             existing_identity_id=identity.id,
@@ -351,6 +379,137 @@ async def one_campus_callback(
         student=_build_student_response(db, student),
         action=action,
     )
+
+
+async def _handle_oauth_flow(
+    request: Request,
+    code: str,
+    db: Session,
+) -> OneCampusCallbackResponse:
+    """Handle the OAuth 2.0 Authorization Code flow (from Duotopia login page)."""
+    # Step 1: Exchange authorization code for access token
+    try:
+        token_data = await OneCampusService.exchange_oauth_code(code)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error("1Campus OAuth code exchange failed: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to communicate with 1Campus. Please try again.",
+        )
+
+    oauth_access_token = token_data.get("access_token")
+    if not oauth_access_token:
+        raise HTTPException(
+            status_code=502, detail="1Campus did not return an access token."
+        )
+
+    # Step 2: Get user info
+    try:
+        user_info = await OneCampusService.get_oauth_user_info(oauth_access_token)
+    except Exception as e:
+        logger.error("1Campus OAuth user info fetch failed: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to fetch user info from 1Campus.",
+        )
+
+    uuid = user_info.get("uuid", "")
+    first_name = user_info.get("firstName", "")
+    last_name = user_info.get("lastName", "")
+    mail = user_info.get("mail", "")
+
+    if not uuid:
+        raise HTTPException(
+            status_code=502, detail="1Campus did not return a user UUID."
+        )
+
+    # Step 3: Try getUserRole to determine teacher/student role
+    role_type = None
+    national_id_hash = None
+    one_campus_student_id = None
+    student_name = None
+    student_number = None
+    teacher_name = None
+
+    try:
+        user_role_data = await OneCampusService.get_user_role(account=mail)
+        for school in user_role_data.get("school", []):
+            # Extract national_id_hash
+            for role_key in ("studentRole", "teacherRole"):
+                role_data = school.get(role_key)
+                if role_data and role_data.get("idNumberHash"):
+                    national_id_hash = role_data["idNumberHash"]
+                    break
+
+            # Determine role
+            if school.get("teacherRole"):
+                role_type = "teacher"
+                teacher_name = school["teacherRole"].get("teacherName")
+            elif school.get("studentRole"):
+                role_type = "student"
+                sr = school["studentRole"]
+                one_campus_student_id = str(sr.get("studentID", ""))
+                student_name = sr.get("studentName")
+                student_number = sr.get("studentNumber")
+
+            if role_type:
+                break
+    except Exception as e:
+        logger.warning("1Campus getUserRole after OAuth failed (non-fatal): %s", e)
+
+    # Step 4: Match or create account
+    display_name = f"{last_name}{first_name}".strip()
+
+    identity, user, detected_role, action = (
+        OneCampusAccountService.find_or_create_by_oauth(
+            db=db,
+            uuid=uuid,
+            mail=mail,
+            first_name=first_name,
+            last_name=last_name,
+            role_type=role_type,
+            one_campus_student_id=one_campus_student_id,
+            student_name=student_name,
+            student_number=student_number,
+            teacher_name=teacher_name,
+            national_id_hash=national_id_hash,
+        )
+    )
+
+    # Step 5: Build response
+    if detected_role == "student":
+        access_token = create_access_token(
+            data={"sub": str(user.id), "type": "student"},
+            expires_delta=timedelta(hours=24),
+        )
+        user.last_login = datetime.now(timezone.utc)
+        db.commit()
+        return OneCampusCallbackResponse(
+            access_token=access_token,
+            role_type="student",
+            student=_build_student_response(db, user),
+            action=action,
+        )
+    else:
+        teacher_response = _build_teacher_response(db, user)
+        access_token = create_access_token(
+            data={
+                "sub": str(user.id),
+                "email": user.email,
+                "type": "teacher",
+                "name": user.name,
+                "role": teacher_response["role"],
+            },
+            expires_delta=timedelta(hours=24),
+        )
+        return OneCampusCallbackResponse(
+            access_token=access_token,
+            role_type="teacher",
+            user=teacher_response,
+            action=action,
+        )
 
 
 @router.post("/merge-confirm")

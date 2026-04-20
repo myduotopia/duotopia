@@ -54,7 +54,7 @@ export default function OneCampusCallback() {
     const schoolDsns =
       searchParams.get("schoolDsns") || searchParams.get("dsns");
 
-    if (!code || !schoolDsns) {
+    if (!code) {
       setStatus("error");
       setErrorMessage(
         t(
@@ -65,14 +65,19 @@ export default function OneCampusCallback() {
       return;
     }
 
-    handleCallback(code, schoolDsns);
+    // With schoolDsns → Identity Code flow; without → OAuth flow
+    handleCallback(code, schoolDsns || undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  async function handleCallback(code: string, schoolDsns: string) {
+  async function handleCallback(code: string, schoolDsns?: string) {
     try {
+      const params: Record<string, string> = { code };
+      if (schoolDsns) {
+        params.schoolDsns = schoolDsns;
+      }
       const response = await api.get("/api/auth/1campus/callback", {
-        params: { code, schoolDsns },
+        params,
       });
       const data = response.data;
 

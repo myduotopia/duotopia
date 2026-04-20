@@ -7,6 +7,7 @@ import { ArrowLeft, ChevronRight, Home, Mail, Eye, EyeOff } from "lucide-react";
 import { useStudentAuthStore, StudentUser } from "@/stores/studentAuthStore";
 import { authService } from "@/services/authService";
 import { teacherService } from "@/services/teacherService";
+import { apiClient } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
@@ -498,8 +499,20 @@ export default function StudentLogin() {
                   <Button
                     variant="outline"
                     className="w-full py-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-green-200 text-green-700 font-medium"
-                    onClick={() => {
-                      window.location.href = "https://1campus.net";
+                    onClick={async () => {
+                      try {
+                        const res = await apiClient.get<{ url: string }>(
+                          "/api/auth/1campus/login-url",
+                        );
+                        window.location.href = res.url;
+                      } catch {
+                        setError(
+                          t(
+                            "studentLogin.oneCampus.error",
+                            "Failed to connect to 1Campus. Please try again.",
+                          ),
+                        );
+                      }
                     }}
                   >
                     🏫{" "}

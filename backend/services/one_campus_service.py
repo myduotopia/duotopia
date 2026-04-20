@@ -3,6 +3,7 @@
 
 Handles:
 - OAuth client_credentials token management with caching
+- OAuth 2.0 Authorization Code flow (auth.ischool.com.tw)
 - Identity code exchange (SSO login)
 - getUserRole for cross-school identity data (idNumberHash)
 """
@@ -31,6 +32,16 @@ ONE_CAMPUS_API_BASE = (
 
 ONE_CAMPUS_CLIENT_ID = getattr(settings, "ONE_CAMPUS_CLIENT_ID", None)
 ONE_CAMPUS_CLIENT_SECRET = getattr(settings, "ONE_CAMPUS_CLIENT_SECRET", None)
+
+# 1Campus OAuth (auth.ischool.com.tw)
+ONE_CAMPUS_OAUTH_BASE = "https://auth.ischool.com.tw"
+ONE_CAMPUS_OAUTH_CLIENT_ID = getattr(settings, "ONE_CAMPUS_OAUTH_CLIENT_ID", None)
+ONE_CAMPUS_OAUTH_CLIENT_SECRET = getattr(
+    settings, "ONE_CAMPUS_OAUTH_CLIENT_SECRET", None
+)
+ONE_CAMPUS_OAUTH_REDIRECT_URI = getattr(
+    settings, "ONE_CAMPUS_OAUTH_REDIRECT_URI", None
+)
 
 # Token cache (module-level singleton) with asyncio.Lock to prevent race conditions
 _token_cache: dict = {"access_token": None, "expires_at": 0}
@@ -82,6 +93,69 @@ async def _get_access_token() -> str:
 
 class OneCampusService:
     """1Campus API client."""
+
+    @staticmethod
+    def get_oauth_authorize_url() -> str:
+        """Build the OAuth authorize URL for 1Campus SSO.
+
+        The frontend redirects the user to this URL to initiate login.
+        """
+        if not ONE_CAMPUS_OAUTH_CLIENT_ID or not ONE_CAMPUS_OAUTH_REDIRECT_URI:
+            raise RuntimeError(
+                "ONE_CAMPUS_OAUTH_CLIENT_ID and ONE_CAMPUS_OAUTH_REDIRECT_URI must be set"
+            )
+        return (
+            f"{ONE_CAMPUS_OAUTH_BASE}/oauth/authorize.php"
+            f"?client_id={ONE_CAMPUS_OAUTH_CLIENT_ID}"
+            f"&response_type=code"
+            f"&redirect_uri={ONE_CAMPUS_OAUTH_REDIRECT_URI}"
+            f"&scope=User.Mail,User.BasicInfo"
+        )
+
+    @staticmethod
+    async def exchange_oauth_code(code: str) -> dict:
+        """Exchange an OAuth authorization code for an access token.
+
+        POST https://auth.ischool.com.tw/oauth/token.php
+
+        Returns dict with keys: access_token, expires_in, token_type, scope, refresh_token.
+        """
+        if not ONE_CAMPUS_OAUTH_CLIENT_ID or not ONE_CAMPUS_OAUTH_CLIENT_SECRET:
+            raise RuntimeError(
+                "ONE_CAMPUS_OAUTH_CLIENT_ID and ONE_CAMPUS_OAUTH_CLIENT_SECRET must be set"
+            )
+        if not ONE_CAMPUS_OAUTH_REDIRECT_URI:
+            raise RuntimeError("ONE_CAMPUS_OAUTH_REDIRECT_URI must be set")
+
+        client = get_http_client()
+        resp = await client.post(
+            f"{ONE_CAMPUS_OAUTH_BASE}/oauth/token.php",
+            data={
+                "client_id": ONE_CAMPUS_OAUTH_CLIENT_ID,
+                "client_secret": ONE_CAMPUS_OAUTH_CLIENT_SECRET,
+                "redirect_uri": ONE_CAMPUS_OAUTH_REDIRECT_URI,
+                "code": code,
+                "grant_type": "authorization_code",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    @staticmethod
+    async def get_oauth_user_info(access_token: str) -> dict:
+        """Get user info from 1Campus OAuth.
+
+        GET https://auth.ischool.com.tw/services/me.php?access_token=xxx
+
+        Returns dict with keys: uuid, firstName, lastName, language, mail.
+        """
+        client = get_http_client()
+        resp = await client.get(
+            f"{ONE_CAMPUS_OAUTH_BASE}/services/me.php",
+            params={"access_token": access_token},
+        )
+        resp.raise_for_status()
+        return resp.json()
 
     @staticmethod
     async def exchange_identity_code(school_dsns: str, code: str) -> dict:

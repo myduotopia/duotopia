@@ -268,8 +268,20 @@ export default function TeacherLogin() {
                   type="button"
                   variant="outline"
                   className="w-full py-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-green-200 text-green-700 font-medium"
-                  onClick={() => {
-                    window.location.href = "https://1campus.net";
+                  onClick={async () => {
+                    try {
+                      const res = await apiClient.get<{ url: string }>(
+                        "/api/auth/1campus/login-url",
+                      );
+                      window.location.href = res.url;
+                    } catch {
+                      setError(
+                        t(
+                          "teacherLogin.oneCampus.error",
+                          "Failed to connect to 1Campus. Please try again.",
+                        ),
+                      );
+                    }
                   }}
                 >
                   🏫{" "}

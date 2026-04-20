@@ -6,5 +6,5 @@ export const FEATURE_FLAGS = {
   /** 左側選單「作業管理」 */
   ASSIGNMENTS: true,
   /** 1Campus SSO 登入按鈕 */
-  ONE_CAMPUS_LOGIN: false,
+  ONE_CAMPUS_LOGIN: true,
 } as const;
