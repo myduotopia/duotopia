@@ -65,7 +65,7 @@ interface WordSelectionActivityProps {
   isPreviewMode?: boolean;
   isDemoMode?: boolean; // Demo mode - uses public demo API endpoints
   initialPracticeMode?: boolean; // True when assignment is already GRADED (re-practice)
-  showAnswer?: boolean; // 答錯後是否揭示正確答案（Issue #538）
+  showAnswer?: boolean; // 答錯後是否揭示正確答案
   onComplete?: () => void;
 }
 
@@ -92,6 +92,7 @@ export default function WordSelectionActivity({
   const [completing, setCompleting] = useState(false);
   const [scoreOverlayOpen, setScoreOverlayOpen] = useState(false);
   const nextQuestionCalledRef = useRef(false);
+  const showAnswerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Settings
   const [showWord, setShowWord] = useState(true);
@@ -283,6 +284,12 @@ export default function WordSelectionActivity({
     startPractice();
   }, [startPractice]);
 
+  useEffect(() => {
+    return () => {
+      if (showAnswerTimeoutRef.current) clearTimeout(showAnswerTimeoutRef.current);
+    };
+  }, []);
+
   // Play audio for current word
   const playWordAudio = useCallback(() => {
     const currentWord = words[currentIndex];
@@ -371,9 +378,9 @@ export default function WordSelectionActivity({
     setSelectedAnswer(null); // No selection made
     setIsCorrect(false);
     setShowResult(true);
-    // Issue #538：答錯且老師開啟「顯示答案」時，跳過「再試一次」動畫避免遮擋揭示的正解
+    // 答錯且老師開啟「顯示答案」時，跳過「再試一次」動畫避免遮擋揭示的正解
     if (showAnswer) {
-      setTimeout(() => handleOverlayComplete(), 2000);
+      showAnswerTimeoutRef.current = setTimeout(() => handleOverlayComplete(), 2000);
     } else {
       setScoreOverlayOpen(true);
     }
@@ -421,9 +428,9 @@ export default function WordSelectionActivity({
     setSelectedAnswer(answer);
     setIsCorrect(correct);
     setShowResult(true);
-    // Issue #538：答錯且老師開啟「顯示答案」時，跳過「再試一次」動畫避免遮擋揭示的正解
+    // 答錯且老師開啟「顯示答案」時，跳過「再試一次」動畫避免遮擋揭示的正解
     if (!correct && showAnswer) {
-      setTimeout(() => handleOverlayComplete(), 2000);
+      showAnswerTimeoutRef.current = setTimeout(() => handleOverlayComplete(), 2000);
     } else {
       setScoreOverlayOpen(true);
     }
