@@ -75,6 +75,7 @@ interface TeacherSubscriptionInfo {
   teacher_id: number;
   teacher_name: string;
   teacher_email: string;
+  email_verified: boolean;
   current_subscription: {
     period_id: number;
     plan_name: string;
@@ -83,6 +84,10 @@ interface TeacherSubscriptionInfo {
     end_date: string;
     status: string;
   } | null;
+  credit_points_total: number;
+  credit_points_used: number;
+  credit_points_remaining: number;
+  has_trial_bonus: boolean;
 }
 
 interface SubscriptionPeriod {
@@ -246,6 +251,14 @@ export default function AdminSubscriptionDashboard() {
     notes: "",
   });
 
+  // Grant points modal state
+  const [grantModalOpen, setGrantModalOpen] = useState(false);
+  const [grantForm, setGrantForm] = useState({
+    points: undefined as number | undefined,
+    reason: "",
+    expires_days: 365,
+  });
+
   useEffect(() => {
     loadDashboardData();
   }, []);
@@ -339,6 +352,51 @@ export default function AdminSubscriptionDashboard() {
       reason: "",
     });
     setEditModalOpen(true);
+  };
+
+  const handleOpenGrantModal = (teacher: TeacherSubscriptionInfo) => {
+    setSelectedTeacher(teacher);
+    setGrantForm({
+      points: undefined,
+      reason: "",
+      expires_days: 365,
+    });
+    setGrantModalOpen(true);
+  };
+
+  const handleSubmitGrant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTeacher || !grantForm.points || !grantForm.reason) return;
+
+    try {
+      setLoading(true);
+      await apiClient.post("/api/admin/credit-packages/grant", {
+        teacher_email: selectedTeacher.teacher_email,
+        points: grantForm.points,
+        reason: grantForm.reason,
+        expires_days: grantForm.expires_days,
+      });
+
+      setSuccessMessage(
+        t("adminSubscription.messages.grantSuccess", {
+          points: grantForm.points,
+          name: selectedTeacher.teacher_name,
+          defaultValue: `Successfully granted ${grantForm.points} points to ${selectedTeacher.teacher_name}`,
+        }),
+      );
+      setGrantModalOpen(false);
+      loadDashboardData();
+    } catch (error: unknown) {
+      if (isApiError(error)) {
+        setErrorMessage(
+          error.response?.data?.detail ||
+            error.message ||
+            t("adminSubscription.errors.grantFailed", "Failed to grant points"),
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOpenRefundModal = (period: SubscriptionPeriod) => {
@@ -977,6 +1035,22 @@ export default function AdminSubscriptionDashboard() {
                                     />
                                   </div>
                                 </div>
+                              ) : teacher.credit_points_total > 0 ? (
+                                <div className="space-y-1">
+                                  <div className="text-sm text-purple-700">
+                                    {teacher.credit_points_used.toLocaleString()}{" "}
+                                    /{" "}
+                                    {teacher.credit_points_total.toLocaleString()}
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div
+                                      className="bg-purple-500 h-2 rounded-full"
+                                      style={{
+                                        width: `${Math.min((teacher.credit_points_used / teacher.credit_points_total) * 100 || 0, 100)}%`,
+                                      }}
+                                    />
+                                  </div>
+                                </div>
                               ) : (
                                 "-"
                               )}
@@ -987,6 +1061,14 @@ export default function AdminSubscriptionDashboard() {
                                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
                                   {t("adminSubscription.status.active")}
                                 </span>
+                              ) : teacher.has_trial_bonus ? (
+                                <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
+                                  {t("adminSubscription.status.trial", "Free Trial")}
+                                </span>
+                              ) : !teacher.email_verified ? (
+                                <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
+                                  {t("adminSubscription.status.unverified", "Unverified")}
+                                </span>
                               ) : (
                                 <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">
                                   {t("adminSubscription.status.none")}
@@ -994,15 +1076,26 @@ export default function AdminSubscriptionDashboard() {
                               )}
                             </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleOpenEditModal(teacher)}
-                                className="h-8"
-                              >
-                                <Edit className="w-3 h-3 mr-1" />
-                                {t("adminSubscription.buttons.edit")}
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenEditModal(teacher)}
+                                  className="h-8"
+                                >
+                                  <Edit className="w-3 h-3 mr-1" />
+                                  {t("adminSubscription.buttons.edit")}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenGrantModal(teacher)}
+                                  className="h-8 text-purple-600 border-purple-300 hover:bg-purple-50"
+                                >
+                                  <GraduationCap className="w-3 h-3 mr-1" />
+                                  {t("adminSubscription.buttons.grantPoints", "Grant")}
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
 
@@ -2159,6 +2252,112 @@ export default function AdminSubscriptionDashboard() {
                   <>
                     <RefreshCcw className="w-4 h-4 mr-2" />
                     Confirm Refund
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Grant Points Modal */}
+      <Dialog open={grantModalOpen} onOpenChange={setGrantModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>
+              {t("adminSubscription.grant.title", "Grant Points")}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedTeacher &&
+                `${selectedTeacher.teacher_name} (${selectedTeacher.teacher_email})`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitGrant} className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t("adminSubscription.grant.points", "Points")}{" "}
+                <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="number"
+                value={grantForm.points || ""}
+                onChange={(e) =>
+                  setGrantForm({
+                    ...grantForm,
+                    points: e.target.value
+                      ? parseInt(e.target.value)
+                      : undefined,
+                  })
+                }
+                placeholder={t(
+                  "adminSubscription.grant.pointsPlaceholder",
+                  "e.g. 2000",
+                )}
+                min="1"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t("adminSubscription.grant.expiresDays", "Valid for (days)")}{" "}
+              </label>
+              <Input
+                type="number"
+                value={grantForm.expires_days}
+                onChange={(e) =>
+                  setGrantForm({
+                    ...grantForm,
+                    expires_days: parseInt(e.target.value) || 365,
+                  })
+                }
+                min="1"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t("adminSubscription.grant.reason", "Reason")}{" "}
+                <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                value={grantForm.reason}
+                onChange={(e) =>
+                  setGrantForm({ ...grantForm, reason: e.target.value })
+                }
+                placeholder={t(
+                  "adminSubscription.grant.reasonPlaceholder",
+                  "Why are these points being granted?",
+                )}
+                required
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setGrantModalOpen(false)}
+                disabled={loading}
+              >
+                {t("common.cancel", "Cancel")}
+              </Button>
+              <Button
+                type="submit"
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+                disabled={loading || !grantForm.points || !grantForm.reason}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    {t("adminSubscription.grant.granting", "Granting...")}
+                  </>
+                ) : (
+                  <>
+                    <GraduationCap className="w-4 h-4 mr-2" />
+                    {t("adminSubscription.grant.confirm", "Confirm Grant")}
                   </>
                 )}
               </Button>

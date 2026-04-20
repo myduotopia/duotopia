@@ -25,6 +25,7 @@ from models import (
     PointUsageLog,
     ClassroomStudent,
 )
+from models.credit_package import CreditPackage
 from routers.admin import get_current_admin
 
 router = APIRouter(prefix="/api/admin/subscription", tags=["admin-subscription"])
@@ -421,13 +422,40 @@ async def get_all_teachers_subscriptions(
         .all()
     )
 
+    # 🔥 Preload credit packages for all teachers (avoid N+1)
+    teacher_ids = [t.id for t, _ in teachers_with_subs]
+    all_credit_packages = (
+        db.query(CreditPackage)
+        .filter(
+            CreditPackage.teacher_id.in_(teacher_ids),
+            CreditPackage.status == "active",
+        )
+        .all()
+    )
+    credit_packages_by_teacher = {}
+    for pkg in all_credit_packages:
+        if pkg.teacher_id not in credit_packages_by_teacher:
+            credit_packages_by_teacher[pkg.teacher_id] = []
+        credit_packages_by_teacher[pkg.teacher_id].append(pkg)
+
     result = []
     for teacher, period in teachers_with_subs:
+        # Credit package info
+        teacher_pkgs = credit_packages_by_teacher.get(teacher.id, [])
+        credit_points_total = sum(p.points_total for p in teacher_pkgs)
+        credit_points_used = sum(p.points_used for p in teacher_pkgs)
+        has_trial_bonus = any(p.source == "trial_bonus" for p in teacher_pkgs)
+
         teacher_data = {
             "teacher_id": teacher.id,
             "teacher_name": teacher.name,
             "teacher_email": teacher.email,
+            "email_verified": teacher.email_verified or False,
             "current_subscription": None,
+            "credit_points_total": credit_points_total,
+            "credit_points_used": credit_points_used,
+            "credit_points_remaining": credit_points_total - credit_points_used,
+            "has_trial_bonus": has_trial_bonus,
         }
 
         if period:
