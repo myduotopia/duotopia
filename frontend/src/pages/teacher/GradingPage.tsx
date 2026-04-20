@@ -440,8 +440,8 @@ export default function GradingPage() {
   ) => {
     if (!assignmentId) return;
 
-    setReanalyzingItems(
-      (prev: Set<number>) => new Set(prev).add(itemProgressId),
+    setReanalyzingItems((prev: Set<number>) =>
+      new Set(prev).add(itemProgressId),
     );
 
     try {
@@ -458,7 +458,9 @@ export default function GradingPage() {
               : item,
         );
         const updatedGroups = submission.content_groups?.map(
-          (group: NonNullable<StudentSubmission["content_groups"]>[number]) => ({
+          (
+            group: NonNullable<StudentSubmission["content_groups"]>[number],
+          ) => ({
             ...group,
             submissions: group.submissions.map((item: SubmissionItem) =>
               item.item_progress_id === itemProgressId
