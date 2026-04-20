@@ -1330,7 +1330,7 @@ export default function GradingPage() {
                                           <Button
                                             variant="outline"
                                             size="sm"
-                                            className="mt-3 block mx-auto"
+                                            className="mt-3 mx-auto flex"
                                             disabled={reanalyzingItems.has(
                                               item.item_progress_id,
                                             )}
