@@ -135,7 +135,6 @@ export default function GradingPage() {
     "students" | "content" | "grading"
   >("content");
 
-  // 🎯 Issue #633: 重新分析狀態
   const [reanalyzingItems, setReanalyzingItems] = useState<Set<number>>(
     new Set(),
   );
@@ -433,7 +432,6 @@ export default function GradingPage() {
     }
   };
 
-  // 🎯 Issue #633: 老師端手動觸發重新分析
   const handleReanalyzeItem = async (
     itemProgressId: number,
     itemIndex: number,
@@ -1327,7 +1325,6 @@ export default function GradingPage() {
                                       {t("gradingPage.messages.noAIScore")}
                                       {!item.audio_url &&
                                         ` ${t("gradingPage.messages.missingRecordingFile")}`}
-                                      {/* 🎯 Issue #633: 有音檔但無分析結果時，顯示重新分析按鈕 */}
                                       {item.audio_url &&
                                         item.item_progress_id && (
                                           <Button
@@ -1459,15 +1456,14 @@ export default function GradingPage() {
                                     // 切換到內容 tab（手機版）
                                     setActiveTab("content");
                                     // 滾動到對應題目
-                                    setTimeout(() => {
-                                      const el = document.getElementById(
-                                        `item-${globalIndex}`,
-                                      );
-                                      el?.scrollIntoView({
-                                        behavior: "smooth",
-                                        block: "center",
-                                      });
-                                    }, 100);
+                                    requestAnimationFrame(() => {
+                                      document
+                                        .getElementById(`item-${globalIndex}`)
+                                        ?.scrollIntoView({
+                                          behavior: "smooth",
+                                          block: "center",
+                                        });
+                                    });
                                   }}
                                 >
                                   {isPassed

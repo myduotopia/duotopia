@@ -1484,20 +1484,32 @@ async def reanalyze_item(
             status_code=400, detail="No recording available for reanalysis"
         )
 
-    # 5. 清除舊的評估結果，允許重新分析
-    item_progress.ai_assessed_at = None
-    db.flush()
-
-    # 6. 觸發重新分析
+    # 5. 查詢對應的 content_item
     content_item = (
         db.query(ContentItem)
         .filter(ContentItem.id == item_progress.content_item_id)
         .first()
     )
+    if not content_item:
+        raise HTTPException(status_code=404, detail="Content item not found")
 
-    success = await trigger_ai_assessment_for_item(item_progress, db, content_item)
+    # 6. 清除舊的評估結果，觸發重新分析
+    try:
+        item_progress.ai_assessed_at = None
+        db.flush()
 
-    if not success:
+        success = await trigger_ai_assessment_for_item(item_progress, db, content_item)
+
+        if not success:
+            db.rollback()
+            raise HTTPException(
+                status_code=500, detail="AI analysis failed, please try again later"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Reanalyze failed for item_progress {item_progress_id}: {e}")
         raise HTTPException(
             status_code=500, detail="AI analysis failed, please try again later"
         )
@@ -1514,6 +1526,15 @@ async def reanalyze_item(
         except (json.JSONDecodeError, TypeError):
             ai_data = {}
 
+    scores = [
+        item_progress.accuracy_score,
+        item_progress.fluency_score,
+        item_progress.pronunciation_score,
+        item_progress.completeness_score,
+    ]
+    valid_scores = [float(s) for s in scores if s is not None]
+    overall = sum(valid_scores) / len(valid_scores) if valid_scores else 0
+
     return {
         "success": True,
         "ai_scores": {
@@ -1521,13 +1542,7 @@ async def reanalyze_item(
             "fluency_score": float(item_progress.fluency_score or 0),
             "pronunciation_score": float(item_progress.pronunciation_score or 0),
             "completeness_score": float(item_progress.completeness_score or 0),
-            "overall_score": (
-                float(item_progress.accuracy_score or 0)
-                + float(item_progress.fluency_score or 0)
-                + float(item_progress.pronunciation_score or 0)
-                + float(item_progress.completeness_score or 0)
-            )
-            / 4,
+            "overall_score": overall,
             "word_details": ai_data.get("word_details", []),
         },
     }
