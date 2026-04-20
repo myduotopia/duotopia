@@ -48,6 +48,7 @@ class Identity(Base):
     email_verified_at = Column(DateTime(timezone=True), nullable=True)
 
     # 1Campus SSO 欄位
+    one_campus_uuid = Column(String(100), nullable=True, unique=True, index=True)
     one_campus_student_id = Column(String(100), nullable=True, index=True)
     one_campus_account = Column(String(255), nullable=True)
     national_id_hash = Column(String(64), nullable=True, index=True)
