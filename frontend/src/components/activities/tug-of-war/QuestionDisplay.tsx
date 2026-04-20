@@ -99,15 +99,49 @@ export function QuestionDisplay({
       stopLoop();
       speechSynthesis.cancel();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question.vocabItem.id, showPrompt]);
+  }, [
+    question.vocabItem.id,
+    showPrompt,
+    question.hasAudio,
+    startLoop,
+    stopLoop,
+  ]);
+
+  // Fixed height for image mode to prevent container from jumping
+  const imageContainerClass =
+    "text-center py-2 h-72 flex items-center justify-center";
+  const defaultContainerClass =
+    "text-center py-2 h-16 flex items-end justify-center pb-4";
 
   if (!showPrompt) {
     return (
-      <div className="text-center py-2 h-16 flex items-center justify-center">
+      <div
+        className={
+          question.hasImage ? imageContainerClass : defaultContainerClass
+        }
+      >
         <span className="text-4xl font-bold text-green-600 handwrite-font">
           {question.correctAnswer}
         </span>
+      </div>
+    );
+  }
+
+  if (question.hasImage) {
+    const imageUrl = question.vocabItem.image_url;
+    return (
+      <div className={imageContainerClass}>
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt=""
+            className="h-64 w-64 rounded-lg object-cover shadow-md"
+          />
+        ) : (
+          <span className="text-4xl font-bold handwrite-font">
+            {question.vocabItem.text}
+          </span>
+        )}
       </div>
     );
   }

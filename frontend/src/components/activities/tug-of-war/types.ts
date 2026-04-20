@@ -8,7 +8,8 @@ export type QuestionMode =
   | "audio_to_english" // 音檔播放 → 選英文 (default)
   | "audio_to_chinese" // 音檔播放 → 選中文
   | "english_to_chinese" // 英文 → 選中文
-  | "chinese_to_english"; // 中文 → 選英文
+  | "chinese_to_english" // 中文 → 選英文
+  | "image_to_english"; // 看圖 → 選英文
 
 export type Team = "a" | "b";
 
@@ -31,6 +32,7 @@ export interface Question {
   optionsA: string[]; // Shuffled for Team A
   optionsB: string[]; // Shuffled differently for Team B
   hasAudio: boolean; // Whether this question uses audio playback
+  hasImage: boolean; // Whether this question uses image as prompt
 }
 
 export interface AnswerRecord {

@@ -7,19 +7,17 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
-import VocabularySetPanel from "@/components/VocabularySetPanel";
+import ReadingAssessmentPanel, {
+  type ReadingAssessmentPanelHandle,
+} from "@/components/ReadingAssessmentPanel";
+import VocabularySetPanel, {
+  type VocabularySetPanelHandle,
+} from "@/components/VocabularySetPanel";
+import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
@@ -36,15 +34,10 @@ import {
   Settings2,
 } from "lucide-react";
 import { Assignment } from "@/types";
-
-interface StudentProgress {
-  student_id: number;
-  student_number: string;
-  student_name: string;
-  status: string;
-  score?: number;
-  is_assigned?: boolean;
-}
+import StudentStatusPanel, {
+  StudentProgress,
+} from "@/components/StudentStatusPanel";
+import { useSidebar } from "@/contexts/SidebarContext";
 
 interface AssignmentContent {
   id: number;
@@ -94,17 +87,22 @@ export function AssignmentDetailSheet({
   open,
   onOpenChange,
   assignment,
-  classroomId: _classroomId,
+  classroomId,
   canUseAiGrading = false,
   onGradeClick,
   onBatchGradeClick,
   onAssignmentUpdated,
 }: AssignmentDetailSheetProps) {
   const { t } = useTranslation();
+  const { sidebarWidth } = useSidebar();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [studentProgress, setStudentProgress] = useState<StudentProgress[]>([]);
+  const [isEditingStudents, setIsEditingStudents] = useState(false);
+  const [pendingStudentIds, setPendingStudentIds] = useState<number[] | null>(
+    null,
+  );
 
   // Content state
   const [assignmentContents, setAssignmentContents] = useState<
@@ -117,7 +115,19 @@ export function AssignmentDetailSheet({
     Record<number, ContentDetail>
   >({});
   const [editingContentId, setEditingContentId] = useState<number | null>(null);
+  const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
+  const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
   const loadingRef = useRef<Set<number>>(new Set());
+
+  // Auto-focus content edit panel so scroll works immediately
+  const contentEditPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (editingContentId) {
+      requestAnimationFrame(() => {
+        contentEditPanelRef.current?.focus();
+      });
+    }
+  }, [editingContentId]);
 
   // Detail data from API (includes advanced settings)
   const [detailData, setDetailData] = useState<Record<string, unknown> | null>(
@@ -189,11 +199,7 @@ export function AssignmentDetailSheet({
           ).students_progress ||
           (progressResponse as { data?: unknown[] }).data ||
           [];
-      setStudentProgress(
-        (progressData as StudentProgress[]).filter(
-          (p) => p.status !== "unassigned" && p.is_assigned !== false,
-        ),
-      );
+      setStudentProgress(progressData as StudentProgress[]);
     } catch {
       setStudentProgress([]);
       setAssignmentContents([]);
@@ -315,40 +321,28 @@ export function AssignmentDetailSheet({
     setIsEditing(false);
   };
 
-  const getStatusBadge = (status: string) => {
-    const config: Record<string, { label: string; className: string }> = {
-      SUBMITTED: {
-        label: t("assignmentDetail.status.submitted", "已繳交"),
-        className:
-          "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-      },
-      GRADED: {
-        label: t("assignmentDetail.status.graded", "已批改"),
-        className:
-          "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
-      },
-      IN_PROGRESS: {
-        label: t("assignmentDetail.status.inProgress", "進行中"),
-        className:
-          "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
-      },
-      NOT_STARTED: {
-        label: t("assignmentDetail.status.notStarted", "未開始"),
-        className:
-          "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
-      },
-      RETURNED: {
-        label: t("assignmentDetail.status.returned", "已退回"),
-        className:
-          "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
-      },
-      RESUBMITTED: {
-        label: t("assignmentDetail.status.resubmitted", "已重交"),
-        className:
-          "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
-      },
-    };
-    return config[status] || config.NOT_STARTED;
+  const handleSaveStudents = async () => {
+    if (!assignment || !pendingStudentIds) return;
+    setSaving(true);
+    try {
+      await apiClient.patch(`/api/teachers/assignments/${assignment.id}`, {
+        student_ids: pendingStudentIds,
+      });
+      toast.success(t("assignmentDetail.messages.updateSuccess", "派發已更新"));
+      setIsEditingStudents(false);
+      setPendingStudentIds(null);
+      fetchAssignmentData();
+      onAssignmentUpdated?.();
+    } catch {
+      toast.error(t("assignmentDetail.messages.updateError", "更新失敗"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelEditStudents = () => {
+    setIsEditingStudents(false);
+    setPendingStudentIds(null);
   };
 
   const getContentTypeBadge = () => {
@@ -449,6 +443,12 @@ export function AssignmentDetailSheet({
         <SheetContent
           side="right"
           className="w-full sm:max-w-lg md:max-w-xl lg:max-w-2xl p-0 flex flex-col"
+          onEscapeKeyDown={(e) => {
+            if (editingContentId) {
+              e.preventDefault();
+              setEditingContentId(null);
+            }
+          }}
         >
           {/* Header */}
           <SheetHeader className="px-6 pt-6 pb-4 border-b dark:border-gray-700">
@@ -1089,66 +1089,43 @@ export function AssignmentDetailSheet({
               </div>
             )}
 
-            {/* Student Progress List (always shown) */}
-            <div className="border-t dark:border-gray-700 pt-4">
-              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                {t("assignmentDetail.sheet.studentProgress", "學生完成狀況")}
-              </h4>
-              {loading ? (
-                <div className="flex items-center justify-center py-8 text-gray-400">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                </div>
-              ) : studentProgress.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 text-center">
-                  {t("assignmentDetail.sheet.noStudents", "尚無學生資料")}
-                </p>
-              ) : (
-                <div className="space-y-1">
-                  {studentProgress.map((sp) => {
-                    const badge = getStatusBadge(sp.status);
-                    const hasScore =
-                      sp.score !== undefined &&
-                      sp.score !== null &&
-                      (sp.status === "GRADED" ||
-                        sp.status === "RETURNED" ||
-                        sp.status === "RESUBMITTED");
-                    return (
-                      <div
-                        key={sp.student_id || sp.student_number}
-                        className="flex items-center justify-between py-2 px-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
-                      >
-                        <span className="text-sm text-gray-700 dark:text-gray-300">
-                          {sp.student_name}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {hasScore && (
-                            <span
-                              className={`text-sm font-bold ${
-                                sp.score! >= 80
-                                  ? "text-green-600 dark:text-green-400"
-                                  : "text-red-600 dark:text-red-400"
-                              }`}
-                            >
-                              {sp.score!.toFixed(1)}
-                            </span>
-                          )}
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}
-                          >
-                            {badge.label}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            {/* Student Status Panel (always shown) */}
+            <StudentStatusPanel
+              students={studentProgress}
+              assignmentId={assignment?.id ?? 0}
+              classroomId={classroomId}
+              practiceMode={assignment?.practice_mode ?? undefined}
+              isEditingStudents={isEditingStudents}
+              onEditingStudentsChange={setIsEditingStudents}
+              onStudentIdsChanged={setPendingStudentIds}
+              onSave={handleSaveStudents}
+              saving={saving}
+              loading={loading}
+            />
           </div>
 
           {/* Footer */}
           <div className="border-t dark:border-gray-700 px-6 py-4 flex justify-end gap-3">
-            {isEditing ? (
+            {isEditingStudents ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleCancelEditStudents}
+                  disabled={saving}
+                >
+                  <X className="h-4 w-4 mr-1.5" />
+                  {t("common.cancel", "取消")}
+                </Button>
+                <Button onClick={handleSaveStudents} disabled={saving}>
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-1.5" />
+                  )}
+                  {t("assignmentDetail.sheet.saveStudents", "儲存派發")}
+                </Button>
+              </>
+            ) : isEditing ? (
               <>
                 <Button
                   variant="outline"
@@ -1173,95 +1150,125 @@ export function AssignmentDetailSheet({
               </Button>
             )}
           </div>
+
+          {/* Content Edit Overlay — inside SheetContent to stay within Radix focus trap */}
+          {editingContentId &&
+            contentDetails[editingContentId] &&
+            (() => {
+              const editingDetail = contentDetails[editingContentId];
+              const isVocabSet = ["VOCABULARY_SET", "SENTENCE_MAKING"].includes(
+                editingDetail?.type?.toUpperCase() ?? "",
+              );
+              const handleEditSave = async () => {
+                const savedContentId = editingContentId;
+                setEditingContentId(null);
+                if (savedContentId) {
+                  setContentDetails((prev) => {
+                    const updated = { ...prev };
+                    delete updated[savedContentId];
+                    return updated;
+                  });
+                  await loadContentDetail(savedContentId, true);
+                }
+              };
+
+              return (
+                <div
+                  ref={contentEditPanelRef}
+                  tabIndex={-1}
+                  className="fixed inset-0 z-[60] flex outline-none"
+                >
+                  {/* Backdrop — click to cancel */}
+                  <div
+                    className="absolute inset-0 bg-black/30"
+                    onClick={() => setEditingContentId(null)}
+                  />
+                  {/* Panel */}
+                  <div
+                    className="absolute top-0 right-0 h-full bg-white dark:bg-gray-950 shadow-xl border-l flex flex-col"
+                    style={{ left: `${sidebarWidth}px` }}
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50 dark:bg-gray-800">
+                      <div>
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                          {t(
+                            "assignmentDetail.labels.editContent",
+                            "編輯作業內容",
+                          )}
+                        </h2>
+                        <p className="text-sm text-amber-600 mt-1">
+                          ⚠️{" "}
+                          {t(
+                            "assignmentDetail.sheet.editContentWarning",
+                            "注意：此為作業副本。刪除已有學生進度的題目將被阻止。",
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingContentId(null)}
+                        >
+                          {t("common.cancel", "取消")}
+                        </Button>
+                        <RefSaveButton
+                          panelRef={
+                            isVocabSet ? vocabPanelRef : readingPanelRef
+                          }
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingContentId(null);
+                            onOpenChange(false);
+                          }}
+                          className="hover:bg-gray-200"
+                        >
+                          <X className="h-5 w-5" />
+                        </Button>
+                      </div>
+                    </div>
+                    {/* Content */}
+                    <div className="flex-1 overflow-y-auto p-6">
+                      {isVocabSet ? (
+                        <VocabularySetPanel
+                          ref={vocabPanelRef}
+                          content={{
+                            id: editingContentId,
+                            title: editingDetail.title || "",
+                          }}
+                          editingContent={editingDetail as never}
+                          onUpdateContent={async () => {}}
+                          onSave={handleEditSave}
+                          lessonId={0}
+                          isCreating={false}
+                          isAssignmentCopy={true}
+                        />
+                      ) : (
+                        <ReadingAssessmentPanel
+                          ref={readingPanelRef}
+                          content={{
+                            id: editingContentId,
+                            title: editingDetail.title || "",
+                          }}
+                          editingContent={editingDetail as never}
+                          onUpdateContent={async () => {}}
+                          onSave={handleEditSave}
+                          lessonId={0}
+                          isCreating={false}
+                          isAssignmentCopy={true}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
         </SheetContent>
       </Sheet>
-
-      {/* Content Edit Dialog */}
-      {editingContentId && contentDetails[editingContentId] && (
-        <Dialog
-          open={editingContentId !== null}
-          onOpenChange={(dialogOpen) =>
-            !dialogOpen && setEditingContentId(null)
-          }
-        >
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {t("assignmentDetail.labels.editContent") || "編輯作業內容"}
-              </DialogTitle>
-              <p className="text-sm text-amber-600 mt-2">
-                ⚠️{" "}
-                {t(
-                  "assignmentDetail.sheet.editContentWarning",
-                  "注意：此為作業副本。刪除已有學生進度的題目將被阻止。",
-                )}
-              </p>
-            </DialogHeader>
-            <div className="mt-4">
-              {(() => {
-                const contentType =
-                  contentDetails[editingContentId]?.type?.toUpperCase();
-                const isVocabSet =
-                  contentType === "VOCABULARY_SET" ||
-                  contentType === "SENTENCE_MAKING";
-
-                const handleEditSave = async () => {
-                  const savedContentId = editingContentId;
-                  setEditingContentId(null);
-                  if (savedContentId) {
-                    setContentDetails((prev) => {
-                      const updated = { ...prev };
-                      delete updated[savedContentId];
-                      return updated;
-                    });
-                    await loadContentDetail(savedContentId, true);
-                  }
-                };
-
-                if (isVocabSet) {
-                  return (
-                    <VocabularySetPanel
-                      content={{
-                        id: editingContentId,
-                        title: contentDetails[editingContentId].title || "",
-                      }}
-                      editingContent={contentDetails[editingContentId] as never}
-                      onUpdateContent={async () => {}}
-                      onSave={handleEditSave}
-                      lessonId={0}
-                      isCreating={false}
-                      isAssignmentCopy={true}
-                    />
-                  );
-                }
-
-                return (
-                  <ReadingAssessmentPanel
-                    content={{
-                      id: editingContentId,
-                      title: contentDetails[editingContentId].title || "",
-                    }}
-                    editingContent={contentDetails[editingContentId] as never}
-                    onUpdateContent={async () => {}}
-                    onSave={handleEditSave}
-                    lessonId={0}
-                    isCreating={false}
-                    isAssignmentCopy={true}
-                  />
-                );
-              })()}
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setEditingContentId(null)}
-              >
-                {t("common.cancel")}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
     </>
   );
 }

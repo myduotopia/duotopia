@@ -19,8 +19,13 @@ import { ProgramDialog } from "@/components/ProgramDialog";
 import { LessonDialog } from "@/components/LessonDialog";
 import CreateProgramDialog from "@/components/CreateProgramDialog";
 import ContentTypeDialog from "@/components/ContentTypeDialog";
-import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
-import VocabularySetPanel from "@/components/VocabularySetPanel";
+import ReadingAssessmentPanel, {
+  type ReadingAssessmentPanelHandle,
+} from "@/components/ReadingAssessmentPanel";
+import VocabularySetPanel, {
+  type VocabularySetPanelHandle,
+} from "@/components/VocabularySetPanel";
+import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import ContentCopyDialog from "@/components/ContentCopyDialog";
 import { AssignmentDialog, CartItem } from "@/components/AssignmentDialog";
 import { InstantPracticeDialog } from "@/components/InstantPracticeDialog";
@@ -202,9 +207,9 @@ export default function ClassroomDetail({
     type?: string;
   } | null>(null);
 
-  // Dispatch assignment states (from Programs tab)
-  const [showDispatchDialog, setShowDispatchDialog] = useState(false);
-  const [dispatchContents, setDispatchContents] = useState<CartItem[]>([]);
+  // Assign states (from Programs tab)
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [assignContents, setAssignContents] = useState<CartItem[]>([]);
 
   // Assignment states
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
@@ -306,11 +311,17 @@ export default function ClassroomDetail({
     open: false,
     assignmentIndex: 0,
   });
-  // Batch print selection
-  const [selectedForPrint, setSelectedForPrint] = useState<Set<number>>(
+  // Batch selection (shared by batch print and batch archive)
+  const [selectedAssignments, setSelectedAssignments] = useState<Set<number>>(
     new Set(),
   );
   const [batchPrinting, setBatchPrinting] = useState(false);
+  const [batchArchiving, setBatchArchiving] = useState(false);
+
+  // Clear selection when switching between active/archived tabs
+  useEffect(() => {
+    setSelectedAssignments(new Set());
+  }, [showArchived]);
 
   // Pagination (on filtered results)
   const [assignmentPage, setAssignmentPage] = useState(1);
@@ -323,7 +334,7 @@ export default function ClassroomDetail({
     assignmentPage * assignmentPageSize,
   );
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when filters or tab changes
   useEffect(() => {
     setAssignmentPage(1);
   }, [
@@ -333,10 +344,11 @@ export default function ClassroomDetail({
     filterDateTo,
     filterOverdue,
     filterStatus,
+    showArchived,
   ]);
 
-  const togglePrintSelection = (assignmentId: number) => {
-    setSelectedForPrint((prev) => {
+  const toggleAssignmentSelection = (assignmentId: number) => {
+    setSelectedAssignments((prev) => {
       const next = new Set(prev);
       if (next.has(assignmentId)) next.delete(assignmentId);
       else next.add(assignmentId);
@@ -345,18 +357,18 @@ export default function ClassroomDetail({
   };
 
   const toggleSelectAll = () => {
-    if (selectedForPrint.size === filteredAssignments.length) {
-      setSelectedForPrint(new Set());
+    if (selectedAssignments.size === filteredAssignments.length) {
+      setSelectedAssignments(new Set());
     } else {
-      setSelectedForPrint(new Set(filteredAssignments.map((a) => a.id)));
+      setSelectedAssignments(new Set(filteredAssignments.map((a) => a.id)));
     }
   };
 
   const handleBatchPrint = async () => {
-    if (selectedForPrint.size === 0) return;
+    if (selectedAssignments.size === 0) return;
     setBatchPrinting(true);
     try {
-      const selected = assignments.filter((a) => selectedForPrint.has(a.id));
+      const selected = assignments.filter((a) => selectedAssignments.has(a.id));
       const progressResults = await Promise.all(
         selected.map(async (a) => {
           const response = await apiClient.get(
@@ -401,7 +413,7 @@ export default function ClassroomDetail({
       });
 
       openPrintWindow(pages);
-      setSelectedForPrint(new Set());
+      setSelectedAssignments(new Set());
     } catch {
       toast.error(t("stickyNote.batchPrintError", "列印失敗"));
     } finally {
@@ -409,7 +421,58 @@ export default function ClassroomDetail({
     }
   };
 
+  const handleBatchArchive = async () => {
+    if (selectedAssignments.size === 0) return;
+    const count = selectedAssignments.size;
+    if (
+      !confirm(
+        t("classroomDetail.messages.confirmBatchArchiveAssignments", { count }),
+      )
+    )
+      return;
+    setBatchArchiving(true);
+    try {
+      const ids = Array.from(selectedAssignments);
+      const results = await Promise.allSettled(
+        ids.map((id) =>
+          apiClient.patch(`/api/teachers/assignments/${id}/archive`),
+        ),
+      );
+      const failedIndices = results
+        .map((r, i) => (r.status === "rejected" ? i : -1))
+        .filter((i) => i >= 0);
+      const failed = failedIndices.length;
+      const succeeded = results.length - failed;
+      if (failed === 0) {
+        toast.success(
+          t("classroomDetail.messages.batchArchiveSuccess", {
+            count: succeeded,
+          }),
+        );
+        setSelectedAssignments(new Set());
+      } else if (succeeded > 0) {
+        toast.warning(
+          t("classroomDetail.messages.batchArchivePartial", {
+            succeeded,
+            failed,
+          }),
+        );
+        // Keep failed IDs selected for easy retry
+        setSelectedAssignments(new Set(failedIndices.map((i) => ids[i])));
+      } else {
+        toast.error(t("classroomDetail.messages.batchArchiveFailed"));
+      }
+      await fetchAssignments();
+    } catch {
+      toast.error(t("classroomDetail.messages.batchArchiveFailed"));
+    } finally {
+      setBatchArchiving(false);
+    }
+  };
+
   const hasFetchedData = useRef<string | null>(null);
+  const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
+  const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
 
   useEffect(() => {
     const key = `${id}-${isTemplateMode}`;
@@ -427,14 +490,28 @@ export default function ClassroomDetail({
     }
   }, [id, isTemplateMode]);
 
+  const autoOpenedAssignmentRef = useRef<string | null>(null);
   useEffect(() => {
-    // Check URL parameters for tab switching
+    // Check URL parameters for tab switching and auto-opening assignment
     const searchParams = new URLSearchParams(location.search);
     const tab = searchParams.get("tab");
     if (tab === "assignments") {
       setActiveTab("assignments");
     }
-  }, [location.search]);
+    const assignmentId = searchParams.get("assignment");
+    if (
+      assignmentId &&
+      assignmentId !== autoOpenedAssignmentRef.current &&
+      assignments.length > 0
+    ) {
+      const target = assignments.find((a) => a.id === Number(assignmentId));
+      if (target) {
+        autoOpenedAssignmentRef.current = assignmentId;
+        setSheetAssignment(target);
+        setShowAssignmentSheet(true);
+      }
+    }
+  }, [location.search, assignments]);
 
   // Issue #150: Smart default tab based on student count
   // When class has students, default to "assignments" tab
@@ -1703,7 +1780,7 @@ export default function ClassroomDetail({
                       setShowContentCopyDialog(true);
                     }
                   }}
-                  onDispatch={
+                  onAssign={
                     !isTemplateMode
                       ? (item, level, parentId) => {
                           if (level === 2 && typeof item.id === "number") {
@@ -1725,8 +1802,8 @@ export default function ClassroomDetail({
                               order: 0,
                               hasMissingAudio: false,
                             };
-                            setDispatchContents([cartItem]);
-                            setShowDispatchDialog(true);
+                            setAssignContents([cartItem]);
+                            setShowAssignDialog(true);
                           }
                         }
                       : undefined
@@ -1769,14 +1846,29 @@ export default function ClassroomDetail({
                           variant="outline"
                           onClick={handleBatchPrint}
                           disabled={
-                            selectedForPrint.size === 0 || batchPrinting
+                            selectedAssignments.size === 0 || batchPrinting
                           }
                           className="h-10"
                         >
                           <Printer className="h-4 w-4 mr-2" />
                           {t("stickyNote.batchPrint")}
-                          {selectedForPrint.size > 0 &&
-                            ` (${selectedForPrint.size})`}
+                          {selectedAssignments.size > 0 &&
+                            ` (${selectedAssignments.size})`}
+                        </Button>
+                      )}
+                      {assignments.length > 0 && !showArchived && (
+                        <Button
+                          variant="outline"
+                          onClick={handleBatchArchive}
+                          disabled={
+                            selectedAssignments.size === 0 || batchArchiving
+                          }
+                          className="h-10"
+                        >
+                          <Archive className="h-4 w-4 mr-2" />
+                          {t("classroomDetail.buttons.batchArchive")}
+                          {selectedAssignments.size > 0 &&
+                            ` (${selectedAssignments.size})`}
                         </Button>
                       )}
                       {!canAssignHomework && !showArchived && teacherData && (
@@ -2126,11 +2218,11 @@ export default function ClassroomDetail({
                                 <div className="flex items-start justify-between gap-2">
                                   {!showArchived && (
                                     <Checkbox
-                                      checked={selectedForPrint.has(
+                                      checked={selectedAssignments.has(
                                         assignment.id,
                                       )}
                                       onCheckedChange={() =>
-                                        togglePrintSelection(assignment.id)
+                                        toggleAssignmentSelection(assignment.id)
                                       }
                                       className="mt-1"
                                     />
@@ -2310,7 +2402,7 @@ export default function ClassroomDetail({
                                     <Checkbox
                                       checked={
                                         filteredAssignments.length > 0 &&
-                                        selectedForPrint.size ===
+                                        selectedAssignments.size ===
                                           filteredAssignments.length
                                       }
                                       onCheckedChange={toggleSelectAll}
@@ -2463,11 +2555,13 @@ export default function ClassroomDetail({
                                     {!showArchived && (
                                       <td className="w-10 px-4 py-3">
                                         <Checkbox
-                                          checked={selectedForPrint.has(
+                                          checked={selectedAssignments.has(
                                             assignment.id,
                                           )}
                                           onCheckedChange={() =>
-                                            togglePrintSelection(assignment.id)
+                                            toggleAssignmentSelection(
+                                              assignment.id,
+                                            )
                                           }
                                         />
                                       </td>
@@ -2595,7 +2689,11 @@ export default function ClassroomDetail({
                                             })
                                           }
                                         >
-                                          <StickyNote className="h-5 w-5" />
+                                          <StickyNote className="h-5 w-5 mr-1" />
+                                          {t(
+                                            "classroomDetail.buttons.stickyNote",
+                                            "進度",
+                                          )}
                                         </Button>
                                         {showArchived ? (
                                           <>
@@ -2714,23 +2812,35 @@ export default function ClassroomDetail({
                 <h2 className="text-lg font-semibold text-gray-900">
                   {t("classroomDetail.labels.editContent")}
                 </h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={closePanel}
-                  className="hover:bg-gray-200"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  {(selectedContent.type?.toLowerCase() ===
+                    "reading_assessment" ||
+                    selectedContent.type?.toLowerCase() ===
+                      "example_sentences") && (
+                    <RefSaveButton panelRef={readingPanelRef} />
+                  )}
+                  {(selectedContent.type?.toLowerCase() === "sentence_making" ||
+                    selectedContent.type?.toLowerCase() ===
+                      "vocabulary_set") && (
+                    <RefSaveButton panelRef={vocabPanelRef} />
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={closePanel}
+                    className="hover:bg-gray-200"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
 
               {/* Panel Content */}
               <div className="flex-1 overflow-y-auto p-4">
                 {selectedContent.type?.toLowerCase() === "reading_assessment" ||
                 selectedContent.type?.toLowerCase() === "example_sentences" ? (
-                  /* ReadingAssessmentPanel has its own save button */
-                  /* EXAMPLE_SENTENCES uses the same panel as READING_ASSESSMENT */
                   <ReadingAssessmentPanel
+                    ref={readingPanelRef}
                     content={selectedContent as ReadingAssessmentContent}
                     editingContent={
                       editingContent as ReadingAssessmentContent | undefined
@@ -2744,8 +2854,8 @@ export default function ClassroomDetail({
                   />
                 ) : selectedContent.type?.toLowerCase() === "sentence_making" ||
                   selectedContent.type?.toLowerCase() === "vocabulary_set" ? (
-                  /* VocabularySetPanel has its own save button */
                   <VocabularySetPanel
+                    ref={vocabPanelRef}
                     content={selectedContent as ReadingAssessmentContent}
                     editingContent={
                       editingContent as ReadingAssessmentContent | undefined
@@ -3005,19 +3115,19 @@ export default function ClassroomDetail({
         }}
       />
 
-      {/* Assignment Dispatch Dialog (from Programs tab - with preSelectedContents) */}
+      {/* Assignment Dialog (from Programs tab - with preSelectedContents) */}
       <AssignmentDialog
-        open={showDispatchDialog}
+        open={showAssignDialog}
         onClose={() => {
-          setShowDispatchDialog(false);
-          setDispatchContents([]);
+          setShowAssignDialog(false);
+          setAssignContents([]);
         }}
         classroomId={Number(id)}
         students={students}
-        preSelectedContents={dispatchContents}
+        preSelectedContents={assignContents}
         onSuccess={() => {
-          setShowDispatchDialog(false);
-          setDispatchContents([]);
+          setShowAssignDialog(false);
+          setAssignContents([]);
           fetchAssignments();
         }}
       />

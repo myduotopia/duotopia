@@ -207,6 +207,7 @@ jobs:
           --build-arg VITE_TAPPAY_SERVER_TYPE=$TAPPAY_SERVER_TYPE \
           --build-arg VITE_TAPPAY_PRODUCTION_APP_ID=$TAPPAY_PRODUCTION_APP_ID \
           --build-arg VITE_TAPPAY_PRODUCTION_APP_KEY=$TAPPAY_PRODUCTION_APP_KEY \
+          --build-arg VITE_GA_MEASUREMENT_ID=${{ secrets.VITE_GA_MEASUREMENT_ID }} \
           -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/${{ steps.env_vars.outputs.FRONTEND_SERVICE }}:$GITHUB_SHA .
 
         docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/${{ steps.env_vars.outputs.FRONTEND_SERVICE }}:$GITHUB_SHA

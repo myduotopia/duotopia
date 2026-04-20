@@ -38,7 +38,7 @@ export function RefSaveButton({ panelRef }: RefSaveButtonProps) {
     <Button
       size="sm"
       className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
-      disabled={isSaving}
+      disabled={isSaving || (panelRef.current?.isBusy ?? false)}
       onClick={handleClick}
     >
       {isSaving ? (
