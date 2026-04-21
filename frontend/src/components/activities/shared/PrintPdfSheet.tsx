@@ -872,7 +872,12 @@ export function PrintPdfSheet({
         <SheetHeader className="border-b px-6 py-4">
           <div className="flex items-center justify-between">
             <SheetTitle>{t("printPdf.sheetTitle")}</SheetTitle>
-            <Button onClick={handleDownload} disabled={isDownloading} size="sm">
+            <Button
+              onClick={handleDownload}
+              disabled={isDownloading}
+              size="sm"
+              className="mr-8"
+            >
               {isDownloading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
