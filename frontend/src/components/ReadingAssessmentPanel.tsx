@@ -31,6 +31,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useSidebar } from "@/contexts/SidebarContext";
 import { apiClient, ApiError } from "@/lib/api";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import {
@@ -1116,6 +1117,7 @@ const ReadingAssessmentPanel = forwardRef<
   ref,
 ) {
   const { t } = useTranslation();
+  const { setEditorBusy } = useSidebar();
 
   const [title, setTitle] = useState("");
   const [rows, setRows] = useState<ContentRow[]>([
@@ -1175,6 +1177,14 @@ const ReadingAssessmentPanel = forwardRef<
   // 計算是否有批次操作正在進行
   const isBatchProcessing =
     isBatchGeneratingTTS || isBatchGeneratingTranslation || isPasting;
+
+  // Sync batch state to SidebarContext.editorBusy so that RefSaveButton (and
+  // sidebar close buttons) can reactively reflect busy state. Cleanup on
+  // unmount prevents lock-out if panel closes mid-operation. (#651)
+  useEffect(() => {
+    setEditorBusy(isBatchProcessing);
+    return () => setEditorBusy(false);
+  }, [isBatchProcessing, setEditorBusy]);
 
   // dnd-kit sensors
   const sensors = useSensors(
