@@ -1324,9 +1324,9 @@ export default function StudentActivityPageContent({
   ) => {
     const currentActivity = activities[currentActivityIndex];
 
-    // 檢查是否為例句朗讀模式（items 有值且非重組模式）
+    // 需要每題錄音的朗讀模式（例句集 reading / 單字集 reading）才需要自動分析
     const isReadingMode =
-      isExampleSentencesType(currentActivity.type) &&
+      activityNeedsRecording(currentActivity, practiceMode) &&
       practiceMode !== "rearrangement" &&
       currentActivity.items &&
       currentActivity.items.length > 0;
@@ -1589,7 +1589,7 @@ export default function StudentActivityPageContent({
       // 收集所有有錄音但未分析的題目（不限 blob URL）
       activities.forEach((activity) => {
         if (
-          isExampleSentencesType(activity.type) &&
+          activityNeedsRecording(activity, practiceMode) &&
           practiceMode !== "rearrangement" &&
           activity.items
         ) {
