@@ -199,16 +199,25 @@ const RECORDING_REQUIRED_TYPES = new Set([
 
 const VOCABULARY_TYPES = new Set(["VOCABULARY_SET", "SENTENCE_MAKING"]);
 
+// 單字集搭配需要錄音的練習模式：
+// - reading       → 例句朗讀（朗讀單字的例句）
+// - word_reading  → 單字朗讀
+// 其他模式（rearrangement / word_selection）不需錄音。
+const VOCABULARY_RECORDING_PRACTICE_MODES = new Set([
+  "reading",
+  "word_reading",
+]);
+
 const activityNeedsRecording = (
   activity: Activity,
   practiceMode?: string | null,
 ): boolean => {
   const normalizedType = activity.type?.toUpperCase() ?? "";
   if (RECORDING_REQUIRED_TYPES.has(normalizedType)) return true;
-  // 單字朗讀：單字集在 word_reading 練習模式下每題需錄音
   if (
     VOCABULARY_TYPES.has(normalizedType) &&
-    practiceMode === "word_reading"
+    !!practiceMode &&
+    VOCABULARY_RECORDING_PRACTICE_MODES.has(practiceMode)
   ) {
     return true;
   }
@@ -289,23 +298,10 @@ export default function StudentActivityPageContent({
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
 
   // Issue #645: 任何題目未錄音/未上傳時，禁用提交按鈕
-  const isSubmitBlockedByRecording = useMemo(() => {
-    const result = hasIncompleteRecordings(activities, practiceMode);
-    // 暫時加 debug log 方便在 per-issue 環境定位問題（稍後會移除）
-    if (typeof window !== "undefined") {
-      console.log("[#645] isSubmitBlockedByRecording =", result, {
-        practiceMode,
-        activitySnapshot: activities.map((a) => ({
-          type: a.type,
-          itemsLen: a.items?.length ?? 0,
-          recordings:
-            a.items?.map((i) => i.recording_url?.slice(0, 30) ?? null) ?? null,
-          audio_url: a.audio_url?.slice(0, 30) ?? null,
-        })),
-      });
-    }
-    return result;
-  }, [activities, practiceMode]);
+  const isSubmitBlockedByRecording = useMemo(
+    () => hasIncompleteRecordings(activities, practiceMode),
+    [activities, practiceMode],
+  );
 
   // 🎯 背景分析狀態管理
   type ItemAnalysisStatus =
