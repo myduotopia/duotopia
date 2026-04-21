@@ -964,6 +964,7 @@
       "word_selection": "單字選擇",
       "word_reading": "單字朗讀",
       "word_spelling": "單字拼寫",
+      "word_cloze": "克漏字",
       "all": "全部類型"
     },
     "sort": {
@@ -1112,7 +1113,8 @@
       "vocabulary": "單字練習",
       "wordReading": "單字朗讀",
       "wordSelection": "單字選擇",
-      "wordSpelling": "單字拼寫"
+      "wordSpelling": "單字拼寫",
+      "wordCloze": "克漏字"
     },
     "stats": {
       "minutes": "分鐘",
@@ -1839,6 +1841,8 @@
         "wordSelectionDesc": "看單字或聽音檔，選擇正確的翻譯",
         "wordSpelling": "單字拼寫",
         "wordSpellingDesc": "看翻譯或聽音檔，拼寫正確的單字",
+        "wordCloze": "克漏字",
+        "wordClozeDesc": "看例句填空，輸入正確的單字變形",
         "targetProficiency": "達標熟悉度",
         "targetProficiencyDesc": "學生需達到此熟悉度才算完成作業",
         "showTranslation": "顯示翻譯",
@@ -4704,6 +4708,34 @@
     },
     "timeLimit": "限時 {{seconds}} 秒"
   },
+  "wordCloze": {
+    "loading": "正在載入克漏字題目...",
+    "noItems": "沒有可用的克漏字題目（例句需包含目標單字）",
+    "wordCloze": "克漏字",
+    "questionProgress": "第 {{current}}/{{total}} 題",
+    "correctLabel": "正確",
+    "baseWord": "單字",
+    "playAudio": "播放例句發音",
+    "inputPlaceholder": "填入空格...",
+    "checkAnswer": "確認",
+    "seconds": "秒",
+    "timeUp": "時間到！",
+    "incorrectTryAgain": "答錯了，請再試一次！",
+    "timeUpTryAgain": "時間到！請再試一次。",
+    "retry": "重試",
+    "practiceComplete": "練習完成！",
+    "accuracy": "正確率",
+    "correct": "答對",
+    "totalQuestions": "總題數",
+    "practiceAgain": "再練習一次",
+    "submitAssignment": "提交作業",
+    "toast": {
+      "startFailed": "開始練習失敗",
+      "submitFailed": "提交答案失敗",
+      "completed": "作業已完成！",
+      "completeFailed": "提交作業失敗"
+    }
+  },
   "wordSpelling": {
     "loading": "正在載入單字...",
     "noItems": "找不到單字項目",
@@ -5126,7 +5158,8 @@
       "reading": "例句朗讀",
       "word_selection": "單字選擇",
       "word_reading": "單字朗讀",
-      "word_spelling": "單字拼寫"
+      "word_spelling": "單字拼寫",
+      "word_cloze": "克漏字"
     },
     "estimate": {
       "practiceMode": "作業類型",

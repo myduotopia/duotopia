@@ -389,7 +389,8 @@ export function AssignmentDialog({
       | "rearrangement"
       | "word_reading"
       | "word_selection"
-      | "word_spelling", // 作答模式（空字串 = 未選擇）
+      | "word_spelling"
+      | "word_cloze", // 作答模式（空字串 = 未選擇）
     time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40, // 每題時間限制 (0 = 不限時)
     shuffle_questions: false, // 是否打亂順序
     show_answer: false, // 答題結束後是否顯示正確答案（例句重組專用）
@@ -579,7 +580,8 @@ export function AssignmentDialog({
     if (
       formData.practice_mode === "word_reading" ||
       formData.practice_mode === "word_selection" ||
-      formData.practice_mode === "word_spelling"
+      formData.practice_mode === "word_spelling" ||
+      formData.practice_mode === "word_cloze"
     ) {
       setCartItems((prev) => {
         const filtered = prev.filter((item) =>
@@ -847,7 +849,8 @@ export function AssignmentDialog({
     if (
       mode === "word_reading" ||
       mode === "word_selection" ||
-      mode === "word_spelling"
+      mode === "word_spelling" ||
+      mode === "word_cloze"
     ) {
       return isVocabularySetType(contentType);
     }
@@ -2796,6 +2799,39 @@ export function AssignmentDialog({
                         </div>
                       </div>
                     </button>
+
+                    {/* 克漏字 */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          practice_mode: "word_cloze",
+                          time_limit_per_question: 0,
+                        }))
+                      }
+                      className={`p-6 rounded-xl border-2 transition-all ${
+                        formData.practice_mode === "word_cloze"
+                          ? "border-blue-500 bg-blue-50 shadow-md"
+                          : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-3">
+                        <span className="text-4xl">📝</span>
+                        <div className="text-center">
+                          <div className="font-semibold text-lg">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.wordCloze",
+                            ) || "克漏字"}
+                          </div>
+                          <div className="text-sm text-gray-500 mt-1">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.wordClozeDesc",
+                            ) || "看例句填空，輸入正確的單字變形"}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
                   </div>
 
                   {/* ===== 例句集細節設定 (reading / rearrangement) ===== */}
@@ -2987,10 +3023,11 @@ export function AssignmentDialog({
                     </Card>
                   )}
 
-                  {/* ===== 單字集細節設定 (word_reading / word_selection / word_spelling) ===== */}
+                  {/* ===== 單字集細節設定 (word_reading / word_selection / word_spelling / word_cloze) ===== */}
                   {(formData.practice_mode === "word_reading" ||
                     formData.practice_mode === "word_selection" ||
-                    formData.practice_mode === "word_spelling") && (
+                    formData.practice_mode === "word_spelling" ||
+                    formData.practice_mode === "word_cloze") && (
                     <Card className="p-4 border-gray-200">
                       <h4 className="text-sm font-medium mb-3 text-gray-700">
                         {t(
@@ -3121,7 +3158,8 @@ export function AssignmentDialog({
                                 "dialogs.assignmentDialog.practiceMode.unlimited",
                               )}
                               {(formData.practice_mode === "word_reading" ||
-                                formData.practice_mode === "word_spelling") &&
+                                formData.practice_mode === "word_spelling" ||
+                                formData.practice_mode === "word_cloze") &&
                                 ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
                             </option>
                             <option value={20}>
@@ -3203,9 +3241,10 @@ export function AssignmentDialog({
                           </div>
                         )}
 
-                        {/* 單字朗讀/拼寫 - 顯示翻譯 */}
+                        {/* 單字朗讀/拼寫/克漏字 - 顯示翻譯 */}
                         {(formData.practice_mode === "word_reading" ||
-                          formData.practice_mode === "word_spelling") && (
+                          formData.practice_mode === "word_spelling" ||
+                          formData.practice_mode === "word_cloze") && (
                           <div className="space-y-1.5">
                             <Label className="text-xs text-gray-600">
                               {t(

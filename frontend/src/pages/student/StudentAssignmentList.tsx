@@ -29,6 +29,7 @@ import {
   Volume2,
   ArrowUpDown,
   Keyboard,
+  FileText,
 } from "lucide-react";
 import { StudentAssignmentCard, AssignmentStatusEnum } from "@/types";
 import { useTranslation } from "react-i18next";
@@ -40,6 +41,7 @@ const PRACTICE_MODE_ICONS: Record<string, React.ReactNode> = {
   word_selection: <MousePointerClick className="h-7 w-7 sm:h-8 sm:w-8" />,
   word_reading: <Volume2 className="h-7 w-7 sm:h-8 sm:w-8" />,
   word_spelling: <Keyboard className="h-7 w-7 sm:h-8 sm:w-8" />,
+  word_cloze: <FileText className="h-7 w-7 sm:h-8 sm:w-8" />,
 };
 
 // Score category colors
@@ -63,6 +65,8 @@ const PRACTICE_MODE_BG: Record<string, string> = {
     "crayon-texture bg-gradient-to-b from-purple-100 to-purple-200 text-purple-600",
   word_spelling:
     "crayon-texture bg-gradient-to-b from-amber-100 to-amber-200 text-amber-600",
+  word_cloze:
+    "crayon-texture bg-gradient-to-b from-pink-100 to-pink-200 text-pink-600",
 };
 
 export default function StudentAssignmentList() {
@@ -540,6 +544,7 @@ export default function StudentAssignmentList() {
     "word_selection",
     "word_reading",
     "word_spelling",
+    "word_cloze",
   ];
 
   return (

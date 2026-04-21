@@ -43,7 +43,9 @@ logger = logging.getLogger(__name__)
 # 自動批改的練習模式（不需要老師批改）
 # - rearrangement: 例句重組
 # - word_selection: 單字選擇
-AUTO_GRADED_MODES = frozenset({"rearrangement", "word_selection", "word_spelling"})
+AUTO_GRADED_MODES = frozenset(
+    {"rearrangement", "word_selection", "word_spelling", "word_cloze"}
+)
 
 router = APIRouter()
 
@@ -60,6 +62,7 @@ async def get_student_assignments(
             "word_selection",
             "word_reading",
             "word_spelling",
+            "word_cloze",
         ]
     ] = None,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -2179,6 +2182,405 @@ async def complete_word_spelling_assignment(
         }
 
     # Calculate score from mastery
+    result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+
+    current_mastery = float(result.current_mastery) * 100 if result else 0
+
+    student_assignment.status = AssignmentStatus.GRADED
+    student_assignment.submitted_at = datetime.now(timezone.utc)
+    student_assignment.score = min(100, round(current_mastery))
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "作業已完成！",
+        "status": "COMPLETED",
+        "final_score": student_assignment.score,
+    }
+
+
+# =============================================================================
+# 克漏字 (Word Cloze) APIs
+# =============================================================================
+
+
+class WordClozeAnswerRequest(BaseModel):
+    content_item_id: int
+    typed_answer: str = Field(max_length=200)
+    time_spent_seconds: int = 0
+    session_id: Optional[int] = None
+
+
+def extract_cloze(base_word: str, example_sentence: str) -> Optional[tuple]:
+    """
+    Find the target word in an example sentence and return
+    (blanked_sentence, correct_answer).
+
+    Strategy:
+    1. Exact word match (case-insensitive, word boundary)
+    2. Prefix match (e.g., "apple" → "apples", "watch" → "watching")
+
+    Returns None if no match found (e.g., contractions like "am" in "I'm").
+    """
+    import re as _re
+
+    if not base_word or not example_sentence:
+        return None
+
+    base = base_word.strip().lower()
+    if not base:
+        return None
+
+    escaped = _re.escape(base)
+
+    # Try exact match first
+    exact_pattern = rf"\b{escaped}\b"
+    match = _re.search(exact_pattern, example_sentence, _re.IGNORECASE)
+    if match:
+        actual_word = match.group(0)
+        blanked = (
+            example_sentence[: match.start()]
+            + "_____"
+            + example_sentence[match.end() :]
+        )
+        return blanked, actual_word
+
+    # Fallback: prefix match (word starting with base + more letters)
+    prefix_pattern = rf"\b{escaped}\w*\b"
+    match = _re.search(prefix_pattern, example_sentence, _re.IGNORECASE)
+    if match:
+        actual_word = match.group(0)
+        blanked = (
+            example_sentence[: match.start()]
+            + "_____"
+            + example_sentence[match.end() :]
+        )
+        return blanked, actual_word
+
+    return None
+
+
+@router.get("/assignments/{assignment_id}/vocabulary/cloze/start")
+async def start_word_cloze_practice(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    Start a word cloze practice session.
+
+    For each word with an example sentence, blank out the target word form
+    and let the student fill it in. Items without a usable example sentence
+    are skipped.
+    """
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    assignment = None
+    if student_assignment.assignment_id:
+        assignment = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+
+    if assignment and assignment.practice_mode != "word_cloze":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This is not a word cloze assignment",
+        )
+
+    if student_assignment.status == AssignmentStatus.NOT_STARTED:
+        student_assignment.status = AssignmentStatus.IN_PROGRESS
+        student_assignment.started_at = datetime.now(timezone.utc)
+        db.commit()
+
+    # Get all content items in order
+    assignment_contents = (
+        db.query(AssignmentContent)
+        .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
+        .order_by(AssignmentContent.order_index)
+        .all()
+    )
+    content_ids = [ac.content_id for ac in assignment_contents]
+
+    content_items = (
+        db.query(ContentItem)
+        .filter(ContentItem.content_id.in_(content_ids))
+        .order_by(ContentItem.id)
+        .all()
+    )
+
+    if not content_items:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No vocabulary items found for this assignment",
+        )
+
+    items_list = list(content_items)
+    if assignment and assignment.shuffle_questions:
+        random.shuffle(items_list)
+
+    # Build cloze questions, skip items without usable example sentence
+    questions = []
+    for ci in items_list:
+        example = ci.example_sentence or ""
+        cloze = extract_cloze(ci.text, example)
+        if cloze is None:
+            logger.info(
+                "Skipping cloze for content_item %s: no match in example sentence",
+                ci.id,
+            )
+            continue
+        blanked_sentence, correct_answer = cloze
+        questions.append(
+            {
+                "content_item_id": ci.id,
+                "base_word": ci.text,
+                "translation": ci.translation or "",
+                "blanked_sentence": blanked_sentence,
+                "sentence_translation": ci.example_sentence_translation or "",
+                "audio_url": ci.example_sentence_audio_url or ci.audio_url,
+                "correct_answer_length": len(correct_answer),
+            }
+        )
+
+    if not questions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "No usable cloze questions: example sentences do not contain "
+                "the target word."
+            ),
+        )
+
+    practice_session = PracticeSession(
+        student_id=student_id,
+        student_assignment_id=assignment_id,
+        practice_mode="word_cloze",
+        words_practiced=0,
+        correct_count=0,
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(practice_session)
+    db.commit()
+    db.refresh(practice_session)
+
+    return {
+        "session_id": practice_session.id,
+        "questions": questions,
+        "total_questions": len(questions),
+        "show_translation": (assignment.show_translation if assignment else True),
+        "play_audio": assignment.play_audio if assignment else False,
+        "time_limit_per_question": (
+            assignment.time_limit_per_question if assignment else None
+        ),
+    }
+
+
+@router.post("/assignments/{assignment_id}/vocabulary/cloze/answer")
+async def submit_word_cloze_answer(
+    assignment_id: int,
+    request: WordClozeAnswerRequest,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    Submit a cloze answer. The correct answer is the actual word form that
+    appears in the example sentence (e.g., "apples" for base "apple").
+    """
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    content_item = (
+        db.query(ContentItem)
+        .join(Content, ContentItem.content_id == Content.id)
+        .join(AssignmentContent, AssignmentContent.content_id == Content.id)
+        .filter(
+            ContentItem.id == request.content_item_id,
+            AssignmentContent.assignment_id == student_assignment.assignment_id,
+        )
+        .first()
+    )
+
+    if not content_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content item not found",
+        )
+
+    cloze = extract_cloze(content_item.text or "", content_item.example_sentence or "")
+    if cloze is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This item has no usable cloze sentence",
+        )
+    _blanked, correct_answer = cloze
+
+    is_correct = request.typed_answer.strip().lower() == correct_answer.strip().lower()
+
+    result = db.execute(
+        text(
+            """
+            SELECT * FROM update_memory_strength(
+                :sa_id,
+                :item_id,
+                :is_correct
+            )
+            """
+        ),
+        {
+            "sa_id": assignment_id,
+            "item_id": request.content_item_id,
+            "is_correct": is_correct,
+        },
+    ).fetchone()
+
+    new_memory_strength = float(result.memory_strength) if result else 0
+
+    if request.session_id:
+        practice_session = (
+            db.query(PracticeSession)
+            .filter(
+                PracticeSession.id == request.session_id,
+                PracticeSession.student_id == student_id,
+                PracticeSession.student_assignment_id == assignment_id,
+            )
+            .first()
+        )
+        if practice_session:
+            practice_answer = PracticeAnswer(
+                practice_session_id=practice_session.id,
+                content_item_id=request.content_item_id,
+                is_correct=is_correct,
+                time_spent_seconds=request.time_spent_seconds,
+                answer_data={
+                    "type": "word_cloze",
+                    "typed_answer": request.typed_answer,
+                    "correct_answer": correct_answer,
+                },
+            )
+            db.add(practice_answer)
+
+            practice_session.words_practiced = (
+                practice_session.words_practiced or 0
+            ) + 1
+            if is_correct:
+                practice_session.correct_count = (
+                    practice_session.correct_count or 0
+                ) + 1
+
+    item_progress = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == assignment_id,
+            StudentItemProgress.content_item_id == request.content_item_id,
+        )
+        .first()
+    )
+    if item_progress:
+        ws_data = item_progress.word_selection_data or {
+            "correct_count": 0,
+            "error_count": 0,
+            "error_selections": [],
+        }
+        if is_correct:
+            ws_data["correct_count"] = ws_data.get("correct_count", 0) + 1
+        else:
+            ws_data["error_count"] = ws_data.get("error_count", 0) + 1
+            if request.typed_answer.strip():
+                error_selections = ws_data.get("error_selections", [])
+                found = False
+                for entry in error_selections:
+                    if entry["selected"] == request.typed_answer:
+                        entry["count"] = entry.get("count", 0) + 1
+                        found = True
+                        break
+                if not found and len(error_selections) < 20:
+                    error_selections.append(
+                        {"selected": request.typed_answer, "count": 1}
+                    )
+                ws_data["error_selections"] = error_selections
+        ws_data["last_answered_at"] = datetime.now(timezone.utc).isoformat()
+        item_progress.word_selection_data = dict(ws_data)
+
+    db.commit()
+
+    return {
+        "success": True,
+        "is_correct": is_correct,
+        "correct_answer": correct_answer,
+        "new_memory_strength": new_memory_strength,
+    }
+
+
+@router.post("/assignments/{assignment_id}/vocabulary/cloze/complete")
+async def complete_word_cloze_assignment(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Mark word cloze assignment as completed."""
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    if student_assignment.status == AssignmentStatus.GRADED:
+        return {
+            "success": True,
+            "message": "作業已提交",
+            "status": "COMPLETED",
+            "final_score": student_assignment.score,
+        }
+
     result = db.execute(
         text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
         {"sa_id": assignment_id},
