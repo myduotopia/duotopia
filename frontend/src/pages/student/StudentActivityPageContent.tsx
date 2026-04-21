@@ -239,8 +239,7 @@ const hasIncompleteRecordings = (
     if (activity.items && activity.items.length > 0) {
       return activity.items.some((item) => {
         const hasRecording = !!item.recording_url && item.recording_url !== "";
-        const isBlob =
-          hasRecording && item.recording_url!.startsWith("blob:");
+        const isBlob = hasRecording && item.recording_url!.startsWith("blob:");
         return !hasRecording || isBlob;
       });
     }
