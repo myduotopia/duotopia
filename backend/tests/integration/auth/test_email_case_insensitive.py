@@ -1,17 +1,22 @@
 """Integration tests for Issue #648 — case-insensitive email lookup across auth paths.
 
-Covers teacher login / register / forgot-password / resend-verification,
-student Identity-based login, and student forgot-password. Each test stores
-an account with one casing and hits the endpoint with a different casing;
-the endpoint must still resolve to the same account.
+Covers teacher login / register / forgot-password / resend-verification, the
+Identity-based student login path, and the 1Campus SSO bind collision check.
+Each test stores an account with one casing and hits the endpoint with a
+different casing; the endpoint must still resolve to the same account.
 
 Rate-limit note: the login endpoint is throttled to 3/minute per IP. Tests use
 different endpoints per test method and keep login attempts minimal to avoid
 cross-test interference.
+
+Scope note: direct `Student.email` queries (authenticate_student and
+student_forgot_password) intentionally remain case-sensitive until the
+follow-up issue lands (data cleanup + ix_students_email_lower migration).
 """
 from datetime import date
 
 from fastapi import status
+from sqlalchemy import func
 
 from auth import get_password_hash
 from models import Student, Teacher
@@ -132,7 +137,13 @@ class TestResendVerificationCaseInsensitive:
             json={"email": "DAN@example.com"},
         )
 
-        assert response.status_code != status.HTTP_404_NOT_FOUND, response.text
+        # Legitimate outcomes once the teacher is located: 200 (email sent) or
+        # 429 (resend cooldown). 404 means the case-variant lookup failed, which
+        # is the regression this test guards against.
+        assert response.status_code in (
+            status.HTTP_200_OK,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+        ), response.text
 
 
 class TestForgotPasswordCaseInsensitive:
@@ -159,30 +170,6 @@ class TestForgotPasswordCaseInsensitive:
         assert (
             teacher.password_reset_token is not None
         ), "forgot-password must locate the teacher regardless of email casing"
-
-    def test_student_forgot_password_accepts_case_variant(
-        self, test_client, shared_test_session
-    ):
-        student = Student(
-            email="kid@example.com",
-            password_hash=get_password_hash(PASSWORD),
-            name="Kid",
-            birthdate=date(2010, 1, 1),
-            email_verified=True,
-        )
-        shared_test_session.add(student)
-        shared_test_session.commit()
-
-        response = test_client.post(
-            "/api/auth/student/forgot-password",
-            json={"email": "Kid@EXAMPLE.COM"},
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        shared_test_session.refresh(student)
-        assert (
-            student.password_reset_token is not None
-        ), "student forgot-password must locate the student regardless of email casing"
 
 
 class TestStudentIdentityValidateCaseInsensitive:
@@ -231,8 +218,6 @@ class TestOneCampusBindCaseInsensitive:
     def test_teacher_email_collision_check_is_case_insensitive(
         self, shared_test_session
     ):
-        from sqlalchemy import func
-
         existing = Teacher(
             email="sso.user@example.com",
             password_hash=get_password_hash(PASSWORD),

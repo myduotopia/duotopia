@@ -161,10 +161,13 @@ def authenticate_teacher(db: Session, email: str, password: str):
 
 
 def authenticate_student(db: Session, email: str, password: str):
-    """學生認證（支援 Identity 統一密碼）"""
-    student = (
-        db.query(Student).filter(func.lower(Student.email) == email.lower()).first()
-    )
+    """學生認證（支援 Identity 統一密碼）
+
+    Note: `Student.email` 查詢維持 case-sensitive 直到 students 表完成資料
+    正規化 (4 筆大小寫重複 + 119 筆空字串) 並建立 ix_students_email_lower
+    functional index；見 #648 的 follow-up issue。
+    """
+    student = db.query(Student).filter(Student.email == email).first()
     if not student:
         logger.info(
             f"[LOGIN-DEBUG] authenticate_student | email={email} | student_found=False"

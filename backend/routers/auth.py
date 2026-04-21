@@ -687,11 +687,13 @@ async def verify_reset_token(token: str, db: Session = Depends(get_db)):
 async def student_forgot_password(
     request: Request, email: str = Body(..., embed=True), db: Session = Depends(get_db)
 ):
-    """學生忘記密碼 - 發送重設郵件（僅限已驗證 email 的學生）"""
+    """學生忘記密碼 - 發送重設郵件（僅限已驗證 email 的學生）
+
+    Note: `Student.email` 查詢維持 case-sensitive 直到 students 表完成資料
+    正規化並建立 ix_students_email_lower functional index；見 #648 的 follow-up。
+    """
     # 查找學生
-    student = (
-        db.query(Student).filter(func.lower(Student.email) == email.lower()).first()
-    )
+    student = db.query(Student).filter(Student.email == email).first()
 
     # 不論是否找到都返回相同訊息（安全性考量）
     if not student:
