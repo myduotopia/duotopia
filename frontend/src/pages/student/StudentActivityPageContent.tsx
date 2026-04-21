@@ -254,6 +254,10 @@ const hasIncompleteRecordings = (
  * 是否屬於「逐題錄音、需要在跳題與提交前補做 Azure 發音分析」的朗讀活動。
  * 範圍比 activityNeedsRecording 小：提交按鈕禁用可以涵蓋所有需要錄音的型別，
  * 但自動分析流程僅針對例句集朗讀／單字集例句朗讀兩種情境。
+ *
+ * 注意：單字集 word_reading 模式雖然也有錄音，但其畫面走獨立的
+ * WordReadingActivity 組件、由它自己負責 Azure 分析，故這裡不納入，
+ * 避免在主流程重複分析。
  */
 const needsPerItemAnalysis = (
   activity: Activity,
