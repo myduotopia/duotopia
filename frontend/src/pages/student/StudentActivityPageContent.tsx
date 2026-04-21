@@ -1590,10 +1590,7 @@ export default function StudentActivityPageContent({
 
       // 收集所有有錄音但未分析的題目（不限 blob URL）
       activities.forEach((activity) => {
-        if (
-          activityNeedsRecording(activity, practiceMode) &&
-          activity.items
-        ) {
+        if (activityNeedsRecording(activity, practiceMode) && activity.items) {
           activity.items.forEach((item, itemIndex) => {
             const hasRecording =
               item.recording_url && item.recording_url !== "";
