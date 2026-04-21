@@ -2215,6 +2215,71 @@ class WordClozeAnswerRequest(BaseModel):
     session_id: Optional[int] = None
 
 
+_CLOZE_STOPWORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "can",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "and",
+        "or",
+        "but",
+        "if",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "with",
+        "by",
+        "from",
+        "as",
+        "it",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "he",
+        "she",
+        "we",
+        "they",
+        "you",
+        "my",
+        "your",
+        "his",
+        "their",
+        "our",
+        "her",
+        "him",
+        "me",
+        "us",
+        "them",
+    }
+)
+
+
 def extract_cloze(base_word: str, example_sentence: str) -> Optional[tuple]:
     """
     Find the target word in an example sentence and return
@@ -2260,6 +2325,62 @@ def extract_cloze(base_word: str, example_sentence: str) -> Optional[tuple]:
             + example_sentence[match.end() :]
         )
         return blanked, actual_word
+
+    return None
+
+
+def _pick_cloze_target_from_sentence(sentence: str) -> Optional[tuple]:
+    """
+    Pick a target word from a sentence to blank out.
+    Deterministically chooses the longest content word (>= 4 chars,
+    not a stopword). Returns (blanked_sentence, target_word) or None.
+    """
+    import re as _re
+
+    if not sentence:
+        return None
+
+    matches = [
+        (m.start(), m.end(), m.group(0))
+        for m in _re.finditer(r"\b[a-zA-Z][a-zA-Z']*\b", sentence)
+    ]
+    candidates = [
+        (s, e, w)
+        for (s, e, w) in matches
+        if len(w) >= 4 and w.lower() not in _CLOZE_STOPWORDS
+    ]
+    if not candidates:
+        return None
+
+    # Pick longest; tie-break by earliest position
+    best = max(candidates, key=lambda x: (len(x[2]), -x[0]))
+    start, end, word = best
+    blanked = sentence[:start] + "_____" + sentence[end:]
+    return blanked, word
+
+
+def extract_cloze_for_item(content_item) -> Optional[tuple]:
+    """
+    Extract (blanked_sentence, correct_answer) from a ContentItem.
+
+    Supports two content shapes:
+    1. VOCABULARY_SET: ci.text is base word,
+       ci.example_sentence contains the sentence
+    2. EXAMPLE_SENTENCES: ci.text IS the sentence,
+       pick a target word automatically
+    """
+    base = (content_item.text or "").strip()
+    example = content_item.example_sentence or ""
+
+    # Strategy 1: VOCABULARY_SET-style (use base word + example sentence)
+    if example:
+        result = extract_cloze(base, example)
+        if result:
+            return result
+
+    # Strategy 2: EXAMPLE_SENTENCES-style (text itself is a sentence)
+    if base and " " in base:
+        return _pick_cloze_target_from_sentence(base)
 
     return None
 
@@ -2343,23 +2464,35 @@ async def start_word_cloze_practice(
     # Build cloze questions, skip items without usable example sentence
     questions = []
     for ci in items_list:
-        example = ci.example_sentence or ""
-        cloze = extract_cloze(ci.text, example)
+        cloze = extract_cloze_for_item(ci)
         if cloze is None:
             logger.info(
-                "Skipping cloze for content_item %s: no match in example sentence",
+                "Skipping cloze for content_item %s: no usable sentence",
                 ci.id,
             )
             continue
         blanked_sentence, correct_answer = cloze
+
+        # For VOCABULARY_SET: base_word is the target word concept
+        # For EXAMPLE_SENTENCES: base_word is omitted (no separate target word)
+        is_vocab_item = bool(ci.example_sentence)
         questions.append(
             {
                 "content_item_id": ci.id,
-                "base_word": ci.text,
-                "translation": ci.translation or "",
+                "base_word": ci.text if is_vocab_item else "",
+                "translation": ci.translation if is_vocab_item else "",
                 "blanked_sentence": blanked_sentence,
-                "sentence_translation": ci.example_sentence_translation or "",
-                "audio_url": ci.example_sentence_audio_url or ci.audio_url,
+                "sentence_translation": (
+                    ci.example_sentence_translation
+                    if is_vocab_item
+                    else (ci.translation or "")
+                )
+                or "",
+                "audio_url": (
+                    ci.example_sentence_audio_url or ci.audio_url
+                    if is_vocab_item
+                    else ci.audio_url
+                ),
                 "correct_answer_length": len(correct_answer),
             }
         )
@@ -2443,7 +2576,7 @@ async def submit_word_cloze_answer(
             detail="Content item not found",
         )
 
-    cloze = extract_cloze(content_item.text or "", content_item.example_sentence or "")
+    cloze = extract_cloze_for_item(content_item)
     if cloze is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

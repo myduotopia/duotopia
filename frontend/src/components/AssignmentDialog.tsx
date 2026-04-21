@@ -580,8 +580,7 @@ export function AssignmentDialog({
     if (
       formData.practice_mode === "word_reading" ||
       formData.practice_mode === "word_selection" ||
-      formData.practice_mode === "word_spelling" ||
-      formData.practice_mode === "word_cloze"
+      formData.practice_mode === "word_spelling"
     ) {
       setCartItems((prev) => {
         const filtered = prev.filter((item) =>
@@ -841,16 +840,19 @@ export function AssignmentDialog({
     const mode = formData.practice_mode;
     if (!mode) return true; // 未選模式，全部可選
 
-    // 例句模式（朗讀 / 重組）：例句集 + 單字集都可選（單字集用 example_sentence 出題）
-    if (mode === "reading" || mode === "rearrangement") {
+    // 例句模式（朗讀 / 重組）+ 克漏字：例句集 + 單字集都可選（單字集用 example_sentence 出題）
+    if (
+      mode === "reading" ||
+      mode === "rearrangement" ||
+      mode === "word_cloze"
+    ) {
       return true;
     }
     // 單字模式：只能選單字集
     if (
       mode === "word_reading" ||
       mode === "word_selection" ||
-      mode === "word_spelling" ||
-      mode === "word_cloze"
+      mode === "word_spelling"
     ) {
       return isVocabularySetType(contentType);
     }

@@ -448,20 +448,22 @@ export default function WordClozeActivity({
 
       {/* Question content */}
       <div className="space-y-6">
-        {/* Base word hint */}
-        <div className="text-center">
-          <p className="text-sm text-gray-500 mb-1">
-            {t("wordCloze.baseWord") || "Base word"}
-          </p>
-          <h2 className="text-2xl font-bold text-gray-800">
-            {currentQ.base_word}
-            {showTranslation && currentQ.translation && (
-              <span className="text-base text-gray-500 ml-2">
-                ({currentQ.translation})
-              </span>
-            )}
-          </h2>
-        </div>
+        {/* Base word hint (only for vocabulary set items) */}
+        {currentQ.base_word && (
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-1">
+              {t("wordCloze.baseWord") || "Base word"}
+            </p>
+            <h2 className="text-2xl font-bold text-gray-800">
+              {currentQ.base_word}
+              {showTranslation && currentQ.translation && (
+                <span className="text-base text-gray-500 ml-2">
+                  ({currentQ.translation})
+                </span>
+              )}
+            </h2>
+          </div>
+        )}
 
         {/* Audio Button */}
         {currentQ.audio_url && (
