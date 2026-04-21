@@ -1027,6 +1027,7 @@
       "submitShort": "Submit",
       "submitting": "Submitting...",
       "submittingShort": "Submitting",
+      "submitDisabledTooltip": "Some items are missing recordings. Please complete them before submitting.",
       "next": "Next",
       "previous": "Previous",
       "cancel": "Cancel",

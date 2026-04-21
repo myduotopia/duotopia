@@ -6,7 +6,7 @@
  * 2. 老師預覽示範頁面 (TeacherAssignmentPreviewPage)
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -187,6 +187,37 @@ const isVocabularySetType = (type: string): boolean => {
   return ["SENTENCE_MAKING", "VOCABULARY_SET"].includes(normalizedType);
 };
 
+// Issue #645: 需要每題錄音的 activity 類型（段落朗讀 / 例句朗讀 / 單字朗讀）
+const RECORDING_REQUIRED_TYPES = [
+  "reading_assessment",
+  "grouped_questions",
+  "speaking",
+];
+
+/**
+ * Issue #645: 判斷是否有任何題目尚未完成錄音或尚未上傳到 GCS。
+ * - 空字串 / undefined：未錄音
+ * - blob: URL：已錄音但尚未上傳到 GCS
+ */
+const hasIncompleteRecordings = (activities: Activity[]): boolean => {
+  return activities.some((activity) => {
+    if (!RECORDING_REQUIRED_TYPES.includes(activity.type)) return false;
+
+    if (activity.items && activity.items.length > 0) {
+      return activity.items.some((item) => {
+        const hasRecording = !!item.recording_url && item.recording_url !== "";
+        const isBlob =
+          hasRecording && item.recording_url!.startsWith("blob:");
+        return !hasRecording || isBlob;
+      });
+    }
+
+    const hasRecording = !!activity.audio_url && activity.audio_url !== "";
+    const isBlob = hasRecording && activity.audio_url!.startsWith("blob:");
+    return !hasRecording || isBlob;
+  });
+};
+
 export default function StudentActivityPageContent({
   activities: initialActivities,
   assignmentTitle,
@@ -232,6 +263,12 @@ export default function StudentActivityPageContent({
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [incompleteItems, setIncompleteItems] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
+
+  // Issue #645: 任何題目未錄音/未上傳時，禁用提交按鈕
+  const isSubmitBlockedByRecording = useMemo(
+    () => hasIncompleteRecordings(activities),
+    [activities],
+  );
 
   // 🎯 背景分析狀態管理
   type ItemAnalysisStatus =
@@ -2227,7 +2264,12 @@ export default function StudentActivityPageContent({
                 practiceMode !== "word_selection" && (
                   <Button
                     onClick={handleSubmit}
-                    disabled={submitting}
+                    disabled={submitting || isSubmitBlockedByRecording}
+                    title={
+                      isSubmitBlockedByRecording
+                        ? t("studentActivityPage.buttons.submitDisabledTooltip")
+                        : undefined
+                    }
                     size="sm"
                     variant="default"
                     className="px-2 sm:px-3"
@@ -2686,7 +2728,14 @@ export default function StudentActivityPageContent({
                           variant="default"
                           size="sm"
                           onClick={handleSubmit}
-                          disabled={submitting} // 🔒 提交中禁用
+                          disabled={submitting || isSubmitBlockedByRecording} // 🔒 提交中 / 有題目未上傳音檔 時禁用
+                          title={
+                            isSubmitBlockedByRecording
+                              ? t(
+                                  "studentActivityPage.buttons.submitDisabledTooltip",
+                                )
+                              : undefined
+                          }
                           className="flex-1 sm:flex-none min-w-0"
                         >
                           <span className="hidden sm:inline">
