@@ -227,7 +227,7 @@ async def create_content(
                 item_data.get("vocabulary_translation")
                 or item_data.get("definition")
                 or item_data.get("translation", "")
-                or ""
+                or ""  # guard against explicit None value
             )
 
             # 處理 part_of_speech：前端可能傳送 parts_of_speech (plural, array)
@@ -518,7 +518,7 @@ async def update_content(
                     item_data.get("vocabulary_translation")
                     or item_data.get("definition")
                     or item_data.get("translation", "")
-                    or ""
+                    or ""  # guard against explicit None value
                 )
 
                 # 計算 word_count（如果有 example_sentence）

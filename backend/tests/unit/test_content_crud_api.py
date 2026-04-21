@@ -503,6 +503,26 @@ class TestContentCRUD:
         items = detail_response.json()["items"]
         assert items[0]["translation"] == "你好"
 
+        # UPDATE 路徑：同樣用舊格式（只送 definition，無 vocabulary_translation）
+        update_response = client.put(
+            f"/api/teachers/contents/{content_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={
+                "title": "Legacy definition content",
+                "items": [{"text": "hello", "definition": "謝謝"}],
+                "target_wpm": 100,
+                "target_accuracy": 90.0,
+            },
+        )
+        assert update_response.status_code == 200
+
+        updated_detail = client.get(
+            f"/api/teachers/contents/{content_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+        updated_items = updated_detail.json()["items"]
+        assert updated_items[0]["translation"] == "謝謝"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

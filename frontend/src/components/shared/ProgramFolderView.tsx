@@ -145,14 +145,11 @@ function ActionDropdown({ actions }: { actions: MenuAction[] }) {
         onClick={(e) => e.stopPropagation()}
         className="z-[60] min-w-[100px] bg-white rounded-2xl shadow-lg border border-gray-100 py-[3px]"
       >
-        {actions.map((a, i) => (
+        {actions.map((a) => (
           <DropdownMenuItem
-            key={i}
+            key={a.label}
             disabled={a.disabled}
-            onSelect={(e) => {
-              e.preventDefault();
-              if (!a.disabled) a.onClick();
-            }}
+            onSelect={() => a.onClick()}
             onClick={(e) => e.stopPropagation()}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs cursor-pointer transition-colors ${
               a.disabled
