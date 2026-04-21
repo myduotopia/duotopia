@@ -188,20 +188,44 @@ const isVocabularySetType = (type: string): boolean => {
 };
 
 // Issue #645: 需要每題錄音的 activity 類型（段落朗讀 / 例句朗讀 / 單字朗讀）
-const RECORDING_REQUIRED_TYPES = [
-  "reading_assessment",
-  "grouped_questions",
-  "speaking",
-];
+// 注意：API 回傳的 activity.type 為大寫（如 EXAMPLE_SENTENCES），但歷史紀錄也可能小寫，故統一 normalize。
+const RECORDING_REQUIRED_TYPES = new Set([
+  "READING_ASSESSMENT", // 段落朗讀（legacy）
+  "EXAMPLE_SENTENCES", // 例句朗讀
+  "GROUPED_QUESTIONS",
+  "SPEAKING",
+  "SPEAKING_PRACTICE",
+]);
+
+const VOCABULARY_TYPES = new Set(["VOCABULARY_SET", "SENTENCE_MAKING"]);
+
+const activityNeedsRecording = (
+  activity: Activity,
+  practiceMode?: string | null,
+): boolean => {
+  const normalizedType = activity.type?.toUpperCase() ?? "";
+  if (RECORDING_REQUIRED_TYPES.has(normalizedType)) return true;
+  // 單字朗讀：單字集在 word_reading 練習模式下每題需錄音
+  if (
+    VOCABULARY_TYPES.has(normalizedType) &&
+    practiceMode === "word_reading"
+  ) {
+    return true;
+  }
+  return false;
+};
 
 /**
  * Issue #645: 判斷是否有任何題目尚未完成錄音或尚未上傳到 GCS。
- * - 空字串 / undefined：未錄音
+ * - 空字串 / undefined / null：未錄音
  * - blob: URL：已錄音但尚未上傳到 GCS
  */
-const hasIncompleteRecordings = (activities: Activity[]): boolean => {
+const hasIncompleteRecordings = (
+  activities: Activity[],
+  practiceMode?: string | null,
+): boolean => {
   return activities.some((activity) => {
-    if (!RECORDING_REQUIRED_TYPES.includes(activity.type)) return false;
+    if (!activityNeedsRecording(activity, practiceMode)) return false;
 
     if (activity.items && activity.items.length > 0) {
       return activity.items.some((item) => {
@@ -266,8 +290,8 @@ export default function StudentActivityPageContent({
 
   // Issue #645: 任何題目未錄音/未上傳時，禁用提交按鈕
   const isSubmitBlockedByRecording = useMemo(
-    () => hasIncompleteRecordings(activities),
-    [activities],
+    () => hasIncompleteRecordings(activities, practiceMode),
+    [activities, practiceMode],
   );
 
   // 🎯 背景分析狀態管理
@@ -1405,12 +1429,8 @@ export default function StudentActivityPageContent({
       }[] = [];
 
       activities.forEach((activity) => {
-        // 檢查是否是需要錄音的題型
-        const needsRecording = [
-          "reading_assessment",
-          "grouped_questions",
-          "speaking",
-        ].includes(activity.type);
+        // Issue #645: 改用共用 helper（大小寫 normalize + 涵蓋 word_reading 練習模式）
+        const needsRecording = activityNeedsRecording(activity, practiceMode);
 
         if (needsRecording && activity.items && activity.items.length > 0) {
           // 逐題檢查
