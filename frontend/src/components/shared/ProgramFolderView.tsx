@@ -32,6 +32,12 @@ import {
   SendHorizontal,
 } from "lucide-react";
 import {
+  DropdownMenu as ShadcnDropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
   DndContext,
   closestCenter,
   PointerSensor,
@@ -108,7 +114,9 @@ const TYPE_BADGE: Record<string, { label: string; bg: string; text: string }> =
     SENTENCE_MAKING: { label: "造句", bg: "#F5F3FF", text: "#7C3AED" },
   };
 
-/* ── Dropdown Menu ── */
+/* ── Dropdown Menu ──
+ * 使用 Radix DropdownMenu + Portal 避免被鄰近卡片遮擋，
+ * collisionPadding 讓選單在貼近視窗邊緣時自動翻轉到上方。 */
 interface MenuAction {
   label: string;
   icon: React.ReactNode;
@@ -117,52 +125,47 @@ interface MenuAction {
   disabled?: boolean;
 }
 
-function DropdownMenu({
-  actions,
-  onClose,
-}: {
-  actions: MenuAction[];
-  onClose: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [onClose]);
-
+function ActionDropdown({ actions }: { actions: MenuAction[] }) {
   return (
-    <div
-      ref={ref}
-      className="absolute right-0 top-full mt-1 z-20 w-[100px] bg-white rounded-2xl shadow-lg border border-gray-100 py-[3px]"
-    >
-      {actions.map((a, i) => (
-        <button
-          key={i}
-          disabled={a.disabled}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!a.disabled) {
-              a.onClick();
-              onClose();
-            }
-          }}
-          className={`flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded-md text-xs transition-colors ${
-            a.disabled
-              ? "text-gray-300 cursor-not-allowed"
-              : a.danger
-                ? "text-red-500 hover:bg-gray-50"
-                : "text-gray-700 hover:bg-gray-50"
-          }`}
-        >
-          {a.icon}
-          {a.label}
+    <ShadcnDropdownMenu>
+      <DropdownMenuTrigger
+        asChild
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        <button className="absolute right-3 bottom-3 p-1 opacity-70 hover:opacity-100 transition-opacity">
+          <Ellipsis size={18} className="text-gray-500" />
         </button>
-      ))}
-    </div>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={6}
+        collisionPadding={16}
+        onClick={(e) => e.stopPropagation()}
+        className="z-[60] min-w-[100px] bg-white rounded-2xl shadow-lg border border-gray-100 py-[3px]"
+      >
+        {actions.map((a, i) => (
+          <DropdownMenuItem
+            key={i}
+            disabled={a.disabled}
+            onSelect={(e) => {
+              e.preventDefault();
+              if (!a.disabled) a.onClick();
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs cursor-pointer transition-colors ${
+              a.disabled
+                ? "text-gray-300 cursor-not-allowed"
+                : a.danger
+                  ? "text-red-500 focus:bg-gray-50 focus:text-red-500"
+                  : "text-gray-700 focus:bg-gray-50 focus:text-gray-700"
+            }`}
+          >
+            {a.icon}
+            {a.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </ShadcnDropdownMenu>
   );
 }
 
@@ -181,7 +184,6 @@ function ProgramCard({
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
-  const [showMenu, setShowMenu] = useState(false);
   const lessons = program.lessons ?? [];
   const contentCount = lessons.reduce(
     (sum, l) => sum + (l.contents?.length ?? 0),
@@ -222,35 +224,21 @@ function ProgramCard({
           {contentCount} {t("programFolderView.contents", "內容")}
         </p>
 
-        {/* Ellipsis menu trigger */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowMenu(!showMenu);
-          }}
-          className="absolute right-3 bottom-3 p-1 opacity-70 hover:opacity-100 transition-opacity"
-        >
-          <Ellipsis size={18} className="text-gray-500" />
-        </button>
-
-        {showMenu && (
-          <DropdownMenu
-            onClose={() => setShowMenu(false)}
-            actions={[
-              {
-                label: t("common.edit", "編輯"),
-                icon: <Pencil size={13} />,
-                onClick: onEdit,
-              },
-              {
-                label: t("common.delete", "刪除"),
-                icon: <Trash2 size={13} />,
-                onClick: onDelete,
-                danger: true,
-              },
-            ]}
-          />
-        )}
+        <ActionDropdown
+          actions={[
+            {
+              label: t("common.edit", "編輯"),
+              icon: <Pencil size={13} />,
+              onClick: onEdit,
+            },
+            {
+              label: t("common.delete", "刪除"),
+              icon: <Trash2 size={13} />,
+              onClick: onDelete,
+              danger: true,
+            },
+          ]}
+        />
       </div>
     </div>
   );
@@ -271,7 +259,6 @@ function LessonCard({
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
-  const [showMenu, setShowMenu] = useState(false);
   const contents = lesson.contents ?? [];
 
   return (
@@ -299,35 +286,21 @@ function LessonCard({
           {contents.length} {t("programFolderView.contents", "內容")}
         </p>
 
-        {/* Ellipsis menu trigger */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowMenu(!showMenu);
-          }}
-          className="absolute right-3 bottom-3 p-1 opacity-70 hover:opacity-100 transition-opacity"
-        >
-          <Ellipsis size={18} className="text-gray-500" />
-        </button>
-
-        {showMenu && (
-          <DropdownMenu
-            onClose={() => setShowMenu(false)}
-            actions={[
-              {
-                label: t("common.edit", "編輯"),
-                icon: <Pencil size={13} />,
-                onClick: onEdit,
-              },
-              {
-                label: t("common.delete", "刪除"),
-                icon: <Trash2 size={13} />,
-                onClick: onDelete,
-                danger: true,
-              },
-            ]}
-          />
-        )}
+        <ActionDropdown
+          actions={[
+            {
+              label: t("common.edit", "編輯"),
+              icon: <Pencil size={13} />,
+              onClick: onEdit,
+            },
+            {
+              label: t("common.delete", "刪除"),
+              icon: <Trash2 size={13} />,
+              onClick: onDelete,
+              danger: true,
+            },
+          ]}
+        />
       </div>
     </div>
   );
@@ -350,7 +323,6 @@ function ContentCard({
   onAssign?: () => void;
 }) {
   const { t } = useTranslation();
-  const [showMenu, setShowMenu] = useState(false);
   const items = content.items ?? [];
   const badge = TYPE_BADGE[content.type ?? ""] ?? {
     label: content.type ?? "其他",
@@ -473,51 +445,37 @@ function ContentCard({
           {t("programFolderView.questions", "題")}
         </span>
 
-        {/* Ellipsis menu trigger */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowMenu(!showMenu);
-          }}
-          className="absolute right-3 bottom-3 p-1 opacity-70 hover:opacity-100 transition-opacity"
-        >
-          <Ellipsis size={18} className="text-gray-500" />
-        </button>
-
-        {showMenu && (
-          <DropdownMenu
-            onClose={() => setShowMenu(false)}
-            actions={[
-              ...(onCopy
-                ? [
-                    {
-                      label: t("common.copy", "複製"),
-                      icon: <Copy size={13} />,
-                      onClick: onCopy,
-                    },
-                  ]
-                : []),
-              {
-                label: t("common.move", "移動"),
-                icon: <ArrowRightLeft size={13} />,
-                onClick: () => {
-                  // TODO: 等工程師實作移動功能
-                },
-                disabled: true,
+        <ActionDropdown
+          actions={[
+            ...(onCopy
+              ? [
+                  {
+                    label: t("common.copy", "複製"),
+                    icon: <Copy size={13} />,
+                    onClick: onCopy,
+                  },
+                ]
+              : []),
+            {
+              label: t("common.move", "移動"),
+              icon: <ArrowRightLeft size={13} />,
+              onClick: () => {
+                // TODO: 等工程師實作移動功能
               },
-              ...(onDelete
-                ? [
-                    {
-                      label: t("common.delete", "刪除"),
-                      icon: <Trash2 size={13} />,
-                      onClick: onDelete,
-                      danger: true,
-                    },
-                  ]
-                : []),
-            ]}
-          />
-        )}
+              disabled: true,
+            },
+            ...(onDelete
+              ? [
+                  {
+                    label: t("common.delete", "刪除"),
+                    icon: <Trash2 size={13} />,
+                    onClick: onDelete,
+                    danger: true,
+                  },
+                ]
+              : []),
+          ]}
+        />
       </div>
     </div>
   );

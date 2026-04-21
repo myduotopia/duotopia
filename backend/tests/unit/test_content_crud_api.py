@@ -410,6 +410,99 @@ class TestContentCRUD:
 
         db.close()
 
+    def test_update_content_prefers_vocabulary_translation_over_definition(
+        self, auth_token
+    ):
+        """Issue #600: Preview 卡顯示的 translation 應該是使用者當前選擇語言的翻譯。
+
+        前端 VocabularySetPanel 在英英模式下送出：
+          - vocabulary_translation = "Hello" (英文定義)
+          - vocabulary_translation_lang = "english"
+          - definition = "你好"  (殘留的中文欄位)
+        後端應存入 item.translation = "Hello"（vocabulary_translation 優先），
+        而非中文的 definition。"""
+        create_response = client.post(
+            "/api/teachers/lessons/1/contents",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={
+                "title": "Lang-aware translation content",
+                "items": [
+                    {
+                        "text": "greet",
+                        "vocabulary_translation": "a friendly word of welcome",
+                        "vocabulary_translation_lang": "english",
+                        "definition": "你好",
+                    }
+                ],
+                "target_wpm": 100,
+                "target_accuracy": 90.0,
+                "order_index": 1,
+            },
+        )
+        assert create_response.status_code == 200
+        content_id = create_response.json()["id"]
+
+        # CREATE 路徑：translation 欄位應存英文（vocabulary_translation）
+        detail_response = client.get(
+            f"/api/teachers/contents/{content_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+        assert detail_response.status_code == 200
+        created_items = detail_response.json()["items"]
+        assert len(created_items) == 1
+        assert created_items[0]["translation"] == "a friendly word of welcome"
+
+        # UPDATE 路徑：切換語言到日文後，translation 欄位也要同步
+        update_response = client.put(
+            f"/api/teachers/contents/{content_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={
+                "title": "Lang-aware translation content",
+                "items": [
+                    {
+                        "text": "greet",
+                        "vocabulary_translation": "こんにちは",
+                        "vocabulary_translation_lang": "japanese",
+                        "definition": "你好",
+                    }
+                ],
+            },
+        )
+        assert update_response.status_code == 200
+
+        detail_response_2 = client.get(
+            f"/api/teachers/contents/{content_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+        updated_items = detail_response_2.json()["items"]
+        assert updated_items[0]["translation"] == "こんにちは"
+
+    def test_update_content_falls_back_to_definition_when_no_vocab_translation(
+        self, auth_token
+    ):
+        """相容性：若前端未送 vocabulary_translation（舊 ReadingAssessmentPanel 流程），
+        應沿用舊行為從 definition → translation fallback。"""
+        create_response = client.post(
+            "/api/teachers/lessons/1/contents",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={
+                "title": "Legacy definition content",
+                "items": [{"text": "hello", "definition": "你好"}],
+                "target_wpm": 100,
+                "target_accuracy": 90.0,
+                "order_index": 1,
+            },
+        )
+        assert create_response.status_code == 200
+        content_id = create_response.json()["id"]
+
+        detail_response = client.get(
+            f"/api/teachers/contents/{content_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+        items = detail_response.json()["items"]
+        assert items[0]["translation"] == "你好"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
