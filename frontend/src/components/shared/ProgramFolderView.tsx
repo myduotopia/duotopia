@@ -117,7 +117,8 @@ const TYPE_BADGE: Record<string, { label: string; bg: string; text: string }> =
 
 /* ── Dropdown Menu Helpers ──
  * 使用 shadcn/Radix 的 DropdownMenu（透過 Portal 渲染、有內建 collision detection），
- * 避免三點選單造成父容器出現捲軸（舊實作 absolute + z-index 會撐大父容器）。 */
+ * 避免三點選單造成父容器出現捲軸（舊實作 absolute + z-index 會撐大父容器）、
+ * 以及被鄰近卡片遮擋；collisionPadding 讓選單在貼近視窗邊緣時自動翻轉到上方。 */
 interface MenuAction {
   label: string;
   icon: React.ReactNode;
@@ -139,8 +140,10 @@ function ActionDropdown({ actions }: { actions: MenuAction[] }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
+        sideOffset={6}
+        collisionPadding={16}
         onClick={(e) => e.stopPropagation()}
-        className="z-50 min-w-[100px] bg-white rounded-2xl shadow-lg border border-gray-100 py-[3px]"
+        className="z-[60] min-w-[100px] bg-white rounded-2xl shadow-lg border border-gray-100 py-[3px]"
       >
         {actions.map((a, i) => (
           <DropdownMenuItem
