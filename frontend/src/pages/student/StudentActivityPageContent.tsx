@@ -6,7 +6,7 @@
  * 2. 老師預覽示範頁面 (TeacherAssignmentPreviewPage)
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -187,6 +187,94 @@ const isVocabularySetType = (type: string): boolean => {
   return ["SENTENCE_MAKING", "VOCABULARY_SET"].includes(normalizedType);
 };
 
+// API 回傳的 activity.type 可能為大寫 enum（EXAMPLE_SENTENCES）或舊資料的小寫，
+// 故所有比對一律 normalize 成大寫。
+const RECORDING_REQUIRED_TYPES = new Set([
+  "READING_ASSESSMENT",
+  "EXAMPLE_SENTENCES",
+  "GROUPED_QUESTIONS",
+  "SPEAKING",
+]);
+
+// 單字集搭配需要錄音的練習模式：
+// - reading       → 朗讀單字的例句
+// - word_reading  → 單字朗讀
+// rearrangement / word_selection 不需錄音。
+const VOCABULARY_RECORDING_PRACTICE_MODES = new Set([
+  "reading",
+  "word_reading",
+]);
+
+const activityNeedsRecording = (
+  activity: Activity,
+  practiceMode?: string | null,
+): boolean => {
+  // Rearrangement 是拖拉重組題，任何 content type 下都不使用麥克風，
+  // 因此 early-return，避免 content-type 檢查誤判為需要錄音。
+  if (practiceMode === "rearrangement") return false;
+
+  const normalizedType = activity.type?.toUpperCase() ?? "";
+  if (RECORDING_REQUIRED_TYPES.has(normalizedType)) return true;
+  if (
+    isVocabularySetType(activity.type) &&
+    !!practiceMode &&
+    VOCABULARY_RECORDING_PRACTICE_MODES.has(practiceMode)
+  ) {
+    return true;
+  }
+  return false;
+};
+
+/**
+ * 判斷是否有任何題目尚未完成錄音或尚未上傳到 GCS。
+ * - 空字串 / undefined / null：未錄音
+ * - blob: URL：已錄音但尚未上傳到 GCS
+ */
+const isRecordingMissingOrPending = (url?: string | null): boolean =>
+  !url || url.startsWith("blob:");
+
+const hasIncompleteRecordings = (
+  activities: Activity[],
+  practiceMode?: string | null,
+): boolean => {
+  return activities.some((activity) => {
+    if (!activityNeedsRecording(activity, practiceMode)) return false;
+
+    if (activity.items && activity.items.length > 0) {
+      return activity.items.some((item) =>
+        isRecordingMissingOrPending(item.recording_url),
+      );
+    }
+
+    return isRecordingMissingOrPending(activity.audio_url);
+  });
+};
+
+/**
+ * 是否屬於「逐題錄音、需要在跳題與提交前補做 Azure 發音分析」的朗讀活動。
+ * 範圍比 activityNeedsRecording 小：提交按鈕禁用可以涵蓋所有需要錄音的型別，
+ * 但自動分析流程僅針對例句集朗讀／單字集例句朗讀兩種情境。
+ *
+ * 注意：單字集 word_reading 模式雖然也有錄音，但其畫面走獨立的
+ * WordReadingActivity 組件、由它自己負責 Azure 分析，故這裡不納入，
+ * 避免在主流程重複分析。
+ */
+const needsPerItemAnalysis = (
+  activity: Activity,
+  practiceMode?: string | null,
+): boolean => {
+  if (
+    isExampleSentencesType(activity.type) &&
+    practiceMode !== "rearrangement"
+  ) {
+    return true;
+  }
+  if (isVocabularySetType(activity.type) && practiceMode === "reading") {
+    return true;
+  }
+  return false;
+};
+
 export default function StudentActivityPageContent({
   activities: initialActivities,
   assignmentTitle,
@@ -232,6 +320,12 @@ export default function StudentActivityPageContent({
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [incompleteItems, setIncompleteItems] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
+
+  // 任何題目未錄音 / 錄音未上傳到 GCS 時，禁用提交按鈕
+  const isSubmitBlockedByRecording = useMemo(
+    () => hasIncompleteRecordings(activities, practiceMode),
+    [activities, practiceMode],
+  );
 
   // 🎯 背景分析狀態管理
   type ItemAnalysisStatus =
@@ -1258,10 +1352,10 @@ export default function StudentActivityPageContent({
   ) => {
     const currentActivity = activities[currentActivityIndex];
 
-    // 檢查是否為例句朗讀模式（items 有值且非重組模式）
+    // 例句集朗讀 / 單字集例句朗讀才需要在跳題前做自動分析。
+    // 此處不使用 activityNeedsRecording，因它涵蓋範圍較廣（例如 GROUPED_QUESTIONS / word_reading）。
     const isReadingMode =
-      isExampleSentencesType(currentActivity.type) &&
-      practiceMode !== "rearrangement" &&
+      needsPerItemAnalysis(currentActivity, practiceMode) &&
       currentActivity.items &&
       currentActivity.items.length > 0;
 
@@ -1368,12 +1462,7 @@ export default function StudentActivityPageContent({
       }[] = [];
 
       activities.forEach((activity) => {
-        // 檢查是否是需要錄音的題型
-        const needsRecording = [
-          "reading_assessment",
-          "grouped_questions",
-          "speaking",
-        ].includes(activity.type);
+        const needsRecording = activityNeedsRecording(activity, practiceMode);
 
         if (needsRecording && activity.items && activity.items.length > 0) {
           // 逐題檢查
@@ -1527,11 +1616,7 @@ export default function StudentActivityPageContent({
 
       // 收集所有有錄音但未分析的題目（不限 blob URL）
       activities.forEach((activity) => {
-        if (
-          isExampleSentencesType(activity.type) &&
-          practiceMode !== "rearrangement" &&
-          activity.items
-        ) {
+        if (needsPerItemAnalysis(activity, practiceMode) && activity.items) {
           activity.items.forEach((item, itemIndex) => {
             const hasRecording =
               item.recording_url && item.recording_url !== "";
@@ -2228,7 +2313,12 @@ export default function StudentActivityPageContent({
                 practiceMode !== "word_selection" && (
                   <Button
                     onClick={handleSubmit}
-                    disabled={submitting}
+                    disabled={submitting || isSubmitBlockedByRecording}
+                    title={
+                      isSubmitBlockedByRecording
+                        ? t("studentActivityPage.buttons.submitDisabledTooltip")
+                        : undefined
+                    }
                     size="sm"
                     variant="default"
                     className="px-2 sm:px-3"
@@ -2687,7 +2777,14 @@ export default function StudentActivityPageContent({
                           variant="default"
                           size="sm"
                           onClick={handleSubmit}
-                          disabled={submitting} // 🔒 提交中禁用
+                          disabled={submitting || isSubmitBlockedByRecording} // 🔒 提交中 / 有題目未上傳音檔 時禁用
+                          title={
+                            isSubmitBlockedByRecording
+                              ? t(
+                                  "studentActivityPage.buttons.submitDisabledTooltip",
+                                )
+                              : undefined
+                          }
                           className="flex-1 sm:flex-none min-w-0"
                         >
                           <span className="hidden sm:inline">

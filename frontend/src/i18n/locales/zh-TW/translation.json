@@ -1082,6 +1082,7 @@
       "submitShort": "提交",
       "submitting": "提交中...",
       "submittingShort": "提交中",
+      "submitDisabledTooltip": "尚有題目未上傳錄音，請完成後再提交",
       "next": "下一題",
       "previous": "上一題",
       "cancel": "取消",
