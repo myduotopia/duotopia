@@ -289,10 +289,23 @@ export default function StudentActivityPageContent({
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
 
   // Issue #645: 任何題目未錄音/未上傳時，禁用提交按鈕
-  const isSubmitBlockedByRecording = useMemo(
-    () => hasIncompleteRecordings(activities, practiceMode),
-    [activities, practiceMode],
-  );
+  const isSubmitBlockedByRecording = useMemo(() => {
+    const result = hasIncompleteRecordings(activities, practiceMode);
+    // 暫時加 debug log 方便在 per-issue 環境定位問題（稍後會移除）
+    if (typeof window !== "undefined") {
+      console.log("[#645] isSubmitBlockedByRecording =", result, {
+        practiceMode,
+        activitySnapshot: activities.map((a) => ({
+          type: a.type,
+          itemsLen: a.items?.length ?? 0,
+          recordings:
+            a.items?.map((i) => i.recording_url?.slice(0, 30) ?? null) ?? null,
+          audio_url: a.audio_url?.slice(0, 30) ?? null,
+        })),
+      });
+    }
+    return result;
+  }, [activities, practiceMode]);
 
   // 🎯 背景分析狀態管理
   type ItemAnalysisStatus =
