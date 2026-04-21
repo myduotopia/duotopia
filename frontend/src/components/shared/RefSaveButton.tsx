@@ -3,12 +3,15 @@
  *
  * 功能：
  * 1. 面板 busy 時（批次操作中）自動 disabled
+ *    - busy 狀態透過 SidebarContext.editorBusy 訂閱，確保 reactive 更新
+ *    - 避免讀取 panelRef.current?.isBusy 產生的 stale-ref 問題 (#651)
  * 2. 防止重複連續點擊（saving 中 disabled）
  */
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
+import { useSidebar } from "@/contexts/SidebarContext";
 
 interface PanelHandle {
   save: () => Promise<void>;
@@ -21,6 +24,7 @@ interface RefSaveButtonProps {
 
 export function RefSaveButton({ panelRef }: RefSaveButtonProps) {
   const { t } = useTranslation();
+  const { editorBusy } = useSidebar();
   const [isSaving, setIsSaving] = useState(false);
 
   const handleClick = useCallback(async () => {
@@ -38,7 +42,7 @@ export function RefSaveButton({ panelRef }: RefSaveButtonProps) {
     <Button
       size="sm"
       className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
-      disabled={isSaving || (panelRef.current?.isBusy ?? false)}
+      disabled={isSaving || editorBusy}
       onClick={handleClick}
     >
       {isSaving ? (

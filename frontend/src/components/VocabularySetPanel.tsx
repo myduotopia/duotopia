@@ -1610,11 +1610,6 @@ const VocabularySetPanel = forwardRef<
   const { t } = useTranslation();
   const { setEditorBusy } = useSidebar();
 
-  // Reset editorBusy on unmount to prevent lock-out if panel closes mid-operation
-  useEffect(() => {
-    return () => setEditorBusy(false);
-  }, [setEditorBusy]);
-
   const [title, setTitle] = useState("");
   // 記住用戶最後選擇的翻譯語言，批次翻譯時使用
   const [lastSelectedWordLang, setLastSelectedWordLang] = useState<
@@ -1663,11 +1658,15 @@ const VocabularySetPanel = forwardRef<
   const [batchPasteText, setBatchPasteText] = useState("");
   const [batchPasteAutoTTS, setBatchPasteAutoTTS] = useState(true);
   const [batchPasteAutoTranslate, setBatchPasteAutoTranslate] = useState(true);
-  const [isBatchPasting, _setIsBatchPasting] = useState(false);
-  const setIsBatchPasting = (v: boolean) => {
-    _setIsBatchPasting(v);
-    setEditorBusy(v);
-  };
+  const [isBatchPasting, setIsBatchPasting] = useState(false);
+
+  // Sync batch-paste state to SidebarContext.editorBusy so that RefSaveButton
+  // (and sidebar close buttons) can reactively reflect busy state. Cleanup on
+  // unmount prevents lock-out if panel closes mid-operation. (#651)
+  useEffect(() => {
+    setEditorBusy(isBatchPasting);
+    return () => setEditorBusy(false);
+  }, [isBatchPasting, setEditorBusy]);
   const [batchProgress, setBatchProgress] = useState<{
     completedItems: number;
     totalItems: number;
