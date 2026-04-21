@@ -250,6 +250,27 @@ const hasIncompleteRecordings = (
   });
 };
 
+/**
+ * 是否屬於「逐題錄音、需要在跳題與提交前補做 Azure 發音分析」的朗讀活動。
+ * 範圍比 activityNeedsRecording 小：提交按鈕禁用可以涵蓋所有需要錄音的型別，
+ * 但自動分析流程僅針對例句集朗讀／單字集例句朗讀兩種情境。
+ */
+const needsPerItemAnalysis = (
+  activity: Activity,
+  practiceMode?: string | null,
+): boolean => {
+  if (
+    isExampleSentencesType(activity.type) &&
+    practiceMode !== "rearrangement"
+  ) {
+    return true;
+  }
+  if (isVocabularySetType(activity.type) && practiceMode === "reading") {
+    return true;
+  }
+  return false;
+};
+
 export default function StudentActivityPageContent({
   activities: initialActivities,
   assignmentTitle,
@@ -1327,9 +1348,10 @@ export default function StudentActivityPageContent({
   ) => {
     const currentActivity = activities[currentActivityIndex];
 
-    // 需要每題錄音的朗讀模式（例句集 reading / 單字集 reading）才需要自動分析
+    // 例句集朗讀 / 單字集例句朗讀才需要在跳題前做自動分析。
+    // 此處不使用 activityNeedsRecording，因它涵蓋範圍較廣（例如 GROUPED_QUESTIONS / word_reading）。
     const isReadingMode =
-      activityNeedsRecording(currentActivity, practiceMode) &&
+      needsPerItemAnalysis(currentActivity, practiceMode) &&
       currentActivity.items &&
       currentActivity.items.length > 0;
 
@@ -1590,7 +1612,7 @@ export default function StudentActivityPageContent({
 
       // 收集所有有錄音但未分析的題目（不限 blob URL）
       activities.forEach((activity) => {
-        if (activityNeedsRecording(activity, practiceMode) && activity.items) {
+        if (needsPerItemAnalysis(activity, practiceMode) && activity.items) {
           activity.items.forEach((item, itemIndex) => {
             const hasRecording =
               item.recording_url && item.recording_url !== "";
