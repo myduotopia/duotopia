@@ -3125,6 +3125,35 @@ export function AssignmentDialog({
                           </div>
                         </div>
 
+                        {/* 單字選擇專用 - 答錯後顯示答案 */}
+                        {formData.practice_mode === "word_selection" && (
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-gray-600">
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.showAnswer",
+                              )}
+                            </Label>
+                            <div className="flex items-center h-9">
+                              <input
+                                type="checkbox"
+                                checked={formData.show_answer}
+                                onChange={(e) =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    show_answer: e.target.checked,
+                                  }))
+                                }
+                                className="h-4 w-4 rounded border-gray-300"
+                              />
+                              <span className="ml-2 text-sm text-gray-600">
+                                {t(
+                                  "dialogs.assignmentDialog.practiceMode.wordSelectionShowAnswerDesc",
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                         {/* 單字朗讀專用 - 顯示翻譯 */}
                         {formData.practice_mode === "word_reading" && (
                           <div className="space-y-1.5">

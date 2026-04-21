@@ -257,6 +257,7 @@ jobs:
       env:
         DATABASE_URL: ${{ steps.db_env.outputs.ALEMBIC_DATABASE_URL }}
       run: |
+        set -euo pipefail
         echo "🔍 Installing dependencies for migrations..."
         pip install -r backend/requirements.txt
 
@@ -266,22 +267,7 @@ jobs:
         alembic current || true
 
         echo "🔄 Upgrading to latest migration..."
-        if ! alembic upgrade head 2>&1 | tee /tmp/alembic_output.txt; then
-          # Check if error is due to orphaned revision
-          if grep -q "Can't locate revision" /tmp/alembic_output.txt; then
-            echo "⚠️ Orphaned revision detected in database"
-            echo "🔧 Stamping database to latest head to recover..."
-            # Get the current head from the codebase
-            CURRENT_HEAD=$(alembic heads | head -1 | awk '{print $1}')
-            echo "📌 Stamping to revision: $CURRENT_HEAD"
-            alembic stamp "$CURRENT_HEAD"
-            echo "✅ Database stamped successfully"
-          else
-            echo "❌ Migration failed with unexpected error"
-            cat /tmp/alembic_output.txt
-            exit 1
-          fi
-        fi
+        alembic upgrade head
         echo "✅ Migrations completed"
 
     - name: 🔒 Verify RLS Configuration

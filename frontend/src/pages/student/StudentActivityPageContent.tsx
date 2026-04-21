@@ -2033,6 +2033,7 @@ export default function StudentActivityPageContent({
             isPreviewMode={isPreviewMode}
             isDemoMode={isDemoMode}
             initialPracticeMode={assignmentStatus === "GRADED"}
+            showAnswer={showAnswer}
             onComplete={() => {
               toast.success(
                 t("wordSelection.toast.completed") || "作業已完成！",
