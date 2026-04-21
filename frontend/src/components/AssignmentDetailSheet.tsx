@@ -779,8 +779,9 @@ export function AssignmentDetailSheet({
                       </div>
                     </div>
 
-                    {/* 例句重組專用 - 顯示答案 */}
-                    {assignment.practice_mode === "rearrangement" && (
+                    {/* 例句重組 / 單字選擇 - 顯示答案 */}
+                    {(assignment.practice_mode === "rearrangement" ||
+                      assignment.practice_mode === "word_selection") && (
                       <div className="space-y-1.5">
                         <Label className="text-xs text-gray-600 dark:text-gray-400">
                           {t(
@@ -801,7 +802,9 @@ export function AssignmentDetailSheet({
                           />
                           <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
                             {t(
-                              "dialogs.assignmentDialog.practiceMode.showAnswerDesc",
+                              assignment.practice_mode === "word_selection"
+                                ? "dialogs.assignmentDialog.practiceMode.wordSelectionShowAnswerDesc"
+                                : "dialogs.assignmentDialog.practiceMode.showAnswerDesc",
                             )}
                           </span>
                         </div>

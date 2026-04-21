@@ -157,7 +157,9 @@ jobs:
       run: |
         # 優先使用 GitHub secrets（gcloud status.url 仍回傳已停用的舊格式 URL）
         # See: https://github.com/myduotopia/duotopia/issues/548
-        if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          BACKEND_URL="${{ secrets.PRODUCTION_BACKEND_URL }}"
+        elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
           BACKEND_URL="${{ secrets.DEVELOP_BACKEND_URL }}"
         else
           BACKEND_URL="${{ secrets.STAGING_BACKEND_URL }}"
