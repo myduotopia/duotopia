@@ -209,6 +209,9 @@ const activityNeedsRecording = (
   activity: Activity,
   practiceMode?: string | null,
 ): boolean => {
+  // Rearrangement 是拖拉重組題，任何 content type 下都不需錄音。
+  if (practiceMode === "rearrangement") return false;
+
   const normalizedType = activity.type?.toUpperCase() ?? "";
   if (RECORDING_REQUIRED_TYPES.has(normalizedType)) return true;
   if (
@@ -226,6 +229,9 @@ const activityNeedsRecording = (
  * - 空字串 / undefined / null：未錄音
  * - blob: URL：已錄音但尚未上傳到 GCS
  */
+const isRecordingMissingOrPending = (url?: string | null): boolean =>
+  !url || url.startsWith("blob:");
+
 const hasIncompleteRecordings = (
   activities: Activity[],
   practiceMode?: string | null,
@@ -234,16 +240,12 @@ const hasIncompleteRecordings = (
     if (!activityNeedsRecording(activity, practiceMode)) return false;
 
     if (activity.items && activity.items.length > 0) {
-      return activity.items.some((item) => {
-        const hasRecording = !!item.recording_url;
-        const isBlob = hasRecording && item.recording_url!.startsWith("blob:");
-        return !hasRecording || isBlob;
-      });
+      return activity.items.some((item) =>
+        isRecordingMissingOrPending(item.recording_url),
+      );
     }
 
-    const hasRecording = !!activity.audio_url;
-    const isBlob = hasRecording && activity.audio_url!.startsWith("blob:");
-    return !hasRecording || isBlob;
+    return isRecordingMissingOrPending(activity.audio_url);
   });
 };
 
@@ -1327,7 +1329,6 @@ export default function StudentActivityPageContent({
     // 需要每題錄音的朗讀模式（例句集 reading / 單字集 reading）才需要自動分析
     const isReadingMode =
       activityNeedsRecording(currentActivity, practiceMode) &&
-      practiceMode !== "rearrangement" &&
       currentActivity.items &&
       currentActivity.items.length > 0;
 
@@ -1590,7 +1591,6 @@ export default function StudentActivityPageContent({
       activities.forEach((activity) => {
         if (
           activityNeedsRecording(activity, practiceMode) &&
-          practiceMode !== "rearrangement" &&
           activity.items
         ) {
           activity.items.forEach((item, itemIndex) => {
