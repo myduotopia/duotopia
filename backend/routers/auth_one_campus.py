@@ -17,6 +17,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from auth import create_access_token, get_current_user
@@ -441,11 +442,13 @@ async def verify_teacher_bind(
         db, sso_identity, target_email, user_type="teacher"
     )
 
-    # Update teacher email — check uniqueness first to avoid constraint violation
+    # Update teacher email — check uniqueness first to avoid constraint violation.
+    # Case-insensitive match so we don't collide with the unique functional index
+    # ix_teachers_email_lower (see migration 20260420_1100).
     existing_teacher_with_email = (
         db.query(Teacher)
         .filter(
-            Teacher.email == target_email,
+            func.lower(Teacher.email) == target_email.lower(),
             Teacher.id != teacher.id,
             Teacher.is_active.is_(True),
         )
