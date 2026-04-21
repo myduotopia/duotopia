@@ -187,22 +187,19 @@ const isVocabularySetType = (type: string): boolean => {
   return ["SENTENCE_MAKING", "VOCABULARY_SET"].includes(normalizedType);
 };
 
-// Issue #645: 需要每題錄音的 activity 類型（段落朗讀 / 例句朗讀 / 單字朗讀）
-// 注意：API 回傳的 activity.type 為大寫（如 EXAMPLE_SENTENCES），但歷史紀錄也可能小寫，故統一 normalize。
+// API 回傳的 activity.type 可能為大寫 enum（EXAMPLE_SENTENCES）或舊資料的小寫，
+// 故所有比對一律 normalize 成大寫。
 const RECORDING_REQUIRED_TYPES = new Set([
-  "READING_ASSESSMENT", // 段落朗讀（legacy）
-  "EXAMPLE_SENTENCES", // 例句朗讀
+  "READING_ASSESSMENT",
+  "EXAMPLE_SENTENCES",
   "GROUPED_QUESTIONS",
   "SPEAKING",
-  "SPEAKING_PRACTICE",
 ]);
 
-const VOCABULARY_TYPES = new Set(["VOCABULARY_SET", "SENTENCE_MAKING"]);
-
 // 單字集搭配需要錄音的練習模式：
-// - reading       → 例句朗讀（朗讀單字的例句）
+// - reading       → 朗讀單字的例句
 // - word_reading  → 單字朗讀
-// 其他模式（rearrangement / word_selection）不需錄音。
+// rearrangement / word_selection 不需錄音。
 const VOCABULARY_RECORDING_PRACTICE_MODES = new Set([
   "reading",
   "word_reading",
@@ -215,7 +212,7 @@ const activityNeedsRecording = (
   const normalizedType = activity.type?.toUpperCase() ?? "";
   if (RECORDING_REQUIRED_TYPES.has(normalizedType)) return true;
   if (
-    VOCABULARY_TYPES.has(normalizedType) &&
+    isVocabularySetType(activity.type) &&
     !!practiceMode &&
     VOCABULARY_RECORDING_PRACTICE_MODES.has(practiceMode)
   ) {
@@ -225,7 +222,7 @@ const activityNeedsRecording = (
 };
 
 /**
- * Issue #645: 判斷是否有任何題目尚未完成錄音或尚未上傳到 GCS。
+ * 判斷是否有任何題目尚未完成錄音或尚未上傳到 GCS。
  * - 空字串 / undefined / null：未錄音
  * - blob: URL：已錄音但尚未上傳到 GCS
  */
@@ -238,13 +235,13 @@ const hasIncompleteRecordings = (
 
     if (activity.items && activity.items.length > 0) {
       return activity.items.some((item) => {
-        const hasRecording = !!item.recording_url && item.recording_url !== "";
+        const hasRecording = !!item.recording_url;
         const isBlob = hasRecording && item.recording_url!.startsWith("blob:");
         return !hasRecording || isBlob;
       });
     }
 
-    const hasRecording = !!activity.audio_url && activity.audio_url !== "";
+    const hasRecording = !!activity.audio_url;
     const isBlob = hasRecording && activity.audio_url!.startsWith("blob:");
     return !hasRecording || isBlob;
   });
@@ -296,7 +293,7 @@ export default function StudentActivityPageContent({
   const [incompleteItems, setIncompleteItems] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
 
-  // Issue #645: 任何題目未錄音/未上傳時，禁用提交按鈕
+  // 任何題目未錄音 / 錄音未上傳到 GCS 時，禁用提交按鈕
   const isSubmitBlockedByRecording = useMemo(
     () => hasIncompleteRecordings(activities, practiceMode),
     [activities, practiceMode],
@@ -1437,7 +1434,6 @@ export default function StudentActivityPageContent({
       }[] = [];
 
       activities.forEach((activity) => {
-        // Issue #645: 改用共用 helper（大小寫 normalize + 涵蓋 word_reading 練習模式）
         const needsRecording = activityNeedsRecording(activity, practiceMode);
 
         if (needsRecording && activity.items && activity.items.length > 0) {
