@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from datetime import timedelta, datetime, timezone
 
@@ -113,7 +114,10 @@ async def validate_student(
     # 查詢 Identity（Email 流程直接用 Identity 密碼驗證）
     identity = (
         db.query(Identity)
-        .filter(Identity.email == request.email, Identity.is_active.is_(True))
+        .filter(
+            func.lower(Identity.email) == request.email.lower(),
+            Identity.is_active.is_(True),
+        )
         .first()
     )
 

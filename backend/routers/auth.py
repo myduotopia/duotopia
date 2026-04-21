@@ -2,6 +2,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional  # noqa: F401
 from pydantic import BaseModel, EmailStr, field_validator
@@ -93,7 +94,11 @@ async def teacher_login(
     logger = logging.getLogger(__name__)
 
     logger.info(f"🔍 Login attempt for email: {login_req.email}")
-    teacher = db.query(Teacher).filter(Teacher.email == login_req.email).first()
+    teacher = (
+        db.query(Teacher)
+        .filter(func.lower(Teacher.email) == login_req.email.lower())
+        .first()
+    )
 
     # 🔐 Security: 統一錯誤訊息，不洩漏帳號是否存在
     if not teacher:
@@ -220,8 +225,12 @@ async def teacher_register(
     if not is_valid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
-    # Check if email exists
-    existing = db.query(Teacher).filter(Teacher.email == register_req.email).first()
+    # Check if email exists (case-insensitive, matches the unique functional index)
+    existing = (
+        db.query(Teacher)
+        .filter(func.lower(Teacher.email) == register_req.email.lower())
+        .first()
+    )
     if existing:
         # 如果已經驗證，不允許重複註冊
         if existing.email_verified:
@@ -334,7 +343,9 @@ async def resend_verification_email(request: dict, db: Session = Depends(get_db)
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required"
         )
 
-    teacher = db.query(Teacher).filter(Teacher.email == email).first()
+    teacher = (
+        db.query(Teacher).filter(func.lower(Teacher.email) == email.lower()).first()
+    )
     if not teacher:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Teacher not found"
@@ -554,7 +565,9 @@ async def forgot_password(
 ):
     """教師忘記密碼 - 發送重設郵件"""
     # 查找教師
-    teacher = db.query(Teacher).filter(Teacher.email == email).first()
+    teacher = (
+        db.query(Teacher).filter(func.lower(Teacher.email) == email.lower()).first()
+    )
 
     # 不論是否找到都返回相同訊息（安全性考量）
     if not teacher:
@@ -676,7 +689,9 @@ async def student_forgot_password(
 ):
     """學生忘記密碼 - 發送重設郵件（僅限已驗證 email 的學生）"""
     # 查找學生
-    student = db.query(Student).filter(Student.email == email).first()
+    student = (
+        db.query(Student).filter(func.lower(Student.email) == email.lower()).first()
+    )
 
     # 不論是否找到都返回相同訊息（安全性考量）
     if not student:
