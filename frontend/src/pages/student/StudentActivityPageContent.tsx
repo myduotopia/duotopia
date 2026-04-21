@@ -209,7 +209,8 @@ const activityNeedsRecording = (
   activity: Activity,
   practiceMode?: string | null,
 ): boolean => {
-  // Rearrangement 是拖拉重組題，任何 content type 下都不需錄音。
+  // Rearrangement 是拖拉重組題，任何 content type 下都不使用麥克風，
+  // 因此 early-return，避免 content-type 檢查誤判為需要錄音。
   if (practiceMode === "rearrangement") return false;
 
   const normalizedType = activity.type?.toUpperCase() ?? "";
