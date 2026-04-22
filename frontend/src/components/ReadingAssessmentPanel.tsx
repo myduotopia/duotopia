@@ -926,38 +926,73 @@ function SortableRowInner({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex flex-col sm:flex-row items-start sm:items-center gap-2 p-3 rounded-lg ${
+      className={`p-3 rounded-lg ${
         hasError ? "bg-red-50 border-2 border-red-400" : "bg-gray-50"
       }`}
     >
-      <div className="flex items-center gap-1 w-full sm:w-auto flex-wrap">
-        {/* Drag handle - ONLY this triggers drag */}
-        <div
-          {...attributes}
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing touch-none"
-          title={t("contentEditor.tooltips.dragToReorder")}
-        >
-          <GripVertical className="h-5 w-5 text-gray-400 hover:text-gray-700 transition-colors" />
+      {/* Header: drag + index + error labels | Copy + Delete */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Drag handle - ONLY this triggers drag */}
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing touch-none"
+            title={t("contentEditor.tooltips.dragToReorder")}
+          >
+            <GripVertical className="h-5 w-5 text-gray-400 hover:text-gray-700 transition-colors" />
+          </div>
+          <span className="text-sm font-medium text-gray-600">
+            {index + 1}
+          </span>
+          {hasDuplicate && (
+            <span className="text-xs text-red-600 font-medium">
+              {t("contentEditor.messages.duplicateWord")}
+            </span>
+          )}
+          {tooFewWords && (
+            <span className="text-xs text-red-600 font-medium">
+              {t("contentEditor.messages.wordsTooFewLabel", {
+                limit: MIN_WORDS_PER_ITEM,
+              })}
+            </span>
+          )}
         </div>
-        <span className="text-sm font-medium text-gray-600 w-6">
-          {index + 1}
-        </span>
-        {hasDuplicate && (
-          <span className="text-xs text-red-600 font-medium">
-            {t("contentEditor.messages.duplicateWord")}
-          </span>
-        )}
-        {tooFewWords && (
-          <span className="text-xs text-red-600 font-medium">
-            {t("contentEditor.messages.wordsTooFewLabel", {
-              limit: MIN_WORDS_PER_ITEM,
-            })}
-          </span>
-        )}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => handleDuplicateRow(index)}
+            className="p-1 rounded hover:bg-gray-200"
+            title={t("contentEditor.tooltips.duplicate")}
+          >
+            <Copy className="h-4 w-4 text-gray-600" />
+          </button>
+          <button
+            onClick={() => handleRemoveRow(index)}
+            className={`p-1 rounded ${
+              row.has_student_progress || rowsLength <= 1
+                ? "cursor-not-allowed"
+                : "hover:bg-gray-200"
+            }`}
+            title={
+              row.has_student_progress
+                ? t("contentEditor.tooltips.cannotDeleteWithProgress")
+                : t("contentEditor.tooltips.delete")
+            }
+            disabled={rowsLength <= 1 || row.has_student_progress}
+          >
+            <Trash2
+              className={`h-4 w-4 ${
+                rowsLength <= 1 || row.has_student_progress
+                  ? "text-gray-300"
+                  : "text-gray-600"
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 w-full space-y-2">
+      {/* Body: text + translation inputs */}
+      <div className="space-y-2">
         {/* Text input */}
         <div className="relative">
           <textarea
@@ -1093,39 +1128,6 @@ function SortableRowInner({
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Action buttons */}
-      <div className="flex items-center gap-1 w-full sm:w-auto justify-end">
-        <button
-          onClick={() => handleDuplicateRow(index)}
-          className="p-1 rounded hover:bg-gray-200"
-          title={t("contentEditor.tooltips.duplicate")}
-        >
-          <Copy className="h-4 w-4 text-gray-600" />
-        </button>
-        <button
-          onClick={() => handleRemoveRow(index)}
-          className={`p-1 rounded ${
-            row.has_student_progress || rowsLength <= 1
-              ? "cursor-not-allowed"
-              : "hover:bg-gray-200"
-          }`}
-          title={
-            row.has_student_progress
-              ? t("contentEditor.tooltips.cannotDeleteWithProgress")
-              : t("contentEditor.tooltips.delete")
-          }
-          disabled={rowsLength <= 1 || row.has_student_progress}
-        >
-          <Trash2
-            className={`h-4 w-4 ${
-              rowsLength <= 1 || row.has_student_progress
-                ? "text-gray-300"
-                : "text-gray-600"
-            }`}
-          />
-        </button>
       </div>
     </div>
   );
