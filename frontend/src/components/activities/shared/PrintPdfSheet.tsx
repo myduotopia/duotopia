@@ -669,8 +669,7 @@ export function PrintPdfSheet({
     const cacheKey =
       displayQuestions
         .map(
-          (q) =>
-            `${q.index}:${q.correctAnswer}:${(q.options ?? []).join(",")}`,
+          (q) => `${q.index}:${q.correctAnswer}:${(q.options ?? []).join(",")}`,
         )
         .join("|") + `|cc=${localChoiceCount}|at=${localActivityType}`;
 

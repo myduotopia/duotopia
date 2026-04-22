@@ -78,10 +78,7 @@ function shuffle<T>(arr: T[]): T[] {
  * 回傳實際出現在例句的字形（保留原本大小寫）或 null（找不到 → 無法挖空）
  * 不規則變化（go/went, man/men）不在此涵蓋範圍
  */
-function findAnswerInSentence(
-  text: string,
-  sentence: string,
-): string | null {
+function findAnswerInSentence(text: string, sentence: string): string | null {
   const base = text.trim();
   if (!base || !sentence) return null;
 
@@ -192,10 +189,7 @@ export function ContentDownloadSheet({
         if (cancelled) return;
         console.error("Failed to load content detail:", err);
         toast.error(
-          t(
-            "contentDownload.loadError",
-            "載入單字集失敗，請稍後再試",
-          ),
+          t("contentDownload.loadError", "載入單字集失敗，請稍後再試"),
         );
         onOpenChange(false);
       })
@@ -209,8 +203,15 @@ export function ContentDownloadSheet({
 
   // 先為每個 item 推導「例句中實際出現的字形」（克漏字用），失敗則 fallback 到 text
   const clozeInfo = useMemo(() => {
-    if (!items) return new Map<number, { parts: ReturnType<typeof buildClozeParts>; answer: string }>();
-    const map = new Map<number, { parts: ReturnType<typeof buildClozeParts>; answer: string }>();
+    if (!items)
+      return new Map<
+        number,
+        { parts: ReturnType<typeof buildClozeParts>; answer: string }
+      >();
+    const map = new Map<
+      number,
+      { parts: ReturnType<typeof buildClozeParts>; answer: string }
+    >();
     for (const item of items) {
       const parts = item.example_sentence
         ? buildClozeParts(item.text, item.example_sentence)
@@ -247,8 +248,7 @@ export function ContentDownloadSheet({
 
   // 克漏字 choice 模式的 answerPool = 所有例句中實際字形（帶時態/複數）
   const answerPool = useMemo(
-    () =>
-      (items ?? []).map((it) => clozeInfo.get(it.id)?.answer ?? it.text),
+    () => (items ?? []).map((it) => clozeInfo.get(it.id)?.answer ?? it.text),
     [items, clozeInfo],
   );
 

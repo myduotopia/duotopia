@@ -632,17 +632,17 @@ function RecursiveTreeNode({
                     {onDownload &&
                       typeof data.type === "string" &&
                       data.type.toLowerCase() === "vocabulary_set" && (
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDownload(data, level, parentId);
-                        }}
-                        className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        {t("contentDownload.menu", "下載")}
-                      </DropdownMenuItem>
-                    )}
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDownload(data, level, parentId);
+                          }}
+                          className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          {t("contentDownload.menu", "下載")}
+                        </DropdownMenuItem>
+                      )}
                     {onCopy && (
                       <DropdownMenuItem
                         onClick={(e) => {
