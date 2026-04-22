@@ -79,8 +79,9 @@ const TRANSLATION_LANGUAGES = [
 const MAX_ROWS = 15;
 // 批次貼上/翻譯的項目上限
 const MAX_BATCH_ITEMS = MAX_ROWS;
-// 每題最少單字數
+// 每題單字數範圍
 const MIN_WORDS_PER_ITEM = 2;
+const MAX_WORDS_PER_ITEM = 25;
 
 // 檢測重複的行 index（text 完全相同，忽略大小寫與前後空白）
 // 回傳 Map<index, reasons[]>，給 UI 用來標紅 + 顯示重複內容
@@ -916,11 +917,12 @@ function SortableRowInner({
   }, []);
 
   const hasDuplicate = !!duplicateReasons && duplicateReasons.length > 0;
-  // 只有當 row 有內容但單字數 <MIN 才標記（空 row 不標）
+  // 只有當 row 有內容但單字數不在範圍內才標記（空 row 不標）
   const rowWordCount = row.text?.trim().split(/\s+/).filter(Boolean).length ?? 0;
   const tooFewWords =
     rowWordCount > 0 && rowWordCount < MIN_WORDS_PER_ITEM;
-  const hasError = hasDuplicate || tooFewWords;
+  const tooManyWords = rowWordCount > MAX_WORDS_PER_ITEM;
+  const hasError = hasDuplicate || tooFewWords || tooManyWords;
 
   return (
     <div
@@ -954,6 +956,13 @@ function SortableRowInner({
             <span className="text-xs text-red-600 font-medium">
               {t("contentEditor.messages.wordsTooFewLabel", {
                 limit: MIN_WORDS_PER_ITEM,
+              })}
+            </span>
+          )}
+          {tooManyWords && (
+            <span className="text-xs text-red-600 font-medium">
+              {t("contentEditor.messages.wordsTooManyLabel", {
+                limit: MAX_WORDS_PER_ITEM,
               })}
             </span>
           )}
@@ -999,7 +1008,7 @@ function SortableRowInner({
             value={row.text}
             onChange={(e) => {
               const words = e.target.value.trim().split(/\s+/).filter(Boolean);
-              if (words.length > 25) return;
+              if (words.length > MAX_WORDS_PER_ITEM) return;
               handleUpdateRow(index, "text", e.target.value);
               e.target.style.height = "auto";
               e.target.style.height = e.target.scrollHeight + "px";
@@ -1290,11 +1299,13 @@ const ReadingAssessmentPanel = forwardRef<
     // 檢查單字數上限
     const overLimitRow = validRows.find((row) => {
       const words = row.text.trim().split(/\s+/).filter(Boolean);
-      return words.length > 25;
+      return words.length > MAX_WORDS_PER_ITEM;
     });
     if (overLimitRow) {
       toast.error(
-        t("contentEditor.messages.wordLimitExceeded", { limit: 25 }),
+        t("contentEditor.messages.wordLimitExceeded", {
+          limit: MAX_WORDS_PER_ITEM,
+        }),
       );
       return;
     }
