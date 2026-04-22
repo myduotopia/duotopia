@@ -4411,6 +4411,7 @@
       "wordsTooFewLabel": "< {{limit}} words",
       "wordsTooManyLabel": "> {{limit}} words",
       "batchPasteHasErrors": "Items added but have errors (word count or duplicates). Please fix the highlighted rows before saving.",
+      "translationDisabled": "Sentence translation is temporarily disabled. Please enter translation manually.",
       "duplicateItems": "Duplicate words or translations found. Please resolve duplicates before saving.",
       "duplicateWord": "Duplicate",
       "maxRowsReached": "Maximum 15 rows allowed",

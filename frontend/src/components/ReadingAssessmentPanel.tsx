@@ -889,7 +889,7 @@ function SortableRowInner({
   handleDuplicateRow,
   handleOpenTTSModal,
   handleRemoveAudio,
-  handleGenerateSingleDefinition,
+  handleGenerateSingleDefinition: _handleGenerateSingleDefinition,
   rowsLength,
   panelTranslateLang = "",
   panelCustomLang = "",
@@ -1113,11 +1113,17 @@ function SortableRowInner({
               rows={2}
               maxLength={500}
             />
+            {/*
+              Per-row 翻譯按鈕暫時停用：後端 /translate endpoint 的 prompt
+              以「英文單字」為主體，整句例句翻譯會走壞。待後端新增句子
+              專用 translate endpoint 後再恢復 onClick。仍顯示目前選定
+              語言 label 讓使用者看得出語言脈絡。
+            */}
             <div className="absolute right-2 top-2">
               <button
-                onClick={() => handleGenerateSingleDefinition(index)}
-                className="text-xs text-gray-400 hover:text-blue-500 hover:underline cursor-pointer transition-colors"
-                title={t("contentEditor.messages.generatingTranslation")}
+                disabled
+                className="text-xs text-gray-400 cursor-not-allowed"
+                title={t("contentEditor.messages.translationDisabled")}
               >
                 {(() => {
                   const lang = panelTranslateLang || row.selectedLanguage || "";

@@ -4429,6 +4429,7 @@
       "wordsTooFewLabel": "少於 {{limit}} 字",
       "wordsTooManyLabel": "超過 {{limit}} 字",
       "batchPasteHasErrors": "已加入題目但有錯誤（字數不符或重複），請先修正標紅的題目才能儲存",
+      "translationDisabled": "例句翻譯功能暫時停用，請手動輸入翻譯",
       "duplicateItems": "有重複的單字或翻譯，請先處理重複項目",
       "duplicateWord": "重複",
       "maxRowsReached": "最多只能新增 15 列",
