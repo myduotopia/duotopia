@@ -53,11 +53,17 @@ def upgrade() -> None:
     )
 
     # Create the correct FK if it's not already in place.
+    # Scoped to the `students` table — PostgreSQL constraint names are unique
+    # per-table, not globally, so `conname` alone could miss.
     op.execute(
         """
         DO $$ BEGIN
             IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = 'fk_students_identity'
+                SELECT 1
+                  FROM pg_constraint c
+                  JOIN pg_class cls ON c.conrelid = cls.oid
+                 WHERE c.conname = 'fk_students_identity'
+                   AND cls.relname = 'students'
             ) THEN
                 ALTER TABLE students
                     ADD CONSTRAINT fk_students_identity
@@ -70,4 +76,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Intentionally no-op: restoring the wrong FK would reintroduce the bug.
     pass
