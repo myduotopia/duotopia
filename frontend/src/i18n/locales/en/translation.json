@@ -4409,6 +4409,7 @@
       "wordLimitTooFew": "Each item must have at least {{limit}} words",
       "wordsTooFewLabel": "< {{limit}} words",
       "wordsTooManyLabel": "> {{limit}} words",
+      "batchPasteHasErrors": "Items added but have errors (word count or duplicates). Please fix the highlighted rows before saving.",
       "duplicateItems": "Duplicate words or translations found. Please resolve duplicates before saving.",
       "duplicateWord": "Duplicate",
       "maxRowsReached": "Maximum 15 rows allowed",

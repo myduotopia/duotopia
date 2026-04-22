@@ -2486,7 +2486,27 @@ const ReadingAssessmentPanel = forwardRef<
     // 更新前端狀態
     setRows(updatedRows);
 
+    // 檢查新 rows 是否有 validation error（字數不符 / 重複），
+    // 有錯誤就跳過自動寫 DB，讓使用者看到紅色標記後手動修正
+    const updatedValidRows = updatedRows.filter((r) => r.text?.trim());
+    const hasWordCountError = updatedValidRows.some((r) => {
+      const words = r.text.trim().split(/\s+/).filter(Boolean);
+      return (
+        words.length < MIN_WORDS_PER_ITEM || words.length > MAX_WORDS_PER_ITEM
+      );
+    });
+    const hasDupeError = findDuplicates(updatedValidRows).size > 0;
+    const skipAutoSave = hasWordCountError || hasDupeError;
+
     const existingContentId = editingContent?.id || content?.id;
+
+    if (skipAutoSave) {
+      toast.warning(t("contentEditor.messages.batchPasteHasErrors"));
+      setIsPasting(false);
+      setBatchPasteDialogOpen(false);
+      setBatchPasteText("");
+      return;
+    }
 
     if (existingContentId) {
       // 編輯模式：直接儲存到資料庫

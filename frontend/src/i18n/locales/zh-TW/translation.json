@@ -4427,6 +4427,7 @@
       "wordLimitTooFew": "單一題目的英文原文至少需要 {{limit}} 個單字",
       "wordsTooFewLabel": "少於 {{limit}} 字",
       "wordsTooManyLabel": "超過 {{limit}} 字",
+      "batchPasteHasErrors": "已加入題目但有錯誤（字數不符或重複），請先修正標紅的題目才能儲存",
       "duplicateItems": "有重複的單字或翻譯，請先處理重複項目",
       "duplicateWord": "重複",
       "maxRowsReached": "最多只能新增 15 列",
