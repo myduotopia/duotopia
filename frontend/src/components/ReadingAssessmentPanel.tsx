@@ -2393,6 +2393,19 @@ const ReadingAssessmentPanel = forwardRef<
       example_sentence_definition: "",
     }));
 
+    // 只對字數合法（2–25）的 item 執行 TTS / 翻譯，避免浪費 token
+    // 字數不符的 item 仍會被加進 rows，但跳過外部 API 呼叫；
+    // 使用者修正字數後可用單一 mic 按鈕或批次工具列補產 TTS / 翻譯。
+    const validForProcessingIndices: number[] = [];
+    const validForProcessingTexts: string[] = [];
+    newItems.forEach((item, i) => {
+      const wc = item.text.trim().split(/\s+/).filter(Boolean).length;
+      if (wc >= MIN_WORDS_PER_ITEM && wc <= MAX_WORDS_PER_ITEM) {
+        validForProcessingIndices.push(i);
+        validForProcessingTexts.push(item.text);
+      }
+    });
+
     // 批次處理 TTS 和翻譯
     if (autoTTS || autoTranslate) {
       try {
@@ -2404,7 +2417,8 @@ const ReadingAssessmentPanel = forwardRef<
 
           if (isRandom) {
             // Random 模式：每題個別生成，確保口音/性別不同
-            for (let i = 0; i < newItems.length; i++) {
+            // 只對字數合法的 item 呼叫 TTS API
+            for (const i of validForProcessingIndices) {
               const { voice, rate } = getVoiceAndRate(
                 batchTTSAccent,
                 batchTTSGender,
@@ -2427,15 +2441,15 @@ const ReadingAssessmentPanel = forwardRef<
                 };
               }
             }
-          } else {
-            // 固定口音/性別：批次生成
+          } else if (validForProcessingTexts.length > 0) {
+            // 固定口音/性別：批次生成（只送字數合法的 text）
             const { voice, rate } = getVoiceAndRate(
               batchTTSAccent,
               batchTTSGender,
               batchTTSSpeed,
             );
             const ttsResult = await apiClient.batchGenerateTTS(
-              lines,
+              validForProcessingTexts,
               voice,
               rate,
               "+0%",
@@ -2447,35 +2461,49 @@ const ReadingAssessmentPanel = forwardRef<
             ) {
               const audioUrls = (ttsResult as { audio_urls: string[] })
                 .audio_urls;
-              newItems = newItems.map((item, i) => ({
-                ...item,
-                audioUrl: audioUrls[i]?.startsWith("http")
-                  ? audioUrls[i]
-                  : `${import.meta.env.VITE_API_URL}${audioUrls[i]}`,
-                audio_url: audioUrls[i]?.startsWith("http")
-                  ? audioUrls[i]
-                  : `${import.meta.env.VITE_API_URL}${audioUrls[i]}`,
-              }));
+              // audioUrls 的 index 對應 validForProcessingIndices，map 回 newItems
+              validForProcessingIndices.forEach((itemIdx, resultIdx) => {
+                const url = audioUrls[resultIdx];
+                if (url) {
+                  const fullUrl = url.startsWith("http")
+                    ? url
+                    : `${import.meta.env.VITE_API_URL}${url}`;
+                  newItems[itemIdx] = {
+                    ...newItems[itemIdx],
+                    audioUrl: fullUrl,
+                    audio_url: fullUrl,
+                  };
+                }
+              });
             }
           }
         }
 
-        if (autoTranslate && selectedTranslateLang) {
+        if (
+          autoTranslate &&
+          selectedTranslateLang &&
+          validForProcessingTexts.length > 0
+        ) {
           const langCode =
             selectedTranslateLang === "other"
               ? customTranslateLang || ""
               : TRANSLATION_LANGUAGES.find(
                   (l) => l.value === selectedTranslateLang,
                 )?.code || "zh-TW";
-          const result = await apiClient.batchTranslate(lines, langCode);
+          const result = await apiClient.batchTranslate(
+            validForProcessingTexts,
+            langCode,
+          );
           const translations =
             (result as { translations?: string[] }).translations || result;
           if (Array.isArray(translations)) {
-            newItems = newItems.map((item, i) => ({
-              ...item,
-              definition: translations[i] || "",
-              selectedLanguage: selectedTranslateLang,
-            }));
+            validForProcessingIndices.forEach((itemIdx, resultIdx) => {
+              newItems[itemIdx] = {
+                ...newItems[itemIdx],
+                definition: translations[resultIdx] || "",
+                selectedLanguage: selectedTranslateLang,
+              };
+            });
           }
         }
       } catch (error) {
