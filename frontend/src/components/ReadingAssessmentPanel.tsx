@@ -82,6 +82,8 @@ const MAX_BATCH_ITEMS = MAX_ROWS;
 // 每題單字數範圍
 const MIN_WORDS_PER_ITEM = 2;
 const MAX_WORDS_PER_ITEM = 25;
+// 整個例句集最少題數
+const MIN_ITEMS_PER_SET = 3;
 
 // 檢測重複的行 index（text 完全相同，忽略大小寫與前後空白）
 // 回傳 Map<index, reasons[]>，給 UI 用來標紅 + 顯示重複內容
@@ -1272,8 +1274,12 @@ const ReadingAssessmentPanel = forwardRef<
   const handleSave = async () => {
     const validRows = rows.filter((row) => row.text && row.text.trim());
 
-    if (validRows.length === 0) {
-      toast.error(t("contentEditor.messages.addAtLeastOneItem"));
+    if (validRows.length < MIN_ITEMS_PER_SET) {
+      toast.error(
+        t("contentEditor.messages.addAtLeastNItems", {
+          limit: MIN_ITEMS_PER_SET,
+        }),
+      );
       return;
     }
 
@@ -2496,7 +2502,9 @@ const ReadingAssessmentPanel = forwardRef<
       );
     });
     const hasDupeError = findDuplicates(updatedValidRows).size > 0;
-    const skipAutoSave = hasWordCountError || hasDupeError;
+    const tooFewItemsAfterPaste = updatedValidRows.length < MIN_ITEMS_PER_SET;
+    const skipAutoSave =
+      hasWordCountError || hasDupeError || tooFewItemsAfterPaste;
 
     const existingContentId = editingContent?.id || content?.id;
 

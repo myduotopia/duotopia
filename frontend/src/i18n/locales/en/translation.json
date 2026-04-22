@@ -4404,6 +4404,7 @@
       "loadingContentFailed": "Failed to load content",
       "enterTitle": "Please enter a title",
       "addAtLeastOneItem": "Please add at least one content item",
+      "addAtLeastNItems": "Example sentences set requires at least {{limit}} items",
       "addAtLeastFiveItems": "Vocabulary set requires at least 5 words",
       "wordLimitExceeded": "Each item must not exceed {{limit}} words",
       "wordLimitTooFew": "Each item must have at least {{limit}} words",

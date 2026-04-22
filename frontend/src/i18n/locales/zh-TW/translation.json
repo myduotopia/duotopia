@@ -4422,6 +4422,7 @@
       "loadingContentFailed": "載入內容失敗",
       "enterTitle": "請輸入標題",
       "addAtLeastOneItem": "請至少新增一個內容項目",
+      "addAtLeastNItems": "例句集至少需要 {{limit}} 個題目",
       "addAtLeastFiveItems": "單字集至少需要 5 個單字",
       "wordLimitExceeded": "單一題目的英文原文不可超過 {{limit}} 個單字",
       "wordLimitTooFew": "單一題目的英文原文至少需要 {{limit}} 個單字",
