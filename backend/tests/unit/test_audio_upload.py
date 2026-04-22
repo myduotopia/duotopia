@@ -146,6 +146,54 @@ class TestAudioUploadService:
         assert "File too large" in exc_info.value.detail
 
     @pytest.mark.asyncio
+    @patch("services.bigquery_logger.get_bigquery_logger")
+    async def test_upload_audio_file_too_small(self, mock_get_bq_logger, service):
+        """測試檔案過小（邊界：499 bytes < 500 bytes 最小值）"""
+        mock_bq_logger = AsyncMock()
+        mock_bq_logger.log_audio_error = AsyncMock()
+        mock_get_bq_logger.return_value = mock_bq_logger
+
+        mock_file = Mock(spec=UploadFile)
+        mock_file.content_type = "audio/webm"
+        mock_file.filename = "test.webm"
+        mock_file.read = AsyncMock(return_value=b"x" * 499)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await service.upload_audio(mock_file)
+
+        assert exc_info.value.status_code == 400
+        assert "too small" in exc_info.value.detail
+        mock_bq_logger.log_audio_error.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("services.bigquery_logger.get_bigquery_logger")
+    async def test_upload_audio_file_at_min_boundary(self, mock_get_bq_logger, service):
+        """測試檔案剛好達到最小值（邊界：500 bytes 應通過大小檢查，不被 'too small' 拒絕）"""
+        mock_bq_logger = AsyncMock()
+        mock_bq_logger.log_audio_error = AsyncMock()
+        mock_get_bq_logger.return_value = mock_bq_logger
+
+        mock_file = Mock(spec=UploadFile)
+        mock_file.content_type = "audio/webm"
+        mock_file.filename = "test.webm"
+        mock_file.read = AsyncMock(return_value=b"x" * 500)
+
+        # 500 bytes 應通過大小檢查，不被 "too small" 拒絕
+        # 後續行為視環境而定（有 GCS 憑證 → 成功返回 URL；無憑證 → 500 錯誤）
+        # 重點：不應因 "too small" 被擋
+        raised_exception = None
+        try:
+            await service.upload_audio(mock_file, duration_seconds=20)
+        except HTTPException as e:
+            raised_exception = e
+
+        if raised_exception is not None:
+            # 若有錯誤，確認不是因為檔案太小
+            assert "too small" not in raised_exception.detail
+        # 無論是否拋出例外，BigQuery logger 的 log_audio_error 都不應被呼叫（那是 too-small 路徑）
+        mock_bq_logger.log_audio_error.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_upload_audio_duration_too_long(self, service):
         """測試音檔過長"""
         mock_file = Mock(spec=UploadFile)
