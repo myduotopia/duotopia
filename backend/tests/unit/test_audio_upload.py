@@ -201,7 +201,9 @@ class TestAudioUploadService:
         # Unconditional positive assertions: upload must succeed
         assert result is not None
         assert "https://storage.googleapis.com/duotopia-audio/recordings/" in result
-        mock_blob.upload_from_string.assert_called_once_with(b"x" * 500, content_type="audio/webm")
+        mock_blob.upload_from_string.assert_called_once_with(
+            b"x" * 500, content_type="audio/webm"
+        )
         # The too-small path must NOT have been taken
         mock_bq_logger.log_audio_error.assert_not_called()
 
