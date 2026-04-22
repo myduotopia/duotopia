@@ -79,6 +79,34 @@ const TRANSLATION_LANGUAGES = [
 const MAX_ROWS = 15;
 // 批次貼上/翻譯的項目上限
 const MAX_BATCH_ITEMS = MAX_ROWS;
+// 每題最少單字數
+const MIN_WORDS_PER_ITEM = 2;
+
+// 檢測重複的行 index（text 完全相同，忽略大小寫與前後空白）
+// 回傳 Map<index, reasons[]>，給 UI 用來標紅 + 顯示重複內容
+function findDuplicates(rows: { text: string }[]): Map<number, string[]> {
+  const dupes = new Map<number, string[]>();
+  const textMap = new Map<string, number[]>();
+
+  rows.forEach((row, i) => {
+    const text = row.text?.trim().toLowerCase();
+    if (text) {
+      if (!textMap.has(text)) textMap.set(text, []);
+      textMap.get(text)!.push(i);
+    }
+  });
+
+  for (const [text, indices] of textMap.entries()) {
+    if (indices.length > 1) {
+      indices.forEach((i) => {
+        if (!dupes.has(i)) dupes.set(i, []);
+        dupes.get(i)!.push(text);
+      });
+    }
+  }
+
+  return dupes;
+}
 
 interface ContentRow {
   id: string | number;
@@ -847,6 +875,7 @@ interface SortableRowInnerProps {
   rowsLength: number;
   panelTranslateLang?: TranslationLanguage | "";
   panelCustomLang?: string;
+  duplicateReasons?: string[];
 }
 
 function SortableRowInner({
@@ -861,6 +890,7 @@ function SortableRowInner({
   rowsLength,
   panelTranslateLang = "",
   panelCustomLang = "",
+  duplicateReasons,
 }: SortableRowInnerProps) {
   const { t } = useTranslation();
   const {
@@ -885,11 +915,17 @@ function SortableRowInner({
     }
   }, []);
 
+  const hasDuplicate = !!duplicateReasons && duplicateReasons.length > 0;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-3 bg-gray-50 rounded-lg"
+      className={`flex flex-col sm:flex-row items-start sm:items-center gap-2 p-3 rounded-lg ${
+        hasDuplicate
+          ? "bg-red-50 border-2 border-red-400"
+          : "bg-gray-50"
+      }`}
     >
       <div className="flex items-center gap-1 w-full sm:w-auto">
         {/* Drag handle - ONLY this triggers drag */}
@@ -904,6 +940,11 @@ function SortableRowInner({
         <span className="text-sm font-medium text-gray-600 w-6">
           {index + 1}
         </span>
+        {hasDuplicate && (
+          <span className="text-xs text-red-600 font-medium">
+            {t("contentEditor.messages.duplicateWord")}
+          </span>
+        )}
       </div>
 
       <div className="flex-1 w-full space-y-2">
@@ -1120,6 +1161,9 @@ const ReadingAssessmentPanel = forwardRef<
   const { setEditorBusy } = useSidebar();
 
   const [title, setTitle] = useState("");
+  const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(
+    new Map(),
+  );
   const [rows, setRows] = useState<ContentRow[]>([
     {
       id: "1",
@@ -1186,6 +1230,11 @@ const ReadingAssessmentPanel = forwardRef<
     return () => setEditorBusy(false);
   }, [isBatchProcessing, setEditorBusy]);
 
+  // Recalculate duplicates whenever rows change
+  useEffect(() => {
+    setDuplicateMap(findDuplicates(rows));
+  }, [rows]);
+
   // dnd-kit sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1212,6 +1261,20 @@ const ReadingAssessmentPanel = forwardRef<
       return;
     }
 
+    // 檢查單字數下限
+    const underLimitRow = validRows.find((row) => {
+      const words = row.text.trim().split(/\s+/).filter(Boolean);
+      return words.length < MIN_WORDS_PER_ITEM;
+    });
+    if (underLimitRow) {
+      toast.error(
+        t("contentEditor.messages.wordLimitTooFew", {
+          limit: MIN_WORDS_PER_ITEM,
+        }),
+      );
+      return;
+    }
+
     // 檢查單字數上限
     const overLimitRow = validRows.find((row) => {
       const words = row.text.trim().split(/\s+/).filter(Boolean);
@@ -1221,6 +1284,14 @@ const ReadingAssessmentPanel = forwardRef<
       toast.error(
         t("contentEditor.messages.wordLimitExceeded", { limit: 25 }),
       );
+      return;
+    }
+
+    // 檢查重複
+    const dupes = findDuplicates(validRows);
+    if (dupes.size > 0) {
+      setDuplicateMap(dupes);
+      toast.error(t("contentEditor.messages.duplicateItems"));
       return;
     }
 
@@ -2036,13 +2107,57 @@ const ReadingAssessmentPanel = forwardRef<
 
   const handleBatchPaste = async (autoTTS: boolean, autoTranslate: boolean) => {
     // 分割文字，每行一個項目
-    const lines = batchPasteText
+    const rawLines = batchPasteText
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
 
+    // 1. 貼上框內部去重（忽略大小寫）
+    const seen = new Set<string>();
+    const deduped = rawLines.filter((l) => {
+      const key = l.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const internalDupes = rawLines.length - deduped.length;
+
+    // 2. 跟右側已有 row 去重
+    const existingTexts = new Set(
+      rows
+        .filter((r) => r.text && r.text.trim())
+        .map((r) => r.text.trim().toLowerCase()),
+    );
+    const lines = deduped.filter((l) => !existingTexts.has(l.toLowerCase()));
+    const existingDupes = deduped.length - lines.length;
+
+    // 提醒去重結果
+    if (internalDupes > 0 || existingDupes > 0) {
+      const msgs: string[] = [];
+      if (internalDupes > 0)
+        msgs.push(
+          t("contentEditor.messages.removedInternalDupes", {
+            count: internalDupes,
+          }),
+        );
+      if (existingDupes > 0)
+        msgs.push(
+          t("contentEditor.messages.removedExistingDupes", {
+            count: existingDupes,
+          }),
+        );
+      toast.info(msgs.join("、"));
+    }
+
     // === Backfill 模式：textarea 空白時，補齊已有項目缺少的翻譯/TTS ===
-    const isBackfillMode = lines.length === 0;
+    // Backfill 模式只在貼上框本來就空白時觸發；若使用者有貼內容但全被去重掉，
+    // 應顯示空結果提示而非進 Backfill。
+    const isBackfillMode = lines.length === 0 && rawLines.length === 0;
+
+    if (!isBackfillMode && lines.length === 0) {
+      // 全部都是重複，前面的 toast.info 已顯示；直接結束
+      return;
+    }
 
     if (isBackfillMode) {
       const existingRows = rows.filter((r) => r.text && r.text.trim());
@@ -2603,6 +2718,7 @@ const ReadingAssessmentPanel = forwardRef<
                       rowsLength={rows.length}
                       panelTranslateLang={selectedTranslateLang}
                       panelCustomLang={customTranslateLang}
+                      duplicateReasons={duplicateMap.get(index)}
                     />
                   );
                 })}
