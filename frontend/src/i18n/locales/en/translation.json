@@ -4466,7 +4466,9 @@
       "batchLimitTruncated": "Exceeded limit, only the first {{count}} items will be processed",
       "batchLimitWarning": "Exceeded {{count}} item limit, only the first {{count}} will be processed",
       "batchPasteLimit": "Batch paste limit is {{count}} items, please reduce and try again",
-      "batchPasteLimitShort": "max {{count}} items"
+      "batchPasteLimitShort": "max {{count}} items",
+      "removedInternalDupes": "Removed {{count}} duplicate(s)",
+      "removedExistingDupes": "Skipped {{count}} existing word(s)"
     },
     "translationLanguages": {
       "chinese": "Chinese",

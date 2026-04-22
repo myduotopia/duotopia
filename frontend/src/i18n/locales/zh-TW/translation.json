@@ -4484,7 +4484,9 @@
       "batchLimitTruncated": "已超過上限，僅前 {{count}} 個項目會被處理",
       "batchLimitWarning": "超過 {{count}} 個項目上限，僅前 {{count}} 個會被處理",
       "batchPasteLimit": "批次貼上上限為 {{count}} 個項目，請減少後重試",
-      "batchPasteLimitShort": "上限 {{count}} 個"
+      "batchPasteLimitShort": "上限 {{count}} 個",
+      "removedInternalDupes": "已去除 {{count}} 個重複單字",
+      "removedExistingDupes": "已跳過 {{count}} 個已存在的單字"
     },
     "translationLanguages": {
       "chinese": "中文",
