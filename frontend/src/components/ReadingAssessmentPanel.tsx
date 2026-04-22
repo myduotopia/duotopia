@@ -76,7 +76,7 @@ const TRANSLATION_LANGUAGES = [
 ];
 
 // 每個例句集的題目上限
-const MAX_ROWS = 8;
+const MAX_ROWS = 15;
 // 批次貼上/翻譯的項目上限
 const MAX_BATCH_ITEMS = MAX_ROWS;
 
@@ -913,7 +913,7 @@ function SortableRowInner({
             value={row.text}
             onChange={(e) => {
               const words = e.target.value.trim().split(/\s+/).filter(Boolean);
-              if (words.length > 150) return;
+              if (words.length > 25) return;
               handleUpdateRow(index, "text", e.target.value);
               e.target.style.height = "auto";
               e.target.style.height = e.target.scrollHeight + "px";
@@ -1215,11 +1215,11 @@ const ReadingAssessmentPanel = forwardRef<
     // 檢查單字數上限
     const overLimitRow = validRows.find((row) => {
       const words = row.text.trim().split(/\s+/).filter(Boolean);
-      return words.length > 150;
+      return words.length > 25;
     });
     if (overLimitRow) {
       toast.error(
-        t("contentEditor.messages.wordLimitExceeded", { limit: 150 }),
+        t("contentEditor.messages.wordLimitExceeded", { limit: 25 }),
       );
       return;
     }
@@ -2034,50 +2034,14 @@ const ReadingAssessmentPanel = forwardRef<
     }
   };
 
-  // 將超過 150 單字的段落自動分段，保留句子完整性
-  const splitParagraphByWordLimit = (
-    text: string,
-    maxWords = 150,
-  ): string[] => {
-    const sentences = text.match(/[^.!?]*[.!?]+\s*/g) || [text];
-    const paragraphs: string[] = [];
-    let current = "";
-
-    for (const sentence of sentences) {
-      const combined = current + sentence;
-      const wordCount = combined.trim().split(/\s+/).filter(Boolean).length;
-
-      if (wordCount > maxWords && current.trim()) {
-        paragraphs.push(current.trim());
-        current = sentence;
-      } else {
-        current = combined;
-      }
-    }
-    if (current.trim()) {
-      paragraphs.push(current.trim());
-    }
-    return paragraphs;
-  };
-
   const handleBatchPaste = async (autoTTS: boolean, autoTranslate: boolean) => {
-    // 分割文字，每行一個項目，超過 150 單字的段落自動分段
-    const rawLines = batchPasteText
+    // 分割文字，每行一個項目
+    const lines = batchPasteText
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
 
-    const lines: string[] = [];
-    for (const line of rawLines) {
-      const wordCount = line.split(/\s+/).filter(Boolean).length;
-      if (wordCount > 150) {
-        lines.push(...splitParagraphByWordLimit(line));
-      } else {
-        lines.push(line);
-      }
-    }
-
-    // === Backfill 模式：textarea 空白時，補齊已有段落缺少的翻譯/TTS ===
+    // === Backfill 模式：textarea 空白時，補齊已有項目缺少的翻譯/TTS ===
     const isBackfillMode = lines.length === 0;
 
     if (isBackfillMode) {

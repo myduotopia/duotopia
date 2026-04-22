@@ -1788,10 +1788,10 @@
         "partialCreated": "部分成功：{{successCount}}/{{totalCount}} 個班級已建立作業（{{studentCount}} 位學生），失敗：{{failedNames}}"
       },
       "contentTypes": {
-        "reading_assessment": "段落集",
-        "READING_ASSESSMENT": "段落集",
-        "example_sentences": "段落集",
-        "EXAMPLE_SENTENCES": "段落集",
+        "reading_assessment": "例句集",
+        "READING_ASSESSMENT": "例句集",
+        "example_sentences": "例句集",
+        "EXAMPLE_SENTENCES": "例句集",
         "vocabulary_set": "單字集",
         "VOCABULARY_SET": "單字集",
         "sentence_making": "造句練習",
@@ -1870,8 +1870,8 @@
       "cancel": "取消",
       "types": {
         "example_sentences": {
-          "name": "段落集",
-          "description": "建立段落供學生練習朗讀或排序，可將文章多個段落貼上，每段落最多120個單字",
+          "name": "例句集",
+          "description": "建立例句供學生練習朗讀或重組（2-25個單字）",
           "recommended": "推薦"
         },
         "vocabulary_set": {
@@ -2843,7 +2843,7 @@
       "noDescription": "無說明",
       "unknownType": "未知類型",
       "notSet": "未設定",
-      "readingAssessmentSettings": "新增段落集",
+      "readingAssessmentSettings": "新增例句集",
       "subscriptionExpiredWarning": "⚠️ 訂閱已過期",
       "daysRemaining": "剩餘 {{days}} 天",
       "requiresSubscription": "需要訂閱才能指派作業",
@@ -3044,10 +3044,10 @@
       "editContent": "編輯內容"
     },
     "contentTypes": {
-      "readingAssessment": "段落集",
-      "reading_assessment": "段落集",
-      "READING_ASSESSMENT": "段落集",
-      "EXAMPLE_SENTENCES": "段落集",
+      "readingAssessment": "例句集",
+      "reading_assessment": "例句集",
+      "READING_ASSESSMENT": "例句集",
+      "EXAMPLE_SENTENCES": "例句集",
       "speakingPractice": "口說練習",
       "speaking_practice": "口說練習",
       "SPEAKING_PRACTICE": "口說練習",
@@ -3299,7 +3299,7 @@
       "featureInDevelopment": "{{type}} 功能開發中"
     },
     "dialogs": {
-      "addReadingTitle": "新增段落集",
+      "addReadingTitle": "新增例句集",
       "editContentTitle": "編輯內容"
     },
     "toolbar": {
@@ -4821,7 +4821,7 @@
     },
     "contentTypes": {
       "reading_assessment": "閱讀評量",
-      "example_sentences": "段落集",
+      "example_sentences": "例句集",
       "vocabulary_set": "單字集",
       "sentence_making": "造句"
     },
