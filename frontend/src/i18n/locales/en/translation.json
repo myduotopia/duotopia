@@ -4407,6 +4407,7 @@
       "addAtLeastFiveItems": "Vocabulary set requires at least 5 words",
       "wordLimitExceeded": "Each item must not exceed {{limit}} words",
       "wordLimitTooFew": "Each item must have at least {{limit}} words",
+      "wordsTooFewLabel": "< {{limit}} words",
       "duplicateItems": "Duplicate words or translations found. Please resolve duplicates before saving.",
       "duplicateWord": "Duplicate",
       "maxRowsReached": "Maximum 15 rows allowed",

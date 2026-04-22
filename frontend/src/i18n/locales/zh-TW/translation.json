@@ -4425,6 +4425,7 @@
       "addAtLeastFiveItems": "單字集至少需要 5 個單字",
       "wordLimitExceeded": "單一題目的英文原文不可超過 {{limit}} 個單字",
       "wordLimitTooFew": "單一題目的英文原文至少需要 {{limit}} 個單字",
+      "wordsTooFewLabel": "少於 {{limit}} 字",
       "duplicateItems": "有重複的單字或翻譯，請先處理重複項目",
       "duplicateWord": "重複",
       "maxRowsReached": "最多只能新增 15 列",

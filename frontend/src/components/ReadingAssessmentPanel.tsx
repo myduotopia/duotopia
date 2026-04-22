@@ -916,18 +916,21 @@ function SortableRowInner({
   }, []);
 
   const hasDuplicate = !!duplicateReasons && duplicateReasons.length > 0;
+  // 只有當 row 有內容但單字數 <MIN 才標記（空 row 不標）
+  const rowWordCount = row.text?.trim().split(/\s+/).filter(Boolean).length ?? 0;
+  const tooFewWords =
+    rowWordCount > 0 && rowWordCount < MIN_WORDS_PER_ITEM;
+  const hasError = hasDuplicate || tooFewWords;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={`flex flex-col sm:flex-row items-start sm:items-center gap-2 p-3 rounded-lg ${
-        hasDuplicate
-          ? "bg-red-50 border-2 border-red-400"
-          : "bg-gray-50"
+        hasError ? "bg-red-50 border-2 border-red-400" : "bg-gray-50"
       }`}
     >
-      <div className="flex items-center gap-1 w-full sm:w-auto">
+      <div className="flex items-center gap-1 w-full sm:w-auto flex-wrap">
         {/* Drag handle - ONLY this triggers drag */}
         <div
           {...attributes}
@@ -943,6 +946,13 @@ function SortableRowInner({
         {hasDuplicate && (
           <span className="text-xs text-red-600 font-medium">
             {t("contentEditor.messages.duplicateWord")}
+          </span>
+        )}
+        {tooFewWords && (
+          <span className="text-xs text-red-600 font-medium">
+            {t("contentEditor.messages.wordsTooFewLabel", {
+              limit: MIN_WORDS_PER_ITEM,
+            })}
           </span>
         )}
       </div>
