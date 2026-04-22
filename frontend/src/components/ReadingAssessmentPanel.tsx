@@ -920,9 +920,9 @@ function SortableRowInner({
 
   const hasDuplicate = !!duplicateReasons && duplicateReasons.length > 0;
   // 只有當 row 有內容但單字數不在範圍內才標記（空 row 不標）
-  const rowWordCount = row.text?.trim().split(/\s+/).filter(Boolean).length ?? 0;
-  const tooFewWords =
-    rowWordCount > 0 && rowWordCount < MIN_WORDS_PER_ITEM;
+  const rowWordCount =
+    row.text?.trim().split(/\s+/).filter(Boolean).length ?? 0;
+  const tooFewWords = rowWordCount > 0 && rowWordCount < MIN_WORDS_PER_ITEM;
   const tooManyWords = rowWordCount > MAX_WORDS_PER_ITEM;
   const hasError = hasDuplicate || tooFewWords || tooManyWords;
 
@@ -946,9 +946,7 @@ function SortableRowInner({
           >
             <GripVertical className="h-5 w-5 text-gray-400 hover:text-gray-700 transition-colors" />
           </div>
-          <span className="text-sm font-medium text-gray-600">
-            {index + 1}
-          </span>
+          <span className="text-sm font-medium text-gray-600">{index + 1}</span>
           {hasDuplicate && (
             <span className="text-xs text-red-600 font-medium">
               {t("contentEditor.messages.duplicateWord")}
