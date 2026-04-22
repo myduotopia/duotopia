@@ -16,7 +16,7 @@ describe("audioRecordingStrategy", () => {
       expect(strategy.useTimeslice).toBe(false);
       expect(strategy.useRequestData).toBe(true);
       expect(strategy.durationValidation).toBe("lenient");
-      expect(strategy.minFileSize).toBe(10000);
+      expect(strategy.minFileSize).toBe(500);
       expect(strategy.platformName).toBe("iOS Safari");
     });
 
@@ -41,7 +41,7 @@ describe("audioRecordingStrategy", () => {
       expect(strategy.fallbackMimeTypes).toContain("audio/mp4");
       expect(strategy.useRequestData).toBe(true);
       expect(strategy.durationValidation).toBe("metadata-first");
-      expect(strategy.minFileSize).toBe(1000);
+      expect(strategy.minFileSize).toBe(500);
     });
 
     it("應該為 Firefox 返回正確策略", () => {
@@ -61,7 +61,7 @@ describe("audioRecordingStrategy", () => {
 
       expect(strategy.preferredMimeType).toBe("audio/mp4");
       expect(strategy.durationValidation).toBe("lenient");
-      expect(strategy.minFileSize).toBe(5000);
+      expect(strategy.minFileSize).toBe(500);
       expect(strategy.platformName).toBe("Unknown Browser");
     });
   });
