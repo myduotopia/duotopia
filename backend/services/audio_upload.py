@@ -136,8 +136,8 @@ class AudioUploadService:
             # 讀取檔案內容
             content = await file.read()
 
-            # 檢查檔案大小（至少 1KB，最多 2MB）
-            min_file_size = 1 * 1024  # 1KB
+            # 檢查檔案大小（至少 500B，最多 2MB）
+            min_file_size = 500  # 500B
             if len(content) < min_file_size:
                 # 記錄到 BigQuery
                 from services.bigquery_logger import get_bigquery_logger
@@ -159,7 +159,7 @@ class AudioUploadService:
                     status_code=400,
                     detail=(
                         f"Recording file too small ({len(content)} bytes). "
-                        f"Must be at least {min_file_size / 1024}KB for valid audio."
+                        f"Must be at least {min_file_size} bytes for valid audio."
                     ),
                 )
 
