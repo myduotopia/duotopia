@@ -76,9 +76,40 @@ const TRANSLATION_LANGUAGES = [
 ];
 
 // 每個例句集的題目上限
-const MAX_ROWS = 8;
+const MAX_ROWS = 15;
 // 批次貼上/翻譯的項目上限
 const MAX_BATCH_ITEMS = MAX_ROWS;
+// 每題單字數範圍
+const MIN_WORDS_PER_ITEM = 2;
+const MAX_WORDS_PER_ITEM = 25;
+// 整個例句集最少題數
+const MIN_ITEMS_PER_SET = 3;
+
+// 檢測重複的行 index（text 完全相同，忽略大小寫與前後空白）
+// 回傳 Map<index, reasons[]>，給 UI 用來標紅 + 顯示重複內容
+function findDuplicates(rows: { text: string }[]): Map<number, string[]> {
+  const dupes = new Map<number, string[]>();
+  const textMap = new Map<string, number[]>();
+
+  rows.forEach((row, i) => {
+    const text = row.text?.trim().toLowerCase();
+    if (text) {
+      if (!textMap.has(text)) textMap.set(text, []);
+      textMap.get(text)!.push(i);
+    }
+  });
+
+  for (const [text, indices] of textMap.entries()) {
+    if (indices.length > 1) {
+      indices.forEach((i) => {
+        if (!dupes.has(i)) dupes.set(i, []);
+        dupes.get(i)!.push(text);
+      });
+    }
+  }
+
+  return dupes;
+}
 
 interface ContentRow {
   id: string | number;
@@ -847,6 +878,7 @@ interface SortableRowInnerProps {
   rowsLength: number;
   panelTranslateLang?: TranslationLanguage | "";
   panelCustomLang?: string;
+  duplicateReasons?: string[];
 }
 
 function SortableRowInner({
@@ -857,10 +889,11 @@ function SortableRowInner({
   handleDuplicateRow,
   handleOpenTTSModal,
   handleRemoveAudio,
-  handleGenerateSingleDefinition,
+  handleGenerateSingleDefinition: _handleGenerateSingleDefinition,
   rowsLength,
   panelTranslateLang = "",
   panelCustomLang = "",
+  duplicateReasons,
 }: SortableRowInnerProps) {
   const { t } = useTranslation();
   const {
@@ -885,35 +918,97 @@ function SortableRowInner({
     }
   }, []);
 
+  const hasDuplicate = !!duplicateReasons && duplicateReasons.length > 0;
+  // 只有當 row 有內容但單字數不在範圍內才標記（空 row 不標）
+  const rowWordCount =
+    row.text?.trim().split(/\s+/).filter(Boolean).length ?? 0;
+  const tooFewWords = rowWordCount > 0 && rowWordCount < MIN_WORDS_PER_ITEM;
+  const tooManyWords = rowWordCount > MAX_WORDS_PER_ITEM;
+  const hasError = hasDuplicate || tooFewWords || tooManyWords;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-3 bg-gray-50 rounded-lg"
+      className={`p-3 rounded-lg ${
+        hasError ? "bg-red-50 border-2 border-red-400" : "bg-gray-50"
+      }`}
     >
-      <div className="flex items-center gap-1 w-full sm:w-auto">
-        {/* Drag handle - ONLY this triggers drag */}
-        <div
-          {...attributes}
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing touch-none"
-          title={t("contentEditor.tooltips.dragToReorder")}
-        >
-          <GripVertical className="h-5 w-5 text-gray-400 hover:text-gray-700 transition-colors" />
+      {/* Header: drag + index + error labels | Copy + Delete */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Drag handle - ONLY this triggers drag */}
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing touch-none"
+            title={t("contentEditor.tooltips.dragToReorder")}
+          >
+            <GripVertical className="h-5 w-5 text-gray-400 hover:text-gray-700 transition-colors" />
+          </div>
+          <span className="text-sm font-medium text-gray-600">{index + 1}</span>
+          {hasDuplicate && (
+            <span className="text-xs text-red-600 font-medium">
+              {t("contentEditor.messages.duplicateWord")}
+            </span>
+          )}
+          {tooFewWords && (
+            <span className="text-xs text-red-600 font-medium">
+              {t("contentEditor.messages.wordsTooFewLabel", {
+                limit: MIN_WORDS_PER_ITEM,
+              })}
+            </span>
+          )}
+          {tooManyWords && (
+            <span className="text-xs text-red-600 font-medium">
+              {t("contentEditor.messages.wordsTooManyLabel", {
+                limit: MAX_WORDS_PER_ITEM,
+              })}
+            </span>
+          )}
         </div>
-        <span className="text-sm font-medium text-gray-600 w-6">
-          {index + 1}
-        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => handleDuplicateRow(index)}
+            className="p-1 rounded hover:bg-gray-200"
+            title={t("contentEditor.tooltips.duplicate")}
+          >
+            <Copy className="h-4 w-4 text-gray-600" />
+          </button>
+          <button
+            onClick={() => handleRemoveRow(index)}
+            className={`p-1 rounded ${
+              row.has_student_progress || rowsLength <= 1
+                ? "cursor-not-allowed"
+                : "hover:bg-gray-200"
+            }`}
+            title={
+              row.has_student_progress
+                ? t("contentEditor.tooltips.cannotDeleteWithProgress")
+                : t("contentEditor.tooltips.delete")
+            }
+            disabled={rowsLength <= 1 || row.has_student_progress}
+          >
+            <Trash2
+              className={`h-4 w-4 ${
+                rowsLength <= 1 || row.has_student_progress
+                  ? "text-gray-300"
+                  : "text-gray-600"
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 w-full space-y-2">
+      {/* Body: text + translation inputs */}
+      <div className="space-y-2">
         {/* Text input */}
         <div className="relative">
           <textarea
             value={row.text}
             onChange={(e) => {
               const words = e.target.value.trim().split(/\s+/).filter(Boolean);
-              if (words.length > 150) return;
+              if (words.length > MAX_WORDS_PER_ITEM) return;
               handleUpdateRow(index, "text", e.target.value);
               e.target.style.height = "auto";
               e.target.style.height = e.target.scrollHeight + "px";
@@ -1016,11 +1111,17 @@ function SortableRowInner({
               rows={2}
               maxLength={500}
             />
+            {/*
+              Per-row 翻譯按鈕暫時停用：後端 /translate endpoint 的 prompt
+              以「英文單字」為主體，整句例句翻譯會走壞。待後端新增句子
+              專用 translate endpoint 後再恢復 onClick。仍顯示目前選定
+              語言 label 讓使用者看得出語言脈絡。
+            */}
             <div className="absolute right-2 top-2">
               <button
-                onClick={() => handleGenerateSingleDefinition(index)}
-                className="text-xs text-gray-400 hover:text-blue-500 hover:underline cursor-pointer transition-colors"
-                title={t("contentEditor.messages.generatingTranslation")}
+                disabled
+                className="text-xs text-gray-400 cursor-not-allowed"
+                title={t("contentEditor.messages.translationDisabled")}
               >
                 {(() => {
                   const lang = panelTranslateLang || row.selectedLanguage || "";
@@ -1042,39 +1143,6 @@ function SortableRowInner({
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Action buttons */}
-      <div className="flex items-center gap-1 w-full sm:w-auto justify-end">
-        <button
-          onClick={() => handleDuplicateRow(index)}
-          className="p-1 rounded hover:bg-gray-200"
-          title={t("contentEditor.tooltips.duplicate")}
-        >
-          <Copy className="h-4 w-4 text-gray-600" />
-        </button>
-        <button
-          onClick={() => handleRemoveRow(index)}
-          className={`p-1 rounded ${
-            row.has_student_progress || rowsLength <= 1
-              ? "cursor-not-allowed"
-              : "hover:bg-gray-200"
-          }`}
-          title={
-            row.has_student_progress
-              ? t("contentEditor.tooltips.cannotDeleteWithProgress")
-              : t("contentEditor.tooltips.delete")
-          }
-          disabled={rowsLength <= 1 || row.has_student_progress}
-        >
-          <Trash2
-            className={`h-4 w-4 ${
-              rowsLength <= 1 || row.has_student_progress
-                ? "text-gray-300"
-                : "text-gray-600"
-            }`}
-          />
-        </button>
       </div>
     </div>
   );
@@ -1120,6 +1188,9 @@ const ReadingAssessmentPanel = forwardRef<
   const { setEditorBusy } = useSidebar();
 
   const [title, setTitle] = useState("");
+  const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(
+    new Map(),
+  );
   const [rows, setRows] = useState<ContentRow[]>([
     {
       id: "1",
@@ -1186,6 +1257,11 @@ const ReadingAssessmentPanel = forwardRef<
     return () => setEditorBusy(false);
   }, [isBatchProcessing, setEditorBusy]);
 
+  // Recalculate duplicates whenever rows change
+  useEffect(() => {
+    setDuplicateMap(findDuplicates(rows));
+  }, [rows]);
+
   // dnd-kit sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1202,8 +1278,12 @@ const ReadingAssessmentPanel = forwardRef<
   const handleSave = async () => {
     const validRows = rows.filter((row) => row.text && row.text.trim());
 
-    if (validRows.length === 0) {
-      toast.error(t("contentEditor.messages.addAtLeastOneItem"));
+    if (validRows.length < MIN_ITEMS_PER_SET) {
+      toast.error(
+        t("contentEditor.messages.addAtLeastNItems", {
+          limit: MIN_ITEMS_PER_SET,
+        }),
+      );
       return;
     }
 
@@ -1212,15 +1292,39 @@ const ReadingAssessmentPanel = forwardRef<
       return;
     }
 
+    // 檢查單字數下限
+    const underLimitRow = validRows.find((row) => {
+      const words = row.text.trim().split(/\s+/).filter(Boolean);
+      return words.length < MIN_WORDS_PER_ITEM;
+    });
+    if (underLimitRow) {
+      toast.error(
+        t("contentEditor.messages.wordLimitTooFew", {
+          limit: MIN_WORDS_PER_ITEM,
+        }),
+      );
+      return;
+    }
+
     // 檢查單字數上限
     const overLimitRow = validRows.find((row) => {
       const words = row.text.trim().split(/\s+/).filter(Boolean);
-      return words.length > 150;
+      return words.length > MAX_WORDS_PER_ITEM;
     });
     if (overLimitRow) {
       toast.error(
-        t("contentEditor.messages.wordLimitExceeded", { limit: 150 }),
+        t("contentEditor.messages.wordLimitExceeded", {
+          limit: MAX_WORDS_PER_ITEM,
+        }),
       );
+      return;
+    }
+
+    // 檢查重複
+    const dupes = findDuplicates(validRows);
+    if (dupes.size > 0) {
+      setDuplicateMap(dupes);
+      toast.error(t("contentEditor.messages.duplicateItems"));
       return;
     }
 
@@ -2034,51 +2138,59 @@ const ReadingAssessmentPanel = forwardRef<
     }
   };
 
-  // 將超過 150 單字的段落自動分段，保留句子完整性
-  const splitParagraphByWordLimit = (
-    text: string,
-    maxWords = 150,
-  ): string[] => {
-    const sentences = text.match(/[^.!?]*[.!?]+\s*/g) || [text];
-    const paragraphs: string[] = [];
-    let current = "";
-
-    for (const sentence of sentences) {
-      const combined = current + sentence;
-      const wordCount = combined.trim().split(/\s+/).filter(Boolean).length;
-
-      if (wordCount > maxWords && current.trim()) {
-        paragraphs.push(current.trim());
-        current = sentence;
-      } else {
-        current = combined;
-      }
-    }
-    if (current.trim()) {
-      paragraphs.push(current.trim());
-    }
-    return paragraphs;
-  };
-
   const handleBatchPaste = async (autoTTS: boolean, autoTranslate: boolean) => {
-    // 分割文字，每行一個項目，超過 150 單字的段落自動分段
+    // 分割文字，每行一個項目
     const rawLines = batchPasteText
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
 
-    const lines: string[] = [];
-    for (const line of rawLines) {
-      const wordCount = line.split(/\s+/).filter(Boolean).length;
-      if (wordCount > 150) {
-        lines.push(...splitParagraphByWordLimit(line));
-      } else {
-        lines.push(line);
-      }
+    // 1. 貼上框內部去重（忽略大小寫）
+    const seen = new Set<string>();
+    const deduped = rawLines.filter((l) => {
+      const key = l.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const internalDupes = rawLines.length - deduped.length;
+
+    // 2. 跟右側已有 row 去重
+    const existingTexts = new Set(
+      rows
+        .filter((r) => r.text && r.text.trim())
+        .map((r) => r.text.trim().toLowerCase()),
+    );
+    const lines = deduped.filter((l) => !existingTexts.has(l.toLowerCase()));
+    const existingDupes = deduped.length - lines.length;
+
+    // 提醒去重結果
+    if (internalDupes > 0 || existingDupes > 0) {
+      const msgs: string[] = [];
+      if (internalDupes > 0)
+        msgs.push(
+          t("contentEditor.messages.removedInternalDupes", {
+            count: internalDupes,
+          }),
+        );
+      if (existingDupes > 0)
+        msgs.push(
+          t("contentEditor.messages.removedExistingDupes", {
+            count: existingDupes,
+          }),
+        );
+      toast.info(msgs.join("、"));
     }
 
-    // === Backfill 模式：textarea 空白時，補齊已有段落缺少的翻譯/TTS ===
-    const isBackfillMode = lines.length === 0;
+    // === Backfill 模式：textarea 空白時，補齊已有項目缺少的翻譯/TTS ===
+    // Backfill 模式只在貼上框本來就空白時觸發；若使用者有貼內容但全被去重掉，
+    // 應顯示空結果提示而非進 Backfill。
+    const isBackfillMode = lines.length === 0 && rawLines.length === 0;
+
+    if (!isBackfillMode && lines.length === 0) {
+      // 全部都是重複，前面的 toast.info 已顯示；直接結束
+      return;
+    }
 
     if (isBackfillMode) {
       const existingRows = rows.filter((r) => r.text && r.text.trim());
@@ -2285,6 +2397,19 @@ const ReadingAssessmentPanel = forwardRef<
       example_sentence_definition: "",
     }));
 
+    // 只對字數合法（2–25）的 item 執行 TTS / 翻譯，避免浪費 token
+    // 字數不符的 item 仍會被加進 rows，但跳過外部 API 呼叫；
+    // 使用者修正字數後可用單一 mic 按鈕或批次工具列補產 TTS / 翻譯。
+    const validForProcessingIndices: number[] = [];
+    const validForProcessingTexts: string[] = [];
+    newItems.forEach((item, i) => {
+      const wc = item.text.trim().split(/\s+/).filter(Boolean).length;
+      if (wc >= MIN_WORDS_PER_ITEM && wc <= MAX_WORDS_PER_ITEM) {
+        validForProcessingIndices.push(i);
+        validForProcessingTexts.push(item.text);
+      }
+    });
+
     // 批次處理 TTS 和翻譯
     if (autoTTS || autoTranslate) {
       try {
@@ -2296,7 +2421,8 @@ const ReadingAssessmentPanel = forwardRef<
 
           if (isRandom) {
             // Random 模式：每題個別生成，確保口音/性別不同
-            for (let i = 0; i < newItems.length; i++) {
+            // 只對字數合法的 item 呼叫 TTS API
+            for (const i of validForProcessingIndices) {
               const { voice, rate } = getVoiceAndRate(
                 batchTTSAccent,
                 batchTTSGender,
@@ -2319,15 +2445,15 @@ const ReadingAssessmentPanel = forwardRef<
                 };
               }
             }
-          } else {
-            // 固定口音/性別：批次生成
+          } else if (validForProcessingTexts.length > 0) {
+            // 固定口音/性別：批次生成（只送字數合法的 text）
             const { voice, rate } = getVoiceAndRate(
               batchTTSAccent,
               batchTTSGender,
               batchTTSSpeed,
             );
             const ttsResult = await apiClient.batchGenerateTTS(
-              lines,
+              validForProcessingTexts,
               voice,
               rate,
               "+0%",
@@ -2339,35 +2465,49 @@ const ReadingAssessmentPanel = forwardRef<
             ) {
               const audioUrls = (ttsResult as { audio_urls: string[] })
                 .audio_urls;
-              newItems = newItems.map((item, i) => ({
-                ...item,
-                audioUrl: audioUrls[i]?.startsWith("http")
-                  ? audioUrls[i]
-                  : `${import.meta.env.VITE_API_URL}${audioUrls[i]}`,
-                audio_url: audioUrls[i]?.startsWith("http")
-                  ? audioUrls[i]
-                  : `${import.meta.env.VITE_API_URL}${audioUrls[i]}`,
-              }));
+              // audioUrls 的 index 對應 validForProcessingIndices，map 回 newItems
+              validForProcessingIndices.forEach((itemIdx, resultIdx) => {
+                const url = audioUrls[resultIdx];
+                if (url) {
+                  const fullUrl = url.startsWith("http")
+                    ? url
+                    : `${import.meta.env.VITE_API_URL}${url}`;
+                  newItems[itemIdx] = {
+                    ...newItems[itemIdx],
+                    audioUrl: fullUrl,
+                    audio_url: fullUrl,
+                  };
+                }
+              });
             }
           }
         }
 
-        if (autoTranslate && selectedTranslateLang) {
+        if (
+          autoTranslate &&
+          selectedTranslateLang &&
+          validForProcessingTexts.length > 0
+        ) {
           const langCode =
             selectedTranslateLang === "other"
               ? customTranslateLang || ""
               : TRANSLATION_LANGUAGES.find(
                   (l) => l.value === selectedTranslateLang,
                 )?.code || "zh-TW";
-          const result = await apiClient.batchTranslate(lines, langCode);
+          const result = await apiClient.batchTranslate(
+            validForProcessingTexts,
+            langCode,
+          );
           const translations =
             (result as { translations?: string[] }).translations || result;
           if (Array.isArray(translations)) {
-            newItems = newItems.map((item, i) => ({
-              ...item,
-              definition: translations[i] || "",
-              selectedLanguage: selectedTranslateLang,
-            }));
+            validForProcessingIndices.forEach((itemIdx, resultIdx) => {
+              newItems[itemIdx] = {
+                ...newItems[itemIdx],
+                definition: translations[resultIdx] || "",
+                selectedLanguage: selectedTranslateLang,
+              };
+            });
           }
         }
       } catch (error) {
@@ -2384,7 +2524,29 @@ const ReadingAssessmentPanel = forwardRef<
     // 更新前端狀態
     setRows(updatedRows);
 
+    // 檢查新 rows 是否有 validation error（字數不符 / 重複），
+    // 有錯誤就跳過自動寫 DB，讓使用者看到紅色標記後手動修正
+    const updatedValidRows = updatedRows.filter((r) => r.text?.trim());
+    const hasWordCountError = updatedValidRows.some((r) => {
+      const words = r.text.trim().split(/\s+/).filter(Boolean);
+      return (
+        words.length < MIN_WORDS_PER_ITEM || words.length > MAX_WORDS_PER_ITEM
+      );
+    });
+    const hasDupeError = findDuplicates(updatedValidRows).size > 0;
+    const tooFewItemsAfterPaste = updatedValidRows.length < MIN_ITEMS_PER_SET;
+    const skipAutoSave =
+      hasWordCountError || hasDupeError || tooFewItemsAfterPaste;
+
     const existingContentId = editingContent?.id || content?.id;
+
+    if (skipAutoSave) {
+      toast.warning(t("contentEditor.messages.batchPasteHasErrors"));
+      setIsPasting(false);
+      setBatchPasteDialogOpen(false);
+      setBatchPasteText("");
+      return;
+    }
 
     if (existingContentId) {
       // 編輯模式：直接儲存到資料庫
@@ -2639,6 +2801,7 @@ const ReadingAssessmentPanel = forwardRef<
                       rowsLength={rows.length}
                       panelTranslateLang={selectedTranslateLang}
                       panelCustomLang={customTranslateLang}
+                      duplicateReasons={duplicateMap.get(index)}
                     />
                   );
                 })}

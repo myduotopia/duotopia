@@ -568,11 +568,10 @@ export function AssignmentDialog({
   }, [open, classroomId, students, showOrgTab]);
 
   // 當練習模式改變時，清除不相容的購物車項目
-  // 例句重組 / 單字模式只能選單字集，需要移除例句集項目
-  // 例句朗讀可以選全部，不需要清除
+  // 單字模式只能選單字集，需要移除例句集項目
+  // 例句模式（朗讀 / 重組）可以選全部，不需要清除
   useEffect(() => {
     if (
-      formData.practice_mode === "rearrangement" ||
       formData.practice_mode === "word_reading" ||
       formData.practice_mode === "word_selection"
     ) {
@@ -834,13 +833,9 @@ export function AssignmentDialog({
     const mode = formData.practice_mode;
     if (!mode) return true; // 未選模式，全部可選
 
-    // 例句朗讀：例句集 + 單字集都可選（單字集用 example_sentence 出題）
-    if (mode === "reading") {
+    // 例句模式（朗讀 / 重組）：例句集 + 單字集都可選（單字集用 example_sentence 出題）
+    if (mode === "reading" || mode === "rearrangement") {
       return true;
-    }
-    // 例句重組：只能選單字集（例句集每題是段落，不適合重組）
-    if (mode === "rearrangement") {
-      return isVocabularySetType(contentType);
     }
     // 單字模式：只能選單字集
     if (mode === "word_reading" || mode === "word_selection") {

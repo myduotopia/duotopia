@@ -1788,10 +1788,10 @@
         "partialCreated": "部分成功：{{successCount}}/{{totalCount}} 個班級已建立作業（{{studentCount}} 位學生），失敗：{{failedNames}}"
       },
       "contentTypes": {
-        "reading_assessment": "段落集",
-        "READING_ASSESSMENT": "段落集",
-        "example_sentences": "段落集",
-        "EXAMPLE_SENTENCES": "段落集",
+        "reading_assessment": "例句集",
+        "READING_ASSESSMENT": "例句集",
+        "example_sentences": "例句集",
+        "EXAMPLE_SENTENCES": "例句集",
         "vocabulary_set": "單字集",
         "VOCABULARY_SET": "單字集",
         "sentence_making": "造句練習",
@@ -1870,8 +1870,8 @@
       "cancel": "取消",
       "types": {
         "example_sentences": {
-          "name": "段落集",
-          "description": "建立段落供學生練習朗讀或排序，可將文章多個段落貼上，每段落最多120個單字",
+          "name": "例句集",
+          "description": "建立例句供學生練習朗讀或重組（2-25個單字）",
           "recommended": "推薦"
         },
         "vocabulary_set": {
@@ -2843,7 +2843,7 @@
       "noDescription": "無說明",
       "unknownType": "未知類型",
       "notSet": "未設定",
-      "readingAssessmentSettings": "新增段落集",
+      "readingAssessmentSettings": "新增例句集",
       "subscriptionExpiredWarning": "⚠️ 訂閱已過期",
       "daysRemaining": "剩餘 {{days}} 天",
       "requiresSubscription": "需要訂閱才能指派作業",
@@ -3044,10 +3044,10 @@
       "editContent": "編輯內容"
     },
     "contentTypes": {
-      "readingAssessment": "段落集",
-      "reading_assessment": "段落集",
-      "READING_ASSESSMENT": "段落集",
-      "EXAMPLE_SENTENCES": "段落集",
+      "readingAssessment": "例句集",
+      "reading_assessment": "例句集",
+      "READING_ASSESSMENT": "例句集",
+      "EXAMPLE_SENTENCES": "例句集",
       "speakingPractice": "口說練習",
       "speaking_practice": "口說練習",
       "SPEAKING_PRACTICE": "口說練習",
@@ -3299,7 +3299,7 @@
       "featureInDevelopment": "{{type}} 功能開發中"
     },
     "dialogs": {
-      "addReadingTitle": "新增段落集",
+      "addReadingTitle": "新增例句集",
       "editContentTitle": "編輯內容"
     },
     "toolbar": {
@@ -4366,8 +4366,6 @@
       "enterCustomLanguage": "請輸入自訂語言名稱",
       "translationLanguageMismatch": "此單字集已使用「{{lang}}」翻譯，請保持翻譯語言一致",
       "exampleTranslationLanguageMismatch": "例句翻譯已使用「{{lang}}」，請保持翻譯語言一致",
-      "removedInternalDupes": "已去除 {{count}} 個重複單字",
-      "removedExistingDupes": "已跳過 {{count}} 個已存在的單字",
       "unsavedChangesConfirm": "尚未儲存，確定要關閉嗎？"
     },
     "placeholders": {
@@ -4422,8 +4420,14 @@
       "loadingContentFailed": "載入內容失敗",
       "enterTitle": "請輸入標題",
       "addAtLeastOneItem": "請至少新增一個內容項目",
+      "addAtLeastNItems": "例句集至少需要 {{limit}} 個題目",
       "addAtLeastFiveItems": "單字集至少需要 5 個單字",
       "wordLimitExceeded": "單一題目的英文原文不可超過 {{limit}} 個單字",
+      "wordLimitTooFew": "單一題目的英文原文至少需要 {{limit}} 個單字",
+      "wordsTooFewLabel": "少於 {{limit}} 字",
+      "wordsTooManyLabel": "超過 {{limit}} 字",
+      "batchPasteHasErrors": "已加入題目但有錯誤（字數不符或重複），請先修正標紅的題目才能儲存",
+      "translationDisabled": "例句翻譯功能暫時停用，請手動輸入翻譯",
       "duplicateItems": "有重複的單字或翻譯，請先處理重複項目",
       "duplicateWord": "重複",
       "maxRowsReached": "最多只能新增 15 列",
@@ -4478,7 +4482,9 @@
       "batchLimitTruncated": "已超過上限，僅前 {{count}} 個項目會被處理",
       "batchLimitWarning": "超過 {{count}} 個項目上限，僅前 {{count}} 個會被處理",
       "batchPasteLimit": "批次貼上上限為 {{count}} 個項目，請減少後重試",
-      "batchPasteLimitShort": "上限 {{count}} 個"
+      "batchPasteLimitShort": "上限 {{count}} 個",
+      "removedInternalDupes": "已去除 {{count}} 個重複單字",
+      "removedExistingDupes": "已跳過 {{count}} 個已存在的單字"
     },
     "translationLanguages": {
       "chinese": "中文",
@@ -4821,7 +4827,7 @@
     },
     "contentTypes": {
       "reading_assessment": "閱讀評量",
-      "example_sentences": "段落集",
+      "example_sentences": "例句集",
       "vocabulary_set": "單字集",
       "sentence_making": "造句"
     },
