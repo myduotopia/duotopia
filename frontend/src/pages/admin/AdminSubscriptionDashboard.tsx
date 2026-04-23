@@ -866,10 +866,10 @@ export default function AdminSubscriptionDashboard() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-4 md:mb-6 h-auto md:h-14 bg-white border-2 border-gray-200 p-1">
+        <TabsList className="flex w-full justify-start gap-1 mb-4 md:mb-6 h-auto bg-transparent border-b border-gray-200 rounded-none p-0">
           <TabsTrigger
             value="subscriptions"
-            className="flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base font-semibold py-2 md:py-0 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
           >
             <Users className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
             <span className="hidden sm:inline">
@@ -879,7 +879,7 @@ export default function AdminSubscriptionDashboard() {
           </TabsTrigger>
           <TabsTrigger
             value="transactions"
-            className="flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base font-semibold py-2 md:py-0 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
           >
             <Receipt className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
             <span className="hidden sm:inline">
@@ -889,7 +889,7 @@ export default function AdminSubscriptionDashboard() {
           </TabsTrigger>
           <TabsTrigger
             value="learning"
-            className="flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base font-semibold py-2 md:py-0 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
           >
             <GraduationCap className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
             <span className="hidden sm:inline">
