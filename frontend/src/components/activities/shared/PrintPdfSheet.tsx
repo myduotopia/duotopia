@@ -684,21 +684,10 @@ export function PrintPdfSheet({
     displayQuestions.forEach((q) => {
       let options: string[];
       if (useQuestionOptions && q.options && q.options.length > 0) {
-        // q.options 假定已包含正解；若不足則用 answerPool 補位
+        // word_selection：q.options 已是翻譯語系（中文/英文）的正解+干擾項；
+        // 即使不足 localChoiceCount 也不用 answerPool（英文）補位，避免
+        // 混語 — 小單字集寧可顯示較少選項。
         options = q.options.slice(0, localChoiceCount);
-        if (options.length < localChoiceCount) {
-          const extras = answerPool
-            .filter((a) => a !== q.correctAnswer && !options.includes(a))
-            .slice();
-          for (let i = extras.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [extras[i], extras[j]] = [extras[j], extras[i]];
-          }
-          options = [
-            ...options,
-            ...extras.slice(0, localChoiceCount - options.length),
-          ];
-        }
       } else {
         const distractors = answerPool
           .filter((a) => a !== q.correctAnswer)

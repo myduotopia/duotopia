@@ -675,7 +675,7 @@ function TeacherTemplateProgramsInner() {
               ) {
                 setDownloadContentInfo({
                   id: item.id as number,
-                  title: (item.title || item.name) as string,
+                  title: (item.title || item.name || "") as string,
                 });
                 setDownloadSheetOpen(true);
               }
