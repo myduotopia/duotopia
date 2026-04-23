@@ -3535,7 +3535,7 @@
       "plan": "Plan",
       "endDate": "End Date",
       "periods": "Periods",
-      "quota": "Quota",
+      "quota": "Used / Quota",
       "status": "Status",
       "actions": "Actions",
       "noData": "No data"

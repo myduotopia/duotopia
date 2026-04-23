@@ -3539,7 +3539,7 @@
       "plan": "方案",
       "endDate": "到期日",
       "periods": "期數",
-      "quota": "配額",
+      "quota": "已使用 / 配額",
       "status": "狀態",
       "actions": "操作",
       "noData": "無資料"
