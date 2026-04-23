@@ -161,6 +161,8 @@ function buildOptions(
     .map((x) => getDisplayTranslation(x))
     .filter((t): t is string => !!t && t !== correct);
 
+  // 小單字集（干擾項不足）時降級：至少需 1 個干擾項才能出選擇題
+  if (others.length === 0) return undefined;
   const shuffled = shuffle(others).slice(0, choiceCount - 1);
   return [correct, ...shuffled];
 }

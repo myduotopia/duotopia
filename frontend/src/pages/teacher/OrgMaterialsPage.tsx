@@ -609,7 +609,7 @@ export default function OrgMaterialsPage() {
                 if (level === 2) {
                   setCopyContentInfo({
                     id: item.id as number,
-                    title: (item.title || item.name) as string,
+                    title: (item.title || item.name || "") as string,
                   });
                   setShowCopyDialog(true);
                 }
@@ -622,7 +622,7 @@ export default function OrgMaterialsPage() {
                 ) {
                   setDownloadContentInfo({
                     id: item.id as number,
-                    title: (item.title || item.name) as string,
+                    title: (item.title || item.name || "") as string,
                   });
                   setDownloadSheetOpen(true);
                 }
