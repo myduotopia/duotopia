@@ -4366,8 +4366,6 @@
       "enterCustomLanguage": "請輸入自訂語言名稱",
       "translationLanguageMismatch": "此單字集已使用「{{lang}}」翻譯，請保持翻譯語言一致",
       "exampleTranslationLanguageMismatch": "例句翻譯已使用「{{lang}}」，請保持翻譯語言一致",
-      "removedInternalDupes": "已去除 {{count}} 個重複單字",
-      "removedExistingDupes": "已跳過 {{count}} 個已存在的單字",
       "unsavedChangesConfirm": "尚未儲存，確定要關閉嗎？"
     },
     "placeholders": {

@@ -4348,8 +4348,6 @@
       "enterCustomLanguage": "Please enter a custom language name",
       "translationLanguageMismatch": "This vocabulary set already uses \"{{lang}}\" for translation. Please keep the translation language consistent.",
       "exampleTranslationLanguageMismatch": "Example sentence translations already use \"{{lang}}\". Please keep the translation language consistent.",
-      "removedInternalDupes": "Removed {{count}} duplicate(s)",
-      "removedExistingDupes": "Skipped {{count}} existing word(s)",
       "unsavedChangesConfirm": "You have unsaved changes. Are you sure you want to close?"
     },
     "placeholders": {
