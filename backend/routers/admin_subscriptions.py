@@ -521,6 +521,36 @@ async def get_teacher_periods(
             }
         )
 
+    # 🔥 Approach A: 同時撈取 credit_packages（trial_bonus / admin_grant / 加購）
+    credit_packages = (
+        db.query(CreditPackage)
+        .filter(CreditPackage.teacher_id == teacher_id)
+        .order_by(CreditPackage.purchased_at.desc())
+        .all()
+    )
+
+    credit_package_list = []
+    for pkg in credit_packages:
+        credit_package_list.append(
+            {
+                "id": pkg.id,
+                "package_id": pkg.package_id,
+                "source": pkg.source,
+                "points_total": pkg.points_total,
+                "points_used": pkg.points_used,
+                "points_remaining": pkg.points_remaining,
+                "price_paid": pkg.price_paid,
+                "purchased_at": pkg.purchased_at.isoformat()
+                if pkg.purchased_at
+                else None,
+                "expires_at": pkg.expires_at.isoformat()
+                if pkg.expires_at
+                else None,
+                "status": pkg.status,
+                "payment_id": pkg.payment_id,
+            }
+        )
+
     return {
         "teacher": {
             "id": teacher.id,
@@ -528,7 +558,9 @@ async def get_teacher_periods(
             "email": teacher.email,
         },
         "periods": period_list,
+        "credit_packages": credit_package_list,
         "total": len(period_list),
+        "credit_packages_total": len(credit_package_list),
     }
 
 

@@ -3557,6 +3557,19 @@
       "payment": "付款",
       "status": "狀態"
     },
+    "creditPackageTable": {
+      "title": "點數包紀錄",
+      "source": "來源",
+      "package": "套餐",
+      "dates": "購買 / 到期",
+      "points": "已使用 / 總計",
+      "payment": "付款",
+      "status": "狀態",
+      "sourceTrial": "試用",
+      "sourceGrant": "贈送",
+      "sourcePurchase": "加購",
+      "sourceOrgPurchase": "機構購買"
+    },
     "history": {
       "title": "編輯歷史",
       "noHistory": "無編輯歷史",

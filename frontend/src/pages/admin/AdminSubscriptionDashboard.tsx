@@ -104,6 +104,20 @@ interface SubscriptionPeriod {
   amount_paid?: number;
 }
 
+interface CreditPackageInfo {
+  id: number;
+  package_id: string;
+  source: string; // "trial_bonus" | "admin_grant" | "purchase" | "org_purchase"
+  points_total: number;
+  points_used: number;
+  points_remaining: number;
+  price_paid: number;
+  purchased_at: string;
+  expires_at: string;
+  status: string;
+  payment_id?: string;
+}
+
 interface EditHistoryRecord {
   action: string;
   admin_email: string;
@@ -218,6 +232,9 @@ export default function AdminSubscriptionDashboard() {
   const [expandedPeriodId, setExpandedPeriodId] = useState<number | null>(null);
   const [teacherPeriods, setTeacherPeriods] = useState<
     Record<number, SubscriptionPeriod[]>
+  >({});
+  const [teacherCreditPackages, setTeacherCreditPackages] = useState<
+    Record<number, CreditPackageInfo[]>
   >({});
   const [periodHistory, setPeriodHistory] = useState<
     Record<number, EditHistoryRecord[]>
@@ -609,26 +626,24 @@ export default function AdminSubscriptionDashboard() {
       setExpandedTeacherId(teacherId);
       setExpandedPeriodId(null);
 
-      // Fetch periods if not already loaded
+      // Fetch periods + credit_packages if not already loaded
       if (!teacherPeriods[teacherId]) {
         try {
           const response = await apiClient.get(
             `/api/admin/subscription/teacher/${teacherId}/periods`,
           );
-          const periods = (response as { periods: SubscriptionPeriod[] })
-            .periods;
-
-          // Debug: 檢查第一個 period 的資料
-          if (periods.length > 0) {
-            console.log("🔍 Period data:", periods[0]);
-            console.log("payment_id:", periods[0].payment_id);
-            console.log("payment_status:", periods[0].payment_status);
-            console.log("status:", periods[0].status);
-          }
+          const data = response as {
+            periods: SubscriptionPeriod[];
+            credit_packages?: CreditPackageInfo[];
+          };
 
           setTeacherPeriods((prev) => ({
             ...prev,
-            [teacherId]: periods,
+            [teacherId]: data.periods,
+          }));
+          setTeacherCreditPackages((prev) => ({
+            ...prev,
+            [teacherId]: data.credit_packages || [],
           }));
         } catch (error) {
           console.error("Failed to load periods:", error);
@@ -1565,6 +1580,161 @@ export default function AdminSubscriptionDashboard() {
                                       </TableBody>
                                     </Table>
                                   </div>
+
+                                  {/* Layer 2b: Credit Packages (trial / admin_grant / purchase) */}
+                                  {teacherCreditPackages[teacher.teacher_id] &&
+                                    teacherCreditPackages[teacher.teacher_id]
+                                      .length > 0 && (
+                                      <div className="p-4 pt-0">
+                                        <h4 className="font-semibold mb-3 text-sm">
+                                          {t(
+                                            "adminSubscription.creditPackageTable.title",
+                                            "點數包紀錄",
+                                          )}
+                                        </h4>
+                                        <Table>
+                                          <TableHeader>
+                                            <TableRow>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.source",
+                                                  "來源",
+                                                )}
+                                              </TableHead>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.package",
+                                                  "套餐",
+                                                )}
+                                              </TableHead>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.dates",
+                                                  "購買 / 到期",
+                                                )}
+                                              </TableHead>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.points",
+                                                  "已使用 / 總計",
+                                                )}
+                                              </TableHead>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.payment",
+                                                  "付款",
+                                                )}
+                                              </TableHead>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.status",
+                                                  "狀態",
+                                                )}
+                                              </TableHead>
+                                            </TableRow>
+                                          </TableHeader>
+                                          <TableBody>
+                                            {teacherCreditPackages[
+                                              teacher.teacher_id
+                                            ].map((pkg) => {
+                                              const sourceBadge = {
+                                                trial_bonus: {
+                                                  label: t(
+                                                    "adminSubscription.creditPackageTable.sourceTrial",
+                                                    "試用",
+                                                  ),
+                                                  className:
+                                                    "bg-purple-100 text-purple-700",
+                                                },
+                                                admin_grant: {
+                                                  label: t(
+                                                    "adminSubscription.creditPackageTable.sourceGrant",
+                                                    "贈送",
+                                                  ),
+                                                  className:
+                                                    "bg-orange-100 text-orange-700",
+                                                },
+                                                purchase: {
+                                                  label: t(
+                                                    "adminSubscription.creditPackageTable.sourcePurchase",
+                                                    "加購",
+                                                  ),
+                                                  className:
+                                                    "bg-green-100 text-green-700",
+                                                },
+                                                org_purchase: {
+                                                  label: t(
+                                                    "adminSubscription.creditPackageTable.sourceOrgPurchase",
+                                                    "機構購買",
+                                                  ),
+                                                  className:
+                                                    "bg-green-100 text-green-700",
+                                                },
+                                              }[pkg.source] || {
+                                                label: pkg.source,
+                                                className:
+                                                  "bg-gray-100 text-gray-700",
+                                              };
+
+                                              return (
+                                                <TableRow key={`pkg-${pkg.id}`}>
+                                                  <TableCell>
+                                                    <span
+                                                      className={`px-2 py-1 rounded text-xs font-semibold ${sourceBadge.className}`}
+                                                    >
+                                                      {sourceBadge.label}
+                                                    </span>
+                                                  </TableCell>
+                                                  <TableCell className="font-mono text-xs text-gray-600">
+                                                    {pkg.package_id}
+                                                  </TableCell>
+                                                  <TableCell className="text-sm text-gray-600">
+                                                    {formatDate(
+                                                      pkg.purchased_at,
+                                                    )}{" "}
+                                                    →{" "}
+                                                    {formatDate(pkg.expires_at)}
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <div className="space-y-1">
+                                                      <div className="text-sm">
+                                                        {pkg.points_used.toLocaleString()}{" "}
+                                                        /{" "}
+                                                        {pkg.points_total.toLocaleString()}
+                                                      </div>
+                                                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                                        <div
+                                                          className="bg-purple-500 h-1.5 rounded-full"
+                                                          style={{
+                                                            width: `${Math.min((pkg.points_used / pkg.points_total) * 100 || 0, 100)}%`,
+                                                          }}
+                                                        />
+                                                      </div>
+                                                    </div>
+                                                  </TableCell>
+                                                  <TableCell className="text-sm">
+                                                    {pkg.price_paid > 0
+                                                      ? `NT$ ${pkg.price_paid.toLocaleString()}`
+                                                      : "-"}
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <span
+                                                      className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                        pkg.status === "active"
+                                                          ? "bg-green-100 text-green-700"
+                                                          : "bg-gray-100 text-gray-600"
+                                                      }`}
+                                                    >
+                                                      {pkg.status}
+                                                    </span>
+                                                  </TableCell>
+                                                </TableRow>
+                                              );
+                                            })}
+                                          </TableBody>
+                                        </Table>
+                                      </div>
+                                    )}
                                 </TableCell>
                               </TableRow>
                             )}

@@ -3553,6 +3553,19 @@
       "payment": "Payment",
       "status": "Status"
     },
+    "creditPackageTable": {
+      "title": "Credit Packages",
+      "source": "Source",
+      "package": "Package",
+      "dates": "Purchased / Expires",
+      "points": "Used / Total",
+      "payment": "Payment",
+      "status": "Status",
+      "sourceTrial": "Trial",
+      "sourceGrant": "Grant",
+      "sourcePurchase": "Purchase",
+      "sourceOrgPurchase": "Org Purchase"
+    },
     "history": {
       "title": "Edit History",
       "noHistory": "No edit history",
