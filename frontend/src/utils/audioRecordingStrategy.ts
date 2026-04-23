@@ -46,7 +46,7 @@ export function getRecordingStrategy(
       maxDuration: 45,
       minDuration: 1,
       durationValidation: "lenient", // WebM metadata 不可靠，使用寬鬆模式（只檢查檔案大小）
-      minFileSize: 5000, // 5KB (統一門檻)
+      minFileSize: 500, // 500B (統一門檻)
       platformName: `iOS ${device.browser}`,
       notes:
         "iOS Safari 支援 WebM 錄音但 metadata 不準確，使用檔案大小判斷有效性",
@@ -63,7 +63,7 @@ export function getRecordingStrategy(
       maxDuration: 45,
       minDuration: 1,
       durationValidation: "lenient", // MP4 metadata 可靠但仍用寬鬆模式
-      minFileSize: 5000, // 5KB (統一門檻)
+      minFileSize: 500, // 500B (統一門檻)
       platformName: "macOS Safari",
       notes: "macOS Safari 只支援 MP4 格式，metadata 準確",
     };
@@ -82,7 +82,7 @@ export function getRecordingStrategy(
       maxDuration: 45,
       minDuration: 1,
       durationValidation: isIOS ? "lenient" : "metadata-first", // iOS Chrome metadata 不可靠
-      minFileSize: 5000, // 5KB (統一門檻)
+      minFileSize: 500, // 500B (統一門檻)
       platformName: device.browser + (device.isMobile ? " Mobile" : " Desktop"),
       notes: isIOS
         ? "iOS Chrome 使用 WebKit，metadata 不可靠，使用檔案大小判斷"
@@ -100,7 +100,7 @@ export function getRecordingStrategy(
       maxDuration: 45,
       minDuration: 1,
       durationValidation: "metadata-first",
-      minFileSize: 5000, // 5KB (統一門檻)
+      minFileSize: 500, // 500B (統一門檻)
       platformName: "Firefox",
       notes: "WebM/OGG 支援良好",
     };
@@ -115,7 +115,7 @@ export function getRecordingStrategy(
     maxDuration: 45,
     minDuration: 1,
     durationValidation: "lenient", // 寬鬆驗證
-    minFileSize: 5000, // 5KB (統一門檻)
+    minFileSize: 500, // 500B (統一門檻)
     platformName: "Unknown Browser",
     notes: "未知瀏覽器，使用保守策略",
   };
