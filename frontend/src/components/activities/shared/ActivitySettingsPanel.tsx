@@ -24,6 +24,7 @@
  */
 
 import { type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 export type AssignmentMode = "practice" | "exam";
 
@@ -38,10 +39,11 @@ export interface ActivitySettingsPanelProps {
   onAssignmentModeChange: (mode: AssignmentMode) => void;
   assignmentModeVisible?: boolean;
 
-  // 提示方式（選項由各活動決定）
+  // 提示方式（選項由各活動決定；hintModeVisible=false 時整個選項隱藏，例如 word_selection）
   hintMode: string;
   hintModeOptions: HintModeOption[];
   onHintModeChange: (mode: string) => void;
+  hintModeVisible?: boolean;
 
   // 選項數量（選擇題模式，choiceCountVisible=true 時顯示）
   choiceCount?: number;
@@ -124,6 +126,7 @@ export function ActivitySettingsPanel({
   hintMode,
   hintModeOptions,
   onHintModeChange,
+  hintModeVisible = true,
   choiceCount,
   onChoiceCountChange,
   choiceCountVisible = false,
@@ -149,12 +152,15 @@ export function ActivitySettingsPanel({
   showExamAnswers,
   onShowExamAnswersChange,
 }: ActivitySettingsPanelProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-4 mb-4">
       {/* 作業模式（assignmentModeVisible=false 時隱藏） */}
       {assignmentModeVisible && (
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">作業模式</label>
+          <label className="text-sm text-gray-600">
+            {t("activitySettings.assignmentMode.label")}
+          </label>
           <select
             value={assignmentMode}
             onChange={(e) =>
@@ -162,40 +168,56 @@ export function ActivitySettingsPanel({
             }
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white"
           >
-            <option value="practice">練習</option>
-            <option value="exam">考試</option>
+            <option value="practice">
+              {t("activitySettings.assignmentMode.practice")}
+            </option>
+            <option value="exam">
+              {t("activitySettings.assignmentMode.exam")}
+            </option>
           </select>
         </div>
       )}
 
-      {/* 提示方式 */}
-      <div className="flex items-center gap-2">
-        <label className="text-sm text-gray-600">提示方式</label>
-        <select
-          value={hintMode}
-          onChange={(e) => onHintModeChange(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white"
-        >
-          {hintModeOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* 提示方式（hintModeVisible=false 時隱藏，例如 word_selection） */}
+      {hintModeVisible && (
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">
+            {t("activitySettings.hintMode.label")}
+          </label>
+          <select
+            value={hintMode}
+            onChange={(e) => onHintModeChange(e.target.value)}
+            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white"
+          >
+            {hintModeOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* 選項數量（選擇題模式專屬） */}
       {choiceCountVisible && (
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">選項數量</label>
+          <label className="text-sm text-gray-600">
+            {t("activitySettings.choiceCount.label")}
+          </label>
           <select
             value={choiceCount}
             onChange={(e) => onChoiceCountChange?.(Number(e.target.value))}
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white"
           >
-            <option value={2}>2 個</option>
-            <option value={3}>3 個</option>
-            <option value={4}>4 個</option>
+            <option value={2}>
+              {t("activitySettings.choiceCount.option2")}
+            </option>
+            <option value={3}>
+              {t("activitySettings.choiceCount.option3")}
+            </option>
+            <option value={4}>
+              {t("activitySettings.choiceCount.option4")}
+            </option>
           </select>
         </div>
       )}
@@ -203,7 +225,9 @@ export function ActivitySettingsPanel({
       {/* 輸入方式（選擇題模式等情境下可隱藏） */}
       {inputMethodVisible && (
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">輸入方式</label>
+          <label className="text-sm text-gray-600">
+            {t("activitySettings.inputMethod.label")}
+          </label>
           <select
             value={inputMethod}
             onChange={(e) =>
@@ -213,9 +237,15 @@ export function ActivitySettingsPanel({
             }
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white"
           >
-            <option value="keyboard">鍵盤</option>
-            <option value="handwriting">手寫</option>
-            <option value="drawing">作畫</option>
+            <option value="keyboard">
+              {t("activitySettings.inputMethod.keyboard")}
+            </option>
+            <option value="handwriting">
+              {t("activitySettings.inputMethod.handwriting")}
+            </option>
+            <option value="drawing">
+              {t("activitySettings.inputMethod.drawing")}
+            </option>
           </select>
         </div>
       )}
@@ -224,7 +254,7 @@ export function ActivitySettingsPanel({
       <SettingCheckbox
         checked={showImage}
         onChange={onShowImageChange}
-        label="顯示圖片"
+        label={t("activitySettings.showImage")}
       />
 
       {/* 活動專屬的提示方式附加選項 */}
@@ -235,7 +265,7 @@ export function ActivitySettingsPanel({
         <SettingCheckbox
           checked={showLetterCount}
           onChange={onShowLetterCountChange}
-          label="顯示字母數"
+          label={t("activitySettings.showLetterCount")}
         />
       )}
 
@@ -246,7 +276,7 @@ export function ActivitySettingsPanel({
           <SettingCheckbox
             checked={forceVirtualKeyboard}
             onChange={onForceVirtualKeyboardChange}
-            label="強制顯示虛擬鍵盤"
+            label={t("activitySettings.forceVirtualKeyboard")}
           />
         )}
 
@@ -254,13 +284,15 @@ export function ActivitySettingsPanel({
       <SettingCheckbox
         checked={shuffleQuestions}
         onChange={onShuffleQuestionsChange}
-        label="打亂題目"
+        label={t("activitySettings.shuffleQuestions")}
       />
 
       {/* 每題限時 */}
       {questionTimeLimitVisible && (
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">每題限時</label>
+          <label className="text-sm text-gray-600">
+            {t("activitySettings.questionTimeLimit.label")}
+          </label>
           <select
             value={questionTimeLimit ?? "none"}
             onChange={(e) => {
@@ -269,10 +301,18 @@ export function ActivitySettingsPanel({
             }}
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white"
           >
-            <option value="none">不限時</option>
-            <option value={10}>10 秒</option>
-            <option value={20}>20 秒</option>
-            <option value={30}>30 秒</option>
+            <option value="none">
+              {t("activitySettings.questionTimeLimit.none")}
+            </option>
+            <option value={10}>
+              {t("activitySettings.questionTimeLimit.sec10")}
+            </option>
+            <option value={20}>
+              {t("activitySettings.questionTimeLimit.sec20")}
+            </option>
+            <option value={30}>
+              {t("activitySettings.questionTimeLimit.sec30")}
+            </option>
           </select>
         </div>
       )}
@@ -280,7 +320,9 @@ export function ActivitySettingsPanel({
       {/* 考試模式：考試時間 */}
       {assignmentMode === "exam" && (
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">考試時間（時:分）</label>
+          <label className="text-sm text-gray-600">
+            {t("activitySettings.examTimeLabel")}
+          </label>
           <input
             type="text"
             value={examTimeValue}
@@ -321,7 +363,7 @@ export function ActivitySettingsPanel({
         <SettingCheckbox
           checked={showExamAnswers}
           onChange={onShowExamAnswersChange}
-          label="考後顯示答案"
+          label={t("activitySettings.showExamAnswers")}
         />
       )}
     </div>

@@ -16,6 +16,7 @@ import VocabularySetPanel, {
   type VocabularySetPanelHandle,
 } from "@/components/VocabularySetPanel";
 import ContentCopyDialog from "@/components/ContentCopyDialog";
+import ContentDownloadSheet from "@/components/ContentDownloadSheet";
 import { AssignmentDialog, CartItem } from "@/components/AssignmentDialog";
 import { ProgramVisibilitySelector } from "@/components/ProgramVisibilitySelector";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
@@ -154,6 +155,13 @@ function TeacherTemplateProgramsInner() {
   // Content copy dialog state
   const [showCopyDialog, setShowCopyDialog] = useState(false);
   const [copyContentInfo, setCopyContentInfo] = useState<{
+    id: number;
+    title: string;
+  } | null>(null);
+
+  // Content download sheet state
+  const [downloadSheetOpen, setDownloadSheetOpen] = useState(false);
+  const [downloadContentInfo, setDownloadContentInfo] = useState<{
     id: number;
     title: string;
   } | null>(null);
@@ -659,6 +667,19 @@ function TeacherTemplateProgramsInner() {
                 setShowCopyDialog(true);
               }
             }}
+            onDownload={(item, level) => {
+              if (
+                level === 2 &&
+                typeof item.type === "string" &&
+                item.type.toLowerCase() === "vocabulary_set"
+              ) {
+                setDownloadContentInfo({
+                  id: item.id as number,
+                  title: (item.title || item.name || "") as string,
+                });
+                setDownloadSheetOpen(true);
+              }
+            }}
             onAssign={(item, level, parentId) => {
               if (level === 2 && typeof item.id === "number") {
                 const program = programs.find((p) =>
@@ -704,6 +725,18 @@ function TeacherTemplateProgramsInner() {
             onCopyContent={(contentId, title) => {
               setCopyContentInfo({ id: contentId, title });
               setShowCopyDialog(true);
+            }}
+            onDownloadContent={(content) => {
+              if (
+                typeof content.type === "string" &&
+                content.type.toLowerCase() === "vocabulary_set"
+              ) {
+                setDownloadContentInfo({
+                  id: content.id,
+                  title: content.title,
+                });
+                setDownloadSheetOpen(true);
+              }
             }}
             onInstantPractice={(content) => {
               setInstantPracticeContent({
@@ -1224,6 +1257,17 @@ function TeacherTemplateProgramsInner() {
           programs={programs}
         />
       )}
+
+      {/* Content Download Sheet (vocabulary_set worksheet PDF) */}
+      <ContentDownloadSheet
+        open={downloadSheetOpen}
+        onOpenChange={(open) => {
+          setDownloadSheetOpen(open);
+          if (!open) setDownloadContentInfo(null);
+        }}
+        contentId={downloadContentInfo?.id ?? null}
+        contentTitle={downloadContentInfo?.title}
+      />
 
       {/* Assignment Dialog (no classroomId = multi-classroom mode) */}
       <AssignmentDialog
