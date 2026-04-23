@@ -75,10 +75,13 @@ function shuffle<T>(arr: T[]): T[] {
  * 依序嘗試單字的各種常見變化形態，找出哪一種實際出現在例句中
  * 涵蓋：原型（含片語整組）、複數/三人稱單數、-es、-ies、過去式、-ing
  *
- * 回傳實際出現在例句的字形（保留原本大小寫）或 null（找不到 → 無法挖空）
+ * 回傳實際出現在例句的字形（保留原本大小寫）與位置；找不到時回傳 null。
  * 不規則變化（go/went, man/men）不在此涵蓋範圍
  */
-function findAnswerInSentence(text: string, sentence: string): string | null {
+function findAnswerInSentence(
+  text: string,
+  sentence: string,
+): { answer: string; index: number } | null {
   const base = text.trim();
   if (!base || !sentence) return null;
 
@@ -110,7 +113,9 @@ function findAnswerInSentence(text: string, sentence: string): string | null {
     const escaped = form.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`\\b${escaped}\\b`, "i");
     const match = sentence.match(re);
-    if (match) return match[0]; // 保留例句中原本的大小寫
+    if (match && match.index !== undefined) {
+      return { answer: match[0], index: match.index };
+    }
   }
 
   return null;
@@ -124,14 +129,12 @@ function buildClozeParts(
   text: string,
   sentence: string,
 ): { before: string; answer: string; after: string } | null {
-  const answer = findAnswerInSentence(text, sentence);
-  if (!answer) return null;
-  const idx = sentence.toLowerCase().indexOf(answer.toLowerCase());
-  if (idx < 0) return null;
+  const found = findAnswerInSentence(text, sentence);
+  if (!found) return null;
   return {
-    before: sentence.slice(0, idx),
-    answer,
-    after: sentence.slice(idx + answer.length),
+    before: sentence.slice(0, found.index),
+    answer: found.answer,
+    after: sentence.slice(found.index + found.answer.length),
   };
 }
 
