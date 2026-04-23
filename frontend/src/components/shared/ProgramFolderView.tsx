@@ -106,9 +106,9 @@ function getCoverImage(level?: string): string {
 /* ── Content type badge config ── */
 const TYPE_BADGE: Record<string, { label: string; bg: string; text: string }> =
   {
-    example_sentences: { label: "段落集", bg: "#F0FDF4", text: "#059669" },
-    EXAMPLE_SENTENCES: { label: "段落集", bg: "#F0FDF4", text: "#059669" },
-    reading_assessment: { label: "段落集", bg: "#F0FDF4", text: "#059669" },
+    example_sentences: { label: "例句集", bg: "#F0FDF4", text: "#059669" },
+    EXAMPLE_SENTENCES: { label: "例句集", bg: "#F0FDF4", text: "#059669" },
+    reading_assessment: { label: "例句集", bg: "#F0FDF4", text: "#059669" },
     vocabulary_set: { label: "單字集", bg: "#FFFBEB", text: "#D97706" },
     VOCABULARY_SET: { label: "單字集", bg: "#FFFBEB", text: "#D97706" },
     sentence_making: { label: "造句", bg: "#F5F3FF", text: "#7C3AED" },

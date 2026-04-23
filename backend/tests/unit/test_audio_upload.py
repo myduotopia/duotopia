@@ -146,6 +146,68 @@ class TestAudioUploadService:
         assert "File too large" in exc_info.value.detail
 
     @pytest.mark.asyncio
+    @patch("services.bigquery_logger.get_bigquery_logger")
+    async def test_upload_audio_file_too_small(self, mock_get_bq_logger, service):
+        """測試檔案過小（邊界：499 bytes < 500 bytes 最小值）"""
+        mock_bq_logger = AsyncMock()
+        mock_bq_logger.log_audio_error = AsyncMock()
+        mock_get_bq_logger.return_value = mock_bq_logger
+
+        mock_file = Mock(spec=UploadFile)
+        mock_file.content_type = "audio/webm"
+        mock_file.filename = "test.webm"
+        mock_file.read = AsyncMock(return_value=b"x" * 499)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await service.upload_audio(mock_file)
+
+        assert exc_info.value.status_code == 400
+        assert "too small" in exc_info.value.detail
+        mock_bq_logger.log_audio_error.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("services.audio_upload.uuid.uuid4")
+    @patch("services.audio_upload.datetime")
+    @patch("services.bigquery_logger.get_bigquery_logger")
+    async def test_upload_audio_file_at_min_boundary(
+        self, mock_get_bq_logger, mock_datetime, mock_uuid, service
+    ):
+        """測試檔案剛好達到最小值（邊界：500 bytes 應通過大小檢查並成功上傳）"""
+        mock_bq_logger = AsyncMock()
+        mock_bq_logger.log_audio_error = AsyncMock()
+        mock_get_bq_logger.return_value = mock_bq_logger
+
+        # Deterministic uuid / timestamp
+        mock_uuid.return_value = "test-uuid-boundary"
+        mock_now = Mock()
+        mock_now.strftime.return_value = "20240101_120000"
+        mock_datetime.now.return_value = mock_now
+
+        # Mock GCS client so upload path is deterministic (no real credentials needed)
+        mock_client = Mock()
+        mock_bucket = Mock()
+        mock_blob = Mock()
+        service.storage_client = mock_client
+        mock_client.bucket.return_value = mock_bucket
+        mock_bucket.blob.return_value = mock_blob
+
+        mock_file = Mock(spec=UploadFile)
+        mock_file.content_type = "audio/webm"
+        mock_file.filename = "test.webm"
+        mock_file.read = AsyncMock(return_value=b"x" * 500)
+
+        result = await service.upload_audio(mock_file, duration_seconds=20)
+
+        # Unconditional positive assertions: upload must succeed
+        assert result is not None
+        assert "https://storage.googleapis.com/duotopia-audio/recordings/" in result
+        mock_blob.upload_from_string.assert_called_once_with(
+            b"x" * 500, content_type="audio/webm"
+        )
+        # The too-small path must NOT have been taken
+        mock_bq_logger.log_audio_error.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_upload_audio_duration_too_long(self, service):
         """測試音檔過長"""
         mock_file = Mock(spec=UploadFile)

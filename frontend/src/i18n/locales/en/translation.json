@@ -1027,6 +1027,7 @@
       "submitShort": "Submit",
       "submitting": "Submitting...",
       "submittingShort": "Submitting",
+      "submitDisabledTooltip": "Some items are missing recordings. Please complete them before submitting.",
       "next": "Next",
       "previous": "Previous",
       "cancel": "Cancel",
@@ -1716,10 +1717,10 @@
         "partialCreated": "Partial success: {{successCount}}/{{totalCount}} classrooms created ({{studentCount}} students). Failed: {{failedNames}}"
       },
       "contentTypes": {
-        "reading_assessment": "Paragraph Set",
-        "READING_ASSESSMENT": "Paragraph Set",
-        "example_sentences": "Paragraph Set",
-        "EXAMPLE_SENTENCES": "Paragraph Set",
+        "reading_assessment": "Example Sentences",
+        "READING_ASSESSMENT": "Example Sentences",
+        "example_sentences": "Example Sentences",
+        "EXAMPLE_SENTENCES": "Example Sentences",
         "vocabulary_set": "Vocabulary Set",
         "VOCABULARY_SET": "Vocabulary Set",
         "sentence_making": "Vocabulary Set",
@@ -1817,8 +1818,8 @@
       "cancel": "Cancel",
       "types": {
         "example_sentences": {
-          "name": "Paragraph Set",
-          "description": "Create paragraphs for reading or ordering practice. Paste multiple paragraphs from an article, up to 120 words each",
+          "name": "Example Sentences",
+          "description": "Create sentences for reading or rearrangement practice (2-25 words)",
           "recommended": "Recommended"
         },
         "vocabulary_set": {
@@ -2789,7 +2790,7 @@
       "noDescription": "No Description",
       "unknownType": "Unknown Type",
       "notSet": "Not Set",
-      "readingAssessmentSettings": "Add Paragraph Set",
+      "readingAssessmentSettings": "Add Example Sentences",
       "subscriptionExpiredWarning": "⚠️ Subscription Expired",
       "daysRemaining": "{{days}} days remaining",
       "requiresSubscription": "Subscription required to assign homework",
@@ -3039,10 +3040,10 @@
       "resubmitted": "Resubmitted"
     },
     "contentTypes": {
-      "readingAssessment": "Paragraph Set",
-      "reading_assessment": "Paragraph Set",
-      "READING_ASSESSMENT": "Paragraph Set",
-      "EXAMPLE_SENTENCES": "Paragraph Set",
+      "readingAssessment": "Example Sentences",
+      "reading_assessment": "Example Sentences",
+      "READING_ASSESSMENT": "Example Sentences",
+      "EXAMPLE_SENTENCES": "Example Sentences",
       "speakingPractice": "Speaking Practice",
       "speaking_practice": "Speaking Practice",
       "SPEAKING_PRACTICE": "Speaking Practice",
@@ -3294,7 +3295,7 @@
       "featureInDevelopment": "{{type}} feature in development"
     },
     "dialogs": {
-      "addReadingTitle": "Add Paragraph Set",
+      "addReadingTitle": "Add Example Sentences",
       "editContentTitle": "Edit Content"
     },
     "toolbar": {
@@ -4347,8 +4348,6 @@
       "enterCustomLanguage": "Please enter a custom language name",
       "translationLanguageMismatch": "This vocabulary set already uses \"{{lang}}\" for translation. Please keep the translation language consistent.",
       "exampleTranslationLanguageMismatch": "Example sentence translations already use \"{{lang}}\". Please keep the translation language consistent.",
-      "removedInternalDupes": "Removed {{count}} duplicate(s)",
-      "removedExistingDupes": "Skipped {{count}} existing word(s)",
       "unsavedChangesConfirm": "You have unsaved changes. Are you sure you want to close?"
     },
     "placeholders": {
@@ -4403,8 +4402,14 @@
       "loadingContentFailed": "Failed to load content",
       "enterTitle": "Please enter a title",
       "addAtLeastOneItem": "Please add at least one content item",
+      "addAtLeastNItems": "Example sentences set requires at least {{limit}} items",
       "addAtLeastFiveItems": "Vocabulary set requires at least 5 words",
       "wordLimitExceeded": "Each item must not exceed {{limit}} words",
+      "wordLimitTooFew": "Each item must have at least {{limit}} words",
+      "wordsTooFewLabel": "< {{limit}} words",
+      "wordsTooManyLabel": "> {{limit}} words",
+      "batchPasteHasErrors": "Items added but have errors (word count or duplicates). Please fix the highlighted rows before saving.",
+      "translationDisabled": "Sentence translation is temporarily disabled. Please enter translation manually.",
       "duplicateItems": "Duplicate words or translations found. Please resolve duplicates before saving.",
       "duplicateWord": "Duplicate",
       "maxRowsReached": "Maximum 15 rows allowed",
@@ -4459,7 +4464,9 @@
       "batchLimitTruncated": "Exceeded limit, only the first {{count}} items will be processed",
       "batchLimitWarning": "Exceeded {{count}} item limit, only the first {{count}} will be processed",
       "batchPasteLimit": "Batch paste limit is {{count}} items, please reduce and try again",
-      "batchPasteLimitShort": "max {{count}} items"
+      "batchPasteLimitShort": "max {{count}} items",
+      "removedInternalDupes": "Removed {{count}} duplicate(s)",
+      "removedExistingDupes": "Skipped {{count}} existing word(s)"
     },
     "translationLanguages": {
       "chinese": "Chinese",
@@ -4802,7 +4809,7 @@
     },
     "contentTypes": {
       "reading_assessment": "Reading Assessment",
-      "example_sentences": "Paragraph Set",
+      "example_sentences": "Example Sentences",
       "vocabulary_set": "Vocabulary Set",
       "sentence_making": "Sentence Making"
     },

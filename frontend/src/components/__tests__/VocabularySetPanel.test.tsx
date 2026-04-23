@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ReactNode } from "react";
 import { render, waitFor } from "@testing-library/react";
 import VocabularySetPanel from "../VocabularySetPanel";
+import { SidebarProvider } from "@/contexts/SidebarContext";
+
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <SidebarProvider>{children}</SidebarProvider>
+);
 
 // Mock apiClient.getContentDetail
 const mockGetContentDetail = vi.fn();
@@ -72,7 +77,7 @@ describe("VocabularySetPanel data loading", () => {
       ],
     });
 
-    render(<VocabularySetPanel content={{ id: 123 }} />);
+    render(<VocabularySetPanel content={{ id: 123 }} />, { wrapper });
 
     await waitFor(() => {
       expect(mockGetContentDetail).toHaveBeenCalledWith(123);
@@ -80,7 +85,7 @@ describe("VocabularySetPanel data loading", () => {
   });
 
   it("should NOT call getContentDetail when content is undefined", async () => {
-    render(<VocabularySetPanel />);
+    render(<VocabularySetPanel />, { wrapper });
 
     // Give time for any potential async calls
     await new Promise((r) => setTimeout(r, 100));
@@ -89,7 +94,7 @@ describe("VocabularySetPanel data loading", () => {
   });
 
   it("should NOT call getContentDetail when content.id is undefined", async () => {
-    render(<VocabularySetPanel content={{}} />);
+    render(<VocabularySetPanel content={{}} />, { wrapper });
 
     await new Promise((r) => setTimeout(r, 100));
 
@@ -102,7 +107,9 @@ describe("VocabularySetPanel data loading", () => {
       items: [],
     });
 
-    const { container } = render(<VocabularySetPanel content={{ id: 456 }} />);
+    const { container } = render(<VocabularySetPanel content={{ id: 456 }} />, {
+      wrapper,
+    });
 
     await waitFor(() => {
       expect(mockGetContentDetail).toHaveBeenCalledWith(456);
@@ -115,7 +122,9 @@ describe("VocabularySetPanel data loading", () => {
   it("should handle API error gracefully", async () => {
     mockGetContentDetail.mockRejectedValue(new Error("Network error"));
 
-    const { container } = render(<VocabularySetPanel content={{ id: 789 }} />);
+    const { container } = render(<VocabularySetPanel content={{ id: 789 }} />, {
+      wrapper,
+    });
 
     await waitFor(() => {
       expect(mockGetContentDetail).toHaveBeenCalledWith(789);

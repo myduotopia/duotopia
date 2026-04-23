@@ -4,6 +4,7 @@ from datetime import datetime, timedelta  # noqa: F401
 from typing import Optional, Dict, Any  # noqa: F401
 from jose import JWTError, jwt
 import bcrypt
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -149,7 +150,9 @@ def verify_token(token: str):
 
 def authenticate_teacher(db: Session, email: str, password: str):
     """教師認證"""
-    teacher = db.query(Teacher).filter(Teacher.email == email).first()
+    teacher = (
+        db.query(Teacher).filter(func.lower(Teacher.email) == email.lower()).first()
+    )
     if not teacher:
         return None
     if not verify_password(password, teacher.password_hash):
@@ -158,7 +161,12 @@ def authenticate_teacher(db: Session, email: str, password: str):
 
 
 def authenticate_student(db: Session, email: str, password: str):
-    """學生認證（支援 Identity 統一密碼）"""
+    """學生認證（支援 Identity 統一密碼）
+
+    Note: `Student.email` 查詢維持 case-sensitive 直到 students 表完成資料
+    正規化 (4 筆大小寫重複 + 119 筆空字串) 並建立 ix_students_email_lower
+    functional index；見 #648 的 follow-up issue。
+    """
     student = db.query(Student).filter(Student.email == email).first()
     if not student:
         logger.info(
