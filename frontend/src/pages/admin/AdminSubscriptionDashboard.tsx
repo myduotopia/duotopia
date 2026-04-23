@@ -1078,11 +1078,17 @@ export default function AdminSubscriptionDashboard() {
                                 </span>
                               ) : teacher.has_trial_bonus ? (
                                 <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
-                                  {t("adminSubscription.status.trial", "Free Trial")}
+                                  {t(
+                                    "adminSubscription.status.trial",
+                                    "Free Trial",
+                                  )}
                                 </span>
                               ) : !teacher.email_verified ? (
                                 <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
-                                  {t("adminSubscription.status.unverified", "Unverified")}
+                                  {t(
+                                    "adminSubscription.status.unverified",
+                                    "Unverified",
+                                  )}
                                 </span>
                               ) : (
                                 <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">
@@ -1108,7 +1114,10 @@ export default function AdminSubscriptionDashboard() {
                                   className="h-8 text-purple-600 border-purple-300 hover:bg-purple-50"
                                 >
                                   <GraduationCap className="w-3 h-3 mr-1" />
-                                  {t("adminSubscription.buttons.grantPoints", "Grant")}
+                                  {t(
+                                    "adminSubscription.buttons.grantPoints",
+                                    "Grant",
+                                  )}
                                 </Button>
                               </div>
                             </TableCell>
@@ -2471,7 +2480,10 @@ export default function AdminSubscriptionDashboard() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                {t("adminSubscription.grant.expiresDays", "Valid for (days)")}{" "}
+                {t(
+                  "adminSubscription.grant.expiresDays",
+                  "Valid for (days)",
+                )}{" "}
               </label>
               <Input
                 type="number"

@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from typing import Optional  # noqa: F401
 from pydantic import BaseModel, EmailStr, field_validator
 from database import get_db
@@ -231,9 +230,7 @@ async def teacher_register(
 
     # Check if email exists (case-insensitive, matches the unique functional index)
     existing = (
-        db.query(Teacher)
-        .filter(func.lower(Teacher.email) == normalized_email)
-        .first()
+        db.query(Teacher).filter(func.lower(Teacher.email) == normalized_email).first()
     )
     if existing:
         # 如果已經驗證，不允許重複註冊

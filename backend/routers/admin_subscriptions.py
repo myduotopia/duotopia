@@ -543,9 +543,7 @@ async def get_teacher_periods(
                 "purchased_at": pkg.purchased_at.isoformat()
                 if pkg.purchased_at
                 else None,
-                "expires_at": pkg.expires_at.isoformat()
-                if pkg.expires_at
-                else None,
+                "expires_at": pkg.expires_at.isoformat() if pkg.expires_at else None,
                 "status": pkg.status,
                 "payment_id": pkg.payment_id,
             }
