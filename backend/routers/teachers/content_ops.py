@@ -221,9 +221,13 @@ async def create_content(
                 metadata["audio_settings"] = item_data["audio_settings"]
 
             # 根據前端傳來的資料決定存儲到 translation 欄位的內容
-            # 優先使用 definition (中文翻譯)，如果沒有則使用 translation
-            translation_value = item_data.get("definition") or item_data.get(
-                "translation", ""
+            # 優先使用語言感知的 vocabulary_translation（前端目前選擇語言的翻譯，
+            # 中/英/日/韓），舊欄位作為相容性 fallback。
+            translation_value = (
+                item_data.get("vocabulary_translation")
+                or item_data.get("definition")
+                or item_data.get("translation", "")
+                or ""  # guard against explicit None value
             )
 
             # 處理 part_of_speech：前端可能傳送 parts_of_speech (plural, array)
@@ -508,9 +512,13 @@ async def update_content(
                     metadata["audio_settings"] = item_data["audio_settings"]
 
                 # 根據前端傳來的資料決定存儲到 translation 欄位的內容
-                # 優先使用 definition (中文翻譯)，如果沒有則使用 translation
-                translation_value = item_data.get("definition") or item_data.get(
-                    "translation", ""
+                # 優先使用語言感知的 vocabulary_translation（前端目前選擇語言的翻譯，
+                # 中/英/日/韓），舊欄位作為相容性 fallback。
+                translation_value = (
+                    item_data.get("vocabulary_translation")
+                    or item_data.get("definition")
+                    or item_data.get("translation", "")
+                    or ""  # guard against explicit None value
                 )
 
                 # 計算 word_count（如果有 example_sentence）
