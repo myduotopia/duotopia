@@ -5,6 +5,7 @@ Admin Subscription Management API
 不依賴 teacher_subscription_transactions
 """
 
+from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func
@@ -423,7 +424,8 @@ async def get_all_teachers_subscriptions(
     )
 
     # 🔥 Preload credit packages for all teachers (avoid N+1)
-    teacher_ids = [t.id for t, _ in teachers_with_subs]
+    # Deduplicate teacher_ids since the same teacher may appear with multiple periods
+    teacher_ids = list({t.id for t, _ in teachers_with_subs})
     all_credit_packages = (
         db.query(CreditPackage)
         .filter(
@@ -432,10 +434,8 @@ async def get_all_teachers_subscriptions(
         )
         .all()
     )
-    credit_packages_by_teacher = {}
+    credit_packages_by_teacher = defaultdict(list)
     for pkg in all_credit_packages:
-        if pkg.teacher_id not in credit_packages_by_teacher:
-            credit_packages_by_teacher[pkg.teacher_id] = []
         credit_packages_by_teacher[pkg.teacher_id].append(pkg)
 
     result = []
@@ -679,8 +679,6 @@ async def get_transaction_analytics(
         )
 
     # 計算月度統計
-    from collections import defaultdict
-
     monthly_stats = defaultdict(lambda: {"total": 0, "by_teacher": defaultdict(int)})
 
     for txn, teacher in transactions:
@@ -716,8 +714,6 @@ async def get_learning_analytics(
     """
     學習分析：獲取教師的班級、學生、作業、點數使用統計
     """
-    from collections import defaultdict
-
     # 1. 獲取所有教師的基本統計
     teachers = db.query(Teacher).all()
 

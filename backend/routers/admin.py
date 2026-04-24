@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from typing import Dict, Any, Optional
-from pydantic import BaseModel, EmailStr
-from datetime import datetime, timezone
+from pydantic import BaseModel, EmailStr, Field
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 import logging
 
 from database import get_db, get_engine, Base
@@ -95,9 +96,9 @@ class AdminGrantCreditRequest(BaseModel):
     """管理員贈送點數包請求"""
 
     teacher_email: EmailStr
-    points: int  # 點數數量
-    reason: str  # 贈送原因
-    expires_days: int = 365  # 有效天數，預設 365 天
+    points: int = Field(gt=0, le=100_000)  # 點數數量，上限 100,000 防誤填
+    reason: str = Field(max_length=500)  # 贈送原因
+    expires_days: int = Field(default=365, gt=0, le=3650)  # 有效天數
 
 
 class ExtensionHistoryRecord(BaseModel):
@@ -358,10 +359,8 @@ async def list_teachers(
         )
         .all()
     )
-    credit_packages_by_teacher = {}
+    credit_packages_by_teacher = defaultdict(list)
     for pkg in all_credit_packages:
-        if pkg.teacher_id not in credit_packages_by_teacher:
-            credit_packages_by_teacher[pkg.teacher_id] = []
         credit_packages_by_teacher[pkg.teacher_id].append(pkg)
 
     # Build maps: teacher_id -> [periods] and teacher_id -> latest_period
@@ -1240,22 +1239,9 @@ async def grant_credit_package(
     """
     管理員贈送點數包給教師
 
-    建立一個 source=admin_grant 的 CreditPackage
+    建立一個 source=admin_grant 的 CreditPackage。
+    輸入驗證由 AdminGrantCreditRequest 的 Pydantic Field 處理。
     """
-    from datetime import timedelta
-
-    if grant_req.points <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Points must be greater than 0",
-        )
-
-    if grant_req.expires_days <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Expires days must be greater than 0",
-        )
-
     # 🔒 Case-insensitive email lookup
     teacher = (
         db.query(Teacher)

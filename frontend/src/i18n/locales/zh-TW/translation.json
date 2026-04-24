@@ -3515,7 +3515,18 @@
       "cancel": "取消",
       "processing": "處理中...",
       "cancelSubscription": "取消訂閱",
-      "updateSubscription": "更新訂閱"
+      "updateSubscription": "更新訂閱",
+      "grantPoints": "贈送點數"
+    },
+    "grant": {
+      "title": "贈送點數",
+      "points": "點數",
+      "pointsPlaceholder": "例如：2000",
+      "expiresDays": "有效天數",
+      "reason": "贈送原因",
+      "reasonPlaceholder": "為何贈送這些點數？",
+      "granting": "贈送中...",
+      "confirm": "確認贈送"
     },
     "stats": {
       "totalTeachers": "總教師數",
@@ -3546,7 +3557,9 @@
     },
     "status": {
       "active": "啟用",
-      "none": "無"
+      "none": "無",
+      "trial": "免費試用",
+      "unverified": "未驗證"
     },
     "periodTable": {
       "title": "訂閱期數",
@@ -3643,11 +3656,13 @@
       "operationFailed": "操作失敗：{{detail}}",
       "searchFailed": "搜尋失敗：{{detail}}",
       "loadPeriodsFailed": "無法載入訂閱期數",
-      "loadHistoryFailed": "無法載入編輯歷史"
+      "loadHistoryFailed": "無法載入編輯歷史",
+      "grantFailed": "贈送點數失敗"
     },
     "messages": {
       "operationSuccess": "成功！{{teacherName}} - {{message}}",
-      "completed": "操作完成"
+      "completed": "操作完成",
+      "grantSuccess": "已成功贈送 {{points}} 點給 {{name}}"
     }
   },
   "adminMonitoring": {

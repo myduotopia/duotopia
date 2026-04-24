@@ -3511,7 +3511,18 @@
       "cancel": "Cancel",
       "processing": "Processing...",
       "cancelSubscription": "Cancel Subscription",
-      "updateSubscription": "Update Subscription"
+      "updateSubscription": "Update Subscription",
+      "grantPoints": "Grant"
+    },
+    "grant": {
+      "title": "Grant Points",
+      "points": "Points",
+      "pointsPlaceholder": "e.g. 2000",
+      "expiresDays": "Valid for (days)",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why are these points being granted?",
+      "granting": "Granting...",
+      "confirm": "Confirm Grant"
     },
     "stats": {
       "totalTeachers": "Total Teachers",
@@ -3542,7 +3553,9 @@
     },
     "status": {
       "active": "Active",
-      "none": "None"
+      "none": "None",
+      "trial": "Free Trial",
+      "unverified": "Unverified"
     },
     "periodTable": {
       "title": "Subscription Periods",
@@ -3639,11 +3652,13 @@
       "operationFailed": "Failed: {{detail}}",
       "searchFailed": "Search failed: {{detail}}",
       "loadPeriodsFailed": "Failed to load subscription periods",
-      "loadHistoryFailed": "Failed to load edit history"
+      "loadHistoryFailed": "Failed to load edit history",
+      "grantFailed": "Failed to grant points"
     },
     "messages": {
       "operationSuccess": "Success! {{teacherName}} - {{message}}",
-      "completed": "Operation completed"
+      "completed": "Operation completed",
+      "grantSuccess": "Successfully granted {{points}} points to {{name}}"
     }
   },
   "adminMonitoring": {

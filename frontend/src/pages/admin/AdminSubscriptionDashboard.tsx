@@ -47,6 +47,7 @@ import {
   ChevronRight,
   ChevronDown,
   Receipt,
+  Gift,
   GraduationCap,
   Download,
   RefreshCcw,
@@ -1107,7 +1108,7 @@ export default function AdminSubscriptionDashboard() {
                                   onClick={() => handleOpenGrantModal(teacher)}
                                   className="h-8 text-purple-600 border-purple-300 hover:bg-purple-50"
                                 >
-                                  <GraduationCap className="w-3 h-3 mr-1" />
+                                  <Gift className="w-3 h-3 mr-1" />
                                   {t(
                                     "adminSubscription.buttons.grantPoints",
                                     "Grant",
@@ -2532,7 +2533,7 @@ export default function AdminSubscriptionDashboard() {
                   </>
                 ) : (
                   <>
-                    <GraduationCap className="w-4 h-4 mr-2" />
+                    <Gift className="w-4 h-4 mr-2" />
                     {t("adminSubscription.grant.confirm", "Confirm Grant")}
                   </>
                 )}
