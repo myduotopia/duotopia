@@ -448,12 +448,6 @@ export default function AdminSubscriptionDashboard() {
       return;
     }
 
-    console.log("🔄 Sending refund request:", {
-      rec_trade_id: selectedPeriod.payment_id,
-      amount: refundForm.amount,
-      reason: refundForm.reason,
-    });
-
     try {
       setLoading(true);
       await apiClient.post("/api/admin/refund", {
@@ -1177,7 +1171,7 @@ export default function AdminSubscriptionDashboard() {
                                       <TableBody>
                                         {teacherPeriods[teacher.teacher_id].map(
                                           (period) => (
-                                            <>
+                                            <React.Fragment key={period.id}>
                                               <TableRow
                                                 key={period.id}
                                                 className="cursor-pointer hover:bg-gray-100"
@@ -1583,7 +1577,7 @@ export default function AdminSubscriptionDashboard() {
                                                     </TableCell>
                                                   </TableRow>
                                                 )}
-                                            </>
+                                            </React.Fragment>
                                           ),
                                         )}
                                       </TableBody>
