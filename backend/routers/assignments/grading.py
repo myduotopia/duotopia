@@ -361,6 +361,16 @@ async def get_student_submission(
     # 從資料庫獲取真實的 content 題目資料
     actual_assignment_id = assignment.assignment_id
 
+    # 載入 Assignment 以取得 practice_mode（批改頁依 practice_mode 分流中間欄）
+    parent_assignment = (
+        db.query(Assignment).filter(Assignment.id == actual_assignment_id).first()
+    )
+    practice_mode = (
+        parent_assignment.practice_mode
+        if parent_assignment and parent_assignment.practice_mode
+        else "reading"
+    )
+
     # 查詢作業關聯的 contents (按 order_index 排序)
     assignment_contents = (
         db.query(AssignmentContent, Content)
@@ -422,6 +432,12 @@ async def get_student_submission(
                         "feedback": "",
                         "passed": None,
                     }
+
+                    # 例句重組專用：補上 max_errors（來自 content_item）
+                    if practice_mode == "rearrangement":
+                        submission["max_errors"] = (
+                            item.max_errors if hasattr(item, "max_errors") else None
+                        )
 
                     # 使用 content_item_id 來獲取對應的 StudentItemProgress 記錄
                     item_progress = progress_by_item_id.get(item.id)
@@ -493,6 +509,45 @@ async def get_student_submission(
                                     "word_details": ai_data.get("word_details", []),
                                 }
 
+                        # 例句重組：補上 rearrangement 相關欄位
+                        if practice_mode == "rearrangement":
+                            submission[
+                                "rearrangement_data"
+                            ] = item_progress.rearrangement_data
+                            submission["error_count"] = item_progress.error_count
+                            submission[
+                                "correct_word_count"
+                            ] = item_progress.correct_word_count
+                            submission["retry_count"] = item_progress.retry_count
+                            submission["expected_score"] = (
+                                float(item_progress.expected_score)
+                                if item_progress.expected_score is not None
+                                else None
+                            )
+                            submission["timeout_ended"] = item_progress.timeout_ended
+                            # status 供前端判斷是否顯示歷程（僅 COMPLETED 顯示）
+                            submission["item_status"] = (
+                                item_progress.status.value
+                                if hasattr(item_progress.status, "value")
+                                else item_progress.status
+                            )
+                            # 完成時間：優先取 rearrangement_data.completed_at，
+                            # 沒有則 fallback updated_at（COMPLETED 後 updated_at ≈ 完成時間）
+                            rd = item_progress.rearrangement_data or {}
+                            completed_at = rd.get("completed_at")
+                            if (
+                                not completed_at
+                                and item_progress.status
+                                and (
+                                    item_progress.status == "COMPLETED"
+                                    or getattr(item_progress.status, "value", None)
+                                    == "COMPLETED"
+                                )
+                                and item_progress.updated_at
+                            ):
+                                completed_at = item_progress.updated_at.isoformat()
+                            submission["completed_at"] = completed_at
+
                     submissions.append(submission)
                     group["submissions"].append(submission)
                     item_index += 1
@@ -527,6 +582,7 @@ async def get_student_submission(
             assignment.submitted_at.isoformat() if assignment.submitted_at else None
         ),
         "content_type": "SPEAKING_PRACTICE",
+        "practice_mode": practice_mode,
         "submissions": submissions,
         "content_groups": content_groups,
         "current_score": assignment.score,

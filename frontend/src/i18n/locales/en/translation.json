@@ -2921,6 +2921,28 @@
       "resubmitted": "Resubmitted",
       "resubmittedShort": "Resub",
       "notAssigned": "Not Assigned"
+    },
+    "rearrangement": {
+      "labels": {
+        "errors": "Errors",
+        "correctWords": "Correct Words",
+        "retryCount": "Retries",
+        "expectedScore": "Score",
+        "timedOut": "Timed Out",
+        "selectionHistory": "Selection History",
+        "selected": "Selected",
+        "expected": "Expected",
+        "completedAt": "Completed at",
+        "detailedErrorHistory": "Detailed Error History"
+      },
+      "messages": {
+        "noHistory": "Student hasn't answered yet",
+        "detailedErrorHistoryComingSoon": "Coming soon: full word-by-word selection log for every attempt (including forced-retry and timed-out runs)."
+      },
+      "badges": {
+        "incomplete": "Below passing",
+        "notAnswered": "Not answered"
+      }
     }
   },
   "assignmentDetail": {

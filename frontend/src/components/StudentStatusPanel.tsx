@@ -58,7 +58,7 @@ type ViewMode = "grid" | "list";
 type TabValue = "all" | "assigned" | "unassigned";
 type SortMode = "number" | "name" | "score" | "status";
 
-const GRADABLE_MODES = new Set(["reading", "word_reading"]);
+const GRADABLE_MODES = new Set(["reading", "word_reading", "rearrangement"]);
 
 const STATUS_ORDER: Record<string, number> = {
   NOT_STARTED: 0,
@@ -634,7 +634,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     }, [filteredStudents, selectedIds, isCheckboxDisabled]);
 
     // ---- Navigation ----
-    // Gradable modes (reading / word_reading): open grading page for this student in a new tab.
+    // Gradable modes (see GRADABLE_MODES): open grading page for this student in a new tab.
     // Skip unassigned and NOT_STARTED — nothing to grade yet.
     const isGradableStudent = useCallback(
       (s: StudentProgress) =>
