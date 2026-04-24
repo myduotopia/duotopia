@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from typing import Dict, Any, Optional
-from pydantic import BaseModel, EmailStr
-from datetime import datetime, timezone
+from pydantic import BaseModel, EmailStr, Field
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 import logging
 
 from database import get_db, get_engine, Base
@@ -29,6 +30,7 @@ from models import (
     Organization,
     TeacherOrganization,
 )
+from models.credit_package import CreditPackage
 from routers.teachers import get_current_teacher
 from services.tappay_service import TapPayService
 from services.casbin_service import CasbinService
@@ -82,6 +84,21 @@ class TeacherSubscriptionInfo(BaseModel):
     status: str  # active/expired/cancelled/none
     total_periods: int  # 總共訂閱過幾期
     created_at: str
+    # Credit package (trial bonus / admin grant) info
+    credit_points_total: int = 0
+    credit_points_used: int = 0
+    credit_points_remaining: int = 0
+    has_trial_bonus: bool = False
+    email_verified: bool = False
+
+
+class AdminGrantCreditRequest(BaseModel):
+    """管理員贈送點數包請求"""
+
+    teacher_email: EmailStr
+    points: int = Field(gt=0, le=100_000)  # 點數數量，上限 100,000 防誤填
+    reason: str = Field(max_length=500)  # 贈送原因
+    expires_days: int = Field(default=365, gt=0, le=3650)  # 有效天數
 
 
 class ExtensionHistoryRecord(BaseModel):
@@ -333,6 +350,19 @@ async def list_teachers(
         .all()
     )
 
+    # 🔥 Preload credit packages for all teachers (avoid N+1)
+    all_credit_packages = (
+        db.query(CreditPackage)
+        .filter(
+            CreditPackage.teacher_id.in_(teacher_ids),
+            CreditPackage.status == "active",
+        )
+        .all()
+    )
+    credit_packages_by_teacher = defaultdict(list)
+    for pkg in all_credit_packages:
+        credit_packages_by_teacher[pkg.teacher_id].append(pkg)
+
     # Build maps: teacher_id -> [periods] and teacher_id -> latest_period
     periods_by_teacher = {}
     latest_period_by_teacher = {}
@@ -398,6 +428,14 @@ async def list_teachers(
             if status_filter != subscription_status:
                 continue
 
+        # 🔥 Credit package info
+        teacher_credit_packages = credit_packages_by_teacher.get(teacher.id, [])
+        credit_points_total = sum(p.points_total for p in teacher_credit_packages)
+        credit_points_used = sum(p.points_used for p in teacher_credit_packages)
+        has_trial_bonus = any(
+            p.source == "trial_bonus" for p in teacher_credit_packages
+        )
+
         result.append(
             TeacherSubscriptionInfo(
                 id=teacher.id,
@@ -418,6 +456,11 @@ async def list_teachers(
                 created_at=teacher.created_at.isoformat()
                 if teacher.created_at
                 else None,
+                credit_points_total=credit_points_total,
+                credit_points_used=credit_points_used,
+                credit_points_remaining=credit_points_total - credit_points_used,
+                has_trial_bonus=has_trial_bonus,
+                email_verified=teacher.email_verified or False,
             )
         )
 
@@ -736,10 +779,13 @@ async def create_organization_as_admin(
     Returns organization ID and owner info.
     """
 
-    # Validate owner exists and is verified
+    # Validate owner exists and is verified (case-insensitive)
     owner = (
         db.query(Teacher)
-        .filter(Teacher.email == org_data.owner_email, Teacher.email_verified.is_(True))
+        .filter(
+            func.lower(Teacher.email) == org_data.owner_email.strip().lower(),
+            Teacher.email_verified.is_(True),
+        )
         .first()
     )
 
@@ -770,7 +816,10 @@ async def create_organization_as_admin(
         for staff_email in org_data.project_staff_emails:
             staff_teacher = (
                 db.query(Teacher)
-                .filter(Teacher.email == staff_email, Teacher.email_verified.is_(True))
+                .filter(
+                    func.lower(Teacher.email) == staff_email.strip().lower(),
+                    Teacher.email_verified.is_(True),
+                )
                 .first()
             )
 
@@ -1158,7 +1207,12 @@ async def get_teacher_by_email(
     - 404 if teacher not found
     - 403 if caller is not admin
     """
-    teacher = db.query(Teacher).filter(Teacher.email == email).first()
+    # 🔒 Email case-insensitive lookup
+    teacher = (
+        db.query(Teacher)
+        .filter(func.lower(Teacher.email) == email.strip().lower())
+        .first()
+    )
 
     if not teacher:
         raise HTTPException(
@@ -1173,3 +1227,71 @@ async def get_teacher_by_email(
         phone=teacher.phone,
         email_verified=teacher.email_verified,
     )
+
+
+# ============ 點數贈送 API ============
+@router.post("/credit-packages/grant")
+async def grant_credit_package(
+    grant_req: AdminGrantCreditRequest,
+    admin: Teacher = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    管理員贈送點數包給教師
+
+    建立一個 source=admin_grant 的 CreditPackage。
+    輸入驗證由 AdminGrantCreditRequest 的 Pydantic Field 處理。
+    """
+    # 🔒 Case-insensitive email lookup
+    teacher = (
+        db.query(Teacher)
+        .filter(func.lower(Teacher.email) == grant_req.teacher_email.strip().lower())
+        .first()
+    )
+
+    if not teacher:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Teacher with email {grant_req.teacher_email} not found",
+        )
+
+    now = datetime.now(timezone.utc)
+
+    credit_package = CreditPackage(
+        teacher_id=teacher.id,
+        package_id="admin-grant",
+        points_total=grant_req.points,
+        points_used=0,
+        price_paid=0,
+        purchased_at=now,
+        expires_at=now + timedelta(days=grant_req.expires_days),
+        status="active",
+        source="admin_grant",
+    )
+
+    db.add(credit_package)
+    db.commit()
+    db.refresh(credit_package)
+
+    logger.info(
+        f"Admin {admin.email} granted {grant_req.points} points to {teacher.email}. "
+        f"Reason: {grant_req.reason}"
+    )
+
+    return {
+        "message": f"Successfully granted {grant_req.points} points to {teacher.email}",
+        "credit_package": {
+            "id": credit_package.id,
+            "teacher_id": teacher.id,
+            "teacher_email": teacher.email,
+            "teacher_name": teacher.name,
+            "points_total": credit_package.points_total,
+            "expires_at": credit_package.expires_at.isoformat(),
+            "source": credit_package.source,
+        },
+        "granted_by": {
+            "admin_id": admin.id,
+            "admin_email": admin.email,
+            "reason": grant_req.reason,
+        },
+    }

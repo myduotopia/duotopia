@@ -47,6 +47,7 @@ import {
   ChevronRight,
   ChevronDown,
   Receipt,
+  Gift,
   GraduationCap,
   Download,
   RefreshCcw,
@@ -75,6 +76,7 @@ interface TeacherSubscriptionInfo {
   teacher_id: number;
   teacher_name: string;
   teacher_email: string;
+  email_verified: boolean;
   current_subscription: {
     period_id: number;
     plan_name: string;
@@ -83,6 +85,10 @@ interface TeacherSubscriptionInfo {
     end_date: string;
     status: string;
   } | null;
+  credit_points_total: number;
+  credit_points_used: number;
+  credit_points_remaining: number;
+  has_trial_bonus: boolean;
 }
 
 interface SubscriptionPeriod {
@@ -97,6 +103,20 @@ interface SubscriptionPeriod {
   payment_id?: string;
   payment_status: string;
   amount_paid?: number;
+}
+
+interface CreditPackageInfo {
+  id: number;
+  package_id: string;
+  source: string; // "trial_bonus" | "admin_grant" | "purchase" | "org_purchase"
+  points_total: number;
+  points_used: number;
+  points_remaining: number;
+  price_paid: number;
+  purchased_at: string;
+  expires_at: string;
+  status: string;
+  payment_id?: string;
 }
 
 interface EditHistoryRecord {
@@ -214,6 +234,9 @@ export default function AdminSubscriptionDashboard() {
   const [teacherPeriods, setTeacherPeriods] = useState<
     Record<number, SubscriptionPeriod[]>
   >({});
+  const [teacherCreditPackages, setTeacherCreditPackages] = useState<
+    Record<number, CreditPackageInfo[]>
+  >({});
   const [periodHistory, setPeriodHistory] = useState<
     Record<number, EditHistoryRecord[]>
   >({});
@@ -244,6 +267,14 @@ export default function AdminSubscriptionDashboard() {
     amount: undefined as number | undefined,
     reason: "",
     notes: "",
+  });
+
+  // Grant points modal state
+  const [grantModalOpen, setGrantModalOpen] = useState(false);
+  const [grantForm, setGrantForm] = useState({
+    points: undefined as number | undefined,
+    reason: "",
+    expires_days: 365,
   });
 
   useEffect(() => {
@@ -341,6 +372,51 @@ export default function AdminSubscriptionDashboard() {
     setEditModalOpen(true);
   };
 
+  const handleOpenGrantModal = (teacher: TeacherSubscriptionInfo) => {
+    setSelectedTeacher(teacher);
+    setGrantForm({
+      points: undefined,
+      reason: "",
+      expires_days: 365,
+    });
+    setGrantModalOpen(true);
+  };
+
+  const handleSubmitGrant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTeacher || !grantForm.points || !grantForm.reason) return;
+
+    try {
+      setLoading(true);
+      await apiClient.post("/api/admin/credit-packages/grant", {
+        teacher_email: selectedTeacher.teacher_email,
+        points: grantForm.points,
+        reason: grantForm.reason,
+        expires_days: grantForm.expires_days,
+      });
+
+      setSuccessMessage(
+        t("adminSubscription.messages.grantSuccess", {
+          points: grantForm.points,
+          name: selectedTeacher.teacher_name,
+          defaultValue: `Successfully granted ${grantForm.points} points to ${selectedTeacher.teacher_name}`,
+        }),
+      );
+      setGrantModalOpen(false);
+      loadDashboardData();
+    } catch (error: unknown) {
+      if (isApiError(error)) {
+        setErrorMessage(
+          error.response?.data?.detail ||
+            error.message ||
+            t("adminSubscription.errors.grantFailed", "Failed to grant points"),
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOpenRefundModal = (period: SubscriptionPeriod) => {
     setSelectedPeriod(period);
     setRefundForm({
@@ -372,12 +448,6 @@ export default function AdminSubscriptionDashboard() {
       setErrorMessage("請填寫退款原因");
       return;
     }
-
-    console.log("🔄 Sending refund request:", {
-      rec_trade_id: selectedPeriod.payment_id,
-      amount: refundForm.amount,
-      reason: refundForm.reason,
-    });
 
     try {
       setLoading(true);
@@ -551,26 +621,24 @@ export default function AdminSubscriptionDashboard() {
       setExpandedTeacherId(teacherId);
       setExpandedPeriodId(null);
 
-      // Fetch periods if not already loaded
+      // Fetch periods + credit_packages if not already loaded
       if (!teacherPeriods[teacherId]) {
         try {
           const response = await apiClient.get(
             `/api/admin/subscription/teacher/${teacherId}/periods`,
           );
-          const periods = (response as { periods: SubscriptionPeriod[] })
-            .periods;
-
-          // Debug: 檢查第一個 period 的資料
-          if (periods.length > 0) {
-            console.log("🔍 Period data:", periods[0]);
-            console.log("payment_id:", periods[0].payment_id);
-            console.log("payment_status:", periods[0].payment_status);
-            console.log("status:", periods[0].status);
-          }
+          const data = response as {
+            periods: SubscriptionPeriod[];
+            credit_packages?: CreditPackageInfo[];
+          };
 
           setTeacherPeriods((prev) => ({
             ...prev,
-            [teacherId]: periods,
+            [teacherId]: data.periods,
+          }));
+          setTeacherCreditPackages((prev) => ({
+            ...prev,
+            [teacherId]: data.credit_packages || [],
           }));
         } catch (error) {
           console.error("Failed to load periods:", error);
@@ -808,10 +876,10 @@ export default function AdminSubscriptionDashboard() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-4 md:mb-6 h-auto md:h-14 bg-white border-2 border-gray-200 p-1">
+        <TabsList className="flex w-full justify-start gap-1 mb-4 md:mb-6 h-auto bg-transparent border-b border-gray-200 rounded-none p-0">
           <TabsTrigger
             value="subscriptions"
-            className="flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base font-semibold py-2 md:py-0 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
           >
             <Users className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
             <span className="hidden sm:inline">
@@ -821,7 +889,7 @@ export default function AdminSubscriptionDashboard() {
           </TabsTrigger>
           <TabsTrigger
             value="transactions"
-            className="flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base font-semibold py-2 md:py-0 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
           >
             <Receipt className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
             <span className="hidden sm:inline">
@@ -831,7 +899,7 @@ export default function AdminSubscriptionDashboard() {
           </TabsTrigger>
           <TabsTrigger
             value="learning"
-            className="flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base font-semibold py-2 md:py-0 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
           >
             <GraduationCap className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
             <span className="hidden sm:inline">
@@ -977,6 +1045,22 @@ export default function AdminSubscriptionDashboard() {
                                     />
                                   </div>
                                 </div>
+                              ) : teacher.credit_points_total > 0 ? (
+                                <div className="space-y-1">
+                                  <div className="text-sm text-purple-700">
+                                    {teacher.credit_points_used.toLocaleString()}{" "}
+                                    /{" "}
+                                    {teacher.credit_points_total.toLocaleString()}
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div
+                                      className="bg-purple-500 h-2 rounded-full"
+                                      style={{
+                                        width: `${Math.min((teacher.credit_points_used / teacher.credit_points_total) * 100 || 0, 100)}%`,
+                                      }}
+                                    />
+                                  </div>
+                                </div>
                               ) : (
                                 "-"
                               )}
@@ -987,6 +1071,20 @@ export default function AdminSubscriptionDashboard() {
                                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
                                   {t("adminSubscription.status.active")}
                                 </span>
+                              ) : teacher.has_trial_bonus ? (
+                                <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
+                                  {t(
+                                    "adminSubscription.status.trial",
+                                    "Free Trial",
+                                  )}
+                                </span>
+                              ) : !teacher.email_verified ? (
+                                <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
+                                  {t(
+                                    "adminSubscription.status.unverified",
+                                    "Unverified",
+                                  )}
+                                </span>
                               ) : (
                                 <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">
                                   {t("adminSubscription.status.none")}
@@ -994,15 +1092,29 @@ export default function AdminSubscriptionDashboard() {
                               )}
                             </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleOpenEditModal(teacher)}
-                                className="h-8"
-                              >
-                                <Edit className="w-3 h-3 mr-1" />
-                                {t("adminSubscription.buttons.edit")}
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenEditModal(teacher)}
+                                  className="h-8"
+                                >
+                                  <Edit className="w-3 h-3 mr-1" />
+                                  {t("adminSubscription.buttons.edit")}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenGrantModal(teacher)}
+                                  className="h-8 text-purple-600 border-purple-300 hover:bg-purple-50"
+                                >
+                                  <Gift className="w-3 h-3 mr-1" />
+                                  {t(
+                                    "adminSubscription.buttons.grantPoints",
+                                    "Grant",
+                                  )}
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
 
@@ -1060,7 +1172,7 @@ export default function AdminSubscriptionDashboard() {
                                       <TableBody>
                                         {teacherPeriods[teacher.teacher_id].map(
                                           (period) => (
-                                            <>
+                                            <React.Fragment key={period.id}>
                                               <TableRow
                                                 key={period.id}
                                                 className="cursor-pointer hover:bg-gray-100"
@@ -1466,12 +1578,167 @@ export default function AdminSubscriptionDashboard() {
                                                     </TableCell>
                                                   </TableRow>
                                                 )}
-                                            </>
+                                            </React.Fragment>
                                           ),
                                         )}
                                       </TableBody>
                                     </Table>
                                   </div>
+
+                                  {/* Layer 2b: Credit Packages (trial / admin_grant / purchase) */}
+                                  {teacherCreditPackages[teacher.teacher_id] &&
+                                    teacherCreditPackages[teacher.teacher_id]
+                                      .length > 0 && (
+                                      <div className="p-4 pt-0">
+                                        <h4 className="font-semibold mb-3 text-sm">
+                                          {t(
+                                            "adminSubscription.creditPackageTable.title",
+                                            "點數包紀錄",
+                                          )}
+                                        </h4>
+                                        <Table>
+                                          <TableHeader>
+                                            <TableRow>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.source",
+                                                  "來源",
+                                                )}
+                                              </TableHead>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.package",
+                                                  "套餐",
+                                                )}
+                                              </TableHead>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.dates",
+                                                  "購買 / 到期",
+                                                )}
+                                              </TableHead>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.points",
+                                                  "已使用 / 總計",
+                                                )}
+                                              </TableHead>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.payment",
+                                                  "付款",
+                                                )}
+                                              </TableHead>
+                                              <TableHead>
+                                                {t(
+                                                  "adminSubscription.creditPackageTable.status",
+                                                  "狀態",
+                                                )}
+                                              </TableHead>
+                                            </TableRow>
+                                          </TableHeader>
+                                          <TableBody>
+                                            {teacherCreditPackages[
+                                              teacher.teacher_id
+                                            ].map((pkg) => {
+                                              const sourceBadge = {
+                                                trial_bonus: {
+                                                  label: t(
+                                                    "adminSubscription.creditPackageTable.sourceTrial",
+                                                    "試用",
+                                                  ),
+                                                  className:
+                                                    "bg-purple-100 text-purple-700",
+                                                },
+                                                admin_grant: {
+                                                  label: t(
+                                                    "adminSubscription.creditPackageTable.sourceGrant",
+                                                    "贈送",
+                                                  ),
+                                                  className:
+                                                    "bg-orange-100 text-orange-700",
+                                                },
+                                                purchase: {
+                                                  label: t(
+                                                    "adminSubscription.creditPackageTable.sourcePurchase",
+                                                    "加購",
+                                                  ),
+                                                  className:
+                                                    "bg-green-100 text-green-700",
+                                                },
+                                                org_purchase: {
+                                                  label: t(
+                                                    "adminSubscription.creditPackageTable.sourceOrgPurchase",
+                                                    "機構購買",
+                                                  ),
+                                                  className:
+                                                    "bg-green-100 text-green-700",
+                                                },
+                                              }[pkg.source] || {
+                                                label: pkg.source,
+                                                className:
+                                                  "bg-gray-100 text-gray-700",
+                                              };
+
+                                              return (
+                                                <TableRow key={`pkg-${pkg.id}`}>
+                                                  <TableCell>
+                                                    <span
+                                                      className={`px-2 py-1 rounded text-xs font-semibold ${sourceBadge.className}`}
+                                                    >
+                                                      {sourceBadge.label}
+                                                    </span>
+                                                  </TableCell>
+                                                  <TableCell className="font-mono text-xs text-gray-600">
+                                                    {pkg.package_id}
+                                                  </TableCell>
+                                                  <TableCell className="text-sm text-gray-600">
+                                                    {formatDate(
+                                                      pkg.purchased_at,
+                                                    )}{" "}
+                                                    →{" "}
+                                                    {formatDate(pkg.expires_at)}
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <div className="space-y-1">
+                                                      <div className="text-sm">
+                                                        {pkg.points_used.toLocaleString()}{" "}
+                                                        /{" "}
+                                                        {pkg.points_total.toLocaleString()}
+                                                      </div>
+                                                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                                        <div
+                                                          className="bg-purple-500 h-1.5 rounded-full"
+                                                          style={{
+                                                            width: `${Math.min((pkg.points_used / pkg.points_total) * 100 || 0, 100)}%`,
+                                                          }}
+                                                        />
+                                                      </div>
+                                                    </div>
+                                                  </TableCell>
+                                                  <TableCell className="text-sm">
+                                                    {pkg.price_paid > 0
+                                                      ? `NT$ ${pkg.price_paid.toLocaleString()}`
+                                                      : "-"}
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <span
+                                                      className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                        pkg.status === "active"
+                                                          ? "bg-green-100 text-green-700"
+                                                          : "bg-gray-100 text-gray-600"
+                                                      }`}
+                                                    >
+                                                      {pkg.status}
+                                                    </span>
+                                                  </TableCell>
+                                                </TableRow>
+                                              );
+                                            })}
+                                          </TableBody>
+                                        </Table>
+                                      </div>
+                                    )}
                                 </TableCell>
                               </TableRow>
                             )}
@@ -2159,6 +2426,115 @@ export default function AdminSubscriptionDashboard() {
                   <>
                     <RefreshCcw className="w-4 h-4 mr-2" />
                     Confirm Refund
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Grant Points Modal */}
+      <Dialog open={grantModalOpen} onOpenChange={setGrantModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>
+              {t("adminSubscription.grant.title", "Grant Points")}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedTeacher &&
+                `${selectedTeacher.teacher_name} (${selectedTeacher.teacher_email})`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitGrant} className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t("adminSubscription.grant.points", "Points")}{" "}
+                <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="number"
+                value={grantForm.points || ""}
+                onChange={(e) =>
+                  setGrantForm({
+                    ...grantForm,
+                    points: e.target.value
+                      ? parseInt(e.target.value)
+                      : undefined,
+                  })
+                }
+                placeholder={t(
+                  "adminSubscription.grant.pointsPlaceholder",
+                  "e.g. 2000",
+                )}
+                min="1"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t(
+                  "adminSubscription.grant.expiresDays",
+                  "Valid for (days)",
+                )}{" "}
+              </label>
+              <Input
+                type="number"
+                value={grantForm.expires_days}
+                onChange={(e) =>
+                  setGrantForm({
+                    ...grantForm,
+                    expires_days: parseInt(e.target.value) || 365,
+                  })
+                }
+                min="1"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t("adminSubscription.grant.reason", "Reason")}{" "}
+                <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                value={grantForm.reason}
+                onChange={(e) =>
+                  setGrantForm({ ...grantForm, reason: e.target.value })
+                }
+                placeholder={t(
+                  "adminSubscription.grant.reasonPlaceholder",
+                  "Why are these points being granted?",
+                )}
+                required
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setGrantModalOpen(false)}
+                disabled={loading}
+              >
+                {t("common.cancel", "Cancel")}
+              </Button>
+              <Button
+                type="submit"
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+                disabled={loading || !grantForm.points || !grantForm.reason}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    {t("adminSubscription.grant.granting", "Granting...")}
+                  </>
+                ) : (
+                  <>
+                    <Gift className="w-4 h-4 mr-2" />
+                    {t("adminSubscription.grant.confirm", "Confirm Grant")}
                   </>
                 )}
               </Button>

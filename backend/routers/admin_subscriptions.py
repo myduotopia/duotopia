@@ -5,6 +5,7 @@ Admin Subscription Management API
 不依賴 teacher_subscription_transactions
 """
 
+from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func
@@ -25,6 +26,7 @@ from models import (
     PointUsageLog,
     ClassroomStudent,
 )
+from models.credit_package import CreditPackage
 from routers.admin import get_current_admin
 
 router = APIRouter(prefix="/api/admin/subscription", tags=["admin-subscription"])
@@ -421,13 +423,39 @@ async def get_all_teachers_subscriptions(
         .all()
     )
 
+    # 🔥 Preload credit packages for all teachers (avoid N+1)
+    # Deduplicate teacher_ids since the same teacher may appear with multiple periods
+    teacher_ids = list({t.id for t, _ in teachers_with_subs})
+    all_credit_packages = (
+        db.query(CreditPackage)
+        .filter(
+            CreditPackage.teacher_id.in_(teacher_ids),
+            CreditPackage.status == "active",
+        )
+        .all()
+    )
+    credit_packages_by_teacher = defaultdict(list)
+    for pkg in all_credit_packages:
+        credit_packages_by_teacher[pkg.teacher_id].append(pkg)
+
     result = []
     for teacher, period in teachers_with_subs:
+        # Credit package info
+        teacher_pkgs = credit_packages_by_teacher.get(teacher.id, [])
+        credit_points_total = sum(p.points_total for p in teacher_pkgs)
+        credit_points_used = sum(p.points_used for p in teacher_pkgs)
+        has_trial_bonus = any(p.source == "trial_bonus" for p in teacher_pkgs)
+
         teacher_data = {
             "teacher_id": teacher.id,
             "teacher_name": teacher.name,
             "teacher_email": teacher.email,
+            "email_verified": teacher.email_verified or False,
             "current_subscription": None,
+            "credit_points_total": credit_points_total,
+            "credit_points_used": credit_points_used,
+            "credit_points_remaining": credit_points_total - credit_points_used,
+            "has_trial_bonus": has_trial_bonus,
         }
 
         if period:
@@ -493,6 +521,34 @@ async def get_teacher_periods(
             }
         )
 
+    # 🔥 Approach A: 同時撈取 credit_packages（trial_bonus / admin_grant / 加購）
+    credit_packages = (
+        db.query(CreditPackage)
+        .filter(CreditPackage.teacher_id == teacher_id)
+        .order_by(CreditPackage.purchased_at.desc())
+        .all()
+    )
+
+    credit_package_list = []
+    for pkg in credit_packages:
+        credit_package_list.append(
+            {
+                "id": pkg.id,
+                "package_id": pkg.package_id,
+                "source": pkg.source,
+                "points_total": pkg.points_total,
+                "points_used": pkg.points_used,
+                "points_remaining": pkg.points_remaining,
+                "price_paid": pkg.price_paid,
+                "purchased_at": pkg.purchased_at.isoformat()
+                if pkg.purchased_at
+                else None,
+                "expires_at": pkg.expires_at.isoformat() if pkg.expires_at else None,
+                "status": pkg.status,
+                "payment_id": pkg.payment_id,
+            }
+        )
+
     return {
         "teacher": {
             "id": teacher.id,
@@ -500,7 +556,9 @@ async def get_teacher_periods(
             "email": teacher.email,
         },
         "periods": period_list,
+        "credit_packages": credit_package_list,
         "total": len(period_list),
+        "credit_packages_total": len(credit_package_list),
     }
 
 
@@ -621,8 +679,6 @@ async def get_transaction_analytics(
         )
 
     # 計算月度統計
-    from collections import defaultdict
-
     monthly_stats = defaultdict(lambda: {"total": 0, "by_teacher": defaultdict(int)})
 
     for txn, teacher in transactions:
@@ -658,8 +714,6 @@ async def get_learning_analytics(
     """
     學習分析：獲取教師的班級、學生、作業、點數使用統計
     """
-    from collections import defaultdict
-
     # 1. 獲取所有教師的基本統計
     teachers = db.query(Teacher).all()
 

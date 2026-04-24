@@ -3511,7 +3511,18 @@
       "cancel": "Cancel",
       "processing": "Processing...",
       "cancelSubscription": "Cancel Subscription",
-      "updateSubscription": "Update Subscription"
+      "updateSubscription": "Update Subscription",
+      "grantPoints": "Grant"
+    },
+    "grant": {
+      "title": "Grant Points",
+      "points": "Points",
+      "pointsPlaceholder": "e.g. 2000",
+      "expiresDays": "Valid for (days)",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why are these points being granted?",
+      "granting": "Granting...",
+      "confirm": "Confirm Grant"
     },
     "stats": {
       "totalTeachers": "Total Teachers",
@@ -3535,14 +3546,16 @@
       "plan": "Plan",
       "endDate": "End Date",
       "periods": "Periods",
-      "quota": "Quota",
+      "quota": "Used / Quota",
       "status": "Status",
       "actions": "Actions",
       "noData": "No data"
     },
     "status": {
       "active": "Active",
-      "none": "None"
+      "none": "None",
+      "trial": "Free Trial",
+      "unverified": "Unverified"
     },
     "periodTable": {
       "title": "Subscription Periods",
@@ -3552,6 +3565,19 @@
       "quota": "Quota",
       "payment": "Payment",
       "status": "Status"
+    },
+    "creditPackageTable": {
+      "title": "Credit Packages",
+      "source": "Source",
+      "package": "Package",
+      "dates": "Purchased / Expires",
+      "points": "Used / Total",
+      "payment": "Payment",
+      "status": "Status",
+      "sourceTrial": "Trial",
+      "sourceGrant": "Grant",
+      "sourcePurchase": "Purchase",
+      "sourceOrgPurchase": "Org Purchase"
     },
     "history": {
       "title": "Edit History",
@@ -3626,11 +3652,13 @@
       "operationFailed": "Failed: {{detail}}",
       "searchFailed": "Search failed: {{detail}}",
       "loadPeriodsFailed": "Failed to load subscription periods",
-      "loadHistoryFailed": "Failed to load edit history"
+      "loadHistoryFailed": "Failed to load edit history",
+      "grantFailed": "Failed to grant points"
     },
     "messages": {
       "operationSuccess": "Success! {{teacherName}} - {{message}}",
-      "completed": "Operation completed"
+      "completed": "Operation completed",
+      "grantSuccess": "Successfully granted {{points}} points to {{name}}"
     }
   },
   "adminMonitoring": {

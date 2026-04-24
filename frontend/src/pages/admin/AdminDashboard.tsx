@@ -21,10 +21,10 @@ export default function AdminDashboard() {
         onValueChange={setActiveTab}
         className="space-y-4 md:space-y-6"
       >
-        <TabsList className="grid w-full max-w-[1000px] grid-cols-4 h-auto md:h-14 bg-white border-2 border-gray-200 p-1">
+        <TabsList className="flex w-full max-w-[1000px] justify-start gap-1 h-auto bg-transparent border-b border-gray-200 rounded-none p-0">
           <TabsTrigger
             value="subscription"
-            className="flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base font-semibold py-2 md:py-0 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
           >
             <Crown className="h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
             <span className="hidden sm:inline">訂閱管理</span>
@@ -32,7 +32,7 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger
             value="billing"
-            className="flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base font-semibold py-2 md:py-0 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
           >
             <DollarSign className="h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
             <span className="hidden sm:inline">GCP 費用</span>
@@ -40,7 +40,7 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger
             value="audio-errors"
-            className="flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base font-semibold py-2 md:py-0 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
           >
             <AlertTriangle className="h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
             <span className="hidden sm:inline">錄音錯誤</span>
@@ -48,7 +48,7 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger
             value="organizations"
-            className="flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base font-semibold py-2 md:py-0 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
           >
             <Building className="h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
             <span className="hidden sm:inline">組織管理</span>

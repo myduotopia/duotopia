@@ -225,11 +225,12 @@ async def teacher_register(
     if not is_valid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
+    # 🔒 Email case-insensitive: normalize to lowercase before storing
+    normalized_email = register_req.email.strip().lower()
+
     # Check if email exists (case-insensitive, matches the unique functional index)
     existing = (
-        db.query(Teacher)
-        .filter(func.lower(Teacher.email) == register_req.email.lower())
-        .first()
+        db.query(Teacher).filter(func.lower(Teacher.email) == normalized_email).first()
     )
     if existing:
         # 如果已經驗證，不允許重複註冊
@@ -245,7 +246,7 @@ async def teacher_register(
 
     # Create new teacher (未啟用，需要 email 驗證)
     new_teacher = Teacher(
-        email=register_req.email,
+        email=normalized_email,
         password_hash=get_password_hash(register_req.password),
         name=register_req.name,
         phone=register_req.phone,
@@ -564,7 +565,7 @@ async def forgot_password(
     request: Request, email: str = Body(..., embed=True), db: Session = Depends(get_db)
 ):
     """教師忘記密碼 - 發送重設郵件"""
-    # 查找教師
+    # 查找教師 (case-insensitive)
     teacher = (
         db.query(Teacher).filter(func.lower(Teacher.email) == email.lower()).first()
     )
