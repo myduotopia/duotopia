@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { StudentProtectedRoute } from "./components/StudentProtectedRoute";
 import { RoleBasedRedirect } from "./components/RoleBasedRedirect";
 import { organizationRoutes } from "./routes/organizationRoutes";
 import Home from "./pages/Home";
@@ -357,7 +358,14 @@ function App() {
         />
 
         {/* Student Routes with Layout */}
-        <Route path="/student" element={<StudentLayout />}>
+        <Route
+          path="/student"
+          element={
+            <StudentProtectedRoute>
+              <StudentLayout />
+            </StudentProtectedRoute>
+          }
+        >
           <Route path="dashboard" element={<StudentDashboard />} />
           <Route path="assignments" element={<StudentAssignmentList />} />
           <Route
