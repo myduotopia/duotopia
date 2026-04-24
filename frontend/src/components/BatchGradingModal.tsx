@@ -13,6 +13,10 @@ import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { Loader2, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  TrafficLightDot,
+  useStatusLabel,
+} from "@/components/StudentStatusPanel";
 
 // Teacher's decision for each student
 type TeacherDecision = "RETURNED" | "GRADED" | null;
@@ -60,6 +64,7 @@ export default function BatchGradingModal({
   onComplete,
 }: BatchGradingModalProps) {
   const { t } = useTranslation();
+  const getStatusLabel = useStatusLabel();
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<{
     current: number;
@@ -95,16 +100,49 @@ export default function BatchGradingModal({
         },
       );
 
-      setResults(response.results);
+      // Same priority ordering as GradingPage sidebar so teachers see students
+      // in a consistent order across the two screens.
+      const statusPriority: Record<string, number> = {
+        IN_PROGRESS: 1,
+        RETURNED: 1,
+        SUBMITTED: 2,
+        RESUBMITTED: 2,
+        NOT_STARTED: 3,
+        GRADED: 4,
+        NOT_ASSIGNED: 99,
+      };
+      const isInactive = (status: string) =>
+        status === "NOT_STARTED" ||
+        status === "IN_PROGRESS" ||
+        status === "RETURNED";
+      const sortedResults = [...response.results].sort((a, b) => {
+        const aPriority = statusPriority[a.status] ?? 50;
+        const bPriority = statusPriority[b.status] ?? 50;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return a.student_id - b.student_id;
+      });
+
+      setResults(sortedResults);
       setProgress({
         current: response.total_students,
         total: response.total_students,
       });
 
-      // Initialize all students' decisions to null (pending)
+      // Pre-select decision based on total_score:
+      //   >= 70 → GRADED (completed)
+      //   < 69  → RETURNED (send back)
+      //   69–70 (borderline) or inactive → null (pending, teacher decides)
       const initialDecisions: Record<number, TeacherDecision> = {};
       response.results.forEach((r) => {
-        initialDecisions[r.student_id] = null;
+        if (isInactive(r.status)) {
+          initialDecisions[r.student_id] = null;
+        } else if (r.total_score >= 70) {
+          initialDecisions[r.student_id] = "GRADED";
+        } else if (r.total_score < 69) {
+          initialDecisions[r.student_id] = "RETURNED";
+        } else {
+          initialDecisions[r.student_id] = null;
+        }
       });
       setTeacherDecisions(initialDecisions);
 
@@ -307,13 +345,27 @@ export default function BatchGradingModal({
                     </tr>
                   </thead>
                   <tbody>
-                    {results.map((result) => (
+                    {results.map((result) => {
+                      return (
                       <tr
                         key={result.student_id}
                         className="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
                       >
                         <td className="px-4 py-4 text-base font-medium dark:text-gray-300">
-                          {result.student_name}
+                          <div className="flex items-start gap-2">
+                            <TrafficLightDot
+                              status={result.status}
+                              size={12}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate">
+                                {result.student_name}
+                              </div>
+                              <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                                {getStatusLabel(result.status)}
+                              </div>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-3 py-4 text-center">
                           <span className="text-lg font-semibold text-blue-600 dark:text-blue-400">
@@ -448,18 +500,28 @@ export default function BatchGradingModal({
                           </Button>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               {/* Mobile/Tablet Card View (below lg) */}
               <div className="lg:hidden space-y-3">
-                {results.map((result) => (
+                {results.map((result) => {
+                  return (
                   <Card key={result.student_id} className="p-3 sm:p-4">
                     {/* Student Name Header */}
-                    <div className="font-medium text-base sm:text-lg mb-3 pb-2 border-b dark:border-gray-700">
-                      {result.student_name}
+                    <div className="mb-3 pb-2 border-b dark:border-gray-700 flex items-start gap-2">
+                      <TrafficLightDot status={result.status} size={14} />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-base sm:text-lg truncate">
+                          {result.student_name}
+                        </div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                          {getStatusLabel(result.status)}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Score Grid - 2 columns on mobile */}
@@ -631,7 +693,8 @@ export default function BatchGradingModal({
                       </Button>
                     </div>
                   </Card>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}

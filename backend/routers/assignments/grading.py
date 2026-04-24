@@ -1032,26 +1032,33 @@ async def batch_grade_assignment(
         # Apply status filter based on mode
         is_single_student_mode = request.student_ids and len(request.student_ids) == 1
 
+        # Batch/multi-student modes include every non-final status so teachers
+        # see unsubmitted + returned students alongside fresh submissions.
+        # GRADED is the only terminal state we skip.
+        # finalize-batch-grade still only flips SUBMITTED/RESUBMITTED,
+        # so NOT_STARTED / IN_PROGRESS / RETURNED students' statuses stay unchanged.
+        batch_statuses = [
+            AssignmentStatus.NOT_STARTED,
+            AssignmentStatus.IN_PROGRESS,
+            AssignmentStatus.SUBMITTED,
+            AssignmentStatus.RESUBMITTED,
+            AssignmentStatus.RETURNED,
+        ]
+
         if is_single_student_mode:
             # Single-student mode: Allow grading ANY status
             query = query.filter(Student.id.in_(request.student_ids))
         elif request.student_ids:
-            # Multi-student mode with specific IDs: Filter by status + IDs
+            # Multi-student mode with specific IDs
             query = query.filter(
                 and_(
-                    StudentAssignment.status.in_(
-                        [AssignmentStatus.SUBMITTED, AssignmentStatus.RESUBMITTED]
-                    ),
+                    StudentAssignment.status.in_(batch_statuses),
                     Student.id.in_(request.student_ids),
                 )
             )
         else:
-            # Batch mode (all students): Only SUBMITTED/RESUBMITTED
-            query = query.filter(
-                StudentAssignment.status.in_(
-                    [AssignmentStatus.SUBMITTED, AssignmentStatus.RESUBMITTED]
-                )
-            )
+            # Batch mode (all students)
+            query = query.filter(StudentAssignment.status.in_(batch_statuses))
 
         student_assignments = query.options(
             selectinload(StudentAssignment.student)
@@ -1232,12 +1239,10 @@ async def batch_grade_assignment(
             student_assignment.score = total_score
             student_assignment.graded_at = datetime.now(timezone.utc)
 
-            # 9.5. Generate item-level comments
+            # 9.5. Generate item-level comments and pass/fail (issue #680)
             with start_span("Generate Item Comments"):
                 for item in item_progress_list:
-                    # Only generate comments for items with recordings
                     if item.recording_url and item.ai_assessed_at:
-                        # Get scores (use get_score_with_fallback for safety)
                         pron = float(
                             get_score_with_fallback(
                                 item,
@@ -1275,9 +1280,16 @@ async def batch_grade_assignment(
                             )
                         )
 
-                        # Generate and store comment
-                        comment = generate_item_comment(pron, acc, flu, comp)
-                        item.teacher_feedback = comment
+                        item.teacher_feedback = generate_item_comment(
+                            pron, acc, flu, comp
+                        )
+
+                        overall = (pron + acc + flu + comp) / 4
+                        item.teacher_passed = overall >= 60
+                    elif not item.recording_url:
+                        item.teacher_passed = False
+                    else:
+                        item.teacher_passed = None
 
                 perf.checkpoint("Item Comments Generated")
 
