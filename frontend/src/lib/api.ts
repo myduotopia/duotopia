@@ -5,6 +5,7 @@
 import { API_URL } from "../config/api";
 import { retryAIAnalysis } from "../utils/retryHelper";
 import { clearAllAuth } from "./authUtils";
+import { appendAudioToFormData } from "@/utils/audioFormatDetection";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
@@ -1196,7 +1197,7 @@ class ApiClient {
     itemIndex?: number,
   ) {
     const formData = new FormData();
-    formData.append("file", audioBlob, "recording.webm");
+    await appendAudioToFormData(formData, "file", audioBlob);
     formData.append("duration", duration.toString());
 
     // 加入 content_id 和 item_index 以便追蹤和替換舊檔案

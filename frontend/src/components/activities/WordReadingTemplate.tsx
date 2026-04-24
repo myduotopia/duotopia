@@ -42,6 +42,7 @@ import {
 import { useDemoAzurePronunciation } from "@/hooks/useDemoAzurePronunciation";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import PronunciationScoreChart from "./shared/PronunciationScoreChart";
+import { appendAudioToFormData } from "@/utils/audioFormatDetection";
 
 interface AssessmentResult {
   overallScore: number;
@@ -589,13 +590,7 @@ export default function WordReadingTemplate({
       const apiUrl = import.meta.env.VITE_API_URL || "";
       const formData = new FormData();
 
-      const uploadFileExtension = audioBlob.type.includes("mp4")
-        ? "recording.mp4"
-        : audioBlob.type.includes("webm")
-          ? "recording.webm"
-          : "recording.audio";
-
-      formData.append("audio_file", audioBlob, uploadFileExtension);
+      await appendAudioToFormData(formData, "audio_file", audioBlob);
       formData.append(
         "analysis_json",
         JSON.stringify({

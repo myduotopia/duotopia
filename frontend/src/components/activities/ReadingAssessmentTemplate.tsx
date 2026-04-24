@@ -9,6 +9,7 @@ import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { useDemoAzurePronunciation } from "@/hooks/useDemoAzurePronunciation";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
+import { appendAudioToFormData } from "@/utils/audioFormatDetection";
 
 interface AssessmentResult {
   overallScore: number;
@@ -81,14 +82,7 @@ export default function ReadingAssessmentTemplate({
       const apiUrl = import.meta.env.VITE_API_URL || "";
       const formData = new FormData();
 
-      // 決定檔案副檔名
-      const uploadFileExtension = audioBlob.type.includes("mp4")
-        ? "recording.mp4"
-        : audioBlob.type.includes("webm")
-          ? "recording.webm"
-          : "recording.audio";
-
-      formData.append("audio_file", audioBlob, uploadFileExtension);
+      await appendAudioToFormData(formData, "audio_file", audioBlob);
       formData.append(
         "analysis_json",
         JSON.stringify({

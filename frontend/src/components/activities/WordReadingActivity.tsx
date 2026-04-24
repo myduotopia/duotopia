@@ -29,14 +29,13 @@ import RecordingAttemptsIndicator from "./RecordingAttemptsIndicator";
 import { useTranslation } from "react-i18next";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { cn } from "@/lib/utils";
-import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import {
   useRecordingAttempts,
-  incrementRecordingAttemptForItem,
   type AssignmentStatusLike,
 } from "@/hooks/useRecordingAttempts";
 import { getItemPassFailStatus } from "@/utils/itemPassFailStatus";
+import { appendAudioToFormData } from "@/utils/audioFormatDetection";
 
 interface WordItem {
   id: number;
@@ -116,8 +115,6 @@ export default function WordReadingActivity({
   const [showTranslationFromApi, setShowTranslationFromApi] = useState(true);
   // AI 分析額度（從 API 讀取，或使用 prop 傳入的值）
   const [canUseAiAnalysisFromApi, setCanUseAiAnalysisFromApi] = useState(true);
-  const canUseAiAnalysis = canUseAiAnalysisProp ?? canUseAiAnalysisFromApi;
-  const { analyzePronunciation } = useAzurePronunciation();
 
   // Issue #689: 前端錄音次數限制（每題 3 次 AI 分析）。Hook 必須在 early return 前呼叫。
   const currentItemForGate = items[currentIndex];
@@ -161,104 +158,10 @@ export default function WordReadingActivity({
       incrementCurrentAttempt();
   }, [gateActive, currentItemLockedInReturnedMode, incrementCurrentAttempt]);
 
-  /**
-   * 🔧 Review fix: 共用的分析+儲存+上傳邏輯，消除三處重複
-   */
-  const performAnalysisAndSave = useCallback(
-    async (params: {
-      audioBlob: Blob;
-      text: string;
-      itemIndex: number;
-      progressId?: number;
-    }) => {
-      const { audioBlob, text, itemIndex, progressId } = params;
-      const azureResult = await analyzePronunciation(
-        audioBlob,
-        text,
-        "Phoneme",
-      );
-      if (!azureResult) return;
-
-      // Issue #689: 背景分析（離開題目/提交時補分析）也計次。
-      // 不能用 `gateActive` 因為 useCallback 閉包此時尚未定義；改在引用點內部判斷時序：
-      // 此處可直接呼叫 standalone helper，preview/demo/readOnly 的 caller 已不會走到分析路徑。
-      // 已知邊界：此處不檢查 itemLockedInReturnedMode（RETURNED/RESUBMITTED + 已通過）。
-      // 實務上背景分析只對「離開的題目」觸發，已通過題目此時不會有 pending blob 待分析；
-      // 若真的發生（例如錄音與狀態同步間有競態），會多扣一顆愛心，但不影響正確性。
-      const itemForAttempt = items[itemIndex];
-      if (
-        itemForAttempt &&
-        !readOnly &&
-        !isPreviewMode &&
-        !isDemoMode &&
-        canUseAiAnalysisProp !== false
-      ) {
-        incrementRecordingAttemptForItem(assignmentId, itemForAttempt.id);
-      }
-
-      const assessment = {
-        accuracy_score: azureResult.accuracyScore,
-        fluency_score: azureResult.fluencyScore,
-        completeness_score: azureResult.completenessScore,
-        pronunciation_score: azureResult.pronunciationScore,
-        // 🎯 音素詳細資料（重開時可還原圖表）
-        detailed_words: azureResult.detailed_words || [],
-        reference_text: text,
-      };
-
-      setItems((prev) => {
-        const updated = [...prev];
-        updated[itemIndex] = {
-          ...updated[itemIndex],
-          ai_assessment: assessment,
-        };
-        return updated;
-      });
-
-      const apiUrl = import.meta.env.VITE_API_URL || "";
-      if (progressId) {
-        const ext = audioBlob.type.includes("mp4")
-          ? "recording.mp4"
-          : audioBlob.type.includes("webm")
-            ? "recording.webm"
-            : "recording.audio";
-        const analysisForm = new FormData();
-        analysisForm.append("audio_file", audioBlob, ext);
-        analysisForm.append(
-          "analysis_json",
-          JSON.stringify({
-            pronunciation_score: azureResult.pronunciationScore,
-            accuracy_score: azureResult.accuracyScore,
-            fluency_score: azureResult.fluencyScore,
-            completeness_score: azureResult.completenessScore,
-            overall_score: azureResult.pronunciationScore,
-            detailed_words: azureResult.detailed_words || [],
-            reference_text: text,
-          }),
-        );
-        analysisForm.append("progress_id", progressId.toString());
-        analysisForm.append("analysis_id", crypto.randomUUID());
-
-        fetch(`${apiUrl}/api/speech/upload-analysis`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: analysisForm,
-        }).catch((err) => console.error("Upload analysis failed:", err));
-      }
-
-      return assessment;
-    },
-    [
-      analyzePronunciation,
-      token,
-      items,
-      assignmentId,
-      readOnly,
-      isPreviewMode,
-      isDemoMode,
-      canUseAiAnalysisProp,
-    ],
-  );
+  // Issue #677: removed performAnalysisAndSave (the helper used only by
+  // the supplementary background analysis on next/submit, which is gone now).
+  // Foreground recording analysis now happens entirely inside
+  // WordReadingTemplate via Azure SDK -> handleAnalysisSuccess -> attempt counter.
 
   // Load vocabulary items from backend
   const loadItems = useCallback(async () => {
@@ -346,12 +249,7 @@ export default function WordReadingActivity({
       formData.append("assignment_id", assignmentId.toString());
       formData.append("content_item_id", currentItem.id.toString());
 
-      const uploadFileExtension = blob.type.includes("mp4")
-        ? "recording.mp4"
-        : blob.type.includes("webm")
-          ? "recording.webm"
-          : "recording.audio";
-      formData.append("audio_file", blob, uploadFileExtension);
+      await appendAudioToFormData(formData, "audio_file", blob);
 
       const response = await fetch(`${apiUrl}/api/students/upload-recording`, {
         method: "POST",
@@ -432,38 +330,9 @@ export default function WordReadingActivity({
 
   // Navigate to next item
   const handleNext = () => {
-    // 🎯 Issue #227: 切換到下一題時，背景分析當前未分析的題目
-    if (canUseAiAnalysis && !isPreviewMode && !isDemoMode) {
-      const currentItem = items[currentIndex];
-      // 🔧 Review fix: 捕獲 index 避免 async 回調中使用 stale closure
-      const capturedIndex = currentIndex;
-      const hasRecording =
-        currentItem?.recording_url && currentItem.recording_url !== "";
-      if (hasRecording && !currentItem?.ai_assessment && currentItem.text) {
-        // fire-and-forget：背景分析不阻塞導航
-        (async () => {
-          try {
-            const resp = await fetch(currentItem.recording_url!);
-            if (!resp.ok) {
-              console.warn(
-                `Audio fetch failed (${resp.status}), skipping background analysis`,
-              );
-              return;
-            }
-            const audioBlob = await resp.blob();
-            await performAnalysisAndSave({
-              audioBlob,
-              text: currentItem.text,
-              itemIndex: capturedIndex,
-              progressId: currentItem.progress_id,
-            });
-          } catch (err) {
-            console.error("Background analysis on next failed:", err);
-          }
-        })();
-      }
-    }
-
+    // Issue #677: removed fire-and-forget supplementary analysis on next.
+    // Auto-analysis only happens at the moment recording finishes
+    // (handleAnalysisSuccess attempt counter still fires there).
     if (currentIndex < items.length - 1) {
       setCurrentIndex(currentIndex + 1);
     }
@@ -541,16 +410,11 @@ export default function WordReadingActivity({
           try {
             const resp = await fetch(item.recording_url!);
             const audioBlob = await resp.blob();
-            const ext = audioBlob.type.includes("mp4")
-              ? "recording.mp4"
-              : audioBlob.type.includes("webm")
-                ? "recording.webm"
-                : "recording.audio";
 
             const formData = new FormData();
             formData.append("assignment_id", assignmentId.toString());
             formData.append("content_item_id", item.id.toString());
-            formData.append("audio_file", audioBlob, ext);
+            await appendAudioToFormData(formData, "audio_file", audioBlob);
 
             const uploadResult = await retryAudioUpload(
               async () => {
@@ -598,40 +462,8 @@ export default function WordReadingActivity({
         }
       }
 
-      // 🎯 Issue #227: 提交前補分析所有有錄音但未分析的題目
-      if (canUseAiAnalysis) {
-        const unanalyzedItems = items
-          .map((item, index) => ({ item, index }))
-          .filter(
-            ({ item }) =>
-              item.recording_url &&
-              item.recording_url !== "" &&
-              !item.ai_assessment,
-          );
-
-        if (unanalyzedItems.length > 0) {
-          for (const { item, index } of unanalyzedItems) {
-            try {
-              const audioResp = await fetch(item.recording_url!);
-              if (!audioResp.ok) {
-                console.warn(
-                  `Audio fetch failed for item ${index + 1} (${audioResp.status})`,
-                );
-                continue;
-              }
-              const audioBlob = await audioResp.blob();
-              await performAnalysisAndSave({
-                audioBlob,
-                text: item.text,
-                itemIndex: index,
-                progressId: item.progress_id,
-              });
-            } catch (error) {
-              console.error(`Failed to analyze item ${index + 1}:`, error);
-            }
-          }
-        }
-      }
+      // Issue #677: removed pre-submit supplementary analysis pass.
+      // Items without `ai_assessment` at submit time are submitted as-is.
 
       // 提交作業
       const response = await fetch(
