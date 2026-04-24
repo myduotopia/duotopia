@@ -87,30 +87,29 @@ export function SentenceRearrangementPanel({
   }
 
   const renderSelectionHistory = (item: SubmissionItem) => {
-    // 只有完成的題目才顯示歷程；否則顯示 placeholder
-    if (item.item_status !== "COMPLETED") {
-      return (
-        <div className="p-3 bg-gray-50 border border-gray-200 rounded text-xs text-gray-500 text-center">
-          {t("gradingPage.rearrangement.messages.noHistory")}
-        </div>
-      );
-    }
-
-    const words = splitAnswerWords(item.question_text);
+    // ⚠️ 示意圖：目前後端還沒提供每次作答（含 retry / timeout）的完整逐字歷程，
+    // 這裡先拿正確答案切成 chips 當 placeholder，讓老師知道未來會看到什麼樣的 UI。
+    // 等 #679 後端補完 attempts[] 資料後再接真實資料。
+    // Layout 參照 docs/design/pencil-new.pen 案例 1（一次答對）：
+    //   時間 · 「完成」綠 pill · 單字 chips 一字排開
     const formattedTime = formatCompletedAt(item.completed_at);
+    const words = splitAnswerWords(item.question_text);
 
     return (
-      <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2.5">
         {formattedTime && (
-          <div className="text-xs text-gray-500 font-mono">
-            {t("gradingPage.rearrangement.labels.completedAt")}：{formattedTime}
-          </div>
+          <span className="text-xs font-semibold text-gray-700 font-mono">
+            {formattedTime}
+          </span>
         )}
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-semibold">
+          {t("gradingPage.rearrangement.badges.completed")}
+        </span>
         <div className="flex flex-wrap gap-1.5">
           {words.map((word, idx) => (
             <span
               key={idx}
-              className="inline-flex items-center px-2.5 py-1 rounded-md border border-green-200 bg-green-50 text-green-700 text-xs font-semibold font-mono"
+              className="inline-flex items-center px-2.5 py-1 rounded-md border border-green-200 bg-green-50 text-green-700 text-xs font-semibold"
             >
               {word}
             </span>
@@ -336,24 +335,6 @@ export function SentenceRearrangementPanel({
                             )}
                           </label>
                           {renderSelectionHistory(item)}
-                        </div>
-
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <label className="text-xs font-semibold text-gray-600">
-                              {t(
-                                "gradingPage.rearrangement.labels.detailedErrorHistory",
-                              )}
-                            </label>
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">
-                              {t("common.comingSoon", "Coming Soon")}
-                            </span>
-                          </div>
-                          <div className="p-3 bg-gray-50 border border-dashed border-gray-300 rounded text-xs text-gray-500">
-                            {t(
-                              "gradingPage.rearrangement.messages.detailedErrorHistoryComingSoon",
-                            )}
-                          </div>
                         </div>
                       </div>
                     )}

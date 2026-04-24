@@ -2985,14 +2985,10 @@
         "selectionHistory": "選字歷程",
         "selected": "選擇",
         "expected": "應選",
-        "completedAt": "完成時間",
-        "detailedErrorHistory": "更詳細的錯誤結果"
-      },
-      "messages": {
-        "noHistory": "學生尚未作答",
-        "detailedErrorHistoryComingSoon": "即將上線：每次作答（含被強制重來與超時的歷程）的完整逐字選擇紀錄。"
+        "completedAt": "完成時間"
       },
       "badges": {
+        "completed": "完成",
         "incomplete": "未達標",
         "notAnswered": "尚未作答"
       }

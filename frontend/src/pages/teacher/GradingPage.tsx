@@ -941,7 +941,11 @@ export default function GradingPage() {
             onFeedbackChange={setFeedback}
             onAutoSave={() => performAutoSave()}
             onComplete={handleCompleteGrading}
-            onRequestRevision={handleRequestRevision}
+            onRequestRevision={
+              isAutoScoredMode(submission?.practice_mode)
+                ? undefined
+                : handleRequestRevision
+            }
             onJumpToItem={handleJumpToItem}
           />
         </div>

@@ -31,7 +31,8 @@ interface OverallFeedbackPanelProps {
   onFeedbackChange: (value: string) => void;
   onAutoSave: () => Promise<void>;
   onComplete: () => void;
-  onRequestRevision: () => void;
+  // 省略不傳即不顯示「要求訂正」按鈕（用於自動評分模式，如 rearrangement）
+  onRequestRevision?: () => void;
   onJumpToItem: (groupIndex: number, globalIndex: number) => void;
 }
 
@@ -200,21 +201,23 @@ export function OverallFeedbackPanel({
             </div>
 
             <div className="flex gap-2">
-              <Button
-                onClick={onRequestRevision}
-                disabled={submitting || !submission}
-                variant={
-                  submission?.status === "RETURNED" ? "default" : "outline"
-                }
-                className={`flex-1 ${
-                  submission?.status === "RETURNED"
-                    ? "bg-orange-600 hover:bg-orange-700 text-white"
-                    : "border-orange-600 text-orange-600 hover:bg-orange-50"
-                }`}
-              >
-                <X className="h-4 w-4 mr-2" />
-                {t("gradingPage.buttons.requestRevision")}
-              </Button>
+              {onRequestRevision && (
+                <Button
+                  onClick={onRequestRevision}
+                  disabled={submitting || !submission}
+                  variant={
+                    submission?.status === "RETURNED" ? "default" : "outline"
+                  }
+                  className={`flex-1 ${
+                    submission?.status === "RETURNED"
+                      ? "bg-orange-600 hover:bg-orange-700 text-white"
+                      : "border-orange-600 text-orange-600 hover:bg-orange-50"
+                  }`}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  {t("gradingPage.buttons.requestRevision")}
+                </Button>
+              )}
 
               <Button
                 onClick={onComplete}
