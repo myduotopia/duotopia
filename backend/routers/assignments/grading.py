@@ -1034,9 +1034,8 @@ async def batch_grade_assignment(
 
         # Batch/multi-student modes include every non-final status so teachers
         # see unsubmitted + returned students alongside fresh submissions.
-        # GRADED is the only terminal state we skip.
-        # finalize-batch-grade still only flips SUBMITTED/RESUBMITTED,
-        # so NOT_STARTED / IN_PROGRESS / RETURNED students' statuses stay unchanged.
+        # GRADED is the only terminal state we skip. finalize-batch-grade
+        # applies the teacher's per-student decision to any of these statuses.
         batch_statuses = [
             AssignmentStatus.NOT_STARTED,
             AssignmentStatus.IN_PROGRESS,
@@ -1079,33 +1078,36 @@ async def batch_grade_assignment(
             .all()
         )
 
-        # Create lookup dictionary: student_assignment_id -> [item_progress]
+        # Lookup keyed by (student_assignment_id, content_item_id). Iterating the
+        # assignment's content_items below lets us detect missing rows entirely
+        # — iterating StudentItemProgress alone would silently drop items that
+        # never had a progress row created (e.g. items added after assignment,
+        # data migrations), inflating scores and hiding missing work.
+        progress_by_sa_item = {
+            (ip.student_assignment_id, ip.content_item_id): ip
+            for ip in all_item_progress
+        }
         progress_by_student = {}
         for item in all_item_progress:
-            if item.student_assignment_id not in progress_by_student:
-                progress_by_student[item.student_assignment_id] = []
-            progress_by_student[item.student_assignment_id].append(item)
+            progress_by_student.setdefault(item.student_assignment_id, []).append(item)
 
         perf.checkpoint(f"Pre-loaded {len(all_item_progress)} Item Progress Records")
 
-    # 4. Pre-load all ContentItem records at once (fix N+1 query in AI assessment)
-    with start_span("Pre-load Content Items"):
-        content_item_ids = list(
-            set(
-                [
-                    item.content_item_id
-                    for item in all_item_progress
-                    if item.content_item_id
-                ]
-            )
+    # 4. Pre-load the assignment's canonical content_items list. Same source as
+    # GET /submissions/{student_id} — this is the denominator for total/missing.
+    with start_span("Pre-load Assignment Content Items"):
+        assignment_content_items = (
+            db.query(ContentItem)
+            .join(Content, Content.id == ContentItem.content_id)
+            .join(AssignmentContent, AssignmentContent.content_id == Content.id)
+            .filter(AssignmentContent.assignment_id == assignment_id)
+            .order_by(AssignmentContent.order_index, ContentItem.order_index)
+            .all()
         )
-        content_items = (
-            db.query(ContentItem).filter(ContentItem.id.in_(content_item_ids)).all()
+        content_items_by_id = {item.id: item for item in assignment_content_items}
+        perf.checkpoint(
+            f"Pre-loaded {len(assignment_content_items)} Assignment Content Items"
         )
-
-        # Create lookup dictionary: content_item_id -> ContentItem
-        content_items_by_id = {item.id: item for item in content_items}
-        perf.checkpoint(f"Pre-loaded {len(content_items)} Content Items")
 
     results = []
 
@@ -1133,7 +1135,8 @@ async def batch_grade_assignment(
 
                 perf.checkpoint("AI Assessments Triggered")
 
-            # 7. 計算分數
+            # 7. 計算分數 — iterate over the assignment's canonical content_items
+            # so items without a StudentItemProgress row still count as missing.
             item_scores = []
             pronunciation_scores = []
             accuracy_scores = []
@@ -1141,17 +1144,11 @@ async def batch_grade_assignment(
             completeness_scores = []
             missing_count = 0
 
-            for item in item_progress_list:
-                # 檢查是否有錄音
-                if not item.recording_url:
-                    # 缺題
-                    item_scores.append(0)
-                    missing_count += 1
-                    continue
+            for content_item in assignment_content_items:
+                item = progress_by_sa_item.get((student_assignment.id, content_item.id))
 
-                # 檢查是否有 AI 評分
-                if not item.has_ai_assessment:
-                    # 沒有分析結果，視為 0 分
+                # 缺題：沒有 progress row / 沒有錄音 / 沒有 AI 評分 — 都以 0 分計
+                if item is None or not item.recording_url or not item.has_ai_assessment:
                     item_scores.append(0)
                     missing_count += 1
                     continue
@@ -1239,9 +1236,19 @@ async def batch_grade_assignment(
             student_assignment.score = total_score
             student_assignment.graded_at = datetime.now(timezone.utc)
 
-            # 9.5. Generate item-level comments and pass/fail (issue #680)
+            # 9.5. Generate item-level comments and pass/fail (issue #680).
+            # Iterate content_items so "no progress row" is treated the same as
+            # "no recording" — both are missing work and map to teacher_passed=False.
+            # (We don't auto-create StudentItemProgress rows here — data repair
+            # belongs in its own fix, not here.)
             with start_span("Generate Item Comments"):
-                for item in item_progress_list:
+                for content_item in assignment_content_items:
+                    item = progress_by_sa_item.get(
+                        (student_assignment.id, content_item.id)
+                    )
+                    if item is None:
+                        continue
+
                     if item.recording_url and item.ai_assessed_at:
                         pron = float(
                             get_score_with_fallback(
@@ -1294,13 +1301,17 @@ async def batch_grade_assignment(
                 perf.checkpoint("Item Comments Generated")
 
             # 9.6. Generate assignment feedback
-            with start_span("Generate Assignment Feedback"):
-                completed_items_count = len(
-                    [i for i in item_progress_list if i.recording_url]
-                )
+            total_items_count = len(assignment_content_items)
+            completed_items_count = sum(
+                1
+                for ci in assignment_content_items
+                if (ip := progress_by_sa_item.get((student_assignment.id, ci.id)))
+                and ip.recording_url
+            )
 
+            with start_span("Generate Assignment Feedback"):
                 assignment_feedback = generate_assignment_feedback(
-                    total_items=len(item_progress_list),
+                    total_items=total_items_count,
                     completed_items=completed_items_count,
                     avg_score=total_score,
                     avg_pronunciation=avg_pronunciation,
@@ -1322,10 +1333,8 @@ async def batch_grade_assignment(
                     student_name=student.name,
                     total_score=round(total_score, 1),
                     missing_items=missing_count,
-                    total_items=len(item_progress_list),
-                    completed_items=len(
-                        [i for i in item_progress_list if i.recording_url]
-                    ),
+                    total_items=total_items_count,
+                    completed_items=completed_items_count,
                     avg_pronunciation=round(avg_pronunciation, 1),
                     avg_accuracy=round(avg_accuracy, 1),
                     avg_fluency=round(avg_fluency, 1),
@@ -1363,10 +1372,10 @@ async def finalize_batch_grade(
     """
     完成批次批改 - 根據老師決定設定最終狀態
 
-    Teacher Decisions:
-    - "RETURNED" → Mark as RETURNED
+    Teacher Decisions (applied regardless of current status, except GRADED):
+    - "RETURNED" → Mark as RETURNED (sets returned_at)
     - "GRADED" → Mark as GRADED
-    - None or missing → Keep SUBMITTED/RESUBMITTED (no change)
+    - None or missing → Keep original status (no change)
     """
     perf = PerformanceSnapshot(f"Finalize_Batch_Grade_{assignment_id}")
 
@@ -1392,15 +1401,15 @@ async def finalize_batch_grade(
         perf.checkpoint("Permissions Verified")
 
     with start_span("Query Student Assignments"):
-        # Get all submitted/resubmitted students
+        # Include every non-terminal status — the batch modal lists unsubmitted
+        # and returned students too, and the teacher must be able to mark any
+        # of them GRADED/RETURNED. Only GRADED is terminal and excluded here.
         student_assignments = (
             db.query(StudentAssignment)
             .filter(
                 StudentAssignment.assignment_id == assignment_id,
                 StudentAssignment.classroom_id == request.classroom_id,
-                StudentAssignment.status.in_(
-                    [AssignmentStatus.SUBMITTED, AssignmentStatus.RESUBMITTED]
-                ),
+                StudentAssignment.status != AssignmentStatus.GRADED,
             )
             .all()
         )
@@ -1426,7 +1435,7 @@ async def finalize_batch_grade(
                 # graded_at was already set in batch-grade step
                 graded_count += 1
             else:
-                # None or other value → Keep original status (SUBMITTED/RESUBMITTED)
+                # None or missing → keep original status unchanged
                 unchanged_count += 1
 
         perf.checkpoint("Updated Student Statuses")
