@@ -29,6 +29,12 @@ const FORMAT_TO_MIME: Record<Exclude<AudioFormat, "unknown">, string> = {
 };
 
 async function readHead(blob: Blob, n: number): Promise<Uint8Array> {
+  // NOTE: We use FileReader instead of `blob.arrayBuffer()` because the
+  // jsdom environment used by Vitest (vitest 3.x + jsdom 25) does not
+  // currently implement `Blob.arrayBuffer` reliably — switching to it
+  // breaks the tests in this same file. FileReader works in both jsdom
+  // and every browser MediaRecorder ships in. Revisit when jsdom fixes
+  // the Blob support.
   const slice = blob.slice(0, n);
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -85,8 +91,18 @@ function sniff(head: Uint8Array): AudioFormat {
   if (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) {
     return "mp3";
   }
-  // MP3 — MPEG audio sync frame (11-bit sync: FF Ex ...)
-  if (head[0] === 0xff && (head[1] & 0xe0) === 0xe0) {
+  // MP3 — MPEG-1/2 Layer III sync frame. Restricted to the layers that
+  // actually appear in real-world uploads (mirrors the backend check —
+  // see backend/routers/speech_assessment.py::sniff_audio_format) to
+  // avoid false positives on RIFF and other formats whose 2nd byte
+  // happens to have the top 3 sync bits set.
+  if (
+    head[0] === 0xff &&
+    (head[1] === 0xfb ||
+      head[1] === 0xfa ||
+      head[1] === 0xf3 ||
+      head[1] === 0xf2)
+  ) {
     return "mp3";
   }
   return "unknown";

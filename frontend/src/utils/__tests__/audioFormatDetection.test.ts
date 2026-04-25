@@ -43,9 +43,19 @@ describe("detectAudioFormat", () => {
     expect(await detectAudioFormat(blob)).toBe("mp3");
   });
 
-  it("detects mp3 from MPEG audio sync frame", async () => {
-    const blob = makeBlob([0xff, 0xfb, 0x90, 0x00]);
-    expect(await detectAudioFormat(blob)).toBe("mp3");
+  it("detects mp3 from MPEG-1/2 Layer III sync frame", async () => {
+    for (const second of [0xfb, 0xfa, 0xf3, 0xf2]) {
+      const blob = makeBlob([0xff, second, 0x90, 0x00]);
+      expect(await detectAudioFormat(blob)).toBe("mp3");
+    }
+  });
+
+  it("does not misdetect other MPEG layers as mp3 (matches backend)", async () => {
+    // 0xFF 0xE0–0xF1 has sync bits set but is Layer I/II or reserved.
+    for (const second of [0xe0, 0xe1, 0xf0, 0xf1]) {
+      const blob = makeBlob([0xff, second, 0x90, 0x00]);
+      expect(await detectAudioFormat(blob)).toBe("unknown");
+    }
   });
 
   it("returns 'unknown' for unrecognised bytes", async () => {
