@@ -1,8 +1,9 @@
+import { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 
 interface StudentProtectedRouteProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export function StudentProtectedRoute({
