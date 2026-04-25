@@ -399,6 +399,9 @@
         "demoPassword": "選擇學生後輸入: 20120101"
       }
     },
+    "lineContact": {
+      "ariaLabel": "LINE 客服"
+    },
     "footer": {
       "description": "AI 驅動的多元智能英語學習平台，專為亞洲學生設計",
       "contact": "聯絡我們",

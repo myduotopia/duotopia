@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import LineContactButton from "@/components/LineContactButton";
 import { apiClient } from "@/lib/api";
 
 function getSubscriptionPlans(t: (key: string) => string): SubscriptionPlan[] {
@@ -610,6 +611,9 @@ export default function PricingPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* LINE 客服浮動按鈕 */}
+      <LineContactButton />
 
       {/* Meta Messenger 浮動按鈕 */}
       <a

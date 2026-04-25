@@ -344,6 +344,9 @@
         "demoPassword": "After selecting student, enter: 20120101"
       }
     },
+    "lineContact": {
+      "ariaLabel": "LINE Customer Service"
+    },
     "footer": {
       "description": "AI-powered multiple intelligence English learning platform, designed specifically for Asian students",
       "contact": "Contact Us",
