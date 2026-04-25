@@ -529,7 +529,7 @@ export default function PricingPage() {
                 <ul className="space-y-2 text-sm">
                   <li>
                     <a
-                      href="https://m.me/duotopia"
+                      href="https://line.me/R/ti/p/@duotopia"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="hover:text-white"
