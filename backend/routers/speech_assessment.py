@@ -225,7 +225,8 @@ def convert_audio_to_wav(audio_data: bytes, content_type: str) -> bytes:
         # i.e. genuine client mislabeling. We don't log when the client sends
         # a generic Content-Type like application/octet-stream (which yields
         # None from _content_type_to_format), because there's no real mismatch.
-        if sniffed and sniffed != _content_type_to_format(content_type):
+        ct_fmt = _content_type_to_format(content_type)
+        if sniffed and ct_fmt and sniffed != ct_fmt:
             logger.info(
                 "Audio format mismatch: content_type=%r but magic bytes indicate %s",
                 content_type,
