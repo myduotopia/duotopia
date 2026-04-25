@@ -347,159 +347,161 @@ export default function BatchGradingModal({
                   <tbody>
                     {results.map((result) => {
                       return (
-                      <tr
-                        key={result.student_id}
-                        className="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                      >
-                        <td className="px-4 py-4 text-base font-medium dark:text-gray-300">
-                          <div className="flex items-start gap-2">
-                            <TrafficLightDot
-                              status={result.status}
-                              size={12}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate">
-                                {result.student_name}
-                              </div>
-                              <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                                {getStatusLabel(result.status)}
+                        <tr
+                          key={result.student_id}
+                          className="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                        >
+                          <td className="px-4 py-4 text-base font-medium dark:text-gray-300">
+                            <div className="flex items-start gap-2">
+                              <TrafficLightDot
+                                status={result.status}
+                                size={12}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate">
+                                  {result.student_name}
+                                </div>
+                                <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                                  {getStatusLabel(result.status)}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-3 py-4 text-center">
-                          <span className="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                            {result.avg_pronunciation.toFixed(0)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-4 text-center">
-                          <span className="text-lg font-semibold text-purple-600 dark:text-purple-400">
-                            {result.avg_accuracy.toFixed(0)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-4 text-center">
-                          <span className="text-lg font-semibold text-teal-600 dark:text-teal-400">
-                            {result.avg_fluency.toFixed(0)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-4 text-center">
-                          <span className="text-lg font-semibold text-indigo-600 dark:text-indigo-400">
-                            {result.avg_completeness.toFixed(0)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-4 text-center">
-                          <span
-                            className={`text-xl font-bold ${
-                              result.total_score >= 80
-                                ? "text-green-600 dark:text-green-400"
-                                : "text-red-600 dark:text-red-400"
-                            }`}
-                          >
-                            {result.total_score.toFixed(1)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-4 text-center">
-                          {result.missing_items > 0 ? (
-                            <span className="text-lg font-semibold text-red-600 dark:text-red-400">
-                              {result.missing_items}
+                          </td>
+                          <td className="px-3 py-4 text-center">
+                            <span className="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                              {result.avg_pronunciation.toFixed(0)}
                             </span>
-                          ) : (
-                            <span className="text-lg font-semibold text-green-600 dark:text-green-400">
-                              0
+                          </td>
+                          <td className="px-3 py-4 text-center">
+                            <span className="text-lg font-semibold text-purple-600 dark:text-purple-400">
+                              {result.avg_accuracy.toFixed(0)}
                             </span>
-                          )}
-                        </td>
+                          </td>
+                          <td className="px-3 py-4 text-center">
+                            <span className="text-lg font-semibold text-teal-600 dark:text-teal-400">
+                              {result.avg_fluency.toFixed(0)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-4 text-center">
+                            <span className="text-lg font-semibold text-indigo-600 dark:text-indigo-400">
+                              {result.avg_completeness.toFixed(0)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-4 text-center">
+                            <span
+                              className={`text-xl font-bold ${
+                                result.total_score >= 80
+                                  ? "text-green-600 dark:text-green-400"
+                                  : "text-red-600 dark:text-red-400"
+                              }`}
+                            >
+                              {result.total_score.toFixed(1)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-4 text-center">
+                            {result.missing_items > 0 ? (
+                              <span className="text-lg font-semibold text-red-600 dark:text-red-400">
+                                {result.missing_items}
+                              </span>
+                            ) : (
+                              <span className="text-lg font-semibold text-green-600 dark:text-green-400">
+                                0
+                              </span>
+                            )}
+                          </td>
 
-                        {/* Button Group Decision Column - Desktop */}
-                        <td className="px-4 py-4">
-                          <div className="flex flex-col gap-2">
+                          {/* Button Group Decision Column - Desktop */}
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col gap-2">
+                              <Button
+                                variant={
+                                  teacherDecisions[result.student_id] ===
+                                  "GRADED"
+                                    ? "default"
+                                    : "outline"
+                                }
+                                size="sm"
+                                className={cn(
+                                  "justify-start text-sm font-medium w-full",
+                                  teacherDecisions[result.student_id] ===
+                                    "GRADED" &&
+                                    "bg-green-600 hover:bg-green-700 text-white dark:bg-green-600 dark:hover:bg-green-700",
+                                )}
+                                onClick={() =>
+                                  setTeacherDecisions((prev) => ({
+                                    ...prev,
+                                    [result.student_id]: "GRADED",
+                                  }))
+                                }
+                              >
+                                ✓ {t("batchGrading.decisionGraded")}
+                              </Button>
+
+                              <Button
+                                variant={
+                                  teacherDecisions[result.student_id] ===
+                                  "RETURNED"
+                                    ? "default"
+                                    : "outline"
+                                }
+                                size="sm"
+                                className={cn(
+                                  "justify-start text-sm font-medium w-full",
+                                  teacherDecisions[result.student_id] ===
+                                    "RETURNED" &&
+                                    "bg-red-600 hover:bg-red-700 text-white dark:bg-red-600 dark:hover:bg-red-700",
+                                )}
+                                onClick={() =>
+                                  setTeacherDecisions((prev) => ({
+                                    ...prev,
+                                    [result.student_id]: "RETURNED",
+                                  }))
+                                }
+                              >
+                                ↩ {t("batchGrading.decisionReturned")}
+                              </Button>
+
+                              <Button
+                                variant={
+                                  teacherDecisions[result.student_id] === null
+                                    ? "default"
+                                    : "outline"
+                                }
+                                size="sm"
+                                className={cn(
+                                  "justify-start text-sm font-medium w-full",
+                                  teacherDecisions[result.student_id] ===
+                                    null &&
+                                    "bg-gray-600 hover:bg-gray-700 text-white dark:bg-gray-500 dark:hover:bg-gray-600",
+                                )}
+                                onClick={() =>
+                                  setTeacherDecisions((prev) => ({
+                                    ...prev,
+                                    [result.student_id]: null,
+                                  }))
+                                }
+                              >
+                                ⏸ {t("batchGrading.decisionPending")}
+                              </Button>
+                            </div>
+                          </td>
+
+                          {/* Single Submit Button */}
+                          <td className="px-4 py-3 text-center">
                             <Button
-                              variant={
-                                teacherDecisions[result.student_id] === "GRADED"
-                                  ? "default"
-                                  : "outline"
-                              }
                               size="sm"
-                              className={cn(
-                                "justify-start text-sm font-medium w-full",
-                                teacherDecisions[result.student_id] ===
-                                  "GRADED" &&
-                                  "bg-green-600 hover:bg-green-700 text-white dark:bg-green-600 dark:hover:bg-green-700",
-                              )}
                               onClick={() =>
-                                setTeacherDecisions((prev) => ({
-                                  ...prev,
-                                  [result.student_id]: "GRADED",
-                                }))
+                                handleSubmitSingleStudent(result.student_id)
+                              }
+                              disabled={
+                                !teacherDecisions[result.student_id] ||
+                                isSubmitting
                               }
                             >
-                              ✓ {t("batchGrading.decisionGraded")}
+                              {t("batchGrading.submitSingle")}
                             </Button>
-
-                            <Button
-                              variant={
-                                teacherDecisions[result.student_id] ===
-                                "RETURNED"
-                                  ? "default"
-                                  : "outline"
-                              }
-                              size="sm"
-                              className={cn(
-                                "justify-start text-sm font-medium w-full",
-                                teacherDecisions[result.student_id] ===
-                                  "RETURNED" &&
-                                  "bg-red-600 hover:bg-red-700 text-white dark:bg-red-600 dark:hover:bg-red-700",
-                              )}
-                              onClick={() =>
-                                setTeacherDecisions((prev) => ({
-                                  ...prev,
-                                  [result.student_id]: "RETURNED",
-                                }))
-                              }
-                            >
-                              ↩ {t("batchGrading.decisionReturned")}
-                            </Button>
-
-                            <Button
-                              variant={
-                                teacherDecisions[result.student_id] === null
-                                  ? "default"
-                                  : "outline"
-                              }
-                              size="sm"
-                              className={cn(
-                                "justify-start text-sm font-medium w-full",
-                                teacherDecisions[result.student_id] === null &&
-                                  "bg-gray-600 hover:bg-gray-700 text-white dark:bg-gray-500 dark:hover:bg-gray-600",
-                              )}
-                              onClick={() =>
-                                setTeacherDecisions((prev) => ({
-                                  ...prev,
-                                  [result.student_id]: null,
-                                }))
-                              }
-                            >
-                              ⏸ {t("batchGrading.decisionPending")}
-                            </Button>
-                          </div>
-                        </td>
-
-                        {/* Single Submit Button */}
-                        <td className="px-4 py-3 text-center">
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              handleSubmitSingleStudent(result.student_id)
-                            }
-                            disabled={
-                              !teacherDecisions[result.student_id] ||
-                              isSubmitting
-                            }
-                          >
-                            {t("batchGrading.submitSingle")}
-                          </Button>
-                        </td>
-                      </tr>
+                          </td>
+                        </tr>
                       );
                     })}
                   </tbody>
@@ -510,189 +512,190 @@ export default function BatchGradingModal({
               <div className="lg:hidden space-y-3">
                 {results.map((result) => {
                   return (
-                  <Card key={result.student_id} className="p-3 sm:p-4">
-                    {/* Student Name Header */}
-                    <div className="mb-3 pb-2 border-b dark:border-gray-700 flex items-start gap-2">
-                      <TrafficLightDot status={result.status} size={14} />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-base sm:text-lg truncate">
-                          {result.student_name}
+                    <Card key={result.student_id} className="p-3 sm:p-4">
+                      {/* Student Name Header */}
+                      <div className="mb-3 pb-2 border-b dark:border-gray-700 flex items-start gap-2">
+                        <TrafficLightDot status={result.status} size={14} />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-base sm:text-lg truncate">
+                            {result.student_name}
+                          </div>
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                            {getStatusLabel(result.status)}
+                          </div>
                         </div>
-                        <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                          {getStatusLabel(result.status)}
+                      </div>
+
+                      {/* Score Grid - 2 columns on mobile */}
+                      <div className="grid grid-cols-2 gap-2 mb-3 text-xs sm:text-sm">
+                        <div className="flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                          <span className="text-gray-600 dark:text-gray-400">
+                            {t("batchGrading.pronunciation")}:
+                          </span>
+                          <span className="text-blue-600 dark:text-blue-400 font-medium">
+                            {result.avg_pronunciation.toFixed(0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                          <span className="text-gray-600 dark:text-gray-400">
+                            {t("batchGrading.accuracy")}:
+                          </span>
+                          <span className="text-purple-600 dark:text-purple-400 font-medium">
+                            {result.avg_accuracy.toFixed(0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 bg-teal-50 dark:bg-teal-900/20 rounded">
+                          <span className="text-gray-600 dark:text-gray-400">
+                            {t("batchGrading.fluency")}:
+                          </span>
+                          <span className="text-teal-600 dark:text-teal-400 font-medium">
+                            {result.avg_fluency.toFixed(0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded">
+                          <span className="text-gray-600 dark:text-gray-400">
+                            {t("batchGrading.completeness")}:
+                          </span>
+                          <span className="text-indigo-600 dark:text-indigo-400 font-medium">
+                            {result.avg_completeness.toFixed(0)}
+                          </span>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Score Grid - 2 columns on mobile */}
-                    <div className="grid grid-cols-2 gap-2 mb-3 text-xs sm:text-sm">
-                      <div className="flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          {t("batchGrading.pronunciation")}:
-                        </span>
-                        <span className="text-blue-600 dark:text-blue-400 font-medium">
-                          {result.avg_pronunciation.toFixed(0)}
-                        </span>
+                      {/* Total Score and Missing Items - Prominent Display */}
+                      <div className="flex justify-between items-center mb-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">
+                            {t("batchGrading.totalScore")}:
+                          </span>
+                          <span
+                            className={`text-2xl font-bold ${
+                              result.total_score >= 80
+                                ? "text-green-600 dark:text-green-400"
+                                : "text-red-600 dark:text-red-400"
+                            }`}
+                          >
+                            {result.total_score.toFixed(1)}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs text-gray-600 dark:text-gray-400 block">
+                            {t("batchGrading.missingItems")}
+                          </span>
+                          {result.missing_items > 0 ? (
+                            <span className="text-red-600 dark:text-red-400 font-bold text-lg">
+                              {result.missing_items}
+                            </span>
+                          ) : (
+                            <span className="text-green-600 dark:text-green-400 font-bold text-lg">
+                              0
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          {t("batchGrading.accuracy")}:
-                        </span>
-                        <span className="text-purple-600 dark:text-purple-400 font-medium">
-                          {result.avg_accuracy.toFixed(0)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center p-2 bg-teal-50 dark:bg-teal-900/20 rounded">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          {t("batchGrading.fluency")}:
-                        </span>
-                        <span className="text-teal-600 dark:text-teal-400 font-medium">
-                          {result.avg_fluency.toFixed(0)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          {t("batchGrading.completeness")}:
-                        </span>
-                        <span className="text-indigo-600 dark:text-indigo-400 font-medium">
-                          {result.avg_completeness.toFixed(0)}
-                        </span>
-                      </div>
-                    </div>
 
-                    {/* Total Score and Missing Items - Prominent Display */}
-                    <div className="flex justify-between items-center mb-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {t("batchGrading.totalScore")}:
-                        </span>
-                        <span
-                          className={`text-2xl font-bold ${
-                            result.total_score >= 80
-                              ? "text-green-600 dark:text-green-400"
-                              : "text-red-600 dark:text-red-400"
-                          }`}
+                      {/* Decision and Submit Buttons - Two Row Layout */}
+                      {/* Row 1: Three decision buttons (simplified text) */}
+                      <div className="flex gap-2 mb-2">
+                        <Button
+                          variant={
+                            teacherDecisions[result.student_id] === "GRADED"
+                              ? "default"
+                              : "outline"
+                          }
+                          aria-label={t("batchGrading.aria.markAsGraded", {
+                            name: result.student_name,
+                          })}
+                          aria-pressed={
+                            teacherDecisions[result.student_id] === "GRADED"
+                          }
+                          className={cn(
+                            "flex-1 text-sm min-h-[44px] py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400 dark:focus:ring-offset-gray-800",
+                            teacherDecisions[result.student_id] === "GRADED" &&
+                              "bg-green-700 hover:bg-green-800 text-white dark:bg-green-600 dark:hover:bg-green-700 dark:text-white font-semibold",
+                          )}
+                          onClick={() =>
+                            setTeacherDecisions((prev) => ({
+                              ...prev,
+                              [result.student_id]: "GRADED",
+                            }))
+                          }
                         >
-                          {result.total_score.toFixed(1)}
-                        </span>
+                          {t("batchGrading.decisionGraded")}
+                        </Button>
+                        <Button
+                          variant={
+                            teacherDecisions[result.student_id] === "RETURNED"
+                              ? "default"
+                              : "outline"
+                          }
+                          aria-label={t("batchGrading.aria.markAsReturned", {
+                            name: result.student_name,
+                          })}
+                          aria-pressed={
+                            teacherDecisions[result.student_id] === "RETURNED"
+                          }
+                          className={cn(
+                            "flex-1 text-sm min-h-[44px] py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400 dark:focus:ring-offset-gray-800",
+                            teacherDecisions[result.student_id] ===
+                              "RETURNED" &&
+                              "bg-red-700 hover:bg-red-800 text-white dark:bg-red-600 dark:hover:bg-red-700 dark:text-white font-semibold",
+                          )}
+                          onClick={() =>
+                            setTeacherDecisions((prev) => ({
+                              ...prev,
+                              [result.student_id]: "RETURNED",
+                            }))
+                          }
+                        >
+                          {t("batchGrading.decisionReturned")}
+                        </Button>
+                        <Button
+                          variant={
+                            teacherDecisions[result.student_id] === null
+                              ? "default"
+                              : "outline"
+                          }
+                          aria-label={t("batchGrading.aria.markAsPending", {
+                            name: result.student_name,
+                          })}
+                          aria-pressed={
+                            teacherDecisions[result.student_id] === null
+                          }
+                          className={cn(
+                            "flex-1 text-sm min-h-[44px] py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400 dark:focus:ring-offset-gray-800",
+                            teacherDecisions[result.student_id] === null &&
+                              "bg-gray-700 hover:bg-gray-800 text-white dark:bg-gray-500 dark:hover:bg-gray-600 dark:text-white font-semibold",
+                          )}
+                          onClick={() =>
+                            setTeacherDecisions((prev) => ({
+                              ...prev,
+                              [result.student_id]: null,
+                            }))
+                          }
+                        >
+                          {t("batchGrading.decisionPending")}
+                        </Button>
                       </div>
-                      <div className="text-right">
-                        <span className="text-xs text-gray-600 dark:text-gray-400 block">
-                          {t("batchGrading.missingItems")}
-                        </span>
-                        {result.missing_items > 0 ? (
-                          <span className="text-red-600 dark:text-red-400 font-bold text-lg">
-                            {result.missing_items}
-                          </span>
-                        ) : (
-                          <span className="text-green-600 dark:text-green-400 font-bold text-lg">
-                            0
-                          </span>
-                        )}
+
+                      {/* Row 2: Submit button (right-aligned) */}
+                      <div className="flex justify-end">
+                        <Button
+                          onClick={() =>
+                            handleSubmitSingleStudent(result.student_id)
+                          }
+                          disabled={
+                            !teacherDecisions[result.student_id] || isSubmitting
+                          }
+                          className={cn(
+                            "bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-600 dark:hover:bg-blue-700 dark:text-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400 dark:focus:ring-offset-gray-800",
+                            "disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed dark:disabled:bg-gray-700 dark:disabled:text-gray-500",
+                          )}
+                        >
+                          {t("batchGrading.submitSingle")}
+                        </Button>
                       </div>
-                    </div>
-
-                    {/* Decision and Submit Buttons - Two Row Layout */}
-                    {/* Row 1: Three decision buttons (simplified text) */}
-                    <div className="flex gap-2 mb-2">
-                      <Button
-                        variant={
-                          teacherDecisions[result.student_id] === "GRADED"
-                            ? "default"
-                            : "outline"
-                        }
-                        aria-label={t("batchGrading.aria.markAsGraded", {
-                          name: result.student_name,
-                        })}
-                        aria-pressed={
-                          teacherDecisions[result.student_id] === "GRADED"
-                        }
-                        className={cn(
-                          "flex-1 text-sm min-h-[44px] py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400 dark:focus:ring-offset-gray-800",
-                          teacherDecisions[result.student_id] === "GRADED" &&
-                            "bg-green-700 hover:bg-green-800 text-white dark:bg-green-600 dark:hover:bg-green-700 dark:text-white font-semibold",
-                        )}
-                        onClick={() =>
-                          setTeacherDecisions((prev) => ({
-                            ...prev,
-                            [result.student_id]: "GRADED",
-                          }))
-                        }
-                      >
-                        {t("batchGrading.decisionGraded")}
-                      </Button>
-                      <Button
-                        variant={
-                          teacherDecisions[result.student_id] === "RETURNED"
-                            ? "default"
-                            : "outline"
-                        }
-                        aria-label={t("batchGrading.aria.markAsReturned", {
-                          name: result.student_name,
-                        })}
-                        aria-pressed={
-                          teacherDecisions[result.student_id] === "RETURNED"
-                        }
-                        className={cn(
-                          "flex-1 text-sm min-h-[44px] py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400 dark:focus:ring-offset-gray-800",
-                          teacherDecisions[result.student_id] === "RETURNED" &&
-                            "bg-red-700 hover:bg-red-800 text-white dark:bg-red-600 dark:hover:bg-red-700 dark:text-white font-semibold",
-                        )}
-                        onClick={() =>
-                          setTeacherDecisions((prev) => ({
-                            ...prev,
-                            [result.student_id]: "RETURNED",
-                          }))
-                        }
-                      >
-                        {t("batchGrading.decisionReturned")}
-                      </Button>
-                      <Button
-                        variant={
-                          teacherDecisions[result.student_id] === null
-                            ? "default"
-                            : "outline"
-                        }
-                        aria-label={t("batchGrading.aria.markAsPending", {
-                          name: result.student_name,
-                        })}
-                        aria-pressed={
-                          teacherDecisions[result.student_id] === null
-                        }
-                        className={cn(
-                          "flex-1 text-sm min-h-[44px] py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400 dark:focus:ring-offset-gray-800",
-                          teacherDecisions[result.student_id] === null &&
-                            "bg-gray-700 hover:bg-gray-800 text-white dark:bg-gray-500 dark:hover:bg-gray-600 dark:text-white font-semibold",
-                        )}
-                        onClick={() =>
-                          setTeacherDecisions((prev) => ({
-                            ...prev,
-                            [result.student_id]: null,
-                          }))
-                        }
-                      >
-                        {t("batchGrading.decisionPending")}
-                      </Button>
-                    </div>
-
-                    {/* Row 2: Submit button (right-aligned) */}
-                    <div className="flex justify-end">
-                      <Button
-                        onClick={() =>
-                          handleSubmitSingleStudent(result.student_id)
-                        }
-                        disabled={
-                          !teacherDecisions[result.student_id] || isSubmitting
-                        }
-                        className={cn(
-                          "bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-600 dark:hover:bg-blue-700 dark:text-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400 dark:focus:ring-offset-gray-800",
-                          "disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed dark:disabled:bg-gray-700 dark:disabled:text-gray-500",
-                        )}
-                      >
-                        {t("batchGrading.submitSingle")}
-                      </Button>
-                    </div>
-                  </Card>
+                    </Card>
                   );
                 })}
               </div>

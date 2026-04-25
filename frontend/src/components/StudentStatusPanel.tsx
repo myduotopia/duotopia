@@ -196,7 +196,10 @@ export function useStatusLabel() {
   return (status: string): string => {
     switch (status) {
       case "NOT_STARTED":
-        return t("assignmentDetail.sheet.statusNotStarted", "學生尚未開始寫作業");
+        return t(
+          "assignmentDetail.sheet.statusNotStarted",
+          "學生尚未開始寫作業",
+        );
       case "RETURNED":
         return t("assignmentDetail.sheet.statusReturned", "學生未開始訂正");
       case "IN_PROGRESS":
