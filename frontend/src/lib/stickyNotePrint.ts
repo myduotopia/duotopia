@@ -46,6 +46,7 @@ export interface PrintStudent {
   student_number: number;
   student_name: string;
   score?: number;
+  is_interim_score?: boolean;
   status: string;
 }
 
@@ -105,9 +106,11 @@ export function buildStickyNotePageHtml(
   const cardsHtml = students
     .map((student) => {
       const hasNumber = student.student_number > 0;
-      const hasScore =
-        student.score != null &&
-        ["GRADED", "RETURNED", "RESUBMITTED"].includes(student.status);
+      // 已派發的學生一律顯示分數（同 StudentStatusPanel 規則）：
+      //   null / 未完成 → 0；is_interim_score 加 "~"；unassigned 顯示 "-"。
+      const hasScore = student.status !== "unassigned";
+      const scoreValue = student.score ?? 0;
+      const scoreText = `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(0)}`;
 
       const parts: string[] = [];
       if (showNumber && hasNumber) {
@@ -122,7 +125,7 @@ export function buildStickyNotePageHtml(
       }
       if (showScore) {
         parts.push(
-          `<div style="font-size:16px;font-weight:bold;color:${hasScore ? "#1F2937" : "#D1D5DB"}">${hasScore ? escapeHtml(Number(student.score!).toFixed(0)) : "-"}</div>`,
+          `<div style="font-size:16px;font-weight:bold;color:${hasScore ? "#1F2937" : "#D1D5DB"}">${hasScore ? escapeHtml(scoreText) : "-"}</div>`,
         );
       }
 

@@ -389,6 +389,7 @@ export default function ClassroomDetail({
                 student_name:
                   (p.student_name as string) || (p.name as string) || "",
                 score: (p.score as number) ?? undefined,
+                is_interim_score: (p.is_interim_score as boolean) || false,
                 status: (p.status as string) || "NOT_STARTED",
               })),
           };
