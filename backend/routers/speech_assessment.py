@@ -225,9 +225,7 @@ def convert_audio_to_wav(audio_data: bytes, content_type: str) -> bytes:
 
         if fmt in ("webm", "mp4"):
             # Container formats: pydub wants a real file on disk (ffmpeg probes).
-            with tempfile.NamedTemporaryFile(
-                suffix=f".{fmt}", delete=False
-            ) as temp_in:
+            with tempfile.NamedTemporaryFile(suffix=f".{fmt}", delete=False) as temp_in:
                 temp_in.write(audio_data)
                 temp_in_path = temp_in.name
             audio = AudioSegment.from_file(temp_in_path, format=fmt)

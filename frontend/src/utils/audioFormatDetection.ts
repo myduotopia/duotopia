@@ -40,7 +40,8 @@ async function readHead(blob: Blob, n: number): Promise<Uint8Array> {
         resolve(new Uint8Array(0));
       }
     };
-    reader.onerror = () => reject(reader.error ?? new Error("FileReader failed"));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("FileReader failed"));
     reader.readAsArrayBuffer(slice);
   });
 }
@@ -138,7 +139,10 @@ export async function getUploadFileMetadata(
     return { filename: FORMAT_TO_EXT.mp3, contentType: FORMAT_TO_MIME.mp3 };
   }
 
-  return { filename: "recording.audio", contentType: "application/octet-stream" };
+  return {
+    filename: "recording.audio",
+    contentType: "application/octet-stream",
+  };
 }
 
 /**
@@ -153,7 +157,9 @@ export async function appendAudioToFormData(
 ): Promise<{ filename: string; contentType: string }> {
   const meta = await getUploadFileMetadata(blob);
   const retyped =
-    blob.type === meta.contentType ? blob : new Blob([blob], { type: meta.contentType });
+    blob.type === meta.contentType
+      ? blob
+      : new Blob([blob], { type: meta.contentType });
   formData.append(key, retyped, meta.filename);
   return meta;
 }
