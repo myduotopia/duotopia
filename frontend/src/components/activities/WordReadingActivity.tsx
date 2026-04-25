@@ -463,7 +463,8 @@ export default function WordReadingActivity({
       }
 
       // Issue #677: removed pre-submit supplementary analysis pass.
-      // Items without `ai_assessment` at submit time are submitted as-is.
+      // Items without `ai_assessment` at submit time are submitted as-is;
+      // analysis only happens at the moment the recording is finished.
 
       // 提交作業
       const response = await fetch(

@@ -1366,6 +1366,7 @@ export default function StudentActivityPageContent({
 
   /**
    * 處理題號按鈕跳題（純切換，不再自動補分析 — Issue #677）
+   * 補分析只在錄音完成那一刻發生；跳題時不再為「之前未分析的題目」追加分析。
    */
   const handleQuestionJump = async (
     targetActivityIndex: number,
@@ -1546,7 +1547,8 @@ export default function StudentActivityPageContent({
     }
 
     // Issue #677: removed pre-submit supplementary analysis pass.
-    // Items without `ai_assessment` at submit time are submitted as-is.
+    // Items without `ai_assessment` at submit time are submitted as-is;
+    // analysis only happens at the moment the recording is finished.
 
     // 🎯 立即提交（只上傳音檔，不執行分析）
     if (onSubmit) {
