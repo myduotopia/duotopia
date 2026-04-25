@@ -7,11 +7,16 @@
  *      位於 src/components/grading/，**不要**依作業類型改它們的行為。
  *    - 中間欄 = 作業類型專屬 Panel，依 submission.practice_mode 選擇。
  *
+ * 中間欄 panel 採 React.lazy 切 chunk：每個 practice_mode 只載入自己那支 panel
+ * （例如 rearrangement 不會把 ReadingAssessmentPanel 的 Speech SDK 一併打進首頁
+ * chunk —— SpeechSDK 內部 class 繼承鏈在 production bundle 對 eager import 很敏感，
+ * 一同打包會在進頁時 `Class extends value undefined` crash 整頁）。
+ *
  * 新增作業類型 / 修改此分流邏輯前請先閱讀：
  *   docs/design/grading-page-architecture.md
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { apiClient } from "@/lib/api";
@@ -21,9 +26,18 @@ import {
   GradingHeader,
   StudentListPanel,
   OverallFeedbackPanel,
-  ReadingAssessmentPanel,
-  SentenceRearrangementPanel,
 } from "@/components/grading";
+
+const ReadingAssessmentPanel = lazy(() =>
+  import("@/components/grading/ReadingAssessmentPanel").then((m) => ({
+    default: m.ReadingAssessmentPanel,
+  })),
+);
+const SentenceRearrangementPanel = lazy(() =>
+  import("@/components/grading/SentenceRearrangementPanel").then((m) => ({
+    default: m.SentenceRearrangementPanel,
+  })),
+);
 
 interface AssignmentInfo extends Assignment {
   title: string;
@@ -923,7 +937,15 @@ export default function GradingPage() {
             activeTab={activeTab}
           />
 
-          {renderContentPanel()}
+          <Suspense
+            fallback={
+              <div className="col-span-12 lg:col-span-6 flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            }
+          >
+            {renderContentPanel()}
+          </Suspense>
 
           <OverallFeedbackPanel
             submission={submission}
