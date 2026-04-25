@@ -2985,7 +2985,8 @@
         "selectionHistory": "選字歷程",
         "selected": "選擇",
         "expected": "應選",
-        "completedAt": "完成時間"
+        "completedAt": "完成時間",
+        "detailedHistoryComingSoon": "更詳細的作答紀錄 Coming Soon"
       },
       "badges": {
         "completed": "完成",

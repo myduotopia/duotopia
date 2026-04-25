@@ -2932,7 +2932,8 @@
         "selectionHistory": "Selection History",
         "selected": "Selected",
         "expected": "Expected",
-        "completedAt": "Completed at"
+        "completedAt": "Completed at",
+        "detailedHistoryComingSoon": "Detailed answer history Coming Soon"
       },
       "badges": {
         "completed": "Completed",

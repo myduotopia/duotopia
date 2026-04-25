@@ -11,8 +11,9 @@
  *   - 其他（尚未作答 / 無分數）                                → 灰色 placeholder
  * 完全不讀 itemFeedbacks、不 onClick、不 autosave。
  *
- * 展開區會顯示「選字歷程」雛型（目前先用綠色 chip 呈現完整正確答案），
- * 多次 attempt 的詳細歷程要等 #679 後端改動完成才會真正上。
+ * 展開區「選字歷程」label 永遠顯示，但內容依分數分流：
+ *   - expected_score > 60 → 用綠色 chip 呈現完整正確答案（雛型，等 #679 補完整 attempts[] 再接真實資料）
+ *   - 其他（沒分數 / ≤ 60）→ 顯示「更詳細的作答紀錄 Coming Soon」灰色佔位文字
  *
  * 詳見 docs/design/grading-page-architecture.md
  */
@@ -87,6 +88,18 @@ export function SentenceRearrangementPanel({
   }
 
   const renderSelectionHistory = (item: SubmissionItem) => {
+    // 分流：> 60 才顯示綠色 chips 雛型；其餘（沒分數 / ≤ 60）顯示 Coming Soon 佔位
+    const expectedScore = item.expected_score;
+    const showChips = expectedScore != null && expectedScore > 60;
+
+    if (!showChips) {
+      return (
+        <div className="text-xs text-gray-400 italic">
+          {t("gradingPage.rearrangement.labels.detailedHistoryComingSoon")}
+        </div>
+      );
+    }
+
     // ⚠️ 示意圖：目前後端還沒提供每次作答（含 retry / timeout）的完整逐字歷程，
     // 這裡先拿正確答案切成 chips 當 placeholder，讓老師知道未來會看到什麼樣的 UI。
     // 等 #679 後端補完 attempts[] 資料後再接真實資料。
