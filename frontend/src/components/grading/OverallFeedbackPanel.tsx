@@ -4,6 +4,11 @@
  * 顯示：逐題燈號（可點擊跳題）、分數輸入、總評語、要求訂正 / 完成批改按鈕。
  * 此元件不得依 practice_mode 改變行為；所有作業類型共用。
  *
+ * 與 practice_mode 相關的調整由 GradingPage 透過 props 指示，元件本身不感知模式：
+ *   - 省略 `onRequestRevision` → 不顯示「要求訂正」按鈕（auto-graded 模式無訂正概念）
+ *   - `isAutoScored` → 主按鈕文案改為「儲存」（auto-graded 模式不是「完成批改」，
+ *     批改在學生作答當下就完成了，老師只是儲存最終分數/評語）
+ *
  * 詳見 docs/design/grading-page-architecture.md
  */
 
@@ -33,6 +38,8 @@ interface OverallFeedbackPanelProps {
   onComplete: () => void;
   // 省略不傳即不顯示「要求訂正」按鈕（用於自動評分模式，如 rearrangement）
   onRequestRevision?: () => void;
+  // true 時主按鈕文案顯示「儲存」而非「完成批改」（auto-graded 模式）
+  isAutoScored?: boolean;
   onJumpToItem: (groupIndex: number, globalIndex: number) => void;
 }
 
@@ -50,6 +57,7 @@ export function OverallFeedbackPanel({
   onAutoSave,
   onComplete,
   onRequestRevision,
+  isAutoScored,
   onJumpToItem,
 }: OverallFeedbackPanelProps) {
   const { t } = useTranslation();
@@ -148,7 +156,7 @@ export function OverallFeedbackPanel({
             </label>
             <input
               type="text"
-              inputMode="numeric"
+              inputMode="decimal"
               value={score === null ? "" : score}
               onBlur={async () => {
                 await onAutoSave();
@@ -232,7 +240,9 @@ export function OverallFeedbackPanel({
                 }`}
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
-                {t("gradingPage.buttons.completeGrading")}
+                {isAutoScored
+                  ? t("common.save")
+                  : t("gradingPage.buttons.completeGrading")}
               </Button>
             </div>
           </div>

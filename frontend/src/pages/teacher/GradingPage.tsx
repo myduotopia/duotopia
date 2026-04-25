@@ -968,6 +968,7 @@ export default function GradingPage() {
                 ? undefined
                 : handleRequestRevision
             }
+            isAutoScored={isAutoScoredMode(submission?.practice_mode)}
             onJumpToItem={handleJumpToItem}
           />
         </div>
