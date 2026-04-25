@@ -926,7 +926,15 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   ) : (
                     <Save className="h-3.5 w-3.5" />
                   )}
-                  {t("assignmentDetail.sheet.saveStudents", "儲存派發")}
+                  {activeTab === "assigned"
+                    ? t(
+                        "assignmentDetail.sheet.unassignStudents",
+                        "取消派發",
+                      )
+                    : t(
+                        "assignmentDetail.sheet.saveStudents",
+                        "儲存派發",
+                      )}
                 </button>
               </div>
             </div>

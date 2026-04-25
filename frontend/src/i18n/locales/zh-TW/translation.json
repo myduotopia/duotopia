@@ -59,6 +59,7 @@
       "checkHomework": "批改作業",
       "editStudents": "編輯派發",
       "saveStudents": "儲存派發",
+      "unassignStudents": "取消派發",
       "sortByScore": "成績",
       "sortByNumber": "座號",
       "sortByName": "姓名",
