@@ -271,9 +271,11 @@ function StudentCard({
   const isUnassigned = student.status === "unassigned";
   const cardTooltip = tooltip && !isUnassigned ? tooltip : undefined;
   const isClickable = !!cardTooltip;
-  const hasScore =
-    student.score != null &&
-    ["GRADED", "RETURNED", "RESUBMITTED"].includes(student.status);
+  // 已派發的學生一律顯示分數：null（未完成 / 無 interim）→ 0.0，
+  // 有 is_interim_score 則前面加 "~"。狀態由名牌左上的紅綠燈點告知，
+  // 不再因為狀態不是 GRADED 就把分數藏起來顯示 "-"。
+  const hasScore = !isUnassigned;
+  const scoreValue = student.score ?? 0;
 
   return (
     <div
@@ -343,7 +345,7 @@ function StudentCard({
         }`}
       >
         {hasScore
-          ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(1)}`
+          ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
           : "-"}
       </span>
     </div>
@@ -374,9 +376,9 @@ function StudentRow({
   const isUnassigned = student.status === "unassigned";
   const rowTooltip = tooltip && !isUnassigned ? tooltip : undefined;
   const isClickable = !!rowTooltip;
-  const hasScore =
-    student.score != null &&
-    ["GRADED", "RETURNED", "RESUBMITTED"].includes(student.status);
+  // 已派發的學生一律顯示分數（同 StudentCard 規則）。
+  const hasScore = !isUnassigned;
+  const scoreValue = student.score ?? 0;
 
   return (
     <div
@@ -446,7 +448,7 @@ function StudentRow({
         }`}
       >
         {hasScore
-          ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(1)}`
+          ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
           : "-"}
       </span>
     </div>
