@@ -59,6 +59,73 @@ def _is_vocab_type(content_type) -> bool:
     return content_type in _VOCABULARY_CONTENT_TYPES
 
 
+async def ensure_example_sentence_audio(items: List[ContentItem], db: Session) -> int:
+    """Lazily generate missing example_sentence_audio_url for vocab items.
+
+    Used by reading / rearrangement / word_cloze flows so the student (or
+    teacher preview) always hears the full sentence audio rather than a
+    fallback / blank.
+
+    Idempotent and concurrency-safe: only updates rows where
+    example_sentence_audio_url IS NULL at the time of write.
+
+    Returns number of TTS rows newly generated (for logging / metrics).
+    """
+    missing_audio_items = [
+        ci
+        for ci in items
+        if ci.example_sentence
+        and ci.example_sentence.strip()
+        and not ci.example_sentence_audio_url
+    ]
+    if not missing_audio_items:
+        return 0
+
+    # Lazy imports to avoid heavyweight module loads at request time
+    from services.tts import TTSService
+    from utils.ttsVoiceResolver import get_voice_and_rate
+    from sqlalchemy import text as _sa_text
+
+    tts_service = TTSService()
+    generated = 0
+    for item in missing_audio_items:
+        try:
+            audio_settings = (
+                item.item_metadata.get("audio_settings", {})
+                if item.item_metadata
+                else {}
+            )
+            voice, rate = get_voice_and_rate(
+                audio_settings.get("accent", "American English"),
+                audio_settings.get("gender", "Male"),
+                audio_settings.get("speed", "Normal x1"),
+            )
+            url = await tts_service.generate_tts(item.example_sentence, voice, rate)
+            rows = db.execute(
+                _sa_text(
+                    "UPDATE content_items "
+                    "SET example_sentence_audio_url = :url "
+                    "WHERE id = :id "
+                    "AND example_sentence_audio_url IS NULL"
+                ),
+                {"url": url, "id": item.id},
+            ).rowcount
+            if rows > 0:
+                item.example_sentence_audio_url = url
+                generated += 1
+            else:
+                # already updated by a concurrent request; refresh to latest
+                db.refresh(item)
+        except Exception as e:
+            logger.warning(
+                f"Lazy TTS generation failed for content_item {item.id}: {e}"
+            )
+    if generated > 0:
+        db.commit()
+        logger.info(f"Lazy-generated example sentence TTS for {generated} item(s)")
+    return generated
+
+
 def get_sentence_fields(item: ContentItem, content_type, practice_mode: str):
     """Return (text, translation, audio_url) based on content type and practice mode.
 
@@ -677,8 +744,11 @@ def get_word_spelling_start(assignment: Assignment, db: Session) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def get_word_cloze_start(assignment: Assignment, db: Session) -> dict:
+async def get_word_cloze_start(assignment: Assignment, db: Session) -> dict:
     """Return word-cloze practice data.
+
+    Lazily backfills missing example_sentence_audio_url so that students
+    (and teacher previews) hear the full sentence rather than nothing.
 
     Imports extract_cloze_for_item lazily to avoid circular imports
     (the helper currently lives in routers/students/assignments.py).
@@ -706,6 +776,9 @@ def get_word_cloze_start(assignment: Assignment, db: Session) -> dict:
             status_code=404,
             detail="No vocabulary items found for this assignment",
         )
+
+    # Generate any missing example sentence audio so audio_url isn't blank.
+    await ensure_example_sentence_audio(list(content_items), db)
 
     items_list = list(content_items)
     if assignment.shuffle_questions:

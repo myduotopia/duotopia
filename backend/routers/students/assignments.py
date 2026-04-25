@@ -279,68 +279,20 @@ async def get_assignment_activities(
 
         # Lazy TTS：朗讀/重組/克漏字模式下，補生成缺少例句音檔的單字集 items
         if _practice_mode in ("reading", "rearrangement", "word_cloze"):
-            vocab_content_ids = [
+            vocab_content_ids = {
                 cid
                 for cid, c in content_dict.items()
                 if c.type in _VOCABULARY_CONTENT_TYPES
-            ]
+            }
             if vocab_content_ids:
-                missing_audio_items = [
-                    ci
-                    for ci in all_content_items
-                    if ci.content_id in vocab_content_ids
-                    and ci.example_sentence
-                    and ci.example_sentence.strip()
-                    and not ci.example_sentence_audio_url
-                ]
-                if missing_audio_items:
-                    from services.tts import TTSService
-                    from utils.ttsVoiceResolver import get_voice_and_rate
+                from services.preview_service import (
+                    ensure_example_sentence_audio,
+                )
 
-                    tts_service = TTSService()
-                    tts_generated = 0
-                    for item in missing_audio_items:
-                        try:
-                            audio_settings = (
-                                item.item_metadata.get("audio_settings", {})
-                                if item.item_metadata
-                                else {}
-                            )
-                            voice, rate = get_voice_and_rate(
-                                audio_settings.get("accent", "American English"),
-                                audio_settings.get("gender", "Male"),
-                                audio_settings.get("speed", "Normal x1"),
-                            )
-                            url = await tts_service.generate_tts(
-                                item.example_sentence, voice, rate
-                            )
-                            # 條件式更新：只在仍為 NULL 時寫入，避免並行覆蓋
-                            rows = db.execute(
-                                text(
-                                    "UPDATE content_items "
-                                    "SET example_sentence_audio_url = :url "
-                                    "WHERE id = :id "
-                                    "AND example_sentence_audio_url IS NULL"
-                                ),
-                                {"url": url, "id": item.id},
-                            ).rowcount
-                            if rows > 0:
-                                item.example_sentence_audio_url = url
-                                tts_generated += 1
-                            else:
-                                # 已被其他 request 更新，重讀最新值
-                                db.refresh(item)
-                        except Exception as e:
-                            logger.warning(
-                                f"Lazy TTS generation failed for item {item.id}: {e}"
-                            )
-                    if tts_generated > 0:
-                        db.commit()
-                        logger.info(
-                            f"Lazy-generated example sentence TTS for "
-                            f"{tts_generated} items in assignment "
-                            f"{student_assignment.assignment_id}"
-                        )
+                vocab_items = [
+                    ci for ci in all_content_items if ci.content_id in vocab_content_ids
+                ]
+                await ensure_example_sentence_audio(vocab_items, db)
 
         # 建立 content_id -> [items] 的索引
         content_items_map = {}
@@ -2456,6 +2408,14 @@ async def start_word_cloze_practice(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No vocabulary items found for this assignment",
         )
+
+    # Defensive: ensure example sentence audio exists for vocab items so
+    # students always hear the full sentence (not just the word).
+    # Normally backfilled by get_assignment_activities, but call here too
+    # in case this endpoint is hit directly.
+    from services.preview_service import ensure_example_sentence_audio
+
+    await ensure_example_sentence_audio(list(content_items), db)
 
     items_list = list(content_items)
     if assignment and assignment.shuffle_questions:

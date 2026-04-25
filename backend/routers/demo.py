@@ -366,7 +366,7 @@ async def demo_word_cloze_start(
 ):
     """Demo mode: Start word cloze practice."""
     assignment = get_demo_assignment(assignment_id, db)
-    return get_word_cloze_start(assignment, db)
+    return await get_word_cloze_start(assignment, db)
 
 
 @router.post("/assignments/{assignment_id}/preview/word-selection-answer")

@@ -192,7 +192,7 @@ async def preview_word_cloze_start(
 ):
     """Preview mode: Get word cloze practice data."""
     assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
-    return get_word_cloze_start(assignment, db)
+    return await get_word_cloze_start(assignment, db)
 
 
 @router.post("/assignments/{assignment_id}/preview/word-selection-answer")
