@@ -37,6 +37,7 @@ from .validators import (
     BatchGradeFinalizeResponse,
 )
 from .dependencies import get_current_teacher
+from .detail import _compute_interim_score
 from .utils import (
     process_audio_with_whisper,
     calculate_text_similarity,
@@ -585,7 +586,13 @@ async def get_student_submission(
         "practice_mode": practice_mode,
         "submissions": submissions,
         "content_groups": content_groups,
-        "current_score": assignment.score,
+        # Auto-graded modes (rearrangement / word_selection) only finalize
+        # sa.score on completion; while IN_PROGRESS the helper computes
+        # sum(expected_scores) / total_items so the grading page right panel
+        # matches the assignment overview instead of showing 0.
+        "current_score": _compute_interim_score(
+            assignment, parent_assignment, db
+        ),
         "current_feedback": assignment.feedback,
     }
 
