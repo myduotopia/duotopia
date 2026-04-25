@@ -44,6 +44,8 @@ from services.preview_service import (
     check_rearrangement_answer,
     handle_rearrangement_retry,
     handle_rearrangement_complete,
+    get_word_spelling_start,
+    get_word_cloze_start,
     WordSelectionAnswerRequest,
     RearrangementAnswerRequest,
     RearrangementCompleteRequest,
@@ -169,6 +171,28 @@ async def preview_word_selection_start(
     """Preview mode: Get word selection practice data."""
     assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
     return get_word_selection_start(assignment, db, exclude_ids)
+
+
+@router.get("/assignments/{assignment_id}/preview/word-spelling-start")
+async def preview_word_spelling_start(
+    assignment_id: int,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """Preview mode: Get word spelling practice data."""
+    assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
+    return get_word_spelling_start(assignment, db)
+
+
+@router.get("/assignments/{assignment_id}/preview/word-cloze-start")
+async def preview_word_cloze_start(
+    assignment_id: int,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """Preview mode: Get word cloze practice data."""
+    assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
+    return get_word_cloze_start(assignment, db)
 
 
 @router.post("/assignments/{assignment_id}/preview/word-selection-answer")

@@ -610,3 +610,153 @@ def handle_rearrangement_complete(
         "timeout": timeout,
         "completed_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /word-spelling-start — word spelling practice data
+# ---------------------------------------------------------------------------
+
+
+def get_word_spelling_start(assignment: Assignment, db: Session) -> dict:
+    """Return word-spelling practice data (sequential, all words)."""
+    if assignment.practice_mode != "word_spelling":
+        raise HTTPException(
+            status_code=400,
+            detail="This assignment does not support word-spelling mode",
+        )
+
+    content_items = (
+        db.query(ContentItem)
+        .join(Content)
+        .join(AssignmentContent)
+        .filter(AssignmentContent.assignment_id == assignment.id)
+        .order_by(ContentItem.order_index)
+        .all()
+    )
+
+    if not content_items:
+        raise HTTPException(
+            status_code=404,
+            detail="No vocabulary items found for this assignment",
+        )
+
+    items_list = list(content_items)
+    if assignment.shuffle_questions:
+        random.shuffle(items_list)
+
+    words_data = [
+        {
+            "content_item_id": ci.id,
+            "text": ci.text,
+            "translation": ci.translation or "",
+            "audio_url": ci.audio_url,
+            "image_url": ci.image_url,
+        }
+        for ci in items_list
+    ]
+
+    return {
+        "session_id": None,
+        "words": words_data,
+        "total_words": len(words_data),
+        "show_translation": (
+            assignment.show_translation
+            if assignment.show_translation is not None
+            else True
+        ),
+        "show_image": (
+            assignment.show_image if assignment.show_image is not None else True
+        ),
+        "play_audio": assignment.play_audio or False,
+        "time_limit_per_question": assignment.time_limit_per_question,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /word-cloze-start — word cloze practice data
+# ---------------------------------------------------------------------------
+
+
+def get_word_cloze_start(assignment: Assignment, db: Session) -> dict:
+    """Return word-cloze practice data.
+
+    Imports extract_cloze_for_item lazily to avoid circular imports
+    (the helper currently lives in routers/students/assignments.py).
+    """
+    if assignment.practice_mode != "word_cloze":
+        raise HTTPException(
+            status_code=400,
+            detail="This assignment does not support word-cloze mode",
+        )
+
+    # Lazy import to avoid circular dependency
+    from routers.students.assignments import extract_cloze_for_item
+
+    content_items = (
+        db.query(ContentItem)
+        .join(Content)
+        .join(AssignmentContent)
+        .filter(AssignmentContent.assignment_id == assignment.id)
+        .order_by(ContentItem.order_index)
+        .all()
+    )
+
+    if not content_items:
+        raise HTTPException(
+            status_code=404,
+            detail="No vocabulary items found for this assignment",
+        )
+
+    items_list = list(content_items)
+    if assignment.shuffle_questions:
+        random.shuffle(items_list)
+
+    questions = []
+    for ci in items_list:
+        cloze = extract_cloze_for_item(ci)
+        if cloze is None:
+            continue
+        blanked_sentence, correct_answer = cloze
+        is_vocab_item = bool(ci.example_sentence)
+        questions.append(
+            {
+                "content_item_id": ci.id,
+                "base_word": ci.text if is_vocab_item else "",
+                "translation": ci.translation if is_vocab_item else "",
+                "blanked_sentence": blanked_sentence,
+                "sentence_translation": (
+                    ci.example_sentence_translation
+                    if is_vocab_item
+                    else (ci.translation or "")
+                )
+                or "",
+                "audio_url": (
+                    ci.example_sentence_audio_url or ci.audio_url
+                    if is_vocab_item
+                    else ci.audio_url
+                ),
+                "correct_answer_length": len(correct_answer),
+            }
+        )
+
+    if not questions:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No usable cloze questions: example sentences do not contain "
+                "the target word."
+            ),
+        )
+
+    return {
+        "session_id": None,
+        "questions": questions,
+        "total_questions": len(questions),
+        "show_translation": (
+            assignment.show_translation
+            if assignment.show_translation is not None
+            else True
+        ),
+        "play_audio": assignment.play_audio or False,
+        "time_limit_per_question": assignment.time_limit_per_question,
+    }
