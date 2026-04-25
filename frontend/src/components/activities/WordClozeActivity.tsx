@@ -44,6 +44,9 @@ interface WordClozeActivityProps {
   isPreviewMode?: boolean;
   isDemoMode?: boolean;
   onComplete?: () => void;
+  externalQuestionIndex?: number;
+  onQuestionIndexChange?: (idx: number) => void;
+  onTotalQuestionsChange?: (total: number) => void;
 }
 
 export default function WordClozeActivity({
@@ -51,6 +54,9 @@ export default function WordClozeActivity({
   isPreviewMode = false,
   isDemoMode = false,
   onComplete,
+  externalQuestionIndex,
+  onQuestionIndexChange,
+  onTotalQuestionsChange,
 }: WordClozeActivityProps) {
   const { t } = useTranslation();
 
@@ -106,7 +112,8 @@ export default function WordClozeActivity({
         time_limit_per_question: number | null;
       }>(apiEndpoint);
 
-      setQuestions(data.questions || []);
+      const loadedQuestions = data.questions || [];
+      setQuestions(loadedQuestions);
       setSessionId(data.session_id);
       setShowTranslation(data.show_translation ?? true);
       setPlayAudio(data.play_audio ?? false);
@@ -117,6 +124,8 @@ export default function WordClozeActivity({
       setShowResult(false);
       setCorrectCount(0);
       setAllCompleted(false);
+      onTotalQuestionsChange?.(loadedQuestions.length);
+      onQuestionIndexChange?.(0);
     } catch (error) {
       console.error("Error starting cloze practice:", error);
       toast.error(
@@ -125,11 +134,31 @@ export default function WordClozeActivity({
     } finally {
       setLoading(false);
     }
+    // onTotalQuestionsChange / onQuestionIndexChange are notification-only;
+    // intentionally excluded to avoid restart loops.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId, isPreviewMode, isDemoMode, t]);
 
   useEffect(() => {
     startPractice();
   }, [startPractice]);
+
+  // Sync external→internal: jump to question when parent navigates.
+  useEffect(() => {
+    if (
+      externalQuestionIndex !== undefined &&
+      externalQuestionIndex !== currentIndex &&
+      externalQuestionIndex >= 0 &&
+      externalQuestionIndex < questions.length
+    ) {
+      setCurrentIndex(externalQuestionIndex);
+      setShowResult(false);
+      setTypedAnswer("");
+      setIncorrectAnswer(null);
+      if (timeLimit) setTimeRemaining(timeLimit);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalQuestionIndex]);
 
   // Focus input when question changes
   useEffect(() => {
@@ -275,7 +304,9 @@ export default function WordClozeActivity({
     }
 
     if (currentIndex < questions.length - 1) {
-      setCurrentIndex(currentIndex + 1);
+      const next = currentIndex + 1;
+      setCurrentIndex(next);
+      onQuestionIndexChange?.(next);
     } else {
       setAllCompleted(true);
     }

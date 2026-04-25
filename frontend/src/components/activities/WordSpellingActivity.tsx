@@ -41,6 +41,11 @@ interface WordSpellingActivityProps {
   isPreviewMode?: boolean;
   isDemoMode?: boolean;
   onComplete?: () => void;
+  // Controlled-component hooks: external nav can drive currentIndex and
+  // observe total question count for rendering question buttons.
+  externalQuestionIndex?: number;
+  onQuestionIndexChange?: (idx: number) => void;
+  onTotalQuestionsChange?: (total: number) => void;
 }
 
 export default function WordSpellingActivity({
@@ -48,6 +53,9 @@ export default function WordSpellingActivity({
   isPreviewMode = false,
   isDemoMode = false,
   onComplete,
+  externalQuestionIndex,
+  onQuestionIndexChange,
+  onTotalQuestionsChange,
 }: WordSpellingActivityProps) {
   const { t } = useTranslation();
 
@@ -107,7 +115,8 @@ export default function WordSpellingActivity({
         time_limit_per_question: number | null;
       }>(apiEndpoint);
 
-      setWords(data.words || []);
+      const loadedWords = data.words || [];
+      setWords(loadedWords);
       setSessionId(data.session_id);
       setShowTranslation(data.show_translation ?? true);
       setShowImage(data.show_image ?? true);
@@ -118,6 +127,8 @@ export default function WordSpellingActivity({
       setShowResult(false);
       setCorrectCount(0);
       setAllCompleted(false);
+      onTotalQuestionsChange?.(loadedWords.length);
+      onQuestionIndexChange?.(0);
     } catch (error) {
       console.error("Error starting practice:", error);
       toast.error(
@@ -126,11 +137,33 @@ export default function WordSpellingActivity({
     } finally {
       setLoading(false);
     }
+    // onTotalQuestionsChange / onQuestionIndexChange are notification-only
+    // callbacks; intentionally excluded to avoid restart loops if the parent
+    // passes new function instances each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId, isPreviewMode, isDemoMode, t]);
 
   useEffect(() => {
     startPractice();
   }, [startPractice]);
+
+  // Sync external→internal: when parent navigates via question buttons,
+  // jump to that question (clear any pending result/answer state).
+  useEffect(() => {
+    if (
+      externalQuestionIndex !== undefined &&
+      externalQuestionIndex !== currentIndex &&
+      externalQuestionIndex >= 0 &&
+      externalQuestionIndex < words.length
+    ) {
+      setCurrentIndex(externalQuestionIndex);
+      setShowResult(false);
+      setTypedAnswer("");
+      setIncorrectAnswer(null);
+      if (timeLimit) setTimeRemaining(timeLimit);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalQuestionIndex]);
 
   // Focus input when question changes
   useEffect(() => {
@@ -264,7 +297,9 @@ export default function WordSpellingActivity({
     }
 
     if (currentIndex < words.length - 1) {
-      setCurrentIndex(currentIndex + 1);
+      const next = currentIndex + 1;
+      setCurrentIndex(next);
+      onQuestionIndexChange?.(next);
     } else {
       setAllCompleted(true);
     }
