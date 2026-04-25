@@ -225,10 +225,15 @@ def convert_audio_to_wav(audio_data: bytes, content_type: str) -> bytes:
 
         if fmt in ("webm", "mp4"):
             # Container formats: pydub wants a real file on disk (ffmpeg probes).
+            # try/finally guarantees cleanup even when AudioSegment.from_file
+            # raises on a corrupt upload.
             with tempfile.NamedTemporaryFile(suffix=f".{fmt}", delete=False) as temp_in:
                 temp_in.write(audio_data)
                 temp_in_path = temp_in.name
-            audio = AudioSegment.from_file(temp_in_path, format=fmt)
+            try:
+                audio = AudioSegment.from_file(temp_in_path, format=fmt)
+            finally:
+                os.unlink(temp_in_path)
         elif fmt == "mp3":
             audio = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
         elif fmt == "wav":
@@ -252,10 +257,6 @@ def convert_audio_to_wav(audio_data: bytes, content_type: str) -> bytes:
             f"Converted audio: {len(audio_data)} bytes -> {len(wav_data)} bytes WAV"
         )
         logger.debug(f"Audio duration: {len(audio) / 1000.0} seconds")
-
-        # 清理暫存檔
-        if "temp_in_path" in locals():
-            os.unlink(temp_in_path)
 
         return wav_data
 
