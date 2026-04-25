@@ -76,7 +76,6 @@ export default function WordClozeActivity({
 
   // Settings
   const [showTranslation, setShowTranslation] = useState(true);
-  const [playAudio, setPlayAudio] = useState(false);
 
   // Stats
   const [correctCount, setCorrectCount] = useState(0);
@@ -116,7 +115,6 @@ export default function WordClozeActivity({
       setQuestions(loadedQuestions);
       setSessionId(data.session_id);
       setShowTranslation(data.show_translation ?? true);
-      setPlayAudio(data.play_audio ?? false);
       setTimeLimit(data.time_limit_per_question || null);
       setTimeRemaining(data.time_limit_per_question || null);
       setCurrentIndex(0);
@@ -179,11 +177,14 @@ export default function WordClozeActivity({
     }
   }, [questions, currentIndex]);
 
+  // Auto-play example sentence audio once per question switch
+  // (consistent with WordSpellingActivity — listening helps fill the blank)
   useEffect(() => {
-    if (playAudio && questions[currentIndex]?.audio_url && !showResult) {
+    if (questions[currentIndex]?.audio_url && !showResult) {
       playQuestionAudio();
     }
-  }, [currentIndex, playAudio, playQuestionAudio, questions, showResult]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, questions.length]);
 
   // Timer
   useEffect(() => {
@@ -479,19 +480,15 @@ export default function WordClozeActivity({
 
       {/* Question content */}
       <div className="space-y-6">
-        {/* Base word hint (only for vocabulary set items) */}
-        {currentQ.base_word && (
+        {/* Translation hint (Chinese meaning only — never show the English
+            base word as that's the answer) */}
+        {showTranslation && currentQ.translation && (
           <div className="text-center">
             <p className="text-sm text-gray-500 mb-1">
-              {t("wordCloze.baseWord") || "Base word"}
+              {t("wordCloze.translationHint") || "Translation"}
             </p>
-            <h2 className="text-2xl font-bold text-gray-800">
-              {currentQ.base_word}
-              {showTranslation && currentQ.translation && (
-                <span className="text-base text-gray-500 ml-2">
-                  ({currentQ.translation})
-                </span>
-              )}
+            <h2 className="text-xl font-bold text-gray-800">
+              {currentQ.translation}
             </h2>
           </div>
         )}

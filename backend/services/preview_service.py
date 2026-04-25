@@ -730,10 +730,11 @@ def get_word_cloze_start(assignment: Assignment, db: Session) -> dict:
                     else (ci.translation or "")
                 )
                 or "",
+                # Vocab items must use example sentence audio (not the
+                # single-word audio); example sentence content uses its
+                # own audio_url which IS the sentence audio.
                 "audio_url": (
-                    ci.example_sentence_audio_url or ci.audio_url
-                    if is_vocab_item
-                    else ci.audio_url
+                    ci.example_sentence_audio_url if is_vocab_item else ci.audio_url
                 ),
                 "correct_answer_length": len(correct_answer),
             }

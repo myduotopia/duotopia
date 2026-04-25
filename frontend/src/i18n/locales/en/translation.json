@@ -4697,6 +4697,7 @@
     "questionProgress": "{{current}} / {{total}}",
     "correctLabel": "correct",
     "baseWord": "Base word",
+    "translationHint": "Translation",
     "playAudio": "Play Audio",
     "inputPlaceholder": "Fill in the blank...",
     "checkAnswer": "Check",

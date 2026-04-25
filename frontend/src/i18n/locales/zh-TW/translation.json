@@ -4715,6 +4715,7 @@
     "questionProgress": "第 {{current}}/{{total}} 題",
     "correctLabel": "正確",
     "baseWord": "單字",
+    "translationHint": "中文意思",
     "playAudio": "播放例句發音",
     "inputPlaceholder": "填入空格...",
     "checkAnswer": "確認",

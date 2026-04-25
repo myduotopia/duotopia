@@ -277,8 +277,8 @@ async def get_assignment_activities(
             .all()
         )
 
-        # Lazy TTS：朗讀/重組模式下，補生成缺少例句音檔的單字集 items
-        if _practice_mode in ("reading", "rearrangement"):
+        # Lazy TTS：朗讀/重組/克漏字模式下，補生成缺少例句音檔的單字集 items
+        if _practice_mode in ("reading", "rearrangement", "word_cloze"):
             vocab_content_ids = [
                 cid
                 for cid, c in content_dict.items()
@@ -2488,10 +2488,11 @@ async def start_word_cloze_practice(
                     else (ci.translation or "")
                 )
                 or "",
+                # Vocab items must use example sentence audio (not the
+                # single-word audio); example sentence content uses its
+                # own audio_url which IS the sentence audio.
                 "audio_url": (
-                    ci.example_sentence_audio_url or ci.audio_url
-                    if is_vocab_item
-                    else ci.audio_url
+                    ci.example_sentence_audio_url if is_vocab_item else ci.audio_url
                 ),
                 "correct_answer_length": len(correct_answer),
             }
