@@ -1658,6 +1658,23 @@ export default function StudentActivityPageContent({
   };
 
   const getActivityTypeBadge = (type: string) => {
+    // 練習模式優先：spelling/cloze 都顯示對應模式名稱
+    // （否則克漏字/拼寫題會誤顯示為「例句朗讀」或「單字練習」）
+    if (practiceMode === "word_cloze") {
+      return (
+        <Badge variant="outline">
+          {t("studentActivityPage.activityTypes.wordCloze")}
+        </Badge>
+      );
+    }
+    if (practiceMode === "word_spelling") {
+      return (
+        <Badge variant="outline">
+          {t("studentActivityPage.activityTypes.wordSpelling")}
+        </Badge>
+      );
+    }
+
     // 使用 helper functions 處理例句集和單字集類型
     if (isExampleSentencesType(type)) {
       return (
