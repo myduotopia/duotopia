@@ -117,6 +117,7 @@ ALLOWED_AUDIO_FORMATS = [
     "audio/mp3",
     "audio/mpeg",
     "audio/mp4",  # macOS Safari 使用 MP4 格式
+    "audio/m4a",  # 部分 iOS Safari firmware 上送這個 — 不能擋住，否則永遠不會走到 magic-byte sniff
     "video/mp4",  # 某些瀏覽器可能用 video/mp4
     "application/octet-stream",  # 瀏覽器上傳時的通用類型
 ]
@@ -170,7 +171,7 @@ def sniff_audio_format(audio_data: bytes) -> str | None:
     labels the upload as `audio/webm`. Trusting only Content-Type caused
     ffmpeg to reject the bytes. Magic-byte sniffing is the reliable signal.
     """
-    if len(audio_data) < 12:
+    if len(audio_data) < 16:
         return None
     head = audio_data[:16]
     # Matroska/WebM — EBML header
@@ -182,10 +183,14 @@ def sniff_audio_format(audio_data: bytes) -> str | None:
     # RIFF/WAVE
     if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
         return "wav"
-    # MP3 — ID3 tag or MPEG audio sync frame (11-bit frame sync)
+    # MP3 — ID3 tag
     if head[:3] == b"ID3":
         return "mp3"
-    if head[0] == 0xFF and (head[1] & 0xE0) == 0xE0:
+    # MP3 — MPEG audio sync frame: full 11-bit sync (FF Ex) AND restrict to
+    # MPEG-1/2 Layer III (the only layer in real-world use). This avoids
+    # false positives on RIFF and other formats whose 2nd byte happens to
+    # have the top 3 bits set.
+    if head[0] == 0xFF and head[1] in (0xFB, 0xFA, 0xF3, 0xF2):
         return "mp3"
     return None
 
@@ -216,6 +221,10 @@ def convert_audio_to_wav(audio_data: bytes, content_type: str) -> bytes:
         # ffmpeg to decode them as webm fails with error 183 (EBML parse).
         sniffed = sniff_audio_format(audio_data)
         fmt = sniffed or _content_type_to_format(content_type)
+        # Only log when both signals agree on a format but disagree on which —
+        # i.e. genuine client mislabeling. We don't log when the client sends
+        # a generic Content-Type like application/octet-stream (which yields
+        # None from _content_type_to_format), because there's no real mismatch.
         if sniffed and sniffed != _content_type_to_format(content_type):
             logger.info(
                 "Audio format mismatch: content_type=%r but magic bytes indicate %s",

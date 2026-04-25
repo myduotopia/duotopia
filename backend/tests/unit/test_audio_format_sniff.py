@@ -11,7 +11,11 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from routers.speech_assessment import convert_audio_to_wav, sniff_audio_format
+from routers.speech_assessment import (
+    convert_audio_to_wav,
+    sniff_audio_format,
+    _content_type_to_format,
+)
 
 
 class TestSniffAudioFormat:
@@ -41,9 +45,17 @@ class TestSniffAudioFormat:
         assert sniff_audio_format(data) == "mp3"
 
     def test_detects_mp3_from_sync_frame(self):
-        # MP3 sync frame: 0xFF 0xFB / 0xFF 0xF3 / 0xFF 0xF2
-        data = b"\xff\xfb" + b"\x00" * 24
-        assert sniff_audio_format(data) == "mp3"
+        # MPEG-1/2 Layer III sync frames: 0xFF 0xFB / 0xFA / 0xF3 / 0xF2
+        for second_byte in (0xFB, 0xFA, 0xF3, 0xF2):
+            data = bytes([0xFF, second_byte]) + b"\x00" * 24
+            assert sniff_audio_format(data) == "mp3"
+
+    def test_does_not_misdetect_other_layers_as_mp3(self):
+        # 0xFF 0xE0–0xF1 has sync bits set but is Layer I/II or reserved —
+        # not what we want to claim as mp3 in this codebase.
+        for second_byte in (0xE0, 0xE1, 0xF0, 0xF1):
+            data = bytes([0xFF, second_byte]) + b"\x00" * 24
+            assert sniff_audio_format(data) is None
 
     def test_returns_none_for_unknown_bytes(self):
         data = b"\x00" * 32
@@ -52,6 +64,35 @@ class TestSniffAudioFormat:
     def test_returns_none_for_short_data(self):
         assert sniff_audio_format(b"") is None
         assert sniff_audio_format(b"\x1a\x45") is None
+        # Also < 16 bytes should be rejected (consistency with head[:16]).
+        assert sniff_audio_format(b"\x1a\x45\xdf\xa3" + b"\x00" * 10) is None
+
+
+class TestContentTypeToFormat:
+    """Maps client-supplied Content-Type to pydub format id (lower priority
+    fallback when magic-byte sniffing is inconclusive)."""
+
+    @pytest.mark.parametrize(
+        "ct, expected",
+        [
+            ("audio/webm", "webm"),
+            ("audio/webm;codecs=opus", "webm"),
+            ("audio/mp4", "mp4"),
+            ("audio/m4a", "mp4"),
+            ("audio/aac", "mp4"),
+            ("video/mp4", "mp4"),
+            ("audio/wav", "wav"),
+            ("audio/x-wav", "wav"),
+            ("audio/mp3", "mp3"),
+            ("audio/mpeg", "mp3"),
+            ("AUDIO/WEBM", "webm"),  # case-insensitive
+            ("application/octet-stream", None),
+            ("", None),
+            ("text/plain", None),
+        ],
+    )
+    def test_content_type_mapping(self, ct, expected):
+        assert _content_type_to_format(ct) == expected
 
 
 class TestConvertAudioToWavFormatDetection:
