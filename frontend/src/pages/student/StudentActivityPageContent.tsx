@@ -1733,6 +1733,38 @@ export default function StudentActivityPageContent({
   const renderActivityContent = (activity: Activity) => {
     const answer = answers.get(activity.id);
 
+    // 🎯 克漏字 / 單字拼寫：根據 practiceMode 直接路由（與內容類型無關，
+    // 因克漏字可選例句集或單字集；拼寫雖只接單字集，但邏輯一致）。
+    // 必須在 isExampleSentencesType / isVocabularySetType 判斷前先早退，
+    // 避免被 ReadingAssessmentTemplate 攔截。
+    if (practiceMode === "word_cloze") {
+      return (
+        <WordClozeActivity
+          assignmentId={assignmentId}
+          isPreviewMode={isPreviewMode}
+          isDemoMode={isDemoMode}
+          onComplete={() => {
+            toast.success(t("wordCloze.toast.completed") || "作業已完成！");
+            onBack?.();
+          }}
+        />
+      );
+    }
+
+    if (practiceMode === "word_spelling") {
+      return (
+        <WordSpellingActivity
+          assignmentId={assignmentId}
+          isPreviewMode={isPreviewMode}
+          isDemoMode={isDemoMode}
+          onComplete={() => {
+            toast.success(t("wordSpelling.toast.completed") || "作業已完成！");
+            onBack?.();
+          }}
+        />
+      );
+    }
+
     // 單字集類型使用新的 SentenceMakingActivity 組件，不要進入舊的 GroupedQuestionsTemplate
     // 例句集/單字集 + rearrangement 模式使用 RearrangementActivity，也不要進入 GroupedQuestionsTemplate
     const isRearrangementMode =
@@ -2086,37 +2118,7 @@ export default function StudentActivityPageContent({
         );
       }
 
-      if (practiceMode === "word_spelling") {
-        // 單字拼寫練習（一般練習模式，非艾賓浩斯）
-        return (
-          <WordSpellingActivity
-            assignmentId={assignmentId}
-            isPreviewMode={isPreviewMode}
-            isDemoMode={isDemoMode}
-            onComplete={() => {
-              toast.success(
-                t("wordSpelling.toast.completed") || "作業已完成！",
-              );
-              onBack?.();
-            }}
-          />
-        );
-      }
-
-      if (practiceMode === "word_cloze") {
-        // 克漏字練習（一般練習模式，非艾賓浩斯）
-        return (
-          <WordClozeActivity
-            assignmentId={assignmentId}
-            isPreviewMode={isPreviewMode}
-            isDemoMode={isDemoMode}
-            onComplete={() => {
-              toast.success(t("wordCloze.toast.completed") || "作業已完成！");
-              onBack?.();
-            }}
-          />
-        );
-      }
+      // 注意：word_spelling / word_cloze 已在函式開頭早退路由
 
       // 造句練習：使用艾賓浩斯記憶曲線系統
       return (

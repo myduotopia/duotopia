@@ -68,7 +68,6 @@ export default function WordSpellingActivity({
   // Settings
   const [showTranslation, setShowTranslation] = useState(true);
   const [showImage, setShowImage] = useState(true);
-  const [playAudio, setPlayAudio] = useState(false);
 
   // Stats
   const [correctCount, setCorrectCount] = useState(0);
@@ -112,7 +111,6 @@ export default function WordSpellingActivity({
       setSessionId(data.session_id);
       setShowTranslation(data.show_translation ?? true);
       setShowImage(data.show_image ?? true);
-      setPlayAudio(data.play_audio ?? false);
       setTimeLimit(data.time_limit_per_question || null);
       setTimeRemaining(data.time_limit_per_question || null);
       setCurrentIndex(0);
@@ -153,12 +151,14 @@ export default function WordSpellingActivity({
     }
   }, [words, currentIndex]);
 
-  // Auto-play audio when word changes if play_audio is enabled
+  // Auto-play audio when switching to a new question (拼寫題：聽音檔是主要提示)
+  // Plays once per question if audio is available, regardless of play_audio setting
   useEffect(() => {
-    if (playAudio && words[currentIndex]?.audio_url && !showResult) {
+    if (words[currentIndex]?.audio_url && !showResult) {
       playWordAudio();
     }
-  }, [currentIndex, playAudio, playWordAudio, words, showResult]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, words.length]);
 
   // Timer countdown
   useEffect(() => {
