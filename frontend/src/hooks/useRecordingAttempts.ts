@@ -111,13 +111,21 @@ export const useRecordingAttempts = (
 
     if (stored) return stored;
 
-    if (existingRecordingUrl) {
-      const seeded: StoredEntry = { count: 1, lastReviewMarker: currentMarker };
-      safeWrite(key, seeded);
-      return seeded;
-    }
-
-    return { count: 0, lastReviewMarker: currentMarker };
+    // First time we see this (assignmentId, itemId): write the entry NOW so
+    // future renders read `stored` and never re-trigger seeding. Without this,
+    // the moment a fresh student records (URL flips null → blob → GCS) the
+    // seed branch below would fire and steal a heart before they pressed
+    // Analyze. Backwards-compat seed only counts when the URL is a real
+    // server-stored recording (non-blob) at first hook init — i.e. the student
+    // truly recorded before this feature shipped.
+    const isPriorServerRecording =
+      !!existingRecordingUrl && !existingRecordingUrl.startsWith("blob:");
+    const initial: StoredEntry = {
+      count: isPriorServerRecording ? 1 : 0,
+      lastReviewMarker: currentMarker,
+    };
+    safeWrite(key, initial);
+    return initial;
   }, [
     key,
     assignmentStatus,
