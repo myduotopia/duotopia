@@ -157,7 +157,6 @@ export default function StudentActivityPage() {
       }
 
       const data: ActivityResponse = await response.json();
-      console.log("Loaded activities from API:", data.activities);
 
       setActivities(data.activities);
       setAssignmentTitle(data.title);

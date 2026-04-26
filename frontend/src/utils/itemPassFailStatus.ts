@@ -32,7 +32,7 @@ export function getItemPassFailStatus({
   if (teacherPassed === false) return { passed: false, failed: true };
 
   // teacher_passed === null / undefined（老師尚未對該題下判定）
-  if (assignmentStatus === "RETURNED") {
+  if (assignmentStatus === "RETURNED" || assignmentStatus === "RESUBMITTED") {
     // 訂正模式不做 AI fallback：老師最後沒對這題打勾就不算 passed
     return { passed: false, failed: false };
   }

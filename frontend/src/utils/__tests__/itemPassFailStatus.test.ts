@@ -74,6 +74,38 @@ describe("getItemPassFailStatus", () => {
     });
   });
 
+  describe("teacher_passed === null in RESUBMITTED mode (第二次訂正週期)", () => {
+    it("does NOT auto-pass via AI score >= 60", () => {
+      expect(
+        getItemPassFailStatus({
+          teacherPassed: null,
+          aiScore: 95,
+          assignmentStatus: "RESUBMITTED",
+        }),
+      ).toEqual({ passed: false, failed: false });
+    });
+
+    it("does NOT auto-fail via AI score < 60 either (yellow / pending)", () => {
+      expect(
+        getItemPassFailStatus({
+          teacherPassed: null,
+          aiScore: 30,
+          assignmentStatus: "RESUBMITTED",
+        }),
+      ).toEqual({ passed: false, failed: false });
+    });
+
+    it("undefined teacherPassed treated same as null", () => {
+      expect(
+        getItemPassFailStatus({
+          teacherPassed: undefined,
+          aiScore: 80,
+          assignmentStatus: "RESUBMITTED",
+        }),
+      ).toEqual({ passed: false, failed: false });
+    });
+  });
+
   describe("teacher_passed === null in non-RETURNED mode (AI fallback)", () => {
     it("AI score >= 60 → passed (self-feedback)", () => {
       expect(
