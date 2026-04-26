@@ -285,14 +285,20 @@ export function SentenceRearrangementPanel({
                               {t(
                                 "gradingPage.rearrangement.labels.correctWords",
                               )}
-                              : <span className="font-semibold">{correctWords}</span>
+                              :{" "}
+                              <span className="font-semibold">
+                                {correctWords}
+                              </span>
                             </span>
                           </div>
                           <div className="flex items-center gap-1">
                             <RotateCcw className="h-3 w-3 text-gray-400" />
                             <span className="text-gray-600">
                               {t("gradingPage.rearrangement.labels.retryCount")}
-                              : <span className="font-semibold">{retryCount}</span>
+                              :{" "}
+                              <span className="font-semibold">
+                                {retryCount}
+                              </span>
                             </span>
                           </div>
                           {expectedScore != null && (

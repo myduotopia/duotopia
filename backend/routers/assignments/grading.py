@@ -590,9 +590,7 @@ async def get_student_submission(
         # sa.score on completion; while IN_PROGRESS the helper computes
         # sum(expected_scores) / total_items so the grading page right panel
         # matches the assignment overview instead of showing 0.
-        "current_score": _compute_interim_score(
-            assignment, parent_assignment, db
-        ),
+        "current_score": _compute_interim_score(assignment, parent_assignment, db),
         "current_feedback": assignment.feedback,
     }
 

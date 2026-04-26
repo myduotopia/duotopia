@@ -133,13 +133,11 @@ export function OverallFeedbackPanel({
                                     ? t("gradingPage.labels.hasRecording")
                                     : t("gradingPage.labels.noRecording")
                             }`}
-                            onClick={() => onJumpToItem(groupIndex, globalIndex)}
+                            onClick={() =>
+                              onJumpToItem(groupIndex, globalIndex)
+                            }
                           >
-                            {isPassed
-                              ? "✓"
-                              : isFailed
-                                ? "✗"
-                                : localIndex + 1}
+                            {isPassed ? "✓" : isFailed ? "✗" : localIndex + 1}
                           </div>
                         );
                       })}

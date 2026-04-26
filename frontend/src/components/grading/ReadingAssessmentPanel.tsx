@@ -318,24 +318,25 @@ export function ReadingAssessmentPanel({
             <Sparkles className="h-4 w-4" />
             {t("gradingPage.buttons.applyAISuggestions")}
           </Button>
-          {submission.content_groups && submission.content_groups.length > 1 && (
-            <>
-              <span className="text-sm font-medium whitespace-nowrap">
-                {t("gradingPage.labels.groupTitle")}
-              </span>
-              <select
-                value={selectedGroupIndex}
-                onChange={(e) => onSelectGroup(parseInt(e.target.value))}
-                className="border rounded-md px-3 py-1.5 text-sm"
-              >
-                {submission.content_groups.map((group, index) => (
-                  <option key={group.content_id} value={index}>
-                    {group.content_title} ({group.submissions.length}題)
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
+          {submission.content_groups &&
+            submission.content_groups.length > 1 && (
+              <>
+                <span className="text-sm font-medium whitespace-nowrap">
+                  {t("gradingPage.labels.groupTitle")}
+                </span>
+                <select
+                  value={selectedGroupIndex}
+                  onChange={(e) => onSelectGroup(parseInt(e.target.value))}
+                  className="border rounded-md px-3 py-1.5 text-sm"
+                >
+                  {submission.content_groups.map((group, index) => (
+                    <option key={group.content_id} value={index}>
+                      {group.content_title} ({group.submissions.length}題)
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
         </div>
 
         <div className="lg:hidden sticky top-28 z-10 -mx-4 sm:-mx-6 mb-3">
