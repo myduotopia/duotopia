@@ -44,13 +44,12 @@ export const RecordingAttemptsIndicator = ({
           <Heart
             key={i}
             className={cn(
-              "h-4 w-4",
+              "h-4 w-4 transition-all duration-300 ease-out",
               filled ? "text-red-500" : "text-gray-300",
             )}
-            fill={filled ? "currentColor" : "none"}
-            data-testid={
-              filled ? "heart-filled" : "heart-empty"
-            }
+            fill="currentColor"
+            style={{ fillOpacity: filled ? 1 : 0 }}
+            data-testid={filled ? "heart-filled" : "heart-empty"}
           />
         );
       })}
