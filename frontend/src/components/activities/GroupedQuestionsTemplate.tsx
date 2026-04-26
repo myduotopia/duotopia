@@ -908,14 +908,16 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                             onAssessmentComplete(currentQuestionIndex, null);
                           }
                         }}
-                        disabled={readOnly}
+                        disabled={readOnly || recordingDisabled}
                         className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-gray-500 disabled:hover:bg-transparent"
                         title={
                           readOnly
                             ? t("groupedQuestionsTemplate.labels.viewOnlyMode")
-                            : t(
-                                "groupedQuestionsTemplate.labels.clearRecording",
-                              )
+                            : recordingDisabled
+                              ? t("recordingAttempts.lockedTooltip")
+                              : t(
+                                  "groupedQuestionsTemplate.labels.clearRecording",
+                                )
                         }
                       >
                         <svg
@@ -1305,9 +1307,11 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                     title={
                       readOnly || isAssessing
                         ? t("groupedQuestionsTemplate.labels.viewOnlyMode")
-                        : t("groupedQuestionsTemplate.labels.deleteRecording")
+                        : recordingDisabled
+                          ? t("recordingAttempts.lockedTooltip")
+                          : t("groupedQuestionsTemplate.labels.deleteRecording")
                     }
-                    disabled={isAssessing || readOnly}
+                    disabled={isAssessing || readOnly || recordingDisabled}
                   >
                     <X className="w-4 h-4" />
                   </button>

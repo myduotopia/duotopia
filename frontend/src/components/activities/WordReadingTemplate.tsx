@@ -871,12 +871,18 @@ export default function WordReadingTemplate({
                           </div>
                         </div>
 
-                        {/* 清除錄音按鈕 */}
+                        {/* 清除錄音按鈕 — Issue #689: 3/3 用完後鎖定，避免清掉最後分析結果 */}
                         <button
                           onClick={clearRecording}
-                          disabled={readOnly}
+                          disabled={readOnly || recordingDisabled}
                           className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-gray-500 disabled:hover:bg-transparent"
-                          title={readOnly ? "檢視模式" : "清除錄音"}
+                          title={
+                            readOnly
+                              ? "檢視模式"
+                              : recordingDisabled
+                                ? t("recordingAttempts.lockedTooltip")
+                                : "清除錄音"
+                          }
                         >
                           <svg
                             className="w-3.5 h-3.5"
@@ -1119,8 +1125,14 @@ export default function WordReadingTemplate({
                     <button
                       onClick={clearRecording}
                       className="absolute top-0 right-0 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors z-10 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-gray-400 disabled:hover:bg-transparent"
-                      title={readOnly ? "檢視模式" : "清除錄音和評估結果"}
-                      disabled={isAssessing || readOnly}
+                      title={
+                        readOnly
+                          ? "檢視模式"
+                          : recordingDisabled
+                            ? t("recordingAttempts.lockedTooltip")
+                            : "清除錄音和評估結果"
+                      }
+                      disabled={isAssessing || readOnly || recordingDisabled}
                     >
                       <svg
                         className="w-4 h-4"
