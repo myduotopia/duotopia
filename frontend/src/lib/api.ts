@@ -6,6 +6,7 @@ import { API_URL } from "../config/api";
 import { retryAIAnalysis } from "../utils/retryHelper";
 import { clearAllAuth } from "./authUtils";
 import { appendAudioToFormData } from "@/utils/audioFormatDetection";
+import { saveRedirectTarget } from "../utils/redirectAfterLogin";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
@@ -216,6 +217,13 @@ class ApiClient {
         if (response.status === 401 && !endpoint.includes("/auth/")) {
           if (!isRedirectingToLogin) {
             isRedirectingToLogin = true;
+            // #571: Preserve the in-progress URL across the hard navigation
+            // so the user lands back here after re-authenticating.
+            saveRedirectTarget(
+              window.location.pathname +
+                window.location.search +
+                window.location.hash,
+            );
             clearAllAuth();
             window.location.href = "/teacher/login";
             // Reset flag after a short delay so future 401s can still redirect

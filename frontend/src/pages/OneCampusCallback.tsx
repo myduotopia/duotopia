@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
+import { consumeRedirectTarget } from "@/utils/redirectAfterLogin";
 import api from "@/services/api";
 
 export default function OneCampusCallback() {
@@ -98,7 +99,9 @@ export default function OneCampusCallback() {
             setStatus("bind_prompt");
             return;
           }
-          navigate("/teacher/dashboard", { replace: true });
+          navigate(consumeRedirectTarget("/teacher/dashboard"), {
+            replace: true,
+          });
         } else if (data.student) {
           studentLogin(data.access_token, {
             id: data.student.id,
@@ -121,7 +124,9 @@ export default function OneCampusCallback() {
             setStatus("bind_prompt");
             return;
           }
-          navigate("/student/dashboard", { replace: true });
+          navigate(consumeRedirectTarget("/student/dashboard"), {
+            replace: true,
+          });
         }
       }
     } catch (err: unknown) {
@@ -173,7 +178,9 @@ export default function OneCampusCallback() {
           classrooms: data.student.classrooms,
           classrooms_count: data.student.classrooms_count,
         });
-        navigate("/student/dashboard", { replace: true });
+        navigate(consumeRedirectTarget("/student/dashboard"), {
+          replace: true,
+        });
       }
     } catch {
       setErrorMessage(

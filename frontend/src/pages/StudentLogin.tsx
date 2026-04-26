@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -10,6 +10,10 @@ import { teacherService } from "@/services/teacherService";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
+import {
+  consumeRedirectTarget,
+  saveRedirectTarget,
+} from "@/utils/redirectAfterLogin";
 
 interface TeacherHistory {
   email: string;
@@ -32,8 +36,16 @@ interface Student {
 
 export default function StudentLogin() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useStudentAuthStore();
   const { t } = useTranslation();
+
+  // #571: Mirror the intended URL (from ProtectedRoute) into sessionStorage
+  // so it survives the 4-step flow and any external SSO round-trip.
+  useEffect(() => {
+    const from = (location.state as { from?: string } | null)?.from;
+    if (from) saveRedirectTarget(from);
+  }, [location.state]);
 
   // 檢查是否為 demo 模式 (通過 URL 參數 ?is_demo=true)
   const searchParams = new URLSearchParams(window.location.search);
@@ -186,7 +198,7 @@ export default function StudentLogin() {
           teacher_name: teacherHistory.find((t) => t.email === teacherEmail)
             ?.name,
         } as StudentUser);
-        navigate("/student/dashboard");
+        navigate(consumeRedirectTarget("/student/dashboard"));
       }
     } catch (err) {
       console.error("Student login failed:", err);
@@ -226,7 +238,7 @@ export default function StudentLogin() {
         classrooms: s.classrooms,
         classrooms_count: s.classrooms_count,
       } as StudentUser);
-      navigate("/student/dashboard");
+      navigate(consumeRedirectTarget("/student/dashboard"));
     } catch (err) {
       console.error("Email login failed:", err);
       setError(t("studentLogin.emailLogin.error"));
