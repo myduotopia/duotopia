@@ -597,7 +597,8 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       (s: StudentProgress) => {
         if (activeTab === "all") return true;
         if (activeTab === "unassigned") return false;
-        // assigned tab: only NOT_STARTED can be unchecked
+        // assigned tab: only NOT_STARTED can be unchecked — once a student
+        // starts or submits, un-assigning would silently drop their progress.
         return s.status !== "NOT_STARTED";
       },
       [activeTab],

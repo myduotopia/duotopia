@@ -408,7 +408,7 @@ export default function ClassroomDetail({
           title,
           students,
           counts,
-          { showNumber: true, showName: true, showScore: false },
+          { showNumber: true, showName: true, showScore: true },
           t,
         );
       });

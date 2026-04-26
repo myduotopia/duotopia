@@ -110,7 +110,7 @@ export function buildStickyNotePageHtml(
       //   null / 未完成 → 0；is_interim_score 加 "~"；unassigned 顯示 "-"。
       const hasScore = student.status !== "unassigned";
       const scoreValue = student.score ?? 0;
-      const scoreText = `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(0)}`;
+      const scoreText = `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`;
 
       const parts: string[] = [];
       if (showNumber && hasNumber) {
