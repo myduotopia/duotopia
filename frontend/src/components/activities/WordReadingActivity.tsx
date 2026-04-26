@@ -133,13 +133,31 @@ export default function WordReadingActivity({
     teacherReviewedAt: currentItemForGate?.teacher_reviewed_at ?? null,
     existingRecordingUrl: currentItemForGate?.recording_url ?? null,
   });
+  // Issue #689 後續：訂正模式下「已通過」題目鎖住、藏愛心，避免家長以為
+  // 學生有無限重錄機會。passed = 老師打勾 OR (未審且 AI 分數 ≥ 60)。
+  const currentItemAiScore =
+    currentItemForGate?.ai_assessment?.pronunciation_score ??
+    currentItemForGate?.ai_assessment?.accuracy_score ??
+    null;
+  const currentItemPassedByScore =
+    currentItemForGate?.teacher_passed === true ||
+    (currentItemForGate?.teacher_passed !== false &&
+      currentItemAiScore !== null &&
+      currentItemAiScore >= 60);
+  const currentItemLockedInReturnedMode =
+    assignmentStatus === "RETURNED" && currentItemPassedByScore;
   // Preview / demo / readOnly 不適用前端閘門
   const gateActive =
-    !readOnly && !isPreviewMode && !isDemoMode && canUseAiAnalysisProp !== false;
-  const recordingDisabledForCurrent = gateActive && !currentCanRecord;
+    !readOnly &&
+    !isPreviewMode &&
+    !isDemoMode &&
+    canUseAiAnalysisProp !== false;
+  const recordingDisabledForCurrent =
+    currentItemLockedInReturnedMode || (gateActive && !currentCanRecord);
   const handleAnalysisSuccess = useCallback(() => {
-    if (gateActive) incrementCurrentAttempt();
-  }, [gateActive, incrementCurrentAttempt]);
+    if (gateActive && !currentItemLockedInReturnedMode)
+      incrementCurrentAttempt();
+  }, [gateActive, currentItemLockedInReturnedMode, incrementCurrentAttempt]);
 
   /**
    * 🔧 Review fix: 共用的分析+儲存+上傳邏輯，消除三處重複
@@ -768,7 +786,7 @@ export default function WordReadingActivity({
         timeLimit={timeLimitPerQuestion}
         recordingDisabled={recordingDisabledForCurrent}
         attemptsHint={
-          gateActive ? (
+          gateActive && !currentItemLockedInReturnedMode ? (
             <RecordingAttemptsIndicator attemptsUsed={currentAttemptsUsed} />
           ) : null
         }

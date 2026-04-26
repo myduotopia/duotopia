@@ -429,6 +429,24 @@ export default function StudentActivityPageContent({
     (_currentItemForGate?.teacher_reviewed_at as string | undefined) ?? null;
   const _gateExistingRecordingUrl =
     (_currentItemForGate?.recording_url as string | undefined) ?? null;
+  const _gateAiAssessment = _currentItemForGate?.ai_assessment as
+    | { pronunciation_score?: number; accuracy_score?: number }
+    | undefined;
+  const _gateAiScore =
+    _gateAiAssessment?.pronunciation_score ??
+    _gateAiAssessment?.accuracy_score ??
+    null;
+  // Issue #689 後續：「passed」=老師打勾 OR (未審且 AI 分數 ≥ 60)。在 RETURNED
+  // 狀態下，已 passed 的題目不需要訂正，鎖成唯讀且隱藏愛心，避免家長以為
+  // 學生有無限次重錄機會。
+  const _gateItemPassedByScore =
+    _gateTeacherPassed === true ||
+    (_gateTeacherPassed !== false &&
+      _gateAiScore !== null &&
+      _gateAiScore >= 60);
+  const itemLockedInReturnedMode =
+    assignmentStatus === "RETURNED" && _gateItemPassedByScore;
+
   const recordingGate = useRecordingAttempts({
     studentAssignmentId: assignmentId,
     itemId: _gateItemId,
@@ -438,21 +456,24 @@ export default function StudentActivityPageContent({
     teacherReviewedAt: _gateTeacherReviewedAt,
     existingRecordingUrl: _gateExistingRecordingUrl,
   });
-  // Issue #689 後續：readOnly（已提交 / 已批改 / 已訂正）下隱藏愛心指示器，
-  // 學生既然不能再分析，剩餘次數的資訊就是死資訊，不需要顯示。
+  // readOnly（已提交 / 已批改 / 已訂正）下隱藏愛心。
   const recordingGateActive =
     !isReadOnly &&
     !isPreviewMode &&
     !isDemoMode &&
     canUseAiAnalysis !== false;
+  // 訂正模式下單題已通過 → 把錄音/分析鎖死、藏愛心，不讓學生重錄
   const recordingDisabledForCurrent =
-    recordingGateActive && !recordingGate.canRecord;
+    itemLockedInReturnedMode ||
+    (recordingGateActive && !recordingGate.canRecord);
   const handleAnalysisSuccess = useCallback(() => {
-    if (recordingGateActive) recordingGate.recordAttempt();
-  }, [recordingGateActive, recordingGate]);
-  const recordingAttemptsHint = recordingGateActive ? (
-    <RecordingAttemptsIndicator attemptsUsed={recordingGate.attemptsUsed} />
-  ) : null;
+    if (recordingGateActive && !itemLockedInReturnedMode)
+      recordingGate.recordAttempt();
+  }, [recordingGateActive, itemLockedInReturnedMode, recordingGate]);
+  const recordingAttemptsHint =
+    recordingGateActive && !itemLockedInReturnedMode ? (
+      <RecordingAttemptsIndicator attemptsUsed={recordingGate.attemptsUsed} />
+    ) : null;
 
   // 🎯 使用統一的錄音策略
   const strategyRef = useRef(getRecordingStrategy());
