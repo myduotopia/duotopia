@@ -176,7 +176,8 @@ describe("useRecordingAttempts", () => {
     // Background upload finishes → URL becomes GCS
     rerender({
       ...baseProps,
-      existingRecordingUrl: "https://gcs.example.com/recordings/just-uploaded.mp3",
+      existingRecordingUrl:
+        "https://gcs.example.com/recordings/just-uploaded.mp3",
     });
     expect(result.current.attemptsUsed).toBe(0);
 

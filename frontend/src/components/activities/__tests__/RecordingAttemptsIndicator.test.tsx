@@ -9,8 +9,7 @@ import {
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, opts?: { n: number }) =>
-      opts ? `${key}:${opts.n}` : key,
+    t: (key: string, opts?: { n: number }) => (opts ? `${key}:${opts.n}` : key),
   }),
 }));
 

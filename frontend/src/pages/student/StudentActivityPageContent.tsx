@@ -460,10 +460,7 @@ export default function StudentActivityPageContent({
   });
   // readOnly（已提交 / 已批改 / 已訂正）下隱藏愛心。
   const recordingGateActive =
-    !isReadOnly &&
-    !isPreviewMode &&
-    !isDemoMode &&
-    canUseAiAnalysis !== false;
+    !isReadOnly && !isPreviewMode && !isDemoMode && canUseAiAnalysis !== false;
   // 訂正模式下單題已通過 → 把錄音/分析鎖死、藏愛心，不讓學生重錄
   const recordingDisabledForCurrent =
     itemLockedInReturnedMode ||
@@ -2585,12 +2582,14 @@ export default function StudentActivityPageContent({
                               aiAssessmentObj?.pronunciation_score ??
                               aiAssessmentObj?.accuracy_score ??
                               null;
-                            const { passed: passedByScore, failed: failedByScore } =
-                              getItemPassFailStatus({
-                                teacherPassed,
-                                aiScore,
-                                assignmentStatus: assignmentStatus ?? null,
-                              });
+                            const {
+                              passed: passedByScore,
+                              failed: failedByScore,
+                            } = getItemPassFailStatus({
+                              teacherPassed,
+                              aiScore,
+                              assignmentStatus: assignmentStatus ?? null,
+                            });
 
                             return (
                               <button

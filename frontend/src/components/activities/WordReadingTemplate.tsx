@@ -1112,7 +1112,7 @@ export default function WordReadingTemplate({
                       </>
                     )}
                   </Button>
-                    </div>
+                </div>
               ) : null}
               {assessmentResult ? (
                 <div className="relative">
