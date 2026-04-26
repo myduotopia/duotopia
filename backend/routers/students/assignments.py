@@ -570,6 +570,13 @@ async def get_assignment_activities(
         "assignment_id": assignment_id,
         "title": student_assignment.title,
         "status": student_assignment.status.value,  # 返回作業狀態
+        # Issue #689: 前端用來判定「進入訂正模式」的時間戳記，配合 teacher_reviewed_at
+        # 作為愛心 reset cycle 的 marker（同一輪退回只發一次配額）
+        "returned_at": (
+            student_assignment.returned_at.isoformat()
+            if student_assignment.returned_at
+            else None
+        ),
         "practice_mode": practice_mode,  # 前端用來判斷顯示哪個元件
         "show_answer": show_answer,  # 例句重組：答題結束後是否顯示正確答案
         "score_category": score_category,  # 分數記錄分類

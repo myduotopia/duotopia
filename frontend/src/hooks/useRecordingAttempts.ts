@@ -97,9 +97,12 @@ export const useRecordingAttempts = (
     const currentMarker = teacherReviewedAt ?? returnedAt ?? null;
     const stored = safeRead(key);
 
+    // Issue #689 後續：只要進入 RETURNED（待訂正）狀態，所有題目都補滿次數，
+    // 不再侷限於 teacher_passed === false 的題目。學生可重錄任何一題，是否
+    // 該重錄由「方框顏色 / 老師回饋」呈現，不在前端閘門限制。
+    // marker 仍然防止無限重置（同一輪退回只發一次配額）。
     const shouldResetForNewReturnCycle =
       assignmentStatus === "RETURNED" &&
-      teacherPassed === false &&
       currentMarker !== null &&
       (!stored || stored.lastReviewMarker !== currentMarker);
 

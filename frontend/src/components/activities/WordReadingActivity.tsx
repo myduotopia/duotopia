@@ -702,6 +702,39 @@ export default function WordReadingActivity({
           const isActive = index === currentIndex;
           const isCompleted = !!item.recording_url;
           const hasAssessment = !!item.ai_assessment;
+          // Issue #689 後續：點點顏色規則（teacher_passed 優先，AI 分數為 fallback）
+          // 1. teacher_passed === true            → 綠（老師通過）
+          // 2. teacher_passed === false           → 紅（老師打叉）
+          // 3. teacher 未審 但 AI 分數 ≥ 60       → 綠（依 60 分門檻自動通過）
+          // 4. teacher 未審 但 AI 分數 < 60       → 紅（依 60 分門檻自動未通過）
+          // 5. 已錄音但未分析 / 未錄音            → 黃 / 白
+          const teacherPassed = item.teacher_passed;
+          const aiScore =
+            item.ai_assessment?.pronunciation_score ??
+            item.ai_assessment?.accuracy_score ??
+            null;
+          const passedByScore =
+            teacherPassed === true ||
+            (teacherPassed !== false && aiScore !== null && aiScore >= 60);
+          const failedByScore =
+            teacherPassed === false ||
+            (teacherPassed !== true && aiScore !== null && aiScore < 60);
+          const colorClass = passedByScore
+            ? "bg-green-100 text-green-800 border-green-400"
+            : failedByScore
+              ? "bg-red-100 text-red-800 border-red-400"
+              : hasAssessment || isCompleted
+                ? "bg-yellow-100 text-yellow-800 border-yellow-400"
+                : "bg-white text-gray-600 border-gray-300 hover:border-blue-400";
+          const titleText = passedByScore
+            ? t("wordReading.passed") || "通過"
+            : failedByScore
+              ? t("wordReading.notPassed") || "未通過"
+              : hasAssessment
+                ? t("wordReading.assessed") || "Assessed"
+                : isCompleted
+                  ? t("wordReading.recorded") || "Recorded"
+                  : t("wordReading.notRecorded") || "Not recorded";
 
           return (
             <button
@@ -710,19 +743,9 @@ export default function WordReadingActivity({
               className={cn(
                 "w-8 h-8 rounded border transition-all flex items-center justify-center text-xs font-medium flex-shrink-0",
                 isActive && "border-2 border-blue-600",
-                hasAssessment
-                  ? "bg-green-100 text-green-800 border-green-400"
-                  : isCompleted
-                    ? "bg-yellow-100 text-yellow-800 border-yellow-400"
-                    : "bg-white text-gray-600 border-gray-300 hover:border-blue-400",
+                colorClass,
               )}
-              title={
-                hasAssessment
-                  ? t("wordReading.assessed") || "Assessed"
-                  : isCompleted
-                    ? t("wordReading.recorded") || "Recorded"
-                    : t("wordReading.notRecorded") || "Not recorded"
-              }
+              title={titleText}
             >
               {index + 1}
             </button>
@@ -766,7 +789,7 @@ export default function WordReadingActivity({
           {t("wordReading.previous") || "Previous"}
         </Button>
 
-        {isLastItem && allCompleted ? (
+        {isLastItem && allCompleted && !readOnly ? (
           <Button
             onClick={handleSubmit}
             disabled={submitting || uploading}

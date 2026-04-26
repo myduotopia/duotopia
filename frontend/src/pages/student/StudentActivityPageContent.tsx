@@ -161,6 +161,7 @@ interface StudentActivityPageContentProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onSubmit?: (data: { answers: any[] }) => Promise<void>;
   assignmentStatus?: string;
+  returnedAt?: string | null; // Issue #689: 退回時間，前端 hearts reset cycle marker
   practiceMode?: string | null; // 例句重組/朗讀模式
   showAnswer?: boolean; // 例句重組：答題結束後是否顯示正確答案
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
@@ -290,6 +291,7 @@ export default function StudentActivityPageContent({
   onBack,
   onSubmit,
   assignmentStatus = "",
+  returnedAt = null,
   practiceMode = null,
   showAnswer = false,
   canUseAiAnalysis = true,
@@ -431,7 +433,7 @@ export default function StudentActivityPageContent({
     studentAssignmentId: assignmentId,
     itemId: _gateItemId,
     assignmentStatus: assignmentStatus ?? null,
-    returnedAt: null,
+    returnedAt: returnedAt ?? null,
     teacherPassed: _gateTeacherPassed,
     teacherReviewedAt: _gateTeacherReviewedAt,
     existingRecordingUrl: _gateExistingRecordingUrl,
@@ -2151,7 +2153,7 @@ export default function StudentActivityPageContent({
             readOnly={isReadOnly}
             timeLimitPerQuestion={timeLimitPerQuestion}
             assignmentStatus={assignmentStatus ?? null}
-            returnedAt={null}
+            returnedAt={returnedAt ?? null}
             onComplete={async () => {
               if (onSubmit) {
                 try {
@@ -2513,7 +2515,10 @@ export default function StudentActivityPageContent({
                                 : undefined;
                             const teacherPassed =
                               "teacher_passed" in item
-                                ? item.teacher_passed
+                                ? (item.teacher_passed as
+                                    | boolean
+                                    | null
+                                    | undefined)
                                 : undefined;
 
                             const hasTeacherGraded =
@@ -2538,6 +2543,28 @@ export default function StudentActivityPageContent({
 
                             // 🎯 Issue #118: 檢查當前題目是否已分析（用於顯示狀態）
                             const hasAssessment = !!item?.ai_assessment;
+
+                            // Issue #689 後續：依 teacher_passed + AI 分數決定通過 / 未通過
+                            const aiAssessmentObj = item?.ai_assessment as
+                              | {
+                                  pronunciation_score?: number;
+                                  accuracy_score?: number;
+                                }
+                              | undefined;
+                            const aiScore =
+                              aiAssessmentObj?.pronunciation_score ??
+                              aiAssessmentObj?.accuracy_score ??
+                              null;
+                            const passedByScore =
+                              teacherPassed === true ||
+                              (teacherPassed !== false &&
+                                aiScore !== null &&
+                                aiScore >= 60);
+                            const failedByScore =
+                              teacherPassed === false ||
+                              (teacherPassed !== true &&
+                                aiScore !== null &&
+                                aiScore < 60);
 
                             return (
                               <button
@@ -2568,17 +2595,20 @@ export default function StudentActivityPageContent({
                                   "relative w-8 h-8 sm:w-8 sm:h-8 rounded border transition-all",
                                   "flex items-center justify-center text-sm sm:text-xs font-medium",
                                   "min-w-[32px]",
-                                  // 保持學生原本的完成狀態樣式
                                   // 🎯 Issue #147: 單字選擇模式只顯示狀態，不能點擊
                                   isWordSelectionMode
                                     ? isCompleted
                                       ? "bg-green-100 text-green-800 border-green-400 cursor-default"
                                       : "bg-white text-gray-600 border-gray-300 cursor-default"
-                                    : // 🎯 Issue #118: 例句朗讀模式顯示分析狀態（綠色=已分析）
+                                    : // Issue #689 後續：例句朗讀模式依 teacher_passed + AI 分數決定通過 / 未通過
                                       isReadingMode
-                                      ? hasAssessment
+                                      ? passedByScore
                                         ? "bg-green-100 text-green-800 border-green-400 hover:border-blue-400"
-                                        : "bg-white text-gray-600 border-gray-300 hover:border-blue-400"
+                                        : failedByScore
+                                          ? "bg-red-100 text-red-800 border-red-400 hover:border-blue-400"
+                                          : hasAssessment
+                                            ? "bg-yellow-100 text-yellow-800 border-yellow-400 hover:border-blue-400"
+                                            : "bg-white text-gray-600 border-gray-300 hover:border-blue-400"
                                       : isCompleted
                                         ? "bg-green-100 text-green-800 border-green-400"
                                         : "bg-white text-gray-600 border-gray-300 hover:border-blue-400",
@@ -2834,9 +2864,15 @@ export default function StudentActivityPageContent({
 
                     // 非例句重組模式：最後一題顯示提交
                     // 例句重組模式：所有題目完成後顯示提交
+                    // Issue #689 後續：已提交 / 已批改 / 已訂正狀態下不再顯示 submit
                     const shouldShowSubmit = isRearrangementMode
-                      ? allRearrangementCompleted && !isPreviewMode
-                      : isLastActivity && isLastSubQuestion && !isPreviewMode;
+                      ? allRearrangementCompleted &&
+                        !isPreviewMode &&
+                        !isReadOnly
+                      : isLastActivity &&
+                        isLastSubQuestion &&
+                        !isPreviewMode &&
+                        !isReadOnly;
 
                     if (shouldShowSubmit) {
                       return (

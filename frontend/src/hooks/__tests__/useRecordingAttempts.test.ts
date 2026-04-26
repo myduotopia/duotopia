@@ -73,7 +73,9 @@ describe("useRecordingAttempts", () => {
     expect(result.current.canRecord).toBe(true);
   });
 
-  it("does NOT reset when teacher_passed=true (item passed)", () => {
+  it("ALSO resets when teacher_passed=true (passed item still gets fresh hearts on RETURNED)", () => {
+    // 規則更新：學生在訂正模式下可重錄任何一題，包含已過關的，是否需要訂正
+    // 由「方框顏色 / 老師回饋」呈現，不在前端閘門限制。
     localStorage.setItem(
       storageKey(100, 7),
       JSON.stringify({ count: 3, lastReviewMarker: "2026-04-01T00:00:00Z" }),
@@ -86,8 +88,28 @@ describe("useRecordingAttempts", () => {
         teacherReviewedAt: "2026-04-26T10:00:00Z",
       }),
     );
-    expect(result.current.attemptsUsed).toBe(3);
-    expect(result.current.canRecord).toBe(false);
+    expect(result.current.attemptsUsed).toBe(0);
+    expect(result.current.canRecord).toBe(true);
+  });
+
+  it("resets on RETURNED even when item has no teacher_reviewed_at (falls back to returned_at marker)", () => {
+    // 老師退回但只逐一審了部分題目；其餘題目沒有 teacher_reviewed_at，
+    // 透過 assignment-level returned_at 作為 fallback marker 完成 reset。
+    localStorage.setItem(
+      storageKey(100, 7),
+      JSON.stringify({ count: 3, lastReviewMarker: null }),
+    );
+    const { result } = renderHook(() =>
+      useRecordingAttempts({
+        ...baseProps,
+        assignmentStatus: "RETURNED",
+        teacherPassed: null,
+        teacherReviewedAt: null,
+        returnedAt: "2026-04-26T10:00:00Z",
+      }),
+    );
+    expect(result.current.attemptsUsed).toBe(0);
+    expect(result.current.canRecord).toBe(true);
   });
 
   it("does NOT reset when marker matches stored (no infinite loop)", () => {
