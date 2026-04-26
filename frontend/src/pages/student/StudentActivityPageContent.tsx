@@ -438,8 +438,13 @@ export default function StudentActivityPageContent({
     teacherReviewedAt: _gateTeacherReviewedAt,
     existingRecordingUrl: _gateExistingRecordingUrl,
   });
+  // Issue #689 後續：readOnly（已提交 / 已批改 / 已訂正）下隱藏愛心指示器，
+  // 學生既然不能再分析，剩餘次數的資訊就是死資訊，不需要顯示。
   const recordingGateActive =
-    !isPreviewMode && !isDemoMode && canUseAiAnalysis !== false;
+    !isReadOnly &&
+    !isPreviewMode &&
+    !isDemoMode &&
+    canUseAiAnalysis !== false;
   const recordingDisabledForCurrent =
     recordingGateActive && !recordingGate.canRecord;
   const handleAnalysisSuccess = useCallback(() => {
