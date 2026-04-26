@@ -299,23 +299,18 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
     ].filter(Boolean) as Array<{ label: string; score: number }>;
     const wordsData =
       result.detailed_words || result.word_details || result.words || [];
-    const details = wordsData
-      .filter(
-        (w: { accuracy_score?: number; error_type?: string }) =>
-          w.error_type !== "None" ||
-          (w.accuracy_score != null && w.accuracy_score < 60),
-      )
-      .map(
-        (w: {
-          word: string;
-          accuracy_score?: number;
-          error_type?: string;
-        }) => ({
-          label: w.word,
-          score: w.accuracy_score || 0,
-          errorType: w.error_type,
-        }),
-      );
+    // Issue #689 後續：顯示每個單字的分數，不再只篩出分數過低或唸錯的單字
+    const details = wordsData.map(
+      (w: {
+        word: string;
+        accuracy_score?: number;
+        error_type?: string;
+      }) => ({
+        label: w.word,
+        score: w.accuracy_score || 0,
+        errorType: w.error_type,
+      }),
+    );
     return { overallScore, dimensions, details };
   }, [assessmentResults, currentQuestionIndex, t]);
 
