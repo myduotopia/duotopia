@@ -36,6 +36,7 @@ import {
   incrementRecordingAttemptForItem,
   type AssignmentStatusLike,
 } from "@/hooks/useRecordingAttempts";
+import { getItemPassFailStatus } from "@/utils/itemPassFailStatus";
 
 interface WordItem {
   id: number;
@@ -133,19 +134,20 @@ export default function WordReadingActivity({
     teacherReviewedAt: currentItemForGate?.teacher_reviewed_at ?? null,
     existingRecordingUrl: currentItemForGate?.recording_url ?? null,
   });
-  // Issue #689 後續：訂正模式下「已通過」題目鎖住、藏愛心，避免家長以為
-  // 學生有無限重錄機會。passed = 老師打勾 OR (未審且 AI 分數 ≥ 60)。
+  // Issue #689 後續：訂正模式下「已通過」題目鎖住、藏愛心。
+  // RETURNED 狀態下純看 teacher_passed === true，不做 AI 分數 fallback：
+  // 否則學生重錄高分後該題會誤標「訂正過」，分不清這次到底是在訂正哪些題。
   const currentItemAiScore =
     currentItemForGate?.ai_assessment?.pronunciation_score ??
     currentItemForGate?.ai_assessment?.accuracy_score ??
     null;
-  const currentItemPassedByScore =
-    currentItemForGate?.teacher_passed === true ||
-    (currentItemForGate?.teacher_passed !== false &&
-      currentItemAiScore !== null &&
-      currentItemAiScore >= 60);
+  const currentItemStatus = getItemPassFailStatus({
+    teacherPassed: currentItemForGate?.teacher_passed ?? null,
+    aiScore: currentItemAiScore,
+    assignmentStatus: assignmentStatus ?? null,
+  });
   const currentItemLockedInReturnedMode =
-    assignmentStatus === "RETURNED" && currentItemPassedByScore;
+    assignmentStatus === "RETURNED" && currentItemStatus.passed;
   // Preview / demo / readOnly 不適用前端閘門
   const gateActive =
     !readOnly &&
@@ -720,23 +722,18 @@ export default function WordReadingActivity({
           const isActive = index === currentIndex;
           const isCompleted = !!item.recording_url;
           const hasAssessment = !!item.ai_assessment;
-          // Issue #689 後續：點點顏色規則（teacher_passed 優先，AI 分數為 fallback）
-          // 1. teacher_passed === true            → 綠（老師通過）
-          // 2. teacher_passed === false           → 紅（老師打叉）
-          // 3. teacher 未審 但 AI 分數 ≥ 60       → 綠（依 60 分門檻自動通過）
-          // 4. teacher 未審 但 AI 分數 < 60       → 紅（依 60 分門檻自動未通過）
-          // 5. 已錄音但未分析 / 未錄音            → 黃 / 白
-          const teacherPassed = item.teacher_passed;
+          // Issue #689 後續：點點顏色委派 getItemPassFailStatus 統一處理。
+          // RETURNED 模式下純看 teacher_passed；其他狀態才用 AI 分數 fallback。
           const aiScore =
             item.ai_assessment?.pronunciation_score ??
             item.ai_assessment?.accuracy_score ??
             null;
-          const passedByScore =
-            teacherPassed === true ||
-            (teacherPassed !== false && aiScore !== null && aiScore >= 60);
-          const failedByScore =
-            teacherPassed === false ||
-            (teacherPassed !== true && aiScore !== null && aiScore < 60);
+          const { passed: passedByScore, failed: failedByScore } =
+            getItemPassFailStatus({
+              teacherPassed: item.teacher_passed ?? null,
+              aiScore,
+              assignmentStatus: assignmentStatus ?? null,
+            });
           const colorClass = passedByScore
             ? "bg-green-100 text-green-800 border-green-400"
             : failedByScore

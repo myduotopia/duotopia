@@ -36,6 +36,7 @@ import {
   useRecordingAttempts,
   incrementRecordingAttemptForItem,
 } from "@/hooks/useRecordingAttempts";
+import { getItemPassFailStatus } from "@/utils/itemPassFailStatus";
 import {
   ChevronLeft,
   ChevronRight,
@@ -436,16 +437,17 @@ export default function StudentActivityPageContent({
     _gateAiAssessment?.pronunciation_score ??
     _gateAiAssessment?.accuracy_score ??
     null;
-  // Issue #689 後續：「passed」=老師打勾 OR (未審且 AI 分數 ≥ 60)。在 RETURNED
-  // 狀態下，已 passed 的題目不需要訂正，鎖成唯讀且隱藏愛心，避免家長以為
-  // 學生有無限次重錄機會。
-  const _gateItemPassedByScore =
-    _gateTeacherPassed === true ||
-    (_gateTeacherPassed !== false &&
-      _gateAiScore !== null &&
-      _gateAiScore >= 60);
+  // Issue #689 後續：在 RETURNED 模式下，已 passed 的題目鎖唯讀且藏愛心；
+  // RETURNED 模式下「passed」純看 teacher_passed === true，不做 AI 分數 fallback
+  // （否則學生重錄高分 → 老師沒審過的題目誤標訂正過 → 家長以為作業完成）。
+  // getItemPassFailStatus 已封裝這個分流邏輯。
+  const _gateItemStatus = getItemPassFailStatus({
+    teacherPassed: _gateTeacherPassed,
+    aiScore: _gateAiScore,
+    assignmentStatus: assignmentStatus ?? null,
+  });
   const itemLockedInReturnedMode =
-    assignmentStatus === "RETURNED" && _gateItemPassedByScore;
+    assignmentStatus === "RETURNED" && _gateItemStatus.passed;
 
   const recordingGate = useRecordingAttempts({
     studentAssignmentId: assignmentId,
@@ -2570,7 +2572,9 @@ export default function StudentActivityPageContent({
                             // 🎯 Issue #118: 檢查當前題目是否已分析（用於顯示狀態）
                             const hasAssessment = !!item?.ai_assessment;
 
-                            // Issue #689 後續：依 teacher_passed + AI 分數決定通過 / 未通過
+                            // Issue #689 後續：依 teacher_passed + AI 分數決定通過 / 未通過。
+                            // RETURNED 模式不做 AI fallback —— 老師沒審過的題目
+                            // 不會因為學生重錄高分被誤標為訂正過。
                             const aiAssessmentObj = item?.ai_assessment as
                               | {
                                   pronunciation_score?: number;
@@ -2581,16 +2585,12 @@ export default function StudentActivityPageContent({
                               aiAssessmentObj?.pronunciation_score ??
                               aiAssessmentObj?.accuracy_score ??
                               null;
-                            const passedByScore =
-                              teacherPassed === true ||
-                              (teacherPassed !== false &&
-                                aiScore !== null &&
-                                aiScore >= 60);
-                            const failedByScore =
-                              teacherPassed === false ||
-                              (teacherPassed !== true &&
-                                aiScore !== null &&
-                                aiScore < 60);
+                            const { passed: passedByScore, failed: failedByScore } =
+                              getItemPassFailStatus({
+                                teacherPassed,
+                                aiScore,
+                                assignmentStatus: assignmentStatus ?? null,
+                              });
 
                             return (
                               <button
