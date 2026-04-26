@@ -827,8 +827,11 @@ export default function WordReadingTemplate({
 
             {/* 學生錄音區 */}
             <div className="bg-white rounded-lg border border-gray-200 p-3">
-              <div className="text-sm sm:text-base font-medium text-gray-700 mb-2">
-                {t("wordReading.studentAnswer") || "學生作答"}
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="text-sm sm:text-base font-medium text-gray-700">
+                  {t("wordReading.studentAnswer") || "學生作答"}
+                </div>
+                {attemptsHint}
               </div>
 
               {/* 錄音控制 */}
@@ -1029,7 +1032,7 @@ export default function WordReadingTemplate({
 
           {/* 手機版：分析按鈕 / 查看結果按鈕 */}
           {canUseAiAnalysis && audioUrl && (
-            <div className="flex flex-col items-center py-4 md:hidden">
+            <div className="flex justify-center py-4 md:hidden">
               {assessmentResult ? (
                 <Button
                   size="lg"
@@ -1071,7 +1074,6 @@ export default function WordReadingTemplate({
                   )}
                 </Button>
               )}
-              {attemptsHint && <div className="mt-2">{attemptsHint}</div>}
             </div>
           )}
 
@@ -1080,7 +1082,7 @@ export default function WordReadingTemplate({
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               {/* 🎯 Issue #227: 只有教師/機構有 AI 分析額度時才顯示分析按鈕 */}
               {audioUrl && !assessmentResult && canUseAiAnalysis ? (
-                <div className="flex flex-col items-center mb-4 py-6">
+                <div className="flex justify-center mb-4 py-6">
                   <Button
                     size="lg"
                     onClick={handleAssessment}
@@ -1110,8 +1112,7 @@ export default function WordReadingTemplate({
                       </>
                     )}
                   </Button>
-                  {attemptsHint && <div className="mt-2">{attemptsHint}</div>}
-                </div>
+                    </div>
               ) : null}
               {assessmentResult ? (
                 <div className="relative">
@@ -1166,7 +1167,7 @@ export default function WordReadingTemplate({
                       )}
 
                       {/* Re-assess Button */}
-                      <div className="flex flex-col items-center gap-2">
+                      <div className="text-center">
                         <Button
                           onClick={() => {
                             setAssessmentResult(null);
@@ -1184,7 +1185,6 @@ export default function WordReadingTemplate({
                         >
                           {t("wordReading.reassess") || "重新評估"}
                         </Button>
-                        {attemptsHint}
                       </div>
                     </div>
                   </div>

@@ -777,8 +777,11 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
 
           {/* 學生錄音區 - 超精簡版 */}
           <div className="bg-white rounded-lg border border-gray-200 p-3">
-            <div className="text-sm sm:text-base font-medium text-gray-700 mb-2">
-              {t("groupedQuestionsTemplate.labels.studentAnswer")}
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="text-sm sm:text-base font-medium text-gray-700">
+                {t("groupedQuestionsTemplate.labels.studentAnswer")}
+              </div>
+              {attemptsHint}
             </div>
 
             {/* 錄音控制 - 一行搞定 */}
@@ -1079,7 +1082,7 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
 
           {/* 手機版：分析按鈕 / 查看結果按鈕 */}
           {canUseAiAnalysis && items[currentQuestionIndex]?.recording_url && (
-            <div className="flex flex-col items-center py-4 md:hidden">
+            <div className="flex justify-center py-4 md:hidden">
               {assessmentResults[currentQuestionIndex] ? (
                 <Button
                   size="lg"
@@ -1143,7 +1146,6 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                   )}
                 </Button>
               )}
-              {attemptsHint && <div className="mt-2">{attemptsHint}</div>}
             </div>
           )}
         </div>
@@ -1159,7 +1161,7 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
             {canUseAiAnalysis &&
             items[currentQuestionIndex]?.recording_url &&
             !assessmentResults[currentQuestionIndex] ? (
-              <div className="flex flex-col items-center mb-4 py-6">
+              <div className="flex justify-center mb-4 py-6">
                 <Button
                   ref={uploadButtonRef}
                   size="lg"
@@ -1217,8 +1219,7 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                     </>
                   )}
                 </Button>
-                {attemptsHint && <div className="mt-2">{attemptsHint}</div>}
-              </div>
+                </div>
             ) : null}
             {assessmentResults[currentQuestionIndex] ? (
               <div className="relative">
