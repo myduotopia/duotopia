@@ -2631,26 +2631,6 @@ export default function StudentActivityPageContent({
                                 }
                               >
                                 {itemIndex + 1}
-                                {/* 老師評分圖標 - 右上角圓點徽章 */}
-                                {hasTeacherGraded && (
-                                  <span
-                                    className={cn(
-                                      "absolute top-0 right-0 w-3 h-3 rounded-full border border-white",
-                                      teacherPassed
-                                        ? "bg-green-500"
-                                        : "bg-red-500",
-                                    )}
-                                    aria-label={
-                                      teacherPassed
-                                        ? t(
-                                            "studentActivityPage.feedback.passed",
-                                          )
-                                        : t(
-                                            "studentActivityPage.feedback.failed",
-                                          )
-                                    }
-                                  />
-                                )}
                               </button>
                             );
                           })}
