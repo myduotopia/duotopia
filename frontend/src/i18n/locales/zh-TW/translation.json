@@ -5167,5 +5167,9 @@
     "unarchiveError": "取消封存失敗",
     "deleteSuccess": "作業已刪除",
     "deleteError": "刪除失敗"
+  },
+  "recordingAttempts": {
+    "remaining": "還剩 {{n}} 次分析機會",
+    "lockedTooltip": "已達分析上限，老師退回後可重新錄音"
   }
 }

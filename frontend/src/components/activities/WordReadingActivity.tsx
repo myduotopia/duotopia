@@ -25,11 +25,17 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import WordReadingTemplate from "./WordReadingTemplate";
+import RecordingAttemptsIndicator from "./RecordingAttemptsIndicator";
 import { useTranslation } from "react-i18next";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { cn } from "@/lib/utils";
 import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { retryAudioUpload } from "@/utils/retryHelper";
+import {
+  useRecordingAttempts,
+  incrementRecordingAttemptForItem,
+  type AssignmentStatusLike,
+} from "@/hooks/useRecordingAttempts";
 
 interface WordItem {
   id: number;
@@ -56,6 +62,7 @@ interface WordItem {
   teacher_feedback?: string;
   teacher_passed?: boolean;
   teacher_review_score?: number;
+  teacher_reviewed_at?: string;
   review_status?: string;
 }
 
@@ -70,6 +77,9 @@ interface WordReadingActivityProps {
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
   readOnly?: boolean; // 已提交/已完成/已訂正時禁止修改
   timeLimitPerQuestion?: number; // 每題錄音限時（秒），由父元件傳入，覆蓋 API 值
+  // Issue #689: 用於前端錄音次數限制重置條件
+  assignmentStatus?: AssignmentStatusLike | null;
+  returnedAt?: string | null;
 }
 
 export default function WordReadingActivity({
@@ -83,6 +93,8 @@ export default function WordReadingActivity({
   readOnly = false,
   canUseAiAnalysis: canUseAiAnalysisProp,
   timeLimitPerQuestion: timeLimitProp,
+  assignmentStatus,
+  returnedAt,
 }: WordReadingActivityProps) {
   const { t } = useTranslation();
   const { token: studentToken } = useStudentAuthStore();
@@ -106,6 +118,29 @@ export default function WordReadingActivity({
   const canUseAiAnalysis = canUseAiAnalysisProp ?? canUseAiAnalysisFromApi;
   const { analyzePronunciation } = useAzurePronunciation();
 
+  // Issue #689: 前端錄音次數限制（每題 3 次 AI 分析）。Hook 必須在 early return 前呼叫。
+  const currentItemForGate = items[currentIndex];
+  const {
+    attemptsUsed: currentAttemptsUsed,
+    canRecord: currentCanRecord,
+    recordAttempt: incrementCurrentAttempt,
+  } = useRecordingAttempts({
+    studentAssignmentId: assignmentId,
+    itemId: currentItemForGate?.id ?? 0,
+    assignmentStatus: assignmentStatus,
+    returnedAt: returnedAt ?? null,
+    teacherPassed: currentItemForGate?.teacher_passed ?? null,
+    teacherReviewedAt: currentItemForGate?.teacher_reviewed_at ?? null,
+    existingRecordingUrl: currentItemForGate?.recording_url ?? null,
+  });
+  // Preview / demo / readOnly 不適用前端閘門
+  const gateActive =
+    !readOnly && !isPreviewMode && !isDemoMode && canUseAiAnalysisProp !== false;
+  const recordingDisabledForCurrent = gateActive && !currentCanRecord;
+  const handleAnalysisSuccess = useCallback(() => {
+    if (gateActive) incrementCurrentAttempt();
+  }, [gateActive, incrementCurrentAttempt]);
+
   /**
    * 🔧 Review fix: 共用的分析+儲存+上傳邏輯，消除三處重複
    */
@@ -123,6 +158,20 @@ export default function WordReadingActivity({
         "Phoneme",
       );
       if (!azureResult) return;
+
+      // Issue #689: 背景分析（離開題目/提交時補分析）也計次。
+      // 不能用 `gateActive` 因為 useCallback 閉包此時尚未定義；改在引用點內部判斷時序：
+      // 此處可直接呼叫 standalone helper，preview/demo/readOnly 的 caller 已不會走到分析路徑。
+      const itemForAttempt = items[itemIndex];
+      if (
+        itemForAttempt &&
+        !readOnly &&
+        !isPreviewMode &&
+        !isDemoMode &&
+        canUseAiAnalysisProp !== false
+      ) {
+        incrementRecordingAttemptForItem(assignmentId, itemForAttempt.id);
+      }
 
       const assessment = {
         accuracy_score: azureResult.accuracyScore,
@@ -176,7 +225,16 @@ export default function WordReadingActivity({
 
       return assessment;
     },
-    [analyzePronunciation, token],
+    [
+      analyzePronunciation,
+      token,
+      items,
+      assignmentId,
+      readOnly,
+      isPreviewMode,
+      isDemoMode,
+      canUseAiAnalysisProp,
+    ],
   );
 
   // Load vocabulary items from backend
@@ -685,6 +743,13 @@ export default function WordReadingActivity({
         readOnly={readOnly}
         isDemoMode={isDemoMode}
         timeLimit={timeLimitPerQuestion}
+        recordingDisabled={recordingDisabledForCurrent}
+        attemptsHint={
+          gateActive ? (
+            <RecordingAttemptsIndicator attemptsUsed={currentAttemptsUsed} />
+          ) : null
+        }
+        onAnalysisSuccess={handleAnalysisSuccess}
         onAssessmentComplete={handleAssessmentComplete}
         onClearRecording={handleClearRecording}
         canUseAiAnalysis={canUseAiAnalysisProp ?? canUseAiAnalysisFromApi}

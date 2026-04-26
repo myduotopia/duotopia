@@ -348,5 +348,9 @@
         "most_difficult_words": "最も難しい単語"
       }
     }
+  },
+  "recordingAttempts": {
+    "remaining": "残り {{n}} 回分析できます",
+    "lockedTooltip": "分析回数の上限に達しました。先生が差し戻した後に再録音できます。"
   }
 }

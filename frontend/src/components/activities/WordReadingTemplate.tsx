@@ -117,6 +117,11 @@ interface WordReadingTemplateProps {
 
   // AI analysis availability
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
+
+  // Issue #689 — Phase 1 frontend attempt gate
+  recordingDisabled?: boolean; // true → 麥克風/上傳/分析按鈕全部鎖定
+  attemptsHint?: React.ReactNode; // 愛心指示器，渲染於 Analyze 按鈕下方
+  onAnalysisSuccess?: () => void; // Azure 分析成功時觸發 +1
 }
 
 export default function WordReadingTemplate({
@@ -134,6 +139,9 @@ export default function WordReadingTemplate({
   onAssessmentComplete,
   onClearRecording,
   canUseAiAnalysis = true,
+  recordingDisabled = false,
+  attemptsHint,
+  onAnalysisSuccess,
 }: WordReadingTemplateProps) {
   const { t } = useTranslation();
   const [audioUrl, setAudioUrl] = useState<string | undefined>(
@@ -681,6 +689,9 @@ export default function WordReadingTemplate({
         throw new Error("Azure analysis failed");
       }
 
+      // Issue #689: 分析成功 → 計入次數（mirror 後端 speech_assessment.py:1810）
+      onAnalysisSuccess?.();
+
       const result: AssessmentResult = {
         overallScore: azureResult.pronunciationScore,
         accuracyScore: azureResult.accuracyScore,
@@ -886,19 +897,25 @@ export default function WordReadingTemplate({
                       <>
                         <button
                           className="w-12 h-12 sm:w-16 sm:h-16 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all"
-                          disabled={readOnly}
+                          disabled={readOnly || recordingDisabled}
                           onClick={() => {
                             setAssessmentResult(null);
                             setScoreModalOpen(false);
                             startRecording();
                           }}
-                          title={readOnly ? "檢視模式" : "開始錄音"}
+                          title={
+                            readOnly
+                              ? "檢視模式"
+                              : recordingDisabled
+                                ? t("recordingAttempts.lockedTooltip")
+                                : "開始錄音"
+                          }
                         >
                           <Mic className="w-5 h-5 sm:w-6 sm:h-6" />
                         </button>
                         <button
                           className="w-12 h-12 sm:w-16 sm:h-16 bg-green-600 hover:bg-green-700 text-white rounded-full flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all"
-                          disabled={readOnly}
+                          disabled={readOnly || recordingDisabled}
                           onClick={() => {
                             const input = document.createElement("input");
                             input.type = "file";
@@ -911,15 +928,23 @@ export default function WordReadingTemplate({
                             };
                             input.click();
                           }}
-                          title={readOnly ? "檢視模式" : "上傳音檔"}
+                          title={
+                            readOnly
+                              ? "檢視模式"
+                              : recordingDisabled
+                                ? t("recordingAttempts.lockedTooltip")
+                                : "上傳音檔"
+                          }
                         >
                           <Upload className="w-5 h-5 sm:w-6 sm:h-6" />
                         </button>
                         <span className="text-sm sm:text-base text-gray-600">
                           {readOnly
                             ? "檢視模式"
-                            : t("wordReading.startRecordOrUpload") ||
-                              "開始錄音或上傳"}
+                            : recordingDisabled
+                              ? t("recordingAttempts.lockedTooltip")
+                              : t("wordReading.startRecordOrUpload") ||
+                                "開始錄音或上傳"}
                         </span>
                       </>
                     )}
@@ -998,7 +1023,7 @@ export default function WordReadingTemplate({
 
           {/* 手機版：分析按鈕 / 查看結果按鈕 */}
           {canUseAiAnalysis && audioUrl && (
-            <div className="flex justify-center py-4 md:hidden">
+            <div className="flex flex-col items-center py-4 md:hidden">
               {assessmentResult ? (
                 <Button
                   size="lg"
@@ -1013,13 +1038,19 @@ export default function WordReadingTemplate({
                 <Button
                   size="lg"
                   onClick={handleAssessment}
-                  disabled={isAssessing}
+                  disabled={isAssessing || recordingDisabled}
                   className="relative bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white h-14 px-8 text-lg font-bold rounded-2xl shadow-xl transition-all"
                   style={{
-                    animation: isAssessing
-                      ? "none"
-                      : "pulse-scale 1.5s ease-in-out infinite",
+                    animation:
+                      isAssessing || recordingDisabled
+                        ? "none"
+                        : "pulse-scale 1.5s ease-in-out infinite",
                   }}
+                  title={
+                    recordingDisabled
+                      ? t("recordingAttempts.lockedTooltip")
+                      : undefined
+                  }
                 >
                   {isAssessing ? (
                     <>
@@ -1034,6 +1065,7 @@ export default function WordReadingTemplate({
                   )}
                 </Button>
               )}
+              {attemptsHint && <div className="mt-2">{attemptsHint}</div>}
             </div>
           )}
 
@@ -1042,17 +1074,23 @@ export default function WordReadingTemplate({
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               {/* 🎯 Issue #227: 只有教師/機構有 AI 分析額度時才顯示分析按鈕 */}
               {audioUrl && !assessmentResult && canUseAiAnalysis ? (
-                <div className="flex justify-center mb-4 py-6">
+                <div className="flex flex-col items-center mb-4 py-6">
                   <Button
                     size="lg"
                     onClick={handleAssessment}
-                    disabled={isAssessing}
+                    disabled={isAssessing || recordingDisabled}
                     className="relative bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white h-16 px-10 text-xl font-bold rounded-2xl shadow-2xl hover:shadow-purple-500/50 transition-all"
                     style={{
-                      animation: isAssessing
-                        ? "none"
-                        : "pulse-scale 1.5s ease-in-out infinite",
+                      animation:
+                        isAssessing || recordingDisabled
+                          ? "none"
+                          : "pulse-scale 1.5s ease-in-out infinite",
                     }}
+                    title={
+                      recordingDisabled
+                        ? t("recordingAttempts.lockedTooltip")
+                        : undefined
+                    }
                   >
                     {isAssessing ? (
                       <>
@@ -1066,6 +1104,7 @@ export default function WordReadingTemplate({
                       </>
                     )}
                   </Button>
+                  {attemptsHint && <div className="mt-2">{attemptsHint}</div>}
                 </div>
               ) : null}
               {assessmentResult ? (
@@ -1115,7 +1154,7 @@ export default function WordReadingTemplate({
                       )}
 
                       {/* Re-assess Button */}
-                      <div className="text-center">
+                      <div className="flex flex-col items-center gap-2">
                         <Button
                           onClick={() => {
                             setAssessmentResult(null);
@@ -1123,11 +1162,17 @@ export default function WordReadingTemplate({
                           }}
                           variant="outline"
                           size="sm"
-                          disabled={readOnly}
+                          disabled={readOnly || recordingDisabled}
                           className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                          title={
+                            recordingDisabled
+                              ? t("recordingAttempts.lockedTooltip")
+                              : undefined
+                          }
                         >
                           {t("wordReading.reassess") || "重新評估"}
                         </Button>
+                        {attemptsHint}
                       </div>
                     </div>
                   </div>

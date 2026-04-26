@@ -118,6 +118,9 @@ interface GroupedQuestionsTemplateProps {
   onAnalyzingStateChange?: (isAnalyzing: boolean) => void; // 🔒 分析狀態變化回調
   timeLimit?: number; // 錄音時間限制（秒）
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
+  // Issue #689 — Phase 1 frontend attempt gate
+  recordingDisabled?: boolean; // true → 麥克風 / 上傳 / Analyze 鎖定
+  attemptsHint?: React.ReactNode; // 愛心指示器
 }
 
 const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
@@ -147,6 +150,8 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
   onAnalyzingStateChange, // 🔒 分析狀態變化回調
   timeLimit = 30, // 錄音時間限制（秒）
   canUseAiAnalysis = true, // 教師/機構是否有 AI 分析額度
+  recordingDisabled = false,
+  attemptsHint,
 }: GroupedQuestionsTemplateProps) {
   const { t } = useTranslation();
   const currentQuestion = items[currentQuestionIndex];
@@ -932,7 +937,7 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                     <>
                       <button
                         className="w-12 h-12 sm:w-16 sm:h-16 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all"
-                        disabled={readOnly}
+                        disabled={readOnly || recordingDisabled}
                         onClick={() => {
                           setAssessmentResults((prev) => {
                             const newResults = { ...prev };
@@ -944,16 +949,18 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                         title={
                           readOnly
                             ? t("groupedQuestionsTemplate.labels.viewOnlyMode")
-                            : t(
-                                "groupedQuestionsTemplate.labels.startRecording",
-                              )
+                            : recordingDisabled
+                              ? t("recordingAttempts.lockedTooltip")
+                              : t(
+                                  "groupedQuestionsTemplate.labels.startRecording",
+                                )
                         }
                       >
                         <Mic className="w-5 h-5 sm:w-6 sm:h-6" />
                       </button>
                       <button
                         className="w-12 h-12 sm:w-16 sm:h-16 bg-green-600 hover:bg-green-700 text-white rounded-full flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all"
-                        disabled={readOnly}
+                        disabled={readOnly || recordingDisabled}
                         onClick={() => {
                           const input = document.createElement("input");
                           input.type = "file";
@@ -969,7 +976,9 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                         title={
                           readOnly
                             ? t("groupedQuestionsTemplate.labels.viewOnlyMode")
-                            : t("groupedQuestionsTemplate.labels.uploadAudio")
+                            : recordingDisabled
+                              ? t("recordingAttempts.lockedTooltip")
+                              : t("groupedQuestionsTemplate.labels.uploadAudio")
                         }
                       >
                         <Upload className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -977,9 +986,11 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                       <span className="text-sm sm:text-base text-gray-600">
                         {readOnly
                           ? t("groupedQuestionsTemplate.labels.viewOnlyMode")
-                          : t(
-                              "groupedQuestionsTemplate.labels.startRecordingOrUpload",
-                            )}
+                          : recordingDisabled
+                            ? t("recordingAttempts.lockedTooltip")
+                            : t(
+                                "groupedQuestionsTemplate.labels.startRecordingOrUpload",
+                              )}
                       </span>
                     </>
                   )}
@@ -1071,7 +1082,7 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
 
           {/* 手機版：分析按鈕 / 查看結果按鈕 */}
           {canUseAiAnalysis && items[currentQuestionIndex]?.recording_url && (
-            <div className="flex justify-center py-4 md:hidden">
+            <div className="flex flex-col items-center py-4 md:hidden">
               {assessmentResults[currentQuestionIndex] ? (
                 <Button
                   size="lg"
@@ -1086,8 +1097,15 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                 <Button
                   size="lg"
                   onClick={handleAssessment}
+                  title={
+                    recordingDisabled
+                      ? t("recordingAttempts.lockedTooltip")
+                      : undefined
+                  }
                   disabled={
-                    isAssessing || itemAnalysisState?.status === "analyzing"
+                    isAssessing ||
+                    itemAnalysisState?.status === "analyzing" ||
+                    recordingDisabled
                   }
                   className={`relative h-14 px-8 text-lg font-bold rounded-2xl shadow-xl transition-all ${
                     itemAnalysisState?.status === "analyzing"
@@ -1128,6 +1146,7 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                   )}
                 </Button>
               )}
+              {attemptsHint && <div className="mt-2">{attemptsHint}</div>}
             </div>
           )}
         </div>
@@ -1143,13 +1162,20 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
             {canUseAiAnalysis &&
             items[currentQuestionIndex]?.recording_url &&
             !assessmentResults[currentQuestionIndex] ? (
-              <div className="flex justify-center mb-4 py-6">
+              <div className="flex flex-col items-center mb-4 py-6">
                 <Button
                   ref={uploadButtonRef}
                   size="lg"
                   onClick={handleAssessment}
+                  title={
+                    recordingDisabled
+                      ? t("recordingAttempts.lockedTooltip")
+                      : undefined
+                  }
                   disabled={
-                    isAssessing || itemAnalysisState?.status === "analyzing"
+                    isAssessing ||
+                    itemAnalysisState?.status === "analyzing" ||
+                    recordingDisabled
                   }
                   className={`relative h-16 px-10 text-xl font-bold rounded-2xl shadow-2xl transition-all ${
                     itemAnalysisState?.status === "analyzing"
@@ -1194,6 +1220,7 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                     </>
                   )}
                 </Button>
+                {attemptsHint && <div className="mt-2">{attemptsHint}</div>}
               </div>
             ) : null}
             {assessmentResults[currentQuestionIndex] ? (

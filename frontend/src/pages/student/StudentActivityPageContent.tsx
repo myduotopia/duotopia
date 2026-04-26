@@ -31,6 +31,11 @@ import RearrangementActivity, {
 import WordReadingActivity from "@/components/activities/WordReadingActivity";
 import WordSelectionActivity from "@/components/activities/WordSelectionActivity";
 import { TugOfWarGame } from "@/components/activities/TugOfWarGame";
+import RecordingAttemptsIndicator from "@/components/activities/RecordingAttemptsIndicator";
+import {
+  useRecordingAttempts,
+  incrementRecordingAttemptForItem,
+} from "@/hooks/useRecordingAttempts";
 import {
   ChevronLeft,
   ChevronRight,
@@ -404,6 +409,43 @@ export default function StudentActivityPageContent({
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [currentActivityIndex, currentSubQuestionIndex]);
+
+  // Issue #689: 前端錄音次數限制 — 為當前可見題目維持 attempts 狀態。
+  // - 多題題組（GroupedQuestionsTemplate）：以 items[currentSubQuestionIndex] 為 key
+  // - 單題例句朗讀（ReadingAssessmentTemplate, no items）：以 activity.id 為 key
+  // WordReadingActivity 自帶內部閘門，這裡的狀態不影響它。
+  const _currentActivityForGate = activities[currentActivityIndex];
+  const _currentItemForGate =
+    _currentActivityForGate?.items?.[currentSubQuestionIndex];
+  const _gateItemId =
+    (_currentItemForGate?.id as number | undefined) ??
+    _currentActivityForGate?.id ??
+    0;
+  const _gateTeacherPassed =
+    (_currentItemForGate?.teacher_passed as boolean | undefined) ?? null;
+  const _gateTeacherReviewedAt =
+    (_currentItemForGate?.teacher_reviewed_at as string | undefined) ?? null;
+  const _gateExistingRecordingUrl =
+    (_currentItemForGate?.recording_url as string | undefined) ?? null;
+  const recordingGate = useRecordingAttempts({
+    studentAssignmentId: assignmentId,
+    itemId: _gateItemId,
+    assignmentStatus: assignmentStatus ?? null,
+    returnedAt: null,
+    teacherPassed: _gateTeacherPassed,
+    teacherReviewedAt: _gateTeacherReviewedAt,
+    existingRecordingUrl: _gateExistingRecordingUrl,
+  });
+  const recordingGateActive =
+    !isPreviewMode && !isDemoMode && canUseAiAnalysis !== false;
+  const recordingDisabledForCurrent =
+    recordingGateActive && !recordingGate.canRecord;
+  const handleAnalysisSuccess = useCallback(() => {
+    if (recordingGateActive) recordingGate.recordAttempt();
+  }, [recordingGateActive, recordingGate]);
+  const recordingAttemptsHint = recordingGateActive ? (
+    <RecordingAttemptsIndicator attemptsUsed={recordingGate.attemptsUsed} />
+  ) : null;
 
   // 🎯 使用統一的錄音策略
   const strategyRef = useRef(getRecordingStrategy());
@@ -1931,6 +1973,21 @@ export default function StudentActivityPageContent({
             });
           }}
           onAssessmentComplete={(index, assessmentResult) => {
+            // Issue #689: 分析成功 → 替該題計入 +1（mirror 後端 attempts 欄位）
+            if (assessmentResult && recordingGateActive) {
+              const itemIdForCount = activity.items?.[index]?.id;
+              if (itemIdForCount !== undefined) {
+                if (index === currentSubQuestionIndex) {
+                  // current item: 透過 hook 讓 UI 立刻反映
+                  recordingGate.recordAttempt();
+                } else {
+                  incrementRecordingAttemptForItem(
+                    assignmentId,
+                    itemIdForCount as number | string,
+                  );
+                }
+              }
+            }
             setActivities((prevActivities) => {
               const newActivities = [...prevActivities];
               const activityIndex = newActivities.findIndex(
@@ -1956,6 +2013,8 @@ export default function StudentActivityPageContent({
           }}
           onAnalyzingStateChange={setIsAnalyzing} // 🔒 接收分析狀態變化
           canUseAiAnalysis={canUseAiAnalysis}
+          recordingDisabled={recordingDisabledForCurrent}
+          attemptsHint={recordingAttemptsHint}
         />
       );
     }
@@ -2022,6 +2081,9 @@ export default function StudentActivityPageContent({
             isDemoMode={isDemoMode}
             timeLimit={timeLimitPerQuestion}
             canUseAiAnalysis={canUseAiAnalysis}
+            recordingDisabled={recordingDisabledForCurrent}
+            attemptsHint={recordingAttemptsHint}
+            onAnalysisSuccess={handleAnalysisSuccess}
           />
         );
       }
@@ -2088,6 +2150,8 @@ export default function StudentActivityPageContent({
             canUseAiAnalysis={canUseAiAnalysis}
             readOnly={isReadOnly}
             timeLimitPerQuestion={timeLimitPerQuestion}
+            assignmentStatus={assignmentStatus ?? null}
+            returnedAt={null}
             onComplete={async () => {
               if (onSubmit) {
                 try {

@@ -30,6 +30,10 @@ interface ReadingAssessmentProps {
   isDemoMode?: boolean; // Demo mode - uses public demo API endpoints
   timeLimit?: number; // 錄音時間限制（秒），0 = 不限時
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
+  // Issue #689 — Phase 1 frontend attempt gate
+  recordingDisabled?: boolean; // true → 麥克風 / Analyze 鎖定
+  attemptsHint?: React.ReactNode; // 愛心指示器
+  onAnalysisSuccess?: () => void; // Azure 分析成功時觸發 +1
 }
 
 export default function ReadingAssessmentTemplate({
@@ -43,6 +47,9 @@ export default function ReadingAssessmentTemplate({
   isDemoMode = false,
   timeLimit = 0, // 預設不限時
   canUseAiAnalysis = true,
+  recordingDisabled = false,
+  attemptsHint,
+  onAnalysisSuccess,
 }: ReadingAssessmentProps) {
   const { t } = useTranslation();
   const [audioUrl, setAudioUrl] = useState<string | undefined>(
@@ -146,6 +153,9 @@ export default function ReadingAssessmentTemplate({
         throw new Error("Azure analysis failed");
       }
 
+      // Issue #689: 分析成功 → 計入次數
+      onAnalysisSuccess?.();
+
       // ⚡ 立即顯示結果（用戶無需等待上傳）
       const result: AssessmentResult = {
         overallScore: azureResult.pronunciationScore,
@@ -238,6 +248,7 @@ export default function ReadingAssessmentTemplate({
           {/* 🎯 錄音元件 - 使用統一的 AudioRecorder */}
           <AudioRecorder
             existingAudioUrl={audioUrl}
+            disabled={recordingDisabled}
             onRecordingComplete={(blob, url) => {
               // Check recording duration against time limit (0.5s tolerance
               // for auto-stop timer imprecision)
@@ -270,14 +281,19 @@ export default function ReadingAssessmentTemplate({
           />
 
           {/* Bottom Buttons */}
-          <div className="flex space-x-4 pt-6">
+          <div className="flex flex-col items-start gap-2 pt-6">
             {audioUrl && !readOnly && canUseAiAnalysis && (
               <>
                 {!assessmentResult && (
                   <Button
                     onClick={handleAssessment}
-                    disabled={isAssessing}
+                    disabled={isAssessing || recordingDisabled}
                     className="bg-blue-500 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500 text-white"
+                    title={
+                      recordingDisabled
+                        ? t("recordingAttempts.lockedTooltip")
+                        : undefined
+                    }
                   >
                     {isAssessing ? (
                       <>
@@ -294,6 +310,7 @@ export default function ReadingAssessmentTemplate({
                     )}
                   </Button>
                 )}
+                {attemptsHint}
               </>
             )}
           </div>
