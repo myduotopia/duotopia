@@ -2370,11 +2370,14 @@ export default function StudentActivityPageContent({
                 </div>
               )}
               {/* Issue #110: 例句重組模式不在 header 顯示提交按鈕（避免誤觸）
-                  單字選擇模式也不需要（自動根據熟悉度完成） */}
+                  單字選擇模式也不需要（自動根據熟悉度完成）
+                  Issue #689: 單字朗讀有自帶 submit，header 那顆會因為外層
+                  activities state 沒同步而永遠被 disabled，故一併隱藏。 */}
               {!isReadOnly &&
                 !isPreviewMode &&
                 practiceMode !== "rearrangement" &&
-                practiceMode !== "word_selection" && (
+                practiceMode !== "word_selection" &&
+                practiceMode !== "word_reading" && (
                   <Button
                     onClick={handleSubmit}
                     disabled={submitting || isSubmitBlockedByRecording}
