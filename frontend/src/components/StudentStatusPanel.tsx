@@ -191,39 +191,47 @@ export function TrafficLightDot({
 // StatusLegend - 狀態圖例
 // ---------------------------------------------------------------------------
 
+export function useStatusLabel() {
+  const { t } = useTranslation();
+  return (status: string): string => {
+    switch (status) {
+      case "NOT_STARTED":
+        return t(
+          "assignmentDetail.sheet.statusNotStarted",
+          "學生尚未開始寫作業",
+        );
+      case "RETURNED":
+        return t("assignmentDetail.sheet.statusReturned", "學生未開始訂正");
+      case "IN_PROGRESS":
+        return t("assignmentDetail.sheet.statusInProgress", "學生未完成作業");
+      case "RESUBMITTED":
+        return t(
+          "assignmentDetail.sheet.statusResubmitted",
+          "學生已訂正，待老師批改",
+        );
+      case "SUBMITTED":
+        return t(
+          "assignmentDetail.sheet.statusSubmitted",
+          "學生已完成，待老師批改",
+        );
+      case "GRADED":
+        return t("assignmentDetail.sheet.statusGraded", "老師已批改完畢");
+      default:
+        return "";
+    }
+  };
+}
+
 export function StatusLegend({ columns = 2 }: { columns?: 1 | 2 } = {}) {
   const { t } = useTranslation();
+  const getLabel = useStatusLabel();
   const items = [
-    {
-      status: "NOT_STARTED",
-      label: t("assignmentDetail.sheet.statusNotStarted", "學生尚未開始寫作業"),
-    },
-    {
-      status: "RETURNED",
-      label: t("assignmentDetail.sheet.statusReturned", "學生未開始訂正"),
-    },
-    {
-      status: "IN_PROGRESS",
-      label: t("assignmentDetail.sheet.statusInProgress", "學生未完成作業"),
-    },
-    {
-      status: "RESUBMITTED",
-      label: t(
-        "assignmentDetail.sheet.statusResubmitted",
-        "學生已訂正，待老師批改",
-      ),
-    },
-    {
-      status: "SUBMITTED",
-      label: t(
-        "assignmentDetail.sheet.statusSubmitted",
-        "學生已完成，待老師批改",
-      ),
-    },
-    {
-      status: "GRADED",
-      label: t("assignmentDetail.sheet.statusGraded", "老師已批改完畢"),
-    },
+    { status: "NOT_STARTED", label: getLabel("NOT_STARTED") },
+    { status: "RETURNED", label: getLabel("RETURNED") },
+    { status: "IN_PROGRESS", label: getLabel("IN_PROGRESS") },
+    { status: "RESUBMITTED", label: getLabel("RESUBMITTED") },
+    { status: "SUBMITTED", label: getLabel("SUBMITTED") },
+    { status: "GRADED", label: getLabel("GRADED") },
   ];
 
   return (
