@@ -198,7 +198,9 @@ export default function StudentLogin() {
           teacher_name: teacherHistory.find((t) => t.email === teacherEmail)
             ?.name,
         } as StudentUser);
-        navigate(consumeRedirectTarget("/student/dashboard"));
+        navigate(consumeRedirectTarget("/student/dashboard"), {
+          replace: true,
+        });
       }
     } catch (err) {
       console.error("Student login failed:", err);
@@ -238,7 +240,9 @@ export default function StudentLogin() {
         classrooms: s.classrooms,
         classrooms_count: s.classrooms_count,
       } as StudentUser);
-      navigate(consumeRedirectTarget("/student/dashboard"));
+      navigate(consumeRedirectTarget("/student/dashboard"), {
+        replace: true,
+      });
     } catch (err) {
       console.error("Email login failed:", err);
       setError(t("studentLogin.emailLogin.error"));
