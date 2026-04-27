@@ -659,7 +659,7 @@ export default function GradingPage() {
       toast.success(t("gradingPage.messages.gradingSuccess"));
 
       if (submission) {
-        submission.status = "GRADED";
+        setSubmission({ ...submission, status: "GRADED" });
       }
 
       setStudentList((prev) =>
@@ -705,7 +705,7 @@ export default function GradingPage() {
       toast.success(t("gradingPage.messages.revisionRequested"));
 
       if (submission) {
-        submission.status = "RETURNED";
+        setSubmission({ ...submission, status: "RETURNED" });
       }
 
       setStudentList((prev) =>

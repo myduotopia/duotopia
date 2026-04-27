@@ -56,6 +56,12 @@ export function StudentListPanel({
               student.status !== "NOT_ASSIGNED" &&
               student.status !== "NOT_STARTED";
 
+            // 與 StudentStatusPanel / stickyNotePrint 對齊：所有已派發的學生都顯示分數，
+            // null（NOT_STARTED 等）視為 0.0；NOT_ASSIGNED 才隱藏。
+            const hasScore =
+              !!student.status && student.status !== "NOT_ASSIGNED";
+            const scoreValue = student.score ?? 0;
+
             return (
               <button
                 key={student.student_id}
@@ -74,9 +80,9 @@ export function StudentListPanel({
                   <span className="truncate font-medium flex-1">
                     {student.student_name}
                   </span>
-                  {student.score != null && (
+                  {hasScore && (
                     <span className="text-xs font-bold text-gray-700 shrink-0 tabular-nums">
-                      {(Math.round(student.score * 10) / 10).toFixed(1)}
+                      {scoreValue.toFixed(1)}
                     </span>
                   )}
                 </div>

@@ -12,8 +12,8 @@
  * 完全不讀 itemFeedbacks、不 onClick、不 autosave。
  *
  * 展開區「選字歷程」label 永遠顯示，但內容依分數分流：
- *   - expected_score > 60 → 用綠色 chip 呈現完整正確答案（雛型，等 #679 補完整 attempts[] 再接真實資料）
- *   - 其他（沒分數 / ≤ 60）→ 顯示「更詳細的作答紀錄 Coming Soon」灰色佔位文字
+ *   - expected_score >= 60 → 用綠色 chip 呈現完整正確答案（雛型，等 #679 補完整 attempts[] 再接真實資料）
+ *   - 其他（沒分數 / < 60） → 顯示「更詳細的作答紀錄 Coming Soon」灰色佔位文字
  *
  * 詳見 docs/design/grading-page-architecture.md
  */
@@ -53,13 +53,10 @@ interface SentenceRearrangementPanelProps {
 
 function formatCompletedAt(timestamp?: string | null): string {
   if (!timestamp) return "";
-  try {
-    const d = new Date(timestamp);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  } catch {
-    return "";
-  }
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function splitAnswerWords(sentence: string): string[] {
@@ -88,9 +85,10 @@ export function SentenceRearrangementPanel({
   }
 
   const renderSelectionHistory = (item: SubmissionItem) => {
-    // 分流：> 60 才顯示綠色 chips 雛型；其餘（沒分數 / ≤ 60）顯示 Coming Soon 佔位
+    // 分流：>= 60 才顯示綠色 chips 雛型；其餘（沒分數 / < 60）顯示 Coming Soon 佔位。
+    // 與 isPassed 判斷（expected_score >= 60）統一，避免 60 分剛好的學生 ✓ 但無歷程。
     const expectedScore = item.expected_score;
-    const showChips = expectedScore != null && expectedScore > 60;
+    const showChips = expectedScore != null && expectedScore >= 60;
 
     if (!showChips) {
       return (
