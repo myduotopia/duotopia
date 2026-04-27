@@ -237,9 +237,9 @@ export default function OneCampusCallback() {
   }
 
   function handleBindSkip() {
-    const dashboardPath =
+    const fallback =
       bindRoleType === "teacher" ? "/teacher/dashboard" : "/student/dashboard";
-    navigate(dashboardPath, { replace: true });
+    navigate(consumeRedirectTarget(fallback), { replace: true });
   }
 
   return (

@@ -225,7 +225,10 @@ class ApiClient {
                 window.location.hash,
             );
             clearAllAuth();
-            window.location.href = "/teacher/login";
+            const loginPath = window.location.pathname.startsWith("/student")
+              ? "/student/login"
+              : "/teacher/login";
+            window.location.href = loginPath;
             // Reset flag after a short delay so future 401s can still redirect
             setTimeout(() => {
               isRedirectingToLogin = false;

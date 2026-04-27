@@ -34,6 +34,13 @@ export function isSafeRedirectPath(path: unknown): path is string {
   // Reject protocol-relative URLs ("//evil.com") — open redirect guard
   if (path.startsWith("//")) return false;
   if (path.includes("\\")) return false;
+  // Reject percent-encoded variants (e.g. /%2Fevil.com decodes to //evil.com)
+  try {
+    const decoded = decodeURIComponent(path);
+    if (decoded.startsWith("//")) return false;
+  } catch {
+    return false; // malformed encoding
+  }
   return true;
 }
 
