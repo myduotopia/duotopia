@@ -30,7 +30,10 @@
     "cut": "剪下",
     "yes": "是",
     "no": "否",
-    "retry": "重試"
+    "retry": "重試",
+    "lineContact": {
+      "ariaLabel": "LINE 客服"
+    }
   },
   "assignmentDetail": {
     "sheet": {
@@ -398,9 +401,6 @@
         "demoLabel": "Demo 密碼",
         "demoPassword": "選擇學生後輸入: 20120101"
       }
-    },
-    "lineContact": {
-      "ariaLabel": "LINE 客服"
     },
     "footer": {
       "description": "AI 驅動的多元智能英語學習平台，專為亞洲學生設計",

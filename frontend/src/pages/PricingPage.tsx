@@ -33,7 +33,9 @@ import { toast } from "sonner";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import LineContactButton from "@/components/LineContactButton";
+import LineContactButton, {
+  LINE_FRIEND_URL,
+} from "@/components/LineContactButton";
 import { apiClient } from "@/lib/api";
 
 function getSubscriptionPlans(t: (key: string) => string): SubscriptionPlan[] {
@@ -529,7 +531,7 @@ export default function PricingPage() {
                 <ul className="space-y-2 text-sm">
                   <li>
                     <a
-                      href="https://line.me/R/ti/p/@duotopia"
+                      href={LINE_FRIEND_URL}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="hover:text-white"

@@ -13,7 +13,7 @@ describe("LineContactButton", () => {
   it("renders as an anchor pointing to the LINE add-friend URL", () => {
     render(<LineContactButton />);
     const link = screen.getByRole("link", {
-      name: "home.lineContact.ariaLabel",
+      name: "common.lineContact.ariaLabel",
     });
     expect(link).toHaveAttribute("href", "https://line.me/R/ti/p/@duotopia");
   });
@@ -21,7 +21,7 @@ describe("LineContactButton", () => {
   it("opens the LINE link in a new tab safely", () => {
     render(<LineContactButton />);
     const link = screen.getByRole("link", {
-      name: "home.lineContact.ariaLabel",
+      name: "common.lineContact.ariaLabel",
     });
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
@@ -30,7 +30,7 @@ describe("LineContactButton", () => {
   it("uses an i18n aria-label", () => {
     render(<LineContactButton />);
     expect(
-      screen.getByLabelText("home.lineContact.ariaLabel"),
+      screen.getByLabelText("common.lineContact.ariaLabel"),
     ).toBeInTheDocument();
   });
 });
