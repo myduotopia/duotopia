@@ -40,8 +40,7 @@ export default function StudentLogin() {
   const { login } = useStudentAuthStore();
   const { t } = useTranslation();
 
-  // #571: Mirror the intended URL (from ProtectedRoute) into sessionStorage
-  // so it survives the 4-step flow and any external SSO round-trip.
+  // Mirror router state into sessionStorage so it survives the 4-step flow.
   useEffect(() => {
     const from = (location.state as { from?: string } | null)?.from;
     if (from) saveRedirectTarget(from);

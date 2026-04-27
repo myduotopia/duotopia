@@ -1,16 +1,4 @@
-/**
- * Post-login redirect target persistence (Issue #571).
- *
- * Captures the URL a user originally tried to visit before being bounced to
- * a login page, so we can return them there after they authenticate.
- *
- * Stored in sessionStorage (not React Router state alone) so the value
- * survives:
- *  - Multi-step login flows (StudentLogin's 4 steps)
- *  - External SSO round-trips (1Campus → external → /auth/1campus/callback)
- *  - Hard navigations (api.ts 401 auto-logout via window.location.href)
- *  - Login-page reloads
- */
+// sessionStorage-backed so the target survives multi-step flows, SSO round-trips, and 401 hard navigations.
 
 const STORAGE_KEY = "auth_redirect_after_login";
 

@@ -69,8 +69,6 @@ export function ProtectedRoute({
     }
   }, [requiredRoles, isAuthenticated, token, user]);
 
-  // Not authenticated - redirect to login, preserving the intended URL so
-  // the login flow can return the user here after they authenticate (#571).
   if (!isAuthenticated) {
     const from = location.pathname + location.search + location.hash;
     return <Navigate to="/teacher/login" replace state={{ from }} />;

@@ -217,8 +217,7 @@ class ApiClient {
         if (response.status === 401 && !endpoint.includes("/auth/")) {
           if (!isRedirectingToLogin) {
             isRedirectingToLogin = true;
-            // #571: Preserve the in-progress URL across the hard navigation
-            // so the user lands back here after re-authenticating.
+            // Preserve the in-progress URL across this hard navigation.
             saveRedirectTarget(
               window.location.pathname +
                 window.location.search +

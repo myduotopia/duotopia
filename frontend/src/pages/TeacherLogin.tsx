@@ -38,9 +38,7 @@ export default function TeacherLogin() {
     password: "",
   });
 
-  // #571: Mirror router state into sessionStorage, then redirect if already
-  // authenticated. Combined into one effect so saveRedirectTarget always runs
-  // before consumeRedirectTarget regardless of any future code reordering.
+  // Combined into one effect so saveRedirectTarget always runs before consumeRedirectTarget.
   useEffect(() => {
     const from = (location.state as { from?: string } | null)?.from;
     if (from) saveRedirectTarget(from);
@@ -81,8 +79,7 @@ export default function TeacherLogin() {
         is_admin: result.user.is_admin,
       });
 
-      // Navigation is handled by the isAuthenticated effect above so that
-      // post-login redirect honours the intended URL (#571).
+      // isAuthenticated effect above handles navigation.
     } catch (err) {
       console.error("🔑 [ERROR] 登入失敗:", err);
       setError(t("teacherLogin.errors.loginFailed"));
@@ -115,7 +112,7 @@ export default function TeacherLogin() {
         is_admin: result.user.is_admin,
       });
 
-      // Navigation handled by the isAuthenticated effect (#571).
+      // isAuthenticated effect above handles navigation.
     } catch (err) {
       console.error("🔑 [ERROR] 快速登入失敗:", err);
       setError(t("teacherLogin.errors.quickLoginFailed", { email }));
