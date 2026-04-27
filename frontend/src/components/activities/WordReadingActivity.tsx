@@ -25,11 +25,17 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import WordReadingTemplate from "./WordReadingTemplate";
+import RecordingAttemptsIndicator from "./RecordingAttemptsIndicator";
 import { useTranslation } from "react-i18next";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { cn } from "@/lib/utils";
-import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { retryAudioUpload } from "@/utils/retryHelper";
+import {
+  useRecordingAttempts,
+  type AssignmentStatusLike,
+} from "@/hooks/useRecordingAttempts";
+import { getItemPassFailStatus } from "@/utils/itemPassFailStatus";
+import { appendAudioToFormData } from "@/utils/audioFormatDetection";
 
 interface WordItem {
   id: number;
@@ -56,6 +62,7 @@ interface WordItem {
   teacher_feedback?: string;
   teacher_passed?: boolean;
   teacher_review_score?: number;
+  teacher_reviewed_at?: string;
   review_status?: string;
 }
 
@@ -70,6 +77,9 @@ interface WordReadingActivityProps {
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
   readOnly?: boolean; // 已提交/已完成/已訂正時禁止修改
   timeLimitPerQuestion?: number; // 每題錄音限時（秒），由父元件傳入，覆蓋 API 值
+  // Issue #689: 用於前端錄音次數限制重置條件
+  assignmentStatus?: AssignmentStatusLike | null;
+  returnedAt?: string | null;
 }
 
 export default function WordReadingActivity({
@@ -83,6 +93,8 @@ export default function WordReadingActivity({
   readOnly = false,
   canUseAiAnalysis: canUseAiAnalysisProp,
   timeLimitPerQuestion: timeLimitProp,
+  assignmentStatus,
+  returnedAt,
 }: WordReadingActivityProps) {
   const { t } = useTranslation();
   const { token: studentToken } = useStudentAuthStore();
@@ -103,81 +115,53 @@ export default function WordReadingActivity({
   const [showTranslationFromApi, setShowTranslationFromApi] = useState(true);
   // AI 分析額度（從 API 讀取，或使用 prop 傳入的值）
   const [canUseAiAnalysisFromApi, setCanUseAiAnalysisFromApi] = useState(true);
-  const canUseAiAnalysis = canUseAiAnalysisProp ?? canUseAiAnalysisFromApi;
-  const { analyzePronunciation } = useAzurePronunciation();
 
-  /**
-   * 🔧 Review fix: 共用的分析+儲存+上傳邏輯，消除三處重複
-   */
-  const performAnalysisAndSave = useCallback(
-    async (params: {
-      audioBlob: Blob;
-      text: string;
-      itemIndex: number;
-      progressId?: number;
-    }) => {
-      const { audioBlob, text, itemIndex, progressId } = params;
-      const azureResult = await analyzePronunciation(
-        audioBlob,
-        text,
-        "Phoneme",
-      );
-      if (!azureResult) return;
+  // Issue #689: 前端錄音次數限制（每題 3 次 AI 分析）。Hook 必須在 early return 前呼叫。
+  const currentItemForGate = items[currentIndex];
+  const {
+    attemptsUsed: currentAttemptsUsed,
+    canRecord: currentCanRecord,
+    recordAttempt: incrementCurrentAttempt,
+  } = useRecordingAttempts({
+    studentAssignmentId: assignmentId,
+    itemId: currentItemForGate?.id ?? 0,
+    assignmentStatus: assignmentStatus,
+    returnedAt: returnedAt ?? null,
+    teacherPassed: currentItemForGate?.teacher_passed ?? null,
+    teacherReviewedAt: currentItemForGate?.teacher_reviewed_at ?? null,
+    existingRecordingUrl: currentItemForGate?.recording_url ?? null,
+  });
+  // Issue #689 後續：訂正模式下「已通過」題目鎖住、藏愛心。
+  // RETURNED 狀態下純看 teacher_passed === true，不做 AI 分數 fallback：
+  // 否則學生重錄高分後該題會誤標「訂正過」，分不清這次到底是在訂正哪些題。
+  const currentItemAiScore =
+    currentItemForGate?.ai_assessment?.pronunciation_score ??
+    currentItemForGate?.ai_assessment?.accuracy_score ??
+    null;
+  const currentItemStatus = getItemPassFailStatus({
+    teacherPassed: currentItemForGate?.teacher_passed ?? null,
+    aiScore: currentItemAiScore,
+    assignmentStatus: assignmentStatus ?? null,
+  });
+  const currentItemLockedInReturnedMode =
+    assignmentStatus === "RETURNED" && currentItemStatus.passed;
+  // Preview / demo / readOnly 不適用前端閘門
+  const gateActive =
+    !readOnly &&
+    !isPreviewMode &&
+    !isDemoMode &&
+    canUseAiAnalysisProp !== false;
+  const recordingDisabledForCurrent =
+    currentItemLockedInReturnedMode || (gateActive && !currentCanRecord);
+  const handleAnalysisSuccess = useCallback(() => {
+    if (gateActive && !currentItemLockedInReturnedMode)
+      incrementCurrentAttempt();
+  }, [gateActive, currentItemLockedInReturnedMode, incrementCurrentAttempt]);
 
-      const assessment = {
-        accuracy_score: azureResult.accuracyScore,
-        fluency_score: azureResult.fluencyScore,
-        completeness_score: azureResult.completenessScore,
-        pronunciation_score: azureResult.pronunciationScore,
-        // 🎯 音素詳細資料（重開時可還原圖表）
-        detailed_words: azureResult.detailed_words || [],
-        reference_text: text,
-      };
-
-      setItems((prev) => {
-        const updated = [...prev];
-        updated[itemIndex] = {
-          ...updated[itemIndex],
-          ai_assessment: assessment,
-        };
-        return updated;
-      });
-
-      const apiUrl = import.meta.env.VITE_API_URL || "";
-      if (progressId) {
-        const ext = audioBlob.type.includes("mp4")
-          ? "recording.mp4"
-          : audioBlob.type.includes("webm")
-            ? "recording.webm"
-            : "recording.audio";
-        const analysisForm = new FormData();
-        analysisForm.append("audio_file", audioBlob, ext);
-        analysisForm.append(
-          "analysis_json",
-          JSON.stringify({
-            pronunciation_score: azureResult.pronunciationScore,
-            accuracy_score: azureResult.accuracyScore,
-            fluency_score: azureResult.fluencyScore,
-            completeness_score: azureResult.completenessScore,
-            overall_score: azureResult.pronunciationScore,
-            detailed_words: azureResult.detailed_words || [],
-            reference_text: text,
-          }),
-        );
-        analysisForm.append("progress_id", progressId.toString());
-        analysisForm.append("analysis_id", crypto.randomUUID());
-
-        fetch(`${apiUrl}/api/speech/upload-analysis`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: analysisForm,
-        }).catch((err) => console.error("Upload analysis failed:", err));
-      }
-
-      return assessment;
-    },
-    [analyzePronunciation, token],
-  );
+  // Issue #677: removed performAnalysisAndSave (the helper used only by
+  // the supplementary background analysis on next/submit, which is gone now).
+  // Foreground recording analysis now happens entirely inside
+  // WordReadingTemplate via Azure SDK -> handleAnalysisSuccess -> attempt counter.
 
   // Load vocabulary items from backend
   const loadItems = useCallback(async () => {
@@ -265,12 +249,7 @@ export default function WordReadingActivity({
       formData.append("assignment_id", assignmentId.toString());
       formData.append("content_item_id", currentItem.id.toString());
 
-      const uploadFileExtension = blob.type.includes("mp4")
-        ? "recording.mp4"
-        : blob.type.includes("webm")
-          ? "recording.webm"
-          : "recording.audio";
-      formData.append("audio_file", blob, uploadFileExtension);
+      await appendAudioToFormData(formData, "audio_file", blob);
 
       const response = await fetch(`${apiUrl}/api/students/upload-recording`, {
         method: "POST",
@@ -351,38 +330,9 @@ export default function WordReadingActivity({
 
   // Navigate to next item
   const handleNext = () => {
-    // 🎯 Issue #227: 切換到下一題時，背景分析當前未分析的題目
-    if (canUseAiAnalysis && !isPreviewMode && !isDemoMode) {
-      const currentItem = items[currentIndex];
-      // 🔧 Review fix: 捕獲 index 避免 async 回調中使用 stale closure
-      const capturedIndex = currentIndex;
-      const hasRecording =
-        currentItem?.recording_url && currentItem.recording_url !== "";
-      if (hasRecording && !currentItem?.ai_assessment && currentItem.text) {
-        // fire-and-forget：背景分析不阻塞導航
-        (async () => {
-          try {
-            const resp = await fetch(currentItem.recording_url!);
-            if (!resp.ok) {
-              console.warn(
-                `Audio fetch failed (${resp.status}), skipping background analysis`,
-              );
-              return;
-            }
-            const audioBlob = await resp.blob();
-            await performAnalysisAndSave({
-              audioBlob,
-              text: currentItem.text,
-              itemIndex: capturedIndex,
-              progressId: currentItem.progress_id,
-            });
-          } catch (err) {
-            console.error("Background analysis on next failed:", err);
-          }
-        })();
-      }
-    }
-
+    // Issue #677: removed fire-and-forget supplementary analysis on next.
+    // Auto-analysis only happens at the moment recording finishes
+    // (handleAnalysisSuccess attempt counter still fires there).
     if (currentIndex < items.length - 1) {
       setCurrentIndex(currentIndex + 1);
     }
@@ -460,16 +410,11 @@ export default function WordReadingActivity({
           try {
             const resp = await fetch(item.recording_url!);
             const audioBlob = await resp.blob();
-            const ext = audioBlob.type.includes("mp4")
-              ? "recording.mp4"
-              : audioBlob.type.includes("webm")
-                ? "recording.webm"
-                : "recording.audio";
 
             const formData = new FormData();
             formData.append("assignment_id", assignmentId.toString());
             formData.append("content_item_id", item.id.toString());
-            formData.append("audio_file", audioBlob, ext);
+            await appendAudioToFormData(formData, "audio_file", audioBlob);
 
             const uploadResult = await retryAudioUpload(
               async () => {
@@ -517,40 +462,9 @@ export default function WordReadingActivity({
         }
       }
 
-      // 🎯 Issue #227: 提交前補分析所有有錄音但未分析的題目
-      if (canUseAiAnalysis) {
-        const unanalyzedItems = items
-          .map((item, index) => ({ item, index }))
-          .filter(
-            ({ item }) =>
-              item.recording_url &&
-              item.recording_url !== "" &&
-              !item.ai_assessment,
-          );
-
-        if (unanalyzedItems.length > 0) {
-          for (const { item, index } of unanalyzedItems) {
-            try {
-              const audioResp = await fetch(item.recording_url!);
-              if (!audioResp.ok) {
-                console.warn(
-                  `Audio fetch failed for item ${index + 1} (${audioResp.status})`,
-                );
-                continue;
-              }
-              const audioBlob = await audioResp.blob();
-              await performAnalysisAndSave({
-                audioBlob,
-                text: item.text,
-                itemIndex: index,
-                progressId: item.progress_id,
-              });
-            } catch (error) {
-              console.error(`Failed to analyze item ${index + 1}:`, error);
-            }
-          }
-        }
-      }
+      // Issue #677: removed pre-submit supplementary analysis pass.
+      // Items without `ai_assessment` at submit time are submitted as-is;
+      // analysis only happens at the moment the recording is finished.
 
       // 提交作業
       const response = await fetch(
@@ -644,6 +558,34 @@ export default function WordReadingActivity({
           const isActive = index === currentIndex;
           const isCompleted = !!item.recording_url;
           const hasAssessment = !!item.ai_assessment;
+          // Issue #689 後續：點點顏色委派 getItemPassFailStatus 統一處理。
+          // RETURNED 模式下純看 teacher_passed；其他狀態才用 AI 分數 fallback。
+          const aiScore =
+            item.ai_assessment?.pronunciation_score ??
+            item.ai_assessment?.accuracy_score ??
+            null;
+          const { passed: passedByScore, failed: failedByScore } =
+            getItemPassFailStatus({
+              teacherPassed: item.teacher_passed ?? null,
+              aiScore,
+              assignmentStatus: assignmentStatus ?? null,
+            });
+          const colorClass = passedByScore
+            ? "bg-green-100 text-green-800 border-green-400"
+            : failedByScore
+              ? "bg-red-100 text-red-800 border-red-400"
+              : hasAssessment || isCompleted
+                ? "bg-yellow-100 text-yellow-800 border-yellow-400"
+                : "bg-white text-gray-600 border-gray-300 hover:border-blue-400";
+          const titleText = passedByScore
+            ? t("wordReading.passed") || "通過"
+            : failedByScore
+              ? t("wordReading.notPassed") || "未通過"
+              : hasAssessment
+                ? t("wordReading.assessed") || "Assessed"
+                : isCompleted
+                  ? t("wordReading.recorded") || "Recorded"
+                  : t("wordReading.notRecorded") || "Not recorded";
 
           return (
             <button
@@ -652,19 +594,9 @@ export default function WordReadingActivity({
               className={cn(
                 "w-8 h-8 rounded border transition-all flex items-center justify-center text-xs font-medium flex-shrink-0",
                 isActive && "border-2 border-blue-600",
-                hasAssessment
-                  ? "bg-green-100 text-green-800 border-green-400"
-                  : isCompleted
-                    ? "bg-yellow-100 text-yellow-800 border-yellow-400"
-                    : "bg-white text-gray-600 border-gray-300 hover:border-blue-400",
+                colorClass,
               )}
-              title={
-                hasAssessment
-                  ? t("wordReading.assessed") || "Assessed"
-                  : isCompleted
-                    ? t("wordReading.recorded") || "Recorded"
-                    : t("wordReading.notRecorded") || "Not recorded"
-              }
+              title={titleText}
             >
               {index + 1}
             </button>
@@ -685,6 +617,13 @@ export default function WordReadingActivity({
         readOnly={readOnly}
         isDemoMode={isDemoMode}
         timeLimit={timeLimitPerQuestion}
+        recordingDisabled={recordingDisabledForCurrent}
+        attemptsHint={
+          gateActive && !currentItemLockedInReturnedMode ? (
+            <RecordingAttemptsIndicator attemptsUsed={currentAttemptsUsed} />
+          ) : null
+        }
+        onAnalysisSuccess={handleAnalysisSuccess}
         onAssessmentComplete={handleAssessmentComplete}
         onClearRecording={handleClearRecording}
         canUseAiAnalysis={canUseAiAnalysisProp ?? canUseAiAnalysisFromApi}
@@ -701,7 +640,7 @@ export default function WordReadingActivity({
           {t("wordReading.previous") || "Previous"}
         </Button>
 
-        {isLastItem && allCompleted ? (
+        {isLastItem && allCompleted && !readOnly ? (
           <Button
             onClick={handleSubmit}
             disabled={submitting || uploading}

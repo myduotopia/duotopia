@@ -1168,3 +1168,716 @@ def test_batch_grade_integration_realistic_classroom(
     assert (
         len(not_started_students) == 0
     ), "NOT_STARTED students should NOT be processed"
+
+
+# ============================================================================
+# Issue #680: teacher_passed auto-marking from AI scores
+# ============================================================================
+# Rules:
+#   - recording_url is None/empty              → teacher_passed = False
+#   - recording_url set, ai_assessed_at = None → teacher_passed = None (unchanged)
+#   - has AI assessment, overall >= 60         → teacher_passed = True
+#   - has AI assessment, overall < 60          → teacher_passed = False
+# Applies in BOTH single-student mode and multi-student mode.
+
+
+def _student_item_progress_by_item(
+    db: Session, student_assignment_id: int
+) -> dict[int, StudentItemProgress]:
+    rows = (
+        db.query(StudentItemProgress)
+        .filter(StudentItemProgress.student_assignment_id == student_assignment_id)
+        .all()
+    )
+    return {row.content_item_id: row for row in rows}
+
+
+@pytest.fixture
+def issue680_setup(shared_test_session: Session, auth_teacher: Teacher):
+    """
+    Dedicated fixture for issue #680 tests — uses correct ContentType enum value
+    (the shared `setup_classroom_and_assignment` uses lowercase "reading_assessment"
+    which isn't a valid ContentType and causes all its tests to error at setup).
+    """
+    from models import Program, Lesson
+
+    classroom = Classroom(name="Issue680 Classroom", teacher_id=auth_teacher.id)
+    shared_test_session.add(classroom)
+    shared_test_session.commit()
+    shared_test_session.refresh(classroom)
+
+    assignment = Assignment(
+        title="Issue680 Assignment",
+        classroom_id=classroom.id,
+        teacher_id=auth_teacher.id,
+        due_date=datetime.now(timezone.utc),
+    )
+    shared_test_session.add(assignment)
+    shared_test_session.commit()
+    shared_test_session.refresh(assignment)
+
+    program = Program(
+        name="Issue680 Program",
+        teacher_id=auth_teacher.id,
+        classroom_id=classroom.id,
+    )
+    shared_test_session.add(program)
+    shared_test_session.commit()
+    shared_test_session.refresh(program)
+
+    lesson = Lesson(program_id=program.id, name="Issue680 Lesson")
+    shared_test_session.add(lesson)
+    shared_test_session.commit()
+    shared_test_session.refresh(lesson)
+
+    content = Content(
+        lesson_id=lesson.id,
+        title="Issue680 Content",
+        type="EXAMPLE_SENTENCES",
+    )
+    shared_test_session.add(content)
+    shared_test_session.commit()
+    shared_test_session.refresh(content)
+
+    shared_test_session.add(
+        AssignmentContent(
+            assignment_id=assignment.id, content_id=content.id, order_index=1
+        )
+    )
+    shared_test_session.commit()
+
+    items = []
+    for i in range(3):
+        item = ContentItem(
+            content_id=content.id,
+            order_index=i,
+            text=f"Sentence {i + 1}",
+            translation=f"句子 {i + 1}",
+        )
+        shared_test_session.add(item)
+        items.append(item)
+    shared_test_session.commit()
+    for item in items:
+        shared_test_session.refresh(item)
+
+    return {
+        "teacher": auth_teacher,
+        "classroom": classroom,
+        "assignment": assignment,
+        "content": content,
+        "items": items,
+    }
+
+
+def test_issue680_passed_when_overall_above_threshold(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    data = issue680_setup
+    student, sa = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "High Scorer",
+        "S680A",
+        AssignmentStatus.SUBMITTED,
+    )
+    add_item_progress_with_scores(
+        shared_test_session, sa.id, data["items"][0], 80.0, 80.0, 80.0, 80.0
+    )
+
+    response = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={"classroom_id": data["classroom"].id},
+    )
+    assert response.status_code == 200
+
+    shared_test_session.expire_all()
+    progress = _student_item_progress_by_item(shared_test_session, sa.id)
+    assert progress[data["items"][0].id].teacher_passed is True
+
+
+def test_issue680_failed_when_overall_below_threshold(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    data = issue680_setup
+    student, sa = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Low Scorer",
+        "S680B",
+        AssignmentStatus.SUBMITTED,
+    )
+    add_item_progress_with_scores(
+        shared_test_session, sa.id, data["items"][0], 50.0, 50.0, 50.0, 50.0
+    )
+
+    response = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={"classroom_id": data["classroom"].id},
+    )
+    assert response.status_code == 200
+
+    shared_test_session.expire_all()
+    progress = _student_item_progress_by_item(shared_test_session, sa.id)
+    assert progress[data["items"][0].id].teacher_passed is False
+
+
+def test_issue680_boundary_exactly_60_passes(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    data = issue680_setup
+    student, sa = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Borderline",
+        "S680C",
+        AssignmentStatus.SUBMITTED,
+    )
+    add_item_progress_with_scores(
+        shared_test_session, sa.id, data["items"][0], 60.0, 60.0, 60.0, 60.0
+    )
+
+    response = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={"classroom_id": data["classroom"].id},
+    )
+    assert response.status_code == 200
+
+    shared_test_session.expire_all()
+    progress = _student_item_progress_by_item(shared_test_session, sa.id)
+    assert progress[data["items"][0].id].teacher_passed is True
+
+
+def test_issue680_no_recording_marks_failed(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    data = issue680_setup
+    student, sa = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "No Recording",
+        "S680D",
+        AssignmentStatus.SUBMITTED,
+    )
+    add_item_progress_with_scores(
+        shared_test_session,
+        sa.id,
+        data["items"][0],
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        has_recording=False,
+        has_ai_assessment=False,
+    )
+
+    response = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={"classroom_id": data["classroom"].id},
+    )
+    assert response.status_code == 200
+
+    shared_test_session.expire_all()
+    progress = _student_item_progress_by_item(shared_test_session, sa.id)
+    assert progress[data["items"][0].id].teacher_passed is False
+
+
+def test_issue680_failed_analysis_stays_null(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+    monkeypatch,
+):
+    """Recording exists but ai_assessed_at stays None after re-trigger → do not auto-mark."""
+    data = issue680_setup
+    student, sa = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Analysis Failed",
+        "S680E",
+        AssignmentStatus.SUBMITTED,
+    )
+
+    # Mock trigger_ai_assessment_for_item to a no-op so the test verifies the
+    # branch logic (recording_url set + ai_assessed_at None → teacher_passed
+    # stays None) rather than relying on Azure/download failing for the fake
+    # URL — that side-effect could disappear if the test env gains a proxy or
+    # partial Azure mock.
+    async def _noop_trigger(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(
+        "routers.assignments.grading.trigger_ai_assessment_for_item",
+        _noop_trigger,
+    )
+
+    progress = StudentItemProgress(
+        student_assignment_id=sa.id,
+        content_item_id=data["items"][0].id,
+        recording_url="https://example.com/unreachable.mp3",
+        pronunciation_score=None,
+        accuracy_score=None,
+        fluency_score=None,
+        completeness_score=None,
+        ai_assessed_at=None,
+        status="SUBMITTED",
+    )
+    shared_test_session.add(progress)
+    shared_test_session.commit()
+
+    response = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={"classroom_id": data["classroom"].id},
+    )
+    assert response.status_code == 200
+
+    shared_test_session.expire_all()
+    db_progress = _student_item_progress_by_item(shared_test_session, sa.id)
+    assert db_progress[data["items"][0].id].teacher_passed is None
+
+
+def test_issue680_single_student_mode_also_marks(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    """Individual page's purple 'Apply AI Suggestions' button also auto-marks."""
+    data = issue680_setup
+    student, sa = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Single Mode",
+        "S680F",
+        AssignmentStatus.SUBMITTED,
+    )
+    add_item_progress_with_scores(
+        shared_test_session, sa.id, data["items"][0], 90.0, 90.0, 90.0, 90.0
+    )
+    add_item_progress_with_scores(
+        shared_test_session, sa.id, data["items"][1], 30.0, 30.0, 30.0, 30.0
+    )
+
+    response = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={
+            "classroom_id": data["classroom"].id,
+            "student_ids": [student.id],
+        },
+    )
+    assert response.status_code == 200
+
+    shared_test_session.expire_all()
+    progress = _student_item_progress_by_item(shared_test_session, sa.id)
+    assert progress[data["items"][0].id].teacher_passed is True
+    assert progress[data["items"][1].id].teacher_passed is False
+
+
+def test_issue680_overwrites_prior_manual_pass_fail(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    """Re-running batch-grade is deterministic: prior teacher_passed gets overwritten by current AI scores."""
+    data = issue680_setup
+    student, sa = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Prior Manual",
+        "S680G",
+        AssignmentStatus.SUBMITTED,
+    )
+    # Item 1: teacher previously marked True, but AI score is 40 → should become False
+    progress_low = StudentItemProgress(
+        student_assignment_id=sa.id,
+        content_item_id=data["items"][0].id,
+        recording_url=f"https://example.com/recording_{data['items'][0].id}.mp3",
+        pronunciation_score=Decimal("40"),
+        accuracy_score=Decimal("40"),
+        fluency_score=Decimal("40"),
+        completeness_score=Decimal("40"),
+        ai_assessed_at=datetime.now(timezone.utc),
+        status="SUBMITTED",
+        teacher_passed=True,
+    )
+    # Item 2: teacher previously marked False, but AI score is 85 → should become True
+    progress_high = StudentItemProgress(
+        student_assignment_id=sa.id,
+        content_item_id=data["items"][1].id,
+        recording_url=f"https://example.com/recording_{data['items'][1].id}.mp3",
+        pronunciation_score=Decimal("85"),
+        accuracy_score=Decimal("85"),
+        fluency_score=Decimal("85"),
+        completeness_score=Decimal("85"),
+        ai_assessed_at=datetime.now(timezone.utc),
+        status="SUBMITTED",
+        teacher_passed=False,
+    )
+    shared_test_session.add_all([progress_low, progress_high])
+    shared_test_session.commit()
+
+    response = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={"classroom_id": data["classroom"].id},
+    )
+    assert response.status_code == 200
+
+    shared_test_session.expire_all()
+    progress = _student_item_progress_by_item(shared_test_session, sa.id)
+    assert progress[data["items"][0].id].teacher_passed is False
+    assert progress[data["items"][1].id].teacher_passed is True
+
+
+def test_issue680_batch_mode_includes_unsubmitted_students(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    """
+    Batch-grade modal should show unsubmitted students (NOT_STARTED / IN_PROGRESS)
+    so teachers can see who hasn't done the assignment. Their StudentAssignment.status
+    must not change when finalized with 'pending' decision.
+    """
+    data = issue680_setup
+    _, sa_submitted = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Submitted",
+        "S680H1",
+        AssignmentStatus.SUBMITTED,
+    )
+    _, sa_not_started = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Not Started",
+        "S680H2",
+        AssignmentStatus.NOT_STARTED,
+    )
+    _, sa_in_progress = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "In Progress",
+        "S680H3",
+        AssignmentStatus.IN_PROGRESS,
+    )
+    add_item_progress_with_scores(
+        shared_test_session, sa_submitted.id, data["items"][0], 70.0, 70.0, 70.0, 70.0
+    )
+
+    response = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={"classroom_id": data["classroom"].id},
+    )
+    assert response.status_code == 200
+    body = response.json()
+
+    names = {r["student_name"] for r in body["results"]}
+    assert names == {"Submitted", "Not Started", "In Progress"}
+    assert body["total_students"] == 3
+
+    not_started_result = next(
+        r for r in body["results"] if r["student_name"] == "Not Started"
+    )
+    assert not_started_result["completed_items"] == 0
+    assert not_started_result["total_score"] == 0.0
+
+    # Finalize with 'pending' (null) decisions for everyone → statuses must not change
+    finalize_response = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/finalize-batch-grade",
+        headers=auth_headers,
+        json={
+            "classroom_id": data["classroom"].id,
+            "teacher_decisions": {
+                str(sa_submitted.student_id): None,
+                str(sa_not_started.student_id): None,
+                str(sa_in_progress.student_id): None,
+            },
+        },
+    )
+    assert finalize_response.status_code == 200
+
+    shared_test_session.expire_all()
+    shared_test_session.refresh(sa_not_started)
+    shared_test_session.refresh(sa_in_progress)
+    shared_test_session.refresh(sa_submitted)
+    assert sa_not_started.status == AssignmentStatus.NOT_STARTED
+    assert sa_in_progress.status == AssignmentStatus.IN_PROGRESS
+    assert sa_submitted.status == AssignmentStatus.SUBMITTED
+
+
+def test_issue680_batch_mode_excludes_only_graded(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    """Only GRADED is terminal. RETURNED students stay visible so teachers can see them."""
+    data = issue680_setup
+    create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Already Graded",
+        "S680I1",
+        AssignmentStatus.GRADED,
+    )
+    create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Returned For Correction",
+        "S680I2",
+        AssignmentStatus.RETURNED,
+    )
+    create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Fresh Submission",
+        "S680I3",
+        AssignmentStatus.SUBMITTED,
+    )
+
+    response = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={"classroom_id": data["classroom"].id},
+    )
+    assert response.status_code == 200
+    names = {r["student_name"] for r in response.json()["results"]}
+    assert names == {"Fresh Submission", "Returned For Correction"}
+
+
+# ============================================================================
+# Issue #680 follow-up bugs
+# ============================================================================
+# Bug B: batch-grade miscounts total_items when a student's StudentItemProgress
+#        table is sparser than the assignment's content_items (possible after
+#        late-added items, partial assignment updates, etc.).
+# Bug A: finalize-batch-grade silently dropped GRADED/RETURNED decisions for
+#        students whose status wasn't SUBMITTED/RESUBMITTED, so the modal's
+#        "Complete Grading" button was a no-op for IN_PROGRESS students.
+# ============================================================================
+
+
+def test_batch_grade_counts_content_items_missing_progress_row(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    """
+    total_items / missing_items must follow the assignment's content_items,
+    not the set of StudentItemProgress rows. If some content_items lack a
+    progress row entirely, they still count toward total_items and missing.
+
+    Before the fix, the backend iterated over StudentItemProgress rows only —
+    a student with 3 content_items but 1 progress row reported
+    total_items=1, missing_items=0, and a total_score computed from 1 item,
+    while the individual grading page correctly showed 2 missing questions.
+    """
+    data = issue680_setup
+    student, sa = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Incomplete Progress Rows",
+        "S680J1",
+        AssignmentStatus.IN_PROGRESS,
+    )
+    # Only the first of 3 content_items has a StudentItemProgress row
+    # (the other two are entirely missing — no record at all).
+    add_item_progress_with_scores(
+        shared_test_session, sa.id, data["items"][0], 90.0, 90.0, 90.0, 90.0
+    )
+
+    response = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={"classroom_id": data["classroom"].id},
+    )
+    assert response.status_code == 200
+    result = response.json()["results"][0]
+
+    assert (
+        result["total_items"] == 3
+    ), "denominator must come from content_items, not progress rows"
+    assert result["completed_items"] == 1
+    assert (
+        result["missing_items"] == 2
+    ), "content_items without a progress row count as missing"
+
+    # total_score = (90 + 0 + 0) / 3 = 30
+    assert (
+        abs(result["total_score"] - 30.0) < 0.5
+    ), f"expected ~30, got {result['total_score']}"
+
+
+def test_finalize_applies_graded_decision_to_in_progress_student(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    """
+    Teacher opens the batch modal, sees an IN_PROGRESS student with a score,
+    and clicks 'Complete Grading'. Status must flip to GRADED.
+    Before the fix, finalize's query only matched SUBMITTED/RESUBMITTED, so
+    the decision was silently dropped and the student reappeared next time.
+    """
+    data = issue680_setup
+    student, sa = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "In Progress To Grade",
+        "S680K1",
+        AssignmentStatus.IN_PROGRESS,
+    )
+    add_item_progress_with_scores(
+        shared_test_session, sa.id, data["items"][0], 90.0, 90.0, 90.0, 90.0
+    )
+
+    # Run batch-grade first (mirrors real UI flow: modal runs batch before finalize)
+    assert (
+        test_client.post(
+            f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+            headers=auth_headers,
+            json={"classroom_id": data["classroom"].id},
+        ).status_code
+        == 200
+    )
+
+    finalize = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/finalize-batch-grade",
+        headers=auth_headers,
+        json={
+            "classroom_id": data["classroom"].id,
+            "teacher_decisions": {str(sa.student_id): "GRADED"},
+        },
+    )
+    assert finalize.status_code == 200
+    body = finalize.json()
+    assert body["graded_count"] == 1
+    assert body["returned_count"] == 0
+
+    shared_test_session.expire_all()
+    shared_test_session.refresh(sa)
+    assert sa.status == AssignmentStatus.GRADED
+
+
+def test_finalize_applies_returned_decision_to_not_started_student(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    """NOT_STARTED + RETURNED decision → RETURNED with returned_at set."""
+    data = issue680_setup
+    student, sa = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Not Started To Return",
+        "S680K2",
+        AssignmentStatus.NOT_STARTED,
+    )
+
+    batch = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={"classroom_id": data["classroom"].id},
+    )
+    assert batch.status_code == 200
+
+    finalize = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/finalize-batch-grade",
+        headers=auth_headers,
+        json={
+            "classroom_id": data["classroom"].id,
+            "teacher_decisions": {str(sa.student_id): "RETURNED"},
+        },
+    )
+    assert finalize.status_code == 200
+    body = finalize.json()
+    assert body["returned_count"] == 1
+    assert body["graded_count"] == 0
+
+    shared_test_session.expire_all()
+    shared_test_session.refresh(sa)
+    assert sa.status == AssignmentStatus.RETURNED
+    assert sa.returned_at is not None
+
+
+def test_finalize_applies_graded_decision_to_returned_student(
+    test_client: TestClient,
+    shared_test_session: Session,
+    issue680_setup,
+    auth_headers,
+):
+    """Teacher changes mind: a previously RETURNED student is now GRADED."""
+    data = issue680_setup
+    student, sa = create_student_with_assignment(
+        shared_test_session,
+        data["classroom"],
+        data["assignment"],
+        "Returned Then Graded",
+        "S680K3",
+        AssignmentStatus.RETURNED,
+    )
+    add_item_progress_with_scores(
+        shared_test_session, sa.id, data["items"][0], 90.0, 90.0, 90.0, 90.0
+    )
+
+    test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
+        headers=auth_headers,
+        json={"classroom_id": data["classroom"].id},
+    )
+
+    finalize = test_client.post(
+        f"/api/teachers/assignments/{data['assignment'].id}/finalize-batch-grade",
+        headers=auth_headers,
+        json={
+            "classroom_id": data["classroom"].id,
+            "teacher_decisions": {str(sa.student_id): "GRADED"},
+        },
+    )
+    assert finalize.status_code == 200
+    assert finalize.json()["graded_count"] == 1
+
+    shared_test_session.expire_all()
+    shared_test_session.refresh(sa)
+    assert sa.status == AssignmentStatus.GRADED

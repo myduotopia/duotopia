@@ -22,6 +22,7 @@ import {
   LucideIcon,
   MoreHorizontal,
   Zap,
+  Download,
 } from "lucide-react";
 
 // Level-based color system - flat design with colored left accent
@@ -147,6 +148,8 @@ interface RecursiveTreeNodeProps {
     level: number,
     parentId?: string | number,
   ) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onDownload?: (item: any, level: number, parentId?: string | number) => void;
 
   // Accordion state
   expandedValue: string;
@@ -171,6 +174,7 @@ function RecursiveTreeNode({
   onInstantPractice,
   onCopy,
   onAssign,
+  onDownload,
   disableActions = false,
   disableReason = "",
 }: RecursiveTreeNodeProps) {
@@ -459,6 +463,7 @@ function RecursiveTreeNode({
                               onInstantPractice={onInstantPractice}
                               onCopy={onCopy}
                               onAssign={onAssign}
+                              onDownload={onDownload}
                               expandedValue={childExpandedValue}
                               onExpandedChange={setChildExpandedValue}
                               disableActions={disableActions}
@@ -607,8 +612,12 @@ function RecursiveTreeNode({
                 </button>
               )}
 
-              {/* More menu (⋯) with copy, move, delete */}
-              {(config.canDelete || onCopy) && (
+              {/* More menu (⋯) with download (vocab_set only), copy, move, delete */}
+              {(config.canDelete ||
+                onCopy ||
+                (onDownload &&
+                  typeof data.type === "string" &&
+                  data.type.toLowerCase() === "vocabulary_set")) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     onClick={(e) => e.stopPropagation()}
@@ -620,6 +629,20 @@ function RecursiveTreeNode({
                     align="end"
                     className="z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
                   >
+                    {onDownload &&
+                      typeof data.type === "string" &&
+                      data.type.toLowerCase() === "vocabulary_set" && (
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDownload(data, level, parentId);
+                          }}
+                          className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          {t("contentDownload.menu", "下載")}
+                        </DropdownMenuItem>
+                      )}
                     {onCopy && (
                       <DropdownMenuItem
                         onClick={(e) => {
@@ -698,6 +721,8 @@ interface RecursiveTreeAccordionProps {
     level: number,
     parentId?: string | number,
   ) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onDownload?: (item: any, level: number, parentId?: string | number) => void;
   disableActions?: boolean;
   disableReason?: string;
 }
@@ -717,6 +742,7 @@ export function RecursiveTreeAccordion({
   onInstantPractice,
   onCopy,
   onAssign,
+  onDownload,
   disableActions = false,
   disableReason = "",
 }: RecursiveTreeAccordionProps) {
@@ -846,6 +872,7 @@ export function RecursiveTreeAccordion({
                   onInstantPractice={onInstantPractice}
                   onCopy={onCopy}
                   onAssign={onAssign}
+                  onDownload={onDownload}
                   expandedValue={expandedValue}
                   onExpandedChange={setExpandedValue}
                   disableActions={disableActions}

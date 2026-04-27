@@ -348,5 +348,9 @@
         "most_difficult_words": "가장 어려운 단어"
       }
     }
+  },
+  "recordingAttempts": {
+    "remaining": "{{n}}회 더 분석할 수 있습니다",
+    "lockedTooltip": "분석 횟수에 도달했습니다. 선생님이 반려한 후 다시 녹음할 수 있습니다."
   }
 }

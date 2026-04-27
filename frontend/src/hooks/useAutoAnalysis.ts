@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { retryAudioUpload } from "@/utils/retryHelper";
+import { appendAudioToFormData } from "@/utils/audioFormatDetection";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { toast } from "sonner";
 
@@ -60,13 +61,6 @@ export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
         const apiUrl = import.meta.env.VITE_API_URL || "";
         const authToken = useStudentAuthStore.getState().token;
 
-        // 檔案副檔名處理
-        const uploadFileExtension = audioBlob.type.includes("mp4")
-          ? "recording.mp4"
-          : audioBlob.type.includes("webm")
-            ? "recording.webm"
-            : "recording.audio";
-
         let currentProgressId = progressId;
 
         // Issue #141 Fix: 如果沒有 progressId，先上傳錄音取得 progressId
@@ -74,7 +68,7 @@ export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
           const uploadFormData = new FormData();
           uploadFormData.append("assignment_id", assignmentId.toString());
           uploadFormData.append("content_item_id", contentItemId.toString());
-          uploadFormData.append("audio_file", audioBlob, uploadFileExtension);
+          await appendAudioToFormData(uploadFormData, "audio_file", audioBlob);
 
           const uploadResult = await retryAudioUpload(
             async () => {
@@ -111,7 +105,7 @@ export function useAutoAnalysis(assignmentId: number, isPreviewMode: boolean) {
 
         // 使用 /api/speech/upload-analysis 上傳分析結果
         const analysisFormData = new FormData();
-        analysisFormData.append("audio_file", audioBlob, uploadFileExtension);
+        await appendAudioToFormData(analysisFormData, "audio_file", audioBlob);
         analysisFormData.append(
           "analysis_json",
           JSON.stringify({

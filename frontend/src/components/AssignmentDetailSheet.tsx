@@ -433,9 +433,7 @@ export function AssignmentDetailSheet({
 
   const completionRate = assignment.completion_rate || 0;
   const typeBadge = getContentTypeBadge();
-  const showGradingButtons =
-    assignment.practice_mode !== "rearrangement" &&
-    assignment.practice_mode !== "word_selection";
+  const showGradingButtons = assignment.practice_mode !== "word_selection";
 
   return (
     <>

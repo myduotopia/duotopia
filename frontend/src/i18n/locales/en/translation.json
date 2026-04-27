@@ -30,7 +30,10 @@
     "cut": "Cut",
     "yes": "Yes",
     "no": "No",
-    "retry": "Retry"
+    "retry": "Retry",
+    "lineContact": {
+      "ariaLabel": "LINE Customer Service"
+    }
   },
   "demo": {
     "banner": "Demo Mode - Progress will not be saved",
@@ -2921,6 +2924,25 @@
       "resubmitted": "Resubmitted",
       "resubmittedShort": "Resub",
       "notAssigned": "Not Assigned"
+    },
+    "rearrangement": {
+      "labels": {
+        "errors": "Errors",
+        "correctWords": "Correct Words",
+        "retryCount": "Retries",
+        "expectedScore": "Score",
+        "timedOut": "Timed Out",
+        "selectionHistory": "Selection History",
+        "selected": "Selected",
+        "expected": "Expected",
+        "completedAt": "Completed at",
+        "detailedHistoryComingSoon": "Detailed answer history Coming Soon"
+      },
+      "badges": {
+        "completed": "Completed",
+        "incomplete": "Below passing",
+        "notAnswered": "Not answered"
+      }
     }
   },
   "assignmentDetail": {
@@ -3017,6 +3039,7 @@
       "checkHomework": "Check Homework",
       "editStudents": "Edit Assignment",
       "saveStudents": "Save Assignment",
+      "unassignStudents": "Unassign",
       "sortByScore": "Score",
       "sortByNumber": "No.",
       "sortByName": "Name",
@@ -3511,7 +3534,18 @@
       "cancel": "Cancel",
       "processing": "Processing...",
       "cancelSubscription": "Cancel Subscription",
-      "updateSubscription": "Update Subscription"
+      "updateSubscription": "Update Subscription",
+      "grantPoints": "Grant"
+    },
+    "grant": {
+      "title": "Grant Points",
+      "points": "Points",
+      "pointsPlaceholder": "e.g. 2000",
+      "expiresDays": "Valid for (days)",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why are these points being granted?",
+      "granting": "Granting...",
+      "confirm": "Confirm Grant"
     },
     "stats": {
       "totalTeachers": "Total Teachers",
@@ -3535,14 +3569,16 @@
       "plan": "Plan",
       "endDate": "End Date",
       "periods": "Periods",
-      "quota": "Quota",
+      "quota": "Used / Quota",
       "status": "Status",
       "actions": "Actions",
       "noData": "No data"
     },
     "status": {
       "active": "Active",
-      "none": "None"
+      "none": "None",
+      "trial": "Free Trial",
+      "unverified": "Unverified"
     },
     "periodTable": {
       "title": "Subscription Periods",
@@ -3552,6 +3588,19 @@
       "quota": "Quota",
       "payment": "Payment",
       "status": "Status"
+    },
+    "creditPackageTable": {
+      "title": "Credit Packages",
+      "source": "Source",
+      "package": "Package",
+      "dates": "Purchased / Expires",
+      "points": "Used / Total",
+      "payment": "Payment",
+      "status": "Status",
+      "sourceTrial": "Trial",
+      "sourceGrant": "Grant",
+      "sourcePurchase": "Purchase",
+      "sourceOrgPurchase": "Org Purchase"
     },
     "history": {
       "title": "Edit History",
@@ -3626,11 +3675,13 @@
       "operationFailed": "Failed: {{detail}}",
       "searchFailed": "Search failed: {{detail}}",
       "loadPeriodsFailed": "Failed to load subscription periods",
-      "loadHistoryFailed": "Failed to load edit history"
+      "loadHistoryFailed": "Failed to load edit history",
+      "grantFailed": "Failed to grant points"
     },
     "messages": {
       "operationSuccess": "Success! {{teacherName}} - {{message}}",
-      "completed": "Operation completed"
+      "completed": "Operation completed",
+      "grantSuccess": "Successfully granted {{points}} points to {{name}}"
     }
   },
   "adminMonitoring": {
@@ -4837,6 +4888,70 @@
   "contentCopy": {
     "button": "Copy to..."
   },
+  "contentDownload": {
+    "menu": "Download",
+    "defaultTitle": "Vocabulary Worksheet",
+    "loading": "Loading...",
+    "loadError": "Failed to load vocabulary set. Please try again.",
+    "types": {
+      "wordSelection": "Word Selection",
+      "cloze": "Cloze"
+    },
+    "hintMode": {
+      "wordbank": "Word Bank",
+      "choice": "Choice"
+    }
+  },
+  "printPdf": {
+    "sheetTitle": "Print Settings",
+    "downloadButton": "Download PDF",
+    "pdfType": "PDF Type",
+    "twoColumn": "Two-column layout",
+    "showSentenceTranslation": "Show sentence translation",
+    "drawingArea": "Drawing area",
+    "zoomLabel": "Zoom",
+    "fontLabel": "Font size",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "fontDown": "Decrease font size",
+    "fontUp": "Increase font size",
+    "fontSlider": "Font size"
+  },
+  "activitySettings": {
+    "assignmentMode": {
+      "label": "Assignment Mode",
+      "practice": "Practice",
+      "exam": "Exam"
+    },
+    "hintMode": {
+      "label": "Hint Mode"
+    },
+    "choiceCount": {
+      "label": "Options",
+      "option2": "2",
+      "option3": "3",
+      "option4": "4"
+    },
+    "inputMethod": {
+      "label": "Input Method",
+      "keyboard": "Keyboard",
+      "handwriting": "Handwriting",
+      "drawing": "Drawing"
+    },
+    "showImage": "Show image",
+    "showLetterCount": "Show letter count",
+    "forceVirtualKeyboard": "Force virtual keyboard",
+    "shuffleQuestions": "Shuffle questions",
+    "questionTimeLimit": {
+      "label": "Time per question",
+      "none": "Unlimited",
+      "sec10": "10s",
+      "sec20": "20s",
+      "sec30": "30s"
+    },
+    "examTimeLabel": "Exam time (H:M)",
+    "showExamAnswers": "Show answers after exam"
+  },
   "tree": {
     "assign": "Assign"
   },
@@ -5057,5 +5172,9 @@
     "unarchiveError": "Failed to unarchive",
     "deleteSuccess": "Assignment deleted",
     "deleteError": "Failed to delete"
+  },
+  "recordingAttempts": {
+    "remaining": "{{n}} analysis attempt(s) remaining",
+    "lockedTooltip": "Analysis limit reached. Re-record after the teacher returns this item."
   }
 }
