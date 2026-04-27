@@ -40,9 +40,7 @@ const STATUS_SORT_PRIORITY: Record<string, number> = {
 // haven't actually submitted work — those rows skip the score-based default
 // and force the teacher to decide manually.
 const isInactiveStatus = (status: string) =>
-  status === "NOT_STARTED" ||
-  status === "IN_PROGRESS" ||
-  status === "RETURNED";
+  status === "NOT_STARTED" || status === "IN_PROGRESS" || status === "RETURNED";
 
 interface BatchGradingResult {
   student_id: number;
@@ -430,9 +428,12 @@ export default function BatchGradingModal({
                                     : "outline"
                                 }
                                 size="sm"
-                                aria-label={t("batchGrading.aria.markAsGraded", {
-                                  name: result.student_name,
-                                })}
+                                aria-label={t(
+                                  "batchGrading.aria.markAsGraded",
+                                  {
+                                    name: result.student_name,
+                                  },
+                                )}
                                 aria-pressed={
                                   teacherDecisions[result.student_id] ===
                                   "GRADED"
