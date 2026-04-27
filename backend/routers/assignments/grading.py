@@ -555,24 +555,13 @@ async def get_student_submission(
 
                 content_groups.append(group)
 
-    # 如果沒有真實資料，使用模擬資料 (標記為 MOCK)
+    # 沒有真實資料時返回空 submissions；不再注入 MOCK 資料以免老師誤把假題目
+    # 當成學生答案。記錄到結構化 logger 方便追查。
     if not submissions:
-        print(
-            f"WARNING: No real content found for assignment_id={actual_assignment_id}, using MOCK data"
+        logger.warning(
+            "No real content found for assignment_id=%s; returning empty submissions",
+            actual_assignment_id,
         )
-        submissions = [
-            {
-                "question_text": "[MOCK] How are you today?",
-                "question_translation": "[MOCK] 你今天好嗎？",
-                "question_audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-                "student_answer": "I am fine, thank you!",
-                "student_audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-                "transcript": "I am fine thank you",
-                "duration": 3.5,
-                "feedback": "",
-                "passed": None,
-            },
-        ]
 
     return {
         "student_id": student.id,
@@ -1304,6 +1293,20 @@ async def batch_grade_assignment(
                 for item in item_progress_list:
                     # Only generate comments for items with recordings
                     if item.recording_url and item.ai_assessed_at:
+                        # Parse ai_feedback per item (mirror step 7) so the
+                        # comment scores match the displayed totals — passing
+                        # {} drops parsed AI fallback values and can diverge.
+                        item_ai_feedback_data = {}
+                        if item.ai_feedback:
+                            try:
+                                item_ai_feedback_data = (
+                                    json.loads(item.ai_feedback)
+                                    if isinstance(item.ai_feedback, str)
+                                    else item.ai_feedback
+                                )
+                            except (json.JSONDecodeError, TypeError):
+                                item_ai_feedback_data = {}
+
                         # Get scores (use get_score_with_fallback for safety)
                         pron = float(
                             get_score_with_fallback(
@@ -1311,7 +1314,7 @@ async def batch_grade_assignment(
                                 "pronunciation_score",
                                 "pronunciation_score",
                                 db,
-                                ai_feedback_data={},
+                                item_ai_feedback_data,
                             )
                         )
                         acc = float(
@@ -1320,7 +1323,7 @@ async def batch_grade_assignment(
                                 "accuracy_score",
                                 "accuracy_score",
                                 db,
-                                ai_feedback_data={},
+                                item_ai_feedback_data,
                             )
                         )
                         flu = float(
@@ -1329,7 +1332,7 @@ async def batch_grade_assignment(
                                 "fluency_score",
                                 "fluency_score",
                                 db,
-                                ai_feedback_data={},
+                                item_ai_feedback_data,
                             )
                         )
                         comp = float(
@@ -1338,7 +1341,7 @@ async def batch_grade_assignment(
                                 "completeness_score",
                                 "completeness_score",
                                 db,
-                                ai_feedback_data={},
+                                item_ai_feedback_data,
                             )
                         )
 

@@ -368,8 +368,10 @@ export default function ClassroomDetail({
     if (selectedAssignments.size === 0) return;
     setBatchPrinting(true);
     try {
-      const selected = assignments.filter((a) => selectedAssignments.has(a.id));
-      const progressResults = await Promise.all(
+      // 須與 UI 顯示來源一致：archived view 下選的是 archivedAssignments。
+      const source = showArchived ? archivedAssignments : assignments;
+      const selected = source.filter((a) => selectedAssignments.has(a.id));
+      const settled = await Promise.allSettled(
         selected.map(async (a) => {
           const response = await apiClient.get(
             `/api/teachers/assignments/${a.id}/progress`,
@@ -378,6 +380,7 @@ export default function ClassroomDetail({
             ? response
             : (response as { data?: unknown[] }).data || [];
           return {
+            id: a.id,
             title: a.title,
             students: arr
               .filter(
@@ -396,7 +399,19 @@ export default function ClassroomDetail({
         }),
       );
 
-      const pages = progressResults.map(({ title, students }) => {
+      const fulfilled = settled.flatMap((r) =>
+        r.status === "fulfilled" ? [r.value] : [],
+      );
+      const failedIds = settled
+        .map((r, i) => (r.status === "rejected" ? selected[i].id : null))
+        .filter((id): id is number => id !== null);
+
+      if (fulfilled.length === 0) {
+        toast.error(t("stickyNote.batchPrintError", "列印失敗"));
+        return;
+      }
+
+      const pages = fulfilled.map(({ title, students }) => {
         const counts = students.reduce(
           (acc: Record<string, number>, s) => {
             acc[s.status] = (acc[s.status] || 0) + 1;
@@ -414,7 +429,20 @@ export default function ClassroomDetail({
       });
 
       openPrintWindow(pages);
-      setSelectedAssignments(new Set());
+
+      if (failedIds.length > 0) {
+        toast.warning(
+          t("stickyNote.batchPrintPartial", {
+            defaultValue: "{{succeeded}} 份已列印，{{failed}} 份失敗",
+            succeeded: fulfilled.length,
+            failed: failedIds.length,
+          }),
+        );
+        // Keep failed IDs selected for easy retry
+        setSelectedAssignments(new Set(failedIds));
+      } else {
+        setSelectedAssignments(new Set());
+      }
     } catch {
       toast.error(t("stickyNote.batchPrintError", "列印失敗"));
     } finally {
