@@ -58,7 +58,7 @@ type ViewMode = "grid" | "list";
 type TabValue = "all" | "assigned" | "unassigned";
 type SortMode = "number" | "name" | "score" | "status";
 
-const GRADABLE_MODES = new Set(["reading", "word_reading"]);
+const GRADABLE_MODES = new Set(["reading", "word_reading", "rearrangement"]);
 
 const STATUS_ORDER: Record<string, number> = {
   NOT_STARTED: 0,
@@ -271,9 +271,11 @@ function StudentCard({
   const isUnassigned = student.status === "unassigned";
   const cardTooltip = tooltip && !isUnassigned ? tooltip : undefined;
   const isClickable = !!cardTooltip;
-  const hasScore =
-    student.score != null &&
-    ["GRADED", "RETURNED", "RESUBMITTED"].includes(student.status);
+  // 已派發的學生一律顯示分數：null（未完成 / 無 interim）→ 0.0，
+  // 有 is_interim_score 則前面加 "~"。狀態由名牌左上的紅綠燈點告知，
+  // 不再因為狀態不是 GRADED 就把分數藏起來顯示 "-"。
+  const hasScore = !isUnassigned;
+  const scoreValue = student.score ?? 0;
 
   return (
     <div
@@ -343,7 +345,7 @@ function StudentCard({
         }`}
       >
         {hasScore
-          ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(1)}`
+          ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
           : "-"}
       </span>
     </div>
@@ -374,9 +376,9 @@ function StudentRow({
   const isUnassigned = student.status === "unassigned";
   const rowTooltip = tooltip && !isUnassigned ? tooltip : undefined;
   const isClickable = !!rowTooltip;
-  const hasScore =
-    student.score != null &&
-    ["GRADED", "RETURNED", "RESUBMITTED"].includes(student.status);
+  // 已派發的學生一律顯示分數（同 StudentCard 規則）。
+  const hasScore = !isUnassigned;
+  const scoreValue = student.score ?? 0;
 
   return (
     <div
@@ -446,7 +448,7 @@ function StudentRow({
         }`}
       >
         {hasScore
-          ? `${student.is_interim_score ? "~" : ""}${Number(student.score).toFixed(1)}`
+          ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
           : "-"}
       </span>
     </div>
@@ -595,7 +597,8 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       (s: StudentProgress) => {
         if (activeTab === "all") return true;
         if (activeTab === "unassigned") return false;
-        // assigned tab: only NOT_STARTED can be unchecked
+        // assigned tab: only NOT_STARTED can be unchecked — once a student
+        // starts or submits, un-assigning would silently drop their progress.
         return s.status !== "NOT_STARTED";
       },
       [activeTab],
@@ -634,7 +637,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     }, [filteredStudents, selectedIds, isCheckboxDisabled]);
 
     // ---- Navigation ----
-    // Gradable modes (reading / word_reading): open grading page for this student in a new tab.
+    // Gradable modes (see GRADABLE_MODES): open grading page for this student in a new tab.
     // Skip unassigned and NOT_STARTED — nothing to grade yet.
     const isGradableStudent = useCallback(
       (s: StudentProgress) =>
@@ -924,7 +927,9 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   ) : (
                     <Save className="h-3.5 w-3.5" />
                   )}
-                  {t("assignmentDetail.sheet.saveStudents", "儲存派發")}
+                  {activeTab === "assigned"
+                    ? t("assignmentDetail.sheet.unassignStudents", "取消派發")
+                    : t("assignmentDetail.sheet.saveStudents", "儲存派發")}
                 </button>
               </div>
             </div>

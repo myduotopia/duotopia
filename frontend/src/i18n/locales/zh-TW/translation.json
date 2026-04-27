@@ -62,6 +62,7 @@
       "checkHomework": "批改作業",
       "editStudents": "編輯派發",
       "saveStudents": "儲存派發",
+      "unassignStudents": "取消派發",
       "sortByScore": "成績",
       "sortByNumber": "座號",
       "sortByName": "姓名",
@@ -2977,6 +2978,25 @@
       "resubmitted": "已訂正",
       "resubmittedShort": "已訂正",
       "notAssigned": "未指派"
+    },
+    "rearrangement": {
+      "labels": {
+        "errors": "錯誤",
+        "correctWords": "正確選字",
+        "retryCount": "重試",
+        "expectedScore": "分數",
+        "timedOut": "超時結束",
+        "selectionHistory": "選字歷程",
+        "selected": "選擇",
+        "expected": "應選",
+        "completedAt": "完成時間",
+        "detailedHistoryComingSoon": "更詳細的作答紀錄 Coming Soon"
+      },
+      "badges": {
+        "completed": "完成",
+        "incomplete": "未達標",
+        "notAnswered": "尚未作答"
+      }
     }
   },
   "assignmentDetail": {

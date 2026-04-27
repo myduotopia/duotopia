@@ -2924,6 +2924,25 @@
       "resubmitted": "Resubmitted",
       "resubmittedShort": "Resub",
       "notAssigned": "Not Assigned"
+    },
+    "rearrangement": {
+      "labels": {
+        "errors": "Errors",
+        "correctWords": "Correct Words",
+        "retryCount": "Retries",
+        "expectedScore": "Score",
+        "timedOut": "Timed Out",
+        "selectionHistory": "Selection History",
+        "selected": "Selected",
+        "expected": "Expected",
+        "completedAt": "Completed at",
+        "detailedHistoryComingSoon": "Detailed answer history Coming Soon"
+      },
+      "badges": {
+        "completed": "Completed",
+        "incomplete": "Below passing",
+        "notAnswered": "Not answered"
+      }
     }
   },
   "assignmentDetail": {
@@ -3020,6 +3039,7 @@
       "checkHomework": "Check Homework",
       "editStudents": "Edit Assignment",
       "saveStudents": "Save Assignment",
+      "unassignStudents": "Unassign",
       "sortByScore": "Score",
       "sortByNumber": "No.",
       "sortByName": "Name",

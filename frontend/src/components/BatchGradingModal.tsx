@@ -317,22 +317,22 @@ export default function BatchGradingModal({
                         </td>
                         <td className="px-3 py-4 text-center">
                           <span className="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                            {result.avg_pronunciation.toFixed(0)}
+                            {(result.avg_pronunciation ?? 0).toFixed(0)}
                           </span>
                         </td>
                         <td className="px-3 py-4 text-center">
                           <span className="text-lg font-semibold text-purple-600 dark:text-purple-400">
-                            {result.avg_accuracy.toFixed(0)}
+                            {(result.avg_accuracy ?? 0).toFixed(0)}
                           </span>
                         </td>
                         <td className="px-3 py-4 text-center">
                           <span className="text-lg font-semibold text-teal-600 dark:text-teal-400">
-                            {result.avg_fluency.toFixed(0)}
+                            {(result.avg_fluency ?? 0).toFixed(0)}
                           </span>
                         </td>
                         <td className="px-3 py-4 text-center">
                           <span className="text-lg font-semibold text-indigo-600 dark:text-indigo-400">
-                            {result.avg_completeness.toFixed(0)}
+                            {(result.avg_completeness ?? 0).toFixed(0)}
                           </span>
                         </td>
                         <td className="px-3 py-4 text-center">
@@ -469,7 +469,7 @@ export default function BatchGradingModal({
                           {t("batchGrading.pronunciation")}:
                         </span>
                         <span className="text-blue-600 dark:text-blue-400 font-medium">
-                          {result.avg_pronunciation.toFixed(0)}
+                          {(result.avg_pronunciation ?? 0).toFixed(0)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
@@ -477,7 +477,7 @@ export default function BatchGradingModal({
                           {t("batchGrading.accuracy")}:
                         </span>
                         <span className="text-purple-600 dark:text-purple-400 font-medium">
-                          {result.avg_accuracy.toFixed(0)}
+                          {(result.avg_accuracy ?? 0).toFixed(0)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center p-2 bg-teal-50 dark:bg-teal-900/20 rounded">
@@ -485,7 +485,7 @@ export default function BatchGradingModal({
                           {t("batchGrading.fluency")}:
                         </span>
                         <span className="text-teal-600 dark:text-teal-400 font-medium">
-                          {result.avg_fluency.toFixed(0)}
+                          {(result.avg_fluency ?? 0).toFixed(0)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded">
@@ -493,7 +493,7 @@ export default function BatchGradingModal({
                           {t("batchGrading.completeness")}:
                         </span>
                         <span className="text-indigo-600 dark:text-indigo-400 font-medium">
-                          {result.avg_completeness.toFixed(0)}
+                          {(result.avg_completeness ?? 0).toFixed(0)}
                         </span>
                       </div>
                     </div>
