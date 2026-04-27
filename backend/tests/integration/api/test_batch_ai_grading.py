@@ -1406,6 +1406,7 @@ def test_issue680_failed_analysis_stays_null(
     shared_test_session: Session,
     issue680_setup,
     auth_headers,
+    monkeypatch,
 ):
     """Recording exists but ai_assessed_at stays None after re-trigger → do not auto-mark."""
     data = issue680_setup
@@ -1417,10 +1418,20 @@ def test_issue680_failed_analysis_stays_null(
         "S680E",
         AssignmentStatus.SUBMITTED,
     )
-    # Recording uploaded but analysis never succeeded
-    # (trigger_ai_assessment_for_item will try Azure but we can't mock easily
-    # here; the download step will fail on the fake example.com URL and leave
-    # ai_assessed_at = None, which is exactly the scenario we want to test.)
+
+    # Mock trigger_ai_assessment_for_item to a no-op so the test verifies the
+    # branch logic (recording_url set + ai_assessed_at None → teacher_passed
+    # stays None) rather than relying on Azure/download failing for the fake
+    # URL — that side-effect could disappear if the test env gains a proxy or
+    # partial Azure mock.
+    async def _noop_trigger(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(
+        "routers.assignments.grading.trigger_ai_assessment_for_item",
+        _noop_trigger,
+    )
+
     progress = StudentItemProgress(
         student_assignment_id=sa.id,
         content_item_id=data["items"][0].id,

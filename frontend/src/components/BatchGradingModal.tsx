@@ -21,6 +21,19 @@ import {
 // Teacher's decision for each student
 type TeacherDecision = "RETURNED" | "GRADED" | null;
 
+// Sort priority by student status. Same ordering as GradingPage's sidebar so
+// teachers see students in a consistent order across both screens. Update
+// here AND in GradingPage if the ordering rule changes.
+const STATUS_SORT_PRIORITY: Record<string, number> = {
+  IN_PROGRESS: 1,
+  RETURNED: 1,
+  SUBMITTED: 2,
+  RESUBMITTED: 2,
+  NOT_STARTED: 3,
+  GRADED: 4,
+  NOT_ASSIGNED: 99,
+};
+
 interface BatchGradingResult {
   student_id: number;
   student_name: string;
@@ -100,24 +113,13 @@ export default function BatchGradingModal({
         },
       );
 
-      // Same priority ordering as GradingPage sidebar so teachers see students
-      // in a consistent order across the two screens.
-      const statusPriority: Record<string, number> = {
-        IN_PROGRESS: 1,
-        RETURNED: 1,
-        SUBMITTED: 2,
-        RESUBMITTED: 2,
-        NOT_STARTED: 3,
-        GRADED: 4,
-        NOT_ASSIGNED: 99,
-      };
       const isInactive = (status: string) =>
         status === "NOT_STARTED" ||
         status === "IN_PROGRESS" ||
         status === "RETURNED";
       const sortedResults = [...response.results].sort((a, b) => {
-        const aPriority = statusPriority[a.status] ?? 50;
-        const bPriority = statusPriority[b.status] ?? 50;
+        const aPriority = STATUS_SORT_PRIORITY[a.status] ?? 50;
+        const bPriority = STATUS_SORT_PRIORITY[b.status] ?? 50;
         if (aPriority !== bPriority) return aPriority - bPriority;
         return a.student_id - b.student_id;
       });
@@ -129,9 +131,10 @@ export default function BatchGradingModal({
       });
 
       // Pre-select decision based on total_score:
-      //   >= 70 → GRADED (completed)
-      //   < 69  → RETURNED (send back)
-      //   69–70 (borderline) or inactive → null (pending, teacher decides)
+      //   >= 70        → GRADED (completed)
+      //   < 69         → RETURNED (send back)
+      //   [69, 70)     → null (borderline; teacher decides)
+      //   inactive     → null (teacher decides)
       const initialDecisions: Record<number, TeacherDecision> = {};
       response.results.forEach((r) => {
         if (isInactive(r.status)) {
@@ -421,6 +424,13 @@ export default function BatchGradingModal({
                                     : "outline"
                                 }
                                 size="sm"
+                                aria-label={t("batchGrading.aria.markAsGraded", {
+                                  name: result.student_name,
+                                })}
+                                aria-pressed={
+                                  teacherDecisions[result.student_id] ===
+                                  "GRADED"
+                                }
                                 className={cn(
                                   "justify-start text-sm font-medium w-full",
                                   teacherDecisions[result.student_id] ===
@@ -445,6 +455,14 @@ export default function BatchGradingModal({
                                     : "outline"
                                 }
                                 size="sm"
+                                aria-label={t(
+                                  "batchGrading.aria.markAsReturned",
+                                  { name: result.student_name },
+                                )}
+                                aria-pressed={
+                                  teacherDecisions[result.student_id] ===
+                                  "RETURNED"
+                                }
                                 className={cn(
                                   "justify-start text-sm font-medium w-full",
                                   teacherDecisions[result.student_id] ===
@@ -468,6 +486,13 @@ export default function BatchGradingModal({
                                     : "outline"
                                 }
                                 size="sm"
+                                aria-label={t(
+                                  "batchGrading.aria.markAsPending",
+                                  { name: result.student_name },
+                                )}
+                                aria-pressed={
+                                  teacherDecisions[result.student_id] === null
+                                }
                                 className={cn(
                                   "justify-start text-sm font-medium w-full",
                                   teacherDecisions[result.student_id] ===
