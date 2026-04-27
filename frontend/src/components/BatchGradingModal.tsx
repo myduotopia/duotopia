@@ -22,7 +22,9 @@ import {
 type TeacherDecision = "RETURNED" | "GRADED" | null;
 
 // Sort priority by student status. Same ordering as GradingPage's sidebar so
-// teachers see students in a consistent order across both screens. Update
+// teachers see students in a consistent order across both screens.
+// IN_PROGRESS and RETURNED share priority 1 — both need teacher attention
+// (resubmissions land here) so they cluster at the top of the list. Update
 // here AND in GradingPage if the ordering rule changes.
 const STATUS_SORT_PRIORITY: Record<string, number> = {
   IN_PROGRESS: 1,
@@ -33,6 +35,14 @@ const STATUS_SORT_PRIORITY: Record<string, number> = {
   GRADED: 4,
   NOT_ASSIGNED: 99,
 };
+
+// A student counts as "inactive" for batch auto-decision purposes when they
+// haven't actually submitted work — those rows skip the score-based default
+// and force the teacher to decide manually.
+const isInactiveStatus = (status: string) =>
+  status === "NOT_STARTED" ||
+  status === "IN_PROGRESS" ||
+  status === "RETURNED";
 
 interface BatchGradingResult {
   student_id: number;
@@ -113,10 +123,6 @@ export default function BatchGradingModal({
         },
       );
 
-      const isInactive = (status: string) =>
-        status === "NOT_STARTED" ||
-        status === "IN_PROGRESS" ||
-        status === "RETURNED";
       const sortedResults = [...response.results].sort((a, b) => {
         const aPriority = STATUS_SORT_PRIORITY[a.status] ?? 50;
         const bPriority = STATUS_SORT_PRIORITY[b.status] ?? 50;
@@ -137,7 +143,7 @@ export default function BatchGradingModal({
       //   inactive     → null (teacher decides)
       const initialDecisions: Record<number, TeacherDecision> = {};
       response.results.forEach((r) => {
-        if (isInactive(r.status)) {
+        if (isInactiveStatus(r.status)) {
           initialDecisions[r.student_id] = null;
         } else if (r.total_score >= 70) {
           initialDecisions[r.student_id] = "GRADED";

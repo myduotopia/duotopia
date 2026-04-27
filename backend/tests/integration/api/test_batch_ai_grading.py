@@ -1815,11 +1815,12 @@ def test_finalize_applies_returned_decision_to_not_started_student(
         AssignmentStatus.NOT_STARTED,
     )
 
-    test_client.post(
+    batch = test_client.post(
         f"/api/teachers/assignments/{data['assignment'].id}/batch-grade",
         headers=auth_headers,
         json={"classroom_id": data["classroom"].id},
     )
+    assert batch.status_code == 200
 
     finalize = test_client.post(
         f"/api/teachers/assignments/{data['assignment'].id}/finalize-batch-grade",

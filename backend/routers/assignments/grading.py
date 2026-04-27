@@ -1288,9 +1288,17 @@ async def batch_grade_assignment(
                 else 0.0
             )
 
-            # 9. 更新 StudentAssignment
+            # 9. 更新 StudentAssignment.
+            # Only stamp graded_at for students who actually submitted —
+            # batch_grade now also processes NOT_STARTED / IN_PROGRESS so
+            # the teacher can decide on them, but those rows have no
+            # submission yet and shouldn't carry a graded_at timestamp.
             student_assignment.score = total_score
-            student_assignment.graded_at = datetime.now(timezone.utc)
+            if student_assignment.status in (
+                AssignmentStatus.SUBMITTED,
+                AssignmentStatus.RESUBMITTED,
+            ):
+                student_assignment.graded_at = datetime.now(timezone.utc)
 
             # 9.5. Generate item-level comments and pass/fail (issue #680).
             # Iterate content_items so "no progress row" is treated the same as
@@ -1394,8 +1402,13 @@ async def batch_grade_assignment(
                 student_assignment.feedback = assignment_feedback
                 perf.checkpoint("Assignment Feedback Generated")
 
-            # 10. Set graded_at timestamp (status will be decided in finalize step)
-            student_assignment.graded_at = datetime.now(timezone.utc)
+            # 10. Re-stamp graded_at after feedback generation, but only for
+            # students who actually submitted (see step 9 above for rationale).
+            if student_assignment.status in (
+                AssignmentStatus.SUBMITTED,
+                AssignmentStatus.RESUBMITTED,
+            ):
+                student_assignment.graded_at = datetime.now(timezone.utc)
 
             # 11. 記錄結果
             results.append(
