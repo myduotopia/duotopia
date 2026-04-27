@@ -433,12 +433,14 @@ export default function StudentActivityPageContent({
   const _gateAiAssessment = _currentItemForGate?.ai_assessment as
     | { pronunciation_score?: number; accuracy_score?: number }
     | undefined;
+  // 優先用 pronunciation_score（發音準確度，比較貼近「念對沒」的題目本質）；
+  // 若沒有再退到 accuracy_score。兩者皆無則 null（待分析）。
   const _gateAiScore =
     _gateAiAssessment?.pronunciation_score ??
     _gateAiAssessment?.accuracy_score ??
     null;
-  // Issue #689 後續：在 RETURNED 模式下，已 passed 的題目鎖唯讀且藏愛心；
-  // RETURNED 模式下「passed」純看 teacher_passed === true，不做 AI 分數 fallback
+  // Issue #689 後續：在訂正模式下，已 passed 的題目鎖唯讀且藏愛心；
+  // 訂正模式下「passed」純看 teacher_passed === true，不做 AI 分數 fallback
   // （否則學生重錄高分 → 老師沒審過的題目誤標訂正過 → 家長以為作業完成）。
   // getItemPassFailStatus 已封裝這個分流邏輯。
   const _gateItemStatus = getItemPassFailStatus({
@@ -446,8 +448,11 @@ export default function StudentActivityPageContent({
     aiScore: _gateAiScore,
     assignmentStatus: assignmentStatus ?? null,
   });
+  // RESUBMITTED 是第二次以後的訂正循環，鎖定行為要與 RETURNED 一致，
+  // 否則老師之前已打勾的題目，學生在二次訂正時還能重錄，白扣愛心。
   const itemLockedInReturnedMode =
-    assignmentStatus === "RETURNED" && _gateItemStatus.passed;
+    (assignmentStatus === "RETURNED" || assignmentStatus === "RESUBMITTED") &&
+    _gateItemStatus.passed;
 
   const recordingGate = useRecordingAttempts({
     studentAssignmentId: assignmentId,

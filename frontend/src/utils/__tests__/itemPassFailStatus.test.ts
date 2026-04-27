@@ -104,6 +104,16 @@ describe("getItemPassFailStatus", () => {
         }),
       ).toEqual({ passed: false, failed: false });
     });
+
+    it("AI score 59 (just below threshold) → still neither (no AI fallback)", () => {
+      expect(
+        getItemPassFailStatus({
+          teacherPassed: null,
+          aiScore: 59,
+          assignmentStatus: "RESUBMITTED",
+        }),
+      ).toEqual({ passed: false, failed: false });
+    });
   });
 
   describe("teacher_passed === null in non-RETURNED mode (AI fallback)", () => {
