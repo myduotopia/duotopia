@@ -104,6 +104,7 @@ deploy-feature <issue>
 2. **TapPay 金流整合** - 見 `TAPPAY_INTEGRATION_GUIDE.md`
 3. **Per-Issue Test Environment** - 每個 issue 有獨立測試環境
 4. **Use feature branches** - 不直接 commit 到 staging
+5. **批改頁新增作業類型** - 同路由 + `practice_mode` 分 Panel，禁止新增路由或複製 `GradingPage.tsx`。詳細步驟見 [`docs/design/grading-page-architecture.md`](./docs/design/grading-page-architecture.md)
 
 ## Database Migration 鐵則
 

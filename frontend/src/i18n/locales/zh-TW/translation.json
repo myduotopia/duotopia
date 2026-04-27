@@ -30,7 +30,10 @@
     "cut": "剪下",
     "yes": "是",
     "no": "否",
-    "retry": "重試"
+    "retry": "重試",
+    "lineContact": {
+      "ariaLabel": "LINE 客服"
+    }
   },
   "assignmentDetail": {
     "sheet": {
@@ -59,6 +62,7 @@
       "checkHomework": "批改作業",
       "editStudents": "編輯派發",
       "saveStudents": "儲存派發",
+      "unassignStudents": "取消派發",
       "sortByScore": "成績",
       "sortByNumber": "座號",
       "sortByName": "姓名",
@@ -2974,6 +2978,25 @@
       "resubmitted": "已訂正",
       "resubmittedShort": "已訂正",
       "notAssigned": "未指派"
+    },
+    "rearrangement": {
+      "labels": {
+        "errors": "錯誤",
+        "correctWords": "正確選字",
+        "retryCount": "重試",
+        "expectedScore": "分數",
+        "timedOut": "超時結束",
+        "selectionHistory": "選字歷程",
+        "selected": "選擇",
+        "expected": "應選",
+        "completedAt": "完成時間",
+        "detailedHistoryComingSoon": "更詳細的作答紀錄 Coming Soon"
+      },
+      "badges": {
+        "completed": "完成",
+        "incomplete": "未達標",
+        "notAnswered": "尚未作答"
+      }
     }
   },
   "assignmentDetail": {
@@ -5167,5 +5190,9 @@
     "unarchiveError": "取消封存失敗",
     "deleteSuccess": "作業已刪除",
     "deleteError": "刪除失敗"
+  },
+  "recordingAttempts": {
+    "remaining": "還剩 {{n}} 次分析機會",
+    "lockedTooltip": "已達分析上限，老師退回後可重新錄音"
   }
 }

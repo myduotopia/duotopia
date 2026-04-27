@@ -1945,18 +1945,6 @@ export default function TeacherAssignmentDetailPage() {
                       let isActive = false; // 當前狀態
                       let isPassed = false; // 已經過的狀態
 
-                      // Debug for specific students
-                      if (
-                        progress.student_name === "蔡雅芳" ||
-                        progress.student_name === "謝志偉"
-                      ) {
-                        // Debug: student status check
-                        // currentStatus,
-                        // timestamps,
-                        // returned_at: timestamps?.returned_at,
-                        // resubmitted_at: timestamps?.resubmitted_at
-                      }
-
                       // 根據 currentStatus 和時間戳判斷
                       switch (statusName) {
                         case "ASSIGNED":

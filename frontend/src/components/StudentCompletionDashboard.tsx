@@ -231,19 +231,23 @@ export function StudentCompletionDashboard({
             {t("studentCompletionDashboard.progress.overall")}
           </span>
           <span className="text-lg font-bold text-blue-600">
-            {Math.round(
-              ((statusCounts.submitted + statusCounts.graded) /
-                statusCounts.total) *
-                100,
-            )}
+            {statusCounts.total > 0
+              ? Math.round(
+                  ((statusCounts.submitted + statusCounts.graded) /
+                    statusCounts.total) *
+                    100,
+                )
+              : 0}
             %
           </span>
         </div>
         <Progress
           value={
-            ((statusCounts.submitted + statusCounts.graded) /
-              statusCounts.total) *
-            100
+            statusCounts.total > 0
+              ? ((statusCounts.submitted + statusCounts.graded) /
+                  statusCounts.total) *
+                100
+              : 0
           }
           className="h-3"
         />

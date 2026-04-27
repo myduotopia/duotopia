@@ -81,6 +81,7 @@ interface ActivityResponse {
   assignment_id: number;
   title: string;
   status?: string;
+  returned_at?: string | null; // Issue #689: 待訂正時間，前端用作 hearts reset cycle marker
   practice_mode?: string | null;
   score_category?: string | null;
   show_answer?: boolean; // 例句重組：答題結束後是否顯示正確答案
@@ -100,6 +101,7 @@ export default function StudentActivityPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [assignmentTitle, setAssignmentTitle] = useState("");
   const [assignmentStatus, setAssignmentStatus] = useState<string>("");
+  const [returnedAt, setReturnedAt] = useState<string | null>(null);
   const [practiceMode, setPracticeMode] = useState<string | null>(null);
   const [showAnswer, setShowAnswer] = useState<boolean>(false);
   const [canUseAiAnalysis, setCanUseAiAnalysis] = useState<boolean>(true);
@@ -155,11 +157,11 @@ export default function StudentActivityPage() {
       }
 
       const data: ActivityResponse = await response.json();
-      console.log("Loaded activities from API:", data.activities);
 
       setActivities(data.activities);
       setAssignmentTitle(data.title);
       setAssignmentStatus(data.status || "");
+      setReturnedAt(data.returned_at ?? null);
       setPracticeMode(data.practice_mode || null);
       setShowAnswer(data.show_answer || false);
       setCanUseAiAnalysis(data.can_use_ai_analysis ?? true);
@@ -296,6 +298,7 @@ export default function StudentActivityPage() {
       assignmentTitle={assignmentTitle}
       assignmentId={parseInt(assignmentId!)}
       assignmentStatus={assignmentStatus}
+      returnedAt={returnedAt}
       practiceMode={practiceMode}
       showAnswer={showAnswer}
       canUseAiAnalysis={canUseAiAnalysis}
