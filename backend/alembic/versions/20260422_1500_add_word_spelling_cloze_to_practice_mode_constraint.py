@@ -53,34 +53,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Revert to the previous set (all modes minus word_spelling/word_cloze).
+    """No-op.
 
-    The pre-migration set already included word_reading, rearrangement, and
-    tug_of_war (rows with those values exist in staging/prod), so reverting
-    to a narrower set would fail the ADD CONSTRAINT check.
+    Removing word_spelling/word_cloze from the constraint would fail the
+    re-ADD if any practice_sessions row already uses those modes (which
+    will be the case in staging/prod after the upgrade runs). Per project
+    migration policy (forward-only, idempotent), destructive downgrades
+    are not supported.
     """
-    op.execute(
-        """
-        DO $$ BEGIN
-            IF EXISTS (
-                SELECT 1 FROM pg_constraint
-                WHERE conname = 'check_practice_mode'
-                  AND conrelid = 'practice_sessions'::regclass
-            ) THEN
-                ALTER TABLE practice_sessions
-                    DROP CONSTRAINT check_practice_mode;
-            END IF;
-
-            ALTER TABLE practice_sessions
-            ADD CONSTRAINT check_practice_mode
-            CHECK (practice_mode IN (
-                'listening',
-                'writing',
-                'word_selection',
-                'word_reading',
-                'rearrangement',
-                'tug_of_war'
-            ));
-        END $$;
-        """
-    )
+    pass
