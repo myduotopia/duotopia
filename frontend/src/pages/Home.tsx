@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { DemoCard } from "@/components/DemoCard";
 import { ImageCarousel } from "@/components/ImageCarousel";
+import LineContactButton from "@/components/LineContactButton";
 import { demoApi } from "@/lib/demoApi";
 import { toast } from "sonner";
 import TeacherLoginSheet from "@/components/TeacherLoginSheet";
@@ -508,6 +509,9 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* LINE 客服浮動按鈕 */}
+      <LineContactButton />
 
       {/* Meta Messenger 浮動按鈕 */}
       <a

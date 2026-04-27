@@ -30,7 +30,10 @@
     "cut": "剪下",
     "yes": "是",
     "no": "否",
-    "retry": "重試"
+    "retry": "重試",
+    "lineContact": {
+      "ariaLabel": "LINE 客服"
+    }
   },
   "assignmentDetail": {
     "sheet": {

@@ -30,7 +30,10 @@
     "cut": "Cut",
     "yes": "Yes",
     "no": "No",
-    "retry": "Retry"
+    "retry": "Retry",
+    "lineContact": {
+      "ariaLabel": "LINE Customer Service"
+    }
   },
   "demo": {
     "banner": "Demo Mode - Progress will not be saved",
