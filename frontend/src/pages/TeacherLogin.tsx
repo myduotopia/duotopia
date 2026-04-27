@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,10 +18,15 @@ import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { getTeacherDashboardRoute } from "@/utils/authNavigation";
+import {
+  consumeRedirectTarget,
+  saveRedirectTarget,
+} from "@/utils/redirectAfterLogin";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
 
 export default function TeacherLogin() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const isAuthenticated = useTeacherAuthStore((state) => state.isAuthenticated);
   const user = useTeacherAuthStore((state) => state.user);
@@ -33,12 +38,16 @@ export default function TeacherLogin() {
     password: "",
   });
 
-  // Redirect authenticated users to dashboard
+  // Combined into one effect so saveRedirectTarget always runs before consumeRedirectTarget.
   useEffect(() => {
+    const from = (location.state as { from?: string } | null)?.from;
+    if (from) saveRedirectTarget(from);
     if (isAuthenticated && user) {
-      navigate(getTeacherDashboardRoute(), { replace: true });
+      navigate(consumeRedirectTarget(getTeacherDashboardRoute()), {
+        replace: true,
+      });
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, navigate, location.state]);
 
   // 檢查是否為 demo 模式 (通過 URL 參數 ?is_demo=true)
   const searchParams = new URLSearchParams(window.location.search);
@@ -70,8 +79,7 @@ export default function TeacherLogin() {
         is_admin: result.user.is_admin,
       });
 
-      // 登入成功後，一律導向個人教師 dashboard
-      navigate("/teacher/dashboard");
+      // isAuthenticated effect above handles navigation.
     } catch (err) {
       console.error("🔑 [ERROR] 登入失敗:", err);
       setError(t("teacherLogin.errors.loginFailed"));
@@ -104,8 +112,7 @@ export default function TeacherLogin() {
         is_admin: result.user.is_admin,
       });
 
-      // 快速登入成功後，一律導向個人教師 dashboard
-      navigate("/teacher/dashboard");
+      // isAuthenticated effect above handles navigation.
     } catch (err) {
       console.error("🔑 [ERROR] 快速登入失敗:", err);
       setError(t("teacherLogin.errors.quickLoginFailed", { email }));

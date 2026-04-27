@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useEffect, useState } from "react";
 
@@ -16,6 +16,7 @@ export function ProtectedRoute({
   const isAuthenticated = useTeacherAuthStore((state) => state.isAuthenticated);
   const user = useTeacherAuthStore((state) => state.user);
   const token = useTeacherAuthStore((state) => state.token);
+  const location = useLocation();
   const [hasRequiredRole, setHasRequiredRole] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(!!requiredRoles);
 
@@ -68,9 +69,9 @@ export function ProtectedRoute({
     }
   }, [requiredRoles, isAuthenticated, token, user]);
 
-  // Not authenticated - redirect to login
   if (!isAuthenticated) {
-    return <Navigate to="/teacher/login" replace />;
+    const from = location.pathname + location.search + location.hash;
+    return <Navigate to="/teacher/login" replace state={{ from }} />;
   }
 
   // Admin check (original logic)
