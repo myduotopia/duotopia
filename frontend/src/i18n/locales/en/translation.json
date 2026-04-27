@@ -5172,5 +5172,9 @@
     "unarchiveError": "Failed to unarchive",
     "deleteSuccess": "Assignment deleted",
     "deleteError": "Failed to delete"
+  },
+  "recordingAttempts": {
+    "remaining": "{{n}} analysis attempt(s) remaining",
+    "lockedTooltip": "Analysis limit reached. Re-record after the teacher returns this item."
   }
 }

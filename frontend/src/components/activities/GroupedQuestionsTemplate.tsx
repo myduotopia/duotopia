@@ -118,6 +118,9 @@ interface GroupedQuestionsTemplateProps {
   onAnalyzingStateChange?: (isAnalyzing: boolean) => void; // 🔒 分析狀態變化回調
   timeLimit?: number; // 錄音時間限制（秒）
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
+  // Issue #689 — Phase 1 frontend attempt gate
+  recordingDisabled?: boolean; // true → 麥克風 / 上傳 / Analyze 鎖定
+  attemptsHint?: React.ReactNode; // 愛心指示器
 }
 
 const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
@@ -147,6 +150,8 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
   onAnalyzingStateChange, // 🔒 分析狀態變化回調
   timeLimit = 30, // 錄音時間限制（秒）
   canUseAiAnalysis = true, // 教師/機構是否有 AI 分析額度
+  recordingDisabled = false,
+  attemptsHint,
 }: GroupedQuestionsTemplateProps) {
   const { t } = useTranslation();
   const currentQuestion = items[currentQuestionIndex];
@@ -294,23 +299,14 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
     ].filter(Boolean) as Array<{ label: string; score: number }>;
     const wordsData =
       result.detailed_words || result.word_details || result.words || [];
-    const details = wordsData
-      .filter(
-        (w: { accuracy_score?: number; error_type?: string }) =>
-          w.error_type !== "None" ||
-          (w.accuracy_score != null && w.accuracy_score < 60),
-      )
-      .map(
-        (w: {
-          word: string;
-          accuracy_score?: number;
-          error_type?: string;
-        }) => ({
-          label: w.word,
-          score: w.accuracy_score || 0,
-          errorType: w.error_type,
-        }),
-      );
+    // Issue #689 後續：顯示每個單字的分數，不再只篩出分數過低或唸錯的單字
+    const details = wordsData.map(
+      (w: { word: string; accuracy_score?: number; error_type?: string }) => ({
+        label: w.word,
+        score: w.accuracy_score || 0,
+        errorType: w.error_type,
+      }),
+    );
     return { overallScore, dimensions, details };
   }, [assessmentResults, currentQuestionIndex, t]);
 
@@ -777,8 +773,11 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
 
           {/* 學生錄音區 - 超精簡版 */}
           <div className="bg-white rounded-lg border border-gray-200 p-3">
-            <div className="text-sm sm:text-base font-medium text-gray-700 mb-2">
-              {t("groupedQuestionsTemplate.labels.studentAnswer")}
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="text-sm sm:text-base font-medium text-gray-700">
+                {t("groupedQuestionsTemplate.labels.studentAnswer")}
+              </div>
+              {attemptsHint}
             </div>
 
             {/* 錄音控制 - 一行搞定 */}
@@ -903,14 +902,16 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                             onAssessmentComplete(currentQuestionIndex, null);
                           }
                         }}
-                        disabled={readOnly}
+                        disabled={readOnly || recordingDisabled}
                         className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-gray-500 disabled:hover:bg-transparent"
                         title={
                           readOnly
                             ? t("groupedQuestionsTemplate.labels.viewOnlyMode")
-                            : t(
-                                "groupedQuestionsTemplate.labels.clearRecording",
-                              )
+                            : recordingDisabled
+                              ? t("recordingAttempts.lockedTooltip")
+                              : t(
+                                  "groupedQuestionsTemplate.labels.clearRecording",
+                                )
                         }
                       >
                         <svg
@@ -932,7 +933,7 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                     <>
                       <button
                         className="w-12 h-12 sm:w-16 sm:h-16 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all"
-                        disabled={readOnly}
+                        disabled={readOnly || recordingDisabled}
                         onClick={() => {
                           setAssessmentResults((prev) => {
                             const newResults = { ...prev };
@@ -944,16 +945,18 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                         title={
                           readOnly
                             ? t("groupedQuestionsTemplate.labels.viewOnlyMode")
-                            : t(
-                                "groupedQuestionsTemplate.labels.startRecording",
-                              )
+                            : recordingDisabled
+                              ? t("recordingAttempts.lockedTooltip")
+                              : t(
+                                  "groupedQuestionsTemplate.labels.startRecording",
+                                )
                         }
                       >
                         <Mic className="w-5 h-5 sm:w-6 sm:h-6" />
                       </button>
                       <button
                         className="w-12 h-12 sm:w-16 sm:h-16 bg-green-600 hover:bg-green-700 text-white rounded-full flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all"
-                        disabled={readOnly}
+                        disabled={readOnly || recordingDisabled}
                         onClick={() => {
                           const input = document.createElement("input");
                           input.type = "file";
@@ -969,7 +972,9 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                         title={
                           readOnly
                             ? t("groupedQuestionsTemplate.labels.viewOnlyMode")
-                            : t("groupedQuestionsTemplate.labels.uploadAudio")
+                            : recordingDisabled
+                              ? t("recordingAttempts.lockedTooltip")
+                              : t("groupedQuestionsTemplate.labels.uploadAudio")
                         }
                       >
                         <Upload className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -977,9 +982,11 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                       <span className="text-sm sm:text-base text-gray-600">
                         {readOnly
                           ? t("groupedQuestionsTemplate.labels.viewOnlyMode")
-                          : t(
-                              "groupedQuestionsTemplate.labels.startRecordingOrUpload",
-                            )}
+                          : recordingDisabled
+                            ? t("recordingAttempts.lockedTooltip")
+                            : t(
+                                "groupedQuestionsTemplate.labels.startRecordingOrUpload",
+                              )}
                       </span>
                     </>
                   )}
@@ -1086,8 +1093,15 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                 <Button
                   size="lg"
                   onClick={handleAssessment}
+                  title={
+                    recordingDisabled
+                      ? t("recordingAttempts.lockedTooltip")
+                      : undefined
+                  }
                   disabled={
-                    isAssessing || itemAnalysisState?.status === "analyzing"
+                    isAssessing ||
+                    itemAnalysisState?.status === "analyzing" ||
+                    recordingDisabled
                   }
                   className={`relative h-14 px-8 text-lg font-bold rounded-2xl shadow-xl transition-all ${
                     itemAnalysisState?.status === "analyzing"
@@ -1148,8 +1162,15 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                   ref={uploadButtonRef}
                   size="lg"
                   onClick={handleAssessment}
+                  title={
+                    recordingDisabled
+                      ? t("recordingAttempts.lockedTooltip")
+                      : undefined
+                  }
                   disabled={
-                    isAssessing || itemAnalysisState?.status === "analyzing"
+                    isAssessing ||
+                    itemAnalysisState?.status === "analyzing" ||
+                    recordingDisabled
                   }
                   className={`relative h-16 px-10 text-xl font-bold rounded-2xl shadow-2xl transition-all ${
                     itemAnalysisState?.status === "analyzing"
@@ -1278,9 +1299,11 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                     title={
                       readOnly || isAssessing
                         ? t("groupedQuestionsTemplate.labels.viewOnlyMode")
-                        : t("groupedQuestionsTemplate.labels.deleteRecording")
+                        : recordingDisabled
+                          ? t("recordingAttempts.lockedTooltip")
+                          : t("groupedQuestionsTemplate.labels.deleteRecording")
                     }
-                    disabled={isAssessing || readOnly}
+                    disabled={isAssessing || readOnly || recordingDisabled}
                   >
                     <X className="w-4 h-4" />
                   </button>
