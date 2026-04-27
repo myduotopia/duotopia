@@ -182,6 +182,9 @@ export default function WordReadingActivity({
       // Issue #689: 背景分析（離開題目/提交時補分析）也計次。
       // 不能用 `gateActive` 因為 useCallback 閉包此時尚未定義；改在引用點內部判斷時序：
       // 此處可直接呼叫 standalone helper，preview/demo/readOnly 的 caller 已不會走到分析路徑。
+      // 已知邊界：此處不檢查 itemLockedInReturnedMode（RETURNED/RESUBMITTED + 已通過）。
+      // 實務上背景分析只對「離開的題目」觸發，已通過題目此時不會有 pending blob 待分析；
+      // 若真的發生（例如錄音與狀態同步間有競態），會多扣一顆愛心，但不影響正確性。
       const itemForAttempt = items[itemIndex];
       if (
         itemForAttempt &&

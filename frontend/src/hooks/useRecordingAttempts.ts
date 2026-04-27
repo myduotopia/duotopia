@@ -86,7 +86,6 @@ export const useRecordingAttempts = (
     itemId,
     assignmentStatus,
     returnedAt,
-    teacherPassed,
     teacherReviewedAt,
     existingRecordingUrl,
   } = params;
@@ -101,6 +100,8 @@ export const useRecordingAttempts = (
     // 不再侷限於 teacher_passed === false 的題目。學生可重錄任何一題，是否
     // 該重錄由「方框顏色 / 老師回饋」呈現，不在前端閘門限制。
     // marker 仍然防止無限重置（同一輪退回只發一次配額）。
+    // RESUBMITTED 不在此分支：第二輪退回時 status 會先變回 RETURNED 且 marker
+    // (teacher_reviewed_at / returned_at) 會更新，自然會觸發此 reset 一次。
     const shouldResetForNewReturnCycle =
       assignmentStatus === "RETURNED" &&
       currentMarker !== null &&
@@ -132,7 +133,6 @@ export const useRecordingAttempts = (
   }, [
     key,
     assignmentStatus,
-    teacherPassed,
     teacherReviewedAt,
     returnedAt,
     existingRecordingUrl,
