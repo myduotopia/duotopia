@@ -4,6 +4,7 @@
  */
 
 import { API_URL } from "../config/api";
+import { appendAudioToFormData } from "@/utils/audioFormatDetection";
 
 export class DemoApiError extends Error {
   constructor(
@@ -95,7 +96,7 @@ class DemoApiClient {
     const formData = new FormData();
     formData.append("assignment_id", data.assignment_id.toString());
     formData.append("sentence_id", data.sentence_id.toString());
-    formData.append("audio", data.audio_blob, "recording.webm");
+    await appendAudioToFormData(formData, "audio", data.audio_blob);
     formData.append("reference_text", data.reference_text);
     if (data.locale) {
       formData.append("locale", data.locale);

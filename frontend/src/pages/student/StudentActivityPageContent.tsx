@@ -60,6 +60,7 @@ import { useDemoAzurePronunciation } from "@/hooks/useDemoAzurePronunciation";
 import { azureSpeechService } from "@/services/azureSpeechService";
 import { useAutoAnalysis } from "@/hooks/useAutoAnalysis"; // Issue #141: 例句朗讀自動分析
 import { DemoLimitModal } from "@/components/demo/DemoLimitModal";
+import { appendAudioToFormData } from "@/utils/audioFormatDetection";
 
 // Activity type from API
 export interface Activity {
@@ -255,31 +256,6 @@ const hasIncompleteRecordings = (
 
     return isRecordingMissingOrPending(activity.audio_url);
   });
-};
-
-/**
- * 是否屬於「逐題錄音、需要在跳題與提交前補做 Azure 發音分析」的朗讀活動。
- * 範圍比 activityNeedsRecording 小：提交按鈕禁用可以涵蓋所有需要錄音的型別，
- * 但自動分析流程僅針對例句集朗讀／單字集例句朗讀兩種情境。
- *
- * 注意：單字集 word_reading 模式雖然也有錄音，但其畫面走獨立的
- * WordReadingActivity 組件、由它自己負責 Azure 分析，故這裡不納入，
- * 避免在主流程重複分析。
- */
-const needsPerItemAnalysis = (
-  activity: Activity,
-  practiceMode?: string | null,
-): boolean => {
-  if (
-    isExampleSentencesType(activity.type) &&
-    practiceMode !== "rearrangement"
-  ) {
-    return true;
-  }
-  if (isVocabularySetType(activity.type) && practiceMode === "reading") {
-    return true;
-  }
-  return false;
 };
 
 export default function StudentActivityPageContent({
@@ -747,16 +723,10 @@ export default function StudentActivityPageContent({
           const contentItemId =
             currentActivity.items[currentSubQuestionIndex]?.id;
           if (!isPreviewMode && !isDemoMode && assignmentId && contentItemId) {
-            const uploadFileExtension = audioBlob.type.includes("mp4")
-              ? "recording.mp4"
-              : audioBlob.type.includes("webm")
-                ? "recording.webm"
-                : "recording.audio";
-
             const formData = new FormData();
             formData.append("assignment_id", assignmentId.toString());
             formData.append("content_item_id", contentItemId.toString());
-            formData.append("audio_file", audioBlob, uploadFileExtension);
+            await appendAudioToFormData(formData, "audio_file", audioBlob);
 
             const apiUrl = import.meta.env.VITE_API_URL || "";
             const authToken = useStudentAuthStore.getState().token;
@@ -893,159 +863,159 @@ export default function StudentActivityPageContent({
   };
 
   const handleRecordingComplete = useCallback(
-    (blob: Blob, url: string) => {
-      const currentActivity = activities[currentActivityIndex];
-      const subIdx = currentSubQuestionIndex;
+    async (blob: Blob, url: string) => {
+      // Caller (AudioRecorder.onRecordingComplete) doesn't await this Promise,
+      // so swallow + log any rejection here to avoid silent unhandled rejections.
+      try {
+        const currentActivity = activities[currentActivityIndex];
+        const subIdx = currentSubQuestionIndex;
 
-      setAnswers((prev) => {
-        const newAnswers = new Map(prev);
-        const answer = newAnswers.get(currentActivity.id) || {
-          progressId: currentActivity.id,
-          status: "not_started",
-          startTime: new Date(),
-          recordings: [],
-          answers: [],
-        };
+        setAnswers((prev) => {
+          const newAnswers = new Map(prev);
+          const answer = newAnswers.get(currentActivity.id) || {
+            progressId: currentActivity.id,
+            status: "not_started",
+            startTime: new Date(),
+            recordings: [],
+            answers: [],
+          };
 
-        (answer as Answer).audioBlob = blob;
-        (answer as Answer).audioUrl = url;
-        answer.status = "in_progress";
-        (answer as Answer).endTime = new Date();
+          (answer as Answer).audioBlob = blob;
+          (answer as Answer).audioUrl = url;
+          answer.status = "in_progress";
+          (answer as Answer).endTime = new Date();
 
-        newAnswers.set(currentActivity.id, answer);
-        return newAnswers;
-      });
-
-      if (currentActivity.items && currentActivity.items.length > 0) {
-        setActivities((prevActivities) => {
-          const newActivities = [...prevActivities];
-          const activityIndex = newActivities.findIndex(
-            (a) => a.id === currentActivity.id,
-          );
-          if (activityIndex !== -1 && newActivities[activityIndex].items) {
-            const newItems = [...newActivities[activityIndex].items!];
-            if (newItems[subIdx]) {
-              newItems[subIdx] = {
-                ...newItems[subIdx],
-                recording_url: url,
-              };
-            }
-            newActivities[activityIndex] = {
-              ...newActivities[activityIndex],
-              items: newItems,
-            };
-          }
-          return newActivities;
+          newAnswers.set(currentActivity.id, answer);
+          return newAnswers;
         });
 
-        // 🎯 Issue #227: 錄音完成後立即上傳到 GCS（與單字朗讀行為一致）
-        // 不論 canUseAiAnalysis 為何，錄音檔案都應保存到伺服器
-        const contentItemId = currentActivity.items[subIdx]?.id;
-        if (!isPreviewMode && !isDemoMode && assignmentId && contentItemId) {
-          const uploadFileExtension = blob.type.includes("mp4")
-            ? "recording.mp4"
-            : blob.type.includes("webm")
-              ? "recording.webm"
-              : "recording.audio";
-
-          const formData = new FormData();
-          formData.append("assignment_id", assignmentId.toString());
-          formData.append("content_item_id", contentItemId.toString());
-          formData.append("audio_file", blob, uploadFileExtension);
-
-          const apiUrl = import.meta.env.VITE_API_URL || "";
-          const authToken = useStudentAuthStore.getState().token;
-
-          retryAudioUpload(
-            async () => {
-              const uploadResponse = await fetch(
-                `${apiUrl}/api/students/upload-recording`,
-                {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${authToken}`,
-                  },
-                  body: formData,
-                },
-              );
-
-              if (!uploadResponse.ok) {
-                throw new Error(`Upload failed: ${uploadResponse.status}`);
+        if (currentActivity.items && currentActivity.items.length > 0) {
+          setActivities((prevActivities) => {
+            const newActivities = [...prevActivities];
+            const activityIndex = newActivities.findIndex(
+              (a) => a.id === currentActivity.id,
+            );
+            if (activityIndex !== -1 && newActivities[activityIndex].items) {
+              const newItems = [...newActivities[activityIndex].items!];
+              if (newItems[subIdx]) {
+                newItems[subIdx] = {
+                  ...newItems[subIdx],
+                  recording_url: url,
+                };
               }
+              newActivities[activityIndex] = {
+                ...newActivities[activityIndex],
+                items: newItems,
+              };
+            }
+            return newActivities;
+          });
 
-              return await uploadResponse.json();
-            },
-            () => {},
-          )
-            .then((uploadResult) => {
-              // 更新 recording_url 為 GCS URL
-              setActivities((prevActivities) => {
-                const newActivities = [...prevActivities];
-                const activityIndex = newActivities.findIndex(
-                  (a) => a.id === currentActivity.id,
+          // 🎯 Issue #227: 錄音完成後立即上傳到 GCS（與單字朗讀行為一致）
+          // 不論 canUseAiAnalysis 為何，錄音檔案都應保存到伺服器
+          const contentItemId = currentActivity.items[subIdx]?.id;
+          if (!isPreviewMode && !isDemoMode && assignmentId && contentItemId) {
+            const formData = new FormData();
+            formData.append("assignment_id", assignmentId.toString());
+            formData.append("content_item_id", contentItemId.toString());
+            await appendAudioToFormData(formData, "audio_file", blob);
+
+            const apiUrl = import.meta.env.VITE_API_URL || "";
+            const authToken = useStudentAuthStore.getState().token;
+
+            retryAudioUpload(
+              async () => {
+                const uploadResponse = await fetch(
+                  `${apiUrl}/api/students/upload-recording`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${authToken}`,
+                    },
+                    body: formData,
+                  },
                 );
-                if (
-                  activityIndex !== -1 &&
-                  newActivities[activityIndex].items
-                ) {
-                  const newItems = [...newActivities[activityIndex].items!];
-                  if (newItems[subIdx]) {
-                    newItems[subIdx] = {
-                      ...newItems[subIdx],
-                      recording_url: uploadResult.audio_url,
+
+                if (!uploadResponse.ok) {
+                  throw new Error(`Upload failed: ${uploadResponse.status}`);
+                }
+
+                return await uploadResponse.json();
+              },
+              () => {},
+            )
+              .then((uploadResult) => {
+                // 更新 recording_url 為 GCS URL
+                setActivities((prevActivities) => {
+                  const newActivities = [...prevActivities];
+                  const activityIndex = newActivities.findIndex(
+                    (a) => a.id === currentActivity.id,
+                  );
+                  if (
+                    activityIndex !== -1 &&
+                    newActivities[activityIndex].items
+                  ) {
+                    const newItems = [...newActivities[activityIndex].items!];
+                    if (newItems[subIdx]) {
+                      newItems[subIdx] = {
+                        ...newItems[subIdx],
+                        recording_url: uploadResult.audio_url,
+                      };
+                    }
+                    newActivities[activityIndex] = {
+                      ...newActivities[activityIndex],
+                      items: newItems,
                     };
                   }
-                  newActivities[activityIndex] = {
-                    ...newActivities[activityIndex],
-                    items: newItems,
-                  };
-                }
-                return newActivities;
-              });
+                  return newActivities;
+                });
 
-              // 更新 progressIds
-              setAnswers((prev) => {
-                const newAnswers = new Map(prev);
-                const answer = newAnswers.get(currentActivity.id);
-                if (answer) {
-                  if (!answer.progressIds) answer.progressIds = [];
-                  while (answer.progressIds.length <= subIdx) {
-                    answer.progressIds.push(0);
+                // 更新 progressIds
+                setAnswers((prev) => {
+                  const newAnswers = new Map(prev);
+                  const answer = newAnswers.get(currentActivity.id);
+                  if (answer) {
+                    if (!answer.progressIds) answer.progressIds = [];
+                    while (answer.progressIds.length <= subIdx) {
+                      answer.progressIds.push(0);
+                    }
+                    answer.progressIds[subIdx] = uploadResult.progress_id;
                   }
-                  answer.progressIds[subIdx] = uploadResult.progress_id;
+                  return newAnswers;
+                });
+
+                // 🎯 Issue #227: 上傳成功後，有額度時自動背景分析
+                if (canUseAiAnalysis) {
+                  const targetText =
+                    currentActivity.items![subIdx]?.text ||
+                    currentActivity.target_text ||
+                    "";
+                  if (targetText) {
+                    analyzeAndUpload(
+                      uploadResult.audio_url,
+                      targetText,
+                      uploadResult.progress_id,
+                      contentItemId,
+                    ).catch((err) =>
+                      console.error(
+                        "Background analysis after upload failed:",
+                        err,
+                      ),
+                    );
+                  }
                 }
-                return newAnswers;
+
+                toast.success(
+                  t("wordReading.toast.uploaded") || "Recording uploaded",
+                );
+              })
+              .catch((error) => {
+                console.error("❌ 錄音上傳失敗:", error);
               });
-
-              // 🎯 Issue #227: 上傳成功後，有額度時自動背景分析
-              if (canUseAiAnalysis) {
-                const targetText =
-                  currentActivity.items![subIdx]?.text ||
-                  currentActivity.target_text ||
-                  "";
-                if (targetText) {
-                  analyzeAndUpload(
-                    uploadResult.audio_url,
-                    targetText,
-                    uploadResult.progress_id,
-                    contentItemId,
-                  ).catch((err) =>
-                    console.error(
-                      "Background analysis after upload failed:",
-                      err,
-                    ),
-                  );
-                }
-              }
-
-              toast.success(
-                t("wordReading.toast.uploaded") || "Recording uploaded",
-              );
-            })
-            .catch((error) => {
-              console.error("❌ 錄音上傳失敗:", error);
-            });
+          }
         }
+      } catch (err) {
+        console.error("handleRecordingComplete failed:", err);
       }
     },
     [
@@ -1207,16 +1177,7 @@ export default function StudentActivityPageContent({
           const formData = new FormData();
           formData.append("assignment_id", assignmentId!.toString());
           formData.append("content_item_id", contentItemId.toString());
-          const uploadFileExtension = file.type.includes("mp4")
-            ? "recording.mp4"
-            : file.type.includes("webm")
-              ? "recording.webm"
-              : file.type.includes("wav")
-                ? "recording.wav"
-                : file.type.includes("m4a")
-                  ? "recording.m4a"
-                  : "recording.audio";
-          formData.append("audio_file", audioBlob, uploadFileExtension);
+          await appendAudioToFormData(formData, "audio_file", audioBlob);
 
           const apiUrl = import.meta.env.VITE_API_URL || "";
           const authToken = useStudentAuthStore.getState().token;
@@ -1343,23 +1304,8 @@ export default function StudentActivityPageContent({
   const handleNextActivity = async () => {
     const currentActivity = activities[currentActivityIndex];
 
-    // 🎯 Issue #227: 有 AI 分析額度時，按下一題自動背景分析當前題目（blob + GCS URL）
-    if (canUseAiAnalysis && !isPreviewMode && currentActivity.items) {
-      const currentItem = currentActivity.items[currentSubQuestionIndex];
-      const hasRecording =
-        currentItem?.recording_url && currentItem.recording_url !== "";
-      if (hasRecording && !currentItem?.ai_assessment) {
-        // fire-and-forget：背景分析不阻塞導航
-        analyzeAndUpload(
-          currentItem.recording_url!,
-          currentItem.text || currentActivity.target_text || "",
-          currentItem.progress_id,
-          currentItem.id,
-        ).catch((err) =>
-          console.error("Background analysis on next failed:", err),
-        );
-      }
-    }
+    // Issue #677: removed fire-and-forget supplementary analysis on next.
+    // Auto-analysis only happens at recording completion now.
 
     if (currentActivity.items && currentActivity.items.length > 0) {
       // 切換到下一題
@@ -1419,89 +1365,13 @@ export default function StudentActivityPageContent({
   };
 
   /**
-   * Issue #141: 處理題號按鈕跳題
-   * 如果當前題目有錄音但未分析，自動觸發分析後再跳轉
+   * 處理題號按鈕跳題（純切換，不再自動補分析 — Issue #677）
+   * 補分析只在錄音完成那一刻發生；跳題時不再為「之前未分析的題目」追加分析。
    */
   const handleQuestionJump = async (
     targetActivityIndex: number,
     targetItemIndex: number,
   ) => {
-    const currentActivity = activities[currentActivityIndex];
-
-    // 例句集朗讀 / 單字集例句朗讀才需要在跳題前做自動分析。
-    // 此處不使用 activityNeedsRecording，因它涵蓋範圍較廣（例如 GROUPED_QUESTIONS / word_reading）。
-    const isReadingMode =
-      needsPerItemAnalysis(currentActivity, practiceMode) &&
-      currentActivity.items &&
-      currentActivity.items.length > 0;
-
-    // 只有例句朗讀模式才需要自動分析
-    if (!isReadingMode) {
-      // 其他模式直接跳轉
-      if (targetActivityIndex !== currentActivityIndex) {
-        handleActivitySelect(targetActivityIndex, targetItemIndex);
-      } else {
-        setCurrentSubQuestionIndex(targetItemIndex);
-      }
-      return;
-    }
-
-    // 🎯 Issue #227: 只有在有 AI 分析額度時才自動分析
-    if (canUseAiAnalysis) {
-      // 檢查當前題目是否有錄音但未分析
-      const currentItem = currentActivity.items![currentSubQuestionIndex];
-      const hasRecording =
-        currentItem.recording_url && currentItem.recording_url !== "";
-      const hasAssessment = !!currentItem?.ai_assessment;
-
-      // 如果有錄音但沒有分析結果，自動背景分析（fire-and-forget）
-      if (hasRecording && !hasAssessment) {
-        const targetText = currentItem.text || "";
-        const progressId = currentItem.progress_id;
-        const contentItemId = currentItem.id;
-
-        if (targetText) {
-          analyzeAndUpload(
-            currentItem.recording_url!,
-            targetText,
-            progressId,
-            contentItemId,
-          )
-            .then((analysisResult) => {
-              if (analysisResult) {
-                setActivities((prevActivities) => {
-                  const newActivities = [...prevActivities];
-                  const activityIndex = newActivities.findIndex(
-                    (a) => a.id === currentActivity.id,
-                  );
-                  if (
-                    activityIndex !== -1 &&
-                    newActivities[activityIndex].items
-                  ) {
-                    const newItems = [...newActivities[activityIndex].items!];
-                    if (newItems[currentSubQuestionIndex]) {
-                      newItems[currentSubQuestionIndex] = {
-                        ...newItems[currentSubQuestionIndex],
-                        ai_assessment: analysisResult,
-                      };
-                    }
-                    newActivities[activityIndex] = {
-                      ...newActivities[activityIndex],
-                      items: newItems,
-                    };
-                  }
-                  return newActivities;
-                });
-              }
-            })
-            .catch((err) =>
-              console.error("Background analysis on jump failed:", err),
-            );
-        }
-      }
-    }
-
-    // 執行跳轉
     if (targetActivityIndex !== currentActivityIndex) {
       handleActivitySelect(targetActivityIndex, targetItemIndex);
     } else {
@@ -1621,16 +1491,10 @@ export default function StudentActivityPageContent({
             const resp = await fetch(item.recording_url);
             const audioBlob = await resp.blob();
 
-            const ext = audioBlob.type.includes("mp4")
-              ? "recording.mp4"
-              : audioBlob.type.includes("webm")
-                ? "recording.webm"
-                : "recording.audio";
-
             const formData = new FormData();
             formData.append("assignment_id", assignmentId!.toString());
             formData.append("content_item_id", contentItemId.toString());
-            formData.append("audio_file", audioBlob, ext);
+            await appendAudioToFormData(formData, "audio_file", audioBlob);
 
             const uploadResult = await retryAudioUpload(
               async () => {
@@ -1682,86 +1546,9 @@ export default function StudentActivityPageContent({
       }
     }
 
-    // 🎯 Issue #227: 提交前補分析所有有錄音但未分析的題目（blob + GCS URL）
-    if (!isPreviewMode && canUseAiAnalysis) {
-      const unanalyzedItems: {
-        activity: Activity;
-        itemIndex: number;
-        item: Activity["items"] extends (infer T)[] | undefined ? T : never;
-      }[] = [];
-
-      // 收集所有有錄音但未分析的題目（不限 blob URL）
-      activities.forEach((activity) => {
-        if (needsPerItemAnalysis(activity, practiceMode) && activity.items) {
-          activity.items.forEach((item, itemIndex) => {
-            const hasRecording =
-              item.recording_url && item.recording_url !== "";
-            const hasAssessment = !!item?.ai_assessment;
-
-            if (hasRecording && !hasAssessment) {
-              unanalyzedItems.push({ activity, itemIndex, item });
-            }
-          });
-        }
-      });
-
-      // 逐一分析未分析的錄音
-      if (unanalyzedItems.length > 0) {
-        setSubmitting(true);
-
-        for (const { activity, itemIndex, item } of unanalyzedItems) {
-          try {
-            const targetText = item.text || "";
-            const progressId = item.progress_id;
-            const contentItemId = item.id;
-
-            if (targetText && item.recording_url) {
-              const result = await analyzeAndUpload(
-                item.recording_url,
-                targetText,
-                progressId,
-                contentItemId,
-              );
-
-              if (result) {
-                // 更新 activities state
-                setActivities((prevActivities) => {
-                  const newActivities = [...prevActivities];
-                  const activityIndex = newActivities.findIndex(
-                    (a) => a.id === activity.id,
-                  );
-                  if (
-                    activityIndex !== -1 &&
-                    newActivities[activityIndex].items
-                  ) {
-                    const newItems = [...newActivities[activityIndex].items!];
-                    if (newItems[itemIndex]) {
-                      newItems[itemIndex] = {
-                        ...newItems[itemIndex],
-                        ai_assessment: result,
-                      };
-                    }
-                    newActivities[activityIndex] = {
-                      ...newActivities[activityIndex],
-                      items: newItems,
-                    };
-                  }
-                  return newActivities;
-                });
-              }
-            }
-          } catch (error) {
-            console.error(
-              `Failed to analyze item ${itemIndex + 1} of activity ${activity.id}:`,
-              error,
-            );
-            // 繼續分析其他題目，不中斷提交流程
-          }
-        }
-
-        setSubmitting(false);
-      }
-    }
+    // Issue #677: removed pre-submit supplementary analysis pass.
+    // Items without `ai_assessment` at submit time are submitted as-is;
+    // analysis only happens at the moment the recording is finished.
 
     // 🎯 立即提交（只上傳音檔，不執行分析）
     if (onSubmit) {

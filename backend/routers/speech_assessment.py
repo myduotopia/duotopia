@@ -117,6 +117,7 @@ ALLOWED_AUDIO_FORMATS = [
     "audio/mp3",
     "audio/mpeg",
     "audio/mp4",  # macOS Safari 使用 MP4 格式
+    "audio/m4a",  # 部分 iOS Safari firmware 上送這個 — 不能擋住，否則永遠不會走到 magic-byte sniff
     "video/mp4",  # 某些瀏覽器可能用 video/mp4
     "application/octet-stream",  # 瀏覽器上傳時的通用類型
 ]
@@ -161,6 +162,52 @@ class AssessmentResponse(BaseModel):
 #     reference_text: str
 
 
+def sniff_audio_format(audio_data: bytes) -> str | None:
+    """Detect actual audio container by magic bytes.
+
+    Returns pydub/ffmpeg format id: 'webm', 'mp4', 'wav', 'mp3', or None.
+
+    Why: iOS Safari MediaRecorder can produce M4A bytes even when the client
+    labels the upload as `audio/webm`. Trusting only Content-Type caused
+    ffmpeg to reject the bytes. Magic-byte sniffing is the reliable signal.
+    """
+    if len(audio_data) < 16:
+        return None
+    head = audio_data[:16]
+    # Matroska/WebM — EBML header
+    if head[:4] == b"\x1a\x45\xdf\xa3":
+        return "webm"
+    # ISO Base Media File Format (MP4/M4A) — 'ftyp' box at bytes 4..8
+    if head[4:8] == b"ftyp":
+        return "mp4"
+    # RIFF/WAVE
+    if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
+        return "wav"
+    # MP3 — ID3 tag
+    if head[:3] == b"ID3":
+        return "mp3"
+    # MP3 — MPEG audio sync frame: full 11-bit sync (FF Ex) AND restrict to
+    # MPEG-1/2 Layer III (the only layer in real-world use). This avoids
+    # false positives on RIFF and other formats whose 2nd byte happens to
+    # have the top 3 bits set.
+    if head[0] == 0xFF and head[1] in (0xFB, 0xFA, 0xF3, 0xF2):
+        return "mp3"
+    return None
+
+
+def _content_type_to_format(content_type: str) -> str | None:
+    ct = (content_type or "").lower()
+    if "webm" in ct:
+        return "webm"
+    if "mp3" in ct or "mpeg" in ct:
+        return "mp3"
+    if "mp4" in ct or "m4a" in ct or "aac" in ct:
+        return "mp4"
+    if "wav" in ct:
+        return "wav"
+    return None
+
+
 def convert_audio_to_wav(audio_data: bytes, content_type: str) -> bytes:
     """
     將音檔轉換為 WAV 格式（16000Hz, 16bit, mono）
@@ -169,30 +216,40 @@ def convert_audio_to_wav(audio_data: bytes, content_type: str) -> bytes:
     logger.debug(f"Converting audio from {content_type} to WAV")
 
     try:
-        # 根據 content type 選擇格式
-        if "webm" in content_type:
-            # WebM 格式（瀏覽器錄音）
-            with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as temp_in:
-                temp_in.write(audio_data)
-                temp_in_path = temp_in.name
+        # Prefer magic-byte detection over the client-supplied content_type.
+        # iOS Safari sometimes labels M4A bytes as audio/webm — forcing
+        # ffmpeg to decode them as webm fails with error 183 (EBML parse).
+        sniffed = sniff_audio_format(audio_data)
+        fmt = sniffed or _content_type_to_format(content_type)
+        # Only log when both signals agree on a format but disagree on which —
+        # i.e. genuine client mislabeling. We don't log when the client sends
+        # a generic Content-Type like application/octet-stream (which yields
+        # None from _content_type_to_format), because there's no real mismatch.
+        ct_fmt = _content_type_to_format(content_type)
+        if sniffed and ct_fmt and sniffed != ct_fmt:
+            logger.info(
+                "Audio format mismatch: content_type=%r but magic bytes indicate %s",
+                content_type,
+                sniffed,
+            )
 
-            # 使用 pydub 轉換（需要 ffmpeg）
-            audio = AudioSegment.from_file(temp_in_path, format="webm")
-        elif "mp3" in content_type or "mpeg" in content_type:
-            # MP3 格式
-            audio = AudioSegment.from_mp3(BytesIO(audio_data))
-        elif "mp4" in content_type:
-            # MP4 格式（macOS Safari）
-            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_in:
+        if fmt in ("webm", "mp4"):
+            # Container formats: pydub wants a real file on disk (ffmpeg probes).
+            # try/finally guarantees cleanup even when AudioSegment.from_file
+            # raises on a corrupt upload.
+            with tempfile.NamedTemporaryFile(suffix=f".{fmt}", delete=False) as temp_in:
                 temp_in.write(audio_data)
                 temp_in_path = temp_in.name
-            # 使用 pydub 轉換（需要 ffmpeg）
-            audio = AudioSegment.from_file(temp_in_path, format="mp4")
-        elif "wav" in content_type:
-            # 已經是 WAV，但可能需要轉換採樣率
+            try:
+                audio = AudioSegment.from_file(temp_in_path, format=fmt)
+            finally:
+                os.unlink(temp_in_path)
+        elif fmt == "mp3":
+            audio = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
+        elif fmt == "wav":
             audio = AudioSegment.from_wav(BytesIO(audio_data))
         else:
-            # 嘗試自動偵測格式
+            # Unknown — let ffmpeg probe
             audio = AudioSegment.from_file(BytesIO(audio_data))
 
         # 轉換為 Azure Speech SDK 需要的格式
@@ -210,10 +267,6 @@ def convert_audio_to_wav(audio_data: bytes, content_type: str) -> bytes:
             f"Converted audio: {len(audio_data)} bytes -> {len(wav_data)} bytes WAV"
         )
         logger.debug(f"Audio duration: {len(audio) / 1000.0} seconds")
-
-        # 清理暫存檔
-        if "temp_in_path" in locals():
-            os.unlink(temp_in_path)
 
         return wav_data
 
