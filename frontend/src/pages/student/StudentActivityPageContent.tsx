@@ -450,6 +450,8 @@ export default function StudentActivityPageContent({
   });
   // RESUBMITTED 是第二次以後的訂正循環，鎖定行為要與 RETURNED 一致，
   // 否則老師之前已打勾的題目，學生在二次訂正時還能重錄，白扣愛心。
+  // Defensive: RESUBMITTED 目前已被 isReadOnly 覆蓋，recordingGateActive=false
+  // 時這個 flag 不會啟動，但保留以防未來 isReadOnly 規則調整。
   const itemLockedInReturnedMode =
     (assignmentStatus === "RETURNED" || assignmentStatus === "RESUBMITTED") &&
     _gateItemStatus.passed;
