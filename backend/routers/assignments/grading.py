@@ -1517,7 +1517,11 @@ async def finalize_batch_grade(
                 returned_count += 1
             elif decision == "GRADED":
                 sa.status = AssignmentStatus.GRADED
-                # graded_at was already set in batch-grade step
+                # Stamp graded_at unconditionally — batch-grade only stamps
+                # for SUBMITTED/RESUBMITTED, so a NOT_STARTED / IN_PROGRESS /
+                # RETURNED student promoted to GRADED here would otherwise
+                # land with status=GRADED but graded_at=NULL.
+                sa.graded_at = datetime.now(timezone.utc)
                 graded_count += 1
             else:
                 # None or missing → keep original status unchanged

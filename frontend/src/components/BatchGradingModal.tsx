@@ -36,9 +36,11 @@ const STATUS_SORT_PRIORITY: Record<string, number> = {
   NOT_ASSIGNED: 99,
 };
 
-// A student counts as "inactive" for batch auto-decision purposes when they
-// haven't actually submitted work — those rows skip the score-based default
-// and force the teacher to decide manually.
+// A student counts as "inactive" for batch auto-decision purposes — those
+// rows skip the score-based default and force the teacher to decide manually.
+// RETURNED is included intentionally: a returned student may have resubmitted
+// outside the batch flow (individual grading) and the score we have here may
+// no longer reflect their latest attempt, so auto-deciding from it is unsafe.
 const isInactiveStatus = (status: string) =>
   status === "NOT_STARTED" || status === "IN_PROGRESS" || status === "RETURNED";
 
@@ -190,10 +192,17 @@ export default function BatchGradingModal({
         t("batchGrading.singleSubmitSuccess", { name: studentName }),
       );
 
-      // Remove student from list
+      // Remove student from list AND from teacherDecisions, otherwise a
+      // subsequent "Submit All" would re-send the stale decision for an
+      // already-finalized student.
       setResults(
         (prev) => prev?.filter((r) => r.student_id !== studentId) || null,
       );
+      setTeacherDecisions((prev) => {
+        const next = { ...prev };
+        delete next[studentId];
+        return next;
+      });
     } catch (error) {
       console.error("Error submitting single student:", error);
       toast.error(t("batchGrading.errorDescription"));
