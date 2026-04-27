@@ -38,21 +38,18 @@ export default function TeacherLogin() {
     password: "",
   });
 
-  // #571: Mirror the intended URL from router state into sessionStorage so
-  // it survives reloads, multi-step flows, and the 1Campus SSO round-trip.
+  // #571: Mirror router state into sessionStorage, then redirect if already
+  // authenticated. Combined into one effect so saveRedirectTarget always runs
+  // before consumeRedirectTarget regardless of any future code reordering.
   useEffect(() => {
     const from = (location.state as { from?: string } | null)?.from;
     if (from) saveRedirectTarget(from);
-  }, [location.state]);
-
-  // Redirect authenticated users to their intended destination (or dashboard)
-  useEffect(() => {
     if (isAuthenticated && user) {
       navigate(consumeRedirectTarget(getTeacherDashboardRoute()), {
         replace: true,
       });
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, navigate, location.state]);
 
   // 檢查是否為 demo 模式 (通過 URL 參數 ?is_demo=true)
   const searchParams = new URLSearchParams(window.location.search);
