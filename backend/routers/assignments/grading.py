@@ -1288,17 +1288,9 @@ async def batch_grade_assignment(
                 else 0.0
             )
 
-            # 9. 更新 StudentAssignment.
-            # Only stamp graded_at for students who actually submitted —
-            # batch_grade now also processes NOT_STARTED / IN_PROGRESS so
-            # the teacher can decide on them, but those rows have no
-            # submission yet and shouldn't carry a graded_at timestamp.
+            # 9. 更新 StudentAssignment score. graded_at is stamped after
+            # feedback generation (step 10) — see comment there.
             student_assignment.score = total_score
-            if student_assignment.status in (
-                AssignmentStatus.SUBMITTED,
-                AssignmentStatus.RESUBMITTED,
-            ):
-                student_assignment.graded_at = datetime.now(timezone.utc)
 
             # 9.5. Generate item-level comments and pass/fail (issue #680).
             # Iterate content_items so "no progress row" is treated the same as
@@ -1468,6 +1460,15 @@ async def finalize_batch_grade(
         assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
         if not assignment:
             raise HTTPException(status_code=404, detail="Assignment not found")
+
+        # Reject mismatched classroom_id — without this a teacher could pass
+        # a different (own) classroom and probe assignment-student state
+        # outside the assignment's scope.
+        if assignment.classroom_id != request.classroom_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Classroom does not belong to this assignment",
+            )
 
         # Verify teacher owns this assignment's classroom
         classroom = (

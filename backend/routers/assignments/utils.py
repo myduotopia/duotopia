@@ -130,20 +130,24 @@ def get_score_with_fallback(
     if json_score is None:
         return 0.0
 
-    # Found score in JSON - backfill the database field
+    # Found score in JSON - backfill the database field on the session.
+    # The caller (e.g. batch_grade_assignment) commits at the end of its
+    # work; an inner commit here would partially persist work mid-loop and
+    # leave the session inconsistent if a later failure rolls back the
+    # outer transaction.
     try:
         setattr(item_progress, field_name, Decimal(str(json_score)))
-        db.commit()
         logger.info(
-            f"Backfilled {field_name}={json_score} for item_progress {item_progress.id} from ai_feedback JSON"
+            f"Backfilled {field_name}={json_score} for item_progress "
+            f"{item_progress.id} from ai_feedback JSON (uncommitted)"
         )
         return float(json_score)
     except Exception as e:
         logger.error(
             f"Failed to backfill {field_name} for item_progress {item_progress.id}: {e}"
         )
-        db.rollback()
-        # Return the JSON value even if backfill failed
+        # Don't rollback — caller owns the transaction. Return the JSON
+        # value so scoring continues with the right number.
         return float(json_score)
 
 
@@ -324,11 +328,16 @@ async def trigger_ai_assessment_for_item(
         async with httpx.AsyncClient(timeout=30.0) as client:
             audio_response = await client.get(item_progress.recording_url)
             audio_data = audio_response.content
+            # GCS returns the upload's stored Content-Type. Pass it through —
+            # convert_audio_to_wav prefers magic-byte sniffing anyway, so a
+            # mislabel still works, but a correct label helps when sniffing
+            # can't decide.
+            content_type = audio_response.headers.get("content-type", "")
 
         # Convert audio to WAV format
         from routers.speech_assessment import convert_audio_to_wav
 
-        wav_data = convert_audio_to_wav(audio_data, "audio/webm")
+        wav_data = convert_audio_to_wav(audio_data, content_type)
 
         # Call Azure Speech Assessment API (synchronous function)
         from routers.speech_assessment import assess_pronunciation
