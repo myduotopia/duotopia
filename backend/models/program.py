@@ -147,7 +147,14 @@ class Content(Base):
     __tablename__ = "contents"
 
     id = Column(Integer, primary_key=True, index=True)
-    lesson_id = Column(Integer, ForeignKey("lessons.id"), nullable=False)
+    # Issue #587: lesson_id 可為 null（內容直接掛在 program 下時）
+    lesson_id = Column(Integer, ForeignKey("lessons.id"), nullable=True)
+    program_id = Column(
+        Integer,
+        ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     type = Column(Enum(ContentType), default=ContentType.EXAMPLE_SENTENCES)
     title = Column(String(200), nullable=False)
     order_index = Column(Integer, default=0)
@@ -179,6 +186,7 @@ class Content(Base):
 
     # Relationships
     lesson = relationship("Lesson", back_populates="contents")
+    program = relationship("Program", foreign_keys=[program_id])
     content_items = relationship(
         "ContentItem", back_populates="content", cascade="all, delete-orphan"
     )
