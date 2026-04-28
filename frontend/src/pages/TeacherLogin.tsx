@@ -38,16 +38,22 @@ export default function TeacherLogin() {
     password: "",
   });
 
-  // Combined into one effect so saveRedirectTarget always runs before consumeRedirectTarget.
+  // Save and consume in the same effect so save-before-consume ordering is
+  // preserved when the user lands here already authenticated with a `from`.
+  const fromState = (location.state as { from?: string } | null)?.from;
   useEffect(() => {
-    const from = (location.state as { from?: string } | null)?.from;
-    if (from) saveRedirectTarget(from);
+    if (fromState) saveRedirectTarget(fromState);
     if (isAuthenticated && user) {
-      navigate(consumeRedirectTarget(getTeacherDashboardRoute()), {
-        replace: true,
-      });
+      navigate(
+        consumeRedirectTarget(getTeacherDashboardRoute(), [
+          "/teacher/",
+          "/organization/",
+          "/dashboard",
+        ]),
+        { replace: true },
+      );
     }
-  }, [isAuthenticated, user, navigate, location.state]);
+  }, [isAuthenticated, user, navigate, fromState]);
 
   // 檢查是否為 demo 模式 (通過 URL 參數 ?is_demo=true)
   const searchParams = new URLSearchParams(window.location.search);

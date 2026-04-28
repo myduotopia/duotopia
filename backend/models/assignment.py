@@ -80,6 +80,9 @@ class Assignment(Base):
     # 是否顯示圖片（預設 true）- 單字集專用
     show_image = Column(Boolean, default=True)
 
+    # 是否顯示選項圖片（預設 false）- 單字選擇模式專用（Issue #631）
+    show_option_images = Column(Boolean, default=False)
+
     # 軟刪除標記
     is_active = Column(Boolean, default=True)
 
