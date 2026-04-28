@@ -131,6 +131,9 @@ class StudentItemProgress(Base):
         String(20), default="NOT_STARTED"
     )  # NOT_STARTED, IN_PROGRESS, COMPLETED, SUBMITTED
     attempts = Column(Integer, default=0)
+    # Issue #676 Phase 2: server-side AI analysis quota (max 3 per item).
+    # Reset to 0 when assignment status transitions to RETURNED.
+    ai_analysis_count = Column(Integer, default=0, server_default="0")
 
     # Rearrangement activity fields (例句重組專用)
     error_count = Column(Integer, default=0)  # 錯誤選擇次數
