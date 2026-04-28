@@ -233,4 +233,54 @@ describe("useRecordingAttempts", () => {
     );
     expect(result.current.attemptsUsed).toBe(0);
   });
+
+  // Issue #676 Phase 2 — syncServerCount reconciliation.
+  describe("syncServerCount", () => {
+    it("raises local count up to the server count when server is higher", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.recordAttempt()); // local=1
+      act(() => result.current.syncServerCount(2));
+      expect(result.current.attemptsUsed).toBe(2);
+    });
+
+    it("never lowers the count when server reports a smaller value", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.recordAttempt());
+      act(() => result.current.recordAttempt());
+      act(() => result.current.recordAttempt()); // local=3
+      act(() => result.current.syncServerCount(1));
+      expect(result.current.attemptsUsed).toBe(MAX_RECORDING_ATTEMPTS);
+      expect(result.current.canRecord).toBe(false);
+    });
+
+    it("clamps server-reported overflow to MAX_RECORDING_ATTEMPTS", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.syncServerCount(99));
+      expect(result.current.attemptsUsed).toBe(MAX_RECORDING_ATTEMPTS);
+    });
+
+    it("ignores undefined / null / NaN payloads as no-op", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.recordAttempt()); // local=1
+      act(() => result.current.syncServerCount(undefined));
+      act(() => result.current.syncServerCount(null));
+      act(() => result.current.syncServerCount(Number.NaN));
+      expect(result.current.attemptsUsed).toBe(1);
+    });
+
+    it("floors fractional server counts (defensive against bad payloads)", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.syncServerCount(2.7));
+      expect(result.current.attemptsUsed).toBe(2);
+    });
+
+    it("persists the synced count to localStorage", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.syncServerCount(2));
+      const raw = localStorage.getItem(storageKey(100, 7));
+      expect(raw).toBeTruthy();
+      const parsed = JSON.parse(raw!);
+      expect(parsed.count).toBe(2);
+    });
+  });
 });

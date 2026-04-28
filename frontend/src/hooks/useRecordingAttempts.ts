@@ -49,6 +49,13 @@ export interface UseRecordingAttemptsResult {
   attemptsUsed: number;
   canRecord: boolean;
   recordAttempt: () => void;
+  /**
+   * Reconcile against the server-authoritative count returned by the
+   * speech analysis API (issue #676 Phase 2). The hook keeps the
+   * higher of the local and server counts so a stale localStorage can
+   * never grant more attempts than the server has accounted for.
+   */
+  syncServerCount: (serverCount: number | null | undefined) => void;
 }
 
 const safeRead = (key: string): StoredEntry | null => {
@@ -157,10 +164,31 @@ export const useRecordingAttempts = (
     });
   }, [key]);
 
+  const syncServerCount = useCallback(
+    (serverCount: number | null | undefined) => {
+      if (typeof serverCount !== "number" || Number.isNaN(serverCount)) return;
+      const clamped = Math.max(
+        0,
+        Math.min(MAX_RECORDING_ATTEMPTS, Math.floor(serverCount)),
+      );
+      setEntry((prev) => {
+        if (clamped <= prev.count) return prev;
+        const next: StoredEntry = {
+          count: clamped,
+          lastReviewMarker: prev.lastReviewMarker,
+        };
+        safeWrite(key, next);
+        return next;
+      });
+    },
+    [key],
+  );
+
   return {
     attemptsUsed: entry.count,
     canRecord: entry.count < MAX_RECORDING_ATTEMPTS,
     recordAttempt,
+    syncServerCount,
   };
 };
 

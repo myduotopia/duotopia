@@ -36,6 +36,11 @@ from models.subscription import PointUsageLog
 from services.quota_service import QuotaService
 from services.organization_points_service import OrganizationPointsService
 from services.bigquery_logger import get_bigquery_logger
+from services.analysis_quota import (
+    check_can_analyze,
+    increment_analysis_count,
+    MAX_AI_ANALYSIS_ATTEMPTS,
+)
 from sqlalchemy.orm import joinedload
 from sqlalchemy import cast, String
 
@@ -152,6 +157,11 @@ class AssessmentResponse(BaseModel):
     prosody_score: Optional[float] = None
     analysis_summary: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
+    # Issue #676 Phase 2: server-authoritative AI analysis quota state.
+    # Optional so legacy callers without progress context still validate.
+    ai_analysis_count: Optional[int] = None
+    ai_analysis_remaining: Optional[int] = None
+    max_attempts: Optional[int] = None
 
 
 # Commented out - no longer using Cloud Tasks for background analysis
@@ -636,6 +646,9 @@ def save_assessment_result(
     progress.status = "SUBMITTED"
     progress.submitted_at = datetime.now()
 
+    # 🎯 Issue #676 Phase 2: increment server-side AI analysis quota.
+    increment_analysis_count(progress)
+
     db.commit()
     db.refresh(progress)
 
@@ -831,6 +844,19 @@ async def assess_pronunciation_endpoint(
         except Exception as e:
             logger.error(f"❌ Quota/Points check failed: {e}")
             # 計算時長失敗，允許繼續評分
+
+    # 🎯 Issue #676 Phase 2: server-authoritative AI-analysis quota gate.
+    # Runs BEFORE Azure is called so a 4th attempt costs neither Azure
+    # quota nor teacher points. Falls back to a soft pass if progress is
+    # missing (matches the existing "log warning, don't block learning"
+    # philosophy of the surrounding quota checks).
+    _quota_progress = (
+        db.query(StudentItemProgress)
+        .filter(StudentItemProgress.id == progress_id)
+        .first()
+    )
+    if _quota_progress is not None:
+        check_can_analyze(_quota_progress)
 
     # 進行發音評估（Azure Speech SDK）
     # ⚡ 使用自訂語音線程池避免阻塞 event loop
@@ -1123,6 +1149,7 @@ async def assess_pronunciation_endpoint(
     perf.finish()
 
     # 回傳結果 - 包含完整的詳細資料
+    _quota_count = int(updated_progress.ai_analysis_count or 0)
     return AssessmentResponse(
         id=updated_progress.id,
         accuracy_score=assessment_result["accuracy_score"],
@@ -1137,6 +1164,9 @@ async def assess_pronunciation_endpoint(
         prosody_score=assessment_result.get("prosody_score"),
         analysis_summary=assessment_result.get("analysis_summary"),
         created_at=updated_progress.submitted_at,
+        ai_analysis_count=_quota_count,
+        ai_analysis_remaining=max(0, MAX_AI_ANALYSIS_ATTEMPTS - _quota_count),
+        max_attempts=MAX_AI_ANALYSIS_ATTEMPTS,
     )
 
 
@@ -1602,6 +1632,12 @@ async def upload_pronunciation_analysis(
         elif user_type not in ["student", "teacher"]:
             raise HTTPException(status_code=403, detail="Invalid user type")
 
+        # 🎯 Issue #676 Phase 2: server-authoritative AI-analysis quota gate.
+        # Runs after auth so a successful 401/403 reason isn't masked by 429,
+        # and before point deduction so a 4th attempt costs no points.
+        if progress is not None:
+            check_can_analyze(progress)
+
         # 🎯 Issue #208: 扣除配額/點數（在上傳音檔之前）
         if progress and analysis_id:
             try:
@@ -1862,6 +1898,9 @@ async def upload_pronunciation_analysis(
             # 增加尝试次数
             progress.attempts = (progress.attempts or 0) + 1
 
+            # 🎯 Issue #676 Phase 2: increment server-side AI analysis quota.
+            increment_analysis_count(progress)
+
             db.commit()
             db.refresh(progress)
 
@@ -1870,10 +1909,24 @@ async def upload_pronunciation_analysis(
             f"user_id={user_id}, latency_ms={latency_ms}"
         )
 
+        # Surface server-authoritative quota state so the frontend hook
+        # can reconcile its localStorage counter (issue #676 Phase 2).
+        ai_analysis_count = (
+            int(progress.ai_analysis_count or 0) if progress is not None else None
+        )
+        ai_analysis_remaining = (
+            max(0, MAX_AI_ANALYSIS_ATTEMPTS - ai_analysis_count)
+            if ai_analysis_count is not None
+            else None
+        )
+
         return {
             "status": "success",
             "progress_id": progress.id if progress else None,
             "audio_url": audio_url,
+            "ai_analysis_count": ai_analysis_count,
+            "ai_analysis_remaining": ai_analysis_remaining,
+            "max_attempts": MAX_AI_ANALYSIS_ATTEMPTS,
         }
 
     except HTTPException:
