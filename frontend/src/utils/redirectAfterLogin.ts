@@ -1,5 +1,6 @@
 // sessionStorage-backed so the target survives multi-step flows, SSO round-trips, and 401 hard navigations.
 
+/** @internal — exported only so tests can read raw storage; do not use directly. */
 export const REDIRECT_STORAGE_KEY = "auth_redirect_after_login";
 
 const LOGIN_PAGE_PREFIXES = [
@@ -42,6 +43,13 @@ export function saveRedirectTarget(path: unknown): void {
   }
 }
 
+/**
+ * Consume the saved redirect target. Role-sensitive callers MUST pass
+ * `allowedPrefixes` to prevent a path saved by a different role from being
+ * honored (e.g., a `/teacher/*` target hijacking a student login flow).
+ * Prefix matching: trailing-slash prefix matches any sub-path; bare prefix
+ * matches exact-or-sub-path (so `/dashboard` does not match `/dashboard-admin`).
+ */
 export function consumeRedirectTarget(
   fallback: string,
   allowedPrefixes?: string[],
@@ -54,12 +62,6 @@ export function consumeRedirectTarget(
     // ignore
   }
   if (!isSafeRedirectPath(target)) return fallback;
-  // Role isolation: caller restricts which paths it'll honor so a teacher
-  // target saved in sessionStorage can't redirect a student-login flow into
-  // /teacher/*, which would bounce back to /teacher/login.
-  // Trailing-slash prefixes ("/teacher/") match any sub-path; bare paths
-  // ("/dashboard") match exact-or-sub-path so they don't over-match a future
-  // /dashboard-admin route.
   if (
     allowedPrefixes &&
     !allowedPrefixes.some((p) => matchesPrefix(target, p))
@@ -70,7 +72,7 @@ export function consumeRedirectTarget(
 }
 
 function matchesPrefix(target: string, prefix: string): boolean {
-  if (!prefix) return false; // empty prefix would match every absolute path
+  if (!prefix) return false;
   if (prefix.endsWith("/")) return target.startsWith(prefix);
   return target === prefix || target.startsWith(prefix + "/");
 }

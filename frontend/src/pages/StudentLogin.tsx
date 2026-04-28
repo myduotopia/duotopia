@@ -40,10 +40,8 @@ export default function StudentLogin() {
   const { login } = useStudentAuthStore();
   const { t } = useTranslation();
 
-  // Mirror router state into sessionStorage so it survives the 4-step flow.
-  // Depend on the resolved `from` string (not the state object reference)
-  // so we don't re-run when React Router gives us a fresh state object with
-  // the same `from`, which could overwrite a still-valid saved target.
+  // Depend on resolved `from` string (not state object) so a fresh state
+  // reference with the same `from` doesn't overwrite a still-valid save.
   const fromState = (location.state as { from?: string } | null)?.from;
   useEffect(() => {
     if (fromState) saveRedirectTarget(fromState);

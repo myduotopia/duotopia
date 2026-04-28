@@ -38,10 +38,8 @@ export default function TeacherLogin() {
     password: "",
   });
 
-  // Depend on the resolved `from` string instead of `location.state` so the
-  // effect doesn't re-fire on a fresh state object reference with the same
-  // `from`. Combined into one effect so saveRedirectTarget always runs before
-  // consumeRedirectTarget.
+  // Depend on the resolved `from` string (not the `location.state` object
+  // reference) so the effect doesn't re-fire and overwrite a still-valid save.
   const fromState = (location.state as { from?: string } | null)?.from;
   useEffect(() => {
     if (fromState) saveRedirectTarget(fromState);
@@ -50,7 +48,6 @@ export default function TeacherLogin() {
         consumeRedirectTarget(getTeacherDashboardRoute(), [
           "/teacher/",
           "/organization/",
-          // /dashboard is the RoleBasedRedirect entry point (App.tsx).
           "/dashboard",
         ]),
         { replace: true },

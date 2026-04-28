@@ -103,7 +103,6 @@ export default function OneCampusCallback() {
             consumeRedirectTarget("/teacher/dashboard", [
               "/teacher/",
               "/organization/",
-              // /dashboard is the RoleBasedRedirect entry point (App.tsx).
               "/dashboard",
             ]),
             { replace: true },
