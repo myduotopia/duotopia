@@ -51,9 +51,9 @@ export interface UseRecordingAttemptsResult {
   recordAttempt: () => void;
   /**
    * Reconcile against the server-authoritative count returned by the
-   * speech analysis API (issue #676 Phase 2). The hook keeps the
-   * higher of the local and server counts so a stale localStorage can
-   * never grant more attempts than the server has accounted for.
+   * speech analysis API. The hook keeps the higher of the local and
+   * server counts so a stale localStorage can never grant more
+   * attempts than the server has accounted for.
    */
   syncServerCount: (serverCount: number | null | undefined) => void;
 }

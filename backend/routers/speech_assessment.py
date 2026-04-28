@@ -157,8 +157,8 @@ class AssessmentResponse(BaseModel):
     prosody_score: Optional[float] = None
     analysis_summary: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
-    # Issue #676 Phase 2: server-authoritative AI analysis quota state.
-    # Optional so legacy callers without progress context still validate.
+    # Server-authoritative AI analysis quota state. Optional so legacy
+    # callers without progress context still validate against this schema.
     ai_analysis_count: Optional[int] = None
     ai_analysis_remaining: Optional[int] = None
     max_attempts: Optional[int] = None
@@ -559,17 +559,22 @@ def save_assessment_result(
     item_index: Optional[int] = None,
     audio_url: Optional[str] = None,
     student_assignment_id: Optional[int] = None,
+    progress: Optional[StudentItemProgress] = None,
 ) -> StudentItemProgress:
     """
     儲存評估結果到 StudentItemProgress
     progress_id 應該是 StudentItemProgress 的 ID
+    Optional `progress` lets callers that already loaded the row skip
+    the second SELECT round-trip (the assess endpoint queries earlier
+    for the quota gate).
     """
     # 查找 StudentItemProgress 記錄
-    progress = (
-        db.query(StudentItemProgress)
-        .filter(StudentItemProgress.id == progress_id)
-        .first()
-    )
+    if progress is None:
+        progress = (
+            db.query(StudentItemProgress)
+            .filter(StudentItemProgress.id == progress_id)
+            .first()
+        )
 
     if not progress:
         logger.error(
@@ -646,7 +651,6 @@ def save_assessment_result(
     progress.status = "SUBMITTED"
     progress.submitted_at = datetime.now()
 
-    # 🎯 Issue #676 Phase 2: increment server-side AI analysis quota.
     increment_analysis_count(progress)
 
     db.commit()
@@ -845,18 +849,18 @@ async def assess_pronunciation_endpoint(
             logger.error(f"❌ Quota/Points check failed: {e}")
             # 計算時長失敗，允許繼續評分
 
-    # 🎯 Issue #676 Phase 2: server-authoritative AI-analysis quota gate.
-    # Runs BEFORE Azure is called so a 4th attempt costs neither Azure
-    # quota nor teacher points. Falls back to a soft pass if progress is
-    # missing (matches the existing "log warning, don't block learning"
-    # philosophy of the surrounding quota checks).
-    _quota_progress = (
+    # Gate AI-analysis quota BEFORE Azure is called so a 4th attempt
+    # costs neither Azure quota nor teacher points. The loaded row is
+    # passed through to save_assessment_result below to avoid a second
+    # SELECT. A missing row falls through silently — matches the
+    # surrounding "log, don't block learning" quota policy.
+    quota_progress = (
         db.query(StudentItemProgress)
         .filter(StudentItemProgress.id == progress_id)
         .first()
     )
-    if _quota_progress is not None:
-        check_can_analyze(_quota_progress)
+    if quota_progress is not None:
+        check_can_analyze(quota_progress)
 
     # 進行發音評估（Azure Speech SDK）
     # ⚡ 使用自訂語音線程池避免阻塞 event loop
@@ -1142,6 +1146,7 @@ async def assess_pronunciation_endpoint(
             reference_text=reference_text,
             item_index=item_index,
             student_assignment_id=student_assignment_id,
+            progress=quota_progress,
         )
         perf.checkpoint("Database Save Complete")
 
@@ -1632,9 +1637,9 @@ async def upload_pronunciation_analysis(
         elif user_type not in ["student", "teacher"]:
             raise HTTPException(status_code=403, detail="Invalid user type")
 
-        # 🎯 Issue #676 Phase 2: server-authoritative AI-analysis quota gate.
-        # Runs after auth so a successful 401/403 reason isn't masked by 429,
-        # and before point deduction so a 4th attempt costs no points.
+        # Server-authoritative AI-analysis quota gate. Runs after auth so a
+        # 401/403 reason isn't masked by 429, and before point deduction so
+        # a 4th attempt costs no teacher points.
         if progress is not None:
             check_can_analyze(progress)
 
@@ -1898,7 +1903,6 @@ async def upload_pronunciation_analysis(
             # 增加尝试次数
             progress.attempts = (progress.attempts or 0) + 1
 
-            # 🎯 Issue #676 Phase 2: increment server-side AI analysis quota.
             increment_analysis_count(progress)
 
             db.commit()
@@ -1910,7 +1914,7 @@ async def upload_pronunciation_analysis(
         )
 
         # Surface server-authoritative quota state so the frontend hook
-        # can reconcile its localStorage counter (issue #676 Phase 2).
+        # can reconcile its localStorage counter via syncServerCount.
         ai_analysis_count = (
             int(progress.ai_analysis_count or 0) if progress is not None else None
         )

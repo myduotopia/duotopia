@@ -452,10 +452,9 @@ export default function StudentActivityPageContent({
     (serverCount?: number) => {
       if (recordingGateActive && !itemLockedInReturnedMode) {
         recordingGate.recordAttempt();
-        // Issue #676 Phase 2: reconcile localStorage with the server-
-        // authoritative count when available. Templates that read
-        // `ai_analysis_count` from the API response can pass it here;
-        // the hook caps + max-merges so it can never grant extra attempts.
+        // Reconcile localStorage with the server-authoritative count
+        // when available. The hook caps + max-merges so it can never
+        // grant extra attempts.
         recordingGate.syncServerCount(serverCount);
       }
     },
@@ -1810,16 +1809,20 @@ export default function StudentActivityPageContent({
                 if (index === currentSubQuestionIndex) {
                   // current item: 透過 hook 讓 UI 立刻反映
                   recordingGate.recordAttempt();
-                  // Issue #676 Phase 2: if the server returned its
-                  // authoritative count, reconcile so a stale localStorage
-                  // can never grant more attempts than the server allows.
-                  recordingGate.syncServerCount(
-                    (
-                      assessmentResult as {
-                        ai_analysis_count?: number;
-                      }
-                    )?.ai_analysis_count,
-                  );
+                  // Reconcile localStorage with server-authoritative count
+                  // when the response carries it. Stale cache can never
+                  // grant more attempts than the server allows.
+                  const serverCount =
+                    assessmentResult &&
+                    typeof assessmentResult === "object" &&
+                    "ai_analysis_count" in assessmentResult &&
+                    typeof (
+                      assessmentResult as Record<string, unknown>
+                    ).ai_analysis_count === "number"
+                      ? ((assessmentResult as Record<string, unknown>)
+                          .ai_analysis_count as number)
+                      : undefined;
+                  recordingGate.syncServerCount(serverCount);
                 } else {
                   incrementRecordingAttemptForItem(
                     assignmentId,

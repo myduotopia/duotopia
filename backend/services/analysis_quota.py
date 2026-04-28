@@ -1,8 +1,7 @@
-"""Analysis quota service — issue #676 Phase 2.
+"""Analysis quota service.
 
-Server-authoritative enforcement of the 3-AI-analysis-per-item rule that
-the frontend localStorage gate (issue #689 Phase 1) cannot guarantee.
-Phase 1 stays in place as a UX preview; this module is the source of truth.
+Server-authoritative enforcement of the 3-AI-analysis-per-item rule.
+The frontend hook is a UX preview; this module is the source of truth.
 
 The reset semantics deliberately match the frontend hook: when an
 assignment transitions to RETURNED, ALL items have their counter zeroed.
@@ -50,12 +49,17 @@ def check_can_analyze(progress: StudentItemProgress) -> None:
 def increment_analysis_count(progress: StudentItemProgress) -> int:
     """Increment counter on successful Azure analysis. Caps at MAX. Returns new count.
 
-    Caller commits. Cap is defensive against re-entrancy where check passed
-    but a concurrent caller already incremented.
+    Caller commits. The cap is defensive against re-entrancy where the
+    check_can_analyze gate passed but a concurrent caller already
+    incremented past MAX between the gate and here.
+
+    Race note: two requests at count=0 can both read 0, both set to 1,
+    and commit 1 — losing one increment. We accept that for a 3-attempt
+    learning gate; tightening it would require row-level locking that
+    isn't worth the latency cost here.
     """
     current = progress.ai_analysis_count or 0
     if current >= MAX_AI_ANALYSIS_ATTEMPTS:
-        progress.ai_analysis_count = current
         return current
     progress.ai_analysis_count = current + 1
     return progress.ai_analysis_count

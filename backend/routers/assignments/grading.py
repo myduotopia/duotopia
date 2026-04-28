@@ -935,10 +935,10 @@ async def return_for_revision(
     if message and hasattr(assignment, "return_message"):
         assignment.return_message = message
 
-    # Issue #676 Phase 2: refresh per-item AI analysis quota for the new
-    # revision cycle. Already-passed items (teacher_passed=True) are still
-    # locked from re-analysis in the speech endpoint, so a blanket reset is
-    # safe — and matches the frontend hook's reset semantics exactly.
+    # Refresh per-item AI analysis quota for the new revision cycle.
+    # Already-passed items (teacher_passed=True) are still locked from
+    # re-analysis by the speech endpoint, so a blanket reset is safe —
+    # and matches the frontend hook's reset semantics exactly.
     reset_analysis_count_for_assignment(assignment.id, db)
 
     db.commit()
@@ -1521,8 +1521,8 @@ async def finalize_batch_grade(
             if decision == "RETURNED":
                 sa.status = AssignmentStatus.RETURNED
                 sa.returned_at = datetime.now(timezone.utc)
-                # Issue #676 Phase 2: matching the single-return path,
-                # zero per-item AI analysis quota for the fresh cycle.
+                # Mirror the single-return path: zero per-item AI analysis
+                # quota for the fresh revision cycle.
                 reset_analysis_count_for_assignment(sa.id, db)
                 returned_count += 1
             elif decision == "GRADED":
