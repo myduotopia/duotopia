@@ -99,9 +99,14 @@ export default function OneCampusCallback() {
             setStatus("bind_prompt");
             return;
           }
-          navigate(consumeRedirectTarget("/teacher/dashboard"), {
-            replace: true,
-          });
+          navigate(
+            consumeRedirectTarget("/teacher/dashboard", [
+              "/teacher/",
+              "/organization/",
+              "/dashboard",
+            ]),
+            { replace: true },
+          );
         } else if (data.student) {
           studentLogin(data.access_token, {
             id: data.student.id,
@@ -124,7 +129,7 @@ export default function OneCampusCallback() {
             setStatus("bind_prompt");
             return;
           }
-          navigate(consumeRedirectTarget("/student/dashboard"), {
+          navigate(consumeRedirectTarget("/student/dashboard", ["/student/"]), {
             replace: true,
           });
         }
@@ -178,7 +183,7 @@ export default function OneCampusCallback() {
           classrooms: data.student.classrooms,
           classrooms_count: data.student.classrooms_count,
         });
-        navigate(consumeRedirectTarget("/student/dashboard"), {
+        navigate(consumeRedirectTarget("/student/dashboard", ["/student/"]), {
           replace: true,
         });
       }
@@ -239,7 +244,13 @@ export default function OneCampusCallback() {
   function handleBindSkip() {
     const fallback =
       bindRoleType === "teacher" ? "/teacher/dashboard" : "/student/dashboard";
-    navigate(consumeRedirectTarget(fallback), { replace: true });
+    const allowedPrefixes =
+      bindRoleType === "teacher"
+        ? ["/teacher/", "/organization/", "/dashboard"]
+        : ["/student/"];
+    navigate(consumeRedirectTarget(fallback, allowedPrefixes), {
+      replace: true,
+    });
   }
 
   return (

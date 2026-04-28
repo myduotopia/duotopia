@@ -43,9 +43,14 @@ export default function TeacherLogin() {
     const from = (location.state as { from?: string } | null)?.from;
     if (from) saveRedirectTarget(from);
     if (isAuthenticated && user) {
-      navigate(consumeRedirectTarget(getTeacherDashboardRoute()), {
-        replace: true,
-      });
+      navigate(
+        consumeRedirectTarget(getTeacherDashboardRoute(), [
+          "/teacher/",
+          "/organization/",
+          "/dashboard",
+        ]),
+        { replace: true },
+      );
     }
   }, [isAuthenticated, user, navigate, location.state]);
 

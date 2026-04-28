@@ -42,7 +42,10 @@ export function saveRedirectTarget(path: unknown): void {
   }
 }
 
-export function consumeRedirectTarget(fallback: string): string {
+export function consumeRedirectTarget(
+  fallback: string,
+  allowedPrefixes?: string[],
+): string {
   let target: string | null = null;
   try {
     target = sessionStorage.getItem(STORAGE_KEY);
@@ -50,5 +53,12 @@ export function consumeRedirectTarget(fallback: string): string {
   } catch {
     // ignore
   }
-  return isSafeRedirectPath(target) ? target : fallback;
+  if (!isSafeRedirectPath(target)) return fallback;
+  // Role isolation: caller restricts which paths it'll honor so a teacher
+  // target saved in sessionStorage can't redirect a student-login flow into
+  // /teacher/*, which would bounce back to /teacher/login.
+  if (allowedPrefixes && !allowedPrefixes.some((p) => target.startsWith(p))) {
+    return fallback;
+  }
+  return target;
 }
