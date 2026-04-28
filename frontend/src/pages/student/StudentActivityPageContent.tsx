@@ -1809,20 +1809,12 @@ export default function StudentActivityPageContent({
                 if (index === currentSubQuestionIndex) {
                   // current item: 透過 hook 讓 UI 立刻反映
                   recordingGate.recordAttempt();
-                  // Reconcile localStorage with server-authoritative count
-                  // when the response carries it. Stale cache can never
-                  // grant more attempts than the server allows.
-                  const serverCount =
-                    assessmentResult &&
-                    typeof assessmentResult === "object" &&
-                    "ai_analysis_count" in assessmentResult &&
-                    typeof (
-                      assessmentResult as Record<string, unknown>
-                    ).ai_analysis_count === "number"
-                      ? ((assessmentResult as Record<string, unknown>)
-                          .ai_analysis_count as number)
-                      : undefined;
-                  recordingGate.syncServerCount(serverCount);
+                  // Reconcile localStorage with the server-authoritative
+                  // count when the response carries it. The hook handles
+                  // undefined as a no-op and caps overflow itself.
+                  recordingGate.syncServerCount(
+                    assessmentResult.ai_analysis_count,
+                  );
                 } else {
                   incrementRecordingAttemptForItem(
                     assignmentId,

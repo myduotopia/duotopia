@@ -66,14 +66,38 @@ def increment_analysis_count(progress: StudentItemProgress) -> int:
 
 
 def reset_analysis_count_for_assignment(student_assignment_id: int, db: Session) -> int:
-    """Zero ai_analysis_count for every item of a student assignment.
+    """Zero ai_analysis_count for every item of a single student assignment.
 
-    Called when assignment status transitions to RETURNED (single +
-    batch grading flows). Returns rows updated. Caller commits.
+    Called from the single-student return-for-revision endpoint. Returns
+    rows updated. Caller commits.
+
+    Session-staleness note: this issues an UPDATE with
+    `synchronize_session=False`, so any StudentItemProgress instances
+    already loaded in this session retain their pre-reset values until
+    the caller commits (which invalidates lazy-loaded attributes) or
+    explicitly expires them. Callers MUST commit before reading the
+    affected rows back; the production grading paths satisfy this
+    automatically since they commit immediately after.
     """
+    return reset_analysis_count_for_assignments([student_assignment_id], db)
+
+
+def reset_analysis_count_for_assignments(
+    student_assignment_ids: list[int], db: Session
+) -> int:
+    """Bulk variant — zero ai_analysis_count for every item of multiple SAs.
+
+    Single UPDATE with WHERE sa_id IN (...) avoids the N+1 query that
+    would result from looping over the single-id helper in the batch
+    finalize-grading path. Empty input is a no-op (no-op SQL is illegal
+    on some dialects). Same session-staleness contract as the singular
+    variant — caller commits before reading affected rows back.
+    """
+    if not student_assignment_ids:
+        return 0
     return (
         db.query(StudentItemProgress)
-        .filter(StudentItemProgress.student_assignment_id == student_assignment_id)
+        .filter(StudentItemProgress.student_assignment_id.in_(student_assignment_ids))
         .update(
             {StudentItemProgress.ai_analysis_count: 0},
             synchronize_session=False,

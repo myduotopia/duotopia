@@ -1154,7 +1154,7 @@ async def assess_pronunciation_endpoint(
     perf.finish()
 
     # 回傳結果 - 包含完整的詳細資料
-    _quota_count = int(updated_progress.ai_analysis_count or 0)
+    quota_count = int(updated_progress.ai_analysis_count or 0)
     return AssessmentResponse(
         id=updated_progress.id,
         accuracy_score=assessment_result["accuracy_score"],
@@ -1169,8 +1169,8 @@ async def assess_pronunciation_endpoint(
         prosody_score=assessment_result.get("prosody_score"),
         analysis_summary=assessment_result.get("analysis_summary"),
         created_at=updated_progress.submitted_at,
-        ai_analysis_count=_quota_count,
-        ai_analysis_remaining=max(0, MAX_AI_ANALYSIS_ATTEMPTS - _quota_count),
+        ai_analysis_count=quota_count,
+        ai_analysis_remaining=max(0, MAX_AI_ANALYSIS_ATTEMPTS - quota_count),
         max_attempts=MAX_AI_ANALYSIS_ATTEMPTS,
     )
 
