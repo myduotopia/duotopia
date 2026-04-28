@@ -38,21 +38,25 @@ export default function TeacherLogin() {
     password: "",
   });
 
-  // Combined into one effect so saveRedirectTarget always runs before consumeRedirectTarget.
+  // Depend on the resolved `from` string instead of `location.state` so the
+  // effect doesn't re-fire on a fresh state object reference with the same
+  // `from`. Combined into one effect so saveRedirectTarget always runs before
+  // consumeRedirectTarget.
+  const fromState = (location.state as { from?: string } | null)?.from;
   useEffect(() => {
-    const from = (location.state as { from?: string } | null)?.from;
-    if (from) saveRedirectTarget(from);
+    if (fromState) saveRedirectTarget(fromState);
     if (isAuthenticated && user) {
       navigate(
         consumeRedirectTarget(getTeacherDashboardRoute(), [
           "/teacher/",
           "/organization/",
+          // /dashboard is the RoleBasedRedirect entry point (App.tsx).
           "/dashboard",
         ]),
         { replace: true },
       );
     }
-  }, [isAuthenticated, user, navigate, location.state]);
+  }, [isAuthenticated, user, navigate, fromState]);
 
   // 檢查是否為 demo 模式 (通過 URL 參數 ?is_demo=true)
   const searchParams = new URLSearchParams(window.location.search);
