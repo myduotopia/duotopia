@@ -26,7 +26,7 @@ def upgrade() -> None:
     op.execute(
         """
         ALTER TABLE student_item_progress
-        ADD COLUMN IF NOT EXISTS ai_analysis_count INTEGER DEFAULT 0
+        ADD COLUMN IF NOT EXISTS ai_analysis_count INTEGER NOT NULL DEFAULT 0
         """
     )
 
