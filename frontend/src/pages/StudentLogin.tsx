@@ -40,11 +40,12 @@ export default function StudentLogin() {
   const { login } = useStudentAuthStore();
   const { t } = useTranslation();
 
-  // Mirror router state into sessionStorage so it survives the 4-step flow.
+  // Depend on resolved `from` string (not state object) so a fresh state
+  // reference with the same `from` doesn't overwrite a still-valid save.
+  const fromState = (location.state as { from?: string } | null)?.from;
   useEffect(() => {
-    const from = (location.state as { from?: string } | null)?.from;
-    if (from) saveRedirectTarget(from);
-  }, [location.state]);
+    if (fromState) saveRedirectTarget(fromState);
+  }, [fromState]);
 
   // 檢查是否為 demo 模式 (通過 URL 參數 ?is_demo=true)
   const searchParams = new URLSearchParams(window.location.search);
@@ -197,7 +198,7 @@ export default function StudentLogin() {
           teacher_name: teacherHistory.find((t) => t.email === teacherEmail)
             ?.name,
         } as StudentUser);
-        navigate(consumeRedirectTarget("/student/dashboard"), {
+        navigate(consumeRedirectTarget("/student/dashboard", ["/student/"]), {
           replace: true,
         });
       }
@@ -239,7 +240,7 @@ export default function StudentLogin() {
         classrooms: s.classrooms,
         classrooms_count: s.classrooms_count,
       } as StudentUser);
-      navigate(consumeRedirectTarget("/student/dashboard"), {
+      navigate(consumeRedirectTarget("/student/dashboard", ["/student/"]), {
         replace: true,
       });
     } catch (err) {

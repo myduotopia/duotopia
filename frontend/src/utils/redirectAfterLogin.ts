@@ -1,6 +1,7 @@
 // sessionStorage-backed so the target survives multi-step flows, SSO round-trips, and 401 hard navigations.
 
-const STORAGE_KEY = "auth_redirect_after_login";
+/** @internal — exported only so tests can read raw storage; do not use directly. */
+export const REDIRECT_STORAGE_KEY = "auth_redirect_after_login";
 
 const LOGIN_PAGE_PREFIXES = [
   "/teacher/login",
@@ -36,19 +37,43 @@ export function saveRedirectTarget(path: unknown): void {
   if (!isSafeRedirectPath(path)) return;
   if (LOGIN_PAGE_PREFIXES.some((p) => path.startsWith(p))) return;
   try {
-    sessionStorage.setItem(STORAGE_KEY, path);
+    sessionStorage.setItem(REDIRECT_STORAGE_KEY, path);
   } catch {
     // sessionStorage may be unavailable (private mode, SSR); silently ignore.
   }
 }
 
-export function consumeRedirectTarget(fallback: string): string {
+/**
+ * Consume the saved redirect target. Role-sensitive callers MUST pass
+ * `allowedPrefixes` to prevent a path saved by a different role from being
+ * honored (e.g., a `/teacher/*` target hijacking a student login flow).
+ * Prefix matching: trailing-slash prefix matches any sub-path; bare prefix
+ * matches exact-or-sub-path (so `/dashboard` does not match `/dashboard-admin`).
+ */
+export function consumeRedirectTarget(
+  fallback: string,
+  allowedPrefixes?: string[],
+): string {
   let target: string | null = null;
   try {
-    target = sessionStorage.getItem(STORAGE_KEY);
-    sessionStorage.removeItem(STORAGE_KEY);
+    target = sessionStorage.getItem(REDIRECT_STORAGE_KEY);
+    sessionStorage.removeItem(REDIRECT_STORAGE_KEY);
   } catch {
     // ignore
   }
-  return isSafeRedirectPath(target) ? target : fallback;
+  if (!isSafeRedirectPath(target)) return fallback;
+  if (
+    allowedPrefixes &&
+    !allowedPrefixes.some((p) => matchesPrefix(target, p))
+  ) {
+    return fallback;
+  }
+  return target;
+}
+
+function matchesPrefix(target: string, prefix: string): boolean {
+  // Reject empty and bare "/" — both would silently allow every absolute path.
+  if (!prefix || prefix === "/") return false;
+  if (prefix.endsWith("/")) return target.startsWith(prefix);
+  return target === prefix || target.startsWith(prefix + "/");
 }
