@@ -72,7 +72,8 @@ export function consumeRedirectTarget(
 }
 
 function matchesPrefix(target: string, prefix: string): boolean {
-  if (!prefix) return false;
+  // Reject empty and bare "/" — both would silently allow every absolute path.
+  if (!prefix || prefix === "/") return false;
   if (prefix.endsWith("/")) return target.startsWith(prefix);
   return target === prefix || target.startsWith(prefix + "/");
 }

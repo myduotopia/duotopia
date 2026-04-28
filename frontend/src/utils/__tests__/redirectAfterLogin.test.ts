@@ -203,4 +203,11 @@ describe("consumeRedirectTarget allowedPrefixes (role isolation)", () => {
       "/student/dashboard",
     );
   });
+
+  it("bare '/' in allowedPrefixes does not silently allow every path", () => {
+    saveRedirectTarget("/teacher/dashboard");
+    expect(consumeRedirectTarget("/student/dashboard", ["/"])).toBe(
+      "/student/dashboard",
+    );
+  });
 });

@@ -38,8 +38,8 @@ export default function TeacherLogin() {
     password: "",
   });
 
-  // Depend on the resolved `from` string (not the `location.state` object
-  // reference) so the effect doesn't re-fire and overwrite a still-valid save.
+  // Save and consume in the same effect so save-before-consume ordering is
+  // preserved when the user lands here already authenticated with a `from`.
   const fromState = (location.state as { from?: string } | null)?.from;
   useEffect(() => {
     if (fromState) saveRedirectTarget(fromState);

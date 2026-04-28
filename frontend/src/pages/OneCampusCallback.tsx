@@ -21,6 +21,7 @@ import {
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { consumeRedirectTarget } from "@/utils/redirectAfterLogin";
+import { getTeacherDashboardRoute } from "@/utils/authNavigation";
 import api from "@/services/api";
 
 export default function OneCampusCallback() {
@@ -100,7 +101,7 @@ export default function OneCampusCallback() {
             return;
           }
           navigate(
-            consumeRedirectTarget("/teacher/dashboard", [
+            consumeRedirectTarget(getTeacherDashboardRoute(), [
               "/teacher/",
               "/organization/",
               "/dashboard",
@@ -243,7 +244,9 @@ export default function OneCampusCallback() {
 
   function handleBindSkip() {
     const fallback =
-      bindRoleType === "teacher" ? "/teacher/dashboard" : "/student/dashboard";
+      bindRoleType === "teacher"
+        ? getTeacherDashboardRoute()
+        : "/student/dashboard";
     const allowedPrefixes =
       bindRoleType === "teacher"
         ? ["/teacher/", "/organization/", "/dashboard"]
