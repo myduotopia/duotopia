@@ -1,6 +1,6 @@
 // sessionStorage-backed so the target survives multi-step flows, SSO round-trips, and 401 hard navigations.
 
-const STORAGE_KEY = "auth_redirect_after_login";
+export const REDIRECT_STORAGE_KEY = "auth_redirect_after_login";
 
 const LOGIN_PAGE_PREFIXES = [
   "/teacher/login",
@@ -36,7 +36,7 @@ export function saveRedirectTarget(path: unknown): void {
   if (!isSafeRedirectPath(path)) return;
   if (LOGIN_PAGE_PREFIXES.some((p) => path.startsWith(p))) return;
   try {
-    sessionStorage.setItem(STORAGE_KEY, path);
+    sessionStorage.setItem(REDIRECT_STORAGE_KEY, path);
   } catch {
     // sessionStorage may be unavailable (private mode, SSR); silently ignore.
   }
@@ -48,8 +48,8 @@ export function consumeRedirectTarget(
 ): string {
   let target: string | null = null;
   try {
-    target = sessionStorage.getItem(STORAGE_KEY);
-    sessionStorage.removeItem(STORAGE_KEY);
+    target = sessionStorage.getItem(REDIRECT_STORAGE_KEY);
+    sessionStorage.removeItem(REDIRECT_STORAGE_KEY);
   } catch {
     // ignore
   }
@@ -57,8 +57,19 @@ export function consumeRedirectTarget(
   // Role isolation: caller restricts which paths it'll honor so a teacher
   // target saved in sessionStorage can't redirect a student-login flow into
   // /teacher/*, which would bounce back to /teacher/login.
-  if (allowedPrefixes && !allowedPrefixes.some((p) => target.startsWith(p))) {
+  // Trailing-slash prefixes ("/teacher/") match any sub-path; bare paths
+  // ("/dashboard") match exact-or-sub-path so they don't over-match a future
+  // /dashboard-admin route.
+  if (
+    allowedPrefixes &&
+    !allowedPrefixes.some((p) => matchesPrefix(target, p))
+  ) {
     return fallback;
   }
   return target;
+}
+
+function matchesPrefix(target: string, prefix: string): boolean {
+  if (prefix.endsWith("/")) return target.startsWith(prefix);
+  return target === prefix || target.startsWith(prefix + "/");
 }

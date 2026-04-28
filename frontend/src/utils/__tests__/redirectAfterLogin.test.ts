@@ -3,9 +3,10 @@ import {
   isSafeRedirectPath,
   saveRedirectTarget,
   consumeRedirectTarget,
+  REDIRECT_STORAGE_KEY,
 } from "../redirectAfterLogin";
 
-const STORAGE_KEY = "auth_redirect_after_login";
+const STORAGE_KEY = REDIRECT_STORAGE_KEY;
 
 describe("isSafeRedirectPath", () => {
   it("accepts normal absolute paths", () => {
@@ -155,7 +156,7 @@ describe("consumeRedirectTarget allowedPrefixes (role isolation)", () => {
     expect(consumeRedirectTarget("/fallback")).toBe("/anything/at/all");
   });
 
-  it("matches /dashboard exactly via prefix", () => {
+  it("matches bare /dashboard exactly", () => {
     saveRedirectTarget("/dashboard");
     expect(
       consumeRedirectTarget("/teacher/dashboard", [
@@ -164,6 +165,28 @@ describe("consumeRedirectTarget allowedPrefixes (role isolation)", () => {
         "/dashboard",
       ]),
     ).toBe("/dashboard");
+  });
+
+  it("matches /dashboard sub-paths via bare prefix", () => {
+    saveRedirectTarget("/dashboard/teacher");
+    expect(
+      consumeRedirectTarget("/teacher/dashboard", [
+        "/teacher/",
+        "/organization/",
+        "/dashboard",
+      ]),
+    ).toBe("/dashboard/teacher");
+  });
+
+  it("bare prefix /dashboard does not over-match /dashboard-admin", () => {
+    saveRedirectTarget("/dashboard-admin/foo");
+    expect(
+      consumeRedirectTarget("/teacher/dashboard", [
+        "/teacher/",
+        "/organization/",
+        "/dashboard",
+      ]),
+    ).toBe("/teacher/dashboard");
   });
 
   it("does not match a different role despite shared substring", () => {

@@ -41,10 +41,13 @@ export default function StudentLogin() {
   const { t } = useTranslation();
 
   // Mirror router state into sessionStorage so it survives the 4-step flow.
+  // Depend on the resolved `from` string (not the state object reference)
+  // so we don't re-run when React Router gives us a fresh state object with
+  // the same `from`, which could overwrite a still-valid saved target.
+  const fromState = (location.state as { from?: string } | null)?.from;
   useEffect(() => {
-    const from = (location.state as { from?: string } | null)?.from;
-    if (from) saveRedirectTarget(from);
-  }, [location.state]);
+    if (fromState) saveRedirectTarget(fromState);
+  }, [fromState]);
 
   // 檢查是否為 demo 模式 (通過 URL 參數 ?is_demo=true)
   const searchParams = new URLSearchParams(window.location.search);
