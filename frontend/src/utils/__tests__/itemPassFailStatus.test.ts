@@ -127,14 +127,27 @@ describe("getItemPassFailStatus", () => {
       ).toEqual({ passed: true, failed: false });
     });
 
-    it("AI score < 60 → failed", () => {
+    it("AI score < 60 → neither (NOT failed) — failed is reserved for teacher_passed=false", () => {
+      // 規則更新：低 AI 分數不再標紅。學生「還沒寫」或「品質普通」都應該
+      // 留在白/黃，紅色只屬於老師明確要求訂正的情境（teacher_passed=false）。
       expect(
         getItemPassFailStatus({
           teacherPassed: null,
           aiScore: 59,
           assignmentStatus: "SUBMITTED",
         }),
-      ).toEqual({ passed: false, failed: true });
+      ).toEqual({ passed: false, failed: false });
+    });
+
+    it("AI score 0 (no recording, default value) → neither", () => {
+      // 防止「學生還沒寫，每題卻都被標成不通過（紅色）」的 regression。
+      expect(
+        getItemPassFailStatus({
+          teacherPassed: null,
+          aiScore: 0,
+          assignmentStatus: "IN_PROGRESS",
+        }),
+      ).toEqual({ passed: false, failed: false });
     });
 
     it("no AI score → neither (待分析)", () => {
