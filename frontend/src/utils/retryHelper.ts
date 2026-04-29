@@ -90,6 +90,9 @@ export async function retryAudioUpload<T>(
         "NetworkError",
         "TimeoutError",
         "AbortError",
+        "408", // Request Timeout
+        "425", // Too Early (server not ready)
+        "429", // Too Many Requests (rate limit)
         "500",
         "502",
         "503",

@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next";
 
 interface AudioRecorderProps {
   // Core props
-  onRecordingComplete?: (blob: Blob, url: string) => void;
+  onRecordingComplete?: (blob: Blob, url: string, durationSeconds: number) => void;
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
   onError?: (error: AudioErrorData) => void; // 錯誤回調
@@ -290,9 +290,9 @@ export default function AudioRecorder({
           setIsRecording(false);
           cleanup();
 
-          // Callback with recording
+          // Callback with recording (pass duration so callers can persist it)
           if (onRecordingComplete) {
-            onRecordingComplete(audioBlob, audioUrl);
+            onRecordingComplete(audioBlob, audioUrl, validationResult.duration);
           }
 
           if (onRecordingStop) {
@@ -323,8 +323,9 @@ export default function AudioRecorder({
         }
       };
 
-      // Start recording
-      mediaRecorder.start();
+      // Start recording with 1000ms timeslice so ondataavailable fires
+      // periodically on iOS Safari instead of all-at-once on stop.
+      mediaRecorder.start(1000);
       setIsRecording(true);
       setStatus("recording");
       setRecordingTime(0);
@@ -367,13 +368,25 @@ export default function AudioRecorder({
   ]);
 
   // Stop recording
-  const stopRecording = useCallback(() => {
+  // On iOS Safari, requestData() fires ondataavailable asynchronously — if we
+  // call stop() synchronously right after, the last chunk may arrive AFTER
+  // onstop and be missed.  A short delay between the two calls ensures the
+  // browser has time to flush the final chunk before we signal stop.
+  const stopRecording = useCallback(async () => {
     if (mediaRecorderRef.current && isRecording) {
-      // 主動要求資料（防止 ondataavailable 不觸發）
       if (mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.requestData();
+        // Give the browser ~80 ms to deliver the final ondataavailable event
+        // before stop() is issued.  The onstop handler also waits 800 ms for
+        // Safari blob encoding, so this small delay is well within budget.
+        await new Promise<void>((resolve) => setTimeout(resolve, 80));
       }
-      mediaRecorderRef.current.stop();
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state === "recording"
+      ) {
+        mediaRecorderRef.current.stop();
+      }
     }
   }, [isRecording]);
 
