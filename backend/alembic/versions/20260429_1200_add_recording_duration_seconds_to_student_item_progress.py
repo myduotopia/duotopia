@@ -1,7 +1,7 @@
 """add_recording_duration_seconds_to_student_item_progress
 
 Revision ID: 20260429_1200
-Revises: 20260428_1000
+Revises: 20260428_1100
 Create Date: 2026-04-29 12:00:00.000000
 
 Issue #703: 學生錄音檔問題 (Phase A - migration only)
@@ -17,7 +17,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20260429_1200"
-down_revision: Union[str, None] = "20260428_1000"
+down_revision: Union[str, None] = "20260428_1100"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
