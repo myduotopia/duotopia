@@ -32,15 +32,19 @@ function makeMockAudio(initialDuration: number): MockAudio {
     set currentTime(v: number) {
       _currentTime = v;
     },
-    addEventListener: vi.fn((event: string, cb: EventListenerOrEventListenerObject) => {
-      if (!listeners[event]) listeners[event] = [];
-      listeners[event].push(cb);
-    }),
-    removeEventListener: vi.fn((event: string, cb: EventListenerOrEventListenerObject) => {
-      if (listeners[event]) {
-        listeners[event] = listeners[event].filter((l) => l !== cb);
-      }
-    }),
+    addEventListener: vi.fn(
+      (event: string, cb: EventListenerOrEventListenerObject) => {
+        if (!listeners[event]) listeners[event] = [];
+        listeners[event].push(cb);
+      },
+    ),
+    removeEventListener: vi.fn(
+      (event: string, cb: EventListenerOrEventListenerObject) => {
+        if (listeners[event]) {
+          listeners[event] = listeners[event].filter((l) => l !== cb);
+        }
+      },
+    ),
   } as unknown as HTMLAudioElement;
 
   function setDuration(d: number) {

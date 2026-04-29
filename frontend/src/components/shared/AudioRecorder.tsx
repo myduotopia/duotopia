@@ -18,7 +18,11 @@ import { useTranslation } from "react-i18next";
 
 interface AudioRecorderProps {
   // Core props
-  onRecordingComplete?: (blob: Blob, url: string, durationSeconds: number) => void;
+  onRecordingComplete?: (
+    blob: Blob,
+    url: string,
+    durationSeconds: number,
+  ) => void;
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
   onError?: (error: AudioErrorData) => void; // 錯誤回調

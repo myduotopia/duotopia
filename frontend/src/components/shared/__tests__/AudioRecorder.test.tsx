@@ -55,22 +55,24 @@ type MockRecorder = {
 
 let capturedInstance: MockRecorder | null = null;
 
-const MockMediaRecorder = vi.fn().mockImplementation((_stream: unknown, opts: { mimeType?: string }) => {
-  capturedInstance = {
-    start: vi.fn((_timeslice?: number) => {
-      capturedInstance!.state = "recording";
-    }),
-    stop: vi.fn(() => {
-      capturedInstance!.state = "inactive";
-    }),
-    requestData: vi.fn(),
-    state: "inactive",
-    mimeType: opts?.mimeType || "audio/webm",
-    ondataavailable: null,
-    onstop: null,
-  };
-  return capturedInstance;
-});
+const MockMediaRecorder = vi
+  .fn()
+  .mockImplementation((_stream: unknown, opts: { mimeType?: string }) => {
+    capturedInstance = {
+      start: vi.fn((_timeslice?: number) => {
+        capturedInstance!.state = "recording";
+      }),
+      stop: vi.fn(() => {
+        capturedInstance!.state = "inactive";
+      }),
+      requestData: vi.fn(),
+      state: "inactive",
+      mimeType: opts?.mimeType || "audio/webm",
+      ondataavailable: null,
+      onstop: null,
+    };
+    return capturedInstance;
+  });
 
 const mockStream = {
   getTracks: () => [{ stop: vi.fn() }],
