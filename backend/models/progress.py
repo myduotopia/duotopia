@@ -106,6 +106,9 @@ class StudentItemProgress(Base):
 
     # Recording data
     recording_url = Column(Text)
+    recording_duration_seconds = Column(
+        Integer, nullable=True
+    )  # client-reported duration
     answer_text = Column(Text)
     transcription = Column(Text)  # AI 轉錄文字（與 DB 一致）
     submitted_at = Column(DateTime(timezone=True))
