@@ -684,8 +684,17 @@ def handle_rearrangement_complete(
 # ---------------------------------------------------------------------------
 
 
-def get_word_spelling_start(assignment: Assignment, db: Session) -> dict:
-    """Return word-spelling practice data (sequential, all words)."""
+def get_word_spelling_start(
+    assignment: Assignment,
+    db: Session,
+    exclude_ids: str = "",
+) -> dict:
+    """Return word-spelling practice data (preview/demo).
+
+    Mirrors the Ebbinghaus pattern from word-selection: each "round" returns
+    up to 10 items; the frontend tracks practiced ids and passes them via
+    exclude_ids so subsequent rounds rotate through unpractised items first.
+    """
     if assignment.practice_mode != "word_spelling":
         raise HTTPException(
             status_code=400,
@@ -707,9 +716,15 @@ def get_word_spelling_start(assignment: Assignment, db: Session) -> dict:
             detail="No vocabulary items found for this assignment",
         )
 
-    items_list = list(content_items)
+    total_words_in_assignment = len(content_items)
+    exclude_id_set = _parse_exclude_ids(exclude_ids)
+    remaining_items = [item for item in content_items if item.id not in exclude_id_set]
+    if len(remaining_items) < 10:
+        # round wraps — start a fresh cycle
+        remaining_items = list(content_items)
     if assignment.shuffle_questions:
-        random.shuffle(items_list)
+        random.shuffle(remaining_items)
+    items_list = remaining_items[:10]
 
     words_data = [
         {
@@ -718,6 +733,7 @@ def get_word_spelling_start(assignment: Assignment, db: Session) -> dict:
             "translation": ci.translation or "",
             "audio_url": ci.audio_url,
             "image_url": ci.image_url,
+            "memory_strength": 0,
         }
         for ci in items_list
     ]
@@ -725,7 +741,12 @@ def get_word_spelling_start(assignment: Assignment, db: Session) -> dict:
     return {
         "session_id": None,
         "words": words_data,
-        "total_words": len(words_data),
+        "total_words": total_words_in_assignment,
+        "current_proficiency": 0,
+        "target_proficiency": assignment.target_proficiency or 80,
+        "words_mastered": 0,
+        "achieved": False,
+        "is_practice_mode": False,
         "show_translation": (
             assignment.show_translation
             if assignment.show_translation is not None
@@ -744,14 +765,19 @@ def get_word_spelling_start(assignment: Assignment, db: Session) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def get_word_cloze_start(assignment: Assignment, db: Session) -> dict:
-    """Return word-cloze practice data.
+async def get_word_cloze_start(
+    assignment: Assignment,
+    db: Session,
+    exclude_ids: str = "",
+) -> dict:
+    """Return word-cloze practice data (preview/demo).
 
-    Lazily backfills missing example_sentence_audio_url so that students
-    (and teacher previews) hear the full sentence rather than nothing.
+    Returns up to 10 cloze questions per round. Frontend tracks practiced
+    ids and passes them via exclude_ids to cycle through unpractised items
+    first.
 
-    Imports extract_cloze_for_item lazily to avoid circular imports
-    (the helper currently lives in routers/students/assignments.py).
+    Lazily backfills missing example_sentence_audio_url so previews hear
+    the full sentence audio.
     """
     if assignment.practice_mode != "word_cloze":
         raise HTTPException(
@@ -777,15 +803,22 @@ async def get_word_cloze_start(assignment: Assignment, db: Session) -> dict:
             detail="No vocabulary items found for this assignment",
         )
 
+    total_words_in_assignment = len(content_items)
+
     # Generate any missing example sentence audio so audio_url isn't blank.
     await ensure_example_sentence_audio(list(content_items), db)
 
-    items_list = list(content_items)
+    exclude_id_set = _parse_exclude_ids(exclude_ids)
+    remaining_items = [item for item in content_items if item.id not in exclude_id_set]
+    if len(remaining_items) < 10:
+        remaining_items = list(content_items)
     if assignment.shuffle_questions:
-        random.shuffle(items_list)
+        random.shuffle(remaining_items)
 
     questions = []
-    for ci in items_list:
+    for ci in remaining_items:
+        if len(questions) >= 10:
+            break
         cloze = extract_cloze_for_item(ci)
         if cloze is None:
             continue
@@ -825,7 +858,12 @@ async def get_word_cloze_start(assignment: Assignment, db: Session) -> dict:
     return {
         "session_id": None,
         "questions": questions,
-        "total_questions": len(questions),
+        "total_questions": total_words_in_assignment,
+        "current_proficiency": 0,
+        "target_proficiency": assignment.target_proficiency or 80,
+        "words_mastered": 0,
+        "achieved": False,
+        "is_practice_mode": False,
         "show_translation": (
             assignment.show_translation
             if assignment.show_translation is not None

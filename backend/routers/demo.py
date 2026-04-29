@@ -350,11 +350,14 @@ async def demo_word_selection_start(
 async def demo_word_spelling_start(
     request: Request,
     assignment_id: int,
+    exclude_ids: str = Query(
+        default="", description="Already-practiced content_item_ids, comma-separated"
+    ),
     db: Session = Depends(get_db),
 ):
     """Demo mode: Start word spelling practice."""
     assignment = get_demo_assignment(assignment_id, db)
-    return get_word_spelling_start(assignment, db)
+    return get_word_spelling_start(assignment, db, exclude_ids)
 
 
 @router.get("/assignments/{assignment_id}/preview/word-cloze-start")
@@ -362,11 +365,14 @@ async def demo_word_spelling_start(
 async def demo_word_cloze_start(
     request: Request,
     assignment_id: int,
+    exclude_ids: str = Query(
+        default="", description="Already-practiced content_item_ids, comma-separated"
+    ),
     db: Session = Depends(get_db),
 ):
     """Demo mode: Start word cloze practice."""
     assignment = get_demo_assignment(assignment_id, db)
-    return await get_word_cloze_start(assignment, db)
+    return await get_word_cloze_start(assignment, db, exclude_ids)
 
 
 @router.post("/assignments/{assignment_id}/preview/word-selection-answer")

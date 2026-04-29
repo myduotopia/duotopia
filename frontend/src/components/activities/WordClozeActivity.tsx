@@ -1,18 +1,29 @@
 /**
  * WordClozeActivity - Word Cloze Practice Activity
  *
- * Normal practice mode (non-Ebbinghaus): sequential order, all questions.
- * Student sees an example sentence with the target word blanked out and
- * types the correct form (e.g., "apples", "watching", "am").
- * Correct → next question. Incorrect → allow retry.
+ * Ebbinghaus memory-curve practice (mirrors WordSelectionActivity):
+ * - Each round backend picks 10 least-familiar words.
+ * - Student fills the blank in the example sentence.
+ * - Audio is played automatically each new question.
+ * - Correct → animation → next question.
+ * - Incorrect → retry button (same question stays).
+ * - On round completion: stats + Next Round / Submit.
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Loader2,
   Volume2,
@@ -22,6 +33,10 @@ import {
   Send,
   RotateCcw,
   FileText,
+  Trophy,
+  RefreshCw,
+  BookOpen,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -39,28 +54,31 @@ interface ClozeQuestion {
   correct_answer_length: number;
 }
 
+interface ProficiencyStatus {
+  current_mastery: number;
+  target_mastery: number;
+  achieved: boolean;
+  words_mastered: number;
+  total_words: number;
+}
+
 interface WordClozeActivityProps {
   assignmentId: number;
   isPreviewMode?: boolean;
   isDemoMode?: boolean;
+  initialPracticeMode?: boolean;
   onComplete?: () => void;
-  externalQuestionIndex?: number;
-  onQuestionIndexChange?: (idx: number) => void;
-  onTotalQuestionsChange?: (total: number) => void;
 }
 
 export default function WordClozeActivity({
   assignmentId,
   isPreviewMode = false,
   isDemoMode = false,
+  initialPracticeMode = false,
   onComplete,
-  externalQuestionIndex,
-  onQuestionIndexChange,
-  onTotalQuestionsChange,
 }: WordClozeActivityProps) {
   const { t } = useTranslation();
 
-  // State
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<ClozeQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -74,56 +92,130 @@ export default function WordClozeActivity({
   const nextQuestionCalledRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Settings
   const [showTranslation, setShowTranslation] = useState(true);
 
-  // Stats
-  const [correctCount, setCorrectCount] = useState(0);
+  const [proficiency, setProficiency] = useState<ProficiencyStatus>({
+    current_mastery: 0,
+    target_mastery: 80,
+    achieved: false,
+    words_mastered: 0,
+    total_words: 0,
+  });
+  const [showAchievementDialog, setShowAchievementDialog] = useState(false);
+  const [isPracticeMode, setIsPracticeMode] = useState(initialPracticeMode);
+  const [roundCompleted, setRoundCompleted] = useState(false);
 
-  // Timer
+  const practicedWordIdsRef = useRef<number[]>([]);
+  const [previewWordStrengths, setPreviewWordStrengths] = useState<
+    Record<number, number>
+  >({});
+
+  const calculateNewStrength = (
+    currentStrength: number | undefined,
+    correct: boolean,
+  ): number => {
+    if (currentStrength === undefined) return correct ? 0.5 : 0.0;
+    if (correct) return Math.min(1.0, currentStrength + 0.15);
+    return Math.max(0.0, currentStrength - 0.2);
+  };
+
+  const previewProficiency = useMemo(() => {
+    const strengths = Object.values(previewWordStrengths);
+    if (strengths.length === 0) return 0;
+    const totalWords = proficiency.total_words || strengths.length;
+    const sum = strengths.reduce((acc, s) => acc + s, 0);
+    return (sum / totalWords) * 100;
+  }, [previewWordStrengths, proficiency.total_words]);
+
+  const previewWordsMastered = useMemo(() => {
+    const targetThreshold = ((proficiency.target_mastery || 80) / 100) * 0.8;
+    return Object.values(previewWordStrengths).filter(
+      (s) => s >= targetThreshold,
+    ).length;
+  }, [previewWordStrengths, proficiency.target_mastery]);
+
+  const displayProficiency =
+    isPreviewMode || isDemoMode
+      ? previewProficiency
+      : proficiency.current_mastery;
+  const displayWordsMastered =
+    isPreviewMode || isDemoMode
+      ? previewWordsMastered
+      : proficiency.words_mastered;
+
+  const [, setCorrectCount] = useState(0);
+
   const [timeLimit, setTimeLimit] = useState<number | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Audio
   const audioRef = useRef<HTMLAudioElement | null>(null);
-
   const [incorrectAnswer, setIncorrectAnswer] = useState<string | null>(null);
-  const [allCompleted, setAllCompleted] = useState(false);
 
-  // Start practice
   const startPractice = useCallback(async () => {
     try {
       setLoading(true);
 
+      const excludeParam =
+        (isPreviewMode || isDemoMode) && practicedWordIdsRef.current.length > 0
+          ? `?exclude_ids=${practicedWordIdsRef.current.join(",")}`
+          : "";
+
       const apiEndpoint = isDemoMode
-        ? `/api/demo/assignments/${assignmentId}/preview/word-cloze-start`
+        ? `/api/demo/assignments/${assignmentId}/preview/word-cloze-start${excludeParam}`
         : isPreviewMode
-          ? `/api/teachers/assignments/${assignmentId}/preview/word-cloze-start`
+          ? `/api/teachers/assignments/${assignmentId}/preview/word-cloze-start${excludeParam}`
           : `/api/students/assignments/${assignmentId}/vocabulary/cloze/start`;
 
       const data = await apiClient.get<{
         session_id: number | null;
         questions: ClozeQuestion[];
         total_questions: number;
+        current_proficiency: number;
+        target_proficiency: number;
+        words_mastered: number;
+        achieved: boolean;
+        is_practice_mode?: boolean;
         show_translation: boolean;
         play_audio: boolean;
         time_limit_per_question: number | null;
       }>(apiEndpoint);
 
-      const loadedQuestions = data.questions || [];
-      setQuestions(loadedQuestions);
+      setQuestions(data.questions || []);
       setSessionId(data.session_id);
+      setIsPracticeMode(data.is_practice_mode ?? false);
       setShowTranslation(data.show_translation ?? true);
       setTimeLimit(data.time_limit_per_question || null);
       setTimeRemaining(data.time_limit_per_question || null);
+      setProficiency({
+        current_mastery: data.current_proficiency || 0,
+        target_mastery: data.target_proficiency || 80,
+        achieved: data.achieved ?? false,
+        words_mastered: data.words_mastered ?? 0,
+        total_words: data.total_questions || 0,
+      });
       setCurrentIndex(0);
+      setRoundCompleted(false);
       setTypedAnswer("");
       setShowResult(false);
       setCorrectCount(0);
-      setAllCompleted(false);
-      onTotalQuestionsChange?.(loadedQuestions.length);
-      onQuestionIndexChange?.(0);
+
+      if (isPreviewMode || isDemoMode) {
+        const newIds = (data.questions || []).map(
+          (q: ClozeQuestion) => q.content_item_id,
+        );
+        const hasOverlap = newIds.some((id: number) =>
+          practicedWordIdsRef.current.includes(id),
+        );
+        if (hasOverlap && practicedWordIdsRef.current.length > 0) {
+          practicedWordIdsRef.current = [...newIds];
+        } else {
+          practicedWordIdsRef.current = [
+            ...practicedWordIdsRef.current,
+            ...newIds,
+          ];
+        }
+      }
     } catch (error) {
       console.error("Error starting cloze practice:", error);
       toast.error(
@@ -132,59 +224,51 @@ export default function WordClozeActivity({
     } finally {
       setLoading(false);
     }
-    // onTotalQuestionsChange / onQuestionIndexChange are notification-only;
-    // intentionally excluded to avoid restart loops.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId, isPreviewMode, isDemoMode, t]);
+
+  const fetchProficiency = useCallback(async () => {
+    if (isPreviewMode || isDemoMode) return;
+    try {
+      const data = await apiClient.get<ProficiencyStatus>(
+        `/api/students/assignments/${assignmentId}/vocabulary/cloze/proficiency`,
+      );
+      setProficiency(data);
+    } catch (error) {
+      console.error("Error fetching proficiency:", error);
+    }
+  }, [assignmentId, isPreviewMode, isDemoMode]);
 
   useEffect(() => {
     startPractice();
   }, [startPractice]);
 
-  // Sync external→internal: jump to question when parent navigates.
   useEffect(() => {
-    if (
-      externalQuestionIndex !== undefined &&
-      externalQuestionIndex !== currentIndex &&
-      externalQuestionIndex >= 0 &&
-      externalQuestionIndex < questions.length
-    ) {
-      setCurrentIndex(externalQuestionIndex);
-      setShowResult(false);
-      setTypedAnswer("");
-      setIncorrectAnswer(null);
-      if (timeLimit) setTimeRemaining(timeLimit);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [externalQuestionIndex]);
-
-  // Focus input when question changes
-  useEffect(() => {
-    if (!loading && !allCompleted && inputRef.current) {
+    if (!loading && !roundCompleted && inputRef.current) {
       inputRef.current.focus();
     }
-  }, [currentIndex, loading, allCompleted, showResult]);
+  }, [currentIndex, loading, roundCompleted, showResult]);
 
-  // Play audio for current question
   const playQuestionAudio = useCallback(() => {
     const q = questions[currentIndex];
     if (q?.audio_url) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
+      if (audioRef.current) audioRef.current.pause();
       audioRef.current = new Audio(q.audio_url);
       audioRef.current.play().catch(console.error);
     }
   }, [questions, currentIndex]);
 
-  // Auto-play example sentence audio once per question switch
-  // (consistent with WordSpellingActivity — listening helps fill the blank)
+  // Auto-play sentence audio on each new question
   useEffect(() => {
-    if (questions[currentIndex]?.audio_url && !showResult) {
+    if (
+      questions[currentIndex]?.audio_url &&
+      !showResult &&
+      !roundCompleted &&
+      !loading
+    ) {
       playQuestionAudio();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, questions.length]);
+  }, [currentIndex, questions.length, roundCompleted, loading]);
 
   // Timer
   useEffect(() => {
@@ -192,13 +276,8 @@ export default function WordClozeActivity({
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-
-    if (!timeLimit || showResult || allCompleted || loading) {
-      return;
-    }
-
+    if (!timeLimit || showResult || roundCompleted || loading) return;
     setTimeRemaining(timeLimit);
-
     timerRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev === null || prev <= 1) {
@@ -211,14 +290,13 @@ export default function WordClozeActivity({
         return prev - 1;
       });
     }, 1000);
-
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
     };
-  }, [currentIndex, timeLimit, showResult, allCompleted, loading]);
+  }, [currentIndex, timeLimit, showResult, roundCompleted, loading]);
 
   useEffect(() => {
     if (
@@ -234,15 +312,15 @@ export default function WordClozeActivity({
 
   const handleSubmitAnswer = async (isTimeout = false) => {
     if (showResult || submitting) return;
-
     const currentQ = questions[currentIndex];
     const answer = isTimeout ? "" : typedAnswer.trim();
 
     setSubmitting(true);
 
-    // Skip API call in preview/demo — evaluate locally
     if (isPreviewMode || isDemoMode) {
-      // Frontend doesn't know correct answer in preview, assume correct for demo
+      // Frontend doesn't know correct answer in preview; treat any
+      // non-empty answer as correct for the SM-2 simulation, mirroring how
+      // word_selection treats the picked option.
       const correct = !isTimeout && answer.length > 0;
       setIsCorrect(correct);
       setShowResult(true);
@@ -252,6 +330,11 @@ export default function WordClozeActivity({
       } else {
         setIncorrectAnswer(answer);
       }
+      const wordId = currentQ.content_item_id;
+      setPreviewWordStrengths((prev) => ({
+        ...prev,
+        [wordId]: calculateNewStrength(prev[wordId], correct),
+      }));
       setSubmitting(false);
       return;
     }
@@ -271,13 +354,13 @@ export default function WordClozeActivity({
       const correct = resp.is_correct;
       setIsCorrect(correct);
       setShowResult(true);
-
       if (correct) {
         setCorrectCount((prev) => prev + 1);
         setScoreOverlayOpen(true);
       } else {
         setIncorrectAnswer(answer);
       }
+      await fetchProficiency();
     } catch (error) {
       console.error("Error submitting cloze answer:", error);
       toast.error(
@@ -299,17 +382,12 @@ export default function WordClozeActivity({
     setShowResult(false);
     setTypedAnswer("");
     setIncorrectAnswer(null);
-
-    if (timeLimit) {
-      setTimeRemaining(timeLimit);
-    }
+    if (timeLimit) setTimeRemaining(timeLimit);
 
     if (currentIndex < questions.length - 1) {
-      const next = currentIndex + 1;
-      setCurrentIndex(next);
-      onQuestionIndexChange?.(next);
+      setCurrentIndex(currentIndex + 1);
     } else {
-      setAllCompleted(true);
+      setRoundCompleted(true);
     }
   };
 
@@ -317,9 +395,7 @@ export default function WordClozeActivity({
     setShowResult(false);
     setTypedAnswer("");
     setIncorrectAnswer(null);
-    if (timeLimit) {
-      setTimeRemaining(timeLimit);
-    }
+    if (timeLimit) setTimeRemaining(timeLimit);
     inputRef.current?.focus();
   };
 
@@ -329,30 +405,42 @@ export default function WordClozeActivity({
     }
   };
 
-  const handleComplete = async () => {
+  const handleStartNextRound = () => {
+    startPractice();
+  };
+
+  const handleSubmitAssignment = async () => {
     if (isPreviewMode || isDemoMode) {
       toast.success(t("wordCloze.toast.completed") || "Assignment completed!");
+      setShowAchievementDialog(false);
       onComplete?.();
       return;
     }
-
     if (completing) return;
     setCompleting(true);
-
     try {
-      await apiClient.post(
-        `/api/students/assignments/${assignmentId}/vocabulary/cloze/complete`,
-      );
-      toast.success(t("wordCloze.toast.completed") || "Assignment completed!");
-      onComplete?.();
+      await apiClient.post(`/api/students/assignments/${assignmentId}/submit`);
+      toast.success(t("wordCloze.toast.submitted") || "Assignment submitted!");
+      setIsPracticeMode(true);
+      setShowAchievementDialog(false);
+      setRoundCompleted(false);
     } catch (error) {
-      console.error("Error completing cloze assignment:", error);
+      console.error("Error submitting cloze assignment:", error);
       toast.error(
-        t("wordCloze.toast.completeFailed") || "Failed to complete assignment",
+        t("wordCloze.toast.completeFailed") || "Failed to submit assignment.",
       );
     } finally {
       setCompleting(false);
     }
+  };
+
+  const handleCompleteAssignment = () => {
+    onComplete?.();
+  };
+
+  const handleContinuePractice = () => {
+    setShowAchievementDialog(false);
+    startPractice();
   };
 
   if (loading) {
@@ -374,19 +462,14 @@ export default function WordClozeActivity({
         <CardContent className="text-center">
           <p className="text-gray-600">
             {t("wordCloze.noItems") ||
-              "No cloze questions available. Ensure example sentences contain the target words."}
+              "No cloze questions available (example sentences must contain the target word)"}
           </p>
         </CardContent>
       </Card>
     );
   }
 
-  if (allCompleted) {
-    const accuracy =
-      questions.length > 0
-        ? Math.round((correctCount / questions.length) * 100)
-        : 0;
-
+  if (roundCompleted) {
     return (
       <Card className="p-8">
         <CardContent className="text-center space-y-6">
@@ -394,50 +477,84 @@ export default function WordClozeActivity({
             <CheckCircle className="h-16 w-16 text-green-500" />
           </div>
           <h2 className="text-2xl font-bold text-gray-800">
-            {t("wordCloze.practiceComplete") || "Practice Complete!"}
+            {t("wordCloze.roundComplete") || "Round Complete!"}
           </h2>
 
-          <div className="space-y-3 max-w-md mx-auto">
+          {isPracticeMode && (
+            <div className="flex items-center gap-2 justify-center text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
+              <Info className="h-4 w-4" />
+              <span>
+                {t("wordCloze.practiceModeHint") ||
+                  "Practice mode — your score will not be affected"}
+              </span>
+            </div>
+          )}
+
+          <div className="space-y-2 max-w-md mx-auto">
             <div className="flex justify-between text-sm text-gray-600">
-              <span>{t("wordCloze.accuracy") || "Accuracy"}</span>
-              <span className="font-medium">{accuracy}%</span>
+              <span>{t("wordCloze.currentProficiency") || "Proficiency"}</span>
+              <span>
+                {displayProficiency.toFixed(1)}% / {proficiency.target_mastery}%
+              </span>
             </div>
-            <Progress value={accuracy} max={100} className="h-3" />
-
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <div className="bg-green-50 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {correctCount}
-                </div>
-                <div className="text-xs text-green-700">
-                  {t("wordCloze.correct") || "Correct"}
-                </div>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-gray-600">
-                  {questions.length}
-                </div>
-                <div className="text-xs text-gray-700">
-                  {t("wordCloze.totalQuestions") || "Total"}
-                </div>
-              </div>
-            </div>
+            <Progress value={displayProficiency} max={100} className="h-3" />
           </div>
 
-          <div className="flex gap-4 justify-center">
-            <Button variant="outline" onClick={() => startPractice()}>
-              <RotateCcw className="h-4 w-4 mr-2" />
-              {t("wordCloze.practiceAgain") || "Practice Again"}
-            </Button>
-            <Button onClick={handleComplete} disabled={completing}>
-              {completing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4 mr-2" />
-              )}
-              {t("wordCloze.submitAssignment") || "Submit Assignment"}
-            </Button>
+          <div className="text-gray-600">
+            <p>
+              {t("wordCloze.wordsMastered", {
+                mastered: displayWordsMastered,
+                total: proficiency.total_words,
+              }) ||
+                `${displayWordsMastered} / ${proficiency.total_words} words mastered`}
+            </p>
           </div>
+
+          {isPracticeMode ? (
+            <div className="flex gap-4 justify-center">
+              <Button onClick={handleStartNextRound}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                {t("wordCloze.continuePractice") || "Continue Practice"}
+              </Button>
+              <Button variant="outline" onClick={handleCompleteAssignment}>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                {t("wordCloze.backToList") || "Back to List"}
+              </Button>
+            </div>
+          ) : proficiency.achieved ? (
+            <div className="space-y-4">
+              <div className="flex justify-center">
+                <Trophy className="h-12 w-12 text-yellow-500" />
+              </div>
+              <p className="text-green-600 font-medium">
+                {t("wordCloze.targetReached") ||
+                  "Congratulations! You've reached the target proficiency!"}
+              </p>
+              <div className="flex gap-4 justify-center">
+                <Button
+                  variant="outline"
+                  onClick={handleContinuePractice}
+                  disabled={completing}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  {t("wordCloze.keepPracticing") || "Keep Practicing"}
+                </Button>
+                <Button onClick={handleSubmitAssignment} disabled={completing}>
+                  {completing ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  {t("wordCloze.submitAssignment") || "Submit Assignment"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button onClick={handleStartNextRound}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              {t("wordCloze.nextRound") || "Start Next Round"}
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
@@ -447,7 +564,16 @@ export default function WordClozeActivity({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {isPracticeMode && (
+        <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
+          <BookOpen className="h-4 w-4" />
+          <span>
+            {t("wordCloze.practiceModeHeader") ||
+              "Practice mode — your submitted score will not change"}
+          </span>
+        </div>
+      )}
+
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -463,25 +589,18 @@ export default function WordClozeActivity({
             </span>
           </div>
           <span className="text-sm font-medium text-indigo-600">
-            {correctCount} / {currentIndex + (showResult && isCorrect ? 1 : 0)}{" "}
-            {t("wordCloze.correctLabel") || "correct"}
+            {displayProficiency.toFixed(0)}% / {proficiency.target_mastery}%
           </span>
         </div>
         <Progress
-          value={
-            ((currentIndex + (showResult && isCorrect ? 1 : 0)) /
-              questions.length) *
-            100
-          }
+          value={displayProficiency}
           max={100}
           className="h-2.5 [&>div]:bg-gradient-to-r [&>div]:from-indigo-500 [&>div]:to-purple-500"
         />
       </div>
 
-      {/* Question content */}
       <div className="space-y-6">
-        {/* Translation hint (Chinese meaning only — never show the English
-            base word as that's the answer) */}
+        {/* Translation hint (Chinese meaning only — never show base word) */}
         {showTranslation && currentQ.translation && (
           <div className="text-center">
             <p className="text-sm text-gray-500 mb-1">
@@ -493,7 +612,6 @@ export default function WordClozeActivity({
           </div>
         )}
 
-        {/* Audio Button */}
         {currentQ.audio_url && (
           <div className="flex justify-center">
             <Button
@@ -508,7 +626,6 @@ export default function WordClozeActivity({
           </div>
         )}
 
-        {/* Blanked sentence */}
         <div className="max-w-2xl mx-auto text-center">
           <p className="text-xl leading-relaxed text-gray-800 font-medium px-4">
             {currentQ.blanked_sentence}
@@ -520,7 +637,6 @@ export default function WordClozeActivity({
           )}
         </div>
 
-        {/* Timer */}
         {timeLimit && timeRemaining !== null && (
           <div className="flex justify-center">
             <div
@@ -550,7 +666,6 @@ export default function WordClozeActivity({
           </div>
         )}
 
-        {/* Input area */}
         <div className="max-w-md mx-auto space-y-3">
           <Input
             ref={inputRef}
@@ -617,6 +732,55 @@ export default function WordClozeActivity({
         isError={false}
         onComplete={handleOverlayComplete}
       />
+
+      <Dialog
+        open={showAchievementDialog}
+        onOpenChange={setShowAchievementDialog}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Trophy className="h-6 w-6 text-yellow-500" />
+              {t("wordCloze.achievementTitle") || "Congratulations!"}
+            </DialogTitle>
+            <DialogDescription className="space-y-4 pt-4">
+              <p className="text-lg">
+                {t("wordCloze.achievementMessage", {
+                  target: proficiency.target_mastery,
+                }) ||
+                  `You've reached the target proficiency of ${proficiency.target_mastery}%!`}
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={handleContinuePractice}
+              disabled={completing}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              {isPracticeMode
+                ? t("wordCloze.continuePractice") || "Continue Practice"
+                : t("wordCloze.keepPracticing") || "Keep Practicing"}
+            </Button>
+            {isPracticeMode ? (
+              <Button onClick={handleCompleteAssignment}>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                {t("wordCloze.backToList") || "Back to List"}
+              </Button>
+            ) : (
+              <Button onClick={handleSubmitAssignment} disabled={completing}>
+                {completing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                {t("wordCloze.submitAssignment") || "Submit Assignment"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

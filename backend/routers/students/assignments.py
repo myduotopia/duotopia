@@ -1873,50 +1873,96 @@ async def start_word_spelling_practice(
         )
 
     # Update assignment status to IN_PROGRESS if not started
+    # Issue #460: Allow GRADED assignments to start practice (score won't change)
     if student_assignment.status == AssignmentStatus.NOT_STARTED:
         student_assignment.status = AssignmentStatus.IN_PROGRESS
         student_assignment.started_at = datetime.now(timezone.utc)
         db.commit()
 
-    # Get all content items for this assignment in order
-    assignment_contents = (
-        db.query(AssignmentContent)
-        .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
-        .order_by(AssignmentContent.order_index)
-        .all()
-    )
-    content_ids = [ac.content_id for ac in assignment_contents]
+    target_proficiency = assignment.target_proficiency if assignment else 80
 
-    content_items = (
-        db.query(ContentItem)
-        .filter(ContentItem.content_id.in_(content_ids))
-        .order_by(ContentItem.id)
-        .all()
+    # Get total words in assignment (for proficiency display)
+    total_words_result = db.execute(
+        text(
+            """
+            SELECT COUNT(DISTINCT ci.id) as total_count
+            FROM student_content_progress scp
+            JOIN content_items ci ON ci.content_id = scp.content_id
+            WHERE scp.student_assignment_id = :sa_id
+            """
+        ),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    total_words_in_assignment = (
+        total_words_result.total_count if total_words_result else 0
     )
+    if total_words_in_assignment == 0:
+        fallback_count = db.execute(
+            text(
+                """
+                SELECT COUNT(DISTINCT ci.id) as total_count
+                FROM assignment_contents ac
+                JOIN content_items ci ON ci.content_id = ac.content_id
+                WHERE ac.assignment_id = :assignment_id
+                """
+            ),
+            {"assignment_id": student_assignment.assignment_id},
+        ).fetchone()
+        total_words_in_assignment = fallback_count.total_count if fallback_count else 0
 
-    if not content_items:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No vocabulary items found for this assignment",
+    # Ebbinghaus: pick 10 words student is least familiar with
+    words_result = db.execute(
+        text("SELECT * FROM get_words_for_practice(:sa_id, :limit_count)"),
+        {"sa_id": assignment_id, "limit_count": 10},
+    ).fetchall()
+
+    if not words_result:
+        # Fallback: no progress records yet, just take first 10 items
+        assignment_contents = (
+            db.query(AssignmentContent)
+            .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
+            .all()
         )
-
-    # Shuffle if setting is enabled
-    words_list = list(content_items)
-    if assignment and assignment.shuffle_questions:
-        random.shuffle(words_list)
-
-    # Build words data — all words, sequential order
-    words_data = []
-    for ci in words_list:
-        words_data.append(
+        content_ids = [ac.content_id for ac in assignment_contents]
+        content_items = (
+            db.query(ContentItem)
+            .filter(ContentItem.content_id.in_(content_ids))
+            .limit(10)
+            .all()
+        )
+        if not content_items:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No vocabulary items found for this assignment",
+            )
+        words_data = [
             {
                 "content_item_id": ci.id,
                 "text": ci.text,
                 "translation": ci.translation or "",
                 "audio_url": ci.audio_url,
                 "image_url": ci.image_url,
+                "memory_strength": 0,
             }
-        )
+            for ci in content_items
+        ]
+    else:
+        words_data = [
+            {
+                "content_item_id": row.content_item_id,
+                "text": row.text,
+                "translation": row.translation or "",
+                "audio_url": row.audio_url,
+                "image_url": getattr(row, "image_url", None),
+                "memory_strength": (
+                    float(row.memory_strength) if row.memory_strength else 0
+                ),
+            }
+            for row in words_result
+        ]
+
+    if assignment and assignment.shuffle_questions:
+        random.shuffle(words_data)
 
     # Create practice session
     practice_session = PracticeSession(
@@ -1931,10 +1977,27 @@ async def start_word_spelling_practice(
     db.commit()
     db.refresh(practice_session)
 
+    # Current proficiency
+    mastery_result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    current_proficiency = (
+        float(mastery_result.current_mastery) * 100 if mastery_result else 0
+    )
+    words_mastered = int(mastery_result.words_mastered) if mastery_result else 0
+    achieved = bool(mastery_result.achieved) if mastery_result else False
+    is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
+
     return {
         "session_id": practice_session.id,
         "words": words_data,
-        "total_words": len(words_data),
+        "total_words": total_words_in_assignment,
+        "current_proficiency": current_proficiency,
+        "target_proficiency": target_proficiency,
+        "words_mastered": words_mastered,
+        "achieved": achieved,
+        "is_practice_mode": is_practice_mode,
         "show_translation": (assignment.show_translation if assignment else True),
         "show_image": assignment.show_image if assignment else True,
         "play_audio": assignment.play_audio if assignment else False,
@@ -2086,6 +2149,18 @@ async def submit_word_spelling_answer(
         ws_data["last_answered_at"] = datetime.now(timezone.utc).isoformat()
         item_progress.word_selection_data = dict(ws_data)
 
+    # Issue #460 mirror: auto-submit only when mastery hits 100%
+    mastery_result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    if mastery_result and student_assignment.status != AssignmentStatus.GRADED:
+        current_mastery = float(mastery_result.current_mastery)
+        if current_mastery >= 1.0:
+            student_assignment.score = min(100, round(current_mastery * 100))
+            student_assignment.status = AssignmentStatus.GRADED
+            student_assignment.submitted_at = datetime.now(timezone.utc)
+
     db.commit()
 
     return {
@@ -2093,6 +2168,61 @@ async def submit_word_spelling_answer(
         "is_correct": is_correct,
         "correct_answer": correct_answer,
         "new_memory_strength": new_memory_strength,
+    }
+
+
+@router.get("/assignments/{assignment_id}/vocabulary/spelling/proficiency")
+async def get_word_spelling_proficiency(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Return current proficiency for a word spelling assignment."""
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    assignment = None
+    if student_assignment.assignment_id:
+        assignment = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+    target_proficiency = assignment.target_proficiency if assignment else 80
+
+    result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    if not result:
+        return {
+            "current_mastery": 0,
+            "target_mastery": target_proficiency,
+            "achieved": False,
+            "words_mastered": 0,
+            "total_words": 0,
+        }
+    current_mastery = float(result.current_mastery) * 100
+    return {
+        "current_mastery": current_mastery,
+        "target_mastery": target_proficiency,
+        "achieved": current_mastery >= target_proficiency,
+        "words_mastered": result.words_mastered,
+        "total_words": result.total_words,
     }
 
 
@@ -2382,48 +2512,89 @@ async def start_word_cloze_practice(
             detail="This is not a word cloze assignment",
         )
 
+    # Issue #460 mirror: allow GRADED to re-practice (score won't change)
     if student_assignment.status == AssignmentStatus.NOT_STARTED:
         student_assignment.status = AssignmentStatus.IN_PROGRESS
         student_assignment.started_at = datetime.now(timezone.utc)
         db.commit()
 
-    # Get all content items in order
+    target_proficiency = assignment.target_proficiency if assignment else 80
+
+    # total words for proficiency display
+    total_words_result = db.execute(
+        text(
+            """
+            SELECT COUNT(DISTINCT ci.id) as total_count
+            FROM student_content_progress scp
+            JOIN content_items ci ON ci.content_id = scp.content_id
+            WHERE scp.student_assignment_id = :sa_id
+            """
+        ),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    total_words_in_assignment = (
+        total_words_result.total_count if total_words_result else 0
+    )
+    if total_words_in_assignment == 0:
+        fallback_count = db.execute(
+            text(
+                """
+                SELECT COUNT(DISTINCT ci.id) as total_count
+                FROM assignment_contents ac
+                JOIN content_items ci ON ci.content_id = ac.content_id
+                WHERE ac.assignment_id = :assignment_id
+                """
+            ),
+            {"assignment_id": student_assignment.assignment_id},
+        ).fetchone()
+        total_words_in_assignment = fallback_count.total_count if fallback_count else 0
+
+    # Defensive: ensure example sentence audio exists for vocab items.
+    # Pull all assignment items so the helper can backfill anything missing
+    # before we run cloze extraction.
     assignment_contents = (
         db.query(AssignmentContent)
         .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
-        .order_by(AssignmentContent.order_index)
         .all()
     )
-    content_ids = [ac.content_id for ac in assignment_contents]
-
-    content_items = (
+    all_content_items = (
         db.query(ContentItem)
-        .filter(ContentItem.content_id.in_(content_ids))
-        .order_by(ContentItem.id)
+        .filter(
+            ContentItem.content_id.in_([ac.content_id for ac in assignment_contents])
+        )
         .all()
     )
-
-    if not content_items:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No vocabulary items found for this assignment",
-        )
-
-    # Defensive: ensure example sentence audio exists for vocab items so
-    # students always hear the full sentence (not just the word).
-    # Normally backfilled by get_assignment_activities, but call here too
-    # in case this endpoint is hit directly.
     from services.preview_service import ensure_example_sentence_audio
 
-    await ensure_example_sentence_audio(list(content_items), db)
+    await ensure_example_sentence_audio(list(all_content_items), db)
 
-    items_list = list(content_items)
+    # Ebbinghaus: pick 10 least-familiar words; oversample to absorb any
+    # items we'll filter out (those without a usable cloze sentence).
+    words_result = db.execute(
+        text("SELECT * FROM get_words_for_practice(:sa_id, :limit_count)"),
+        {"sa_id": assignment_id, "limit_count": 30},
+    ).fetchall()
+
+    item_by_id = {ci.id: ci for ci in all_content_items}
+
+    candidate_items = []
+    if words_result:
+        for row in words_result:
+            ci = item_by_id.get(row.content_item_id)
+            if ci is not None:
+                candidate_items.append(ci)
+    else:
+        candidate_items = list(all_content_items)
+
     if assignment and assignment.shuffle_questions:
-        random.shuffle(items_list)
+        random.shuffle(candidate_items)
 
-    # Build cloze questions, skip items without usable example sentence
+    # Build cloze questions, skip items without usable example sentence,
+    # cap at 10 per round.
     questions = []
-    for ci in items_list:
+    for ci in candidate_items:
+        if len(questions) >= 10:
+            break
         cloze = extract_cloze_for_item(ci)
         if cloze is None:
             logger.info(
@@ -2432,9 +2603,6 @@ async def start_word_cloze_practice(
             )
             continue
         blanked_sentence, correct_answer = cloze
-
-        # For VOCABULARY_SET: base_word is the target word concept
-        # For EXAMPLE_SENTENCES: base_word is omitted (no separate target word)
         is_vocab_item = bool(ci.example_sentence)
         questions.append(
             {
@@ -2448,9 +2616,6 @@ async def start_word_cloze_practice(
                     else (ci.translation or "")
                 )
                 or "",
-                # Vocab items must use example sentence audio (not the
-                # single-word audio); example sentence content uses its
-                # own audio_url which IS the sentence audio.
                 "audio_url": (
                     ci.example_sentence_audio_url if is_vocab_item else ci.audio_url
                 ),
@@ -2479,10 +2644,27 @@ async def start_word_cloze_practice(
     db.commit()
     db.refresh(practice_session)
 
+    # current proficiency
+    mastery_result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    current_proficiency = (
+        float(mastery_result.current_mastery) * 100 if mastery_result else 0
+    )
+    words_mastered = int(mastery_result.words_mastered) if mastery_result else 0
+    achieved = bool(mastery_result.achieved) if mastery_result else False
+    is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
+
     return {
         "session_id": practice_session.id,
         "questions": questions,
-        "total_questions": len(questions),
+        "total_questions": total_words_in_assignment,
+        "current_proficiency": current_proficiency,
+        "target_proficiency": target_proficiency,
+        "words_mastered": words_mastered,
+        "achieved": achieved,
+        "is_practice_mode": is_practice_mode,
         "show_translation": (assignment.show_translation if assignment else True),
         "play_audio": assignment.play_audio if assignment else False,
         "time_limit_per_question": (
@@ -2632,6 +2814,18 @@ async def submit_word_cloze_answer(
         ws_data["last_answered_at"] = datetime.now(timezone.utc).isoformat()
         item_progress.word_selection_data = dict(ws_data)
 
+    # Auto-submit when mastery hits 100%
+    mastery_result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    if mastery_result and student_assignment.status != AssignmentStatus.GRADED:
+        current_mastery = float(mastery_result.current_mastery)
+        if current_mastery >= 1.0:
+            student_assignment.score = min(100, round(current_mastery * 100))
+            student_assignment.status = AssignmentStatus.GRADED
+            student_assignment.submitted_at = datetime.now(timezone.utc)
+
     db.commit()
 
     return {
@@ -2639,6 +2833,61 @@ async def submit_word_cloze_answer(
         "is_correct": is_correct,
         "correct_answer": correct_answer,
         "new_memory_strength": new_memory_strength,
+    }
+
+
+@router.get("/assignments/{assignment_id}/vocabulary/cloze/proficiency")
+async def get_word_cloze_proficiency(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Return current proficiency for a word cloze assignment."""
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    assignment = None
+    if student_assignment.assignment_id:
+        assignment = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+    target_proficiency = assignment.target_proficiency if assignment else 80
+
+    result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    if not result:
+        return {
+            "current_mastery": 0,
+            "target_mastery": target_proficiency,
+            "achieved": False,
+            "words_mastered": 0,
+            "total_words": 0,
+        }
+    current_mastery = float(result.current_mastery) * 100
+    return {
+        "current_mastery": current_mastery,
+        "target_mastery": target_proficiency,
+        "achieved": current_mastery >= target_proficiency,
+        "words_mastered": result.words_mastered,
+        "total_words": result.total_words,
     }
 
 

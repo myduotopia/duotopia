@@ -346,13 +346,6 @@ export default function StudentActivityPageContent({
   const [rearrangementQuestionIndex, setRearrangementQuestionIndex] =
     useState(0);
 
-  // Word spelling / word cloze: lift state up so the top question-number bar
-  // can navigate them (controlled-component pattern, like rearrangement).
-  const [wordSpellingTotal, setWordSpellingTotal] = useState(0);
-  const [wordSpellingIndex, setWordSpellingIndex] = useState(0);
-  const [wordClozeTotal, setWordClozeTotal] = useState(0);
-  const [wordClozeIndex, setWordClozeIndex] = useState(0);
-
   // Read-only mode (for submitted/graded/resubmitted assignments)
   // Note: isPreviewMode is NOT read-only - it allows all operations but doesn't save to DB
   const isReadOnly =
@@ -1767,9 +1760,7 @@ export default function StudentActivityPageContent({
           assignmentId={assignmentId}
           isPreviewMode={isPreviewMode}
           isDemoMode={isDemoMode}
-          externalQuestionIndex={wordClozeIndex}
-          onQuestionIndexChange={setWordClozeIndex}
-          onTotalQuestionsChange={setWordClozeTotal}
+          initialPracticeMode={assignmentStatus === "GRADED"}
           onComplete={() => {
             toast.success(t("wordCloze.toast.completed") || "作業已完成！");
             onBack?.();
@@ -1784,9 +1775,7 @@ export default function StudentActivityPageContent({
           assignmentId={assignmentId}
           isPreviewMode={isPreviewMode}
           isDemoMode={isDemoMode}
-          externalQuestionIndex={wordSpellingIndex}
-          onQuestionIndexChange={setWordSpellingIndex}
-          onTotalQuestionsChange={setWordSpellingTotal}
+          initialPracticeMode={assignmentStatus === "GRADED"}
           onComplete={() => {
             toast.success(t("wordSpelling.toast.completed") || "作業已完成！");
             onBack?.();
@@ -2366,55 +2355,15 @@ export default function StudentActivityPageContent({
             </div>
           </div>
 
-          {/* Activity navigation - 單字選擇模式不顯示此區塊（但單字集+例句模式 / 拼寫 / 克漏字例外） */}
+          {/* Activity navigation - 單字選擇 / 拼寫 / 克漏字模式不顯示此區塊
+              （這些模式使用艾賓浩斯記憶曲線，每輪選不熟單字，不允許跳題） */}
           {(!isVocabularySetType(currentActivity?.type || "") ||
             practiceMode === "reading" ||
-            practiceMode === "rearrangement" ||
-            practiceMode === "word_spelling" ||
-            practiceMode === "word_cloze") && (
+            practiceMode === "rearrangement") && (
             <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 scrollbar-hide">
-              {/* 單字拼寫 / 克漏字：使用 activity 內部 question index */}
-              {(practiceMode === "word_spelling" && wordSpellingTotal > 0) ||
-              (practiceMode === "word_cloze" && wordClozeTotal > 0) ? (
-                <div className="flex gap-0.5 sm:gap-1 overflow-x-auto scrollbar-hide">
-                  {Array.from(
-                    {
-                      length:
-                        practiceMode === "word_spelling"
-                          ? wordSpellingTotal
-                          : wordClozeTotal,
-                    },
-                    (_, qIndex) => {
-                      const activeIndex =
-                        practiceMode === "word_spelling"
-                          ? wordSpellingIndex
-                          : wordClozeIndex;
-                      const setIndex =
-                        practiceMode === "word_spelling"
-                          ? setWordSpellingIndex
-                          : setWordClozeIndex;
-                      const isActiveItem = activeIndex === qIndex;
-                      return (
-                        <button
-                          key={qIndex}
-                          onClick={() => setIndex(qIndex)}
-                          className={cn(
-                            "relative w-8 h-8 sm:w-8 sm:h-8 rounded border transition-all",
-                            "flex items-center justify-center text-sm sm:text-xs font-medium",
-                            "min-w-[32px]",
-                            "bg-white text-gray-600 border-gray-300 hover:border-blue-400",
-                            isActiveItem && "border-2 border-blue-600",
-                          )}
-                        >
-                          {qIndex + 1}
-                        </button>
-                      );
-                    },
-                  )}
-                </div>
-              ) : /* 例句重組模式：所有題目合併顯示，不分 activity */
-              practiceMode === "rearrangement" &&
-                rearrangementQuestions.length > 0 ? (
+              {/* 例句重組模式：所有題目合併顯示，不分 activity */}
+              {practiceMode === "rearrangement" &&
+              rearrangementQuestions.length > 0 ? (
                 <div className="flex gap-0.5 sm:gap-1 overflow-x-auto scrollbar-hide">
                   {rearrangementQuestions.map((q, qIndex) => {
                     const state = rearrangementQuestionStates.get(

@@ -176,23 +176,29 @@ async def preview_word_selection_start(
 @router.get("/assignments/{assignment_id}/preview/word-spelling-start")
 async def preview_word_spelling_start(
     assignment_id: int,
+    exclude_ids: str = Query(
+        default="", description="Already-practiced content_item_ids, comma-separated"
+    ),
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """Preview mode: Get word spelling practice data."""
     assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
-    return get_word_spelling_start(assignment, db)
+    return get_word_spelling_start(assignment, db, exclude_ids)
 
 
 @router.get("/assignments/{assignment_id}/preview/word-cloze-start")
 async def preview_word_cloze_start(
     assignment_id: int,
+    exclude_ids: str = Query(
+        default="", description="Already-practiced content_item_ids, comma-separated"
+    ),
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """Preview mode: Get word cloze practice data."""
     assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
-    return await get_word_cloze_start(assignment, db)
+    return await get_word_cloze_start(assignment, db, exclude_ids)
 
 
 @router.post("/assignments/{assignment_id}/preview/word-selection-answer")
