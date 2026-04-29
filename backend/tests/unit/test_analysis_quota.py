@@ -1,8 +1,10 @@
-"""Unit tests for analysis_quota service — issue #676 Phase 2.
+"""Unit tests for analysis_quota service — pure-Python rules only.
 
-Pure unit tests against in-memory fakes. The DB-using
-reset_analysis_count_for_assignment is covered by the integration
-tests in tests/integration/api/test_analysis_attempt_limit.py.
+DB-backed behavior (atomic increment, bulk reset) lives in
+tests/integration/api/test_quota_increment_atomic.py and
+tests/integration/api/test_grading_returned_reset.py — those need a
+real session because they exercise SQL semantics (UPDATE WHERE,
+synchronize_session="fetch").
 """
 import os
 import sys
@@ -15,7 +17,6 @@ from fastapi import HTTPException  # noqa: E402
 from services.analysis_quota import (  # noqa: E402
     MAX_AI_ANALYSIS_ATTEMPTS,
     check_can_analyze,
-    increment_analysis_count,
 )
 
 
@@ -75,35 +76,3 @@ class TestCheckCanAnalyze:
         # Legacy rows may surface NULL despite the NOT NULL constraint
         # (e.g. mocked tests, raw-SQL inserts pre-default).
         check_can_analyze(_FakeProgress(ai_analysis_count=None))
-
-
-class TestIncrementAnalysisCount:
-    def test_increments_from_zero(self):
-        progress = _FakeProgress(ai_analysis_count=0)
-        result = increment_analysis_count(progress)
-        assert progress.ai_analysis_count == 1
-        assert result == 1
-
-    def test_increments_normally(self):
-        progress = _FakeProgress(ai_analysis_count=2)
-        result = increment_analysis_count(progress)
-        assert progress.ai_analysis_count == 3
-        assert result == 3
-
-    def test_caps_at_max(self):
-        progress = _FakeProgress(ai_analysis_count=3)
-        result = increment_analysis_count(progress)
-        assert progress.ai_analysis_count == 3
-        assert result == 3
-
-    def test_caps_when_above_max(self):
-        progress = _FakeProgress(ai_analysis_count=10)
-        result = increment_analysis_count(progress)
-        assert progress.ai_analysis_count == 10
-        assert result == 10
-
-    def test_handles_null_count_as_zero(self):
-        progress = _FakeProgress(ai_analysis_count=None)
-        result = increment_analysis_count(progress)
-        assert progress.ai_analysis_count == 1
-        assert result == 1

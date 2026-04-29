@@ -84,6 +84,9 @@ export interface Activity {
     audio_url?: string;
     recording_url?: string;
     progress_id?: number;
+    // Server-authoritative AI analysis count for this item; used by the
+    // recording-attempts hook to seed its initial state cross-device.
+    ai_analysis_count?: number;
     ai_assessment?: {
       accuracy_score?: number;
       fluency_score?: number;
@@ -406,6 +409,10 @@ export default function StudentActivityPageContent({
     (_currentItemForGate?.teacher_reviewed_at as string | undefined) ?? null;
   const _gateExistingRecordingUrl =
     (_currentItemForGate?.recording_url as string | undefined) ?? null;
+  const _gateServerInitialCount =
+    typeof _currentItemForGate?.ai_analysis_count === "number"
+      ? (_currentItemForGate.ai_analysis_count as number)
+      : null;
   const _gateAiAssessment = _currentItemForGate?.ai_assessment as
     | { pronunciation_score?: number; accuracy_score?: number }
     | undefined;
@@ -440,6 +447,7 @@ export default function StudentActivityPageContent({
     teacherPassed: _gateTeacherPassed,
     teacherReviewedAt: _gateTeacherReviewedAt,
     existingRecordingUrl: _gateExistingRecordingUrl,
+    serverInitialCount: _gateServerInitialCount,
   });
   // readOnly（已提交 / 已批改 / 已訂正）下隱藏愛心。
   const recordingGateActive =

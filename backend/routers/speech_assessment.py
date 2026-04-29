@@ -651,7 +651,7 @@ def save_assessment_result(
     progress.status = "SUBMITTED"
     progress.submitted_at = datetime.now()
 
-    increment_analysis_count(progress)
+    increment_analysis_count(progress, db)
 
     db.commit()
     db.refresh(progress)
@@ -1903,7 +1903,7 @@ async def upload_pronunciation_analysis(
             # 增加尝试次数
             progress.attempts = (progress.attempts or 0) + 1
 
-            increment_analysis_count(progress)
+            increment_analysis_count(progress, db)
 
             db.commit()
             db.refresh(progress)

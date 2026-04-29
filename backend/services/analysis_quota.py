@@ -46,23 +46,44 @@ def check_can_analyze(progress: StudentItemProgress) -> None:
         )
 
 
-def increment_analysis_count(progress: StudentItemProgress) -> int:
-    """Increment counter on successful Azure analysis. Caps at MAX. Returns new count.
+def increment_analysis_count(progress: StudentItemProgress, db: Session) -> int:
+    """Atomic +1 on successful Azure analysis. Hard cap at MAX. Returns final count.
 
-    Caller commits. The cap is defensive against re-entrancy where the
-    check_can_analyze gate passed but a concurrent caller already
-    incremented past MAX between the gate and here.
+    Issues a single UPDATE ... WHERE count < MAX so two concurrent
+    callers cannot both pass the quota gate at count=N and both
+    successfully write count=N+1 — the second UPDATE simply matches 0
+    rows and the cap holds. This closes the race window between the
+    application-level gate (check_can_analyze) and the write.
 
-    Race note: two requests at count=0 can both read 0, both set to 1,
-    and commit 1 — losing one increment. We accept that for a 3-attempt
-    learning gate; tightening it would require row-level locking that
-    isn't worth the latency cost here.
+    `synchronize_session="fetch"` updates the in-memory `progress`
+    object's ai_analysis_count attribute to match the DB value while
+    preserving any other unsaved attribute changes the caller has
+    already made on the same instance (scores, ai_feedback, etc.).
+
+    Caller commits.
     """
-    current = progress.ai_analysis_count or 0
-    if current >= MAX_AI_ANALYSIS_ATTEMPTS:
-        return current
-    progress.ai_analysis_count = current + 1
-    return progress.ai_analysis_count
+    rows = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.id == progress.id,
+            StudentItemProgress.ai_analysis_count < MAX_AI_ANALYSIS_ATTEMPTS,
+        )
+        .update(
+            {
+                StudentItemProgress.ai_analysis_count: (
+                    StudentItemProgress.ai_analysis_count + 1
+                )
+            },
+            synchronize_session="fetch",
+        )
+    )
+    if rows == 0:
+        # Race lost: another concurrent caller already pushed the row to
+        # MAX between our gate check and this UPDATE. Reflect the cap on
+        # the in-memory object so response payloads see the truth.
+        progress.ai_analysis_count = MAX_AI_ANALYSIS_ATTEMPTS
+        return MAX_AI_ANALYSIS_ATTEMPTS
+    return progress.ai_analysis_count or MAX_AI_ANALYSIS_ATTEMPTS
 
 
 def reset_analysis_count_for_assignment(student_assignment_id: int, db: Session) -> int:
