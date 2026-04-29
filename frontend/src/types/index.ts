@@ -165,12 +165,15 @@ export interface Assignment {
   };
   // Score property for graded assignments
   score?: number;
-  // 練習模式：'reading' (例句朗讀) / 'rearrangement' (例句重組) / 'word_reading' (單字朗讀) / 'word_selection' (單字選擇)
+  // 練習模式
   practice_mode?:
     | "reading"
     | "rearrangement"
     | "word_reading"
-    | "word_selection";
+    | "word_selection"
+    | "word_spelling"
+    | "word_cloze"
+    | "tug_of_war";
   // 封存狀態
   is_archived?: boolean;
   archived_at?: string;
