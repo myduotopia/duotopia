@@ -2619,6 +2619,7 @@ async def start_word_cloze_practice(
                 "audio_url": (
                     ci.example_sentence_audio_url if is_vocab_item else ci.audio_url
                 ),
+                "correct_answer": correct_answer,
                 "correct_answer_length": len(correct_answer),
             }
         )

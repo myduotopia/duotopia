@@ -329,9 +329,11 @@ export default function WordSpellingActivity({
 
     const currentWord = words[currentIndex];
     const answer = isTimeout ? "" : typedAnswer.trim();
+    const expected = (currentWord.text || "").trim().toLowerCase();
+    // Defensive: if the backend somehow sent an empty word, treat as
+    // incorrect rather than letting "" === "" mark every answer correct.
     const correct =
-      !isTimeout &&
-      answer.toLowerCase() === currentWord.text.trim().toLowerCase();
+      !isTimeout && expected.length > 0 && answer.toLowerCase() === expected;
 
     setIsCorrect(correct);
     setShowResult(true);

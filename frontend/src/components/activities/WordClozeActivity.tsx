@@ -51,6 +51,9 @@ interface ClozeQuestion {
   blanked_sentence: string;
   sentence_translation: string;
   audio_url?: string;
+  // Backend-supplied so the frontend can do a local compare in
+  // preview/demo mode (mirrors how word_selection exposes translation).
+  correct_answer: string;
   correct_answer_length: number;
 }
 
@@ -318,10 +321,11 @@ export default function WordClozeActivity({
     setSubmitting(true);
 
     if (isPreviewMode || isDemoMode) {
-      // Frontend doesn't know correct answer in preview; treat any
-      // non-empty answer as correct for the SM-2 simulation, mirroring how
-      // word_selection treats the picked option.
-      const correct = !isTimeout && answer.length > 0;
+      // Local compare against the backend-supplied correct answer
+      // (case-insensitive, trimmed) — same pattern as spelling.
+      const expected = (currentQ.correct_answer || "").trim().toLowerCase();
+      const correct =
+        !isTimeout && expected.length > 0 && answer.toLowerCase() === expected;
       setIsCorrect(correct);
       setShowResult(true);
       if (correct) {
