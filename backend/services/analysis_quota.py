@@ -83,7 +83,11 @@ def increment_analysis_count(progress: StudentItemProgress, db: Session) -> int:
         # the in-memory object so response payloads see the truth.
         progress.ai_analysis_count = MAX_AI_ANALYSIS_ATTEMPTS
         return MAX_AI_ANALYSIS_ATTEMPTS
-    return progress.ai_analysis_count or MAX_AI_ANALYSIS_ATTEMPTS
+    # synchronize_session="fetch" already wrote the new (count+1) value
+    # into the in-memory attribute. Return it directly — never `or` with
+    # a fallback, since `or` would short-circuit a legitimate 0 (which
+    # can't happen here, but the defensive `or` masked any future bug).
+    return int(progress.ai_analysis_count)
 
 
 def reset_analysis_count_for_assignment(student_assignment_id: int, db: Session) -> int:
