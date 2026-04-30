@@ -58,9 +58,7 @@ class InstantPracticeRequest(BaseModel):
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "InstantPracticeRequest":
         if self.show_image and self.show_option_images:
-            raise ValueError(
-                "show_image and show_option_images are mutually exclusive"
-            )
+            raise ValueError("show_image and show_option_images are mutually exclusive")
         return self
 
 

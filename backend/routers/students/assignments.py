@@ -1447,8 +1447,7 @@ async def start_word_selection_practice(
             pool = [
                 {"text": w["translation"], "image_url": w.get("image_url")}
                 for w in words_data
-                if w.get("translation")
-                and w["translation"].lower().strip() != target
+                if w.get("translation") and w["translation"].lower().strip() != target
             ]
             random.shuffle(pool)
             final_distractors = pool[:3]
@@ -1456,9 +1455,7 @@ async def start_word_selection_practice(
         # Fallback for small word sets
         num_needed = 3 - len(final_distractors)
         for j in range(num_needed):
-            final_distractors.append(
-                {"text": f"選項{chr(65 + j)}", "image_url": None}
-            )
+            final_distractors.append({"text": f"選項{chr(65 + j)}", "image_url": None})
 
         # 正確答案 option 用該單字本身的 image_url
         correct_option = {

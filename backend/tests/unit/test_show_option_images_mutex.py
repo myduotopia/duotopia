@@ -18,13 +18,17 @@ _BASE_CREATE = {
 
 
 def test_create_allows_only_show_image():
-    req = CreateAssignmentRequest(**_BASE_CREATE, show_image=True, show_option_images=False)
+    req = CreateAssignmentRequest(
+        **_BASE_CREATE, show_image=True, show_option_images=False
+    )
     assert req.show_image is True
     assert req.show_option_images is False
 
 
 def test_create_allows_only_show_option_images():
-    req = CreateAssignmentRequest(**_BASE_CREATE, show_image=False, show_option_images=True)
+    req = CreateAssignmentRequest(
+        **_BASE_CREATE, show_image=False, show_option_images=True
+    )
     assert req.show_option_images is True
 
 
@@ -36,7 +40,9 @@ def test_create_allows_both_unset():
 
 def test_create_rejects_both_true():
     with pytest.raises(ValidationError) as exc:
-        CreateAssignmentRequest(**_BASE_CREATE, show_image=True, show_option_images=True)
+        CreateAssignmentRequest(
+            **_BASE_CREATE, show_image=True, show_option_images=True
+        )
     assert "mutually exclusive" in str(exc.value)
 
 

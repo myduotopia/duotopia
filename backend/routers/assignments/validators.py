@@ -43,9 +43,7 @@ class CreateAssignmentRequest(BaseModel):
     def _option_images_xor_image(self) -> "CreateAssignmentRequest":
         # Issue #631: show_image 與 show_option_images 互斥，避免題目圖片直接洩漏答案
         if self.show_image and self.show_option_images:
-            raise ValueError(
-                "show_image and show_option_images are mutually exclusive"
-            )
+            raise ValueError("show_image and show_option_images are mutually exclusive")
         return self
 
 
@@ -74,9 +72,7 @@ class UpdateAssignmentRequest(BaseModel):
         # 只在兩者都明確 True 時才阻擋；其中一邊為 None 表示「不更新」，由後端保留現值，
         # 不在 validator 階段判斷，留給 CRUD 層讀現值再檢查。
         if self.show_image is True and self.show_option_images is True:
-            raise ValueError(
-                "show_image and show_option_images are mutually exclusive"
-            )
+            raise ValueError("show_image and show_option_images are mutually exclusive")
         return self
 
 

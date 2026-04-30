@@ -378,8 +378,7 @@ def get_word_selection_start(
             pool = [
                 {"text": other.translation, "image_url": other.image_url}
                 for other in content_items
-                if other.translation
-                and other.translation.lower().strip() != target
+                if other.translation and other.translation.lower().strip() != target
             ]
             random.shuffle(pool)
             final_distractors = pool[:3]
@@ -387,9 +386,7 @@ def get_word_selection_start(
         # Fallback for small word sets
         num_needed = 3 - len(final_distractors)
         for j in range(num_needed):
-            final_distractors.append(
-                {"text": f"選項{chr(65 + j)}", "image_url": None}
-            )
+            final_distractors.append({"text": f"選項{chr(65 + j)}", "image_url": None})
 
         correct_option = {"text": correct_answer, "image_url": item.image_url}
         options = [correct_option] + final_distractors

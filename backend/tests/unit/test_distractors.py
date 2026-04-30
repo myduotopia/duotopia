@@ -28,9 +28,7 @@ class TestNormalizeDistractors:
         ]
 
     def test_mixed_shapes_normalized(self):
-        result = normalize_distractors(
-            ["legacy", {"text": "modern", "image_url": "u"}]
-        )
+        result = normalize_distractors(["legacy", {"text": "modern", "image_url": "u"}])
         assert result == [
             {"text": "legacy", "image_url": None},
             {"text": "modern", "image_url": "u"},

@@ -320,8 +320,7 @@ export function AssignmentDetailSheet({
       show_word: (detailData.show_word as boolean) ?? true,
       show_image: (detailData.show_image as boolean) ?? true,
       show_translation: (detailData.show_translation as boolean) ?? true,
-      show_option_images:
-        (detailData.show_option_images as boolean) ?? false,
+      show_option_images: (detailData.show_option_images as boolean) ?? false,
     });
     setIsEditing(false);
   };
