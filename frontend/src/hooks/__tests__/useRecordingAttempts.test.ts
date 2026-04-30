@@ -233,4 +233,135 @@ describe("useRecordingAttempts", () => {
     );
     expect(result.current.attemptsUsed).toBe(0);
   });
+
+  // Issue #676 Phase 2 — page-load sync from serverInitialCount.
+  describe("serverInitialCount", () => {
+    it("seeds count from server when localStorage is empty", () => {
+      const { result } = renderHook(() =>
+        useRecordingAttempts({ ...baseProps, serverInitialCount: 2 }),
+      );
+      expect(result.current.attemptsUsed).toBe(2);
+      expect(result.current.canRecord).toBe(true);
+    });
+
+    it("uses server count when local count is lower (cross-device fix)", () => {
+      // Browser B opens, localStorage=0; A previously made 1 attempt.
+      const { result } = renderHook(() =>
+        useRecordingAttempts({ ...baseProps, serverInitialCount: 1 }),
+      );
+      expect(result.current.attemptsUsed).toBe(1);
+    });
+
+    it("keeps local count when it exceeds server (optimistic in-flight write)", () => {
+      // Local optimistically incremented; the server response has not yet
+      // landed when the next render fires. Don't lower the count.
+      localStorage.setItem(
+        storageKey(100, 7),
+        JSON.stringify({ count: 2, lastReviewMarker: null }),
+      );
+      const { result } = renderHook(() =>
+        useRecordingAttempts({ ...baseProps, serverInitialCount: 1 }),
+      );
+      expect(result.current.attemptsUsed).toBe(2);
+    });
+
+    it("clamps server overflow to MAX_RECORDING_ATTEMPTS", () => {
+      const { result } = renderHook(() =>
+        useRecordingAttempts({ ...baseProps, serverInitialCount: 99 }),
+      );
+      expect(result.current.attemptsUsed).toBe(MAX_RECORDING_ATTEMPTS);
+      expect(result.current.canRecord).toBe(false);
+    });
+
+    it("ignores null / undefined server count (preserves legacy behavior)", () => {
+      localStorage.setItem(
+        storageKey(100, 7),
+        JSON.stringify({ count: 1, lastReviewMarker: null }),
+      );
+      const { result } = renderHook(() =>
+        useRecordingAttempts({ ...baseProps, serverInitialCount: null }),
+      );
+      expect(result.current.attemptsUsed).toBe(1);
+    });
+
+    it("RETURNED reset still wins over server count when both indicate fresh cycle", () => {
+      // Server has reset to 0, local was at 3 from previous cycle.
+      localStorage.setItem(
+        storageKey(100, 7),
+        JSON.stringify({ count: 3, lastReviewMarker: "2026-04-01T00:00:00Z" }),
+      );
+      const { result } = renderHook(() =>
+        useRecordingAttempts({
+          ...baseProps,
+          assignmentStatus: "RETURNED",
+          teacherReviewedAt: "2026-04-26T10:00:00Z",
+          returnedAt: "2026-04-26T10:00:00Z",
+          serverInitialCount: 0,
+        }),
+      );
+      expect(result.current.attemptsUsed).toBe(0);
+    });
+
+    it("persists the reconciled count to localStorage", () => {
+      // Browser B with stale cache=0 and server=2: localStorage should
+      // be updated to 2 so subsequent renders read the synced value.
+      const { result } = renderHook(() =>
+        useRecordingAttempts({ ...baseProps, serverInitialCount: 2 }),
+      );
+      expect(result.current.attemptsUsed).toBe(2);
+      const raw = localStorage.getItem(storageKey(100, 7));
+      expect(raw).toBeTruthy();
+      expect(JSON.parse(raw!).count).toBe(2);
+    });
+  });
+
+  // Issue #676 Phase 2 — syncServerCount reconciliation.
+  describe("syncServerCount", () => {
+    it("raises local count up to the server count when server is higher", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.recordAttempt()); // local=1
+      act(() => result.current.syncServerCount(2));
+      expect(result.current.attemptsUsed).toBe(2);
+    });
+
+    it("never lowers the count when server reports a smaller value", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.recordAttempt());
+      act(() => result.current.recordAttempt());
+      act(() => result.current.recordAttempt()); // local=3
+      act(() => result.current.syncServerCount(1));
+      expect(result.current.attemptsUsed).toBe(MAX_RECORDING_ATTEMPTS);
+      expect(result.current.canRecord).toBe(false);
+    });
+
+    it("clamps server-reported overflow to MAX_RECORDING_ATTEMPTS", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.syncServerCount(99));
+      expect(result.current.attemptsUsed).toBe(MAX_RECORDING_ATTEMPTS);
+    });
+
+    it("ignores undefined / null / NaN payloads as no-op", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.recordAttempt()); // local=1
+      act(() => result.current.syncServerCount(undefined));
+      act(() => result.current.syncServerCount(null));
+      act(() => result.current.syncServerCount(Number.NaN));
+      expect(result.current.attemptsUsed).toBe(1);
+    });
+
+    it("floors fractional server counts (defensive against bad payloads)", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.syncServerCount(2.7));
+      expect(result.current.attemptsUsed).toBe(2);
+    });
+
+    it("persists the synced count to localStorage", () => {
+      const { result } = renderHook(() => useRecordingAttempts(baseProps));
+      act(() => result.current.syncServerCount(2));
+      const raw = localStorage.getItem(storageKey(100, 7));
+      expect(raw).toBeTruthy();
+      const parsed = JSON.parse(raw!);
+      expect(parsed.count).toBe(2);
+    });
+  });
 });

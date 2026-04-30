@@ -412,6 +412,13 @@ async def get_assignment_activities(
                             item_data[
                                 "progress_id"
                             ] = item_progress.id  # 返回 progress_id 給前端用於批次分析
+                            # Server-authoritative AI analysis quota count.
+                            # Frontend hook seeds its initial state with
+                            # max(localStorage, this) so cross-device users
+                            # always see the real remaining attempts.
+                            item_data["ai_analysis_count"] = (
+                                item_progress.ai_analysis_count or 0
+                            )
 
                             # 加入老師評語相關資料
                             item_data[

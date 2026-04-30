@@ -43,12 +43,26 @@ export interface UseRecordingAttemptsParams {
   teacherPassed: boolean | null | undefined;
   teacherReviewedAt: string | null | undefined;
   existingRecordingUrl?: string | null;
+  /**
+   * Server-authoritative AI analysis count from the assignment-detail
+   * API response. When provided, the hook seeds its initial state with
+   * max(localStorage, this) so a fresh device / browser never sees more
+   * remaining attempts than the server has actually granted.
+   */
+  serverInitialCount?: number | null;
 }
 
 export interface UseRecordingAttemptsResult {
   attemptsUsed: number;
   canRecord: boolean;
   recordAttempt: () => void;
+  /**
+   * Reconcile against the server-authoritative count returned by the
+   * speech analysis API. The hook keeps the higher of the local and
+   * server counts so a stale localStorage can never grant more
+   * attempts than the server has accounted for.
+   */
+  syncServerCount: (serverCount: number | null | undefined) => void;
 }
 
 const safeRead = (key: string): StoredEntry | null => {
@@ -88,6 +102,7 @@ export const useRecordingAttempts = (
     returnedAt,
     teacherReviewedAt,
     existingRecordingUrl,
+    serverInitialCount,
   } = params;
 
   const key = storageKey(studentAssignmentId, itemId);
@@ -107,13 +122,44 @@ export const useRecordingAttempts = (
       currentMarker !== null &&
       (!stored || stored.lastReviewMarker !== currentMarker);
 
+    // Server-authoritative count clamped to a valid range. Used as a
+    // floor when seeding state — never lets a fresh localStorage make
+    // hearts re-appear that the server has already accounted for.
+    const cleanedServerCount =
+      typeof serverInitialCount === "number" &&
+      !Number.isNaN(serverInitialCount)
+        ? Math.max(
+            0,
+            Math.min(MAX_RECORDING_ATTEMPTS, Math.floor(serverInitialCount)),
+          )
+        : 0;
+
     if (shouldResetForNewReturnCycle) {
-      const next: StoredEntry = { count: 0, lastReviewMarker: currentMarker };
+      // RETURNED reset → server is also 0 by this point (the grading
+      // endpoint resets ai_analysis_count for the whole SA). Keep the
+      // max() so we degrade gracefully if the API hasn't refreshed yet.
+      const count = Math.max(0, cleanedServerCount);
+      const next: StoredEntry = { count, lastReviewMarker: currentMarker };
       safeWrite(key, next);
       return next;
     }
 
-    if (stored) return stored;
+    if (stored) {
+      // Reconcile cached localStorage with the server-reported count —
+      // server can only raise it, never lower it (that's syncServerCount's
+      // contract too). Persist the merged value so the next render reads
+      // a consistent local cache.
+      const reconciled = Math.max(stored.count, cleanedServerCount);
+      if (reconciled !== stored.count) {
+        const next: StoredEntry = {
+          count: reconciled,
+          lastReviewMarker: stored.lastReviewMarker,
+        };
+        safeWrite(key, next);
+        return next;
+      }
+      return stored;
+    }
 
     // First time we see this (assignmentId, itemId): write the entry NOW so
     // future renders read `stored` and never re-trigger seeding. Without this,
@@ -124,8 +170,12 @@ export const useRecordingAttempts = (
     // truly recorded before this feature shipped.
     const isPriorServerRecording =
       !!existingRecordingUrl && !existingRecordingUrl.startsWith("blob:");
+    const seedCount = Math.max(
+      isPriorServerRecording ? 1 : 0,
+      cleanedServerCount,
+    );
     const initial: StoredEntry = {
-      count: isPriorServerRecording ? 1 : 0,
+      count: seedCount,
       lastReviewMarker: currentMarker,
     };
     safeWrite(key, initial);
@@ -136,6 +186,7 @@ export const useRecordingAttempts = (
     teacherReviewedAt,
     returnedAt,
     existingRecordingUrl,
+    serverInitialCount,
   ]);
 
   const [entry, setEntry] = useState<StoredEntry>(initialEntry);
@@ -157,10 +208,31 @@ export const useRecordingAttempts = (
     });
   }, [key]);
 
+  const syncServerCount = useCallback(
+    (serverCount: number | null | undefined) => {
+      if (typeof serverCount !== "number" || Number.isNaN(serverCount)) return;
+      const clamped = Math.max(
+        0,
+        Math.min(MAX_RECORDING_ATTEMPTS, Math.floor(serverCount)),
+      );
+      setEntry((prev) => {
+        if (clamped <= prev.count) return prev;
+        const next: StoredEntry = {
+          count: clamped,
+          lastReviewMarker: prev.lastReviewMarker,
+        };
+        safeWrite(key, next);
+        return next;
+      });
+    },
+    [key],
+  );
+
   return {
     attemptsUsed: entry.count,
     canRecord: entry.count < MAX_RECORDING_ATTEMPTS,
     recordAttempt,
+    syncServerCount,
   };
 };
 
