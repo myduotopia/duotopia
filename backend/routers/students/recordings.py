@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Optional
 from datetime import datetime
 
 from database import get_db
@@ -24,7 +24,9 @@ async def upload_student_recording(
     assignment_id: int = Form(...),  # StudentAssignment ID
     content_item_id: int = Form(...),  # ContentItem ID (最關鍵的簡化)
     audio_file: UploadFile = File(...),
-    duration_seconds: int = Form(default=None),  # Optional: client-reported duration
+    duration_seconds: Optional[int] = Form(
+        default=None
+    ),  # Optional: client-reported duration
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -83,13 +85,13 @@ async def upload_student_recording(
             old_audio_url = existing_item_progress.recording_url
 
         # 上傳新錄音（不傳 content_id 和 item_index，讓它用 UUID）
-        ua = request.headers.get("user-agent", "")
+        user_agent = request.headers.get("user-agent", "")
         audio_url = await audio_service.upload_audio(
             audio_file,
             duration_seconds=duration_seconds if duration_seconds is not None else 30,
             assignment_id=assignment_id,
             student_id=student_id,
-            user_agent=ua,
+            user_agent=user_agent,
         )
 
         # 刪除舊錄音檔案（如果存在且不同）

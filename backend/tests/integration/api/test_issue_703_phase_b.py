@@ -64,9 +64,7 @@ class TestFileTooSmallBigQueryLog:
         tiny_content = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B"
         mock_file = _make_upload_file(tiny_content)
 
-        import pytest as _pytest
-
-        with _pytest.raises(Exception):
+        with pytest.raises(Exception):
             await service.upload_audio(
                 mock_file,
                 duration_seconds=5,
@@ -98,9 +96,7 @@ class TestFileTooSmallBigQueryLog:
         service = AudioUploadService()
         mock_file = _make_upload_file(b"")
 
-        import pytest as _pytest
-
-        with _pytest.raises(Exception):
+        with pytest.raises(Exception):
             await service.upload_audio(mock_file, user_agent="TestAgent/1.0")
 
         mock_bq_logger.log_audio_error.assert_called_once()

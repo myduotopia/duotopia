@@ -806,22 +806,7 @@ export default function StudentActivityPageContent({
               })
               .catch((error) => {
                 console.error("❌ 錄音上傳失敗:", error);
-                // Surface the failure to the student so they know to re-record.
-                toast.error(
-                  t("studentActivity.toast.uploadFailed") ||
-                    "錄音上傳失敗，請重新錄音",
-                );
-                // Mark the answer as failed / still in progress so the UI
-                // does not let the student advance with a lost recording.
-                setAnswers((prev) => {
-                  const newAnswers = new Map(prev);
-                  const ans = newAnswers.get(activityId);
-                  if (ans) {
-                    (ans as Answer).uploadFailed = true;
-                    ans.status = "in_progress";
-                  }
-                  return newAnswers;
-                });
+                markUploadFailed(activityId);
               });
           }
         }
@@ -883,6 +868,24 @@ export default function StudentActivityPageContent({
       }
     }
   };
+
+  const markUploadFailed = useCallback(
+    (activityId: number) => {
+      toast.error(
+        t("studentActivity.toast.uploadFailed", "錄音上傳失敗，請重新錄音"),
+      );
+      setAnswers((prev) => {
+        const next = new Map(prev);
+        const ans = next.get(activityId);
+        if (ans) {
+          ans.uploadFailed = true;
+          ans.status = "in_progress";
+        }
+        return next;
+      });
+    },
+    [t],
+  );
 
   const handleRecordingComplete = useCallback(
     async (blob: Blob, url: string, durationSeconds?: number) => {
@@ -1039,22 +1042,7 @@ export default function StudentActivityPageContent({
               })
               .catch((error) => {
                 console.error("❌ 錄音上傳失敗:", error);
-                // Surface the failure to the student so they know to re-record.
-                toast.error(
-                  t("studentActivity.toast.uploadFailed") ||
-                    "錄音上傳失敗，請重新錄音",
-                );
-                // Mark the answer as failed / still in progress so the UI
-                // does not let the student advance with a lost recording.
-                setAnswers((prev) => {
-                  const newAnswers = new Map(prev);
-                  const answer = newAnswers.get(currentActivity.id);
-                  if (answer) {
-                    (answer as Answer).uploadFailed = true;
-                    answer.status = "in_progress";
-                  }
-                  return newAnswers;
-                });
+                markUploadFailed(currentActivity.id);
               });
           }
         }
@@ -1071,6 +1059,7 @@ export default function StudentActivityPageContent({
       isDemoMode,
       canUseAiAnalysis,
       analyzeAndUpload,
+      markUploadFailed,
     ],
   );
 

@@ -6,7 +6,7 @@
  * 2. requestData() is called before stop() (iOS Safari data-ordering fix).
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, act, screen } from "@testing-library/react";
+import { render, act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // ---------------------------------------------------------------------------
@@ -121,10 +121,8 @@ async function startRecordingInUI() {
   await act(async () => {
     await userEvent.click(startBtn);
   });
-  // Allow microtask queue to settle
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 60));
-  });
+  // Wait until the mock recorder instance is created
+  await waitFor(() => expect(capturedInstance).not.toBeNull());
 }
 
 // ---------------------------------------------------------------------------
@@ -167,13 +165,11 @@ describe("AudioRecorder — requestData before stop", () => {
       await userEvent.click(stopBtn);
     });
 
-    // Allow the 80 ms requestData-to-stop delay to elapse
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 200));
+    // Wait until requestData and stop have both been called
+    await waitFor(() => {
+      expect(callOrder).toContain("requestData");
+      expect(callOrder).toContain("stop");
     });
-
-    expect(callOrder).toContain("requestData");
-    expect(callOrder).toContain("stop");
     expect(callOrder.indexOf("requestData")).toBeLessThan(
       callOrder.indexOf("stop"),
     );

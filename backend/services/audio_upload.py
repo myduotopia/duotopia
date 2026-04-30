@@ -100,7 +100,7 @@ class AudioUploadService:
         item_index: int = None,
         assignment_id: int = None,
         student_id: int = None,
-        user_agent: str = None,
+        user_agent: Optional[str] = None,
     ) -> str:
         """
         上傳音檔到 GCS
@@ -144,7 +144,7 @@ class AudioUploadService:
                 # 記錄到 BigQuery（含 user_agent 和 magic_bytes 供 codec 診斷）
                 from services.bigquery_logger import get_bigquery_logger
 
-                magic_bytes_hex = content[:64].hex() if content else ""
+                magic_bytes_hex = content[:64].hex()
                 logger = get_bigquery_logger()
                 err_msg = (
                     f"File size {len(content)} bytes < minimum {min_file_size} bytes"
