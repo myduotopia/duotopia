@@ -604,8 +604,10 @@ export function AssignmentDetailSheet({
                     </div>
                   )}
 
-                  {/* 單字選擇專用 - 達標熟悉度 */}
-                  {assignment.practice_mode === "word_selection" && (
+                  {/* 達標熟悉度（word_selection / word_spelling / word_cloze 共用） */}
+                  {(assignment.practice_mode === "word_selection" ||
+                    assignment.practice_mode === "word_spelling" ||
+                    assignment.practice_mode === "word_cloze") && (
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <Label className="text-xs text-gray-600 dark:text-gray-400">
@@ -639,8 +641,10 @@ export function AssignmentDetailSheet({
                     </div>
                   )}
 
-                  {/* 單字選擇專用 - 題目呈現方式 */}
-                  {assignment.practice_mode === "word_selection" && (
+                  {/* 題目呈現方式：word_selection 用 show_word；spelling/cloze 用 show_translation */}
+                  {(assignment.practice_mode === "word_selection" ||
+                    assignment.practice_mode === "word_spelling" ||
+                    assignment.practice_mode === "word_cloze") && (
                     <div>
                       <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
                         {t(
@@ -659,44 +663,77 @@ export function AssignmentDetailSheet({
                         <button
                           type="button"
                           disabled={hasStudentsStarted}
-                          onClick={() =>
-                            setEditAdvanced((prev) => ({
-                              ...prev,
-                              show_word: true,
-                              play_audio: false,
-                            }))
-                          }
+                          onClick={() => {
+                            if (assignment.practice_mode === "word_selection") {
+                              setEditAdvanced((prev) => ({
+                                ...prev,
+                                show_word: true,
+                                play_audio: false,
+                              }));
+                            } else {
+                              setEditAdvanced((prev) => ({
+                                ...prev,
+                                show_translation: true,
+                                play_audio: false,
+                              }));
+                            }
+                          }}
                           className={`flex-1 p-3 rounded-lg border text-sm ${
                             hasStudentsStarted
                               ? "opacity-50 cursor-not-allowed"
                               : ""
                           } ${
-                            editAdvanced.show_word && !editAdvanced.play_audio
+                            (
+                              assignment.practice_mode === "word_selection"
+                                ? editAdvanced.show_word &&
+                                  !editAdvanced.play_audio
+                                : editAdvanced.show_translation &&
+                                  !editAdvanced.play_audio
+                            )
                               ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
                               : "border-gray-200 dark:border-gray-600 hover:border-gray-300"
                           }`}
                         >
                           👁️{" "}
-                          {t(
-                            "dialogs.assignmentDialog.practiceMode.displayWord",
-                          )}
+                          {assignment.practice_mode === "word_selection"
+                            ? t(
+                                "dialogs.assignmentDialog.practiceMode.displayWord",
+                              )
+                            : t(
+                                "dialogs.assignmentDialog.practiceMode.displayTranslation",
+                              )}
                         </button>
                         <button
                           type="button"
                           disabled={hasStudentsStarted}
-                          onClick={() =>
-                            setEditAdvanced((prev) => ({
-                              ...prev,
-                              show_word: false,
-                              play_audio: true,
-                            }))
-                          }
+                          onClick={() => {
+                            if (assignment.practice_mode === "word_selection") {
+                              setEditAdvanced((prev) => ({
+                                ...prev,
+                                show_word: false,
+                                play_audio: true,
+                              }));
+                            } else {
+                              setEditAdvanced((prev) => ({
+                                ...prev,
+                                show_translation: false,
+                                play_audio: true,
+                                show_answer: true,
+                              }));
+                            }
+                          }}
                           className={`flex-1 p-3 rounded-lg border text-sm ${
                             hasStudentsStarted
                               ? "opacity-50 cursor-not-allowed"
                               : ""
                           } ${
-                            !editAdvanced.show_word && editAdvanced.play_audio
+                            (
+                              assignment.practice_mode === "word_selection"
+                                ? !editAdvanced.show_word &&
+                                  editAdvanced.play_audio
+                                : !editAdvanced.show_translation &&
+                                  editAdvanced.play_audio
+                            )
                               ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
                               : "border-gray-200 dark:border-gray-600 hover:border-gray-300"
                           }`}
@@ -754,36 +791,44 @@ export function AssignmentDetailSheet({
                       </select>
                     </div>
 
-                    {/* 打亂順序 */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-gray-600 dark:text-gray-400">
-                        {t(
-                          "dialogs.assignmentDialog.practiceMode.shuffleQuestions",
-                        )}
-                      </Label>
-                      <div className="flex items-center h-9">
-                        <input
-                          type="checkbox"
-                          checked={editAdvanced.shuffle_questions}
-                          onChange={(e) =>
-                            setEditAdvanced((prev) => ({
-                              ...prev,
-                              shuffle_questions: e.target.checked,
-                            }))
-                          }
-                          className="h-4 w-4 rounded border-gray-300"
-                        />
-                        <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                    {/* 打亂順序 — word_reading / rearrangement / reading 保留；
+                        word_selection / spelling / cloze 由艾賓浩斯每輪自選不熟單字 */}
+                    {(assignment.practice_mode === "reading" ||
+                      assignment.practice_mode === "rearrangement" ||
+                      assignment.practice_mode === "word_reading") && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-600 dark:text-gray-400">
                           {t(
-                            "dialogs.assignmentDialog.practiceMode.shuffleQuestionsDesc",
+                            "dialogs.assignmentDialog.practiceMode.shuffleQuestions",
                           )}
-                        </span>
+                        </Label>
+                        <div className="flex items-center h-9">
+                          <input
+                            type="checkbox"
+                            checked={editAdvanced.shuffle_questions}
+                            onChange={(e) =>
+                              setEditAdvanced((prev) => ({
+                                ...prev,
+                                shuffle_questions: e.target.checked,
+                              }))
+                            }
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.shuffleQuestionsDesc",
+                            )}
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                    {/* 例句重組 / 單字選擇 - 顯示答案 */}
+                    {/* 顯示答案 — 例句重組 / 單字選擇 / 單字拼寫 / 單字克漏字
+                        spelling/cloze 在 play_audio=true 時強制勾選 + 反灰 */}
                     {(assignment.practice_mode === "rearrangement" ||
-                      assignment.practice_mode === "word_selection") && (
+                      assignment.practice_mode === "word_selection" ||
+                      assignment.practice_mode === "word_spelling" ||
+                      assignment.practice_mode === "word_cloze") && (
                       <div className="space-y-1.5">
                         <Label className="text-xs text-gray-600 dark:text-gray-400">
                           {t(
@@ -794,26 +839,40 @@ export function AssignmentDetailSheet({
                           <input
                             type="checkbox"
                             checked={editAdvanced.show_answer}
+                            disabled={
+                              (assignment.practice_mode === "word_spelling" ||
+                                assignment.practice_mode === "word_cloze") &&
+                              editAdvanced.play_audio
+                            }
                             onChange={(e) =>
                               setEditAdvanced((prev) => ({
                                 ...prev,
                                 show_answer: e.target.checked,
                               }))
                             }
-                            className="h-4 w-4 rounded border-gray-300"
+                            className="h-4 w-4 rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                           <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
                             {t(
-                              assignment.practice_mode === "word_selection"
-                                ? "dialogs.assignmentDialog.practiceMode.wordSelectionShowAnswerDesc"
-                                : "dialogs.assignmentDialog.practiceMode.showAnswerDesc",
+                              assignment.practice_mode === "rearrangement"
+                                ? "dialogs.assignmentDialog.practiceMode.showAnswerDesc"
+                                : "dialogs.assignmentDialog.practiceMode.wordSelectionShowAnswerDesc",
                             )}
                           </span>
                         </div>
+                        {(assignment.practice_mode === "word_spelling" ||
+                          assignment.practice_mode === "word_cloze") &&
+                          editAdvanced.play_audio && (
+                            <p className="text-xs text-red-600 dark:text-red-400">
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.showAnswerLockedByAudio",
+                              )}
+                            </p>
+                          )}
                       </div>
                     )}
 
-                    {/* 單字朗讀專用 - 顯示翻譯 */}
+                    {/* 單字朗讀專用 - 顯示翻譯（spelling/cloze 已用上方 toggle） */}
                     {assignment.practice_mode === "word_reading" && (
                       <div className="space-y-1.5">
                         <Label className="text-xs text-gray-600 dark:text-gray-400">
@@ -842,9 +901,11 @@ export function AssignmentDetailSheet({
                       </div>
                     )}
 
-                    {/* 顯示題目圖片 (word_reading + word_selection) */}
+                    {/* 顯示題目圖片 (word_reading / word_selection / word_spelling / word_cloze) */}
                     {(assignment.practice_mode === "word_reading" ||
-                      assignment.practice_mode === "word_selection") && (
+                      assignment.practice_mode === "word_selection" ||
+                      assignment.practice_mode === "word_spelling" ||
+                      assignment.practice_mode === "word_cloze") && (
                       <div className="space-y-1.5">
                         <Label className="text-xs text-gray-600 dark:text-gray-400">
                           {t("dialogs.assignmentDialog.practiceMode.showImage")}

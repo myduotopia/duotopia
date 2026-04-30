@@ -96,6 +96,7 @@ export default function WordClozeActivity({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [showTranslation, setShowTranslation] = useState(true);
+  const [showAnswerOnWrong, setShowAnswerOnWrong] = useState(false);
 
   const [proficiency, setProficiency] = useState<ProficiencyStatus>({
     current_mastery: 0,
@@ -181,13 +182,21 @@ export default function WordClozeActivity({
         is_practice_mode?: boolean;
         show_translation: boolean;
         play_audio: boolean;
+        show_answer?: boolean;
         time_limit_per_question: number | null;
       }>(apiEndpoint);
 
       setQuestions(data.questions || []);
       setSessionId(data.session_id);
       setIsPracticeMode(data.is_practice_mode ?? false);
-      setShowTranslation(data.show_translation ?? true);
+      // Audio mode hides translation hint; translation mode shows it.
+      setShowTranslation(
+        (data.show_translation ?? true) && !(data.play_audio ?? false),
+      );
+      // play_audio mode forces show_answer=true.
+      setShowAnswerOnWrong(
+        (data.show_answer ?? false) || (data.play_audio ?? false),
+      );
       setTimeLimit(data.time_limit_per_question || null);
       setTimeRemaining(data.time_limit_per_question || null);
       setProficiency({
@@ -704,6 +713,12 @@ export default function WordClozeActivity({
                     : t("wordCloze.timeUpTryAgain") || "Time's up! Try again."}
                 </span>
               </div>
+              {showAnswerOnWrong && currentQ.correct_answer && (
+                <p className="text-sm text-gray-700">
+                  {t("wordCloze.correctAnswerLabel") || "正確答案"}:{" "}
+                  <span className="font-bold">{currentQ.correct_answer}</span>
+                </p>
+              )}
               <Button onClick={handleRetry} variant="outline" className="gap-2">
                 <RotateCcw className="h-4 w-4" />
                 {t("wordCloze.retry") || "Retry"}

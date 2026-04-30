@@ -1861,8 +1861,12 @@
         "questionDisplay": "題目呈現方式",
         "displayWord": "顯示單字",
         "displayWordDesc": "看英文單字選翻譯",
+        "displayTranslation": "顯示翻譯",
+        "displayTranslationDesc": "看翻譯拼/填單字",
         "playAudioWord": "播放音檔",
-        "playAudioWordDesc": "聽音檔選翻譯"
+        "playAudioWordDesc": "聽音檔選翻譯",
+        "playAudioFillDesc": "聽音檔拼/填單字",
+        "showAnswerLockedByAudio": "播放音檔模式必須顯示答案"
       }
     },
     "classroomAssignDialog": {
@@ -4719,6 +4723,7 @@
     "correctLabel": "正確",
     "baseWord": "單字",
     "translationHint": "中文意思",
+    "correctAnswerLabel": "正確答案",
     "playAudio": "播放例句發音",
     "inputPlaceholder": "填入空格...",
     "checkAnswer": "確認",
@@ -4760,6 +4765,7 @@
     "questionProgress": "第 {{current}}/{{total}} 題",
     "correctLabel": "正確",
     "translationHint": "中文意思",
+    "correctAnswerLabel": "正確答案",
     "playAudio": "播放發音",
     "typeTheWord": "請拼寫正確的單字：",
     "inputPlaceholder": "在此輸入單字...",

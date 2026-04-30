@@ -2001,6 +2001,7 @@ async def start_word_spelling_practice(
         "show_translation": (assignment.show_translation if assignment else True),
         "show_image": assignment.show_image if assignment else True,
         "play_audio": assignment.play_audio if assignment else False,
+        "show_answer": assignment.show_answer if assignment else False,
         "time_limit_per_question": (
             assignment.time_limit_per_question if assignment else None
         ),
@@ -2668,6 +2669,7 @@ async def start_word_cloze_practice(
         "is_practice_mode": is_practice_mode,
         "show_translation": (assignment.show_translation if assignment else True),
         "play_audio": assignment.play_audio if assignment else False,
+        "show_answer": assignment.show_answer if assignment else False,
         "time_limit_per_question": (
             assignment.time_limit_per_question if assignment else None
         ),

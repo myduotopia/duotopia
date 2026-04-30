@@ -1808,8 +1808,12 @@
         "questionDisplay": "Question Display",
         "displayWord": "Display Word",
         "displayWordDesc": "View word and select translation",
+        "displayTranslation": "Display Translation",
+        "displayTranslationDesc": "View translation and type the word",
         "playAudioWord": "Play Audio",
-        "playAudioWordDesc": "Listen to audio and select translation"
+        "playAudioWordDesc": "Listen to audio and select translation",
+        "playAudioFillDesc": "Listen to audio and type the word",
+        "showAnswerLockedByAudio": "Audio mode must reveal the answer"
       }
     },
     "classroomAssignDialog": {

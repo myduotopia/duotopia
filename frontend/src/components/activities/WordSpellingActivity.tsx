@@ -94,6 +94,7 @@ export default function WordSpellingActivity({
 
   // Settings
   const [showTranslation, setShowTranslation] = useState(true);
+  const [showAnswerOnWrong, setShowAnswerOnWrong] = useState(false);
 
   // Proficiency
   const [proficiency, setProficiency] = useState<ProficiencyStatus>({
@@ -195,13 +196,21 @@ export default function WordSpellingActivity({
         show_translation: boolean;
         show_image: boolean;
         play_audio: boolean;
+        show_answer?: boolean;
         time_limit_per_question: number | null;
       }>(apiEndpoint);
 
       setWords(data.words || []);
       setSessionId(data.session_id);
       setIsPracticeMode(data.is_practice_mode ?? false);
-      setShowTranslation(data.show_translation ?? true);
+      // Audio mode hides translation; translation mode shows it.
+      setShowTranslation(
+        (data.show_translation ?? true) && !(data.play_audio ?? false),
+      );
+      // play_audio mode forces show_answer=true (server already enforces).
+      setShowAnswerOnWrong(
+        (data.show_answer ?? false) || (data.play_audio ?? false),
+      );
       setTimeLimit(data.time_limit_per_question || null);
       setTimeRemaining(data.time_limit_per_question || null);
       setProficiency({
@@ -709,6 +718,12 @@ export default function WordSpellingActivity({
                       "Time's up! Try again."}
                 </span>
               </div>
+              {showAnswerOnWrong && currentWord.text && (
+                <p className="text-sm text-gray-700">
+                  {t("wordSpelling.correctAnswerLabel") || "正確答案"}:{" "}
+                  <span className="font-bold">{currentWord.text}</span>
+                </p>
+              )}
               <Button onClick={handleRetry} variant="outline" className="gap-2">
                 <RotateCcw className="h-4 w-4" />
                 {t("wordSpelling.retry") || "Retry"}

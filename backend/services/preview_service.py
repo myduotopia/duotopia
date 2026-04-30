@@ -756,6 +756,7 @@ def get_word_spelling_start(
             assignment.show_image if assignment.show_image is not None else True
         ),
         "play_audio": assignment.play_audio or False,
+        "show_answer": assignment.show_answer or False,
         "time_limit_per_question": assignment.time_limit_per_question,
     }
 
@@ -871,5 +872,6 @@ async def get_word_cloze_start(
             else True
         ),
         "play_audio": assignment.play_audio or False,
+        "show_answer": assignment.show_answer or False,
         "time_limit_per_question": assignment.time_limit_per_question,
     }
