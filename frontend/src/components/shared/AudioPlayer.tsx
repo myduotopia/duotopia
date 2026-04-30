@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Play, Pause, RotateCcw, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AudioErrorData } from "@/utils/audioErrorLogger";
+import { fixAudioDuration } from "@/utils/fixAudioDuration";
 
 interface AudioPlayerProps {
   audioUrl?: string;
@@ -196,6 +197,10 @@ export default function AudioPlayer({
 
     // Try to force load metadata
     audio.load();
+
+    // Apply iOS Safari fMP4 duration fix (seek-to-end trick).
+    // Must be called after load() so the element has a src set.
+    fixAudioDuration(audio);
 
     // Check if duration is already available (cached audio)
     if (

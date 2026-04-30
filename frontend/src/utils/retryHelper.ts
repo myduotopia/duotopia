@@ -86,10 +86,15 @@ export async function retryAudioUpload<T>(
     },
     shouldRetry: (error) => {
       // 只有網路錯誤或暫時性錯誤才重試
+      // 408/425/429 are retried because the backend's recording-upload endpoint
+      // upserts on (student_assignment_id, content_item_id), so duplicate uploads are safe.
       const retryableErrors = [
         "NetworkError",
         "TimeoutError",
         "AbortError",
+        "408", // Request Timeout
+        "425", // Too Early (server not ready)
+        "429", // Too Many Requests (rate limit)
         "500",
         "502",
         "503",

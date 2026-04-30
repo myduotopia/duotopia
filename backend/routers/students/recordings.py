@@ -1,8 +1,8 @@
 """Student audio recording upload endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Optional
 from datetime import datetime
 
 from database import get_db
@@ -20,9 +20,13 @@ router = APIRouter()
 
 @router.post("/upload-recording")
 async def upload_student_recording(
+    request: Request,
     assignment_id: int = Form(...),  # StudentAssignment ID
     content_item_id: int = Form(...),  # ContentItem ID (最關鍵的簡化)
     audio_file: UploadFile = File(...),
+    duration_seconds: Optional[int] = Form(
+        default=None
+    ),  # Optional: client-reported duration
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -81,11 +85,13 @@ async def upload_student_recording(
             old_audio_url = existing_item_progress.recording_url
 
         # 上傳新錄音（不傳 content_id 和 item_index，讓它用 UUID）
+        user_agent = request.headers.get("user-agent", "")
         audio_url = await audio_service.upload_audio(
             audio_file,
-            duration_seconds=30,  # 預設 30 秒
+            duration_seconds=duration_seconds if duration_seconds is not None else 30,
             assignment_id=assignment_id,
             student_id=student_id,
+            user_agent=user_agent,
         )
 
         # 刪除舊錄音檔案（如果存在且不同）
@@ -112,6 +118,8 @@ async def upload_student_recording(
             existing_item_progress.recording_url = audio_url
             existing_item_progress.submitted_at = datetime.utcnow()
             existing_item_progress.status = "COMPLETED"
+            if duration_seconds is not None:
+                existing_item_progress.recording_duration_seconds = duration_seconds
             print(f"Updated existing item progress record: {existing_item_progress.id}")
             current_item_progress = existing_item_progress
         else:
@@ -122,6 +130,7 @@ async def upload_student_recording(
                 recording_url=audio_url,
                 submitted_at=datetime.utcnow(),
                 status="COMPLETED",
+                recording_duration_seconds=duration_seconds,
             )
             db.add(new_item_progress)
             print("Created new item progress record")

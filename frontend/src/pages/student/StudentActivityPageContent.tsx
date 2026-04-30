@@ -150,6 +150,8 @@ interface Answer {
   startTime: Date;
   endTime?: Date;
   status: "not_started" | "in_progress" | "completed";
+  /** True when the GCS upload failed; recording is still available locally. */
+  uploadFailed?: boolean;
 }
 
 interface StudentActivityPageContentProps {
@@ -726,6 +728,10 @@ export default function StudentActivityPageContent({
             const formData = new FormData();
             formData.append("assignment_id", assignmentId.toString());
             formData.append("content_item_id", contentItemId.toString());
+            formData.append(
+              "duration_seconds",
+              Math.round(actualRecordingDuration).toString(),
+            );
             await appendAudioToFormData(formData, "audio_file", audioBlob);
 
             const apiUrl = import.meta.env.VITE_API_URL || "";
@@ -800,6 +806,7 @@ export default function StudentActivityPageContent({
               })
               .catch((error) => {
                 console.error("❌ 錄音上傳失敗:", error);
+                markUploadFailed(activityId);
               });
           }
         }
@@ -862,8 +869,26 @@ export default function StudentActivityPageContent({
     }
   };
 
+  const markUploadFailed = useCallback(
+    (activityId: number) => {
+      toast.error(
+        t("studentActivity.toast.uploadFailed", "錄音上傳失敗，請重新錄音"),
+      );
+      setAnswers((prev) => {
+        const next = new Map(prev);
+        const ans = next.get(activityId);
+        if (ans) {
+          ans.uploadFailed = true;
+          ans.status = "in_progress";
+        }
+        return next;
+      });
+    },
+    [t],
+  );
+
   const handleRecordingComplete = useCallback(
-    async (blob: Blob, url: string) => {
+    async (blob: Blob, url: string, durationSeconds?: number) => {
       // Caller (AudioRecorder.onRecordingComplete) doesn't await this Promise,
       // so swallow + log any rejection here to avoid silent unhandled rejections.
       try {
@@ -918,6 +943,12 @@ export default function StudentActivityPageContent({
             const formData = new FormData();
             formData.append("assignment_id", assignmentId.toString());
             formData.append("content_item_id", contentItemId.toString());
+            if (durationSeconds !== undefined) {
+              formData.append(
+                "duration_seconds",
+                Math.round(durationSeconds).toString(),
+              );
+            }
             await appendAudioToFormData(formData, "audio_file", blob);
 
             const apiUrl = import.meta.env.VITE_API_URL || "";
@@ -1011,6 +1042,7 @@ export default function StudentActivityPageContent({
               })
               .catch((error) => {
                 console.error("❌ 錄音上傳失敗:", error);
+                markUploadFailed(currentActivity.id);
               });
           }
         }
@@ -1027,6 +1059,7 @@ export default function StudentActivityPageContent({
       isDemoMode,
       canUseAiAnalysis,
       analyzeAndUpload,
+      markUploadFailed,
     ],
   );
 
