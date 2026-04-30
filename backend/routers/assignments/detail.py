@@ -285,6 +285,7 @@ async def get_assignment_detail(
         "show_translation": assignment.show_translation,
         "show_word": assignment.show_word,
         "show_image": assignment.show_image,
+        "show_option_images": bool(getattr(assignment, "show_option_images", False)),
     }
 
 

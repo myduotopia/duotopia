@@ -1830,6 +1830,7 @@ export default function ClassroomDetail({
                                 | undefined,
                               order: 0,
                               hasMissingAudio: false,
+                              hasMissingImage: false,
                             };
                             setAssignContents([cartItem]);
                             setShowAssignDialog(true);

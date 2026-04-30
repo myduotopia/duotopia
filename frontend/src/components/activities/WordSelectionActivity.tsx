@@ -42,6 +42,11 @@ import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
 
+interface OptionEntry {
+  text: string;
+  image_url?: string | null;
+}
+
 interface WordOption {
   content_item_id: number;
   text: string;
@@ -49,7 +54,7 @@ interface WordOption {
   audio_url?: string;
   image_url?: string;
   memory_strength: number;
-  options: string[];
+  options: OptionEntry[];
 }
 
 interface ProficiencyStatus {
@@ -99,6 +104,7 @@ export default function WordSelectionActivity({
   // Settings
   const [showWord, setShowWord] = useState(true);
   const [showImage, setShowImage] = useState(true);
+  const [showOptionImages, setShowOptionImages] = useState(false); // Issue #631
   const [playAudio, setPlayAudio] = useState(false);
 
   // Proficiency
@@ -210,6 +216,7 @@ export default function WordSelectionActivity({
         is_practice_mode?: boolean;
         show_word: boolean;
         show_image: boolean;
+        show_option_images?: boolean;
         play_audio: boolean;
         time_limit_per_question: number | null;
       }>(apiEndpoint);
@@ -219,6 +226,7 @@ export default function WordSelectionActivity({
       setIsPracticeMode(data.is_practice_mode ?? false);
       setShowWord(data.show_word ?? true);
       setShowImage(data.show_image ?? true);
+      setShowOptionImages(data.show_option_images ?? false);
       setPlayAudio(data.play_audio ?? false);
       setTimeLimit(data.time_limit_per_question || null);
       setTimeRemaining(data.time_limit_per_question || null);
@@ -809,14 +817,18 @@ export default function WordSelectionActivity({
           style={{ gridAutoRows: "1fr" }}
         >
           {currentWord.options.map((option, index) => {
-            const isSelected = selectedAnswer === option;
-            const isCorrectAnswer = option === currentWord.translation;
+            const optionText = option.text;
+            const optionImage = option.image_url || null;
+            const isSelected = selectedAnswer === optionText;
+            const isCorrectAnswer = optionText === currentWord.translation;
             // 答對時揭示；答錯時只有老師開啟 showAnswer 才揭示（Issue #538）
             const showCorrect =
               showResult && isCorrectAnswer && (isCorrect || showAnswer);
             const showIncorrect = showResult && isSelected && !isCorrectAnswer;
             // 答錯後才揭示的正解需要打勾動畫引導注意
             const animateReveal = showCorrect && !isCorrect;
+            // Issue #631: 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字
+            const renderAsImage = showOptionImages && !!optionImage;
 
             // 四個選項各用不同淺色
             const optionColors = [
@@ -831,7 +843,7 @@ export default function WordSelectionActivity({
                 key={index}
                 className={cn(
                   "h-full min-h-16 py-3 px-4 text-base sm:text-lg font-medium",
-                  "rounded-2xl border-2 shadow-md select-none",
+                  "rounded-2xl border-2 shadow-md select-none relative",
                   "transition-all duration-200",
                   "whitespace-normal text-center break-words",
                   !showResult &&
@@ -846,22 +858,34 @@ export default function WordSelectionActivity({
                     "ring-2 ring-indigo-400 scale-95",
                   showResult && !showCorrect && !showIncorrect && "opacity-50",
                 )}
-                onClick={() => handleSelectAnswer(option)}
+                onClick={() => handleSelectAnswer(optionText)}
                 disabled={showResult || submitting}
+                aria-label={optionText}
               >
-                {showCorrect && (
-                  <CheckCircle
+                {(showCorrect || showIncorrect) && (
+                  <span
                     className={cn(
-                      "h-5 w-5 mr-2 shrink-0 text-green-600 inline",
+                      "absolute top-2 left-2 z-10",
                       animateReveal &&
                         "animate-in zoom-in-50 fade-in duration-500",
                     )}
+                  >
+                    {showCorrect ? (
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-600" />
+                    )}
+                  </span>
+                )}
+                {renderAsImage ? (
+                  <img
+                    src={optionImage as string}
+                    alt={optionText}
+                    className="max-h-32 sm:max-h-40 w-full object-contain rounded-md mx-auto"
                   />
+                ) : (
+                  <span>{optionText}</span>
                 )}
-                {showIncorrect && (
-                  <XCircle className="h-5 w-5 mr-2 shrink-0 text-red-600 inline" />
-                )}
-                {option}
               </button>
             );
           })}

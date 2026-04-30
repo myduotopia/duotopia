@@ -162,6 +162,7 @@ async def create_assignment(
         show_word=request.show_word,
         show_image=request.show_image,
         show_translation=request.show_translation,
+        show_option_images=bool(request.show_option_images),  # Issue #631
         score_category=request.score_category,
     )
     db.add(assignment)
@@ -228,7 +229,11 @@ async def create_assignment(
             content_items_copy_map[original_item.id] = item_copy.id
 
     # word_selection 模式：為缺少干擾項的 items 從作業內所有 content 的單字翻譯生成
+    # Issue #631: 干擾項升級為 list[{text, image_url}]，方便 show_option_images 模式
+    # 用 snapshot 的 image_url 渲染選項圖。reader 端會做雙形狀相容。
     if request.practice_mode == "word_selection":
+        from utils.distractors import make_distractor
+
         # 收集作業內所有 content copies 的翻譯（跨 content）
         all_copy_content_ids = list(content_copy_map.values())
         all_items_in_assignment = (
@@ -239,18 +244,24 @@ async def create_assignment(
             .order_by(ContentItem.order_index)
             .all()
         )
-        all_translations = [item.translation for item in all_items_in_assignment]
+        # 候選池：每個 item 同時帶 translation + image_url
+        all_candidates = [
+            (item.translation, item.image_url) for item in all_items_in_assignment
+        ]
 
         generated_count = 0
         for item in all_items_in_assignment:
             if not isinstance(item.distractors, list) or len(item.distractors) == 0:
-                candidates = [
-                    t
-                    for t in all_translations
-                    if t.lower().strip() != item.translation.lower().strip()
+                target = item.translation.lower().strip()
+                pool = [
+                    (t, img)
+                    for (t, img) in all_candidates
+                    if t.lower().strip() != target
                 ]
-                random.shuffle(candidates)
-                item.distractors = candidates[:3]
+                random.shuffle(pool)
+                item.distractors = [
+                    make_distractor(text=t, image_url=img) for (t, img) in pool[:3]
+                ]
                 generated_count += 1
         if generated_count > 0:
             logger.info(
@@ -703,10 +714,18 @@ async def patch_assignment(
         "show_word",
         "show_image",
         "show_translation",
+        "show_option_images",  # Issue #631
     ]
     for field in advanced_fields:
         if field in provided:
             setattr(assignment, field, getattr(request, field))
+
+    # Issue #631: 互斥校驗 — 部分更新後若兩者皆 True 則拒絕
+    if assignment.show_image and assignment.show_option_images:
+        raise HTTPException(
+            status_code=422,
+            detail="show_image and show_option_images are mutually exclusive",
+        )
 
     # 更新 StudentAssignment 記錄
     update_fields = {}

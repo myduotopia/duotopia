@@ -1410,14 +1410,21 @@ async def start_word_selection_practice(
     db.refresh(practice_session)
 
     # Build response with words and their options
+    # Issue #631: options 升級為 list[{text, image_url}]，給 show_option_images 模式渲染圖片用。
+    # 雙形狀相容：舊 distractors 是 list[str]、新的是 list[{text, image_url}]，由
+    # normalize_distractors 統一吐 dict 形狀。
+    from utils.distractors import normalize_distractors
+
     words_with_options = []
 
-    # Collect all unique translations for picking distractors from the word set
-    all_translations = {
-        w["translation"].lower().strip(): w["translation"]
-        for w in words_data
-        if w["translation"]
-    }
+    # Collect translations + image_url for fallback distractor sourcing
+    translation_to_image: Dict[str, Optional[str]] = {}
+    for w in words_data:
+        if not w.get("translation"):
+            continue
+        key = w["translation"].lower().strip()
+        # Prefer first non-null image; if multiple items share a translation, last write wins
+        translation_to_image.setdefault(key, w.get("image_url"))
 
     # Query stored AI distractors from DB
     content_item_ids = [w["content_item_id"] for w in words_data]
@@ -1428,28 +1435,37 @@ async def start_word_selection_practice(
 
     for i, word in enumerate(words_data):
         correct_answer = word["translation"]
-        stored_distractors = distractors_map.get(word["content_item_id"])
+        stored_distractors = normalize_distractors(
+            distractors_map.get(word["content_item_id"])
+        )
 
-        if isinstance(stored_distractors, list) and len(stored_distractors) >= 3:
-            # 使用已儲存的干擾項（來自同作業其他單字翻譯）
+        if len(stored_distractors) >= 3:
             final_distractors = list(stored_distractors[:3])
         else:
-            # Fallback: 從其他單字翻譯取
-            other_translations = [
-                t
-                for key, t in all_translations.items()
-                if key != correct_answer.lower().strip()
+            # Fallback: 從其他單字翻譯取（同時帶 image_url）
+            target = correct_answer.lower().strip()
+            pool = [
+                {"text": w["translation"], "image_url": w.get("image_url")}
+                for w in words_data
+                if w.get("translation")
+                and w["translation"].lower().strip() != target
             ]
-            random.shuffle(other_translations)
-            final_distractors = other_translations[:3]
+            random.shuffle(pool)
+            final_distractors = pool[:3]
 
         # Fallback for small word sets
         num_needed = 3 - len(final_distractors)
         for j in range(num_needed):
-            final_distractors.append(f"選項{chr(65 + j)}")
+            final_distractors.append(
+                {"text": f"選項{chr(65 + j)}", "image_url": None}
+            )
 
-        # Create options array with correct answer and 3 distractors = 4 total
-        options = [correct_answer] + final_distractors
+        # 正確答案 option 用該單字本身的 image_url
+        correct_option = {
+            "text": correct_answer,
+            "image_url": word.get("image_url"),
+        }
+        options = [correct_option] + final_distractors
         random.shuffle(options)
 
         words_with_options.append(
@@ -1490,6 +1506,9 @@ async def start_word_selection_practice(
         "is_practice_mode": is_practice_mode,
         "show_word": assignment.show_word if assignment else True,
         "show_image": assignment.show_image if assignment else True,
+        "show_option_images": (
+            bool(assignment.show_option_images) if assignment else False
+        ),
         "play_audio": assignment.play_audio if assignment else False,
         "time_limit_per_question": (
             assignment.time_limit_per_question if assignment else None
