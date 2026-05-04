@@ -878,11 +878,14 @@ export default function WordSelectionActivity({
                   </span>
                 )}
                 {renderAsImage ? (
-                  <img
-                    src={optionImage as string}
-                    alt={optionText}
-                    className="max-h-32 sm:max-h-40 w-full object-contain rounded-md mx-auto"
-                  />
+                  <div className="flex flex-col items-center gap-2">
+                    <img
+                      src={optionImage as string}
+                      alt={optionText}
+                      className="max-h-28 sm:max-h-36 w-full object-contain rounded-md"
+                    />
+                    <span>{optionText}</span>
+                  </div>
                 ) : (
                   <span>{optionText}</span>
                 )}

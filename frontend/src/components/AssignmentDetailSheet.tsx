@@ -880,7 +880,6 @@ export function AssignmentDetailSheet({
                         <Label className="text-xs text-gray-600 dark:text-gray-400">
                           {t(
                             "dialogs.assignmentDialog.practiceMode.showOptionImages",
-                            { defaultValue: "顯示選項圖片" },
                           )}
                         </Label>
                         <div className="flex items-center h-9">
@@ -901,10 +900,6 @@ export function AssignmentDetailSheet({
                           <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
                             {t(
                               "dialogs.assignmentDialog.practiceMode.showOptionImagesDesc",
-                              {
-                                defaultValue:
-                                  "選項以圖片呈現（與顯示題目圖片互斥）",
-                              },
                             )}
                           </span>
                         </div>

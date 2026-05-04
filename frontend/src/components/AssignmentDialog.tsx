@@ -3235,7 +3235,6 @@ export function AssignmentDialog({
                                 <Label className="text-xs text-gray-600">
                                   {t(
                                     "dialogs.assignmentDialog.practiceMode.showOptionImages",
-                                    { defaultValue: "顯示選項圖片" },
                                   )}
                                 </Label>
                                 <div className="flex items-center h-9">
@@ -3265,20 +3264,12 @@ export function AssignmentDialog({
                                       disabled
                                         ? t(
                                             "dialogs.assignmentDialog.practiceMode.showOptionImagesMissing",
-                                            {
-                                              defaultValue:
-                                                "所選內容中有單字尚未上傳圖片，無法啟用",
-                                            },
                                           )
                                         : undefined
                                     }
                                   >
                                     {t(
                                       "dialogs.assignmentDialog.practiceMode.showOptionImagesDesc",
-                                      {
-                                        defaultValue:
-                                          "選項以圖片呈現（與顯示題目圖片互斥）",
-                                      },
                                     )}
                                   </span>
                                 </div>
@@ -3286,10 +3277,6 @@ export function AssignmentDialog({
                                   <p className="text-xs text-amber-600 mt-1">
                                     {t(
                                       "dialogs.assignmentDialog.practiceMode.showOptionImagesMissing",
-                                      {
-                                        defaultValue:
-                                          "所選內容中有單字尚未上傳圖片，無法啟用",
-                                      },
                                     )}
                                   </p>
                                 )}
