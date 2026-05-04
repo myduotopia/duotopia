@@ -925,6 +925,17 @@ async def get_word_cloze_start(
             ),
         )
 
+    # DEBUG: log audio_url status for first 3 questions to diagnose missing audio
+    logger.info(
+        "[CLOZE-PREVIEW-DEBUG] assignment=%s questions=%d audio_urls=%s",
+        assignment.id,
+        len(questions),
+        [
+            (q["content_item_id"], bool(q["audio_url"]), q["audio_url"])
+            for q in questions[:3]
+        ],
+    )
+
     return {
         "session_id": None,
         "questions": questions,
