@@ -2294,11 +2294,16 @@ export default function ClassroomDetail({
                                       {typeInfo.label}
                                     </span>
                                   </div>
-                                  {/* 🆕 rearrangement / word_selection 模式不顯示 AI 批改按鈕 */}
+                                  {/* 自動批改模式 (rearrangement / word_selection /
+                                      word_spelling / word_cloze / tug_of_war) 不顯示 AI 批改按鈕 */}
                                   {assignment.practice_mode !==
                                     "rearrangement" &&
                                     assignment.practice_mode !==
                                       "word_selection" &&
+                                    assignment.practice_mode !==
+                                      "word_spelling" &&
+                                    assignment.practice_mode !== "word_cloze" &&
+                                    assignment.practice_mode !== "tug_of_war" &&
                                     canUseAiGrading && (
                                       <div className="flex flex-col items-end flex-shrink-0">
                                         <Button
@@ -2735,11 +2740,18 @@ export default function ClassroomDetail({
                                             "classroomDetail.buttons.previewDemo",
                                           )}
                                         </Button>
-                                        {/* 🆕 rearrangement / word_selection 模式不顯示 AI 批改按鈕 */}
+                                        {/* 自動批改模式 (rearrangement / word_selection /
+                                            word_spelling / word_cloze / tug_of_war) 不顯示 AI 批改按鈕 */}
                                         {assignment.practice_mode !==
                                           "rearrangement" &&
                                           assignment.practice_mode !==
                                             "word_selection" &&
+                                          assignment.practice_mode !==
+                                            "word_spelling" &&
+                                          assignment.practice_mode !==
+                                            "word_cloze" &&
+                                          assignment.practice_mode !==
+                                            "tug_of_war" &&
                                           canUseAiGrading && (
                                             <Button
                                               variant="default"

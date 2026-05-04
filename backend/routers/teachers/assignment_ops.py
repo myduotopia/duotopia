@@ -184,7 +184,7 @@ async def preview_word_spelling_start(
 ):
     """Preview mode: Get word spelling practice data."""
     assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
-    return get_word_spelling_start(assignment, db, exclude_ids)
+    return await get_word_spelling_start(assignment, db, exclude_ids)
 
 
 @router.get("/assignments/{assignment_id}/preview/word-cloze-start")

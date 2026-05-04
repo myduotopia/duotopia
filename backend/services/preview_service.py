@@ -126,6 +126,68 @@ async def ensure_example_sentence_audio(items: List[ContentItem], db: Session) -
     return generated
 
 
+async def ensure_word_audio(items: List[ContentItem], db: Session) -> int:
+    """Lazily generate missing audio_url (single-word TTS) for vocab items.
+
+    Used by word_reading / word_spelling flows so the student (or teacher
+    preview) always hears the word audio. Without this, audio mode for
+    spelling shows nothing — translation is hidden by design and the
+    audio button only renders when audio_url exists.
+
+    Idempotent and concurrency-safe: only updates rows where
+    audio_url IS NULL at the time of write.
+
+    Returns number of TTS rows newly generated.
+    """
+    missing_audio_items = [
+        ci for ci in items if ci.text and ci.text.strip() and not ci.audio_url
+    ]
+    if not missing_audio_items:
+        return 0
+
+    from services.tts import TTSService
+    from utils.ttsVoiceResolver import get_voice_and_rate
+    from sqlalchemy import text as _sa_text
+
+    tts_service = TTSService()
+    generated = 0
+    for item in missing_audio_items:
+        try:
+            audio_settings = (
+                item.item_metadata.get("audio_settings", {})
+                if item.item_metadata
+                else {}
+            )
+            voice, rate = get_voice_and_rate(
+                audio_settings.get("accent", "American English"),
+                audio_settings.get("gender", "Male"),
+                audio_settings.get("speed", "Normal x1"),
+            )
+            url = await tts_service.generate_tts(item.text, voice, rate)
+            rows = db.execute(
+                _sa_text(
+                    "UPDATE content_items "
+                    "SET audio_url = :url "
+                    "WHERE id = :id "
+                    "AND audio_url IS NULL"
+                ),
+                {"url": url, "id": item.id},
+            ).rowcount
+            if rows > 0:
+                item.audio_url = url
+                generated += 1
+            else:
+                db.refresh(item)
+        except Exception as e:
+            logger.warning(
+                f"Lazy word TTS generation failed for content_item {item.id}: {e}"
+            )
+    if generated > 0:
+        db.commit()
+        logger.info(f"Lazy-generated word TTS for {generated} item(s)")
+    return generated
+
+
 def get_sentence_fields(item: ContentItem, content_type, practice_mode: str):
     """Return (text, translation, audio_url) based on content type and practice mode.
 
@@ -684,7 +746,7 @@ def handle_rearrangement_complete(
 # ---------------------------------------------------------------------------
 
 
-def get_word_spelling_start(
+async def get_word_spelling_start(
     assignment: Assignment,
     db: Session,
     exclude_ids: str = "",
@@ -694,6 +756,9 @@ def get_word_spelling_start(
     Mirrors the Ebbinghaus pattern from word-selection: each "round" returns
     up to 10 items; the frontend tracks practiced ids and passes them via
     exclude_ids so subsequent rounds rotate through unpractised items first.
+
+    Lazily backfills missing ci.audio_url so audio mode always has the
+    word TTS to play.
     """
     if assignment.practice_mode != "word_spelling":
         raise HTTPException(
@@ -715,6 +780,9 @@ def get_word_spelling_start(
             status_code=404,
             detail="No vocabulary items found for this assignment",
         )
+
+    # Backfill missing single-word audio so 播放音檔 mode actually has audio.
+    await ensure_word_audio(list(content_items), db)
 
     total_words_in_assignment = len(content_items)
     exclude_id_set = _parse_exclude_ids(exclude_ids)

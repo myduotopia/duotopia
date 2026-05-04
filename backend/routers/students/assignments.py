@@ -277,22 +277,28 @@ async def get_assignment_activities(
             .all()
         )
 
-        # Lazy TTS：朗讀/重組/克漏字模式下，補生成缺少例句音檔的單字集 items
-        if _practice_mode in ("reading", "rearrangement", "word_cloze"):
-            vocab_content_ids = {
-                cid
-                for cid, c in content_dict.items()
-                if c.type in _VOCABULARY_CONTENT_TYPES
-            }
-            if vocab_content_ids:
+        # Lazy TTS：依練習模式補生成缺少的音檔
+        # - reading / rearrangement / word_cloze → 例句音檔 (example_sentence_audio_url)
+        # - word_reading / word_spelling → 單字音檔 (audio_url)
+        vocab_content_ids = {
+            cid
+            for cid, c in content_dict.items()
+            if c.type in _VOCABULARY_CONTENT_TYPES
+        }
+        if vocab_content_ids:
+            vocab_items = [
+                ci for ci in all_content_items if ci.content_id in vocab_content_ids
+            ]
+            if _practice_mode in ("reading", "rearrangement", "word_cloze"):
                 from services.preview_service import (
                     ensure_example_sentence_audio,
                 )
 
-                vocab_items = [
-                    ci for ci in all_content_items if ci.content_id in vocab_content_ids
-                ]
                 await ensure_example_sentence_audio(vocab_items, db)
+            if _practice_mode in ("word_reading", "word_spelling"):
+                from services.preview_service import ensure_word_audio
+
+                await ensure_word_audio(vocab_items, db)
 
         # 建立 content_id -> [items] 的索引
         content_items_map = {}
@@ -1910,6 +1916,27 @@ async def start_word_spelling_practice(
         ).fetchone()
         total_words_in_assignment = fallback_count.total_count if fallback_count else 0
 
+    # Defensive: lazily generate single-word audio so 播放音檔 mode is usable.
+    # Pull all assignment items so the helper can backfill anything missing.
+    all_assignment_contents = (
+        db.query(AssignmentContent)
+        .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
+        .all()
+    )
+    all_content_items = (
+        db.query(ContentItem)
+        .filter(
+            ContentItem.content_id.in_(
+                [ac.content_id for ac in all_assignment_contents]
+            )
+        )
+        .all()
+    )
+    from services.preview_service import ensure_word_audio
+
+    await ensure_word_audio(list(all_content_items), db)
+    item_audio_by_id = {ci.id: ci.audio_url for ci in all_content_items}
+
     # Ebbinghaus: pick 10 words student is least familiar with
     words_result = db.execute(
         text("SELECT * FROM get_words_for_practice(:sa_id, :limit_count)"),
@@ -1918,15 +1945,13 @@ async def start_word_spelling_practice(
 
     if not words_result:
         # Fallback: no progress records yet, just take first 10 items
-        assignment_contents = (
-            db.query(AssignmentContent)
-            .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
-            .all()
-        )
-        content_ids = [ac.content_id for ac in assignment_contents]
         content_items = (
             db.query(ContentItem)
-            .filter(ContentItem.content_id.in_(content_ids))
+            .filter(
+                ContentItem.content_id.in_(
+                    [ac.content_id for ac in all_assignment_contents]
+                )
+            )
             .limit(10)
             .all()
         )
@@ -1947,12 +1972,13 @@ async def start_word_spelling_practice(
             for ci in content_items
         ]
     else:
+        # Prefer freshly-backfilled audio over the function's cached value
         words_data = [
             {
                 "content_item_id": row.content_item_id,
                 "text": row.text,
                 "translation": row.translation or "",
-                "audio_url": row.audio_url,
+                "audio_url": item_audio_by_id.get(row.content_item_id, row.audio_url),
                 "image_url": getattr(row, "image_url", None),
                 "memory_strength": (
                     float(row.memory_strength) if row.memory_strength else 0

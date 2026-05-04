@@ -94,6 +94,9 @@ export default function WordSpellingActivity({
 
   // Settings
   const [showTranslation, setShowTranslation] = useState(true);
+  // True when teacher chose "播放音檔" mode — translation is hidden and the
+  // audio button becomes the primary hint, so make it visually prominent.
+  const [audioOnlyMode, setAudioOnlyMode] = useState(false);
   const [showAnswerOnWrong, setShowAnswerOnWrong] = useState(false);
 
   // Proficiency
@@ -204,6 +207,7 @@ export default function WordSpellingActivity({
       setSessionId(data.session_id);
       setIsPracticeMode(data.is_practice_mode ?? false);
       // Audio mode hides translation; translation mode shows it.
+      setAudioOnlyMode(data.play_audio ?? false);
       setShowTranslation(
         (data.show_translation ?? true) && !(data.play_audio ?? false),
       );
@@ -637,16 +641,25 @@ export default function WordSpellingActivity({
         )}
 
         {currentWord.audio_url && (
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-2">
             <Button
-              variant="outline"
+              variant={audioOnlyMode ? "default" : "outline"}
               size="lg"
               onClick={playWordAudio}
-              className="gap-2"
+              className={cn(
+                "gap-2",
+                audioOnlyMode &&
+                  "h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg",
+              )}
             >
-              <Volume2 className="h-5 w-5" />
+              <Volume2 className={audioOnlyMode ? "h-7 w-7" : "h-5 w-5"} />
               {t("wordSpelling.playAudio") || "Play Audio"}
             </Button>
+            {audioOnlyMode && (
+              <p className="text-xs text-gray-500">
+                {t("wordSpelling.tapToReplay") || "點擊播放，可以重複聆聽"}
+              </p>
+            )}
           </div>
         )}
 

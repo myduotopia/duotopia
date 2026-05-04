@@ -430,6 +430,15 @@ export default function AssignmentManagementPage() {
           <option value="word_selection">
             {t("classroomDetail.contentTypes.WORD_SELECTION")}
           </option>
+          <option value="word_spelling">
+            {t("classroomDetail.contentTypes.WORD_SPELLING")}
+          </option>
+          <option value="word_cloze">
+            {t("classroomDetail.contentTypes.WORD_CLOZE")}
+          </option>
+          <option value="tug_of_war">
+            {t("classroomDetail.contentTypes.TUG_OF_WAR")}
+          </option>
         </select>
 
         <div className="relative w-full md:w-[250px]">

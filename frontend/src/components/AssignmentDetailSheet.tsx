@@ -437,7 +437,17 @@ export function AssignmentDetailSheet({
 
   const completionRate = assignment.completion_rate || 0;
   const typeBadge = getContentTypeBadge();
-  const showGradingButtons = assignment.practice_mode !== "word_selection";
+  // Auto-graded modes don't need manual AI/teacher grading buttons.
+  // (Mirrors backend AUTO_GRADED_MODES in routers/students/assignments.py)
+  const AUTO_GRADED_MODES = new Set([
+    "word_selection",
+    "word_spelling",
+    "word_cloze",
+    "tug_of_war",
+  ]);
+  const showGradingButtons = !AUTO_GRADED_MODES.has(
+    assignment.practice_mode ?? "",
+  );
 
   return (
     <>
