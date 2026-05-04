@@ -59,7 +59,7 @@ def _is_vocab_type(content_type) -> bool:
     return content_type in _VOCABULARY_CONTENT_TYPES
 
 
-async def ensure_example_sentence_audio(items: List[ContentItem], db: Session) -> int:
+async def ensure_example_sentence_audio(items: List[ContentItem], db: Session) -> dict:
     """Lazily generate missing example_sentence_audio_url for vocab items.
 
     Used by reading / rearrangement / word_cloze flows so the student (or
@@ -69,8 +69,24 @@ async def ensure_example_sentence_audio(items: List[ContentItem], db: Session) -
     Idempotent and concurrency-safe: only updates rows where
     example_sentence_audio_url IS NULL at the time of write.
 
-    Returns number of TTS rows newly generated (for logging / metrics).
+    Returns a dict {item_id: url} of every item now known to have audio
+    (newly generated + already cached). Callers should use this dict as
+    an authoritative override for `ci.example_sentence_audio_url` to
+    avoid issues where SQLAlchemy expires attributes after commit and a
+    subsequent refresh fails silently, leaving the in-memory attribute
+    None even though DB has the URL.
     """
+    # Lazy imports to avoid heavyweight module loads at request time
+    from services.tts import TTSService
+    from utils.ttsVoiceResolver import get_voice_and_rate
+    from sqlalchemy import text as _sa_text
+
+    # Start with whatever's already on the items (no-op for items that had it)
+    audio_by_id: dict = {}
+    for ci in items:
+        if ci.example_sentence_audio_url:
+            audio_by_id[ci.id] = ci.example_sentence_audio_url
+
     missing_audio_items = [
         ci
         for ci in items
@@ -79,12 +95,7 @@ async def ensure_example_sentence_audio(items: List[ContentItem], db: Session) -
         and not ci.example_sentence_audio_url
     ]
     if not missing_audio_items:
-        return 0
-
-    # Lazy imports to avoid heavyweight module loads at request time
-    from services.tts import TTSService
-    from utils.ttsVoiceResolver import get_voice_and_rate
-    from sqlalchemy import text as _sa_text
+        return audio_by_id
 
     tts_service = TTSService()
     generated = 0
@@ -113,9 +124,7 @@ async def ensure_example_sentence_audio(items: List[ContentItem], db: Session) -
             if rows > 0:
                 item.example_sentence_audio_url = url
                 generated += 1
-            else:
-                # already updated by a concurrent request; refresh to latest
-                db.refresh(item)
+            audio_by_id[item.id] = url
         except Exception as e:
             logger.warning(
                 f"Lazy TTS generation failed for content_item {item.id}: {e}"
@@ -123,10 +132,10 @@ async def ensure_example_sentence_audio(items: List[ContentItem], db: Session) -
     if generated > 0:
         db.commit()
         logger.info(f"Lazy-generated example sentence TTS for {generated} item(s)")
-    return generated
+    return audio_by_id
 
 
-async def ensure_word_audio(items: List[ContentItem], db: Session) -> int:
+async def ensure_word_audio(items: List[ContentItem], db: Session) -> dict:
     """Lazily generate missing audio_url (single-word TTS) for vocab items.
 
     Used by word_reading / word_spelling flows so the student (or teacher
@@ -134,20 +143,23 @@ async def ensure_word_audio(items: List[ContentItem], db: Session) -> int:
     spelling shows nothing — translation is hidden by design and the
     audio button only renders when audio_url exists.
 
-    Idempotent and concurrency-safe: only updates rows where
-    audio_url IS NULL at the time of write.
-
-    Returns number of TTS rows newly generated.
+    Returns a dict {item_id: url}. See ensure_example_sentence_audio for
+    why we return the dict instead of relying on in-memory attributes.
     """
+    from services.tts import TTSService
+    from utils.ttsVoiceResolver import get_voice_and_rate
+    from sqlalchemy import text as _sa_text
+
+    audio_by_id: dict = {}
+    for ci in items:
+        if ci.audio_url:
+            audio_by_id[ci.id] = ci.audio_url
+
     missing_audio_items = [
         ci for ci in items if ci.text and ci.text.strip() and not ci.audio_url
     ]
     if not missing_audio_items:
-        return 0
-
-    from services.tts import TTSService
-    from utils.ttsVoiceResolver import get_voice_and_rate
-    from sqlalchemy import text as _sa_text
+        return audio_by_id
 
     tts_service = TTSService()
     generated = 0
@@ -176,8 +188,7 @@ async def ensure_word_audio(items: List[ContentItem], db: Session) -> int:
             if rows > 0:
                 item.audio_url = url
                 generated += 1
-            else:
-                db.refresh(item)
+            audio_by_id[item.id] = url
         except Exception as e:
             logger.warning(
                 f"Lazy word TTS generation failed for content_item {item.id}: {e}"
@@ -185,7 +196,7 @@ async def ensure_word_audio(items: List[ContentItem], db: Session) -> int:
     if generated > 0:
         db.commit()
         logger.info(f"Lazy-generated word TTS for {generated} item(s)")
-    return generated
+    return audio_by_id
 
 
 def get_sentence_fields(item: ContentItem, content_type, practice_mode: str):
@@ -782,7 +793,7 @@ async def get_word_spelling_start(
         )
 
     # Backfill missing single-word audio so 播放音檔 mode actually has audio.
-    await ensure_word_audio(list(content_items), db)
+    word_audio_by_id = await ensure_word_audio(list(content_items), db)
 
     total_words_in_assignment = len(content_items)
     exclude_id_set = _parse_exclude_ids(exclude_ids)
@@ -799,7 +810,7 @@ async def get_word_spelling_start(
             "content_item_id": ci.id,
             "text": ci.text,
             "translation": ci.translation or "",
-            "audio_url": ci.audio_url,
+            "audio_url": word_audio_by_id.get(ci.id) or ci.audio_url,
             "image_url": ci.image_url,
             "memory_strength": 0,
         }
@@ -875,7 +886,7 @@ async def get_word_cloze_start(
     total_words_in_assignment = len(content_items)
 
     # Generate any missing example sentence audio so audio_url isn't blank.
-    await ensure_example_sentence_audio(list(content_items), db)
+    sentence_audio_by_id = await ensure_example_sentence_audio(list(content_items), db)
 
     exclude_id_set = _parse_exclude_ids(exclude_ids)
     remaining_items = [item for item in content_items if item.id not in exclude_id_set]
@@ -908,8 +919,12 @@ async def get_word_cloze_start(
                 # Vocab items must use example sentence audio (not the
                 # single-word audio); example sentence content uses its
                 # own audio_url which IS the sentence audio.
+                # Use the helper's authoritative dict to dodge SQLAlchemy
+                # expire_on_commit edge cases.
                 "audio_url": (
-                    ci.example_sentence_audio_url if is_vocab_item else ci.audio_url
+                    sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
+                    if is_vocab_item
+                    else ci.audio_url
                 ),
                 "correct_answer": correct_answer,
                 "correct_answer_length": len(correct_answer),
@@ -924,17 +939,6 @@ async def get_word_cloze_start(
                 "the target word."
             ),
         )
-
-    # DEBUG: log audio_url status for first 3 questions to diagnose missing audio
-    logger.info(
-        "[CLOZE-PREVIEW-DEBUG] assignment=%s questions=%d audio_urls=%s",
-        assignment.id,
-        len(questions),
-        [
-            (q["content_item_id"], bool(q["audio_url"]), q["audio_url"])
-            for q in questions[:3]
-        ],
-    )
 
     return {
         "session_id": None,

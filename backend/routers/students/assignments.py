@@ -1934,8 +1934,7 @@ async def start_word_spelling_practice(
     )
     from services.preview_service import ensure_word_audio
 
-    await ensure_word_audio(list(all_content_items), db)
-    item_audio_by_id = {ci.id: ci.audio_url for ci in all_content_items}
+    item_audio_by_id = await ensure_word_audio(list(all_content_items), db)
 
     # Ebbinghaus: pick 10 words student is least familiar with
     words_result = db.execute(
@@ -1965,7 +1964,7 @@ async def start_word_spelling_practice(
                 "content_item_id": ci.id,
                 "text": ci.text,
                 "translation": ci.translation or "",
-                "audio_url": ci.audio_url,
+                "audio_url": item_audio_by_id.get(ci.id) or ci.audio_url,
                 "image_url": ci.image_url,
                 "memory_strength": 0,
             }
@@ -2593,7 +2592,9 @@ async def start_word_cloze_practice(
     )
     from services.preview_service import ensure_example_sentence_audio
 
-    await ensure_example_sentence_audio(list(all_content_items), db)
+    sentence_audio_by_id = await ensure_example_sentence_audio(
+        list(all_content_items), db
+    )
 
     # Ebbinghaus: pick 10 least-familiar words; oversample to absorb any
     # items we'll filter out (those without a usable cloze sentence).
@@ -2644,7 +2645,9 @@ async def start_word_cloze_practice(
                 )
                 or "",
                 "audio_url": (
-                    ci.example_sentence_audio_url if is_vocab_item else ci.audio_url
+                    sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
+                    if is_vocab_item
+                    else ci.audio_url
                 ),
                 "correct_answer": correct_answer,
                 "correct_answer_length": len(correct_answer),
