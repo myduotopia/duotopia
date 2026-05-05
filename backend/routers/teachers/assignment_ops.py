@@ -14,7 +14,7 @@ from fastapi import (
     File,
     Form,
 )
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional, Dict, Any
 
 from database import get_db
@@ -46,6 +46,9 @@ from services.preview_service import (
     handle_rearrangement_complete,
     get_word_spelling_start,
     get_word_cloze_start,
+    ensure_example_sentence_audio,
+    ensure_word_audio,
+    _VOCABULARY_CONTENT_TYPES,
     WordSelectionAnswerRequest,
     RearrangementAnswerRequest,
     RearrangementCompleteRequest,
@@ -126,6 +129,40 @@ async def get_assignment_preview(
 ):
     """取得作業的預覽內容（供老師示範用）"""
     assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
+
+    # Lazy TTS pre-pass：對齊 students/assignments.get_assignment_activities，
+    # 依 practice_mode 補生缺少的音檔。沒做的話 reading 模式會聽到單字音檔
+    # 而不是例句音檔（example_sentence_audio_url 在 staging 上常常是 ""）。
+    # build_assignment_preview 是 sync 的，沒辦法在裡面 await TTS，所以放外面
+    # 先行 pre-load 並更新 ContentItem.example_sentence_audio_url（DB 與 in-memory）。
+    _practice_mode = assignment.practice_mode or ""
+    needs_sentence_audio = _practice_mode in ("reading", "rearrangement", "word_cloze")
+    needs_word_audio = _practice_mode in ("word_reading", "word_spelling")
+    if needs_sentence_audio or needs_word_audio:
+        assignment_contents = (
+            db.query(AssignmentContent)
+            .filter(AssignmentContent.assignment_id == assignment.id)
+            .all()
+        )
+        content_ids = [ac.content_id for ac in assignment_contents]
+        contents = (
+            db.query(Content)
+            .filter(Content.id.in_(content_ids))
+            .options(selectinload(Content.content_items))
+            .all()
+        )
+        vocab_items = [
+            ci
+            for content in contents
+            if content.type in _VOCABULARY_CONTENT_TYPES
+            for ci in content.content_items
+        ]
+        if vocab_items:
+            if needs_sentence_audio:
+                await ensure_example_sentence_audio(vocab_items, db)
+            elif needs_word_audio:
+                await ensure_word_audio(vocab_items, db)
+
     result = build_assignment_preview(assignment, db)
 
     # 即刻練習：加入 student_assignment_id 供前端使用
@@ -136,6 +173,64 @@ async def get_assignment_preview(
             result["is_instant_practice"] = True
 
     return result
+
+
+@router.get("/assignments/{assignment_id}/preview/practice-words")
+async def preview_practice_words(
+    assignment_id: int,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """
+    預覽模式專用：取得造句練習題目（艾賓浩斯記憶曲線系統的單字）
+
+    - 供老師預覽示範用，不建立 PracticeSession
+    - 不需要 StudentAssignment，直接從 Assignment 讀取
+    - 順序回傳前 10 個單字（沒有學生作答歷史可以排序）
+    - 回傳格式對齊 students 端 GET /assignments/{id}/practice-words，
+      但 session_id=None 表示預覽模式
+    """
+    assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
+
+    # answer_mode 對齊學生端：dict / Enum / None 都要 normalise 成字串
+    answer_mode_value = assignment.answer_mode or "listening"
+    if not isinstance(answer_mode_value, str):
+        answer_mode_value = (
+            answer_mode_value.value
+            if hasattr(answer_mode_value, "value")
+            else "listening"
+        )
+
+    # 取得作業內所有 ContentItem（含 Content 以判斷類型，與其他 preview 一致）
+    content_items = (
+        db.query(ContentItem)
+        .join(Content)
+        .join(AssignmentContent)
+        .filter(AssignmentContent.assignment_id == assignment.id)
+        .order_by(ContentItem.order_index)
+        .limit(10)
+        .all()
+    )
+
+    words = [
+        {
+            "content_item_id": item.id,
+            "text": item.text or "",
+            "translation": item.translation or "",
+            "example_sentence": item.example_sentence or "",
+            "example_sentence_translation": item.example_sentence_translation or "",
+            "audio_url": item.audio_url or "",
+            "memory_strength": 0.0,
+            "priority_score": 0.0,
+        }
+        for item in content_items
+    ]
+
+    return {
+        "session_id": None,  # 預覽模式不建立 session
+        "answer_mode": answer_mode_value,
+        "words": words,
+    }
 
 
 @router.post("/assignments/preview/assess-speech")
