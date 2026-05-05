@@ -55,6 +55,7 @@ interface AdvancedSettings {
   show_word: boolean;
   show_image: boolean;
   show_translation: boolean;
+  show_option_images: boolean; // Issue #631
 }
 
 interface ContentDetail {
@@ -148,6 +149,7 @@ export function AssignmentDetailSheet({
     show_word: true,
     show_image: true,
     show_translation: true,
+    show_option_images: false,
   });
 
   const fetchAssignmentData = useCallback(async () => {
@@ -181,6 +183,7 @@ export function AssignmentDetailSheet({
         show_word: (detail.show_word as boolean) ?? true,
         show_image: (detail.show_image as boolean) ?? true,
         show_translation: (detail.show_translation as boolean) ?? true,
+        show_option_images: (detail.show_option_images as boolean) ?? false,
       });
 
       // Extract contents from detail response
@@ -317,6 +320,7 @@ export function AssignmentDetailSheet({
       show_word: (detailData.show_word as boolean) ?? true,
       show_image: (detailData.show_image as boolean) ?? true,
       show_translation: (detailData.show_translation as boolean) ?? true,
+      show_option_images: (detailData.show_option_images as boolean) ?? false,
     });
     setIsEditing(false);
   };
@@ -838,7 +842,7 @@ export function AssignmentDetailSheet({
                       </div>
                     )}
 
-                    {/* 顯示圖片 (word_reading + word_selection) */}
+                    {/* 顯示題目圖片 (word_reading + word_selection) */}
                     {(assignment.practice_mode === "word_reading" ||
                       assignment.practice_mode === "word_selection") && (
                       <div className="space-y-1.5">
@@ -853,6 +857,10 @@ export function AssignmentDetailSheet({
                               setEditAdvanced((prev) => ({
                                 ...prev,
                                 show_image: e.target.checked,
+                                // Issue #631: 互斥
+                                show_option_images: e.target.checked
+                                  ? false
+                                  : prev.show_option_images,
                               }))
                             }
                             className="h-4 w-4 rounded border-gray-300"
@@ -860,6 +868,38 @@ export function AssignmentDetailSheet({
                           <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
                             {t(
                               "dialogs.assignmentDialog.practiceMode.showImageDesc",
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 顯示選項圖片 (word_selection only) Issue #631 */}
+                    {assignment.practice_mode === "word_selection" && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-600 dark:text-gray-400">
+                          {t(
+                            "dialogs.assignmentDialog.practiceMode.showOptionImages",
+                          )}
+                        </Label>
+                        <div className="flex items-center h-9">
+                          <input
+                            type="checkbox"
+                            checked={editAdvanced.show_option_images}
+                            onChange={(e) =>
+                              setEditAdvanced((prev) => ({
+                                ...prev,
+                                show_option_images: e.target.checked,
+                                show_image: e.target.checked
+                                  ? false
+                                  : prev.show_image,
+                              }))
+                            }
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.showOptionImagesDesc",
                             )}
                           </span>
                         </div>

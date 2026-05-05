@@ -77,6 +77,7 @@ interface ContentItemData {
   text: string;
   translation?: string;
   audio_url?: string | null;
+  image_url?: string | null;
 }
 
 interface Content {
@@ -188,6 +189,7 @@ export interface CartItem {
   itemsCount?: number;
   order: number; // 用於排序
   hasMissingAudio: boolean; // 是否有缺少音檔的項目
+  hasMissingImage: boolean; // 是否有缺少題目圖片的項目（單字選擇 show_option_images 前置驗證用）
 }
 
 // 可拖曳的購物車項目組件
@@ -395,7 +397,8 @@ export function AssignmentDialog({
     target_proficiency: 80, // 達標熟悉度 (50-100%)
     show_translation: true, // 顯示翻譯（單字朗讀專用）
     show_word: true, // 顯示單字（單字選擇專用）
-    show_image: true, // 顯示圖片
+    show_image: true, // 顯示題目圖片
+    show_option_images: false, // 顯示選項圖片（單字選擇專用，與 show_image 互斥，Issue #631）
   });
 
   // 內部載入學生列表（當外部未傳入時，單班級模式）
@@ -560,6 +563,7 @@ export function AssignmentDialog({
         show_translation: true,
         show_word: true,
         show_image: true,
+        show_option_images: false,
       });
       setCurrentStep(needsClassroomStep ? 0 : 1);
       setActiveTab(showOrgTab ? "organization" : "template");
@@ -869,9 +873,12 @@ export function AssignmentDialog({
         // 移除
         return prev.filter((item) => item.contentId !== contentId);
       } else {
-        // 添加 - 檢查是否有缺少音檔的項目
+        // 添加 - 檢查是否有缺少音檔/圖片的項目
         const hasMissingAudio = content.items
           ? content.items.some((item) => !item.audio_url)
+          : false;
+        const hasMissingImage = content.items
+          ? content.items.some((item) => !item.image_url)
           : false;
         return [
           ...prev,
@@ -884,6 +891,7 @@ export function AssignmentDialog({
             itemsCount: content.items_count,
             order: prev.length, // 順序為當前數量
             hasMissingAudio,
+            hasMissingImage,
           },
         ];
       }
@@ -973,6 +981,9 @@ export function AssignmentDialog({
             order: prev.length + idx,
             hasMissingAudio: content.items
               ? content.items.some((item) => !item.audio_url)
+              : false,
+            hasMissingImage: content.items
+              ? content.items.some((item) => !item.image_url)
               : false,
           }));
         return [...prev, ...newItems];
@@ -1069,6 +1080,7 @@ export function AssignmentDialog({
         show_translation: formData.show_translation,
         show_word: formData.show_word,
         show_image: formData.show_image,
+        show_option_images: formData.show_option_images,
         ...(effectiveOrganizationId && {
           organization_id: effectiveOrganizationId,
         }),
@@ -1210,6 +1222,7 @@ export function AssignmentDialog({
       show_translation: true,
       show_word: true,
       show_image: true,
+      show_option_images: false,
     });
     setCartItems([]);
     setExpandedPrograms(new Set());
@@ -3178,7 +3191,7 @@ export function AssignmentDialog({
                           </div>
                         )}
 
-                        {/* 顯示圖片 */}
+                        {/* 顯示題目圖片 */}
                         <div className="space-y-1.5">
                           <Label className="text-xs text-gray-600">
                             {t(
@@ -3193,6 +3206,10 @@ export function AssignmentDialog({
                                 setFormData((prev) => ({
                                   ...prev,
                                   show_image: e.target.checked,
+                                  // Issue #631: show_image 與 show_option_images 互斥
+                                  show_option_images: e.target.checked
+                                    ? false
+                                    : prev.show_option_images,
                                 }))
                               }
                               className="h-4 w-4 rounded border-gray-300"
@@ -3204,6 +3221,68 @@ export function AssignmentDialog({
                             </span>
                           </div>
                         </div>
+
+                        {/* 顯示選項圖片（單字選擇專用，與顯示題目圖片互斥）Issue #631 */}
+                        {formData.practice_mode === "word_selection" &&
+                          (() => {
+                            const hasMissingImage = cartItems.some(
+                              (i) => i.hasMissingImage,
+                            );
+                            const disabled =
+                              hasMissingImage && !formData.show_option_images;
+                            return (
+                              <div className="space-y-1.5">
+                                <Label className="text-xs text-gray-600">
+                                  {t(
+                                    "dialogs.assignmentDialog.practiceMode.showOptionImages",
+                                  )}
+                                </Label>
+                                <div className="flex items-center h-9">
+                                  <input
+                                    type="checkbox"
+                                    checked={formData.show_option_images}
+                                    disabled={disabled}
+                                    onChange={(e) =>
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        show_option_images: e.target.checked,
+                                        show_image: e.target.checked
+                                          ? false
+                                          : prev.show_image,
+                                      }))
+                                    }
+                                    className="h-4 w-4 rounded border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+                                  />
+                                  <span
+                                    className={cn(
+                                      "ml-2 text-sm",
+                                      disabled
+                                        ? "text-gray-400"
+                                        : "text-gray-600",
+                                    )}
+                                    title={
+                                      disabled
+                                        ? t(
+                                            "dialogs.assignmentDialog.practiceMode.showOptionImagesMissing",
+                                          )
+                                        : undefined
+                                    }
+                                  >
+                                    {t(
+                                      "dialogs.assignmentDialog.practiceMode.showOptionImagesDesc",
+                                    )}
+                                  </span>
+                                </div>
+                                {disabled && (
+                                  <p className="text-xs text-amber-600 mt-1">
+                                    {t(
+                                      "dialogs.assignmentDialog.practiceMode.showOptionImagesMissing",
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })()}
                       </div>
                     </Card>
                   )}

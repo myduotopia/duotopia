@@ -14,7 +14,7 @@ import random
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
@@ -53,6 +53,13 @@ class InstantPracticeRequest(BaseModel):
     show_translation: Optional[bool] = True
     show_word: Optional[bool] = True
     show_image: Optional[bool] = True
+    show_option_images: Optional[bool] = False  # Issue #631
+
+    @model_validator(mode="after")
+    def _option_images_xor_image(self) -> "InstantPracticeRequest":
+        if self.show_image and self.show_option_images:
+            raise ValueError("show_image and show_option_images are mutually exclusive")
+        return self
 
 
 @router.post("/instant-practice/create")
@@ -155,7 +162,10 @@ async def create_instant_practice(
         db.flush()
 
     # word_selection / tug_of_war 模式：為缺少干擾項的 items 生成
+    # Issue #631: 干擾項升級為 list[{text, image_url}]
     if request.practice_mode in ("word_selection", "tug_of_war"):
+        from utils.distractors import make_distractor
+
         all_items = (
             db.query(ContentItem)
             .filter(ContentItem.content_id == content_copy.id)
@@ -164,17 +174,20 @@ async def create_instant_practice(
             .order_by(ContentItem.order_index)
             .all()
         )
-        all_translations = [item.translation for item in all_items]
+        all_candidates = [(item.translation, item.image_url) for item in all_items]
 
         for item in all_items:
             if not isinstance(item.distractors, list) or len(item.distractors) == 0:
-                candidates = [
-                    t
-                    for t in all_translations
-                    if t.lower().strip() != item.translation.lower().strip()
+                target = item.translation.lower().strip()
+                pool = [
+                    (t, img)
+                    for (t, img) in all_candidates
+                    if t.lower().strip() != target
                 ]
-                random.shuffle(candidates)
-                item.distractors = candidates[:3]
+                random.shuffle(pool)
+                item.distractors = [
+                    make_distractor(text=t, image_url=img) for (t, img) in pool[:3]
+                ]
 
     # 建立 Assignment
     assignment = Assignment(
@@ -192,6 +205,7 @@ async def create_instant_practice(
         show_translation=request.show_translation,
         show_word=request.show_word,
         show_image=request.show_image,
+        show_option_images=bool(request.show_option_images),  # Issue #631
     )
     db.add(assignment)
     db.flush()
