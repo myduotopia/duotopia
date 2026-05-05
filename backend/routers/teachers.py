@@ -47,7 +47,7 @@ from datetime import date, datetime, timedelta, timezone  # noqa: F401
 from services.translation import translation_service
 from services.quota_analytics_service import QuotaAnalyticsService
 from services.quota_service import QuotaService
-from services.preview_service import get_sentence_fields
+from services.preview_service import get_sentence_fields, _VOCABULARY_CONTENT_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -3865,6 +3865,27 @@ async def get_assignment_preview(
     )
     content_dict = {content.id: content for content in contents}
 
+    # Lazy TTS：對齊學生端 get_assignment_activities，依 practice_mode 補生缺少的音檔
+    # - reading / rearrangement / word_cloze → 例句音檔 (example_sentence_audio_url)
+    # - word_reading / word_spelling → 單字音檔 (audio_url)
+    # 不做的話老師預覽會聽到不對的音檔（例句模式聽到單字音）
+    _practice_mode = assignment.practice_mode or ""
+    vocab_items = [
+        ci
+        for content in contents
+        if content.type in _VOCABULARY_CONTENT_TYPES
+        for ci in content.content_items
+    ]
+    if vocab_items:
+        if _practice_mode in ("reading", "rearrangement", "word_cloze"):
+            from services.preview_service import ensure_example_sentence_audio
+
+            await ensure_example_sentence_audio(vocab_items, db)
+        if _practice_mode in ("word_reading", "word_spelling"):
+            from services.preview_service import ensure_word_audio
+
+            await ensure_word_audio(vocab_items, db)
+
     activities = []
 
     for idx, ac in enumerate(assignment_contents):
@@ -3895,7 +3916,7 @@ async def get_assignment_preview(
             content_items = sorted(content.content_items, key=lambda x: x.order_index)
 
             # 構建 items 資料（使用 get_sentence_fields 確保朗讀模式下回傳例句欄位）
-            _practice_mode = assignment.practice_mode or ""
+            # _practice_mode 已在 lazy TTS 區塊提前計算，直接重用
             items_data = []
             for item in content_items:
                 fields = get_sentence_fields(item, content.type, _practice_mode)
