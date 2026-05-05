@@ -281,6 +281,12 @@ export default function AssignmentManagementPage() {
         return t("classroomDetail.contentTypes.WORD_READING");
       case "word_selection":
         return t("classroomDetail.contentTypes.WORD_SELECTION");
+      case "word_spelling":
+        return t("classroomDetail.contentTypes.WORD_SPELLING");
+      case "word_cloze":
+        return t("classroomDetail.contentTypes.WORD_CLOZE");
+      case "tug_of_war":
+        return t("classroomDetail.contentTypes.TUG_OF_WAR");
       default:
         return mode || "—";
     }
@@ -296,6 +302,12 @@ export default function AssignmentManagementPage() {
         return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300";
       case "word_selection":
         return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300";
+      case "word_spelling":
+        return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
+      case "word_cloze":
+        return "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300";
+      case "tug_of_war":
+        return "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300";
       default:
         return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
     }
@@ -417,6 +429,15 @@ export default function AssignmentManagementPage() {
           </option>
           <option value="word_selection">
             {t("classroomDetail.contentTypes.WORD_SELECTION")}
+          </option>
+          <option value="word_spelling">
+            {t("classroomDetail.contentTypes.WORD_SPELLING")}
+          </option>
+          <option value="word_cloze">
+            {t("classroomDetail.contentTypes.WORD_CLOZE")}
+          </option>
+          <option value="tug_of_war">
+            {t("classroomDetail.contentTypes.TUG_OF_WAR")}
           </option>
         </select>
 

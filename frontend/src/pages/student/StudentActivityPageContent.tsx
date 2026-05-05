@@ -37,6 +37,8 @@ import {
   incrementRecordingAttemptForItem,
 } from "@/hooks/useRecordingAttempts";
 import { getItemPassFailStatus } from "@/utils/itemPassFailStatus";
+import WordSpellingActivity from "@/components/activities/WordSpellingActivity";
+import WordClozeActivity from "@/components/activities/WordClozeActivity";
 import {
   ChevronLeft,
   ChevronRight,
@@ -1649,6 +1651,23 @@ export default function StudentActivityPageContent({
   };
 
   const getActivityTypeBadge = (type: string) => {
+    // 練習模式優先：spelling/cloze 都顯示對應模式名稱
+    // （否則克漏字/拼寫題會誤顯示為「例句朗讀」或「單字練習」）
+    if (practiceMode === "word_cloze") {
+      return (
+        <Badge variant="outline">
+          {t("studentActivityPage.activityTypes.wordCloze")}
+        </Badge>
+      );
+    }
+    if (practiceMode === "word_spelling") {
+      return (
+        <Badge variant="outline">
+          {t("studentActivityPage.activityTypes.wordSpelling")}
+        </Badge>
+      );
+    }
+
     // 使用 helper functions 處理例句集和單字集類型
     if (isExampleSentencesType(type)) {
       return (
@@ -1730,6 +1749,40 @@ export default function StudentActivityPageContent({
 
   const renderActivityContent = (activity: Activity) => {
     const answer = answers.get(activity.id);
+
+    // 🎯 克漏字 / 單字拼寫：根據 practiceMode 直接路由（與內容類型無關，
+    // 因克漏字可選例句集或單字集；拼寫雖只接單字集，但邏輯一致）。
+    // 必須在 isExampleSentencesType / isVocabularySetType 判斷前先早退，
+    // 避免被 ReadingAssessmentTemplate 攔截。
+    if (practiceMode === "word_cloze") {
+      return (
+        <WordClozeActivity
+          assignmentId={assignmentId}
+          isPreviewMode={isPreviewMode}
+          isDemoMode={isDemoMode}
+          initialPracticeMode={assignmentStatus === "GRADED"}
+          onComplete={() => {
+            toast.success(t("wordCloze.toast.completed") || "作業已完成！");
+            onBack?.();
+          }}
+        />
+      );
+    }
+
+    if (practiceMode === "word_spelling") {
+      return (
+        <WordSpellingActivity
+          assignmentId={assignmentId}
+          isPreviewMode={isPreviewMode}
+          isDemoMode={isDemoMode}
+          initialPracticeMode={assignmentStatus === "GRADED"}
+          onComplete={() => {
+            toast.success(t("wordSpelling.toast.completed") || "作業已完成！");
+            onBack?.();
+          }}
+        />
+      );
+    }
 
     // 單字集類型使用新的 SentenceMakingActivity 組件，不要進入舊的 GroupedQuestionsTemplate
     // 例句集/單字集 + rearrangement 模式使用 RearrangementActivity，也不要進入 GroupedQuestionsTemplate
@@ -2084,6 +2137,8 @@ export default function StudentActivityPageContent({
         );
       }
 
+      // 注意：word_spelling / word_cloze 已在函式開頭早退路由
+
       // 造句練習：使用艾賓浩斯記憶曲線系統
       return (
         <SentenceMakingActivity
@@ -2194,15 +2249,21 @@ export default function StudentActivityPageContent({
         {/* 🎯 單字選擇預覽模式：使用 max-w-7xl px-4 對齊預覽頁的藍色提示條 */}
         <div
           className={
-            practiceMode === "word_selection" && isPreviewMode
+            (practiceMode === "word_selection" ||
+              practiceMode === "word_spelling" ||
+              practiceMode === "word_cloze") &&
+            isPreviewMode
               ? "max-w-7xl mx-auto px-4 py-2"
               : "max-w-6xl mx-auto px-2 sm:px-4 py-2"
           }
         >
           {/* Mobile header layout */}
           <div className="flex flex-row items-center justify-between gap-2 mb-2">
-            {/* 🎯 單字選擇預覽模式：只顯示標題（外層已有返回按鈕）；學生端保留返回按鈕 */}
-            {practiceMode === "word_selection" && isPreviewMode ? (
+            {/* 🎯 單字選擇/拼寫/克漏字預覽模式：只顯示標題（外層已有返回按鈕）；學生端保留返回按鈕 */}
+            {(practiceMode === "word_selection" ||
+              practiceMode === "word_spelling" ||
+              practiceMode === "word_cloze") &&
+            isPreviewMode ? (
               <h1 className="text-sm sm:text-base font-semibold truncate min-w-0">
                 {assignmentTitle}
               </h1>
@@ -2253,7 +2314,9 @@ export default function StudentActivityPageContent({
                 !isPreviewMode &&
                 practiceMode !== "rearrangement" &&
                 practiceMode !== "word_selection" &&
-                practiceMode !== "word_reading" && (
+                practiceMode !== "word_reading" &&
+                practiceMode !== "word_spelling" &&
+                practiceMode !== "word_cloze" && (
                   <Button
                     onClick={handleSubmit}
                     disabled={submitting || isSubmitBlockedByRecording}
@@ -2292,7 +2355,8 @@ export default function StudentActivityPageContent({
             </div>
           </div>
 
-          {/* Activity navigation - 單字選擇模式不顯示此區塊（但單字集+例句模式例外） */}
+          {/* Activity navigation - 單字選擇 / 拼寫 / 克漏字模式不顯示此區塊
+              （這些模式使用艾賓浩斯記憶曲線，每輪選不熟單字，不允許跳題） */}
           {(!isVocabularySetType(currentActivity?.type || "") ||
             practiceMode === "reading" ||
             practiceMode === "rearrangement") && (
@@ -2564,11 +2628,13 @@ export default function StudentActivityPageContent({
 
             {/* Navigation buttons */}
             {(() => {
-              // 🎯 單字選擇/朗讀模式：WordSelectionActivity/WordReadingActivity 自帶導航，不顯示外部導航按鈕
+              // 🎯 單字選擇/朗讀/拼寫/克漏字模式：自帶導航，不顯示外部導航按鈕
               if (
                 practiceMode === "word_selection" ||
                 practiceMode === "word_reading" ||
-                practiceMode === "tug_of_war"
+                practiceMode === "tug_of_war" ||
+                practiceMode === "word_spelling" ||
+                practiceMode === "word_cloze"
               ) {
                 return null;
               }

@@ -23,7 +23,7 @@ class CreateAssignmentRequest(BaseModel):
     # 作答模式設定
     practice_mode: Optional[
         str
-    ] = None  # reading, rearrangement, word_reading, word_selection
+    ] = None  # reading, rearrangement, word_reading, word_selection, word_spelling, word_cloze
     answer_mode: Optional[
         str
     ] = None  # DEPRECATED: only 'listening'/'writing' allowed by DB

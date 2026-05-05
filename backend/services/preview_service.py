@@ -59,6 +59,146 @@ def _is_vocab_type(content_type) -> bool:
     return content_type in _VOCABULARY_CONTENT_TYPES
 
 
+async def ensure_example_sentence_audio(items: List[ContentItem], db: Session) -> dict:
+    """Lazily generate missing example_sentence_audio_url for vocab items.
+
+    Used by reading / rearrangement / word_cloze flows so the student (or
+    teacher preview) always hears the full sentence audio rather than a
+    fallback / blank.
+
+    Idempotent and concurrency-safe: only updates rows where
+    example_sentence_audio_url IS NULL at the time of write.
+
+    Returns a dict {item_id: url} of every item now known to have audio
+    (newly generated + already cached). Callers should use this dict as
+    an authoritative override for `ci.example_sentence_audio_url` to
+    avoid issues where SQLAlchemy expires attributes after commit and a
+    subsequent refresh fails silently, leaving the in-memory attribute
+    None even though DB has the URL.
+    """
+    # Lazy imports to avoid heavyweight module loads at request time
+    from services.tts import TTSService
+    from utils.ttsVoiceResolver import get_voice_and_rate
+    from sqlalchemy import text as _sa_text
+
+    # Start with whatever's already on the items (no-op for items that had it)
+    audio_by_id: dict = {}
+    for ci in items:
+        if ci.example_sentence_audio_url:
+            audio_by_id[ci.id] = ci.example_sentence_audio_url
+
+    missing_audio_items = [
+        ci
+        for ci in items
+        if ci.example_sentence
+        and ci.example_sentence.strip()
+        and not ci.example_sentence_audio_url
+    ]
+    if not missing_audio_items:
+        return audio_by_id
+
+    tts_service = TTSService()
+    generated = 0
+    for item in missing_audio_items:
+        try:
+            audio_settings = (
+                item.item_metadata.get("audio_settings", {})
+                if item.item_metadata
+                else {}
+            )
+            voice, rate = get_voice_and_rate(
+                audio_settings.get("accent", "American English"),
+                audio_settings.get("gender", "Male"),
+                audio_settings.get("speed", "Normal x1"),
+            )
+            url = await tts_service.generate_tts(item.example_sentence, voice, rate)
+            rows = db.execute(
+                _sa_text(
+                    "UPDATE content_items "
+                    "SET example_sentence_audio_url = :url "
+                    "WHERE id = :id "
+                    "AND example_sentence_audio_url IS NULL"
+                ),
+                {"url": url, "id": item.id},
+            ).rowcount
+            if rows > 0:
+                item.example_sentence_audio_url = url
+                generated += 1
+            audio_by_id[item.id] = url
+        except Exception as e:
+            logger.warning(
+                f"Lazy TTS generation failed for content_item {item.id}: {e}"
+            )
+    if generated > 0:
+        db.commit()
+        logger.info(f"Lazy-generated example sentence TTS for {generated} item(s)")
+    return audio_by_id
+
+
+async def ensure_word_audio(items: List[ContentItem], db: Session) -> dict:
+    """Lazily generate missing audio_url (single-word TTS) for vocab items.
+
+    Used by word_reading / word_spelling flows so the student (or teacher
+    preview) always hears the word audio. Without this, audio mode for
+    spelling shows nothing — translation is hidden by design and the
+    audio button only renders when audio_url exists.
+
+    Returns a dict {item_id: url}. See ensure_example_sentence_audio for
+    why we return the dict instead of relying on in-memory attributes.
+    """
+    from services.tts import TTSService
+    from utils.ttsVoiceResolver import get_voice_and_rate
+    from sqlalchemy import text as _sa_text
+
+    audio_by_id: dict = {}
+    for ci in items:
+        if ci.audio_url:
+            audio_by_id[ci.id] = ci.audio_url
+
+    missing_audio_items = [
+        ci for ci in items if ci.text and ci.text.strip() and not ci.audio_url
+    ]
+    if not missing_audio_items:
+        return audio_by_id
+
+    tts_service = TTSService()
+    generated = 0
+    for item in missing_audio_items:
+        try:
+            audio_settings = (
+                item.item_metadata.get("audio_settings", {})
+                if item.item_metadata
+                else {}
+            )
+            voice, rate = get_voice_and_rate(
+                audio_settings.get("accent", "American English"),
+                audio_settings.get("gender", "Male"),
+                audio_settings.get("speed", "Normal x1"),
+            )
+            url = await tts_service.generate_tts(item.text, voice, rate)
+            rows = db.execute(
+                _sa_text(
+                    "UPDATE content_items "
+                    "SET audio_url = :url "
+                    "WHERE id = :id "
+                    "AND audio_url IS NULL"
+                ),
+                {"url": url, "id": item.id},
+            ).rowcount
+            if rows > 0:
+                item.audio_url = url
+                generated += 1
+            audio_by_id[item.id] = url
+        except Exception as e:
+            logger.warning(
+                f"Lazy word TTS generation failed for content_item {item.id}: {e}"
+            )
+    if generated > 0:
+        db.commit()
+        logger.info(f"Lazy-generated word TTS for {generated} item(s)")
+    return audio_by_id
+
+
 def get_sentence_fields(item: ContentItem, content_type, practice_mode: str):
     """Return (text, translation, audio_url) based on content type and practice mode.
 
@@ -609,4 +749,212 @@ def handle_rearrangement_complete(
         "final_score": expected_score,
         "timeout": timeout,
         "completed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /word-spelling-start — word spelling practice data
+# ---------------------------------------------------------------------------
+
+
+async def get_word_spelling_start(
+    assignment: Assignment,
+    db: Session,
+    exclude_ids: str = "",
+) -> dict:
+    """Return word-spelling practice data (preview/demo).
+
+    Mirrors the Ebbinghaus pattern from word-selection: each "round" returns
+    up to 10 items; the frontend tracks practiced ids and passes them via
+    exclude_ids so subsequent rounds rotate through unpractised items first.
+
+    Lazily backfills missing ci.audio_url so audio mode always has the
+    word TTS to play.
+    """
+    if assignment.practice_mode != "word_spelling":
+        raise HTTPException(
+            status_code=400,
+            detail="This assignment does not support word-spelling mode",
+        )
+
+    content_items = (
+        db.query(ContentItem)
+        .join(Content)
+        .join(AssignmentContent)
+        .filter(AssignmentContent.assignment_id == assignment.id)
+        .order_by(ContentItem.order_index)
+        .all()
+    )
+
+    if not content_items:
+        raise HTTPException(
+            status_code=404,
+            detail="No vocabulary items found for this assignment",
+        )
+
+    # Backfill missing single-word audio so 播放音檔 mode actually has audio.
+    word_audio_by_id = await ensure_word_audio(list(content_items), db)
+
+    total_words_in_assignment = len(content_items)
+    exclude_id_set = _parse_exclude_ids(exclude_ids)
+    remaining_items = [item for item in content_items if item.id not in exclude_id_set]
+    if len(remaining_items) < 10:
+        # round wraps — start a fresh cycle
+        remaining_items = list(content_items)
+    if assignment.shuffle_questions:
+        random.shuffle(remaining_items)
+    items_list = remaining_items[:10]
+
+    words_data = [
+        {
+            "content_item_id": ci.id,
+            "text": ci.text,
+            "translation": ci.translation or "",
+            "audio_url": word_audio_by_id.get(ci.id) or ci.audio_url,
+            "image_url": ci.image_url,
+            "memory_strength": 0,
+        }
+        for ci in items_list
+    ]
+
+    return {
+        "session_id": None,
+        "words": words_data,
+        "total_words": total_words_in_assignment,
+        "current_proficiency": 0,
+        "target_proficiency": assignment.target_proficiency or 80,
+        "words_mastered": 0,
+        "achieved": False,
+        "is_practice_mode": False,
+        "show_translation": (
+            assignment.show_translation
+            if assignment.show_translation is not None
+            else True
+        ),
+        "show_image": (
+            assignment.show_image if assignment.show_image is not None else True
+        ),
+        "play_audio": assignment.play_audio or False,
+        "show_answer": assignment.show_answer or False,
+        "time_limit_per_question": assignment.time_limit_per_question,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /word-cloze-start — word cloze practice data
+# ---------------------------------------------------------------------------
+
+
+async def get_word_cloze_start(
+    assignment: Assignment,
+    db: Session,
+    exclude_ids: str = "",
+) -> dict:
+    """Return word-cloze practice data (preview/demo).
+
+    Returns up to 10 cloze questions per round. Frontend tracks practiced
+    ids and passes them via exclude_ids to cycle through unpractised items
+    first.
+
+    Lazily backfills missing example_sentence_audio_url so previews hear
+    the full sentence audio.
+    """
+    if assignment.practice_mode != "word_cloze":
+        raise HTTPException(
+            status_code=400,
+            detail="This assignment does not support word-cloze mode",
+        )
+
+    # Lazy import to avoid circular dependency
+    from routers.students.assignments import extract_cloze_for_item
+
+    content_items = (
+        db.query(ContentItem)
+        .join(Content)
+        .join(AssignmentContent)
+        .filter(AssignmentContent.assignment_id == assignment.id)
+        .order_by(ContentItem.order_index)
+        .all()
+    )
+
+    if not content_items:
+        raise HTTPException(
+            status_code=404,
+            detail="No vocabulary items found for this assignment",
+        )
+
+    total_words_in_assignment = len(content_items)
+
+    # Generate any missing example sentence audio so audio_url isn't blank.
+    sentence_audio_by_id = await ensure_example_sentence_audio(list(content_items), db)
+
+    exclude_id_set = _parse_exclude_ids(exclude_ids)
+    remaining_items = [item for item in content_items if item.id not in exclude_id_set]
+    if len(remaining_items) < 10:
+        remaining_items = list(content_items)
+    if assignment.shuffle_questions:
+        random.shuffle(remaining_items)
+
+    questions = []
+    for ci in remaining_items:
+        if len(questions) >= 10:
+            break
+        cloze = extract_cloze_for_item(ci)
+        if cloze is None:
+            continue
+        blanked_sentence, correct_answer = cloze
+        is_vocab_item = bool(ci.example_sentence)
+        questions.append(
+            {
+                "content_item_id": ci.id,
+                "base_word": ci.text if is_vocab_item else "",
+                "translation": ci.translation if is_vocab_item else "",
+                "blanked_sentence": blanked_sentence,
+                "sentence_translation": (
+                    ci.example_sentence_translation
+                    if is_vocab_item
+                    else (ci.translation or "")
+                )
+                or "",
+                # Vocab items must use example sentence audio (not the
+                # single-word audio); example sentence content uses its
+                # own audio_url which IS the sentence audio.
+                # Use the helper's authoritative dict to dodge SQLAlchemy
+                # expire_on_commit edge cases.
+                "audio_url": (
+                    sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
+                    if is_vocab_item
+                    else ci.audio_url
+                ),
+                "correct_answer": correct_answer,
+                "correct_answer_length": len(correct_answer),
+            }
+        )
+
+    if not questions:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No usable cloze questions: example sentences do not contain "
+                "the target word."
+            ),
+        )
+
+    return {
+        "session_id": None,
+        "questions": questions,
+        "total_questions": total_words_in_assignment,
+        "current_proficiency": 0,
+        "target_proficiency": assignment.target_proficiency or 80,
+        "words_mastered": 0,
+        "achieved": False,
+        "is_practice_mode": False,
+        "show_translation": (
+            assignment.show_translation
+            if assignment.show_translation is not None
+            else True
+        ),
+        "play_audio": assignment.play_audio or False,
+        "show_answer": assignment.show_answer or False,
+        "time_limit_per_question": assignment.time_limit_per_question,
     }

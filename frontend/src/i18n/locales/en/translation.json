@@ -907,6 +907,8 @@
       "rearrangement": "Sentence Rearrangement",
       "word_selection": "Word Selection",
       "word_reading": "Word Reading",
+      "word_spelling": "Word Spelling",
+      "word_cloze": "Word Cloze",
       "all": "All Types"
     },
     "sort": {
@@ -1057,7 +1059,9 @@
       "rearrangement": "Example Sentence Rearrangement",
       "vocabulary": "Vocabulary Practice",
       "wordReading": "Word Reading",
-      "wordSelection": "Word Selection"
+      "wordSelection": "Word Selection",
+      "wordSpelling": "Word Spelling",
+      "wordCloze": "Word Cloze"
     },
     "stats": {
       "minutes": "minutes",
@@ -1782,6 +1786,10 @@
         "wordReadingDesc": "Students read words aloud, system scores pronunciation",
         "wordSelection": "Word Selection",
         "wordSelectionDesc": "View words or listen to audio, select the correct translation",
+        "wordSpelling": "Word Spelling",
+        "wordSpellingDesc": "View translation or listen to audio, type the correct spelling",
+        "wordCloze": "Word Cloze",
+        "wordClozeDesc": "Fill in the blank in the example sentence with the correct word form",
         "targetProficiency": "Target Proficiency",
         "targetProficiencyDesc": "Students must reach this proficiency to complete the assignment",
         "showTranslation": "Show Translation",
@@ -1800,8 +1808,12 @@
         "questionDisplay": "Question Display",
         "displayWord": "Display Word",
         "displayWordDesc": "View word and select translation",
+        "displayTranslation": "Display Translation",
+        "displayTranslationDesc": "View translation and type the word",
         "playAudioWord": "Play Audio",
-        "playAudioWordDesc": "Listen to audio and select translation"
+        "playAudioWordDesc": "Listen to audio and select translation",
+        "playAudioFillDesc": "Listen to audio and type the word",
+        "showAnswerLockedByAudio": "Audio mode must reveal the answer"
       }
     },
     "classroomAssignDialog": {
@@ -2810,6 +2822,9 @@
       "REARRANGEMENT": "Sentence Rearrangement",
       "WORD_SELECTION": "Word Selection",
       "WORD_READING": "Word Reading",
+      "WORD_SPELLING": "Word Spelling",
+      "WORD_CLOZE": "Word Cloze",
+      "TUG_OF_WAR": "Tug of War",
       "speakingPractice": "Speaking Practice",
       "speaking_practice": "Speaking Practice",
       "SPEAKING_PRACTICE": "Speaking Practice",
@@ -4682,6 +4697,63 @@
     },
     "timeLimit": "Time limit: {{seconds}}s"
   },
+  "wordCloze": {
+    "loading": "Loading cloze questions...",
+    "noItems": "No cloze questions available (example sentences must contain the target word)",
+    "wordCloze": "Word Cloze",
+    "questionProgress": "{{current}} / {{total}}",
+    "correctLabel": "correct",
+    "baseWord": "Base word",
+    "translationHint": "Translation",
+    "playAudio": "Play Audio",
+    "inputPlaceholder": "Fill in the blank...",
+    "checkAnswer": "Check",
+    "seconds": "s",
+    "timeUp": "Time's up!",
+    "incorrectTryAgain": "Incorrect, try again!",
+    "timeUpTryAgain": "Time's up! Try again.",
+    "retry": "Retry",
+    "practiceComplete": "Practice Complete!",
+    "accuracy": "Accuracy",
+    "correct": "Correct",
+    "totalQuestions": "Total",
+    "practiceAgain": "Practice Again",
+    "submitAssignment": "Submit Assignment",
+    "toast": {
+      "startFailed": "Failed to start practice",
+      "submitFailed": "Failed to submit answer",
+      "completed": "Assignment completed!",
+      "completeFailed": "Failed to complete assignment"
+    }
+  },
+  "wordSpelling": {
+    "loading": "Loading vocabulary...",
+    "noItems": "No vocabulary items found",
+    "wordSpelling": "Word Spelling",
+    "questionProgress": "{{current}} / {{total}}",
+    "correctLabel": "correct",
+    "translationHint": "Translation",
+    "playAudio": "Play Audio",
+    "typeTheWord": "Type the correct spelling:",
+    "inputPlaceholder": "Type the word here...",
+    "checkAnswer": "Check",
+    "seconds": "s",
+    "timeUp": "Time's up!",
+    "incorrectTryAgain": "Incorrect, try again!",
+    "timeUpTryAgain": "Time's up! Try again.",
+    "retry": "Retry",
+    "practiceComplete": "Practice Complete!",
+    "accuracy": "Accuracy",
+    "correct": "Correct",
+    "totalWords": "Total",
+    "practiceAgain": "Practice Again",
+    "submitAssignment": "Submit Assignment",
+    "toast": {
+      "startFailed": "Failed to start practice",
+      "completed": "Assignment completed!",
+      "completeFailed": "Failed to complete assignment"
+    }
+  },
   "wordSelection": {
     "loading": "Loading vocabulary...",
     "noItems": "No vocabulary items found",
@@ -5075,7 +5147,9 @@
       "rearrangement": "Sentence Rearrangement",
       "reading": "Sentence Reading",
       "word_selection": "Word Selection",
-      "word_reading": "Word Reading"
+      "word_reading": "Word Reading",
+      "word_spelling": "Word Spelling",
+      "word_cloze": "Word Cloze"
     },
     "estimate": {
       "practiceMode": "Practice Mode",
