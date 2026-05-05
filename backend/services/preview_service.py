@@ -206,13 +206,18 @@ def get_sentence_fields(item: ContentItem, content_type, practice_mode: str):
     rearrangement), we use the item's *example_sentence* fields instead of
     the primary text/translation (which hold the single word).
 
-    Returns ``None`` when the item should be **skipped** (vocab item without
-    an example sentence in a sentence practice mode).
+    Returns ``None`` when the item should be **skipped** — only happens for
+    rearrangement mode without an example sentence (you can't shuffle a
+    single word). Reading mode falls back to the word itself so the student
+    still gets something to read aloud and AI-assess.
     """
     if practice_mode in ("reading", "rearrangement") and _is_vocab_type(content_type):
         sentence = (item.example_sentence or "").strip()
         if not sentence:
-            return None  # skip this item
+            if practice_mode == "rearrangement":
+                return None  # 單字無法重組，整個 item 跳過
+            # Reading mode 退回：用單字本身（text + audio_url）讓學生仍可朗讀
+            return (item.text or "", item.translation or "", item.audio_url)
         audio = item.example_sentence_audio_url or item.audio_url
         return (
             sentence,

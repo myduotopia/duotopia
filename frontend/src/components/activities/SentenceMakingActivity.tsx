@@ -71,12 +71,16 @@ interface SentenceMakingActivityProps {
   assignmentId?: number; // Optional: undefined in organization material context
   onComplete?: () => void;
   activityContent?: ActivityContent; // Optional: provide content for preview mode
+  // 老師預覽示範模式：用 /api/teachers/.../preview/practice-words 端點，
+  // 不建立 PracticeSession，submit/mastery 都不會打（讓老師看題目就好）
+  isPreviewMode?: boolean;
 }
 
 const SentenceMakingActivity: React.FC<SentenceMakingActivityProps> = ({
   assignmentId,
   onComplete,
   activityContent,
+  isPreviewMode = false,
 }) => {
   const [state, setState] = useState<SentenceMakingState>({
     sessionId: null,
@@ -103,10 +107,13 @@ const SentenceMakingActivity: React.FC<SentenceMakingActivityProps> = ({
     try {
       setState((prev) => ({ ...prev, loading: true }));
 
-      const response = (await apiClient.get(
-        `/api/students/assignments/${assignmentId}/practice-words`,
-      )) as {
-        session_id: number;
+      // 老師預覽模式打 teachers/preview 端點（assignment_id），不建 session
+      const apiUrl = isPreviewMode
+        ? `/api/teachers/assignments/${assignmentId}/preview/practice-words`
+        : `/api/students/assignments/${assignmentId}/practice-words`;
+
+      const response = (await apiClient.get(apiUrl)) as {
+        session_id: number | null;
         answer_mode: "listening" | "writing";
         words: PracticeWord[];
       };
@@ -128,6 +135,18 @@ const SentenceMakingActivity: React.FC<SentenceMakingActivityProps> = ({
 
   // 提交答案
   const submitAnswer = async (answer: AnswerRecord) => {
+    // 預覽模式（session_id=null）：純前端推進，不打 submit/mastery API
+    if (isPreviewMode) {
+      setState((prev) => ({ ...prev, answers: [...prev.answers, answer] }));
+      if (state.currentIndex < state.words.length - 1) {
+        setState((prev) => ({ ...prev, currentIndex: prev.currentIndex + 1 }));
+      } else {
+        toast.success("預覽完成");
+        if (onComplete) onComplete();
+      }
+      return;
+    }
+
     if (!state.sessionId) {
       toast.error("練習 session 不存在");
       return;

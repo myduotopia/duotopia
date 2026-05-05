@@ -468,14 +468,13 @@ async def get_assignment_activities(
                     activity_data["items"] = []
                     activity_data["item_count"] = 0
 
-                # 如果完全沒有項目，提供一個空的預設項目
-                if not activity_data.get("items"):
-                    single_item = {
-                        "text": "",
-                        "translation": "",
-                    }
-                    activity_data["items"] = [single_item]
-                    activity_data["item_count"] = 1
+                # 注意：以前這裡有個 fallback 在 items=[] 時硬塞一個
+                # {text: "", translation: ""} 讓 item_count=1。當 vocab 集
+                # 在 reading 模式下所有 item 都被 get_sentence_fields 過濾
+                # （沒有 example_sentence）時，前端就會看到「1題 + 無題目
+                # 文字」。reading mode 現在已會 fallback 到單字本身，所以
+                # 這個假 item 沒有存在意義，反而會誤導前端 routing 邏輯，
+                # 故移除。
 
                 activity_data["content"] = ""
                 activity_data["target_text"] = ""

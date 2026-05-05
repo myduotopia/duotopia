@@ -2143,6 +2143,7 @@ export default function StudentActivityPageContent({
       return (
         <SentenceMakingActivity
           assignmentId={assignmentId}
+          isPreviewMode={isPreviewMode}
           onComplete={() => {
             toast.success("作業已完成！");
           }}
