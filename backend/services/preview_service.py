@@ -117,7 +117,8 @@ async def ensure_example_sentence_audio(items: List[ContentItem], db: Session) -
                     "UPDATE content_items "
                     "SET example_sentence_audio_url = :url "
                     "WHERE id = :id "
-                    "AND example_sentence_audio_url IS NULL"
+                    "AND (example_sentence_audio_url IS NULL "
+                    "     OR example_sentence_audio_url = '')"
                 ),
                 {"url": url, "id": item.id},
             ).rowcount
@@ -181,7 +182,7 @@ async def ensure_word_audio(items: List[ContentItem], db: Session) -> dict:
                     "UPDATE content_items "
                     "SET audio_url = :url "
                     "WHERE id = :id "
-                    "AND audio_url IS NULL"
+                    "AND (audio_url IS NULL OR audio_url = '')"
                 ),
                 {"url": url, "id": item.id},
             ).rowcount
