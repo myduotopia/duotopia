@@ -58,7 +58,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
@@ -279,17 +279,17 @@ interface ExampleSentenceErrorDetail {
 const getExampleSentenceErrorDetail = (
   error: unknown,
 ): ExampleSentenceErrorDetail | null => {
-  if (!error || typeof error !== "object") return null;
-  const response = (error as { response?: unknown }).response;
-  if (!response || typeof response !== "object") return null;
-  if ((response as { status?: unknown }).status !== 422) return null;
-  const detail = (response as { data?: { detail?: unknown } }).data?.detail;
+  // apiClient throws ApiError (fetch-based wrapper); the structured backend
+  // detail lives on `error.detail`, not `error.response.data.detail`.
+  if (!(error instanceof ApiError) || error.status !== 422) return null;
+  const detail = error.detail;
   if (
     detail &&
     typeof detail === "object" &&
+    !Array.isArray(detail) &&
     (detail as { code?: unknown }).code === "EXAMPLE_SENTENCE_REQUIRED"
   ) {
-    return detail as ExampleSentenceErrorDetail;
+    return detail as unknown as ExampleSentenceErrorDetail;
   }
   return null;
 };
