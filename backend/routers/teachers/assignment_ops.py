@@ -201,16 +201,24 @@ async def preview_practice_words(
             else "listening"
         )
 
-    # 取得作業內所有 ContentItem（含 Content 以判斷類型，與其他 preview 一致）
+    # 取得作業內所有 vocab ContentItem（混合作業要把 reading passage items 過濾掉）
     content_items = (
         db.query(ContentItem)
         .join(Content)
         .join(AssignmentContent)
-        .filter(AssignmentContent.assignment_id == assignment.id)
+        .filter(
+            AssignmentContent.assignment_id == assignment.id,
+            Content.type.in_(_VOCABULARY_CONTENT_TYPES),
+        )
         .order_by(ContentItem.order_index)
         .limit(10)
         .all()
     )
+
+    # Lazy TTS：若 audio_url 是 NULL 或 ''，幫老師預覽生成單字 TTS。
+    # 跟 get_assignment_preview 同樣自我修復行為，避免回傳空 audio_url。
+    if content_items:
+        await ensure_word_audio(content_items, db)
 
     words = [
         {
