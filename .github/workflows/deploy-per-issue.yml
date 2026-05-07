@@ -143,10 +143,10 @@ jobs:
           ENV_VARS="$ENV_VARS,TAPPAY_PRODUCTION_APP_KEY=${{ secrets.TAPPAY_PRODUCTION_APP_KEY }}"
           ENV_VARS="$ENV_VARS,TAPPAY_PRODUCTION_PARTNER_KEY=${{ secrets.TAPPAY_PRODUCTION_PARTNER_KEY }}"
           ENV_VARS="$ENV_VARS,TAPPAY_PRODUCTION_MERCHANT_ID=${{ secrets.TAPPAY_PRODUCTION_MERCHANT_ID }}"
-          # 1Campus OAuth (test credentials from public quickstart docs).
+          # 1Campus OAuth credentials from GitHub Secrets.
           # REDIRECT_URI is a placeholder; updated to the real frontend URL in update-backend-frontend-url.
-          ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_ID=edf96e2da7a4f156f1df52f07ab3490f"
-          ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_SECRET=84aff4ae1841be51b6dcdd41546e3ad1eaf9b2d05e8240050753ac5fdddf3940"
+          ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_ID=${{ secrets.ONE_CAMPUS_OAUTH_CLIENT_ID }}"
+          ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_SECRET=${{ secrets.ONE_CAMPUS_OAUTH_CLIENT_SECRET }}"
           ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_REDIRECT_URI=https://placeholder-will-be-updated.run.app/auth/1campus/callback"
 
           echo "🔍 DEBUG: Deploying to Cloud Run (without output capture)"
