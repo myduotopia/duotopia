@@ -410,6 +410,9 @@ jobs:
         ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_ID=${{ secrets.ONE_CAMPUS_OAUTH_CLIENT_ID }}"
         ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_SECRET=${{ secrets.ONE_CAMPUS_OAUTH_CLIENT_SECRET }}"
         ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_REDIRECT_URI=${{ steps.db_env.outputs.FRONTEND_URL }}/auth/1campus/callback"
+        # 1Campus Data API (Jasmine) credentials — same client, used for client_credentials flow.
+        ENV_VARS="$ENV_VARS,ONE_CAMPUS_CLIENT_ID=${{ secrets.ONE_CAMPUS_CLIENT_ID }}"
+        ENV_VARS="$ENV_VARS,ONE_CAMPUS_CLIENT_SECRET=${{ secrets.ONE_CAMPUS_CLIENT_SECRET }}"
 
         # Environment-specific configuration
         if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
