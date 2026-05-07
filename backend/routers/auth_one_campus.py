@@ -137,7 +137,8 @@ def _create_oauth_state() -> str:
     Note on replay: this token is reusable within its 10-minute TTL, but the
     OAuth authorization code (issued by 1Campus and tied to this state) is
     single-use, so a captured state alone cannot complete a login flow. The
-    `.` separator is safe because base64url uses only [A-Za-z0-9_-] (no dots).
+    `.` separator is safe because base64url uses [A-Za-z0-9_-=] and a hex
+    HMAC digest uses only [0-9a-f] — neither contains a dot.
     """
     payload_dict = {
         "nonce": secrets.token_urlsafe(16),
@@ -721,12 +722,18 @@ async def bind_account(
 ):
     """Request to bind a 1Campus SSO account to a Duotopia email.
 
-    The caller must be logged in via 1Campus SSO. The Identity is resolved
-    from the authenticated user's `identity_id` (NOT from a request parameter),
-    so a logged-in user can only bind their own identity — there is no path
-    to operate on another user's identity_id even if it were guessed.
-    Sends a verification email to the provided address.
-    After verification, the Identity merge happens in verify-email endpoint.
+    The caller must be logged in via 1Campus SSO (the Identity has
+    `one_campus_account` set). The Identity is resolved from the
+    authenticated user's `identity_id` (NOT from a request parameter), so a
+    logged-in user can only bind their own identity — there is no path to
+    operate on another user's identity_id even if it were guessed.
+
+    Identities created by the OAuth flow have `email_verified=True` with the
+    1Campus mail. Users may still want to link an existing Duotopia account
+    that uses a different email — we allow that here, then verify ownership
+    by sending a verification email to the target_email. Merge happens in
+    `verify-teacher-bind` (teachers) / verify-email endpoint (students)
+    after the user clicks the verification link.
     """
     user_type = current_user.get("type")
     user_id = int(current_user.get("sub"))

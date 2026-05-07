@@ -144,7 +144,10 @@ jobs:
           ENV_VARS="$ENV_VARS,TAPPAY_PRODUCTION_PARTNER_KEY=${{ secrets.TAPPAY_PRODUCTION_PARTNER_KEY }}"
           ENV_VARS="$ENV_VARS,TAPPAY_PRODUCTION_MERCHANT_ID=${{ secrets.TAPPAY_PRODUCTION_MERCHANT_ID }}"
           # 1Campus OAuth credentials from GitHub Secrets.
-          # REDIRECT_URI is a placeholder; updated to the real frontend URL in update-backend-frontend-url.
+          # The redirect URI is intentionally a placeholder here because the
+          # frontend Cloud Run URL hasn't been generated yet at this step.
+          # The `update-backend-frontend-url` job (see below) replaces it with
+          # the real frontend URL after frontend deploy completes.
           ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_ID=${{ secrets.ONE_CAMPUS_OAUTH_CLIENT_ID }}"
           ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_SECRET=${{ secrets.ONE_CAMPUS_OAUTH_CLIENT_SECRET }}"
           ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_REDIRECT_URI=https://placeholder-will-be-updated.run.app/auth/1campus/callback"
