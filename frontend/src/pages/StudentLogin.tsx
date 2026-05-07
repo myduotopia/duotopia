@@ -3,7 +3,15 @@ import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { ArrowLeft, ChevronRight, Home, Mail, Eye, EyeOff } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  Home,
+  Mail,
+  Eye,
+  EyeOff,
+  Loader2,
+} from "lucide-react";
 import { useStudentAuthStore, StudentUser } from "@/stores/studentAuthStore";
 import { authService } from "@/services/authService";
 import { teacherService } from "@/services/teacherService";
@@ -59,6 +67,7 @@ export default function StudentLogin() {
 
   // Login mode: "teacher" (original 4-step) or "email" (direct email login)
   const [loginMode, setLoginMode] = useState<"teacher" | "email">("teacher");
+  const [isOneCampusLoading, setIsOneCampusLoading] = useState(false);
 
   // Multi-step form state
   const [step, setStep] = useState(1);
@@ -498,13 +507,17 @@ export default function StudentLogin() {
                 {FEATURE_FLAGS.ONE_CAMPUS_LOGIN && (
                   <Button
                     variant="outline"
+                    disabled={isOneCampusLoading}
                     className="w-full py-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-green-200 text-green-700 font-medium"
                     onClick={async () => {
+                      setError("");
+                      setIsOneCampusLoading(true);
                       try {
                         const res = await apiClient.get<{ url: string }>(
                           "/api/auth/1campus/login-url",
                         );
                         window.location.href = res.url;
+                        // Don't reset loading on success — page navigates away.
                       } catch {
                         setError(
                           t(
@@ -512,13 +525,26 @@ export default function StudentLogin() {
                             "Failed to connect to 1Campus. Please try again.",
                           ),
                         );
+                        setIsOneCampusLoading(false);
                       }
                     }}
                   >
-                    🏫{" "}
-                    {t(
-                      "studentLogin.oneCampus.button",
-                      "Log in with School Account (1Campus)",
+                    {isOneCampusLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {t(
+                          "studentLogin.oneCampus.loading",
+                          "Redirecting to 1Campus...",
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        🏫{" "}
+                        {t(
+                          "studentLogin.oneCampus.button",
+                          "Log in with School Account (1Campus)",
+                        )}
+                      </>
                     )}
                   </Button>
                 )}

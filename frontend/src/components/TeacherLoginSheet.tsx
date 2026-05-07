@@ -245,6 +245,7 @@ export default function TeacherLoginSheet({
                 disabled={isOneCampusLoading}
                 className="w-full py-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-green-200 text-green-700 font-medium"
                 onClick={async () => {
+                  setError("");
                   setIsOneCampusLoading(true);
                   try {
                     const res = await apiClient.get<{ url: string }>(

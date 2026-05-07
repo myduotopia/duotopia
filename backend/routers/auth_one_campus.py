@@ -133,6 +133,11 @@ def _create_oauth_state() -> str:
     Format: base64(json({"nonce": ..., "exp": ...})).signature
     Verified on the OAuth callback to defend against forged state values.
     Stateless (no DB/session needed); per-issue and stateless deploys friendly.
+
+    Note on replay: this token is reusable within its 10-minute TTL, but the
+    OAuth authorization code (issued by 1Campus and tied to this state) is
+    single-use, so a captured state alone cannot complete a login flow. The
+    `.` separator is safe because base64url uses only [A-Za-z0-9_-] (no dots).
     """
     payload_dict = {
         "nonce": secrets.token_urlsafe(16),
@@ -488,23 +493,25 @@ async def _handle_oauth_flow(
     try:
         user_role_data = await OneCampusService.get_user_role(account=mail)
         for school in user_role_data.get("school", []):
-            # Extract national_id_hash
-            for role_key in ("studentRole", "teacherRole"):
-                role_data = school.get(role_key)
-                if role_data and role_data.get("idNumberHash"):
-                    national_id_hash = role_data["idNumberHash"]
-                    break
-
-            # Determine role
+            # Determine role and extract hash from the SAME role to keep them
+            # in sync. A user may have both teacherRole and studentRole in one
+            # school; if we extracted hash from one and role from the other,
+            # the teacher account would be linked to the student's national ID
+            # hash (and vice versa).
             if school.get("teacherRole"):
                 role_type = "teacher"
-                teacher_name = school["teacherRole"].get("teacherName")
+                tr = school["teacherRole"]
+                teacher_name = tr.get("teacherName")
+                if tr.get("idNumberHash"):
+                    national_id_hash = tr["idNumberHash"]
             elif school.get("studentRole"):
                 role_type = "student"
                 sr = school["studentRole"]
                 one_campus_student_id = str(sr.get("studentID", ""))
                 student_name = sr.get("studentName")
                 student_number = sr.get("studentNumber")
+                if sr.get("idNumberHash"):
+                    national_id_hash = sr["idNumberHash"]
 
             if role_type:
                 break
@@ -714,15 +721,18 @@ async def bind_account(
 ):
     """Request to bind a 1Campus SSO account to a Duotopia email.
 
-    The caller must be logged in via 1Campus SSO (has an Identity with
-    one_campus_student_id or one_campus_account but no verified email).
+    The caller must be logged in via 1Campus SSO. The Identity is resolved
+    from the authenticated user's `identity_id` (NOT from a request parameter),
+    so a logged-in user can only bind their own identity — there is no path
+    to operate on another user's identity_id even if it were guessed.
     Sends a verification email to the provided address.
     After verification, the Identity merge happens in verify-email endpoint.
     """
     user_type = current_user.get("type")
     user_id = int(current_user.get("sub"))
 
-    # Resolve the Identity for the current user
+    # Resolve the Identity for the current user (from the JWT subject, never
+    # from request body) — this guards against impersonation attempts.
     if user_type == "student":
         user = db.query(Student).filter(Student.id == user_id).first()
         if not user:
@@ -759,10 +769,13 @@ async def bind_account(
 
     target_email = body.email.strip().lower()
 
-    # Block only if the identity is already bound to this exact email (would be a no-op).
-    # Allow rebind to a different email — the OAuth-created identity stores the
-    # 1Campus mail as "verified", but the user may want to link an existing
-    # Duotopia account with a different email address.
+    # Block only when the identity is already bound to this exact email (no-op).
+    # Allowing rebind to a *different* email is intentional: when OAuth creates
+    # a new Identity for a 1Campus user, we set email=<1campus mail>,
+    # email_verified=True (1Campus is the IdP and verifies institutional mails).
+    # If we rejected on email_verified alone, the user could never link the
+    # SSO identity to their existing Duotopia email. The verification email
+    # sent below ensures the user actually owns the target_email before merge.
     if (
         identity.email_verified
         and identity.email
