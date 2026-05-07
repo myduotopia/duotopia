@@ -64,6 +64,15 @@ class Settings:
         "ONE_CAMPUS_API_BASE_URL", "https://devapi.1campus.net"
     )
 
+    # 1Campus OAuth (auth.ischool.com.tw)
+    ONE_CAMPUS_OAUTH_CLIENT_ID: Optional[str] = os.getenv("ONE_CAMPUS_OAUTH_CLIENT_ID")
+    ONE_CAMPUS_OAUTH_CLIENT_SECRET: Optional[str] = os.getenv(
+        "ONE_CAMPUS_OAUTH_CLIENT_SECRET"
+    )
+    ONE_CAMPUS_OAUTH_REDIRECT_URI: Optional[str] = os.getenv(
+        "ONE_CAMPUS_OAUTH_REDIRECT_URI"
+    )
+
     # OpenAI (optional)
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
 

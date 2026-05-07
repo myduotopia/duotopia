@@ -15,6 +15,7 @@ import { Loader2, User, Lock, ArrowLeft, Zap, Eye, EyeOff } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useTranslation } from "react-i18next";
+import { FEATURE_FLAGS } from "@/config/featureFlags";
 
 interface TeacherLoginSheetProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export default function TeacherLoginSheet({
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
+  const [isOneCampusLoading, setIsOneCampusLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -222,6 +224,66 @@ export default function TeacherLoginSheet({
               </Link>
             </div>
           </form>
+
+          {/* 1Campus SSO Login */}
+          {FEATURE_FLAGS.ONE_CAMPUS_LOGIN && (
+            <>
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">
+                    {t("teacherLogin.oneCampus.separator", "or")}
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isOneCampusLoading}
+                className="w-full py-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-green-200 text-green-700 font-medium"
+                onClick={async () => {
+                  setError("");
+                  setIsOneCampusLoading(true);
+                  try {
+                    const res = await apiClient.get<{ url: string }>(
+                      "/api/auth/1campus/login-url",
+                    );
+                    window.location.href = res.url;
+                    // Don't reset loading on success — page will navigate away.
+                  } catch {
+                    setError(
+                      t(
+                        "teacherLogin.oneCampus.error",
+                        "Failed to connect to 1Campus. Please try again.",
+                      ),
+                    );
+                    setIsOneCampusLoading(false);
+                  }
+                }}
+              >
+                {isOneCampusLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {t(
+                      "teacherLogin.oneCampus.loading",
+                      "Redirecting to 1Campus...",
+                    )}
+                  </>
+                ) : (
+                  <>
+                    🏫{" "}
+                    {t(
+                      "teacherLogin.oneCampus.button",
+                      "Log in with School Account (1Campus)",
+                    )}
+                  </>
+                )}
+              </Button>
+            </>
+          )}
 
           {/* Quick Login Section - Only show in non-production */}
           {showDemoSection && (

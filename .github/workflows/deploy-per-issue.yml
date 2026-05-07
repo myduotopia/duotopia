@@ -10,6 +10,7 @@ on:
     paths:
       - 'frontend/**'
       - 'backend/**'
+      - '.github/workflows/deploy-per-issue.yml'
       - '!**/*.md'
 
 permissions:
@@ -142,6 +143,20 @@ jobs:
           ENV_VARS="$ENV_VARS,TAPPAY_PRODUCTION_APP_KEY=${{ secrets.TAPPAY_PRODUCTION_APP_KEY }}"
           ENV_VARS="$ENV_VARS,TAPPAY_PRODUCTION_PARTNER_KEY=${{ secrets.TAPPAY_PRODUCTION_PARTNER_KEY }}"
           ENV_VARS="$ENV_VARS,TAPPAY_PRODUCTION_MERCHANT_ID=${{ secrets.TAPPAY_PRODUCTION_MERCHANT_ID }}"
+          # 1Campus OAuth credentials from GitHub Secrets.
+          # The redirect URI is intentionally a placeholder here because the
+          # frontend Cloud Run URL hasn't been generated yet at this step.
+          # The `update-backend-frontend-url` job (see below) replaces it with
+          # the real frontend URL after frontend deploy completes.
+          ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_ID=${{ secrets.ONE_CAMPUS_OAUTH_CLIENT_ID }}"
+          ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_SECRET=${{ secrets.ONE_CAMPUS_OAUTH_CLIENT_SECRET }}"
+          ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_REDIRECT_URI=https://placeholder-will-be-updated.run.app/auth/1campus/callback"
+          # 1Campus Data API (Jasmine) — client_credentials grant for the Jasmine API.
+          # Currently the same registered Duotopia client as ONE_CAMPUS_OAUTH_*,
+          # but stored as separate secrets so they can be rotated independently
+          # (or split into different clients in the future) without code changes.
+          ENV_VARS="$ENV_VARS,ONE_CAMPUS_CLIENT_ID=${{ secrets.ONE_CAMPUS_CLIENT_ID }}"
+          ENV_VARS="$ENV_VARS,ONE_CAMPUS_CLIENT_SECRET=${{ secrets.ONE_CAMPUS_CLIENT_SECRET }}"
 
           echo "🔍 DEBUG: Deploying to Cloud Run (without output capture)"
           gcloud run deploy "${SERVICE}" \
@@ -312,17 +327,20 @@ jobs:
           ISSUE=${{ needs.extract.outputs.issue_number }}
           SERVICE="duotopia-preview-issue-${ISSUE}-backend"
           FRONTEND_URL="${{ needs.deploy-frontend.outputs.url }}"
+          ONE_CAMPUS_REDIRECT_URI="${FRONTEND_URL}/auth/1campus/callback"
 
           echo "📝 Frontend URL: ${FRONTEND_URL}"
+          echo "📝 1Campus OAuth Redirect URI: ${ONE_CAMPUS_REDIRECT_URI}"
 
-          # Update FRONTEND_URL and DEMO_ALLOWED_ORIGINS environment variables
+          # Update FRONTEND_URL, DEMO_ALLOWED_ORIGINS, and 1Campus OAuth redirect URI
           gcloud run services update "${SERVICE}" \
             --platform managed \
             --region ${{ env.REGION }} \
-            --update-env-vars "FRONTEND_URL=${FRONTEND_URL},DEMO_ALLOWED_ORIGINS=${FRONTEND_URL}"
+            --update-env-vars "FRONTEND_URL=${FRONTEND_URL},DEMO_ALLOWED_ORIGINS=${FRONTEND_URL},ONE_CAMPUS_OAUTH_REDIRECT_URI=${ONE_CAMPUS_REDIRECT_URI}"
 
           echo "✅ Backend FRONTEND_URL updated to: ${FRONTEND_URL}"
           echo "✅ Backend DEMO_ALLOWED_ORIGINS updated to: ${FRONTEND_URL}"
+          echo "✅ Backend ONE_CAMPUS_OAUTH_REDIRECT_URI updated to: ${ONE_CAMPUS_REDIRECT_URI}"
 
   cleanup-images:
     runs-on: ubuntu-latest

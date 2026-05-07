@@ -1,7 +1,10 @@
 """1Campus SSO authentication endpoints.
 
 Provides:
+- GET /api/auth/1campus/login-url — return OAuth authorize URL
 - GET /api/auth/1campus/callback — handle code exchange + account matching
+  - With schoolDsns: Identity Code flow (from 1Campus platform)
+  - Without schoolDsns: OAuth 2.0 flow (from Duotopia login page)
 - POST /api/auth/1campus/merge-confirm — confirm account merge (requires signed token)
 """
 
@@ -11,10 +14,12 @@ import hashlib
 import hmac
 import json
 import logging
+import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func
@@ -38,6 +43,9 @@ from services.one_campus_account_service import OneCampusAccountService
 
 # Merge token validity: 10 minutes
 MERGE_TOKEN_TTL = 600
+
+# OAuth state token validity: 10 minutes
+OAUTH_STATE_TTL = 600
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +125,50 @@ def _verify_merge_token(token: str) -> dict:
         "one_campus_student_id": payload_dict["sid"],
         "one_campus_account": payload_dict["acc"],
     }
+
+
+def _create_oauth_state() -> str:
+    """Create a stateless HMAC-signed OAuth state token for CSRF protection.
+
+    Format: base64(json({"nonce": ..., "exp": ...})).signature
+    Verified on the OAuth callback to defend against forged state values.
+    Stateless (no DB/session needed); per-issue and stateless deploys friendly.
+
+    Note on replay: this token is reusable within its 10-minute TTL, but the
+    OAuth authorization code (issued by 1Campus and tied to this state) is
+    single-use, so a captured state alone cannot complete a login flow. The
+    `.` separator is safe because base64url uses [A-Za-z0-9_-=] and a hex
+    HMAC digest uses only [0-9a-f] — neither contains a dot.
+    """
+    payload_dict = {
+        "nonce": secrets.token_urlsafe(16),
+        "exp": int(time.time()) + OAUTH_STATE_TTL,
+    }
+    payload_b64 = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode()
+    sig = hmac.HMAC(
+        settings.JWT_SECRET.encode(), payload_b64.encode(), hashlib.sha256
+    ).hexdigest()
+    return f"{payload_b64}.{sig}"
+
+
+def _verify_oauth_state(state: Optional[str]) -> bool:
+    """Verify an OAuth state token. Returns True if valid, False otherwise."""
+    if not state:
+        return False
+    parts = state.split(".", 1)
+    if len(parts) != 2:
+        return False
+    payload_b64, sig = parts
+    expected_sig = hmac.HMAC(
+        settings.JWT_SECRET.encode(), payload_b64.encode(), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(sig, expected_sig):
+        return False
+    try:
+        payload_dict = json.loads(base64.urlsafe_b64decode(payload_b64))
+    except (json.JSONDecodeError, UnicodeDecodeError, binascii.Error):
+        return False
+    return payload_dict.get("exp", 0) >= int(time.time())
 
 
 def _build_student_response(db: Session, student: Student) -> dict:
@@ -204,24 +256,61 @@ def _build_teacher_response(db: Session, teacher: Teacher) -> dict:
 # --- Endpoints ---
 
 
+@router.get("/login-url")
+@limiter.limit("30/minute")
+async def get_login_url(request: Request):
+    """Return the 1Campus OAuth authorize URL with a CSRF state token.
+
+    The frontend redirects users to this URL to initiate SSO login.
+    The state is verified on the callback to defend against forged callbacks.
+    """
+    try:
+        state = _create_oauth_state()
+        url = OneCampusService.get_oauth_authorize_url(state=state)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"url": url}
+
+
 @router.get("/callback")
 @limiter.limit("10/minute")
 async def one_campus_callback(
     request: Request,
-    code: str = Query(..., description="1Campus one-time identity code"),
-    schoolDsns: str = Query(..., description="School DSNS identifier"),
+    code: str = Query(..., description="Authorization code or identity code"),
+    schoolDsns: Optional[str] = Query(
+        None, description="School DSNS (present for Identity Code flow only)"
+    ),
+    state: Optional[str] = Query(
+        None, description="CSRF state token (required for OAuth flow)"
+    ),
     db: Session = Depends(get_db),
 ):
     """Handle 1Campus SSO callback.
 
-    1. Exchange code for identity info
-    2. Fetch extended data (idNumberHash) via Data API
-    3. Match or create account
-    4. Return JWT token
+    Two flows are supported, detected by the presence of schoolDsns:
+    - With schoolDsns: Identity Code flow (user comes from 1Campus platform)
+    - Without schoolDsns: OAuth 2.0 flow (user clicks login on Duotopia) — state required
     """
+    if schoolDsns:
+        return await _handle_identity_code_flow(request, code, schoolDsns, db)
+    if not _verify_oauth_state(state):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired OAuth state. Please try logging in again.",
+        )
+    return await _handle_oauth_flow(request, code, db)
+
+
+async def _handle_identity_code_flow(
+    request: Request,
+    code: str,
+    school_dsns: str,
+    db: Session,
+) -> OneCampusCallbackResponse:
+    """Handle the Identity Code flow (from 1Campus platform)."""
     # Step 1: Exchange identity code
     try:
-        identity_data = await OneCampusService.exchange_identity_code(schoolDsns, code)
+        identity_data = await OneCampusService.exchange_identity_code(school_dsns, code)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except OneCampusCodeNotFoundError:
@@ -249,7 +338,6 @@ async def one_campus_callback(
     try:
         user_role_data = await OneCampusService.get_user_role(account=account)
         for school in user_role_data.get("school", []):
-            # Try student role first, then teacher role
             for role_key in ("studentRole", "teacherRole"):
                 role_data = school.get(role_key)
                 if role_data and role_data.get("idNumberHash"):
@@ -270,7 +358,7 @@ async def one_campus_callback(
             one_campus_account=account,
             teacher_name=teacher_name,
             national_id_hash=national_id_hash,
-            school_dsns=schoolDsns,
+            school_dsns=school_dsns,
         )
 
         teacher_response = _build_teacher_response(db, teacher)
@@ -305,7 +393,6 @@ async def one_campus_callback(
     student_name = student_data.get("studentName", "")
     student_number = student_data.get("studentNumber")
 
-    # Step 3: Match or create account
     identity, student, action = OneCampusAccountService.find_or_create_student(
         db=db,
         one_campus_student_id=one_campus_student_id,
@@ -313,10 +400,9 @@ async def one_campus_callback(
         student_name=student_name,
         student_number=student_number,
         national_id_hash=national_id_hash,
-        school_dsns=schoolDsns,
+        school_dsns=school_dsns,
     )
 
-    # Step 4: Handle result
     if action == "merge_prompt":
         merge_token = _create_merge_token(
             existing_identity_id=identity.id,
@@ -351,6 +437,150 @@ async def one_campus_callback(
         student=_build_student_response(db, student),
         action=action,
     )
+
+
+async def _handle_oauth_flow(
+    request: Request,
+    code: str,
+    db: Session,
+) -> OneCampusCallbackResponse:
+    """Handle the OAuth 2.0 Authorization Code flow (from Duotopia login page)."""
+    # Step 1: Exchange authorization code for access token
+    try:
+        token_data = await OneCampusService.exchange_oauth_code(code)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except httpx.HTTPError as e:
+        logger.error("1Campus OAuth code exchange failed: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to communicate with 1Campus. Please try again.",
+        )
+
+    oauth_access_token = token_data.get("access_token")
+    if not oauth_access_token:
+        raise HTTPException(
+            status_code=502, detail="1Campus did not return an access token."
+        )
+
+    # Step 2: Get user info
+    try:
+        user_info = await OneCampusService.get_oauth_user_info(oauth_access_token)
+    except httpx.HTTPError as e:
+        logger.error("1Campus OAuth user info fetch failed: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to fetch user info from 1Campus.",
+        )
+
+    uuid = user_info.get("uuid", "")
+    first_name = user_info.get("firstName", "")
+    last_name = user_info.get("lastName", "")
+    mail = user_info.get("mail", "")
+
+    if not uuid:
+        raise HTTPException(
+            status_code=502, detail="1Campus did not return a user UUID."
+        )
+
+    # Step 3: Try getUserRole to determine teacher/student role
+    role_type = None
+    national_id_hash = None
+    one_campus_student_id = None
+    student_name = None
+    student_number = None
+    teacher_name = None
+
+    try:
+        user_role_data = await OneCampusService.get_user_role(account=mail)
+        for school in user_role_data.get("school", []):
+            # Determine role and extract hash from the SAME role to keep them
+            # in sync. A user may have both teacherRole and studentRole in one
+            # school; if we extracted hash from one and role from the other,
+            # the teacher account would be linked to the student's national ID
+            # hash (and vice versa).
+            if school.get("teacherRole"):
+                role_type = "teacher"
+                tr = school["teacherRole"]
+                teacher_name = tr.get("teacherName")
+                if tr.get("idNumberHash"):
+                    national_id_hash = tr["idNumberHash"]
+            elif school.get("studentRole"):
+                role_type = "student"
+                sr = school["studentRole"]
+                one_campus_student_id = str(sr.get("studentID", ""))
+                student_name = sr.get("studentName")
+                student_number = sr.get("studentNumber")
+                if sr.get("idNumberHash"):
+                    national_id_hash = sr["idNumberHash"]
+
+            if role_type:
+                break
+    except httpx.HTTPError as e:
+        logger.warning("1Campus getUserRole after OAuth failed (non-fatal): %s", e)
+
+    if role_type is None:
+        logger.warning(
+            "1Campus OAuth: could not determine role for uuid=%s mail=%s — "
+            "defaulting to teacher. This typically means getUserRole returned "
+            "no schools or the school has not authorized our app.",
+            uuid,
+            mail,
+        )
+
+    # Step 4: Match or create account
+    (
+        identity,
+        user,
+        detected_role,
+        action,
+    ) = OneCampusAccountService.find_or_create_by_oauth(
+        db=db,
+        uuid=uuid,
+        mail=mail,
+        first_name=first_name,
+        last_name=last_name,
+        role_type=role_type,
+        one_campus_student_id=one_campus_student_id,
+        student_name=student_name,
+        student_number=student_number,
+        teacher_name=teacher_name,
+        national_id_hash=national_id_hash,
+    )
+
+    # Step 5: Build response
+    if detected_role == "student":
+        access_token = create_access_token(
+            data={"sub": str(user.id), "type": "student"},
+            expires_delta=timedelta(hours=24),
+        )
+        user.last_login = datetime.now(timezone.utc)
+        db.commit()
+        return OneCampusCallbackResponse(
+            access_token=access_token,
+            role_type="student",
+            student=_build_student_response(db, user),
+            action=action,
+        )
+    else:
+        teacher_response = _build_teacher_response(db, user)
+        access_token = create_access_token(
+            data={
+                "sub": str(user.id),
+                "email": user.email,
+                "type": "teacher",
+                "name": user.name,
+                "role": teacher_response["role"],
+            },
+            expires_delta=timedelta(hours=24),
+        )
+        # Note: Teacher model has no last_login field (unlike Student); nothing to update.
+        return OneCampusCallbackResponse(
+            access_token=access_token,
+            role_type="teacher",
+            user=teacher_response,
+            action=action,
+        )
 
 
 @router.post("/merge-confirm")
@@ -492,15 +722,24 @@ async def bind_account(
 ):
     """Request to bind a 1Campus SSO account to a Duotopia email.
 
-    The caller must be logged in via 1Campus SSO (has an Identity with
-    one_campus_student_id or one_campus_account but no verified email).
-    Sends a verification email to the provided address.
-    After verification, the Identity merge happens in verify-email endpoint.
+    The caller must be logged in via 1Campus SSO (the Identity has
+    `one_campus_account` set). The Identity is resolved from the
+    authenticated user's `identity_id` (NOT from a request parameter), so a
+    logged-in user can only bind their own identity — there is no path to
+    operate on another user's identity_id even if it were guessed.
+
+    Identities created by the OAuth flow have `email_verified=True` with the
+    1Campus mail. Users may still want to link an existing Duotopia account
+    that uses a different email — we allow that here, then verify ownership
+    by sending a verification email to the target_email. Merge happens in
+    `verify-teacher-bind` (teachers) / verify-email endpoint (students)
+    after the user clicks the verification link.
     """
     user_type = current_user.get("type")
     user_id = int(current_user.get("sub"))
 
-    # Resolve the Identity for the current user
+    # Resolve the Identity for the current user (from the JWT subject, never
+    # from request body) — this guards against impersonation attempts.
     if user_type == "student":
         user = db.query(Student).filter(Student.id == user_id).first()
         if not user:
@@ -535,14 +774,24 @@ async def bind_account(
             detail="This account is not linked to 1Campus SSO.",
         )
 
-    # Must not already have a verified email
-    if identity.email_verified and identity.email:
+    target_email = body.email.strip().lower()
+
+    # Block only when the identity is already bound to this exact email (no-op).
+    # Allowing rebind to a *different* email is intentional: when OAuth creates
+    # a new Identity for a 1Campus user, we set email=<1campus mail>,
+    # email_verified=True (1Campus is the IdP and verifies institutional mails).
+    # If we rejected on email_verified alone, the user could never link the
+    # SSO identity to their existing Duotopia email. The verification email
+    # sent below ensures the user actually owns the target_email before merge.
+    if (
+        identity.email_verified
+        and identity.email
+        and identity.email.lower() == target_email
+    ):
         raise HTTPException(
             status_code=400,
-            detail="This account already has a verified email.",
+            detail="This account is already bound to this email.",
         )
-
-    target_email = body.email.strip().lower()
 
     if user_type == "student":
         from services.email_service import email_service
