@@ -15,6 +15,7 @@ import { Loader2, User, Lock, ArrowLeft, Zap, Eye, EyeOff } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useTranslation } from "react-i18next";
+import { FEATURE_FLAGS } from "@/config/featureFlags";
 
 interface TeacherLoginSheetProps {
   isOpen: boolean;
@@ -222,6 +223,49 @@ export default function TeacherLoginSheet({
               </Link>
             </div>
           </form>
+
+          {/* 1Campus SSO Login */}
+          {FEATURE_FLAGS.ONE_CAMPUS_LOGIN && (
+            <>
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">
+                    {t("teacherLogin.oneCampus.separator", "or")}
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full py-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-green-200 text-green-700 font-medium"
+                onClick={async () => {
+                  try {
+                    const res = await apiClient.get<{ url: string }>(
+                      "/api/auth/1campus/login-url",
+                    );
+                    window.location.href = res.url;
+                  } catch {
+                    setError(
+                      t(
+                        "teacherLogin.oneCampus.error",
+                        "Failed to connect to 1Campus. Please try again.",
+                      ),
+                    );
+                  }
+                }}
+              >
+                🏫{" "}
+                {t(
+                  "teacherLogin.oneCampus.button",
+                  "Log in with School Account (1Campus)",
+                )}
+              </Button>
+            </>
+          )}
 
           {/* Quick Login Section - Only show in non-production */}
           {showDemoSection && (
