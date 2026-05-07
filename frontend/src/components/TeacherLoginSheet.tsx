@@ -29,6 +29,7 @@ export default function TeacherLoginSheet({
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
+  const [isOneCampusLoading, setIsOneCampusLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -241,13 +242,16 @@ export default function TeacherLoginSheet({
               <Button
                 type="button"
                 variant="outline"
+                disabled={isOneCampusLoading}
                 className="w-full py-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-green-200 text-green-700 font-medium"
                 onClick={async () => {
+                  setIsOneCampusLoading(true);
                   try {
                     const res = await apiClient.get<{ url: string }>(
                       "/api/auth/1campus/login-url",
                     );
                     window.location.href = res.url;
+                    // Don't reset loading on success — page will navigate away.
                   } catch {
                     setError(
                       t(
@@ -255,13 +259,26 @@ export default function TeacherLoginSheet({
                         "Failed to connect to 1Campus. Please try again.",
                       ),
                     );
+                    setIsOneCampusLoading(false);
                   }
                 }}
               >
-                🏫{" "}
-                {t(
-                  "teacherLogin.oneCampus.button",
-                  "Log in with School Account (1Campus)",
+                {isOneCampusLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {t(
+                      "teacherLogin.oneCampus.loading",
+                      "Redirecting to 1Campus...",
+                    )}
+                  </>
+                ) : (
+                  <>
+                    🏫{" "}
+                    {t(
+                      "teacherLogin.oneCampus.button",
+                      "Log in with School Account (1Campus)",
+                    )}
+                  </>
                 )}
               </Button>
             </>

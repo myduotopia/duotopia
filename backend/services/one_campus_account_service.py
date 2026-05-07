@@ -11,6 +11,7 @@ Handles:
 import logging
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.user import Identity, Student, Teacher
@@ -135,7 +136,7 @@ class OneCampusAccountService:
             email_identity = (
                 db.query(Identity)
                 .filter(
-                    Identity.email == one_campus_account,
+                    func.lower(Identity.email) == one_campus_account.lower(),
                     Identity.email_verified.is_(True),
                     Identity.is_active.is_(True),
                 )
@@ -322,7 +323,7 @@ class OneCampusAccountService:
             email_identity = (
                 db.query(Identity)
                 .filter(
-                    Identity.email == one_campus_account,
+                    func.lower(Identity.email) == one_campus_account.lower(),
                     Identity.email_verified.is_(True),
                     Identity.is_active.is_(True),
                 )
@@ -354,11 +355,13 @@ class OneCampusAccountService:
 
         # Step 3: Create new Identity + Teacher
         # Use the real 1Campus account email instead of a placeholder,
-        # but only if no other Identity/Teacher already uses this email.
+        # but only if no other Identity/Teacher already uses this email
+        # (case-insensitive to align with the LOWER(email) unique indexes).
+        account_lower = one_campus_account.lower()
         identity_email_taken = (
             db.query(Identity)
             .filter(
-                Identity.email == one_campus_account,
+                func.lower(Identity.email) == account_lower,
                 Identity.is_active.is_(True),
             )
             .first()
@@ -367,7 +370,7 @@ class OneCampusAccountService:
         teacher_email_taken = (
             db.query(Teacher)
             .filter(
-                Teacher.email == one_campus_account,
+                func.lower(Teacher.email) == account_lower,
                 Teacher.is_active.is_(True),
             )
             .first()
@@ -440,8 +443,6 @@ class OneCampusAccountService:
         Returns: (identity, user, role_type, action)
         where action is "existing", "created"
         """
-        display_name = f"{last_name}{first_name}".strip() or mail
-
         # Step 1: Match by uuid
         identity = OneCampusAccountService.find_by_uuid(db, uuid)
         if identity:
@@ -487,12 +488,27 @@ class OneCampusAccountService:
                 )
                 return identity, teacher, "teacher", "existing"
 
-        # Step 2: Match by verified email
-        if mail:
+            # Identity exists by uuid but has no active student or teacher.
+            # Don't fall through to email match — that would create a second
+            # identity for the same uuid (orphaning this one). Reuse it instead.
+            logger.warning(
+                "1Campus OAuth: identity_id=%s matched by uuid has no active "
+                "user. Will create a new student/teacher under this identity.",
+                identity.id,
+            )
+            existing_identity_for_uuid = identity
+        else:
+            existing_identity_for_uuid = None
+
+        # Step 2: Match by verified email (case-insensitive)
+        # Skip if we already found an Identity by uuid above — reuse that one
+        # rather than creating a parallel email-matched identity.
+        if mail and existing_identity_for_uuid is None:
+            mail_lower = mail.lower()
             email_identity = (
                 db.query(Identity)
                 .filter(
-                    Identity.email == mail,
+                    func.lower(Identity.email) == mail_lower,
                     Identity.email_verified.is_(True),
                     Identity.is_active.is_(True),
                 )
@@ -544,33 +560,43 @@ class OneCampusAccountService:
                     )
                     return email_identity, teacher, "teacher", "existing"
 
-        # Step 3: Create new account
+        # Step 3: Create new account (or attach to identity matched by uuid above)
         # Determine role: use getUserRole result, default to teacher
         effective_role = role_type or "teacher"
+        display_name = f"{last_name}{first_name}".strip() or mail
 
-        # Check email uniqueness for Identity
-        identity_email_taken = (
-            (
-                db.query(Identity)
-                .filter(Identity.email == mail, Identity.is_active.is_(True))
-                .first()
+        if existing_identity_for_uuid is not None:
+            # Reuse the identity already matched by uuid; just create the missing user.
+            identity = existing_identity_for_uuid
+        else:
+            # Check email uniqueness for Identity (case-insensitive)
+            identity_email_taken = (
+                (
+                    db.query(Identity)
+                    .filter(
+                        func.lower(Identity.email) == mail.lower(),
+                        Identity.is_active.is_(True),
+                    )
+                    .first()
+                )
+                is not None
+                if mail
+                else False
             )
-            is not None
-            if mail
-            else False
-        )
 
-        identity = Identity(
-            email=mail if not identity_email_taken else None,
-            one_campus_uuid=uuid,
-            one_campus_account=mail,
-            one_campus_student_id=one_campus_student_id,
-            national_id_hash=national_id_hash,
-            email_verified=bool(mail),
-            is_active=True,
-        )
-        db.add(identity)
-        db.flush()
+            identity = Identity(
+                email=mail if not identity_email_taken else None,
+                one_campus_uuid=uuid,
+                one_campus_account=mail,
+                one_campus_student_id=one_campus_student_id,
+                national_id_hash=national_id_hash,
+                # 1Campus is the IdP and verifies institutional emails on its side,
+                # so we trust the returned mail as already verified.
+                email_verified=bool(mail),
+                is_active=True,
+            )
+            db.add(identity)
+            db.flush()
 
         if effective_role == "student":
             name = student_name or display_name
@@ -595,11 +621,14 @@ class OneCampusAccountService:
             return identity, student, "student", "created"
         else:
             name = teacher_name or display_name
-            # Check teacher email uniqueness
+            # Check teacher email uniqueness (case-insensitive)
             teacher_email_taken = (
                 (
                     db.query(Teacher)
-                    .filter(Teacher.email == mail, Teacher.is_active.is_(True))
+                    .filter(
+                        func.lower(Teacher.email) == mail.lower(),
+                        Teacher.is_active.is_(True),
+                    )
                     .first()
                 )
                 is not None

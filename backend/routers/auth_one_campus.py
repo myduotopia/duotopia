@@ -14,10 +14,12 @@ import hashlib
 import hmac
 import json
 import logging
+import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func
@@ -41,6 +43,9 @@ from services.one_campus_account_service import OneCampusAccountService
 
 # Merge token validity: 10 minutes
 MERGE_TOKEN_TTL = 600
+
+# OAuth state token validity: 10 minutes
+OAUTH_STATE_TTL = 600
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +125,44 @@ def _verify_merge_token(token: str) -> dict:
         "one_campus_student_id": payload_dict["sid"],
         "one_campus_account": payload_dict["acc"],
     }
+
+
+def _create_oauth_state() -> str:
+    """Create a stateless HMAC-signed OAuth state token for CSRF protection.
+
+    Format: base64(json({"nonce": ..., "exp": ...})).signature
+    Verified on the OAuth callback to defend against forged state values.
+    Stateless (no DB/session needed); per-issue and stateless deploys friendly.
+    """
+    payload_dict = {
+        "nonce": secrets.token_urlsafe(16),
+        "exp": int(time.time()) + OAUTH_STATE_TTL,
+    }
+    payload_b64 = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode()
+    sig = hmac.HMAC(
+        settings.JWT_SECRET.encode(), payload_b64.encode(), hashlib.sha256
+    ).hexdigest()
+    return f"{payload_b64}.{sig}"
+
+
+def _verify_oauth_state(state: Optional[str]) -> bool:
+    """Verify an OAuth state token. Returns True if valid, False otherwise."""
+    if not state:
+        return False
+    parts = state.split(".", 1)
+    if len(parts) != 2:
+        return False
+    payload_b64, sig = parts
+    expected_sig = hmac.HMAC(
+        settings.JWT_SECRET.encode(), payload_b64.encode(), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(sig, expected_sig):
+        return False
+    try:
+        payload_dict = json.loads(base64.urlsafe_b64decode(payload_b64))
+    except (json.JSONDecodeError, UnicodeDecodeError, binascii.Error):
+        return False
+    return payload_dict.get("exp", 0) >= int(time.time())
 
 
 def _build_student_response(db: Session, student: Student) -> dict:
@@ -208,13 +251,16 @@ def _build_teacher_response(db: Session, teacher: Teacher) -> dict:
 
 
 @router.get("/login-url")
-async def get_login_url():
-    """Return the 1Campus OAuth authorize URL.
+@limiter.limit("30/minute")
+async def get_login_url(request: Request):
+    """Return the 1Campus OAuth authorize URL with a CSRF state token.
 
     The frontend redirects users to this URL to initiate SSO login.
+    The state is verified on the callback to defend against forged callbacks.
     """
     try:
-        url = OneCampusService.get_oauth_authorize_url()
+        state = _create_oauth_state()
+        url = OneCampusService.get_oauth_authorize_url(state=state)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"url": url}
@@ -228,16 +274,24 @@ async def one_campus_callback(
     schoolDsns: Optional[str] = Query(
         None, description="School DSNS (present for Identity Code flow only)"
     ),
+    state: Optional[str] = Query(
+        None, description="CSRF state token (required for OAuth flow)"
+    ),
     db: Session = Depends(get_db),
 ):
     """Handle 1Campus SSO callback.
 
     Two flows are supported, detected by the presence of schoolDsns:
     - With schoolDsns: Identity Code flow (user comes from 1Campus platform)
-    - Without schoolDsns: OAuth 2.0 flow (user clicks login on Duotopia)
+    - Without schoolDsns: OAuth 2.0 flow (user clicks login on Duotopia) — state required
     """
     if schoolDsns:
         return await _handle_identity_code_flow(request, code, schoolDsns, db)
+    if not _verify_oauth_state(state):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired OAuth state. Please try logging in again.",
+        )
     return await _handle_oauth_flow(request, code, db)
 
 
@@ -390,7 +444,7 @@ async def _handle_oauth_flow(
         token_data = await OneCampusService.exchange_oauth_code(code)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
+    except httpx.HTTPError as e:
         logger.error("1Campus OAuth code exchange failed: %s", e)
         raise HTTPException(
             status_code=502,
@@ -406,7 +460,7 @@ async def _handle_oauth_flow(
     # Step 2: Get user info
     try:
         user_info = await OneCampusService.get_oauth_user_info(oauth_access_token)
-    except Exception as e:
+    except httpx.HTTPError as e:
         logger.error("1Campus OAuth user info fetch failed: %s", e)
         raise HTTPException(
             status_code=502,
@@ -454,12 +508,19 @@ async def _handle_oauth_flow(
 
             if role_type:
                 break
-    except Exception as e:
+    except httpx.HTTPError as e:
         logger.warning("1Campus getUserRole after OAuth failed (non-fatal): %s", e)
 
-    # Step 4: Match or create account
-    display_name = f"{last_name}{first_name}".strip()
+    if role_type is None:
+        logger.warning(
+            "1Campus OAuth: could not determine role for uuid=%s mail=%s — "
+            "defaulting to teacher. This typically means getUserRole returned "
+            "no schools or the school has not authorized our app.",
+            uuid,
+            mail,
+        )
 
+    # Step 4: Match or create account
     (
         identity,
         user,
@@ -505,6 +566,7 @@ async def _handle_oauth_flow(
             },
             expires_delta=timedelta(hours=24),
         )
+        # Note: Teacher model has no last_login field (unlike Student); nothing to update.
         return OneCampusCallbackResponse(
             access_token=access_token,
             role_type="teacher",
@@ -695,14 +757,21 @@ async def bind_account(
             detail="This account is not linked to 1Campus SSO.",
         )
 
-    # Must not already have a verified email
-    if identity.email_verified and identity.email:
+    target_email = body.email.strip().lower()
+
+    # Block only if the identity is already bound to this exact email (would be a no-op).
+    # Allow rebind to a different email — the OAuth-created identity stores the
+    # 1Campus mail as "verified", but the user may want to link an existing
+    # Duotopia account with a different email address.
+    if (
+        identity.email_verified
+        and identity.email
+        and identity.email.lower() == target_email
+    ):
         raise HTTPException(
             status_code=400,
-            detail="This account already has a verified email.",
+            detail="This account is already bound to this email.",
         )
-
-    target_email = body.email.strip().lower()
 
     if user_type == "student":
         from services.email_service import email_service

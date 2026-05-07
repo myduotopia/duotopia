@@ -148,7 +148,10 @@ jobs:
           ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_ID=${{ secrets.ONE_CAMPUS_OAUTH_CLIENT_ID }}"
           ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_CLIENT_SECRET=${{ secrets.ONE_CAMPUS_OAUTH_CLIENT_SECRET }}"
           ENV_VARS="$ENV_VARS,ONE_CAMPUS_OAUTH_REDIRECT_URI=https://placeholder-will-be-updated.run.app/auth/1campus/callback"
-          # 1Campus Data API (Jasmine) credentials — same client, used for client_credentials flow.
+          # 1Campus Data API (Jasmine) — client_credentials grant for the Jasmine API.
+          # Currently the same registered Duotopia client as ONE_CAMPUS_OAUTH_*,
+          # but stored as separate secrets so they can be rotated independently
+          # (or split into different clients in the future) without code changes.
           ENV_VARS="$ENV_VARS,ONE_CAMPUS_CLIENT_ID=${{ secrets.ONE_CAMPUS_CLIENT_ID }}"
           ENV_VARS="$ENV_VARS,ONE_CAMPUS_CLIENT_SECRET=${{ secrets.ONE_CAMPUS_CLIENT_SECRET }}"
 

@@ -13,8 +13,7 @@ import logging
 import re
 import time
 from typing import Optional
-
-import httpx
+from urllib.parse import urlencode
 
 from utils.http_client import get_http_client
 from core.config import settings
@@ -93,22 +92,27 @@ class OneCampusService:
     """1Campus API client."""
 
     @staticmethod
-    def get_oauth_authorize_url() -> str:
+    def get_oauth_authorize_url(state: str) -> str:
         """Build the OAuth authorize URL for 1Campus SSO.
 
-        The frontend redirects the user to this URL to initiate login.
+        Caller must pass a CSRF state token (verified on the callback).
+        All query parameters are URL-encoded to handle special characters
+        in redirect_uri or client_id safely.
         """
         if not ONE_CAMPUS_OAUTH_CLIENT_ID or not ONE_CAMPUS_OAUTH_REDIRECT_URI:
             raise RuntimeError(
                 "ONE_CAMPUS_OAUTH_CLIENT_ID and ONE_CAMPUS_OAUTH_REDIRECT_URI must be set"
             )
-        return (
-            f"{ONE_CAMPUS_OAUTH_BASE}/oauth/authorize.php"
-            f"?client_id={ONE_CAMPUS_OAUTH_CLIENT_ID}"
-            f"&response_type=code"
-            f"&redirect_uri={ONE_CAMPUS_OAUTH_REDIRECT_URI}"
-            f"&scope=User.Mail,User.BasicInfo"
+        params = urlencode(
+            {
+                "client_id": ONE_CAMPUS_OAUTH_CLIENT_ID,
+                "response_type": "code",
+                "redirect_uri": ONE_CAMPUS_OAUTH_REDIRECT_URI,
+                "scope": "User.Mail,User.BasicInfo",
+                "state": state,
+            }
         )
+        return f"{ONE_CAMPUS_OAUTH_BASE}/oauth/authorize.php?{params}"
 
     @staticmethod
     async def exchange_oauth_code(code: str) -> dict:
@@ -143,14 +147,15 @@ class OneCampusService:
     async def get_oauth_user_info(access_token: str) -> dict:
         """Get user info from 1Campus OAuth.
 
-        GET https://auth.ischool.com.tw/services/me.php?access_token=xxx
+        Token is passed via Authorization header (not query string) to
+        avoid leaking via server logs, browser history, or Referer headers.
 
         Returns dict with keys: uuid, firstName, lastName, language, mail.
         """
         client = get_http_client()
         resp = await client.get(
             f"{ONE_CAMPUS_OAUTH_BASE}/services/me.php",
-            params={"access_token": access_token},
+            headers={"Authorization": f"Bearer {access_token}"},
         )
         resp.raise_for_status()
         return resp.json()
