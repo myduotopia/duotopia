@@ -67,11 +67,7 @@ export default function OneCampusCallback() {
     }
 
     // With schoolDsns → Identity Code flow; without → OAuth flow (state required)
-    handleCallback(
-      code,
-      schoolDsns || undefined,
-      state || undefined,
-    );
+    handleCallback(code, schoolDsns || undefined, state || undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
