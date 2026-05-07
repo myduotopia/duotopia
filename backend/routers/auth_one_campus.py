@@ -250,9 +250,7 @@ async def _handle_identity_code_flow(
     """Handle the Identity Code flow (from 1Campus platform)."""
     # Step 1: Exchange identity code
     try:
-        identity_data = await OneCampusService.exchange_identity_code(
-            school_dsns, code
-        )
+        identity_data = await OneCampusService.exchange_identity_code(school_dsns, code)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except OneCampusCodeNotFoundError:
@@ -462,20 +460,23 @@ async def _handle_oauth_flow(
     # Step 4: Match or create account
     display_name = f"{last_name}{first_name}".strip()
 
-    identity, user, detected_role, action = (
-        OneCampusAccountService.find_or_create_by_oauth(
-            db=db,
-            uuid=uuid,
-            mail=mail,
-            first_name=first_name,
-            last_name=last_name,
-            role_type=role_type,
-            one_campus_student_id=one_campus_student_id,
-            student_name=student_name,
-            student_number=student_number,
-            teacher_name=teacher_name,
-            national_id_hash=national_id_hash,
-        )
+    (
+        identity,
+        user,
+        detected_role,
+        action,
+    ) = OneCampusAccountService.find_or_create_by_oauth(
+        db=db,
+        uuid=uuid,
+        mail=mail,
+        first_name=first_name,
+        last_name=last_name,
+        role_type=role_type,
+        one_campus_student_id=one_campus_student_id,
+        student_name=student_name,
+        student_number=student_number,
+        teacher_name=teacher_name,
+        national_id_hash=national_id_hash,
     )
 
     # Step 5: Build response

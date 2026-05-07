@@ -65,9 +65,7 @@ class Settings:
     )
 
     # 1Campus OAuth (auth.ischool.com.tw)
-    ONE_CAMPUS_OAUTH_CLIENT_ID: Optional[str] = os.getenv(
-        "ONE_CAMPUS_OAUTH_CLIENT_ID"
-    )
+    ONE_CAMPUS_OAUTH_CLIENT_ID: Optional[str] = os.getenv("ONE_CAMPUS_OAUTH_CLIENT_ID")
     ONE_CAMPUS_OAUTH_CLIENT_SECRET: Optional[str] = os.getenv(
         "ONE_CAMPUS_OAUTH_CLIENT_SECRET"
     )

@@ -550,10 +550,15 @@ class OneCampusAccountService:
 
         # Check email uniqueness for Identity
         identity_email_taken = (
-            db.query(Identity)
-            .filter(Identity.email == mail, Identity.is_active.is_(True))
-            .first()
-        ) is not None if mail else False
+            (
+                db.query(Identity)
+                .filter(Identity.email == mail, Identity.is_active.is_(True))
+                .first()
+            )
+            is not None
+            if mail
+            else False
+        )
 
         identity = Identity(
             email=mail if not identity_email_taken else None,
@@ -592,10 +597,15 @@ class OneCampusAccountService:
             name = teacher_name or display_name
             # Check teacher email uniqueness
             teacher_email_taken = (
-                db.query(Teacher)
-                .filter(Teacher.email == mail, Teacher.is_active.is_(True))
-                .first()
-            ) is not None if mail else False
+                (
+                    db.query(Teacher)
+                    .filter(Teacher.email == mail, Teacher.is_active.is_(True))
+                    .first()
+                )
+                is not None
+                if mail
+                else False
+            )
 
             if mail and not teacher_email_taken:
                 teacher_email = mail

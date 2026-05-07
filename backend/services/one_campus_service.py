@@ -39,9 +39,7 @@ ONE_CAMPUS_OAUTH_CLIENT_ID = getattr(settings, "ONE_CAMPUS_OAUTH_CLIENT_ID", Non
 ONE_CAMPUS_OAUTH_CLIENT_SECRET = getattr(
     settings, "ONE_CAMPUS_OAUTH_CLIENT_SECRET", None
 )
-ONE_CAMPUS_OAUTH_REDIRECT_URI = getattr(
-    settings, "ONE_CAMPUS_OAUTH_REDIRECT_URI", None
-)
+ONE_CAMPUS_OAUTH_REDIRECT_URI = getattr(settings, "ONE_CAMPUS_OAUTH_REDIRECT_URI", None)
 
 # Token cache (module-level singleton) with asyncio.Lock to prevent race conditions
 _token_cache: dict = {"access_token": None, "expires_at": 0}
