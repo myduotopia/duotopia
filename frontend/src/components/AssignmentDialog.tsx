@@ -58,7 +58,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
@@ -269,6 +269,33 @@ function SortableCartItem({ item, index, onRemove, t }: SortableCartItemProps) {
 }
 
 const EMPTY_STUDENTS: Student[] = [];
+
+interface ExampleSentenceErrorDetail {
+  code: "EXAMPLE_SENTENCE_REQUIRED";
+  practice_mode?: string | null;
+  content_titles?: string[];
+}
+
+const getExampleSentenceErrorDetail = (
+  error: unknown,
+): ExampleSentenceErrorDetail | null => {
+  // apiClient throws ApiError (fetch-based wrapper); the structured backend
+  // detail lives on `error.detail`, not `error.response.data.detail`.
+  if (!(error instanceof ApiError) || error.status !== 422) return null;
+  const detail = error.detail;
+  if (
+    detail &&
+    typeof detail === "object" &&
+    !Array.isArray(detail) &&
+    (detail as { code?: unknown }).code === "EXAMPLE_SENTENCE_REQUIRED"
+  ) {
+    return detail as unknown as ExampleSentenceErrorDetail;
+  }
+  return null;
+};
+
+const isExampleSentenceRequiredError = (error: unknown): boolean =>
+  getExampleSentenceErrorDetail(error) !== null;
 
 const sortByStudentNumber = (a: Student, b: Student) => {
   if (!a.student_number && !b.student_number) return 0;
@@ -1121,6 +1148,12 @@ export function AssignmentDialog({
             totalStudents += result.student_count || 0;
             successCount++;
           } catch (err) {
+            // Issue #673: example-sentence validation rejects the *payload*,
+            // not the per-classroom config. Bubble up so the outer handler
+            // shows the specific toast instead of a generic per-class fail.
+            if (isExampleSentenceRequiredError(err)) {
+              throw err;
+            }
             failedClassroomNames.push(classroom.name);
             console.error(
               `Failed to create assignment for ${classroom.name}:`,
@@ -1176,8 +1209,30 @@ export function AssignmentDialog({
     } catch (error: unknown) {
       console.error("Failed to create assignment:", error);
 
-      // 處理 HTTP 402 配額不足錯誤
-      if (
+      // Issue #673: 422 with structured detail telling us which contents lack
+      // example sentences for the chosen practice mode. Surface the specific
+      // toast so the teacher knows what to fix.
+      if (isExampleSentenceRequiredError(error)) {
+        const detail = getExampleSentenceErrorDetail(error);
+        const modeKey = detail?.practice_mode
+          ? `assignment.practiceMode.${detail.practice_mode}`
+          : "";
+        const modeLabel = modeKey
+          ? t(modeKey, { defaultValue: detail?.practice_mode || "" })
+          : "";
+        const titles = detail?.content_titles?.join("、") || "";
+        toast.error(
+          t("dialogs.assignmentDialog.errors.exampleSentenceRequired", {
+            mode: modeLabel,
+          }),
+          {
+            description: t(
+              "dialogs.assignmentDialog.errors.exampleSentenceRequiredDesc",
+              { contents: titles },
+            ),
+          },
+        );
+      } else if (
         error &&
         typeof error === "object" &&
         "response" in error &&

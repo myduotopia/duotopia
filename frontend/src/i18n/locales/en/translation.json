@@ -1712,7 +1712,9 @@
         "missingAudioDesc": "This practice mode requires audio. Please go to content management to generate TTS audio first",
         "insufficientWords": "Not enough vocabulary words",
         "insufficientWordsDesc": "Word selection mode requires at least 20 words, currently only {{count}}",
-        "mixedContentType": "Only {{type}} can be selected. Please clear selected content before choosing a different type"
+        "mixedContentType": "Only {{type}} can be selected. Please clear selected content before choosing a different type",
+        "exampleSentenceRequired": "Cannot create {{mode}} assignment",
+        "exampleSentenceRequiredDesc": "The following content is missing example sentences or translations: {{contents}}"
       },
       "warnings": {
         "quotaLow": "AI analysis quota insufficient",

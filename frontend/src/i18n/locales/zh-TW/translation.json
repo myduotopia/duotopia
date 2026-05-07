@@ -1784,7 +1784,9 @@
         "missingAudioDesc": "此練習模式需要音檔，請先回到內容管理頁面產生 TTS 音檔",
         "insufficientWords": "單字數量不足",
         "insufficientWordsDesc": "單字選擇模式需要至少 20 個單字，目前只有 {{count}} 個",
-        "mixedContentType": "目前只能選擇{{type}}，請先清除已選擇的內容再選擇其他類型"
+        "mixedContentType": "目前只能選擇{{type}}，請先清除已選擇的內容再選擇其他類型",
+        "exampleSentenceRequired": "無法建立{{mode}}作業",
+        "exampleSentenceRequiredDesc": "以下內容缺少例句或例句翻譯，請補齊後再派發：{{contents}}"
       },
       "warnings": {
         "quotaLow": "AI 分析額度不足",

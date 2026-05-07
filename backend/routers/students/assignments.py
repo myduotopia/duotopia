@@ -20,6 +20,7 @@ from models import (
     AssignmentContent,
     Content,
     ContentItem,
+    ContentType,
     StudentItemProgress,
     AssignmentStatus,
     PracticeSession,
@@ -478,6 +479,20 @@ async def get_assignment_activities(
 
                 activity_data["content"] = ""
                 activity_data["target_text"] = ""
+
+                # 例句朗讀（reading_assessment / EXAMPLE_SENTENCES）需要在 top-level 提供
+                # example_audio_url，前端 ReadingAssessmentPanel 才能播放例句音檔。
+                # 沒有這欄位時，audio.src 為 undefined → 瀏覽器拋 NotSupportedError (issue #673)
+                if content.type == ContentType.EXAMPLE_SENTENCES:
+                    first_item = (
+                        activity_data["items"][0]
+                        if activity_data.get("items")
+                        else None
+                    )
+                    if first_item:
+                        activity_data["example_audio_url"] = first_item.get("audio_url")
+                        activity_data["content"] = first_item.get("translation") or ""
+                        activity_data["target_text"] = first_item.get("text") or ""
 
                 # 現在統一使用 StudentItemProgress 的資料，不再從 response_data 讀取
                 # recordings 和 AI 評分都應該從 items 的 recording_url 和 ai_assessment 取得
