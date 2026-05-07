@@ -32,7 +32,12 @@ export default function OneCampusCallback() {
   const { login: teacherLogin } = useTeacherAuthStore();
 
   const [status, setStatus] = useState<
-    "loading" | "error" | "merge_prompt" | "bind_prompt" | "bind_sent"
+    | "loading"
+    | "error"
+    | "merge_prompt"
+    | "bind_prompt"
+    | "bind_sent"
+    | "merge_complete"
   >("loading");
   const [errorMessage, setErrorMessage] = useState("");
   const [mergeInfo, setMergeInfo] = useState<{
@@ -92,6 +97,45 @@ export default function OneCampusCallback() {
       if (data.action === "merge_prompt") {
         setMergeInfo(data.merge_info);
         setStatus("merge_prompt");
+        return;
+      }
+
+      // Flow 2 merge complete — stay logged in as target user, show success
+      if (data.action === "merge_complete") {
+        if (data.access_token) {
+          if (data.role_type === "teacher" && data.user) {
+            teacherLogin(data.access_token, {
+              id: data.user.id,
+              name: data.user.name,
+              email: data.user.email,
+              role: data.user.role,
+              organization_id: data.user.organization_id,
+              school_id: data.user.school_id,
+              is_demo: data.user.is_demo,
+              is_admin: data.user.is_admin,
+            });
+            setBindRoleType("teacher");
+          } else if (data.student) {
+            studentLogin(data.access_token, {
+              id: data.student.id,
+              name: data.student.name,
+              email: data.student.email || "",
+              student_number: data.student.student_number || "",
+              classroom_id: data.student.classroom_id,
+              classroom_name: data.student.classroom_name,
+              school_id: data.student.school_id,
+              school_name: data.student.school_name,
+              organization_id: data.student.organization_id,
+              organization_name: data.student.organization_name,
+              has_linked_accounts: data.student.has_linked_accounts,
+              linked_accounts_count: data.student.linked_accounts_count,
+              classrooms: data.student.classrooms,
+              classrooms_count: data.student.classrooms_count,
+            });
+            setBindRoleType("student");
+          }
+        }
+        setStatus("merge_complete");
         return;
       }
 
@@ -379,6 +423,38 @@ export default function OneCampusCallback() {
           <CardContent className="text-center">
             <Button onClick={handleBindSkip} className="w-full">
               {t("oneCampus.bind.continue", "Continue to Dashboard")}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {status === "merge_complete" && (
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <Link2 className="h-12 w-12 text-green-500 mx-auto mb-2" />
+            <CardTitle>
+              {t("oneCampus.mergeComplete.title", "1Campus Account Linked")}
+            </CardTitle>
+            <CardDescription>
+              {t(
+                "oneCampus.mergeComplete.description",
+                "Your 1Campus account has been successfully linked. You can now log in with either account.",
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <Button
+              onClick={() => {
+                // Navigate back to the appropriate settings page based on bindRoleType
+                if (bindRoleType === "teacher") {
+                  navigate("/teacher/profile", { replace: true });
+                } else {
+                  navigate("/student/profile", { replace: true });
+                }
+              }}
+              className="w-full"
+            >
+              {t("oneCampus.mergeComplete.continue", "Return to Settings")}
             </Button>
           </CardContent>
         </Card>
