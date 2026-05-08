@@ -1,8 +1,8 @@
 """Add merge marker fields to identities table
 
-Revision ID: 20260508_1000
-Revises: 20260429_1200
-Create Date: 2026-05-08 10:00:00.000000
+Revision ID: 20260508_1200
+Revises: 20260508_1100
+Create Date: 2026-05-08 12:00:00.000000
 
 Adds merged_into_identity_id and merged_at to Identity for tracking bind/merge
 of 1Campus SSO accounts with existing Duotopia accounts (Phase 1 of #719).
@@ -18,8 +18,8 @@ Related: #719
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "20260508_1000"
-down_revision = "20260429_1200"
+revision = "20260508_1200"
+down_revision = "20260508_1100"
 branch_labels = None
 depends_on = None
 
