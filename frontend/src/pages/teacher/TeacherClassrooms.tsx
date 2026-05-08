@@ -459,9 +459,7 @@ export default function TeacherClassrooms() {
             <CloudDownload className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">
               {t("teacherClassrooms.oneCampusSync.button", {
-                defaultValue: syncingOneCampus
-                  ? "Syncing..."
-                  : "Sync 1Campus",
+                defaultValue: syncingOneCampus ? "Syncing..." : "Sync 1Campus",
               })}
             </span>
           </Button>

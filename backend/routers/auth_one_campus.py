@@ -538,10 +538,44 @@ async def _handle_oauth_flow(
         logger.warning("1Campus getUserRole after OAuth failed (non-fatal): %s", e)
 
     if role_type is None:
+        # Existing users still log in cleanly (their role is already on file
+        # via uuid / verified email). For brand-new logins where getUserRole
+        # returns no role, refuse instead of silently creating a teacher
+        # account — that's how students were landing on the teacher
+        # dashboard with no way back. (#635 follow-up to #634.)
+        existing_identity = OneCampusAccountService.find_by_uuid(db, uuid)
+        if existing_identity is None and mail:
+            existing_identity = (
+                db.query(Identity)
+                .filter(
+                    func.lower(Identity.email) == mail.lower(),
+                    Identity.email_verified.is_(True),
+                    Identity.is_active.is_(True),
+                )
+                .first()
+            )
+
+        if existing_identity is None:
+            logger.warning(
+                "1Campus OAuth: could not determine role for uuid=%s mail=%s "
+                "and no existing account found — refusing new-account "
+                "creation. getUserRole returned no school with teacherRole "
+                "or studentRole.",
+                uuid,
+                mail,
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "We couldn't determine whether your 1Campus account is a "
+                    "student or teacher. Please ensure your school has "
+                    "authorized Duotopia, or contact your administrator."
+                ),
+            )
+
         logger.warning(
-            "1Campus OAuth: could not determine role for uuid=%s mail=%s — "
-            "defaulting to teacher. This typically means getUserRole returned "
-            "no schools or the school has not authorized our app.",
+            "1Campus OAuth: could not determine role for uuid=%s mail=%s but "
+            "an existing account was found — proceeding with existing role.",
             uuid,
             mail,
         )
