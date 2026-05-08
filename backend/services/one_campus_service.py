@@ -187,6 +187,54 @@ class OneCampusService:
         return resp.json()
 
     @staticmethod
+    async def get_class(school_dsns: str) -> dict:
+        """List all classes in a school via the jasmine API.
+
+        GET /api/jasmine/getClass?schoolDsns=xxx
+
+        Returns the raw JSON response. The exact shape is documented by
+        1Campus, but is expected to contain a list of classes with at least
+        an identifier and a display name. The sync service is responsible
+        for parsing the response shape — keep this method dumb on purpose so
+        that an upstream schema change only requires touching the sync layer.
+        """
+        if not _DSNS_RE.match(school_dsns):
+            raise ValueError(f"Invalid schoolDsns format: {school_dsns!r}")
+
+        token = await _get_access_token()
+        client = get_http_client()
+        resp = await client.get(
+            f"{ONE_CAMPUS_API_BASE}/api/jasmine/getClass",
+            params={"schoolDsns": school_dsns},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    @staticmethod
+    async def get_class_student(school_dsns: str, class_id: str) -> dict:
+        """List students in a 1Campus class via the jasmine API.
+
+        GET /api/jasmine/getClassStudent?schoolDsns=xxx&classID=yyy
+
+        See `get_class` for the rationale behind keeping the response opaque.
+        """
+        if not _DSNS_RE.match(school_dsns):
+            raise ValueError(f"Invalid schoolDsns format: {school_dsns!r}")
+        if not class_id or not isinstance(class_id, str):
+            raise ValueError("class_id must be a non-empty string")
+
+        token = await _get_access_token()
+        client = get_http_client()
+        resp = await client.get(
+            f"{ONE_CAMPUS_API_BASE}/api/jasmine/getClassStudent",
+            params={"schoolDsns": school_dsns, "classID": class_id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    @staticmethod
     async def get_user_role(
         account: Optional[str] = None,
         id_number_hash: Optional[str] = None,
