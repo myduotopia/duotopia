@@ -24,6 +24,7 @@ import {
 import api from "@/services/api";
 
 interface BindingStatus {
+  user_id: number;
   has_1campus_binding: boolean;
   one_campus_account: string | null;
   email: string | null;
@@ -42,10 +43,6 @@ export interface OneCampusBindSectionProps {
    */
   onMergeFlowStart?: (url: string) => void;
   /**
-   * Called after bind-account (email flow) succeeds.
-   */
-  onBindEmailSent?: (email: string) => void;
-  /**
    * userType override — if not provided, fetched from API.
    */
   userType?: "teacher" | "student";
@@ -53,7 +50,6 @@ export interface OneCampusBindSectionProps {
 
 export default function OneCampusBindSection({
   onMergeFlowStart,
-  onBindEmailSent: _onBindEmailSent,
   userType,
 }: OneCampusBindSectionProps) {
   const [status, setStatus] = useState<BindingStatus | null>(null);
@@ -109,11 +105,10 @@ export default function OneCampusBindSection({
           { email: status.email },
         );
       } else {
-        // Student resend — uses student-specific endpoint
-        // This triggers a new verification email
+        // Student resend — dedicated endpoint that re-sends the existing
+        // pending verification (does NOT change the email or reset state).
         await api.post<ResendVerificationResponse>(
-          "/api/students/update-email",
-          { email: status.email },
+          `/api/students/${status.user_id}/email/resend-verification`,
         );
       }
       toast.success("Verification email sent. Please check your inbox.");
@@ -140,7 +135,6 @@ export default function OneCampusBindSection({
   const isBound = status.has_1campus_binding;
   const emailVerified = status.email_verified;
   const hasEmail = !!status.email;
-  const isLoggedInVia1Campus = isBound;
 
   // Determine what action to show
   // - If not bound and email verified → show "Bind 1Campus account" (merge flow)
@@ -207,7 +201,7 @@ export default function OneCampusBindSection({
         {/* Action area */}
         <div className="pt-2 space-y-2">
           {/* Show bind button only if: not already bound, email verified */}
-          {!isLoggedInVia1Campus && !isBound && emailVerified && (
+          {!isBound && emailVerified && (
             <Button
               size="sm"
               variant="secondary"
@@ -225,7 +219,7 @@ export default function OneCampusBindSection({
           )}
 
           {/* Show disabled bind button + resend if email not verified */}
-          {!isLoggedInVia1Campus && !isBound && hasEmail && !emailVerified && (
+          {!isBound && hasEmail && !emailVerified && (
             <div className="space-y-2">
               <Button
                 size="sm"

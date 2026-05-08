@@ -48,9 +48,6 @@ MERGE_TOKEN_TTL = 600
 # OAuth state token validity: 10 minutes
 OAUTH_STATE_TTL = 600
 
-# Prefix for OAuth merge state (different from plain OAuth state to avoid confusion)
-OAUTH_MERGE_STATE_PREFIX = "merge"
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth/1campus", tags=["auth-1campus"])
@@ -383,6 +380,19 @@ async def get_login_url_for_merge(
             detail="No identity found. Please ensure your account is set up correctly.",
         )
 
+    # Enforce email_verified=True upfront so users can't bypass the frontend
+    # gate, complete OAuth, then get rejected at the callback. Mirrors the
+    # check inside _handle_oauth_merge_flow_from_state.
+    identity = db.get(Identity, user.identity_id)
+    if not identity or not identity.email_verified:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "EMAIL_NOT_VERIFIED",
+                "message": "Please verify your email before binding a 1Campus account.",
+            },
+        )
+
     try:
         merge_state = _create_oauth_merge_state(user.identity_id, user_type)
         url = OneCampusService.get_oauth_authorize_url(state=merge_state)
@@ -561,8 +571,6 @@ async def _handle_oauth_merge_flow_from_state(
         )
     else:
         # Merge: B is a different identity → mark B merged into A
-        from services.one_campus_account_service import OneCampusAccountService
-
         OneCampusAccountService.mark_identity_merged(
             db, identity_b.id, target_identity_id
         )
@@ -1305,6 +1313,7 @@ async def get_binding_status(
     email = identity.email if identity else user.email
 
     return {
+        "user_id": user.id,
         "has_1campus_binding": one_campus_account is not None,
         "one_campus_account": one_campus_account,
         "email": email,
