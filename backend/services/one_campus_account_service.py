@@ -44,11 +44,7 @@ class OneCampusAccountService:
         Used during re-login to detect when a uuid points to a merged identity
         so we can redirect to the surviving target identity.
         """
-        return (
-            db.query(Identity)
-            .filter(Identity.one_campus_uuid == uuid)
-            .first()
-        )
+        return db.query(Identity).filter(Identity.one_campus_uuid == uuid).first()
 
     @staticmethod
     def mark_identity_merged(

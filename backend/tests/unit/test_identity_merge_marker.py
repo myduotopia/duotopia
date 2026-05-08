@@ -54,7 +54,9 @@ class TestMarkIdentityMerged:
 
         assert source.is_active is False
 
-    def test_transfers_one_campus_fields_from_source_to_target(self, shared_test_session):
+    def test_transfers_one_campus_fields_from_source_to_target(
+        self, shared_test_session
+    ):
         """mark_identity_merged moves 1Campus fields to target when target has none."""
         db = shared_test_session
 
@@ -81,7 +83,9 @@ class TestMarkIdentityMerged:
         assert target.one_campus_student_id == "S003"
         assert target.national_id_hash == "a" * 64
 
-    def test_does_not_overwrite_existing_one_campus_fields_on_target(self, shared_test_session):
+    def test_does_not_overwrite_existing_one_campus_fields_on_target(
+        self, shared_test_session
+    ):
         """Target with existing 1Campus fields retains them (not overwritten)."""
         db = shared_test_session
 

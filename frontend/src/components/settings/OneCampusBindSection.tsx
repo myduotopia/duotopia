@@ -14,7 +14,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Link2, CheckCircle, AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import {
+  Link2,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import api from "@/services/api";
 
 interface BindingStatus {
@@ -58,7 +64,7 @@ export default function OneCampusBindSection({
   const loadStatus = useCallback(async () => {
     try {
       const resp = await api.get<BindingStatus>(
-        "/api/auth/1campus/binding-status"
+        "/api/auth/1campus/binding-status",
       );
       setStatus(resp.data);
     } catch (err) {
@@ -76,7 +82,7 @@ export default function OneCampusBindSection({
     setMergeLoading(true);
     try {
       const resp = await api.get<{ url: string }>(
-        "/api/auth/1campus/login-url-for-merge"
+        "/api/auth/1campus/login-url-for-merge",
       );
       const url = resp.data.url;
       if (onMergeFlowStart) {
@@ -100,14 +106,14 @@ export default function OneCampusBindSection({
       if (userType === "teacher" || status.user_type === "teacher") {
         await api.post<ResendVerificationResponse>(
           "/api/auth/resend-verification",
-          { email: status.email }
+          { email: status.email },
         );
       } else {
         // Student resend — uses student-specific endpoint
         // This triggers a new verification email
         await api.post<ResendVerificationResponse>(
           "/api/students/update-email",
-          { email: status.email }
+          { email: status.email },
         );
       }
       toast.success("Verification email sent. Please check your inbox.");

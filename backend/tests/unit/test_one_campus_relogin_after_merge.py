@@ -60,7 +60,12 @@ class TestReloginAfterMerge:
         db.commit()
 
         # Simulate find_or_create_by_oauth with uuid that points to merged B
-        identity, user, role_type, action = OneCampusAccountService.find_or_create_by_oauth(
+        (
+            identity,
+            user,
+            role_type,
+            action,
+        ) = OneCampusAccountService.find_or_create_by_oauth(
             db=db,
             uuid="rl-uuid-merged-b-teacher",
             mail="rl_merged_b@1campus.net",
@@ -112,7 +117,12 @@ class TestReloginAfterMerge:
         identity_b.merged_at = datetime.now(timezone.utc)
         db.commit()
 
-        identity, user, role_type, action = OneCampusAccountService.find_or_create_by_oauth(
+        (
+            identity,
+            user,
+            role_type,
+            action,
+        ) = OneCampusAccountService.find_or_create_by_oauth(
             db=db,
             uuid="rl-uuid-merged-student-b",
             mail="rl_merged_student_b@1campus.net",
@@ -126,9 +136,7 @@ class TestReloginAfterMerge:
         assert user.id == student_a.id
         assert role_type == "student"
 
-    def test_audit_log_emitted_for_merge_redirect(
-        self, shared_test_session, caplog
-    ):
+    def test_audit_log_emitted_for_merge_redirect(self, shared_test_session, caplog):
         """Redirect from merged Identity logs a clear audit message."""
         db = shared_test_session
 
@@ -162,7 +170,9 @@ class TestReloginAfterMerge:
         identity_b.merged_at = datetime.now(timezone.utc)
         db.commit()
 
-        with caplog.at_level(logging.INFO, logger="services.one_campus_account_service"):
+        with caplog.at_level(
+            logging.INFO, logger="services.one_campus_account_service"
+        ):
             OneCampusAccountService.find_or_create_by_oauth(
                 db=db,
                 uuid="rl-uuid-auditlog-b",
@@ -203,7 +213,12 @@ class TestReloginAfterMerge:
         db.add(teacher_normal)
         db.commit()
 
-        identity, user, role_type, action = OneCampusAccountService.find_or_create_by_oauth(
+        (
+            identity,
+            user,
+            role_type,
+            action,
+        ) = OneCampusAccountService.find_or_create_by_oauth(
             db=db,
             uuid="rl-uuid-normal-active",
             mail="rl_normal@1campus.net",

@@ -35,9 +35,7 @@ def _make_merge_state_token(identity_id: int, user_type: str) -> str:
         "merge_for_user_type": user_type,
         "exp": int(time.time()) + 600,
     }
-    payload_b64 = base64.urlsafe_b64encode(
-        json.dumps(payload_dict).encode()
-    ).decode()
+    payload_b64 = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode()
     sig = hmac.HMAC(
         settings.JWT_SECRET.encode(), payload_b64.encode(), hashlib.sha256
     ).hexdigest()
@@ -79,6 +77,7 @@ class TestLoginUrlForMerge:
     def test_teacher_gets_url_with_merge_state(self, shared_test_session):
         """Authenticated teacher → returns url containing merge state."""
         import asyncio
+
         db = shared_test_session
 
         identity = Identity(
@@ -114,6 +113,7 @@ class TestLoginUrlForMerge:
     def test_student_gets_url_with_merge_state(self, shared_test_session):
         """Authenticated student → returns url."""
         import asyncio
+
         db = shared_test_session
 
         identity = Identity(
@@ -152,6 +152,7 @@ class TestCallbackWithMergeState:
     def test_uuid_matches_b_marks_b_merged_into_a(self, shared_test_session):
         """UUID matches B → B merged into A, returns A's token."""
         import asyncio
+
         db = shared_test_session
 
         # Target identity A (email-logged-in user requesting merge)
@@ -230,6 +231,7 @@ class TestCallbackWithMergeState:
     def test_target_unverified_raises_400(self, shared_test_session):
         """If A.email_verified=False → HTTPException 400."""
         import asyncio
+
         db = shared_test_session
 
         identity_a_unverified = Identity(
@@ -281,6 +283,7 @@ class TestCallbackWithMergeState:
     def test_uuid_not_in_system_pure_bind(self, shared_test_session):
         """UUID not in system → pure bind: write 1Campus fields to target (A)."""
         import asyncio
+
         db = shared_test_session
 
         identity_a = Identity(
@@ -335,6 +338,7 @@ class TestCallbackWithMergeState:
     def test_uuid_matches_target_noop(self, shared_test_session):
         """UUID == A's identity → no-op (already bound), returns A's token."""
         import asyncio
+
         db = shared_test_session
 
         identity_a = Identity(

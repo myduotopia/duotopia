@@ -540,11 +540,7 @@ async def _handle_oauth_merge_flow_from_state(
         )
 
     # Step 6: Find Identity B by uuid (including deactivated/merged)
-    identity_b = (
-        db.query(Identity)
-        .filter(Identity.one_campus_uuid == uuid)
-        .first()
-    )
+    identity_b = db.query(Identity).filter(Identity.one_campus_uuid == uuid).first()
 
     if identity_b is None:
         # Pure bind: uuid not seen before, write 1Campus fields directly to A
@@ -567,7 +563,9 @@ async def _handle_oauth_merge_flow_from_state(
         # Merge: B is a different identity → mark B merged into A
         from services.one_campus_account_service import OneCampusAccountService
 
-        OneCampusAccountService.mark_identity_merged(db, identity_b.id, target_identity_id)
+        OneCampusAccountService.mark_identity_merged(
+            db, identity_b.id, target_identity_id
+        )
         db.commit()
         logger.info(
             "1Campus merge flow: merged identity_b_id=%s into identity_a_id=%s",

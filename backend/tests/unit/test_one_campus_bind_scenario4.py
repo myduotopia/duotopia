@@ -42,6 +42,7 @@ class TestBindAccountScenario4:
     ):
         """Student bind-account: target email has unverified Identity → HTTPException 400."""
         import asyncio
+
         db = shared_test_session
 
         # 1Campus SSO student identity (already logged in via OAuth)
@@ -106,6 +107,7 @@ class TestBindAccountScenario4:
     ):
         """Teacher bind-account: target email has unverified Identity → HTTPException 400."""
         import asyncio
+
         db = shared_test_session
 
         sso_identity = Identity(
@@ -163,6 +165,7 @@ class TestBindAccountScenario4:
         """
         import asyncio
         from sqlalchemy.exc import IntegrityError as SQLAIntegrityError
+
         db = shared_test_session
 
         sso_identity = Identity(
@@ -219,19 +222,25 @@ class TestBindAccountScenario4:
             )
         except HTTPException as e:
             detail = e.detail
-            if isinstance(detail, dict) and detail.get("code") == "TARGET_EMAIL_NOT_VERIFIED":
+            if (
+                isinstance(detail, dict)
+                and detail.get("code") == "TARGET_EMAIL_NOT_VERIFIED"
+            ):
                 raised_scenario4 = True
         except Exception:
             # Other failures (DB errors, email service mock missing, etc.) are OK
             pass
 
-        assert not raised_scenario4, "Should NOT raise TARGET_EMAIL_NOT_VERIFIED for verified target"
+        assert (
+            not raised_scenario4
+        ), "Should NOT raise TARGET_EMAIL_NOT_VERIFIED for verified target"
 
     def test_bind_to_nonexistent_email_does_not_raise_scenario4_error(
         self, shared_test_session
     ):
         """Bind to email not in system → not rejected by scenario 4 check."""
         import asyncio
+
         db = shared_test_session
 
         sso_identity = Identity(
