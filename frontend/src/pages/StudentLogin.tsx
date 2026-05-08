@@ -514,7 +514,7 @@ export default function StudentLogin() {
                       setIsOneCampusLoading(true);
                       try {
                         const res = await apiClient.get<{ url: string }>(
-                          "/api/auth/1campus/login-url",
+                          "/api/auth/1campus/login-url?role=student",
                         );
                         window.location.href = res.url;
                         // Don't reset loading on success — page navigates away.

@@ -370,6 +370,16 @@ class ApiClient {
     return this.request("/api/teachers/dashboard");
   }
 
+  async syncOneCampusClasses() {
+    return this.request<{
+      enqueued: boolean;
+      schools: string[];
+      message: string;
+    }>("/api/teachers/me/sync-1campus-classes", {
+      method: "POST",
+    });
+  }
+
   async getTeacherClassrooms(params?: {
     mode?: string;
     school_id?: string;

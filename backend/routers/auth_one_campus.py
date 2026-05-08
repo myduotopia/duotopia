@@ -40,6 +40,7 @@ from services.one_campus_service import (
     OneCampusCodeExpiredError,
 )
 from services.one_campus_account_service import OneCampusAccountService
+from services.cloud_tasks_service import enqueue_one_campus_class_sync
 
 # Merge token validity: 10 minutes
 MERGE_TOKEN_TTL = 600
@@ -127,12 +128,18 @@ def _verify_merge_token(token: str) -> dict:
     }
 
 
-def _create_oauth_state() -> str:
+def _create_oauth_state(role_hint: Optional[str] = None) -> str:
     """Create a stateless HMAC-signed OAuth state token for CSRF protection.
 
-    Format: base64(json({"nonce": ..., "exp": ...})).signature
+    Format: base64(json({"nonce": ..., "exp": ..., "role"?: ...})).signature
     Verified on the OAuth callback to defend against forged state values.
     Stateless (no DB/session needed); per-issue and stateless deploys friendly.
+
+    `role_hint` is which login button the user clicked ("teacher" or
+    "student"). It travels through the OAuth round-trip inside the signed
+    state, and is used as a fallback when 1Campus `getUserRole` cannot
+    determine the role on its own. Because the state is HMAC-signed, the
+    hint cannot be forged by the user.
 
     Note on replay: this token is reusable within its 10-minute TTL, but the
     OAuth authorization code (issued by 1Campus and tied to this state) is
@@ -144,6 +151,8 @@ def _create_oauth_state() -> str:
         "nonce": secrets.token_urlsafe(16),
         "exp": int(time.time()) + OAUTH_STATE_TTL,
     }
+    if role_hint in ("teacher", "student"):
+        payload_dict["role"] = role_hint
     payload_b64 = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode()
     sig = hmac.HMAC(
         settings.JWT_SECRET.encode(), payload_b64.encode(), hashlib.sha256
@@ -151,24 +160,30 @@ def _create_oauth_state() -> str:
     return f"{payload_b64}.{sig}"
 
 
-def _verify_oauth_state(state: Optional[str]) -> bool:
-    """Verify an OAuth state token. Returns True if valid, False otherwise."""
+def _verify_oauth_state(state: Optional[str]) -> Optional[dict]:
+    """Verify an OAuth state token.
+
+    Returns the decoded payload dict on success, None on any failure.
+    Callers should treat None as 'invalid or expired state'.
+    """
     if not state:
-        return False
+        return None
     parts = state.split(".", 1)
     if len(parts) != 2:
-        return False
+        return None
     payload_b64, sig = parts
     expected_sig = hmac.HMAC(
         settings.JWT_SECRET.encode(), payload_b64.encode(), hashlib.sha256
     ).hexdigest()
     if not hmac.compare_digest(sig, expected_sig):
-        return False
+        return None
     try:
         payload_dict = json.loads(base64.urlsafe_b64decode(payload_b64))
     except (json.JSONDecodeError, UnicodeDecodeError, binascii.Error):
-        return False
-    return payload_dict.get("exp", 0) >= int(time.time())
+        return None
+    if payload_dict.get("exp", 0) < int(time.time()):
+        return None
+    return payload_dict
 
 
 def _build_student_response(db: Session, student: Student) -> dict:
@@ -258,14 +273,25 @@ def _build_teacher_response(db: Session, teacher: Teacher) -> dict:
 
 @router.get("/login-url")
 @limiter.limit("30/minute")
-async def get_login_url(request: Request):
+async def get_login_url(
+    request: Request,
+    role: Optional[str] = Query(
+        None,
+        description=(
+            "Which login button the user clicked: 'teacher' or 'student'. "
+            "Used as a fallback when 1Campus getUserRole can't determine the "
+            "role. Anything else is ignored."
+        ),
+        regex="^(teacher|student)$",
+    ),
+):
     """Return the 1Campus OAuth authorize URL with a CSRF state token.
 
     The frontend redirects users to this URL to initiate SSO login.
     The state is verified on the callback to defend against forged callbacks.
     """
     try:
-        state = _create_oauth_state()
+        state = _create_oauth_state(role_hint=role)
         url = OneCampusService.get_oauth_authorize_url(state=state)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -293,12 +319,14 @@ async def one_campus_callback(
     """
     if schoolDsns:
         return await _handle_identity_code_flow(request, code, schoolDsns, db)
-    if not _verify_oauth_state(state):
+    state_payload = _verify_oauth_state(state)
+    if state_payload is None:
         raise HTTPException(
             status_code=400,
             detail="Invalid or expired OAuth state. Please try logging in again.",
         )
-    return await _handle_oauth_flow(request, code, db)
+    role_hint = state_payload.get("role") if isinstance(state_payload, dict) else None
+    return await _handle_oauth_flow(request, code, db, role_hint=role_hint)
 
 
 async def _handle_identity_code_flow(
@@ -362,6 +390,15 @@ async def _handle_identity_code_flow(
         )
 
         teacher_response = _build_teacher_response(db, teacher)
+
+        # Schedule a class roster sync for this school. Identity-code flow
+        # always carries exactly one school_dsns (the school the user came
+        # from), so we enqueue one task. Failures inside enqueue are logged
+        # and swallowed — login must not break when the queue is down.
+        try:
+            await enqueue_one_campus_class_sync(school_dsns, teacher.id)
+        except Exception as e:
+            logger.warning("enqueue_one_campus_class_sync failed: %s", e)
 
         access_token = create_access_token(
             data={
@@ -443,8 +480,15 @@ async def _handle_oauth_flow(
     request: Request,
     code: str,
     db: Session,
+    role_hint: Optional[str] = None,
 ) -> OneCampusCallbackResponse:
-    """Handle the OAuth 2.0 Authorization Code flow (from Duotopia login page)."""
+    """Handle the OAuth 2.0 Authorization Code flow (from Duotopia login page).
+
+    `role_hint` (optional) is the role the user picked when starting login —
+    it travels back via the signed OAuth state. We trust it as a fallback
+    only if 1Campus `getUserRole` couldn't determine the role on its own;
+    `getUserRole` always wins when it returns a definitive answer.
+    """
     # Step 1: Exchange authorization code for access token
     try:
         token_data = await OneCampusService.exchange_oauth_code(code)
@@ -490,6 +534,7 @@ async def _handle_oauth_flow(
     student_name = None
     student_number = None
     teacher_name = None
+    teacher_school_dsns_list: list[str] = []  # all schools where user is a teacher
 
     try:
         user_role_data = await OneCampusService.get_user_role(account=mail)
@@ -500,12 +545,18 @@ async def _handle_oauth_flow(
             # the teacher account would be linked to the student's national ID
             # hash (and vice versa).
             if school.get("teacherRole"):
-                role_type = "teacher"
-                tr = school["teacherRole"]
-                teacher_name = tr.get("teacherName")
-                if tr.get("idNumberHash"):
-                    national_id_hash = tr["idNumberHash"]
-            elif school.get("studentRole"):
+                # Collect every teacher school for the post-login class sync.
+                dsns = school.get("schoolDsns")
+                if dsns and dsns not in teacher_school_dsns_list:
+                    teacher_school_dsns_list.append(dsns)
+
+                if role_type is None:
+                    role_type = "teacher"
+                    tr = school["teacherRole"]
+                    teacher_name = tr.get("teacherName")
+                    if tr.get("idNumberHash"):
+                        national_id_hash = tr["idNumberHash"]
+            elif school.get("studentRole") and role_type is None:
                 role_type = "student"
                 sr = school["studentRole"]
                 one_campus_student_id = str(sr.get("studentID", ""))
@@ -513,20 +564,65 @@ async def _handle_oauth_flow(
                 student_number = sr.get("studentNumber")
                 if sr.get("idNumberHash"):
                     national_id_hash = sr["idNumberHash"]
-
-            if role_type:
-                break
+                # Students don't trigger class sync (#635 is teacher-side).
+                # We can't break here because a later school may add another
+                # teacher_school_dsns; but if role_type is already set we stop
+                # collecting student-only data.
     except httpx.HTTPError as e:
         logger.warning("1Campus getUserRole after OAuth failed (non-fatal): %s", e)
 
     if role_type is None:
-        logger.warning(
-            "1Campus OAuth: could not determine role for uuid=%s mail=%s — "
-            "defaulting to teacher. This typically means getUserRole returned "
-            "no schools or the school has not authorized our app.",
-            uuid,
-            mail,
-        )
+        # Order of precedence when getUserRole couldn't tell us the role:
+        #   1. Existing account (matched by uuid or verified email) — log in
+        #      with whatever role they're already on file as.
+        #   2. role_hint from the OAuth state — which login button the user
+        #      clicked. Trustworthy because the state is HMAC-signed.
+        #   3. Refuse with HTTP 400.
+        existing_identity = OneCampusAccountService.find_by_uuid(db, uuid)
+        if existing_identity is None and mail:
+            existing_identity = (
+                db.query(Identity)
+                .filter(
+                    func.lower(Identity.email) == mail.lower(),
+                    Identity.email_verified.is_(True),
+                    Identity.is_active.is_(True),
+                )
+                .first()
+            )
+
+        if existing_identity is not None:
+            logger.warning(
+                "1Campus OAuth: could not determine role for uuid=%s mail=%s "
+                "but an existing account was found — proceeding with "
+                "existing role.",
+                uuid,
+                mail,
+            )
+        elif role_hint in ("teacher", "student"):
+            logger.info(
+                "1Campus OAuth: getUserRole returned no role for uuid=%s "
+                "mail=%s; falling back to role_hint=%s from signed state.",
+                uuid,
+                mail,
+                role_hint,
+            )
+            role_type = role_hint
+        else:
+            logger.warning(
+                "1Campus OAuth: could not determine role for uuid=%s mail=%s, "
+                "no existing account, and no role_hint in state — refusing "
+                "new-account creation.",
+                uuid,
+                mail,
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "We couldn't determine whether your 1Campus account is a "
+                    "student or teacher. Please ensure your school has "
+                    "authorized Duotopia, or contact your administrator."
+                ),
+            )
 
     # Step 4: Match or create account
     (
@@ -575,6 +671,18 @@ async def _handle_oauth_flow(
             expires_delta=timedelta(hours=24),
         )
         # Note: Teacher model has no last_login field (unlike Student); nothing to update.
+
+        # Schedule class roster sync for every school where the user has a
+        # teacherRole. Failures are swallowed so login isn't blocked by a
+        # misbehaving Cloud Tasks queue.
+        for dsns in teacher_school_dsns_list:
+            try:
+                await enqueue_one_campus_class_sync(dsns, user.id)
+            except Exception as e:
+                logger.warning(
+                    "enqueue_one_campus_class_sync failed for %s: %s", dsns, e
+                )
+
         return OneCampusCallbackResponse(
             access_token=access_token,
             role_type="teacher",

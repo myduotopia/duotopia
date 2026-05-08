@@ -164,6 +164,13 @@ async def get_teacher_classrooms(
                 "school_id": school_id,
                 "school_name": school_name,
                 "organization_id": organization_id,
+                # 1Campus sync metadata (#635). NULL for manually-created classrooms.
+                "one_campus_class_id": classroom.one_campus_class_id,
+                "last_synced_at": (
+                    classroom.last_synced_at.isoformat()
+                    if classroom.last_synced_at
+                    else None
+                ),
                 "students": [
                     {
                         "id": cs.student.id,

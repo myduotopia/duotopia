@@ -31,6 +31,7 @@ openai==1.57.4
 google-cloud-storage==2.13.0
 google-cloud-bigquery==3.14.1
 google-cloud-aiplatform==1.95.0  # Vertex AI (Gemini) for AI services
+google-cloud-tasks==2.16.4  # 1Campus class sync background jobs
 azure-cognitiveservices-speech==1.45.0  # Official Azure TTS (replaces edge-tts)
 
 # Performance Monitoring (OpenTelemetry + Cloud Trace)

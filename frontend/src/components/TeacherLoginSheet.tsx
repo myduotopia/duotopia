@@ -249,7 +249,7 @@ export default function TeacherLoginSheet({
                   setIsOneCampusLoading(true);
                   try {
                     const res = await apiClient.get<{ url: string }>(
-                      "/api/auth/1campus/login-url",
+                      "/api/auth/1campus/login-url?role=teacher",
                     );
                     window.location.href = res.url;
                     // Don't reset loading on success — page will navigate away.

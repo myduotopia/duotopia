@@ -34,6 +34,13 @@ class Classroom(Base):
     academic_year = Column(String(20), nullable=True)  # 學年度（與 DB 一致，但不使用）
     is_active = Column(Boolean, default=True)
 
+    # 1Campus sync metadata. Populated only for classrooms imported from
+    # 1Campus jasmine API. Manual Duotopia classrooms have these as NULL,
+    # which the sync service treats as "do not touch".
+    one_campus_class_id = Column(String(100), nullable=True, index=True)
+    one_campus_school_dsns = Column(String(100), nullable=True)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
