@@ -78,7 +78,7 @@ class TestReloginAfterMerge:
         # Should return target A's identity and teacher
         assert identity.id == identity_a.id
         assert user.id == teacher_a.id
-        assert action in ("existing", "merge_redirect")
+        assert action == "merge_redirect"
 
     def test_find_by_uuid_resolves_merged_student_identity_to_target(
         self, shared_test_session

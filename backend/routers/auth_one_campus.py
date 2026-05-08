@@ -393,6 +393,18 @@ async def get_login_url_for_merge(
             },
         )
 
+    # Reject if the identity is already bound to a 1Campus account. Without
+    # this guard, a stale tab could complete OAuth and silently overwrite the
+    # existing binding via the pure-bind path in the callback handler.
+    if identity.one_campus_uuid:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "ALREADY_BOUND",
+                "message": "This account is already linked to a 1Campus account.",
+            },
+        )
+
     try:
         merge_state = _create_oauth_merge_state(user.identity_id, user_type)
         url = OneCampusService.get_oauth_authorize_url(state=merge_state)
@@ -553,7 +565,24 @@ async def _handle_oauth_merge_flow_from_state(
     identity_b = db.query(Identity).filter(Identity.one_campus_uuid == uuid).first()
 
     if identity_b is None:
-        # Pure bind: uuid not seen before, write 1Campus fields directly to A
+        # Pure bind: uuid not seen before, write 1Campus fields directly to A.
+        # Guard against overwriting an existing binding — login-url-for-merge
+        # already rejects this case, but defend in depth in case the state
+        # token was issued before the binding was set.
+        if target_identity.one_campus_uuid:
+            logger.info(
+                "1Campus merge flow: pure-bind no-op, target identity_id=%s "
+                "already bound to uuid=%s",
+                target_identity_id,
+                target_identity.one_campus_uuid,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ALREADY_BOUND",
+                    "message": "This account is already linked to a 1Campus account.",
+                },
+            )
         target_identity.one_campus_uuid = uuid
         target_identity.one_campus_account = mail
         db.commit()
@@ -570,10 +599,28 @@ async def _handle_oauth_merge_flow_from_state(
             target_identity_id,
         )
     else:
-        # Merge: B is a different identity → mark B merged into A
-        OneCampusAccountService.mark_identity_merged(
-            db, identity_b.id, target_identity_id
-        )
+        # Merge: B is a different identity → mark B merged into A.
+        # mark_identity_merged raises ValueError if B is already merged
+        # elsewhere or inactive (cycle / re-merge guard) — surface as 409.
+        try:
+            OneCampusAccountService.mark_identity_merged(
+                db, identity_b.id, target_identity_id
+            )
+        except ValueError as e:
+            logger.warning(
+                "1Campus merge flow: refused to merge identity_b_id=%s "
+                "into identity_a_id=%s: %s",
+                identity_b.id,
+                target_identity_id,
+                e,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "SOURCE_ALREADY_MERGED",
+                    "message": "This 1Campus account is already linked to another Duotopia account.",
+                },
+            )
         db.commit()
         logger.info(
             "1Campus merge flow: merged identity_b_id=%s into identity_a_id=%s",
@@ -581,7 +628,9 @@ async def _handle_oauth_merge_flow_from_state(
             target_identity_id,
         )
 
-    # Step 7: Return access_token for A's user
+    # Step 7: Return access_token for A's user.
+    # Note: Teacher model has no last_login field (unlike Student); only the
+    # student branch updates it.
     if target_user_type == "teacher":
         teacher_response = _build_teacher_response(db, target_user)
         access_token = create_access_token(

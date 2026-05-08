@@ -89,7 +89,27 @@ export default function OneCampusBindSection({
       }
     } catch (err: unknown) {
       console.error("Failed to get 1Campus merge URL:", err);
-      toast.error("Failed to initiate 1Campus binding. Please try again.");
+      // Parse the structured backend response to surface actionable messages.
+      const detail = (
+        err as {
+          response?: {
+            data?: { detail?: { code?: string; message?: string } };
+          };
+        }
+      )?.response?.data?.detail;
+      if (detail?.code === "EMAIL_NOT_VERIFIED") {
+        toast.error(
+          detail.message ||
+            "Please verify your email before binding a 1Campus account.",
+        );
+      } else if (detail?.code === "ALREADY_BOUND") {
+        toast.error(
+          detail.message ||
+            "This account is already linked to a 1Campus account.",
+        );
+      } else {
+        toast.error("Failed to initiate 1Campus binding. Please try again.");
+      }
     } finally {
       setMergeLoading(false);
     }
