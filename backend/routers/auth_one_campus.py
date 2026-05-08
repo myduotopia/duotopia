@@ -1309,8 +1309,12 @@ async def get_binding_status(
         identity = db.get(Identity, user.identity_id)
 
     one_campus_account = identity.one_campus_account if identity else None
-    email_verified = identity.email_verified if identity else user.email_verified
-    email = identity.email if identity else user.email
+    # email_verified lives on Identity; fall back safely if the user has no
+    # identity_id and the user model doesn't expose the attribute directly.
+    email_verified = (
+        identity.email_verified if identity else getattr(user, "email_verified", False)
+    )
+    email = identity.email if identity else getattr(user, "email", None)
 
     return {
         "user_id": user.id,

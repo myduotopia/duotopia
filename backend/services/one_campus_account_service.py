@@ -84,20 +84,36 @@ class OneCampusAccountService:
             )
             return
 
+        # Cycle / re-merge guard: refuse to merge a source that is already
+        # merged elsewhere or has been deactivated. This prevents A→B→A cycles
+        # (find_by_uuid follows only one merged_into hop, so a cycle would
+        # silently land on an inactive identity and fall through to "create
+        # new").
+        if source.merged_into_identity_id is not None or not source.is_active:
+            raise ValueError(
+                f"Source identity_id={source_identity_id} is already merged or inactive "
+                f"(merged_into={source.merged_into_identity_id}, "
+                f"is_active={source.is_active})"
+            )
+
         # Transfer 1Campus fields to target if target doesn't have them.
-        # Clear from source first (unique constraint on one_campus_uuid) before
-        # setting on target, then flush to release the unique index slot.
+        # Each field is cleared from source before assignment to target (and
+        # flushed for unique fields) so the source row never ends up duplicating
+        # identifying data with the surviving target.
         if not target.one_campus_uuid and source.one_campus_uuid:
             transferred_uuid = source.one_campus_uuid
             source.one_campus_uuid = None
-            db.flush()
+            db.flush()  # release UNIQUE index slot before reassigning
             target.one_campus_uuid = transferred_uuid
         if not target.one_campus_account and source.one_campus_account:
             target.one_campus_account = source.one_campus_account
+            source.one_campus_account = None
         if not target.one_campus_student_id and source.one_campus_student_id:
             target.one_campus_student_id = source.one_campus_student_id
+            source.one_campus_student_id = None
         if not target.national_id_hash and source.national_id_hash:
             target.national_id_hash = source.national_id_hash
+            source.national_id_hash = None
 
         # Mark source as merged and deactivate
         source.merged_into_identity_id = target_identity_id

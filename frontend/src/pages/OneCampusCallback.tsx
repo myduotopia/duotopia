@@ -102,6 +102,7 @@ export default function OneCampusCallback() {
 
       // Flow 2 merge complete — stay logged in as target user, show success
       if (data.action === "merge_complete") {
+        let loggedIn = false;
         if (data.access_token) {
           if (data.role_type === "teacher" && data.user) {
             teacherLogin(data.access_token, {
@@ -115,6 +116,7 @@ export default function OneCampusCallback() {
               is_admin: data.user.is_admin,
             });
             setBindRoleType("teacher");
+            loggedIn = true;
           } else if (data.student) {
             studentLogin(data.access_token, {
               id: data.student.id,
@@ -133,9 +135,18 @@ export default function OneCampusCallback() {
               classrooms_count: data.student.classrooms_count,
             });
             setBindRoleType("student");
+            loggedIn = true;
           }
         }
-        setStatus("merge_complete");
+        if (loggedIn) {
+          setStatus("merge_complete");
+        } else {
+          // No usable login payload — surface as error instead of pretending success
+          setErrorMessage(
+            "Merge completed but the server did not return login credentials. Please try logging in again.",
+          );
+          setStatus("error");
+        }
         return;
       }
 
