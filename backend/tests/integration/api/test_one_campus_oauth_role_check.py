@@ -54,7 +54,7 @@ def _patch_oauth_token_and_user_info(role_payload):
     )
 
 
-def _valid_oauth_state(jwt_secret: str = None) -> str:
+def _valid_oauth_state(role_hint: str = None) -> str:
     """Build a valid OAuth state token (mirrors auth_one_campus._create_oauth_state)."""
     import base64
     import hashlib
@@ -65,11 +65,13 @@ def _valid_oauth_state(jwt_secret: str = None) -> str:
 
     from core.config import settings
 
-    secret = (jwt_secret or settings.JWT_SECRET).encode()
+    secret = settings.JWT_SECRET.encode()
     payload = {
         "nonce": secrets.token_urlsafe(16),
         "exp": int(time.time()) + 600,
     }
+    if role_hint in ("teacher", "student"):
+        payload["role"] = role_hint
     payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
     sig = hmac.HMAC(secret, payload_b64.encode(), hashlib.sha256).hexdigest()
     return f"{payload_b64}.{sig}"
@@ -91,6 +93,45 @@ class TestRoleDeterminationGuard:
         assert resp.status_code == 400, resp.text
         body = resp.json()
         assert "couldn't determine" in body["detail"].lower()
+
+    def test_role_hint_used_when_getuserrole_fails_for_new_student(
+        self, test_client, shared_test_session
+    ):
+        """No matching Identity, getUserRole empty, but role_hint=student → 200 student."""
+        p_token, p_info, p_role = _patch_oauth_token_and_user_info({"school": []})
+        with p_token, p_info, p_role:
+            resp = test_client.get(
+                "/api/auth/1campus/callback",
+                params={
+                    "code": "test-code",
+                    "state": _valid_oauth_state(role_hint="student"),
+                },
+            )
+
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["role_type"] == "student"
+        assert body["student"]["email"] is None or body["student"]["email"].endswith(
+            "@example.school"
+        )
+
+    def test_role_hint_used_when_getuserrole_fails_for_new_teacher(
+        self, test_client, shared_test_session
+    ):
+        """No matching Identity, getUserRole empty, but role_hint=teacher → 200 teacher."""
+        p_token, p_info, p_role = _patch_oauth_token_and_user_info({"school": []})
+        with p_token, p_info, p_role:
+            resp = test_client.get(
+                "/api/auth/1campus/callback",
+                params={
+                    "code": "test-code",
+                    "state": _valid_oauth_state(role_hint="teacher"),
+                },
+            )
+
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["role_type"] == "teacher"
 
     def test_existing_user_can_login_even_without_role(
         self, test_client, shared_test_session
