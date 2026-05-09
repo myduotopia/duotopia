@@ -9,10 +9,10 @@
  * - Proficiency progress bar at top
  * - Visual feedback on correct/incorrect selection
  * - Achievement dialog when target_proficiency is reached
- * - Issue #437: Adaptive layout —
+ * - Adaptive layout:
  *   (a) Question image: horizontal (image left, options right) on wide
- *       viewport (≥768px); vertical on narrow viewport.
- *   (b) Option images (#631 mode): options grid switches to 4×1 when its
+ *       viewport (≥640px); vertical on narrow viewport.
+ *   (b) Option images mode: options grid switches to 4×1 when its
  *       container is wide enough (~600px) to fit four images, else 2×2.
  */
 
@@ -117,7 +117,7 @@ export default function WordSelectionActivity({
   // Settings
   const [showWord, setShowWord] = useState(true);
   const [showImage, setShowImage] = useState(true);
-  const [showOptionImages, setShowOptionImages] = useState(false); // Issue #631
+  const [showOptionImages, setShowOptionImages] = useState(false);
   const [playAudio, setPlayAudio] = useState(false);
 
   // Proficiency
@@ -135,7 +135,7 @@ export default function WordSelectionActivity({
   });
   const [showAchievementDialog, setShowAchievementDialog] = useState(false);
 
-  // Issue #460: Practice-only mode (assignment already submitted, score locked)
+  // Practice-only mode: assignment already submitted, score locked
   const [isPracticeMode, setIsPracticeMode] = useState(initialPracticeMode);
 
   // Round tracking
@@ -218,7 +218,7 @@ export default function WordSelectionActivity({
   // Audio ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Issue #437: 自適應排版 — 寬螢幕 + 有題目圖片 → 橫式（圖左、選項右）
+  // 寬螢幕 + 有題目圖片 → 橫式（圖左、選項右）
   // 用 640px (Tailwind sm) 而非 768px，讓平板（含橫置）和手機橫置都保持橫式
   const [isWideViewport, setIsWideViewport] = useState(() =>
     typeof window !== "undefined"
@@ -234,7 +234,7 @@ export default function WordSelectionActivity({
     return () => mql.removeEventListener("change", onChange);
   }, []);
 
-  // Issue #437: 量測選項 grid 實際容器寬度，決定 4×1 / 2×2
+  // 量測選項 grid 實際容器寬度，決定 4×1 / 2×2
   // 寬度足夠（4 個選項 + gap 都裝得下）→ 4×1；不夠 → 2×2
   // 用 callback ref，避免 loading=true 早退出時 useRef 抓不到 DOM 的時序 bug
   const [optionsGridWidth, setOptionsGridWidth] = useState(0);
@@ -588,7 +588,6 @@ export default function WordSelectionActivity({
     startPractice();
   };
 
-  // Issue #460: Submit assignment — called when student confirms submission
   const handleSubmitAssignment = async () => {
     // 預覽模式和 demo 模式不需要呼叫 API
     if (isPreviewMode || isDemoMode) {
@@ -677,7 +676,7 @@ export default function WordSelectionActivity({
             {t("wordSelection.roundComplete") || "Round Complete!"}
           </h2>
 
-          {/* Issue #460: Practice mode banner */}
+          {/* Practice mode banner */}
           {isPracticeMode && (
             <div className="flex items-center gap-2 justify-center text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
               <Info className="h-4 w-4" />
@@ -768,7 +767,7 @@ export default function WordSelectionActivity({
               </Button>
             </div>
           ) : proficiency.achieved ? (
-            /* Issue #460: Achieved target — ask student whether to submit */
+            /* Achieved target — ask student whether to submit */
             <div className="space-y-4">
               <div className="flex justify-center">
                 <Trophy className="h-12 w-12 text-yellow-500" />
@@ -813,16 +812,16 @@ export default function WordSelectionActivity({
 
   const currentWord = words[currentIndex];
 
-  // Issue #437: 寬螢幕 + 有題目圖片 → 橫式排版（圖左、選項右）
+  // 寬螢幕 + 有題目圖片 → 橫式排版（圖左、選項右）
   const useHorizontal = showImage && !!currentWord?.image_url && isWideViewport;
 
-  // Issue #437: 選項有圖時，若容器寬度足夠就排成 4×1（節省垂直空間）；不夠則 2×2
+  // 選項有圖時，若容器寬度足夠就排成 4×1（節省垂直空間）；不夠則 2×2
   // 600px 約等於 4 × 140px + 3 × 16px gap
   const useFourColOptions = showOptionImages && optionsGridWidth >= 600;
 
   return (
     <div className="space-y-6">
-      {/* Issue #460: Practice mode banner */}
+      {/* Practice mode banner */}
       {isPracticeMode && (
         <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
           <BookOpen className="h-4 w-4" />
@@ -862,7 +861,7 @@ export default function WordSelectionActivity({
       <div
         className={cn(
           "space-y-6",
-          // Issue #437: 橫式（圖左、右欄文字+選項）— 不加 items-start，
+          // 橫式（圖左、右欄文字+選項）— 不加 items-start，
           // 用預設 items-stretch 讓兩欄等高，圖片高度由右欄決定
           useHorizontal && "flex flex-row gap-6 space-y-0",
         )}
@@ -957,7 +956,7 @@ export default function WordSelectionActivity({
             ref={setOptionsGridRef}
             className={cn(
               "grid gap-3 sm:gap-4",
-              useFourColOptions ? "grid-cols-4" : "grid-cols-2 grid-rows-2",
+              useFourColOptions ? "grid-cols-4" : "grid-cols-2",
             )}
             style={{ gridAutoRows: "1fr" }}
           >
@@ -973,7 +972,7 @@ export default function WordSelectionActivity({
                 showResult && isSelected && !isCorrectAnswer;
               // 答錯後才揭示的正解需要打勾動畫引導注意
               const animateReveal = showCorrect && !isCorrect;
-              // Issue #631: 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字
+              // 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字
               const renderAsImage = showOptionImages && !!optionImage;
 
               // 四個選項各用不同淺色
