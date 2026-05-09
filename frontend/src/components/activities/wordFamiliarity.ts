@@ -1,18 +1,18 @@
 /**
- * Issue #711: 5-tier classification of single-word familiarity.
+ * Issue #711: 5-tier classification of single-word familiarity, diff-based.
  *
  * Mirrors the SQL ``calculate_assignment_mastery`` function so the
  * preview/demo paths (which never hit the backend) classify words
  * the same way the live student path does.
  *
- * Cascade (top-down, first match wins):
- *   master            (精熟)     correct >= 5 AND rate >= 0.9
- *   familiar          (熟悉)     correct >= 4 AND rate >= 0.75
- *   medium            (普通)     correct >= 3 AND rate >= 0.5
- *   unfamiliar        (不熟悉)   correct >= 1 (other practiced)
- *   very_unfamiliar   (非常不熟) correct == 0 (incl. unpracticed)
+ * Ladder uses ``diff = correct - incorrect`` — every wrong answer
+ * cancels exactly one correct, every tier covers one diff value:
  *
- *   rate = correct / (correct + incorrect)
+ *   master           (精熟)    diff >= 4
+ *   familiar         (熟悉)    diff == 3
+ *   medium           (普通)    diff == 2
+ *   unfamiliar       (不熟悉)  diff == 1
+ *   very_unfamiliar  (非常不熟) diff <= 0  (incl. unpracticed)
  */
 
 export type FamiliarityTier =
@@ -26,13 +26,12 @@ export function classifyTier(
   correct: number,
   incorrect: number,
 ): FamiliarityTier {
-  if (correct === 0) return "very_unfamiliar";
-  const total = correct + incorrect;
-  const rate = total > 0 ? correct / total : 0;
-  if (correct >= 5 && rate >= 0.9) return "master";
-  if (correct >= 4 && rate >= 0.75) return "familiar";
-  if (correct >= 3 && rate >= 0.5) return "medium";
-  return "unfamiliar";
+  const diff = correct - incorrect;
+  if (diff >= 4) return "master";
+  if (diff === 3) return "familiar";
+  if (diff === 2) return "medium";
+  if (diff === 1) return "unfamiliar";
+  return "very_unfamiliar";
 }
 
 export interface TierCounts {
