@@ -989,7 +989,6 @@ export default function WordSelectionActivity({
               // 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字
               const renderAsImage = showOptionImages && !!optionImage;
 
-
               return (
                 <button
                   key={index}
