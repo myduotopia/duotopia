@@ -863,8 +863,9 @@ export default function WordSelectionActivity({
       <div
         className={cn(
           "space-y-6",
-          // Issue #437: 寬螢幕 + 圖片接近正方/直式時 → 橫式（圖左、右側欄含文字+選項）
-          useHorizontal && "flex flex-row gap-6 items-start space-y-0",
+          // Issue #437: 橫式（圖左、右欄文字+選項）— 不加 items-start，
+          // 用預設 items-stretch 讓兩欄等高，圖片高度由右欄決定
+          useHorizontal && "flex flex-row gap-6 space-y-0",
         )}
       >
         {/* Image */}
@@ -872,7 +873,8 @@ export default function WordSelectionActivity({
           <div
             className={cn(
               "flex justify-center",
-              useHorizontal && "w-1/2 shrink-0",
+              // relative 配合 img absolute，讓圖片父層自然高度為 0、不貢獻 flex 高度
+              useHorizontal && "w-1/2 shrink-0 relative",
             )}
           >
             <img
@@ -880,7 +882,9 @@ export default function WordSelectionActivity({
               alt={currentWord.text}
               className={cn(
                 "object-contain rounded-lg",
-                useHorizontal ? "max-h-[60vh] w-full" : "max-h-48",
+                useHorizontal
+                  ? "absolute inset-0 w-full h-full"
+                  : "max-h-48",
               )}
             />
           </div>
@@ -889,7 +893,8 @@ export default function WordSelectionActivity({
         {/* 右側欄（橫式時把文字/音檔/題目/Timer/選項都放這裡） */}
         <div
           className={cn(
-            useHorizontal ? "space-y-3 flex-1 min-w-0" : "space-y-6",
+            "space-y-6",
+            useHorizontal && "flex-1 min-w-0",
           )}
         >
         {/* Word Text - hide when in audio mode */}
