@@ -87,6 +87,13 @@ interface WordSelectionActivityProps {
   onComplete?: () => void;
 }
 
+const OPTION_COLORS = [
+  "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-400",
+  "bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-400",
+  "bg-amber-50 border-amber-200 hover:bg-amber-100 hover:border-amber-400",
+  "bg-teal-50 border-teal-200 hover:bg-teal-100 hover:border-teal-400",
+];
+
 export default function WordSelectionActivity({
   assignmentId,
   isPreviewMode = false,
@@ -245,10 +252,8 @@ export default function WordSelectionActivity({
       optionsObserverRef.current = null;
     }
     if (node && typeof ResizeObserver !== "undefined") {
-      const ro = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          setOptionsGridWidth(entry.contentRect.width);
-        }
+      const ro = new ResizeObserver(([entry]) => {
+        setOptionsGridWidth(entry.contentRect.width);
       });
       ro.observe(node);
       optionsObserverRef.current = ro;
@@ -975,13 +980,6 @@ export default function WordSelectionActivity({
               // 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字
               const renderAsImage = showOptionImages && !!optionImage;
 
-              // 四個選項各用不同淺色
-              const optionColors = [
-                "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-400",
-                "bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-400",
-                "bg-amber-50 border-amber-200 hover:bg-amber-100 hover:border-amber-400",
-                "bg-teal-50 border-teal-200 hover:bg-teal-100 hover:border-teal-400",
-              ];
 
               return (
                 <button
@@ -993,7 +991,7 @@ export default function WordSelectionActivity({
                     "whitespace-normal text-center break-words",
                     !showResult &&
                       "hover:shadow-lg hover:-translate-y-0.5 active:scale-95",
-                    !showResult && optionColors[index % 4],
+                    !showResult && OPTION_COLORS[index % 4],
                     showCorrect &&
                       "bg-green-100 border-green-500 text-green-800 shadow-green-200",
                     showIncorrect &&
