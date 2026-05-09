@@ -110,7 +110,15 @@ export default function TeacherClassrooms() {
     try {
       const res = await apiClient.syncOneCampusClasses();
       if (res.synced && res.schools.length > 0) {
-        const added = res.classrooms_added + res.students_added;
+        // Count *all* changes — additions and updates — when deciding whether
+        // to show the "no changes" message. A rename of an existing student
+        // bumps students_updated but not students_added; we still want the
+        // teacher to know something refreshed.
+        const changed =
+          res.classrooms_added +
+          res.classrooms_updated +
+          res.students_added +
+          res.students_updated;
         const summary = t("teacherClassrooms.oneCampusSync.success", {
           defaultValue: `Synced ${res.schools.length} school(s): ${res.classrooms_added} classroom(s), ${res.students_added} student(s) added.`,
           schools: res.schools.length,
@@ -124,7 +132,7 @@ export default function TeacherClassrooms() {
               { defaultValue: "error(s) — see logs" },
             )})`,
           );
-        } else if (added === 0) {
+        } else if (changed === 0) {
           toast.info(
             t("teacherClassrooms.oneCampusSync.noChanges", {
               defaultValue:

@@ -14,6 +14,8 @@ Safe to run on any DB state because every step uses IF NOT EXISTS.
 Related: #635
 """
 
+import re
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -29,8 +31,6 @@ def _add_column_if_missing(column_name: str, column_def: str) -> None:
     # doesn't look like a plain SQL identifier / type to make accidental
     # reuse of this helper with dynamic input loud rather than silently
     # injectable.
-    import re
-
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", column_name):
         raise ValueError(
             f"Unsafe column_name for PL/pgSQL interpolation: {column_name!r}"

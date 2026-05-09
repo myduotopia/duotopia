@@ -57,6 +57,12 @@ class SyncResult:
         }
 
 
+# Hold strong references to in-flight background tasks. asyncio only keeps
+# weak references to tasks created via create_task, so a GC cycle between
+# awaits can silently cancel them mid-run. Tasks remove themselves on done.
+_live_background_tasks: "set[asyncio.Task]" = set()
+
+
 def schedule_background_sync(school_dsns: str, teacher_id: int) -> None:
     """Fire-and-forget background sync for a single school.
 
@@ -66,7 +72,7 @@ def schedule_background_sync(school_dsns: str, teacher_id: int) -> None:
     swallows all exceptions — login must not break when 1Campus is misbehaving.
     """
     try:
-        asyncio.create_task(_run_sync_in_background(school_dsns, teacher_id))
+        task = asyncio.create_task(_run_sync_in_background(school_dsns, teacher_id))
     except RuntimeError:
         # No running event loop (rare — e.g. when called from sync code).
         # Skip rather than crash: the manual sync button is the recovery path.
@@ -76,6 +82,10 @@ def schedule_background_sync(school_dsns: str, teacher_id: int) -> None:
             school_dsns,
             teacher_id,
         )
+        return
+
+    _live_background_tasks.add(task)
+    task.add_done_callback(_live_background_tasks.discard)
 
 
 async def _run_sync_in_background(school_dsns: str, teacher_id: int) -> None:
