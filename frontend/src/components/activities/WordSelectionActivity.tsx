@@ -244,18 +244,23 @@ export default function WordSelectionActivity({
 
   // Issue #437: 量測選項 grid 實際容器寬度，決定 4×1 / 2×2
   // 寬度足夠（4 個選項 + gap 都裝得下）→ 4×1；不夠 → 2×2
-  const optionsGridRef = useRef<HTMLDivElement | null>(null);
+  // 用 callback ref，避免 loading=true 早退出時 useRef 抓不到 DOM 的時序 bug
   const [optionsGridWidth, setOptionsGridWidth] = useState(0);
-  useEffect(() => {
-    const el = optionsGridRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setOptionsGridWidth(entry.contentRect.width);
-      }
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
+  const optionsObserverRef = useRef<ResizeObserver | null>(null);
+  const setOptionsGridRef = useCallback((node: HTMLDivElement | null) => {
+    if (optionsObserverRef.current) {
+      optionsObserverRef.current.disconnect();
+      optionsObserverRef.current = null;
+    }
+    if (node && typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          setOptionsGridWidth(entry.contentRect.width);
+        }
+      });
+      ro.observe(node);
+      optionsObserverRef.current = ro;
+    }
   }, []);
 
   // Start practice session
@@ -972,7 +977,7 @@ export default function WordSelectionActivity({
 
         {/* Answer Options */}
         <div
-          ref={optionsGridRef}
+          ref={setOptionsGridRef}
           className={cn(
             "grid gap-3 sm:gap-4",
             useFourColOptions ? "grid-cols-4" : "grid-cols-2 grid-rows-2",
