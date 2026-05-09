@@ -10,12 +10,20 @@ a student's vocabulary assignment into one of three tiers from
     medium (普通熟悉) : correct/total >= 0.5 AND correct >= 3   (and not high)
     low    (不熟)     : everything else, including unpracticed words
 
-Single-assignment familiarity is then ``words_high / total_words`` (0..1),
-NOT the previous behaviour of averaging memory_strength across words.
+Single-assignment familiarity weights medium tier at 0.5 of high:
+
+    current_mastery = (words_high + 0.5 * words_medium) / total_words
+
+This replaces the prior ``AVG(memory_strength)`` behaviour. The weight makes
+partial progress visible (4 medium / 6 total → 33.3% rather than 0%) while
+still requiring every word to reach 已熟悉 for current_mastery == 1.0
+(since 0.5 * medium ≤ 0.5 * total < total when medium < total).
 
 These tests replicate the SQL logic in pure Python so they can run without a
 database. They intentionally exercise every spec example given in the issue.
 """
+
+MEDIUM_WEIGHT = 0.5
 
 from typing import List, Tuple
 
@@ -45,7 +53,9 @@ def assignment_mastery(
     high = sum(1 for c, i in words if classify_tier(c, i) == "high")
     medium = sum(1 for c, i in words if classify_tier(c, i) == "medium")
     low = max(0, total_words - high - medium)
-    current = high / total_words if total_words > 0 else 0.0
+    current = (
+        (high + MEDIUM_WEIGHT * medium) / total_words if total_words > 0 else 0.0
+    )
     return {
         "current_mastery": current,
         "words_high": high,
@@ -115,15 +125,16 @@ class TestAssignmentMastery:
         assert result["words_low"] == 2
         assert abs(result["current_mastery"] - 1 / 3) < 1e-9
 
-    def test_words_high_drives_current_mastery_not_average(self):
+    def test_weighted_mastery_combines_high_and_medium(self):
         """
         Issue #711 root cause: previously current_mastery was AVG(memory_strength)
         and "已熟悉" required memory_strength >= 0.64 separately, so percentage
         could rise while the mastered count stayed at 0.
-        New behaviour: percentage IS strictly words_high / total_words, so the
-        two numbers can never disagree.
+        New behaviour: percentage = (high + 0.5 * medium) / total — high counts
+        fully, medium counts as half, so the displayed % and the tier counts
+        no longer disagree.
         """
-        # 2 high, 1 medium, 1 low — only the 2 high count toward mastery.
+        # 2 high, 1 medium, 1 low → (2 + 0.5) / 4 = 0.625
         result = assignment_mastery(
             [(5, 0), (10, 1), (3, 0), (1, 5)],
             total_words=4,
@@ -131,7 +142,44 @@ class TestAssignmentMastery:
         assert result["words_high"] == 2
         assert result["words_medium"] == 1
         assert result["words_low"] == 1
-        assert result["current_mastery"] == 0.5
+        assert abs(result["current_mastery"] - 0.625) < 1e-9
+
+    def test_medium_only_now_contributes_to_mastery(self):
+        """
+        Spec follow-up scenario observed during dogfooding: 4 medium / 0 high
+        used to display 0% even though students had clearly made progress.
+        Weighted formula: (0 + 0.5 * 4) / 6 = 0.333...
+        """
+        result = assignment_mastery(
+            [(3, 0), (3, 0), (3, 0), (3, 0)],
+            total_words=6,
+        )
+        assert result["words_high"] == 0
+        assert result["words_medium"] == 4
+        assert result["words_low"] == 2
+        assert abs(result["current_mastery"] - (2.0 / 6.0)) < 1e-9
+
+    def test_full_mastery_still_requires_all_words_at_high_tier(self):
+        """
+        Boundary check: even with the 0.5 medium weight, current_mastery == 1.0
+        is only reachable when every word is at high tier (since the maximum
+        contribution of medium is 0.5 each).
+        """
+        # All medium → 0.5 * total / total = 0.5, NOT 1.0
+        all_medium = assignment_mastery(
+            [(3, 0)] * 4,
+            total_words=4,
+        )
+        assert all_medium["words_high"] == 0
+        assert all_medium["words_medium"] == 4
+        assert abs(all_medium["current_mastery"] - 0.5) < 1e-9
+        # All high → 1.0
+        all_high = assignment_mastery(
+            [(5, 0)] * 4,
+            total_words=4,
+        )
+        assert all_high["words_high"] == 4
+        assert all_high["current_mastery"] == 1.0
 
     def test_full_mastery(self):
         result = assignment_mastery([(5, 0), (5, 0), (5, 0)], total_words=3)

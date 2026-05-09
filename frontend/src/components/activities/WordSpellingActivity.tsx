@@ -43,7 +43,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
-import { aggregateTierCounts } from "./wordFamiliarity";
+import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
 interface SpellingWord {
   content_item_id: number;
@@ -152,10 +152,11 @@ export default function WordSpellingActivity({
     [previewWordCounts, proficiency.total_words],
   );
 
-  const previewProficiency = useMemo(() => {
-    if (previewTierCounts.total === 0) return 0;
-    return (previewTierCounts.high / previewTierCounts.total) * 100;
-  }, [previewTierCounts]);
+  // Issue #711: weighted preview proficiency (medium counts as 0.5).
+  const previewProficiency = useMemo(
+    () => weightedMastery(previewTierCounts) * 100,
+    [previewTierCounts],
+  );
 
   const displayProficiency =
     isPreviewMode || isDemoMode

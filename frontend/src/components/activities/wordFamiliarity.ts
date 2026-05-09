@@ -50,3 +50,21 @@ export function aggregateTierCounts(
   const low = Math.max(0, total - high - medium);
   return { high, medium, low, total };
 }
+
+/**
+ * Weight applied to medium-tier words in the mastery formula.
+ * Issue #711 follow-up: medium counts as half a "high" word so partial
+ * progress shows up in the percentage; aligned with the SQL function.
+ */
+export const MEDIUM_WEIGHT = 0.5;
+
+/**
+ * Weighted single-assignment mastery, range 0..1.
+ *   mastery = (high + MEDIUM_WEIGHT * medium) / total
+ * Mirrors ``calculate_assignment_mastery`` so preview/demo paths match
+ * what students see live.
+ */
+export function weightedMastery(counts: TierCounts): number {
+  if (counts.total === 0) return 0;
+  return (counts.high + MEDIUM_WEIGHT * counts.medium) / counts.total;
+}

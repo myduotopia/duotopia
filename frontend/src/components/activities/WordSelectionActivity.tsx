@@ -41,7 +41,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
-import { aggregateTierCounts } from "./wordFamiliarity";
+import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
 interface OptionEntry {
   text: string;
@@ -164,11 +164,11 @@ export default function WordSelectionActivity({
     [previewWordCounts, proficiency.total_words],
   );
 
-  // Computed: preview proficiency = words_high / total_words.
-  const previewProficiency = useMemo(() => {
-    if (previewTierCounts.total === 0) return 0;
-    return (previewTierCounts.high / previewTierCounts.total) * 100;
-  }, [previewTierCounts]);
+  // Computed: weighted preview proficiency (medium counts as 0.5).
+  const previewProficiency = useMemo(
+    () => weightedMastery(previewTierCounts) * 100,
+    [previewTierCounts],
+  );
 
   // Computed: 顯示用的熟練度（預覽模式和 demo 模式用本地計算，學生模式用 API 回傳）
   const displayProficiency =
