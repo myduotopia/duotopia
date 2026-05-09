@@ -11,7 +11,7 @@
  * - Achievement dialog when target_proficiency is reached
  * - Issue #437: Adaptive layout —
  *   (a) Question image: horizontal (image left, options right) on wide
- *       viewport + square/portrait image; vertical otherwise.
+ *       viewport (≥768px); vertical on narrow viewport.
  *   (b) Option images (#631 mode): options grid switches to 4×1 when its
  *       container is wide enough (~600px) to fit four images, else 2×2.
  */
@@ -218,11 +218,7 @@ export default function WordSelectionActivity({
   // Audio ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Issue #437: 自適應排版 — 依「圖片寬高比 + 螢幕寬度」切換橫式/直式
-  const [imageDims, setImageDims] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
+  // Issue #437: 自適應排版 — 寬螢幕 + 有題目圖片 → 橫式（圖左、選項右）
   const [isWideViewport, setIsWideViewport] = useState(() =>
     typeof window !== "undefined"
       ? window.matchMedia("(min-width: 768px)").matches
@@ -236,11 +232,6 @@ export default function WordSelectionActivity({
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
   }, []);
-
-  // 切題時清掉舊圖尺寸，避免新圖載入前殘留上一題的版型決策
-  useEffect(() => {
-    setImageDims(null);
-  }, [currentIndex]);
 
   // Issue #437: 量測選項 grid 實際容器寬度，決定 4×1 / 2×2
   // 寬度足夠（4 個選項 + gap 都裝得下）→ 4×1；不夠 → 2×2
@@ -821,14 +812,9 @@ export default function WordSelectionActivity({
 
   const currentWord = words[currentIndex];
 
-  // Issue #437: 寬螢幕 + 圖片接近正方/直式時 → 橫式排版（圖左、選項右）
-  const imageRatio = imageDims ? imageDims.width / imageDims.height : null;
+  // Issue #437: 寬螢幕 + 有題目圖片 → 橫式排版（圖左、選項右）
   const useHorizontal =
-    showImage &&
-    !!currentWord?.image_url &&
-    isWideViewport &&
-    imageRatio !== null &&
-    imageRatio <= 1.2;
+    showImage && !!currentWord?.image_url && isWideViewport;
 
   // Issue #437: 選項有圖時，若容器寬度足夠就排成 4×1（節省垂直空間）；不夠則 2×2
   // 600px 約等於 4 × 140px + 3 × 16px gap
@@ -885,18 +871,12 @@ export default function WordSelectionActivity({
           <div
             className={cn(
               "flex justify-center",
-              useHorizontal && "w-2/5 shrink-0",
+              useHorizontal && "w-1/2 shrink-0",
             )}
           >
             <img
               src={currentWord.image_url}
               alt={currentWord.text}
-              onLoad={(e) =>
-                setImageDims({
-                  width: e.currentTarget.naturalWidth,
-                  height: e.currentTarget.naturalHeight,
-                })
-              }
               className={cn(
                 "object-contain rounded-lg",
                 useHorizontal ? "max-h-[60vh] w-full" : "max-h-48",
