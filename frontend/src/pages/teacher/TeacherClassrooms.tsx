@@ -127,7 +127,8 @@ export default function TeacherClassrooms() {
         } else if (added === 0) {
           toast.info(
             t("teacherClassrooms.oneCampusSync.noChanges", {
-              defaultValue: "Already up to date — no new classrooms or students.",
+              defaultValue:
+                "Already up to date — no new classrooms or students.",
             }),
           );
         } else {
