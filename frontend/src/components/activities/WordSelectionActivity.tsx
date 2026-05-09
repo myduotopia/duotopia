@@ -906,13 +906,12 @@ export default function WordSelectionActivity({
 
         {/* 右側欄（橫式時把文字/音檔/題目/Timer/選項都放這裡） */}
         <div className={cn("space-y-6", useHorizontal && "flex-1 min-w-0")}>
-          {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示 */}
+          {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
+              即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
           {!playAudio && (
             <div className="text-center">
               <h2 className="text-3xl font-bold text-gray-800 select-none">
-                {showImage && currentWord.image_url
-                  ? currentWord.translation
-                  : currentWord.text}
+                {showImage ? currentWord.translation : currentWord.text}
               </h2>
             </div>
           )}
