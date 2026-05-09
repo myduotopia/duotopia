@@ -59,11 +59,13 @@ interface ProficiencyStatus {
   target_mastery: number;
   achieved: boolean;
   words_mastered: number;
-  // Issue #711: 3-tier classification counts. Optional so older API
-  // responses (before the migration lands) still type-check.
-  words_high?: number;
+  // Issue #711: 5-tier classification counts. Optional so a backend
+  // serving the older 3-tier shape still type-checks during rollout.
+  words_master?: number;
+  words_familiar?: number;
   words_medium?: number;
-  words_low?: number;
+  words_unfamiliar?: number;
+  words_very_unfamiliar?: number;
   total_words: number;
 }
 
@@ -111,9 +113,11 @@ export default function WordSpellingActivity({
     target_mastery: 80,
     achieved: false,
     words_mastered: 0,
-    words_high: 0,
+    words_master: 0,
+    words_familiar: 0,
     words_medium: 0,
-    words_low: 0,
+    words_unfamiliar: 0,
+    words_very_unfamiliar: 0,
     total_words: 0,
   });
   const [showAchievementDialog, setShowAchievementDialog] = useState(false);
@@ -165,22 +169,25 @@ export default function WordSpellingActivity({
 
   const displayTierCounts = useMemo(() => {
     if (isPreviewMode || isDemoMode) return previewTierCounts;
+    const master = proficiency.words_master ?? proficiency.words_mastered ?? 0;
+    const familiar = proficiency.words_familiar ?? 0;
+    const medium = proficiency.words_medium ?? 0;
+    const unfamiliar = proficiency.words_unfamiliar ?? 0;
+    const accountedFor = master + familiar + medium + unfamiliar;
+    const very_unfamiliar =
+      proficiency.words_very_unfamiliar ??
+      Math.max(0, proficiency.total_words - accountedFor);
     return {
-      high: proficiency.words_high ?? proficiency.words_mastered ?? 0,
-      medium: proficiency.words_medium ?? 0,
-      low:
-        proficiency.words_low ??
-        Math.max(
-          0,
-          proficiency.total_words -
-            (proficiency.words_high ?? proficiency.words_mastered ?? 0) -
-            (proficiency.words_medium ?? 0),
-        ),
+      master,
+      familiar,
+      medium,
+      unfamiliar,
+      very_unfamiliar,
       total: proficiency.total_words,
     };
   }, [isPreviewMode, isDemoMode, previewTierCounts, proficiency]);
 
-  const displayWordsMastered = displayTierCounts.high;
+  const displayWordsMastered = displayTierCounts.master;
 
   // Stats (per round) — kept for completeness; current implementation
   // doesn't display per-round count, but useful for future analytics.
@@ -217,9 +224,11 @@ export default function WordSpellingActivity({
         current_proficiency: number;
         target_proficiency: number;
         words_mastered: number;
-        words_high?: number;
+        words_master?: number;
+        words_familiar?: number;
         words_medium?: number;
-        words_low?: number;
+        words_unfamiliar?: number;
+        words_very_unfamiliar?: number;
         achieved: boolean;
         is_practice_mode?: boolean;
         show_translation: boolean;
@@ -248,9 +257,11 @@ export default function WordSpellingActivity({
         target_mastery: data.target_proficiency || 80,
         achieved: data.achieved ?? false,
         words_mastered: data.words_mastered ?? 0,
-        words_high: data.words_high ?? data.words_mastered ?? 0,
+        words_master: data.words_master ?? data.words_mastered ?? 0,
+        words_familiar: data.words_familiar ?? 0,
         words_medium: data.words_medium ?? 0,
-        words_low: data.words_low ?? 0,
+        words_unfamiliar: data.words_unfamiliar ?? 0,
+        words_very_unfamiliar: data.words_very_unfamiliar ?? 0,
         total_words: data.total_words || 0,
       });
       setCurrentIndex(0);
@@ -564,30 +575,46 @@ export default function WordSpellingActivity({
             </p>
           </div>
 
-          {/* Issue #711: 三檔熟悉度單字數量 */}
-          <div className="grid grid-cols-3 gap-3 max-w-md mx-auto text-sm">
-            <div className="rounded-lg bg-green-50 px-3 py-2">
-              <div className="text-xs text-gray-500">
-                {t("wordFamiliarity.tierHigh") || "已熟悉"}
+          {/* Issue #711: 五檔熟悉度單字數量 */}
+          <div className="grid grid-cols-5 gap-1.5 max-w-md mx-auto">
+            <div className="rounded bg-green-100 px-1 py-1.5 text-center">
+              <div className="text-[10px] font-medium text-green-800">
+                {t("wordFamiliarity.tierMaster") || "精熟"}
               </div>
-              <div className="text-lg font-semibold text-green-700">
-                {displayTierCounts.high}
+              <div className="text-base font-semibold text-green-800">
+                {displayTierCounts.master}
               </div>
             </div>
-            <div className="rounded-lg bg-yellow-50 px-3 py-2">
-              <div className="text-xs text-gray-500">
-                {t("wordFamiliarity.tierMedium") || "普通熟悉"}
+            <div className="rounded bg-lime-100 px-1 py-1.5 text-center">
+              <div className="text-[10px] font-medium text-lime-800">
+                {t("wordFamiliarity.tierFamiliar") || "熟悉"}
               </div>
-              <div className="text-lg font-semibold text-yellow-700">
+              <div className="text-base font-semibold text-lime-800">
+                {displayTierCounts.familiar}
+              </div>
+            </div>
+            <div className="rounded bg-yellow-100 px-1 py-1.5 text-center">
+              <div className="text-[10px] font-medium text-yellow-800">
+                {t("wordFamiliarity.tierMedium") || "普通"}
+              </div>
+              <div className="text-base font-semibold text-yellow-800">
                 {displayTierCounts.medium}
               </div>
             </div>
-            <div className="rounded-lg bg-gray-100 px-3 py-2">
-              <div className="text-xs text-gray-500">
-                {t("wordFamiliarity.tierLow") || "不熟"}
+            <div className="rounded bg-orange-100 px-1 py-1.5 text-center">
+              <div className="text-[10px] font-medium text-orange-800">
+                {t("wordFamiliarity.tierUnfamiliar") || "不熟悉"}
               </div>
-              <div className="text-lg font-semibold text-gray-700">
-                {displayTierCounts.low}
+              <div className="text-base font-semibold text-orange-800">
+                {displayTierCounts.unfamiliar}
+              </div>
+            </div>
+            <div className="rounded bg-gray-100 px-1 py-1.5 text-center">
+              <div className="text-[10px] font-medium text-gray-700">
+                {t("wordFamiliarity.tierVeryUnfamiliar") || "非常不熟"}
+              </div>
+              <div className="text-base font-semibold text-gray-700">
+                {displayTierCounts.very_unfamiliar}
               </div>
             </div>
           </div>

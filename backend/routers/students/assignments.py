@@ -51,20 +51,29 @@ AUTO_GRADED_MODES = frozenset(
 router = APIRouter()
 
 
-def _tier_counts(mastery_result) -> Dict[str, int]:
-    """Extract 3-tier word counts from a calculate_assignment_mastery row.
+_TIER_FIELDS = (
+    "words_master",
+    "words_familiar",
+    "words_medium",
+    "words_unfamiliar",
+    "words_very_unfamiliar",
+)
 
-    Issue #711: the SQL function returns words_high/medium/low alongside the
-    legacy words_mastered alias. We extract via getattr so older snapshots of
-    the function (without the new columns) fall back to zeros instead of
-    raising AttributeError.
+
+def _tier_counts(mastery_result) -> Dict[str, int]:
+    """Extract 5-tier word counts from a calculate_assignment_mastery row.
+
+    Issue #711 (5-tier extension): the SQL function returns
+    words_master / words_familiar / words_medium / words_unfamiliar /
+    words_very_unfamiliar alongside the legacy ``words_mastered`` alias.
+    We use getattr with default 0 so older snapshots of the function
+    (during a rolling deploy) fall back gracefully.
     """
     if not mastery_result:
-        return {"words_high": 0, "words_medium": 0, "words_low": 0}
+        return {field: 0 for field in _TIER_FIELDS}
     return {
-        "words_high": int(getattr(mastery_result, "words_high", 0) or 0),
-        "words_medium": int(getattr(mastery_result, "words_medium", 0) or 0),
-        "words_low": int(getattr(mastery_result, "words_low", 0) or 0),
+        field: int(getattr(mastery_result, field, 0) or 0)
+        for field in _TIER_FIELDS
     }
 
 
@@ -1759,9 +1768,11 @@ async def get_word_selection_proficiency(
             "target_mastery": target_proficiency,
             "achieved": False,
             "words_mastered": 0,
-            "words_high": 0,
+            "words_master": 0,
+            "words_familiar": 0,
             "words_medium": 0,
-            "words_low": 0,
+            "words_unfamiliar": 0,
+            "words_very_unfamiliar": 0,
             "total_words": 0,
         }
 
@@ -2279,9 +2290,11 @@ async def get_word_spelling_proficiency(
             "target_mastery": target_proficiency,
             "achieved": False,
             "words_mastered": 0,
-            "words_high": 0,
+            "words_master": 0,
+            "words_familiar": 0,
             "words_medium": 0,
-            "words_low": 0,
+            "words_unfamiliar": 0,
+            "words_very_unfamiliar": 0,
             "total_words": 0,
         }
     current_mastery = float(result.current_mastery) * 100
@@ -2956,9 +2969,11 @@ async def get_word_cloze_proficiency(
             "target_mastery": target_proficiency,
             "achieved": False,
             "words_mastered": 0,
-            "words_high": 0,
+            "words_master": 0,
+            "words_familiar": 0,
             "words_medium": 0,
-            "words_low": 0,
+            "words_unfamiliar": 0,
+            "words_very_unfamiliar": 0,
             "total_words": 0,
         }
     current_mastery = float(result.current_mastery) * 100

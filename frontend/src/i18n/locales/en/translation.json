@@ -4700,9 +4700,11 @@
     "timeLimit": "Time limit: {{seconds}}s"
   },
   "wordFamiliarity": {
-    "tierHigh": "Mastered",
-    "tierMedium": "Familiar",
-    "tierLow": "Not yet familiar"
+    "tierMaster": "Mastered",
+    "tierFamiliar": "Familiar",
+    "tierMedium": "OK",
+    "tierUnfamiliar": "Unfamiliar",
+    "tierVeryUnfamiliar": "Not yet"
   },
   "wordCloze": {
     "loading": "Loading cloze questions...",

@@ -4718,9 +4718,11 @@
     "timeLimit": "限時 {{seconds}} 秒"
   },
   "wordFamiliarity": {
-    "tierHigh": "已熟悉",
-    "tierMedium": "普通熟悉",
-    "tierLow": "不熟"
+    "tierMaster": "精熟",
+    "tierFamiliar": "熟悉",
+    "tierMedium": "普通",
+    "tierUnfamiliar": "不熟悉",
+    "tierVeryUnfamiliar": "非常不熟"
   },
   "wordCloze": {
     "loading": "正在載入克漏字題目...",
