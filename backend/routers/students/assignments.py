@@ -72,8 +72,7 @@ def _tier_counts(mastery_result) -> Dict[str, int]:
     if not mastery_result:
         return {field: 0 for field in _TIER_FIELDS}
     return {
-        field: int(getattr(mastery_result, field, 0) or 0)
-        for field in _TIER_FIELDS
+        field: int(getattr(mastery_result, field, 0) or 0) for field in _TIER_FIELDS
     }
 
 

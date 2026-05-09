@@ -52,9 +52,7 @@ def classify_tier(correct: int, incorrect: int) -> str:
     return "very_unfamiliar"
 
 
-def assignment_mastery(
-    words: List[Tuple[int, int]], total_words: int
-) -> dict:
+def assignment_mastery(words: List[Tuple[int, int]], total_words: int) -> dict:
     """Replica of ``calculate_assignment_mastery`` aggregation.
 
     ``words`` is a list of (correct_count, incorrect_count) tuples — one per

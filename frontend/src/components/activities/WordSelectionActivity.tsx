@@ -73,7 +73,6 @@ interface ProficiencyStatus {
   total_words: number;
 }
 
-
 interface WordSelectionActivityProps {
   assignmentId: number;
   isPreviewMode?: boolean;

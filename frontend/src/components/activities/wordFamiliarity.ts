@@ -67,7 +67,7 @@ export function aggregateTierCounts(
   const total = totalWords || Object.keys(counts).length;
   // Unpracticed rows (no entry in counts) all fall into very_unfamiliar.
   const accountedFor = master + familiar + medium + unfamiliar;
-  const very_unfamiliar = Math.max(0, total - accountedFor) ;
+  const very_unfamiliar = Math.max(0, total - accountedFor);
   // Note: practiced very_unfamiliar (correct=0 with errors) is also folded
   // into the same bucket via the subtraction above.
   void veryUnfamiliarPracticed;
