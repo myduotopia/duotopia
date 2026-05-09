@@ -67,8 +67,14 @@ async def _get_access_token() -> str:
             )
 
         client = get_http_client()
+        # The 1Campus auth server (auth.ischool.com.tw/oauth/token.php) handles
+        # both the user OAuth code-exchange (grant_type=authorization_code, see
+        # OneCampusService.exchange_oauth_code) and the server-to-server
+        # client-credentials grant we need here. The earlier `devapi.1campus.net
+        # /oauth/token` URL returns 404 — there is no separate token endpoint on
+        # the API host. Verified manually via curl with staging credentials.
         resp = await client.post(
-            f"{ONE_CAMPUS_API_BASE}/oauth/token",
+            f"{ONE_CAMPUS_OAUTH_BASE}/oauth/token.php",
             data={
                 "grant_type": "client_credentials",
                 "client_id": ONE_CAMPUS_CLIENT_ID,
