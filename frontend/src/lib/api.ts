@@ -372,8 +372,13 @@ class ApiClient {
 
   async syncOneCampusClasses() {
     return this.request<{
-      enqueued: boolean;
+      synced: boolean;
       schools: string[];
+      classrooms_added: number;
+      classrooms_updated: number;
+      students_added: number;
+      students_updated: number;
+      errors: string[];
       message: string;
     }>("/api/teachers/me/sync-1campus-classes", {
       method: "POST",

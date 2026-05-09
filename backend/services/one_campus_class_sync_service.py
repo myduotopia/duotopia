@@ -24,6 +24,7 @@ and only this layer should need touching when the real API is wired up):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -54,6 +55,74 @@ class SyncResult:
             "students_updated": self.students_updated,
             "errors": list(self.errors),
         }
+
+
+def schedule_background_sync(school_dsns: str, teacher_id: int) -> None:
+    """Fire-and-forget background sync for a single school.
+
+    Used by the OAuth login paths so that returning the access token isn't
+    blocked on syncing the teacher's roster. The task uses its own DB session
+    (the request's session would close when the response returns) and
+    swallows all exceptions — login must not break when 1Campus is misbehaving.
+    """
+    try:
+        asyncio.create_task(_run_sync_in_background(school_dsns, teacher_id))
+    except RuntimeError:
+        # No running event loop (rare — e.g. when called from sync code).
+        # Skip rather than crash: the manual sync button is the recovery path.
+        logger.warning(
+            "No running event loop for background 1Campus sync "
+            "(school=%s, teacher=%s); skipping",
+            school_dsns,
+            teacher_id,
+        )
+
+
+async def _run_sync_in_background(school_dsns: str, teacher_id: int) -> None:
+    """Run the sync with a fresh DB session, logging exceptions."""
+    # Late import to avoid a circular-import chain at module-load time.
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        result = await OneCampusClassSyncService.sync_school(
+            db, school_dsns, teacher_id
+        )
+        logger.info(
+            "Background 1Campus sync done (school=%s, teacher=%s): %s",
+            school_dsns,
+            teacher_id,
+            result.to_dict(),
+        )
+    except Exception as e:
+        logger.exception(
+            "Background 1Campus sync crashed (school=%s, teacher=%s): %s",
+            school_dsns,
+            teacher_id,
+            e,
+        )
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
+def collect_teacher_school_dsns(user_role_data: dict) -> list[str]:
+    """Pick out unique schoolDsns values where the user has a teacherRole.
+
+    Used by both the manual-sync endpoint and the OAuth login flow to decide
+    which schools' rosters to sync. Order is preserved to keep the per-school
+    work deterministic across calls; duplicates (a teacher listed twice for
+    the same DSNS) are dropped.
+    """
+    result: list[str] = []
+    for school in user_role_data.get("school", []) or []:
+        if school.get("teacherRole"):
+            dsns = school.get("schoolDsns")
+            if dsns and dsns not in result:
+                result.append(dsns)
+    return result
 
 
 class OneCampusClassSyncService:
@@ -108,15 +177,13 @@ class OneCampusClassSyncService:
 
             for stu in students_data.get("student") or []:
                 try:
-                    _, student_created, student_renamed = _upsert_student(db, stu)
+                    student, student_created, student_renamed = _upsert_student(db, stu)
                     if student_created:
                         result.students_added += 1
                     elif student_renamed:
                         result.students_updated += 1
-                    # Always make sure the link exists; fetch latest student id
-                    student_obj = _resolve_student_for_link(db, stu)
-                    if student_obj is not None:
-                        _ensure_classroom_student_link(db, classroom.id, student_obj.id)
+                    if student is not None:
+                        _ensure_classroom_student_link(db, classroom.id, student.id)
                 except Exception as e:
                     sid = stu.get("studentID")
                     msg = f"upsert student {sid} in class {class_id}: {e}"
@@ -253,30 +320,6 @@ def _upsert_student(db: Session, stu: dict) -> tuple[Student, bool, bool]:
         return primary, True, False
 
     return primary, False, renamed
-
-
-def _resolve_student_for_link(db: Session, stu: dict) -> Optional[Student]:
-    one_campus_student_id = str(stu.get("studentID") or "").strip()
-    if not one_campus_student_id:
-        return None
-
-    identity = (
-        db.query(Identity)
-        .filter(Identity.one_campus_student_id == one_campus_student_id)
-        .first()
-    )
-    if identity is None:
-        return None
-
-    return (
-        db.query(Student)
-        .filter(
-            Student.identity_id == identity.id,
-            Student.is_active.is_(True),
-        )
-        .order_by(Student.is_primary_account.desc().nulls_last())
-        .first()
-    )
 
 
 def _ensure_classroom_student_link(

@@ -40,7 +40,10 @@ from services.one_campus_service import (
     OneCampusCodeExpiredError,
 )
 from services.one_campus_account_service import OneCampusAccountService
-from services.cloud_tasks_service import enqueue_one_campus_class_sync
+from services.one_campus_class_sync_service import (
+    collect_teacher_school_dsns,
+    schedule_background_sync,
+)
 
 # Merge token validity: 10 minutes
 MERGE_TOKEN_TTL = 600
@@ -726,14 +729,10 @@ async def _handle_identity_code_flow(
 
         teacher_response = _build_teacher_response(db, teacher)
 
-        # Schedule a class roster sync for this school. Identity-code flow
-        # always carries exactly one school_dsns (the school the user came
-        # from), so we enqueue one task. Failures inside enqueue are logged
-        # and swallowed — login must not break when the queue is down.
-        try:
-            await enqueue_one_campus_class_sync(school_dsns, teacher.id)
-        except Exception as e:
-            logger.warning("enqueue_one_campus_class_sync failed: %s", e)
+        # Schedule a class roster sync for this school in the background so
+        # login isn't blocked on it. Identity-code flow always carries exactly
+        # one school_dsns (the school the user came from).
+        schedule_background_sync(school_dsns, teacher.id)
 
         access_token = create_access_token(
             data={
@@ -873,6 +872,7 @@ async def _handle_oauth_flow(
 
     try:
         user_role_data = await OneCampusService.get_user_role(account=mail)
+        teacher_school_dsns_list = collect_teacher_school_dsns(user_role_data)
         for school in user_role_data.get("school", []):
             # Determine role and extract hash from the SAME role to keep them
             # in sync. A user may have both teacherRole and studentRole in one
@@ -880,11 +880,6 @@ async def _handle_oauth_flow(
             # the teacher account would be linked to the student's national ID
             # hash (and vice versa).
             if school.get("teacherRole"):
-                # Collect every teacher school for the post-login class sync.
-                dsns = school.get("schoolDsns")
-                if dsns and dsns not in teacher_school_dsns_list:
-                    teacher_school_dsns_list.append(dsns)
-
                 if role_type is None:
                     role_type = "teacher"
                     tr = school["teacherRole"]
@@ -1008,15 +1003,9 @@ async def _handle_oauth_flow(
         # Note: Teacher model has no last_login field (unlike Student); nothing to update.
 
         # Schedule class roster sync for every school where the user has a
-        # teacherRole. Failures are swallowed so login isn't blocked by a
-        # misbehaving Cloud Tasks queue.
+        # teacherRole. Runs in the background so login isn't blocked.
         for dsns in teacher_school_dsns_list:
-            try:
-                await enqueue_one_campus_class_sync(dsns, user.id)
-            except Exception as e:
-                logger.warning(
-                    "enqueue_one_campus_class_sync failed for %s: %s", dsns, e
-                )
+            schedule_background_sync(dsns, user.id)
 
         return OneCampusCallbackResponse(
             access_token=access_token,

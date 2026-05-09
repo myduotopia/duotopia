@@ -1,8 +1,12 @@
 """1Campus operations for teachers.
 
 Manual class roster sync trigger (#635). Lives under /api/teachers because
-it operates on the authenticated teacher's identity — it is NOT an internal
-worker (those live under /api/internal/tasks).
+it operates on the authenticated teacher's identity.
+
+The sync runs inline (await) and returns aggregated SyncResult counts so the
+UI can show how many classrooms / students were added or updated. 1Campus
+rosters are small enough that running this inside the request finishes well
+within Cloud Run's request timeout.
 """
 
 import logging
@@ -18,7 +22,11 @@ from core.limiter import limiter
 from database import get_db
 from models import Teacher
 from models.user import Identity
-from services.cloud_tasks_service import enqueue_one_campus_class_sync
+from services.one_campus_class_sync_service import (
+    OneCampusClassSyncService,
+    SyncResult,
+    collect_teacher_school_dsns,
+)
 from services.one_campus_service import OneCampusService
 
 from .dependencies import get_current_teacher
@@ -28,8 +36,13 @@ router = APIRouter()
 
 
 class OneCampusSyncResponse(BaseModel):
-    enqueued: bool
+    synced: bool
     schools: List[str]
+    classrooms_added: int = 0
+    classrooms_updated: int = 0
+    students_added: int = 0
+    students_updated: int = 0
+    errors: List[str] = []
     message: str
 
 
@@ -43,8 +56,8 @@ async def sync_one_campus_classes(
     """Manually trigger a 1Campus class roster sync for the current teacher.
 
     Restricted to teachers logged in via 1Campus SSO (their Identity has
-    `one_campus_account`). The actual sync runs in the background via
-    Cloud Tasks (or the inline fallback when not configured).
+    `one_campus_account`). Runs the sync inline and returns the aggregated
+    SyncResult so the UI can show counts in a toast.
     """
     if not current_teacher.identity_id:
         raise HTTPException(
@@ -84,36 +97,52 @@ async def sync_one_campus_classes(
             detail="Failed to query 1Campus for your school list. Please try again later.",
         )
 
-    teacher_school_dsns: list[str] = []
-    for school in user_role_data.get("school", []) or []:
-        if school.get("teacherRole"):
-            dsns = school.get("schoolDsns")
-            if dsns and dsns not in teacher_school_dsns:
-                teacher_school_dsns.append(dsns)
+    teacher_school_dsns = collect_teacher_school_dsns(user_role_data)
 
     if not teacher_school_dsns:
         return OneCampusSyncResponse(
-            enqueued=False,
+            synced=False,
             schools=[],
             message="No 1Campus schools with teacher role were found for your account.",
         )
 
+    aggregated = SyncResult()
     for dsns in teacher_school_dsns:
         try:
-            await enqueue_one_campus_class_sync(dsns, current_teacher.id)
+            result = await OneCampusClassSyncService.sync_school(
+                db, school_dsns=dsns, teacher_id=current_teacher.id
+            )
         except Exception as e:
-            logger.warning(
-                "Manual sync: enqueue failed for school=%s teacher_id=%s: %s",
+            # sync_school is designed to swallow upstream errors into
+            # SyncResult.errors, so this branch is for truly unexpected
+            # failures (e.g. DB-level). Surface them but don't 500 — the
+            # other schools may still have synced.
+            logger.exception(
+                "Manual sync: sync_school crashed for school=%s teacher_id=%s: %s",
                 dsns,
                 current_teacher.id,
                 e,
             )
+            aggregated.errors.append(f"{dsns}: {e}")
+            continue
+
+        aggregated.classrooms_added += result.classrooms_added
+        aggregated.classrooms_updated += result.classrooms_updated
+        aggregated.students_added += result.students_added
+        aggregated.students_updated += result.students_updated
+        aggregated.errors.extend(f"{dsns}: {err}" for err in result.errors)
 
     return OneCampusSyncResponse(
-        enqueued=True,
+        synced=True,
         schools=teacher_school_dsns,
+        classrooms_added=aggregated.classrooms_added,
+        classrooms_updated=aggregated.classrooms_updated,
+        students_added=aggregated.students_added,
+        students_updated=aggregated.students_updated,
+        errors=aggregated.errors,
         message=(
-            f"Sync started for {len(teacher_school_dsns)} school(s). "
-            "Refresh in a moment to see the latest roster."
+            f"Synced {len(teacher_school_dsns)} school(s): "
+            f"{aggregated.classrooms_added} classroom(s) added, "
+            f"{aggregated.students_added} student(s) added."
         ),
     )
