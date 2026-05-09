@@ -219,15 +219,16 @@ export default function WordSelectionActivity({
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Issue #437: 自適應排版 — 寬螢幕 + 有題目圖片 → 橫式（圖左、選項右）
+  // 用 640px (Tailwind sm) 而非 768px，讓平板（含橫置）和手機橫置都保持橫式
   const [isWideViewport, setIsWideViewport] = useState(() =>
     typeof window !== "undefined"
-      ? window.matchMedia("(min-width: 768px)").matches
+      ? window.matchMedia("(min-width: 640px)").matches
       : false,
   );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const mql = window.matchMedia("(min-width: 768px)");
+    const mql = window.matchMedia("(min-width: 640px)");
     const onChange = (e: MediaQueryListEvent) => setIsWideViewport(e.matches);
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
@@ -888,8 +889,7 @@ export default function WordSelectionActivity({
         {/* 右側欄（橫式時把文字/音檔/題目/Timer/選項都放這裡） */}
         <div
           className={cn(
-            "space-y-6",
-            useHorizontal && "flex-1 min-w-0",
+            useHorizontal ? "space-y-3 flex-1 min-w-0" : "space-y-6",
           )}
         >
         {/* Word Text - hide when in audio mode */}
