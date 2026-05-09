@@ -131,7 +131,6 @@ export default function WordSelectionActivity({
   );
 
   // Settings
-  const [showWord, setShowWord] = useState(true);
   const [showImage, setShowImage] = useState(true);
   const [showOptionImages, setShowOptionImages] = useState(false);
   const [playAudio, setPlayAudio] = useState(false);
@@ -311,7 +310,6 @@ export default function WordSelectionActivity({
       setWords(data.words || []);
       setSessionId(data.session_id);
       setIsPracticeMode(data.is_practice_mode ?? false);
-      setShowWord(data.show_word ?? true);
       setShowImage(data.show_image ?? true);
       setShowOptionImages(data.show_option_images ?? false);
       setPlayAudio(data.play_audio ?? false);
