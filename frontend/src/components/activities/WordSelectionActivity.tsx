@@ -14,6 +14,12 @@
  *       viewport (≥640px); vertical on narrow viewport.
  *   (b) Option images mode: options grid switches to 4×1 when its
  *       container is wide enough (~600px) to fit four images, else 2×2.
+ *
+ * show_image 模式（看圖選英文）：
+ * - 題目隱藏英文，改顯示翻譯提示 + 圖片
+ * - 4 個選項顯示英文（後端依 show_image 切換 distractors 語言）
+ * - 答案比對使用後端傳的 correct_text（fallback: 依 showImage flag 決定 text/translation）
+ * - 不顯示文字提示語（畫面已直覺）
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
@@ -57,6 +63,9 @@ interface WordOption {
   content_item_id: number;
   text: string;
   translation: string;
+  // 後端依 show_image 決定的「正解文字」(true=英文 / false=翻譯)
+  // 舊版本後端不會回傳此欄位 → 前端 fallback 到 translation
+  correct_text?: string;
   audio_url?: string;
   image_url?: string;
   memory_strength: number;
@@ -517,7 +526,11 @@ export default function WordSelectionActivity({
     if (showResult || submitting) return;
 
     const currentWord = words[currentIndex];
-    const correct = answer === currentWord.translation;
+    // show_image 模式：正解是英文 (currentWord.text)，否則是翻譯
+    const expected =
+      currentWord.correct_text ??
+      (showImage ? currentWord.text : currentWord.translation);
+    const correct = answer === expected;
 
     setSelectedAnswer(answer);
     setIsCorrect(correct);
@@ -893,11 +906,13 @@ export default function WordSelectionActivity({
 
         {/* 右側欄（橫式時把文字/音檔/題目/Timer/選項都放這裡） */}
         <div className={cn("space-y-6", useHorizontal && "flex-1 min-w-0")}>
-          {/* Word Text - hide when in audio mode */}
+          {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示 */}
           {!playAudio && (
             <div className="text-center">
               <h2 className="text-3xl font-bold text-gray-800 select-none">
-                {currentWord.text}
+                {showImage && currentWord.image_url
+                  ? currentWord.translation
+                  : currentWord.text}
               </h2>
             </div>
           )}
@@ -916,15 +931,6 @@ export default function WordSelectionActivity({
               </Button>
             </div>
           )}
-
-          {/* Question */}
-          <div className="text-center text-gray-600">
-            {showWord
-              ? t("wordSelection.selectTranslation") ||
-                "Select the correct translation:"
-              : t("wordSelection.selectTranslationAudio") ||
-                "Listen and select the correct translation:"}
-          </div>
 
           {/* Timer Display - stays visible when time is up to prevent visual jump */}
           {timeLimit && timeRemaining !== null && (
@@ -969,7 +975,11 @@ export default function WordSelectionActivity({
               const optionText = option.text;
               const optionImage = option.image_url || null;
               const isSelected = selectedAnswer === optionText;
-              const isCorrectAnswer = optionText === currentWord.translation;
+              // show_image 模式：正解是英文，否則是翻譯
+              const expectedAnswer =
+                currentWord.correct_text ??
+                (showImage ? currentWord.text : currentWord.translation);
+              const isCorrectAnswer = optionText === expectedAnswer;
               // 答對時揭示；答錯時只有老師開啟 showAnswer 才揭示（Issue #538）
               const showCorrect =
                 showResult && isCorrectAnswer && (isCorrect || showAnswer);

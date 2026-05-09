@@ -508,12 +508,18 @@ def get_word_selection_start(
         content_items = remaining_items[:10]
 
     # Build response — Issue #631: options 升級為 list[{text, image_url}]
-    from utils.distractors import normalize_distractors
+    # show_image 模式：選項用英文（item.text），題目隱藏英文，避免答案太明顯。
+    from utils.distractors import normalize_distractors, text_field_for_show_image
+
+    show_image_for_options = (
+        assignment.show_image if assignment.show_image is not None else True
+    )
+    answer_field = text_field_for_show_image(show_image_for_options)
 
     words_with_options = []
 
     for item in content_items:
-        correct_answer = item.translation or ""
+        correct_answer = getattr(item, answer_field) or ""
 
         # Use stored distractors if available (≥3), else fallback to other words
         stored = normalize_distractors(item.distractors)
@@ -522,9 +528,10 @@ def get_word_selection_start(
         else:
             target = correct_answer.lower().strip()
             pool = [
-                {"text": other.translation, "image_url": other.image_url}
+                {"text": getattr(other, answer_field), "image_url": other.image_url}
                 for other in content_items
-                if other.translation and other.translation.lower().strip() != target
+                if getattr(other, answer_field)
+                and getattr(other, answer_field).lower().strip() != target
             ]
             random.shuffle(pool)
             final_distractors = pool[:3]
@@ -542,7 +549,8 @@ def get_word_selection_start(
             {
                 "content_item_id": item.id,
                 "text": item.text,
-                "translation": correct_answer,
+                "translation": item.translation or "",
+                "correct_text": correct_answer,
                 "audio_url": item.audio_url,
                 "image_url": item.image_url,
                 "memory_strength": 0,
@@ -584,11 +592,15 @@ def check_word_selection_answer(
     if not content_item:
         raise HTTPException(status_code=404, detail="Content item not found")
 
-    is_correct = selected_answer == content_item.translation
+    show_image_mode = (
+        assignment.show_image if assignment.show_image is not None else True
+    )
+    correct_text = (content_item.text if show_image_mode else content_item.translation) or ""
+    is_correct = selected_answer == correct_text
 
     return {
         "is_correct": is_correct,
-        "correct_answer": content_item.translation,
+        "correct_answer": correct_text,
         "new_memory_strength": 0.5 if is_correct else 0,
         "current_mastery": 50.0,
         "target_mastery": assignment.target_proficiency or 80,

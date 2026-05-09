@@ -4625,17 +4625,26 @@ async def preview_word_selection_start(
     # --- end AI distractor generation ---
 
     # 建立回應資料 — Issue #631: options 升級為 list[{text, image_url}]
+    # show_image 模式：選項與正解用英文（item.text），題目隱藏英文。
+    from utils.distractors import text_field_for_show_image
+
+    show_image_for_options = (
+        assignment.show_image if assignment.show_image is not None else True
+    )
+    answer_field = text_field_for_show_image(show_image_for_options)
+
     words_with_options = []
 
     for item in content_items:
-        correct_answer = item.translation or ""
+        correct_answer = getattr(item, answer_field) or ""
 
         # 從同集內其他單字隨機挑 3 個（同時帶 image_url）作為錯誤選項 (#303)
         target = correct_answer.lower().strip()
         pool = [
-            {"text": other.translation, "image_url": other.image_url}
+            {"text": getattr(other, answer_field), "image_url": other.image_url}
             for other in content_items
-            if other.translation and other.translation.lower().strip() != target
+            if getattr(other, answer_field)
+            and getattr(other, answer_field).lower().strip() != target
         ]
         random.shuffle(pool)
         final_distractors = pool[:3]
@@ -4654,7 +4663,8 @@ async def preview_word_selection_start(
             {
                 "content_item_id": item.id,
                 "text": item.text,
-                "translation": correct_answer,
+                "translation": item.translation or "",
+                "correct_text": correct_answer,
                 "audio_url": item.audio_url,
                 "image_url": item.image_url,
                 "memory_strength": 0,
@@ -4716,12 +4726,18 @@ async def preview_word_selection_answer(
     if not content_item:
         raise HTTPException(status_code=404, detail="Content item not found")
 
-    is_correct = selected_answer == content_item.translation
+    show_image_mode = (
+        assignment.show_image if assignment.show_image is not None else True
+    )
+    correct_text = (
+        (content_item.text if show_image_mode else content_item.translation) or ""
+    )
+    is_correct = selected_answer == correct_text
 
     # 回傳模擬結果（預覽模式不更新 memory_strength）
     return {
         "is_correct": is_correct,
-        "correct_answer": content_item.translation,
+        "correct_answer": correct_text,
         "new_memory_strength": 0.5 if is_correct else 0,  # 模擬值
         "current_mastery": 50.0,  # 模擬值
         "target_mastery": assignment.target_proficiency or 80,
