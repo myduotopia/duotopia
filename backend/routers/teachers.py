@@ -4730,8 +4730,8 @@ async def preview_word_selection_answer(
         assignment.show_image if assignment.show_image is not None else True
     )
     correct_text = (
-        (content_item.text if show_image_mode else content_item.translation) or ""
-    )
+        content_item.text if show_image_mode else content_item.translation
+    ) or ""
     is_correct = selected_answer == correct_text
 
     # 回傳模擬結果（預覽模式不更新 memory_strength）

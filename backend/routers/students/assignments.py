@@ -1452,8 +1452,7 @@ async def start_word_selection_practice(
             pool = [
                 {"text": w.get(answer_key), "image_url": w.get("image_url")}
                 for w in words_data
-                if w.get(answer_key)
-                and w[answer_key].lower().strip() != target
+                if w.get(answer_key) and w[answer_key].lower().strip() != target
             ]
             random.shuffle(pool)
             final_distractors = pool[:3]
@@ -1583,8 +1582,8 @@ async def submit_word_selection_answer(
         else True
     )
     correct_answer = (
-        (content_item.text if show_image_mode else content_item.translation) or ""
-    )
+        content_item.text if show_image_mode else content_item.translation
+    ) or ""
 
     # 伺服器端驗證答案正確性（不信任客戶端的 is_correct）
     is_correct = request.selected_answer.strip() == correct_answer.strip()

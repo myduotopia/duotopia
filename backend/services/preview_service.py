@@ -595,7 +595,9 @@ def check_word_selection_answer(
     show_image_mode = (
         assignment.show_image if assignment.show_image is not None else True
     )
-    correct_text = (content_item.text if show_image_mode else content_item.translation) or ""
+    correct_text = (
+        content_item.text if show_image_mode else content_item.translation
+    ) or ""
     is_correct = selected_answer == correct_text
 
     return {
