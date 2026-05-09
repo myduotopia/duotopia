@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
+import OneCampusBindSection from "@/components/settings/OneCampusBindSection";
 import { toast } from "sonner";
 import {
   User,
@@ -556,6 +557,9 @@ export default function StudentProfile() {
             )}
           </CardContent>
         </Card>
+
+        {/* 1Campus Binding Section */}
+        <OneCampusBindSection userType="student" />
 
         {/* Password Settings Card */}
         <Card className="mb-6 border-l-4 border-l-amber-400 overflow-hidden">

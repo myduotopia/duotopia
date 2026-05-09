@@ -6,9 +6,12 @@ Handles:
 - OAuth-based account matching (uuid + email fallback)
 - Creating new Identity + Student/Teacher for first-time SSO users
 - Detecting duplicate accounts for merge prompt
+- Marking identities as merged (Phase 1 bind/merge for #719)
+- Re-login redirect: when uuid points to a merged identity, resolve to target
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import func
@@ -24,7 +27,7 @@ class OneCampusAccountService:
 
     @staticmethod
     def find_by_uuid(db: Session, uuid: str) -> Optional[Identity]:
-        """Find Identity by 1Campus OAuth uuid (exact match)."""
+        """Find Identity by 1Campus OAuth uuid (active only)."""
         return (
             db.query(Identity)
             .filter(
@@ -32,6 +35,121 @@ class OneCampusAccountService:
                 Identity.is_active.is_(True),
             )
             .first()
+        )
+
+    @staticmethod
+    def find_by_uuid_including_merged(db: Session, uuid: str) -> Optional[Identity]:
+        """Find Identity by 1Campus OAuth uuid, including deactivated/merged ones.
+
+        Used during re-login to detect when a uuid points to a merged identity
+        so we can redirect to the surviving target identity.
+        """
+        return db.query(Identity).filter(Identity.one_campus_uuid == uuid).first()
+
+    @staticmethod
+    def mark_identity_merged(
+        db: Session,
+        source_identity_id: int,
+        target_identity_id: int,
+    ) -> None:
+        """Mark source Identity as merged into target Identity.
+
+        Sets:
+        - source.merged_into_identity_id = target.id
+        - source.merged_at = now() (only if not already set — idempotent)
+        - source.is_active = False
+        - Transfers 1Campus fields from source to target (if target has none)
+        - Deactivates Teacher/Student under source
+
+        Does NOT commit — the caller is responsible for commit.
+        Idempotent: calling twice is a safe no-op.
+        """
+        source = db.get(Identity, source_identity_id)
+        target = db.get(Identity, target_identity_id)
+
+        if not source or not target:
+            raise ValueError(
+                f"Identity not found: source={source_identity_id}, target={target_identity_id}"
+            )
+
+        # Idempotency: if already marked as merged into this target, skip
+        if (
+            source.merged_into_identity_id == target_identity_id
+            and source.merged_at is not None
+        ):
+            logger.info(
+                "1Campus merge: source identity_id=%s already merged into %s, skipping",
+                source_identity_id,
+                target_identity_id,
+            )
+            return
+
+        # Cycle / re-merge guard: refuse to merge a source that is already
+        # merged elsewhere or has been deactivated. This prevents A→B→A cycles
+        # (find_by_uuid follows only one merged_into hop, so a cycle would
+        # silently land on an inactive identity and fall through to "create
+        # new").
+        if source.merged_into_identity_id is not None or not source.is_active:
+            raise ValueError(
+                f"Source identity_id={source_identity_id} is already merged or inactive "
+                f"(merged_into={source.merged_into_identity_id}, "
+                f"is_active={source.is_active})"
+            )
+
+        # Transfer 1Campus fields to target if target doesn't have them.
+        # Each field is cleared from source before assignment to target (and
+        # flushed for unique fields) so the source row never ends up duplicating
+        # identifying data with the surviving target.
+        if not target.one_campus_uuid and source.one_campus_uuid:
+            transferred_uuid = source.one_campus_uuid
+            source.one_campus_uuid = None
+            db.flush()  # release UNIQUE index slot before reassigning
+            target.one_campus_uuid = transferred_uuid
+        if not target.one_campus_account and source.one_campus_account:
+            target.one_campus_account = source.one_campus_account
+            source.one_campus_account = None
+        if not target.one_campus_student_id and source.one_campus_student_id:
+            target.one_campus_student_id = source.one_campus_student_id
+            source.one_campus_student_id = None
+        if not target.national_id_hash and source.national_id_hash:
+            target.national_id_hash = source.national_id_hash
+            source.national_id_hash = None
+
+        # Mark source as merged and deactivate
+        source.merged_into_identity_id = target_identity_id
+        source.merged_at = datetime.now(timezone.utc)
+        source.is_active = False
+
+        # Deactivate all Teachers under source
+        for teacher in (
+            db.query(Teacher)
+            .filter(Teacher.identity_id == source.id, Teacher.is_active.is_(True))
+            .all()
+        ):
+            teacher.is_active = False
+            logger.info(
+                "1Campus merge: deactivated teacher_id=%s under source identity_id=%s",
+                teacher.id,
+                source.id,
+            )
+
+        # Deactivate all Students under source
+        for student in (
+            db.query(Student)
+            .filter(Student.identity_id == source.id, Student.is_active.is_(True))
+            .all()
+        ):
+            student.is_active = False
+            logger.info(
+                "1Campus merge: deactivated student_id=%s under source identity_id=%s",
+                student.id,
+                source.id,
+            )
+
+        logger.info(
+            "1Campus merge: marked identity_id=%s as merged into identity_id=%s",
+            source_identity_id,
+            target_identity_id,
         )
 
     @staticmethod
@@ -443,60 +561,112 @@ class OneCampusAccountService:
         Returns: (identity, user, role_type, action)
         where action is "existing", "created"
         """
-        # Step 1: Match by uuid
-        identity = OneCampusAccountService.find_by_uuid(db, uuid)
+        # Step 1: Match by uuid — check both active and merged identities
+        identity = OneCampusAccountService.find_by_uuid_including_merged(db, uuid)
         if identity:
-            # Update email if changed
-            if mail and identity.email != mail:
-                identity.email = mail
-            identity.one_campus_account = mail
-            db.commit()
+            # Re-login redirect: if this identity was merged into another, resolve to target
+            if identity.merged_into_identity_id is not None:
+                target_identity = db.get(Identity, identity.merged_into_identity_id)
+                if target_identity and target_identity.is_active:
+                    logger.info(
+                        "1Campus OAuth: uuid=%s points to merged identity_id=%s, "
+                        "redirecting to target identity_id=%s",
+                        uuid,
+                        identity.id,
+                        target_identity.id,
+                    )
+                    # Find student or teacher under target
+                    student = (
+                        db.query(Student)
+                        .filter(
+                            Student.identity_id == target_identity.id,
+                            Student.is_active.is_(True),
+                        )
+                        .order_by(Student.is_primary_account.desc().nulls_last())
+                        .first()
+                    )
+                    if student:
+                        return target_identity, student, "student", "merge_redirect"
 
-            # Try student first, then teacher
-            student = (
-                db.query(Student)
-                .filter(
-                    Student.identity_id == identity.id,
-                    Student.is_active.is_(True),
+                    teacher = (
+                        db.query(Teacher)
+                        .filter(
+                            Teacher.identity_id == target_identity.id,
+                            Teacher.is_active.is_(True),
+                        )
+                        .first()
+                    )
+                    if teacher:
+                        return target_identity, teacher, "teacher", "merge_redirect"
+
+                # Target not found or inactive — fall through to create new
+                logger.warning(
+                    "1Campus OAuth: uuid=%s merged identity target_id=%s is invalid/inactive",
+                    uuid,
+                    identity.merged_into_identity_id,
                 )
-                .order_by(Student.is_primary_account.desc().nulls_last())
-                .first()
-            )
-            if student:
-                logger.info(
-                    "1Campus OAuth: existing student by uuid, "
-                    "student_id=%s, identity_id=%s",
-                    student.id,
+                existing_identity_for_uuid = None
+            elif not identity.is_active:
+                # Deactivated but not merged — treat as not found
+                logger.warning(
+                    "1Campus OAuth: uuid=%s points to inactive non-merged identity_id=%s",
+                    uuid,
                     identity.id,
                 )
-                return identity, student, "student", "existing"
+                existing_identity_for_uuid = None
+            else:
+                # Active, non-merged identity — normal login
+                # Update email if changed
+                if mail and identity.email != mail:
+                    identity.email = mail
+                identity.one_campus_account = mail
+                db.commit()
 
-            teacher = (
-                db.query(Teacher)
-                .filter(
-                    Teacher.identity_id == identity.id,
-                    Teacher.is_active.is_(True),
+                # Try student first, then teacher
+                student = (
+                    db.query(Student)
+                    .filter(
+                        Student.identity_id == identity.id,
+                        Student.is_active.is_(True),
+                    )
+                    .order_by(Student.is_primary_account.desc().nulls_last())
+                    .first()
                 )
-                .first()
-            )
-            if teacher:
-                logger.info(
-                    "1Campus OAuth: existing teacher by uuid, "
-                    "teacher_id=%s, identity_id=%s",
-                    teacher.id,
+                if student:
+                    logger.info(
+                        "1Campus OAuth: existing student by uuid, "
+                        "student_id=%s, identity_id=%s",
+                        student.id,
+                        identity.id,
+                    )
+                    return identity, student, "student", "existing"
+
+                teacher = (
+                    db.query(Teacher)
+                    .filter(
+                        Teacher.identity_id == identity.id,
+                        Teacher.is_active.is_(True),
+                    )
+                    .first()
+                )
+                if teacher:
+                    logger.info(
+                        "1Campus OAuth: existing teacher by uuid, "
+                        "teacher_id=%s, identity_id=%s",
+                        teacher.id,
+                        identity.id,
+                    )
+                    return identity, teacher, "teacher", "existing"
+
+                # Identity exists by uuid but has no active student or teacher.
+                # Don't fall through to email match — that would create a second
+                # identity for the same uuid (orphaning this one). Reuse it instead.
+                logger.warning(
+                    "1Campus OAuth: identity_id=%s matched by uuid has no active "
+                    "user. Will create a new student/teacher under this identity.",
                     identity.id,
                 )
-                return identity, teacher, "teacher", "existing"
-
-            # Identity exists by uuid but has no active student or teacher.
-            # Don't fall through to email match — that would create a second
-            # identity for the same uuid (orphaning this one). Reuse it instead.
-            logger.warning(
-                "1Campus OAuth: identity_id=%s matched by uuid has no active "
-                "user. Will create a new student/teacher under this identity.",
-                identity.id,
-            )
-            existing_identity_for_uuid = identity
+                existing_identity_for_uuid = identity
         else:
             existing_identity_for_uuid = None
 

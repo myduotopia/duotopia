@@ -104,6 +104,13 @@ async def get_current_student_info(
             classroom_name = classroom.name
             classroom_id = classroom.id
 
+    # Get 1Campus binding status from Identity
+    one_campus_account = None
+    if student.identity_id:
+        identity = db.query(Identity).filter(Identity.id == student.identity_id).first()
+        if identity:
+            one_campus_account = identity.one_campus_account
+
     return {
         "id": student.id,
         "name": student.name,
@@ -114,6 +121,9 @@ async def get_current_student_info(
         "classroom_name": classroom_name,
         "target_wpm": student.target_wpm,
         "target_accuracy": student.target_accuracy,
+        # 1Campus binding status
+        "one_campus_account": one_campus_account,
+        "has_1campus_binding": one_campus_account is not None,
     }
 
 

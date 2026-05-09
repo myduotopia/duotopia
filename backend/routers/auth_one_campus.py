@@ -186,6 +186,53 @@ def _verify_oauth_state(state: Optional[str]) -> Optional[dict]:
     return payload_dict
 
 
+def _create_oauth_merge_state(identity_id: int, user_type: str) -> str:
+    """Create an HMAC-signed OAuth state token for the merge flow.
+
+    Encodes the logged-in user's identity_id and user_type so the callback
+    knows to run the merge flow instead of the regular login flow.
+
+    Format: base64(json({"nonce": ..., "merge_for_identity_id": ...,
+                         "merge_for_user_type": ..., "exp": ...})).signature
+    """
+    payload_dict = {
+        "nonce": secrets.token_urlsafe(16),
+        "merge_for_identity_id": identity_id,
+        "merge_for_user_type": user_type,
+        "exp": int(time.time()) + OAUTH_STATE_TTL,
+    }
+    payload_b64 = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode()
+    sig = hmac.HMAC(
+        settings.JWT_SECRET.encode(), payload_b64.encode(), hashlib.sha256
+    ).hexdigest()
+    return f"{payload_b64}.{sig}"
+
+
+def _verify_oauth_merge_state(state: Optional[str]) -> Optional[dict]:
+    """Verify an OAuth merge state token. Returns payload dict or None on failure."""
+    if not state:
+        return None
+    parts = state.split(".", 1)
+    if len(parts) != 2:
+        return None
+    payload_b64, sig = parts
+    expected_sig = hmac.HMAC(
+        settings.JWT_SECRET.encode(), payload_b64.encode(), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(sig, expected_sig):
+        return None
+    try:
+        payload_dict = json.loads(base64.urlsafe_b64decode(payload_b64))
+    except (json.JSONDecodeError, UnicodeDecodeError, binascii.Error):
+        return None
+    if payload_dict.get("exp", 0) < int(time.time()):
+        return None
+    # Must contain merge fields to distinguish from plain oauth state
+    if "merge_for_identity_id" not in payload_dict:
+        return None
+    return payload_dict
+
+
 def _build_student_response(db: Session, student: Student) -> dict:
     """Build the student login response payload (same shape as email login)."""
     classrooms_list = _get_aggregated_classrooms(db, student)
@@ -298,6 +345,75 @@ async def get_login_url(
     return {"url": url}
 
 
+@router.get("/login-url-for-merge")
+@limiter.limit("10/minute")
+async def get_login_url_for_merge(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Return a 1Campus OAuth URL with a merge state token.
+
+    The merge state token encodes the logged-in user's identity_id and user_type
+    so the callback knows to run Flow 2 (merge logged-in user A with 1Campus user B)
+    instead of the regular login flow.
+
+    Requires authentication. Used from the settings page.
+    """
+    user_type = current_user.get("type")
+    user_id = int(current_user.get("sub"))
+
+    # Resolve identity_id for current user
+    if user_type == "student":
+        user = db.query(Student).filter(Student.id == user_id).first()
+    elif user_type == "teacher":
+        user = db.query(Teacher).filter(Teacher.id == user_id).first()
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported user type")
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not user.identity_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No identity found. Please ensure your account is set up correctly.",
+        )
+
+    # Enforce email_verified=True upfront so users can't bypass the frontend
+    # gate, complete OAuth, then get rejected at the callback. Mirrors the
+    # check inside _handle_oauth_merge_flow_from_state.
+    identity = db.get(Identity, user.identity_id)
+    if not identity or not identity.email_verified:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "EMAIL_NOT_VERIFIED",
+                "message": "Please verify your email before binding a 1Campus account.",
+            },
+        )
+
+    # Reject if the identity is already bound to a 1Campus account. Without
+    # this guard, a stale tab could complete OAuth and silently overwrite the
+    # existing binding via the pure-bind path in the callback handler.
+    if identity.one_campus_uuid:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "ALREADY_BOUND",
+                "message": "This account is already linked to a 1Campus account.",
+            },
+        )
+
+    try:
+        merge_state = _create_oauth_merge_state(user.identity_id, user_type)
+        url = OneCampusService.get_oauth_authorize_url(state=merge_state)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"url": url}
+
+
 @router.get("/callback")
 @limiter.limit("10/minute")
 async def one_campus_callback(
@@ -319,6 +435,13 @@ async def one_campus_callback(
     """
     if schoolDsns:
         return await _handle_identity_code_flow(request, code, schoolDsns, db)
+
+    # Check if state is a merge state token (Flow 2). Must come before the
+    # regular state check because merge state has a different payload shape.
+    merge_payload = _verify_oauth_merge_state(state)
+    if merge_payload is not None:
+        return await _handle_oauth_merge_flow_from_state(request, code, state, db)
+
     state_payload = _verify_oauth_state(state)
     if state_payload is None:
         raise HTTPException(
@@ -327,6 +450,218 @@ async def one_campus_callback(
         )
     role_hint = state_payload.get("role") if isinstance(state_payload, dict) else None
     return await _handle_oauth_flow(request, code, db, role_hint=role_hint)
+
+
+async def _handle_oauth_merge_flow_from_state(
+    request: Request,
+    code: str,
+    merge_state: str,
+    db: Session,
+) -> OneCampusCallbackResponse:
+    """Handle Flow 2: logged-in user A merges with 1Campus account B.
+
+    The merge_state token encodes target_identity_id (A) and user_type.
+    Steps:
+    1. Verify merge state token
+    2. Exchange code for 1Campus user info → get uuid
+    3. Verify target A has email_verified=True
+    4. Find Identity_B by uuid
+    5a. B doesn't exist → pure bind (write 1Campus fields to A)
+    5b. B == A → no-op (already bound)
+    5c. B exists and B != A → mark B merged into A, commit
+    6. Return access_token for A's user
+    """
+    merge_payload = _verify_oauth_merge_state(merge_state)
+    if not merge_payload:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired merge state. Please try again from settings.",
+        )
+
+    target_identity_id = merge_payload["merge_for_identity_id"]
+    target_user_type = merge_payload["merge_for_user_type"]
+
+    # Step 1: Exchange code for 1Campus access token
+    try:
+        token_data = await OneCampusService.exchange_oauth_code(code)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except httpx.HTTPError as e:
+        logger.error("1Campus OAuth code exchange failed during merge: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to communicate with 1Campus. Please try again.",
+        )
+
+    oauth_access_token = token_data.get("access_token")
+    if not oauth_access_token:
+        raise HTTPException(
+            status_code=502, detail="1Campus did not return an access token."
+        )
+
+    # Step 2: Get user info
+    try:
+        user_info = await OneCampusService.get_oauth_user_info(oauth_access_token)
+    except httpx.HTTPError as e:
+        logger.error("1Campus user info fetch failed during merge: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to fetch user info from 1Campus.",
+        )
+
+    uuid = user_info.get("uuid", "")
+    mail = user_info.get("mail", "")
+
+    if not uuid:
+        raise HTTPException(
+            status_code=502, detail="1Campus did not return a user UUID."
+        )
+
+    # Step 3: Load target Identity A
+    target_identity = db.get(Identity, target_identity_id)
+    if not target_identity or not target_identity.is_active:
+        raise HTTPException(status_code=404, detail="Target identity not found.")
+
+    # Step 4: A must have email_verified=True
+    if not target_identity.email_verified:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "TARGET_NOT_VERIFIED",
+                "message": (
+                    "Please verify your Duotopia email address before binding "
+                    "a 1Campus account."
+                ),
+            },
+        )
+
+    # Step 5: Find target user (Teacher or Student) under A
+    if target_user_type == "teacher":
+        target_user = (
+            db.query(Teacher)
+            .filter(
+                Teacher.identity_id == target_identity_id,
+                Teacher.is_active.is_(True),
+            )
+            .first()
+        )
+    else:
+        target_user = (
+            db.query(Student)
+            .filter(
+                Student.identity_id == target_identity_id,
+                Student.is_active.is_(True),
+            )
+            .order_by(Student.is_primary_account.desc().nulls_last())
+            .first()
+        )
+
+    if not target_user:
+        raise HTTPException(
+            status_code=404, detail="No active user found under target identity."
+        )
+
+    # Step 6: Find Identity B by uuid (including deactivated/merged)
+    identity_b = db.query(Identity).filter(Identity.one_campus_uuid == uuid).first()
+
+    if identity_b is None:
+        # Pure bind: uuid not seen before, write 1Campus fields directly to A.
+        # Guard against overwriting an existing binding — login-url-for-merge
+        # already rejects this case, but defend in depth in case the state
+        # token was issued before the binding was set.
+        if target_identity.one_campus_uuid:
+            logger.info(
+                "1Campus merge flow: pure-bind no-op, target identity_id=%s "
+                "already bound to uuid=%s",
+                target_identity_id,
+                target_identity.one_campus_uuid,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ALREADY_BOUND",
+                    "message": "This account is already linked to a 1Campus account.",
+                },
+            )
+        target_identity.one_campus_uuid = uuid
+        target_identity.one_campus_account = mail
+        db.commit()
+        logger.info(
+            "1Campus merge flow: pure bind, uuid=%s written to identity_id=%s",
+            uuid,
+            target_identity_id,
+        )
+    elif identity_b.id == target_identity_id:
+        # No-op: A is already bound to this uuid
+        logger.info(
+            "1Campus merge flow: no-op, uuid=%s already bound to identity_id=%s",
+            uuid,
+            target_identity_id,
+        )
+    else:
+        # Merge: B is a different identity → mark B merged into A.
+        # mark_identity_merged raises ValueError if B is already merged
+        # elsewhere or inactive (cycle / re-merge guard) — surface as 409.
+        try:
+            OneCampusAccountService.mark_identity_merged(
+                db, identity_b.id, target_identity_id
+            )
+        except ValueError as e:
+            logger.warning(
+                "1Campus merge flow: refused to merge identity_b_id=%s "
+                "into identity_a_id=%s: %s",
+                identity_b.id,
+                target_identity_id,
+                e,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "SOURCE_ALREADY_MERGED",
+                    "message": "This 1Campus account is already linked to another Duotopia account.",
+                },
+            )
+        db.commit()
+        logger.info(
+            "1Campus merge flow: merged identity_b_id=%s into identity_a_id=%s",
+            identity_b.id,
+            target_identity_id,
+        )
+
+    # Step 7: Return access_token for A's user.
+    # Note: Teacher model has no last_login field (unlike Student); only the
+    # student branch updates it.
+    if target_user_type == "teacher":
+        teacher_response = _build_teacher_response(db, target_user)
+        access_token = create_access_token(
+            data={
+                "sub": str(target_user.id),
+                "email": target_user.email,
+                "type": "teacher",
+                "name": target_user.name,
+                "role": teacher_response["role"],
+            },
+            expires_delta=timedelta(hours=24),
+        )
+        return OneCampusCallbackResponse(
+            access_token=access_token,
+            role_type="teacher",
+            user=teacher_response,
+            action="merge_complete",
+        )
+    else:
+        access_token = create_access_token(
+            data={"sub": str(target_user.id), "type": "student"},
+            expires_delta=timedelta(hours=24),
+        )
+        target_user.last_login = datetime.now(timezone.utc)
+        db.commit()
+        return OneCampusCallbackResponse(
+            access_token=access_token,
+            role_type="student",
+            student=_build_student_response(db, target_user),
+            action="merge_complete",
+        )
 
 
 async def _handle_identity_code_flow(
@@ -901,6 +1236,29 @@ async def bind_account(
             detail="This account is already bound to this email.",
         )
 
+    # Scenario 4: target email exists but email_verified=False → reject with
+    # structured error so the frontend can offer "Resend verification email".
+    existing_target_identity = (
+        db.query(Identity)
+        .filter(
+            func.lower(Identity.email) == target_email,
+            Identity.is_active.is_(True),
+        )
+        .first()
+    )
+    if existing_target_identity and not existing_target_identity.email_verified:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "TARGET_EMAIL_NOT_VERIFIED",
+                "message": (
+                    f"Your Duotopia account ({target_email}) has not completed email "
+                    "verification yet. Please verify first."
+                ),
+                "target_email": target_email,
+            },
+        )
+
     if user_type == "student":
         from services.email_service import email_service
 
@@ -968,3 +1326,50 @@ async def bind_account(
             "email": target_email,
             "action": "verification_sent",
         }
+
+
+@router.get("/binding-status")
+@limiter.limit("30/minute")
+async def get_binding_status(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Return current user's 1Campus binding and email verification status.
+
+    Used by the settings page to show binding status and available actions.
+    Requires authentication.
+    """
+    user_type = current_user.get("type")
+    user_id = int(current_user.get("sub"))
+
+    if user_type == "student":
+        user = db.query(Student).filter(Student.id == user_id).first()
+    elif user_type == "teacher":
+        user = db.query(Teacher).filter(Teacher.id == user_id).first()
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported user type")
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    identity = None
+    if user.identity_id:
+        identity = db.get(Identity, user.identity_id)
+
+    one_campus_account = identity.one_campus_account if identity else None
+    # email_verified lives on Identity; fall back safely if the user has no
+    # identity_id and the user model doesn't expose the attribute directly.
+    email_verified = (
+        identity.email_verified if identity else getattr(user, "email_verified", False)
+    )
+    email = identity.email if identity else getattr(user, "email", None)
+
+    return {
+        "user_id": user.id,
+        "has_1campus_binding": one_campus_account is not None,
+        "one_campus_account": one_campus_account,
+        "email": email,
+        "email_verified": email_verified,
+        "user_type": user_type,
+    }

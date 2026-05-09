@@ -57,6 +57,17 @@ class Identity(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # Merge marker fields (Phase 1: no data migration, just identity tracking)
+    # When an Identity is merged into another, we mark the source as inactive
+    # and record which identity it was merged into so future logins can redirect.
+    merged_into_identity_id = Column(
+        Integer,
+        ForeignKey("identities.id"),
+        nullable=True,
+        index=True,
+    )
+    merged_at = Column(DateTime(timezone=True), nullable=True)
+
     # Relationships
     linked_students = relationship(
         "Student",
