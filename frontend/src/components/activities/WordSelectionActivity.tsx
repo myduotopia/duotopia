@@ -300,7 +300,6 @@ export default function WordSelectionActivity({
         words_very_unfamiliar?: number;
         achieved: boolean;
         is_practice_mode?: boolean;
-        show_word: boolean;
         show_image: boolean;
         show_option_images?: boolean;
         play_audio: boolean;
