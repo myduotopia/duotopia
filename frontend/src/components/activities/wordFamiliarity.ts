@@ -55,14 +55,12 @@ export function aggregateTierCounts(
   let familiar = 0;
   let medium = 0;
   let unfamiliar = 0;
-  let veryUnfamiliarPracticed = 0; // rows that exist but classify as very_unfamiliar
   for (const { correct, incorrect } of Object.values(counts)) {
     const tier = classifyTier(correct, incorrect);
     if (tier === "master") master += 1;
     else if (tier === "familiar") familiar += 1;
     else if (tier === "medium") medium += 1;
     else if (tier === "unfamiliar") unfamiliar += 1;
-    else veryUnfamiliarPracticed += 1;
   }
   const total = totalWords || Object.keys(counts).length;
   // Unpracticed rows (no entry in counts) all fall into very_unfamiliar.
@@ -70,7 +68,6 @@ export function aggregateTierCounts(
   const very_unfamiliar = Math.max(0, total - accountedFor);
   // Note: practiced very_unfamiliar (correct=0 with errors) is also folded
   // into the same bucket via the subtraction above.
-  void veryUnfamiliarPracticed;
   return { master, familiar, medium, unfamiliar, very_unfamiliar, total };
 }
 

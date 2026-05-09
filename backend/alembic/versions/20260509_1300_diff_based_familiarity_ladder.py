@@ -130,7 +130,7 @@ def upgrade() -> None:
                 v_current_mastery,
                 v_target,
                 v_current_mastery >= v_target,
-                v_t5,        -- words_mastered (legacy alias of T5)
+                v_t5,        -- words_mastered (legacy alias of T5; TODO: drop once all callers use words_master)
                 v_t5,        -- words_master
                 v_t4,        -- words_familiar
                 v_t3,        -- words_medium
