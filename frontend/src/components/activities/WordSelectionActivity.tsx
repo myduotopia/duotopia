@@ -9,6 +9,11 @@
  * - Proficiency progress bar at top
  * - Visual feedback on correct/incorrect selection
  * - Achievement dialog when target_proficiency is reached
+ * - Issue #437: Adaptive layout —
+ *   (a) Question image: horizontal (image left, options right) on wide
+ *       viewport + square/portrait image; vertical otherwise.
+ *   (b) Option images (#631 mode): options grid switches to 4×1 when its
+ *       container is wide enough (~600px) to fit four images, else 2×2.
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
@@ -212,6 +217,46 @@ export default function WordSelectionActivity({
 
   // Audio ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Issue #437: 自適應排版 — 依「圖片寬高比 + 螢幕寬度」切換橫式/直式
+  const [imageDims, setImageDims] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const [isWideViewport, setIsWideViewport] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(min-width: 768px)").matches
+      : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(min-width: 768px)");
+    const onChange = (e: MediaQueryListEvent) => setIsWideViewport(e.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  // 切題時清掉舊圖尺寸，避免新圖載入前殘留上一題的版型決策
+  useEffect(() => {
+    setImageDims(null);
+  }, [currentIndex]);
+
+  // Issue #437: 量測選項 grid 實際容器寬度，決定 4×1 / 2×2
+  // 寬度足夠（4 個選項 + gap 都裝得下）→ 4×1；不夠 → 2×2
+  const optionsGridRef = useRef<HTMLDivElement | null>(null);
+  const [optionsGridWidth, setOptionsGridWidth] = useState(0);
+  useEffect(() => {
+    const el = optionsGridRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setOptionsGridWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Start practice session
   const startPractice = useCallback(async () => {
@@ -771,6 +816,19 @@ export default function WordSelectionActivity({
 
   const currentWord = words[currentIndex];
 
+  // Issue #437: 寬螢幕 + 圖片接近正方/直式時 → 橫式排版（圖左、選項右）
+  const imageRatio = imageDims ? imageDims.width / imageDims.height : null;
+  const useHorizontal =
+    showImage &&
+    !!currentWord?.image_url &&
+    isWideViewport &&
+    imageRatio !== null &&
+    imageRatio <= 1.2;
+
+  // Issue #437: 選項有圖時，若容器寬度足夠就排成 4×1（節省垂直空間）；不夠則 2×2
+  // 600px 約等於 4 × 140px + 3 × 16px gap
+  const useFourColOptions = showOptionImages && optionsGridWidth >= 600;
+
   return (
     <div className="space-y-6">
       {/* Issue #460: Practice mode banner */}
@@ -810,18 +868,45 @@ export default function WordSelectionActivity({
       </div>
 
       {/* Question content */}
-      <div className="space-y-6">
+      <div
+        className={cn(
+          "space-y-6",
+          // Issue #437: 寬螢幕 + 圖片接近正方/直式時 → 橫式（圖左、右側欄含文字+選項）
+          useHorizontal && "flex flex-row gap-6 items-start space-y-0",
+        )}
+      >
         {/* Image */}
         {showImage && currentWord.image_url && (
-          <div className="flex justify-center">
+          <div
+            className={cn(
+              "flex justify-center",
+              useHorizontal && "w-2/5 shrink-0",
+            )}
+          >
             <img
               src={currentWord.image_url}
               alt={currentWord.text}
-              className="max-h-48 object-contain rounded-lg"
+              onLoad={(e) =>
+                setImageDims({
+                  width: e.currentTarget.naturalWidth,
+                  height: e.currentTarget.naturalHeight,
+                })
+              }
+              className={cn(
+                "object-contain rounded-lg",
+                useHorizontal ? "max-h-[60vh] w-full" : "max-h-48",
+              )}
             />
           </div>
         )}
 
+        {/* 右側欄（橫式時把文字/音檔/題目/Timer/選項都放這裡） */}
+        <div
+          className={cn(
+            "space-y-6",
+            useHorizontal && "flex-1 min-w-0",
+          )}
+        >
         {/* Word Text - hide when in audio mode */}
         {!playAudio && (
           <div className="text-center">
@@ -887,7 +972,11 @@ export default function WordSelectionActivity({
 
         {/* Answer Options */}
         <div
-          className="grid grid-cols-2 grid-rows-2 gap-3 sm:gap-4"
+          ref={optionsGridRef}
+          className={cn(
+            "grid gap-3 sm:gap-4",
+            useFourColOptions ? "grid-cols-4" : "grid-cols-2 grid-rows-2",
+          )}
           style={{ gridAutoRows: "1fr" }}
         >
           {currentWord.options.map((option, index) => {
@@ -966,6 +1055,7 @@ export default function WordSelectionActivity({
               </button>
             );
           })}
+        </div>
         </div>
       </div>
 
