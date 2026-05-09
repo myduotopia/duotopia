@@ -4699,6 +4699,11 @@
     },
     "timeLimit": "Time limit: {{seconds}}s"
   },
+  "wordFamiliarity": {
+    "tierHigh": "Mastered",
+    "tierMedium": "Familiar",
+    "tierLow": "Not yet familiar"
+  },
   "wordCloze": {
     "loading": "Loading cloze questions...",
     "noItems": "No cloze questions available (example sentences must contain the target word)",

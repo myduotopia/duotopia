@@ -4717,6 +4717,11 @@
     },
     "timeLimit": "限時 {{seconds}} 秒"
   },
+  "wordFamiliarity": {
+    "tierHigh": "已熟悉",
+    "tierMedium": "普通熟悉",
+    "tierLow": "不熟"
+  },
   "wordCloze": {
     "loading": "正在載入克漏字題目...",
     "noItems": "沒有可用的克漏字題目（例句需包含目標單字）",

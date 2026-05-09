@@ -41,6 +41,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
+import { aggregateTierCounts } from "./wordFamiliarity";
 
 interface OptionEntry {
   text: string;
@@ -62,8 +63,14 @@ interface ProficiencyStatus {
   target_mastery: number;
   achieved: boolean;
   words_mastered: number;
+  // Issue #711: 3-tier classification counts. Optional so older API
+  // responses (before the migration lands) still type-check.
+  words_high?: number;
+  words_medium?: number;
+  words_low?: number;
   total_words: number;
 }
+
 
 interface WordSelectionActivityProps {
   assignmentId: number;
@@ -113,6 +120,9 @@ export default function WordSelectionActivity({
     target_mastery: 80,
     achieved: false,
     words_mastered: 0,
+    words_high: 0,
+    words_medium: 0,
+    words_low: 0,
     total_words: 0,
   });
   const [showAchievementDialog, setShowAchievementDialog] = useState(false);
@@ -126,46 +136,39 @@ export default function WordSelectionActivity({
   // (#379) Preview/demo mode: track practiced word IDs to avoid repetition
   const practicedWordIdsRef = useRef<number[]>([]);
 
-  // Preview mode local proficiency tracking (不存入資料庫，離開後重置)
-  // 模擬學生模式的 SM-2 算法：追蹤每個單字的 memory_strength
-  const [previewWordStrengths, setPreviewWordStrengths] = useState<
-    Record<number, number>
+  // Preview/demo: track per-word correct/incorrect counts locally (not persisted).
+  // Issue #711: classification is now count-based, mirroring the SQL function.
+  const [previewWordCounts, setPreviewWordCounts] = useState<
+    Record<number, { correct: number; incorrect: number }>
   >({});
 
-  // SM-2 簡化版：計算新的 memory_strength
-  const calculateNewStrength = (
-    currentStrength: number | undefined,
-    isCorrect: boolean,
-  ): number => {
-    if (currentStrength === undefined) {
-      // 第一次作答
-      return isCorrect ? 0.5 : 0.0;
-    }
-    // 後續作答：答對 +0.15，答錯 -0.2（可降至 0）
-    if (isCorrect) {
-      return Math.min(1.0, currentStrength + 0.15);
-    } else {
-      return Math.max(0.0, currentStrength - 0.2);
-    }
-  };
+  // Update local counts for preview/demo: increments correct or incorrect.
+  const recordPreviewAnswer = useCallback(
+    (wordId: number, isCorrectAnswer: boolean) => {
+      setPreviewWordCounts((prev) => {
+        const cur = prev[wordId] ?? { correct: 0, incorrect: 0 };
+        return {
+          ...prev,
+          [wordId]: isCorrectAnswer
+            ? { ...cur, correct: cur.correct + 1 }
+            : { ...cur, incorrect: cur.incorrect + 1 },
+        };
+      });
+    },
+    [],
+  );
 
-  // Computed: 預覽模式的平均熟練度（模擬學生模式）
+  // Computed: tier breakdown for preview/demo (live mode reads from API).
+  const previewTierCounts = useMemo(
+    () => aggregateTierCounts(previewWordCounts, proficiency.total_words),
+    [previewWordCounts, proficiency.total_words],
+  );
+
+  // Computed: preview proficiency = words_high / total_words.
   const previewProficiency = useMemo(() => {
-    const strengths = Object.values(previewWordStrengths);
-    if (strengths.length === 0) return 0;
-    const totalWords = proficiency.total_words || strengths.length;
-    // 未練習的單字視為 0 強度
-    const sum = strengths.reduce((acc, s) => acc + s, 0);
-    return (sum / totalWords) * 100;
-  }, [previewWordStrengths, proficiency.total_words]);
-
-  // Computed: 預覽模式的已熟練單字數（memory_strength >= target * 0.8）
-  const previewWordsMastered = useMemo(() => {
-    const targetThreshold = ((proficiency.target_mastery || 80) / 100) * 0.8;
-    return Object.values(previewWordStrengths).filter(
-      (s) => s >= targetThreshold,
-    ).length;
-  }, [previewWordStrengths, proficiency.target_mastery]);
+    if (previewTierCounts.total === 0) return 0;
+    return (previewTierCounts.high / previewTierCounts.total) * 100;
+  }, [previewTierCounts]);
 
   // Computed: 顯示用的熟練度（預覽模式和 demo 模式用本地計算，學生模式用 API 回傳）
   const displayProficiency =
@@ -173,11 +176,28 @@ export default function WordSelectionActivity({
       ? previewProficiency
       : proficiency.current_mastery;
 
-  // Computed: 顯示用的已熟練單字數（預覽模式和 demo 模式用本地計算）
-  const displayWordsMastered =
-    isPreviewMode || isDemoMode
-      ? previewWordsMastered
-      : proficiency.words_mastered;
+  // Computed: tier counts shown in UI (live = API, preview/demo = local).
+  const displayTierCounts = useMemo(() => {
+    if (isPreviewMode || isDemoMode) {
+      return previewTierCounts;
+    }
+    return {
+      high: proficiency.words_high ?? proficiency.words_mastered ?? 0,
+      medium: proficiency.words_medium ?? 0,
+      low:
+        proficiency.words_low ??
+        Math.max(
+          0,
+          proficiency.total_words -
+            (proficiency.words_high ?? proficiency.words_mastered ?? 0) -
+            (proficiency.words_medium ?? 0),
+        ),
+      total: proficiency.total_words,
+    };
+  }, [isPreviewMode, isDemoMode, previewTierCounts, proficiency]);
+
+  // Computed: 顯示用的已熟練單字數（同等於 high tier 數）
+  const displayWordsMastered = displayTierCounts.high;
 
   // Timer
   const [timeLimit, setTimeLimit] = useState<number | null>(null);
@@ -212,6 +232,9 @@ export default function WordSelectionActivity({
         current_proficiency: number;
         target_proficiency: number;
         words_mastered: number;
+        words_high?: number;
+        words_medium?: number;
+        words_low?: number;
         achieved: boolean;
         is_practice_mode?: boolean;
         show_word: boolean;
@@ -235,6 +258,9 @@ export default function WordSelectionActivity({
         target_mastery: data.target_proficiency || 80,
         achieved: data.achieved ?? false,
         words_mastered: data.words_mastered ?? 0,
+        words_high: data.words_high ?? data.words_mastered ?? 0,
+        words_medium: data.words_medium ?? 0,
+        words_low: data.words_low ?? 0,
         total_words: data.total_words || 0,
       });
       setCurrentIndex(0);
@@ -400,13 +426,10 @@ export default function WordSelectionActivity({
     }
     setSubmitting(true);
 
-    // Skip API call in preview mode and demo mode, but track local stats (SM-2 simulation)
+    // Skip API call in preview/demo mode, but track local counts so the
+    // local tier breakdown matches what students would see.
     if (isPreviewMode || isDemoMode) {
-      const wordId = currentWord.content_item_id;
-      setPreviewWordStrengths((prev) => ({
-        ...prev,
-        [wordId]: calculateNewStrength(prev[wordId], false), // timeout = incorrect
-      }));
+      recordPreviewAnswer(currentWord.content_item_id, false);
       setSubmitting(false);
       return;
     }
@@ -453,13 +476,10 @@ export default function WordSelectionActivity({
     }
     setSubmitting(true);
 
-    // Skip API call in preview mode and demo mode, but track local stats (SM-2 simulation)
+    // Skip API call in preview/demo mode, but track local counts so the
+    // local tier breakdown matches what students would see.
     if (isPreviewMode || isDemoMode) {
-      const wordId = currentWord.content_item_id;
-      setPreviewWordStrengths((prev) => ({
-        ...prev,
-        [wordId]: calculateNewStrength(prev[wordId], correct),
-      }));
+      recordPreviewAnswer(currentWord.content_item_id, correct);
       setSubmitting(false);
       return;
     }
@@ -637,6 +657,34 @@ export default function WordSelectionActivity({
               }) ||
                 `${displayWordsMastered} / ${proficiency.total_words} words mastered`}
             </p>
+          </div>
+
+          {/* Issue #711: 三檔熟悉度單字數量 */}
+          <div className="grid grid-cols-3 gap-3 max-w-md mx-auto text-sm">
+            <div className="rounded-lg bg-green-50 px-3 py-2">
+              <div className="text-xs text-gray-500">
+                {t("wordFamiliarity.tierHigh") || "已熟悉"}
+              </div>
+              <div className="text-lg font-semibold text-green-700">
+                {displayTierCounts.high}
+              </div>
+            </div>
+            <div className="rounded-lg bg-yellow-50 px-3 py-2">
+              <div className="text-xs text-gray-500">
+                {t("wordFamiliarity.tierMedium") || "普通熟悉"}
+              </div>
+              <div className="text-lg font-semibold text-yellow-700">
+                {displayTierCounts.medium}
+              </div>
+            </div>
+            <div className="rounded-lg bg-gray-100 px-3 py-2">
+              <div className="text-xs text-gray-500">
+                {t("wordFamiliarity.tierLow") || "不熟"}
+              </div>
+              <div className="text-lg font-semibold text-gray-700">
+                {displayTierCounts.low}
+              </div>
+            </div>
           </div>
 
           {isPracticeMode ? (

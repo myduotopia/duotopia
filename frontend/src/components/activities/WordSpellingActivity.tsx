@@ -43,6 +43,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
+import { aggregateTierCounts } from "./wordFamiliarity";
 
 interface SpellingWord {
   content_item_id: number;
@@ -58,6 +59,11 @@ interface ProficiencyStatus {
   target_mastery: number;
   achieved: boolean;
   words_mastered: number;
+  // Issue #711: 3-tier classification counts. Optional so older API
+  // responses (before the migration lands) still type-check.
+  words_high?: number;
+  words_medium?: number;
+  words_low?: number;
   total_words: number;
 }
 
@@ -105,6 +111,9 @@ export default function WordSpellingActivity({
     target_mastery: 80,
     achieved: false,
     words_mastered: 0,
+    words_high: 0,
+    words_medium: 0,
+    words_low: 0,
     total_words: 0,
   });
   const [showAchievementDialog, setShowAchievementDialog] = useState(false);
@@ -118,46 +127,59 @@ export default function WordSpellingActivity({
   // Preview/demo only — track practiced ids to avoid repetition next round
   const practicedWordIdsRef = useRef<number[]>([]);
 
-  // Preview/demo only — local SM-2 simulation (not persisted)
-  const [previewWordStrengths, setPreviewWordStrengths] = useState<
-    Record<number, number>
+  // Issue #711: count-based local tracking for preview/demo (no DB).
+  const [previewWordCounts, setPreviewWordCounts] = useState<
+    Record<number, { correct: number; incorrect: number }>
   >({});
 
-  const calculateNewStrength = (
-    currentStrength: number | undefined,
-    correct: boolean,
-  ): number => {
-    if (currentStrength === undefined) {
-      return correct ? 0.5 : 0.0;
-    }
-    if (correct) return Math.min(1.0, currentStrength + 0.15);
-    return Math.max(0.0, currentStrength - 0.2);
-  };
+  const recordPreviewAnswer = useCallback(
+    (wordId: number, isCorrectAnswer: boolean) => {
+      setPreviewWordCounts((prev) => {
+        const cur = prev[wordId] ?? { correct: 0, incorrect: 0 };
+        return {
+          ...prev,
+          [wordId]: isCorrectAnswer
+            ? { ...cur, correct: cur.correct + 1 }
+            : { ...cur, incorrect: cur.incorrect + 1 },
+        };
+      });
+    },
+    [],
+  );
+
+  const previewTierCounts = useMemo(
+    () => aggregateTierCounts(previewWordCounts, proficiency.total_words),
+    [previewWordCounts, proficiency.total_words],
+  );
 
   const previewProficiency = useMemo(() => {
-    const strengths = Object.values(previewWordStrengths);
-    if (strengths.length === 0) return 0;
-    const totalWords = proficiency.total_words || strengths.length;
-    const sum = strengths.reduce((acc, s) => acc + s, 0);
-    return (sum / totalWords) * 100;
-  }, [previewWordStrengths, proficiency.total_words]);
-
-  const previewWordsMastered = useMemo(() => {
-    const targetThreshold = ((proficiency.target_mastery || 80) / 100) * 0.8;
-    return Object.values(previewWordStrengths).filter(
-      (s) => s >= targetThreshold,
-    ).length;
-  }, [previewWordStrengths, proficiency.target_mastery]);
+    if (previewTierCounts.total === 0) return 0;
+    return (previewTierCounts.high / previewTierCounts.total) * 100;
+  }, [previewTierCounts]);
 
   const displayProficiency =
     isPreviewMode || isDemoMode
       ? previewProficiency
       : proficiency.current_mastery;
 
-  const displayWordsMastered =
-    isPreviewMode || isDemoMode
-      ? previewWordsMastered
-      : proficiency.words_mastered;
+  const displayTierCounts = useMemo(() => {
+    if (isPreviewMode || isDemoMode) return previewTierCounts;
+    return {
+      high: proficiency.words_high ?? proficiency.words_mastered ?? 0,
+      medium: proficiency.words_medium ?? 0,
+      low:
+        proficiency.words_low ??
+        Math.max(
+          0,
+          proficiency.total_words -
+            (proficiency.words_high ?? proficiency.words_mastered ?? 0) -
+            (proficiency.words_medium ?? 0),
+        ),
+      total: proficiency.total_words,
+    };
+  }, [isPreviewMode, isDemoMode, previewTierCounts, proficiency]);
+
+  const displayWordsMastered = displayTierCounts.high;
 
   // Stats (per round) — kept for completeness; current implementation
   // doesn't display per-round count, but useful for future analytics.
@@ -194,6 +216,9 @@ export default function WordSpellingActivity({
         current_proficiency: number;
         target_proficiency: number;
         words_mastered: number;
+        words_high?: number;
+        words_medium?: number;
+        words_low?: number;
         achieved: boolean;
         is_practice_mode?: boolean;
         show_translation: boolean;
@@ -222,6 +247,9 @@ export default function WordSpellingActivity({
         target_mastery: data.target_proficiency || 80,
         achieved: data.achieved ?? false,
         words_mastered: data.words_mastered ?? 0,
+        words_high: data.words_high ?? data.words_mastered ?? 0,
+        words_medium: data.words_medium ?? 0,
+        words_low: data.words_low ?? 0,
         total_words: data.total_words || 0,
       });
       setCurrentIndex(0);
@@ -359,13 +387,9 @@ export default function WordSpellingActivity({
       setIncorrectAnswer(answer);
     }
 
-    // Preview/demo: simulate SM-2 locally
+    // Preview/demo: track local counts so the tier breakdown matches live mode.
     if (isPreviewMode || isDemoMode) {
-      const wordId = currentWord.content_item_id;
-      setPreviewWordStrengths((prev) => ({
-        ...prev,
-        [wordId]: calculateNewStrength(prev[wordId], correct),
-      }));
+      recordPreviewAnswer(currentWord.content_item_id, correct);
       setSubmitting(false);
       return;
     }
@@ -537,6 +561,34 @@ export default function WordSpellingActivity({
               }) ||
                 `${displayWordsMastered} / ${proficiency.total_words} words mastered`}
             </p>
+          </div>
+
+          {/* Issue #711: 三檔熟悉度單字數量 */}
+          <div className="grid grid-cols-3 gap-3 max-w-md mx-auto text-sm">
+            <div className="rounded-lg bg-green-50 px-3 py-2">
+              <div className="text-xs text-gray-500">
+                {t("wordFamiliarity.tierHigh") || "已熟悉"}
+              </div>
+              <div className="text-lg font-semibold text-green-700">
+                {displayTierCounts.high}
+              </div>
+            </div>
+            <div className="rounded-lg bg-yellow-50 px-3 py-2">
+              <div className="text-xs text-gray-500">
+                {t("wordFamiliarity.tierMedium") || "普通熟悉"}
+              </div>
+              <div className="text-lg font-semibold text-yellow-700">
+                {displayTierCounts.medium}
+              </div>
+            </div>
+            <div className="rounded-lg bg-gray-100 px-3 py-2">
+              <div className="text-xs text-gray-500">
+                {t("wordFamiliarity.tierLow") || "不熟"}
+              </div>
+              <div className="text-lg font-semibold text-gray-700">
+                {displayTierCounts.low}
+              </div>
+            </div>
           </div>
 
           {isPracticeMode ? (
