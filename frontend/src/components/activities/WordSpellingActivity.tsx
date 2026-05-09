@@ -611,7 +611,7 @@ export default function WordSpellingActivity({
             </div>
             <div className="rounded bg-gray-100 px-1 py-1.5 text-center">
               <div className="text-[10px] font-medium text-gray-700">
-                {t("wordFamiliarity.tierVeryUnfamiliar") || "非常不熟"}
+                {t("wordFamiliarity.tierVeryUnfamiliar") || "很不熟"}
               </div>
               <div className="text-base font-semibold text-gray-700">
                 {displayTierCounts.very_unfamiliar}
