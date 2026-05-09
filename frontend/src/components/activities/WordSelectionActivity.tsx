@@ -814,8 +814,7 @@ export default function WordSelectionActivity({
   const currentWord = words[currentIndex];
 
   // Issue #437: 寬螢幕 + 有題目圖片 → 橫式排版（圖左、選項右）
-  const useHorizontal =
-    showImage && !!currentWord?.image_url && isWideViewport;
+  const useHorizontal = showImage && !!currentWord?.image_url && isWideViewport;
 
   // Issue #437: 選項有圖時，若容器寬度足夠就排成 4×1（節省垂直空間）；不夠則 2×2
   // 600px 約等於 4 × 140px + 3 × 16px gap
@@ -882,170 +881,167 @@ export default function WordSelectionActivity({
               alt={currentWord.text}
               className={cn(
                 "object-contain rounded-lg",
-                useHorizontal
-                  ? "absolute inset-0 w-full h-full"
-                  : "max-h-48",
+                useHorizontal ? "absolute inset-0 w-full h-full" : "max-h-48",
               )}
             />
           </div>
         )}
 
         {/* 右側欄（橫式時把文字/音檔/題目/Timer/選項都放這裡） */}
-        <div
-          className={cn(
-            "space-y-6",
-            useHorizontal && "flex-1 min-w-0",
-          )}
-        >
-        {/* Word Text - hide when in audio mode */}
-        {!playAudio && (
-          <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-800 select-none">
-              {currentWord.text}
-            </h2>
-          </div>
-        )}
-
-        {/* Audio Button - only show if playAudio setting is enabled */}
-        {playAudio && currentWord.audio_url && (
-          <div className="flex justify-center">
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={playWordAudio}
-              className="gap-2"
-            >
-              <Volume2 className="h-5 w-5" />
-              {t("wordSelection.playAudio") || "Play Audio"}
-            </Button>
-          </div>
-        )}
-
-        {/* Question */}
-        <div className="text-center text-gray-600">
-          {showWord
-            ? t("wordSelection.selectTranslation") ||
-              "Select the correct translation:"
-            : t("wordSelection.selectTranslationAudio") ||
-              "Listen and select the correct translation:"}
-        </div>
-
-        {/* Timer Display - stays visible when time is up to prevent visual jump */}
-        {timeLimit && timeRemaining !== null && (
-          <div className="flex justify-center">
-            <div
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium",
-                timeRemaining === 0
-                  ? "bg-red-100 text-red-700"
-                  : timeRemaining <= 5
-                    ? "bg-red-100 text-red-700"
-                    : timeRemaining <= 10
-                      ? "bg-yellow-100 text-yellow-700"
-                      : "bg-gray-100 text-gray-700",
-              )}
-            >
-              <Clock className="h-5 w-5" />
-              {timeRemaining === 0 ? (
-                <span>{t("wordSelection.timeUp") || "Time's up!"}</span>
-              ) : (
-                <>
-                  <span>{timeRemaining}</span>
-                  <span className="text-sm">
-                    {t("wordSelection.seconds") || "s"}
-                  </span>
-                </>
-              )}
+        <div className={cn("space-y-6", useHorizontal && "flex-1 min-w-0")}>
+          {/* Word Text - hide when in audio mode */}
+          {!playAudio && (
+            <div className="text-center">
+              <h2 className="text-3xl font-bold text-gray-800 select-none">
+                {currentWord.text}
+              </h2>
             </div>
-          </div>
-        )}
-
-        {/* Answer Options */}
-        <div
-          ref={setOptionsGridRef}
-          className={cn(
-            "grid gap-3 sm:gap-4",
-            useFourColOptions ? "grid-cols-4" : "grid-cols-2 grid-rows-2",
           )}
-          style={{ gridAutoRows: "1fr" }}
-        >
-          {currentWord.options.map((option, index) => {
-            const optionText = option.text;
-            const optionImage = option.image_url || null;
-            const isSelected = selectedAnswer === optionText;
-            const isCorrectAnswer = optionText === currentWord.translation;
-            // 答對時揭示；答錯時只有老師開啟 showAnswer 才揭示（Issue #538）
-            const showCorrect =
-              showResult && isCorrectAnswer && (isCorrect || showAnswer);
-            const showIncorrect = showResult && isSelected && !isCorrectAnswer;
-            // 答錯後才揭示的正解需要打勾動畫引導注意
-            const animateReveal = showCorrect && !isCorrect;
-            // Issue #631: 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字
-            const renderAsImage = showOptionImages && !!optionImage;
 
-            // 四個選項各用不同淺色
-            const optionColors = [
-              "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-400",
-              "bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-400",
-              "bg-amber-50 border-amber-200 hover:bg-amber-100 hover:border-amber-400",
-              "bg-teal-50 border-teal-200 hover:bg-teal-100 hover:border-teal-400",
-            ];
-
-            return (
-              <button
-                key={index}
-                className={cn(
-                  "h-full min-h-16 py-3 px-4 text-base sm:text-lg font-medium",
-                  "rounded-2xl border-2 shadow-md select-none relative",
-                  "transition-all duration-200",
-                  "whitespace-normal text-center break-words",
-                  !showResult &&
-                    "hover:shadow-lg hover:-translate-y-0.5 active:scale-95",
-                  !showResult && optionColors[index % 4],
-                  showCorrect &&
-                    "bg-green-100 border-green-500 text-green-800 shadow-green-200",
-                  showIncorrect &&
-                    "bg-red-100 border-red-500 text-red-800 shadow-red-200",
-                  isSelected &&
-                    !showResult &&
-                    "ring-2 ring-indigo-400 scale-95",
-                  showResult && !showCorrect && !showIncorrect && "opacity-50",
-                )}
-                onClick={() => handleSelectAnswer(optionText)}
-                disabled={showResult || submitting}
-                aria-label={optionText}
+          {/* Audio Button - only show if playAudio setting is enabled */}
+          {playAudio && currentWord.audio_url && (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={playWordAudio}
+                className="gap-2"
               >
-                {(showCorrect || showIncorrect) && (
-                  <span
-                    className={cn(
-                      "absolute top-2 left-2 z-10",
-                      animateReveal &&
-                        "animate-in zoom-in-50 fade-in duration-500",
-                    )}
-                  >
-                    {showCorrect ? (
-                      <CheckCircle className="h-5 w-5 text-green-600" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-red-600" />
-                    )}
-                  </span>
+                <Volume2 className="h-5 w-5" />
+                {t("wordSelection.playAudio") || "Play Audio"}
+              </Button>
+            </div>
+          )}
+
+          {/* Question */}
+          <div className="text-center text-gray-600">
+            {showWord
+              ? t("wordSelection.selectTranslation") ||
+                "Select the correct translation:"
+              : t("wordSelection.selectTranslationAudio") ||
+                "Listen and select the correct translation:"}
+          </div>
+
+          {/* Timer Display - stays visible when time is up to prevent visual jump */}
+          {timeLimit && timeRemaining !== null && (
+            <div className="flex justify-center">
+              <div
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium",
+                  timeRemaining === 0
+                    ? "bg-red-100 text-red-700"
+                    : timeRemaining <= 5
+                      ? "bg-red-100 text-red-700"
+                      : timeRemaining <= 10
+                        ? "bg-yellow-100 text-yellow-700"
+                        : "bg-gray-100 text-gray-700",
                 )}
-                {renderAsImage ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <img
-                      src={optionImage as string}
-                      alt={optionText}
-                      className="max-h-28 sm:max-h-36 w-full object-contain rounded-md"
-                    />
-                    <span>{optionText}</span>
-                  </div>
+              >
+                <Clock className="h-5 w-5" />
+                {timeRemaining === 0 ? (
+                  <span>{t("wordSelection.timeUp") || "Time's up!"}</span>
                 ) : (
-                  <span>{optionText}</span>
+                  <>
+                    <span>{timeRemaining}</span>
+                    <span className="text-sm">
+                      {t("wordSelection.seconds") || "s"}
+                    </span>
+                  </>
                 )}
-              </button>
-            );
-          })}
-        </div>
+              </div>
+            </div>
+          )}
+
+          {/* Answer Options */}
+          <div
+            ref={setOptionsGridRef}
+            className={cn(
+              "grid gap-3 sm:gap-4",
+              useFourColOptions ? "grid-cols-4" : "grid-cols-2 grid-rows-2",
+            )}
+            style={{ gridAutoRows: "1fr" }}
+          >
+            {currentWord.options.map((option, index) => {
+              const optionText = option.text;
+              const optionImage = option.image_url || null;
+              const isSelected = selectedAnswer === optionText;
+              const isCorrectAnswer = optionText === currentWord.translation;
+              // 答對時揭示；答錯時只有老師開啟 showAnswer 才揭示（Issue #538）
+              const showCorrect =
+                showResult && isCorrectAnswer && (isCorrect || showAnswer);
+              const showIncorrect =
+                showResult && isSelected && !isCorrectAnswer;
+              // 答錯後才揭示的正解需要打勾動畫引導注意
+              const animateReveal = showCorrect && !isCorrect;
+              // Issue #631: 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字
+              const renderAsImage = showOptionImages && !!optionImage;
+
+              // 四個選項各用不同淺色
+              const optionColors = [
+                "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-400",
+                "bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-400",
+                "bg-amber-50 border-amber-200 hover:bg-amber-100 hover:border-amber-400",
+                "bg-teal-50 border-teal-200 hover:bg-teal-100 hover:border-teal-400",
+              ];
+
+              return (
+                <button
+                  key={index}
+                  className={cn(
+                    "h-full min-h-16 py-3 px-4 text-base sm:text-lg font-medium",
+                    "rounded-2xl border-2 shadow-md select-none relative",
+                    "transition-all duration-200",
+                    "whitespace-normal text-center break-words",
+                    !showResult &&
+                      "hover:shadow-lg hover:-translate-y-0.5 active:scale-95",
+                    !showResult && optionColors[index % 4],
+                    showCorrect &&
+                      "bg-green-100 border-green-500 text-green-800 shadow-green-200",
+                    showIncorrect &&
+                      "bg-red-100 border-red-500 text-red-800 shadow-red-200",
+                    isSelected &&
+                      !showResult &&
+                      "ring-2 ring-indigo-400 scale-95",
+                    showResult &&
+                      !showCorrect &&
+                      !showIncorrect &&
+                      "opacity-50",
+                  )}
+                  onClick={() => handleSelectAnswer(optionText)}
+                  disabled={showResult || submitting}
+                  aria-label={optionText}
+                >
+                  {(showCorrect || showIncorrect) && (
+                    <span
+                      className={cn(
+                        "absolute top-2 left-2 z-10",
+                        animateReveal &&
+                          "animate-in zoom-in-50 fade-in duration-500",
+                      )}
+                    >
+                      {showCorrect ? (
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                      ) : (
+                        <XCircle className="h-5 w-5 text-red-600" />
+                      )}
+                    </span>
+                  )}
+                  {renderAsImage ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <img
+                        src={optionImage as string}
+                        alt={optionText}
+                        className="max-h-28 sm:max-h-36 w-full object-contain rounded-md"
+                      />
+                      <span>{optionText}</span>
+                    </div>
+                  ) : (
+                    <span>{optionText}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
