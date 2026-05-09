@@ -51,6 +51,31 @@ AUTO_GRADED_MODES = frozenset(
 router = APIRouter()
 
 
+_TIER_FIELDS = (
+    "words_master",
+    "words_familiar",
+    "words_medium",
+    "words_unfamiliar",
+    "words_very_unfamiliar",
+)
+
+
+def _tier_counts(mastery_result) -> Dict[str, int]:
+    """Extract 5-tier word counts from a calculate_assignment_mastery row.
+
+    Issue #711 (5-tier extension): the SQL function returns
+    words_master / words_familiar / words_medium / words_unfamiliar /
+    words_very_unfamiliar alongside the legacy ``words_mastered`` alias.
+    We use getattr with default 0 so older snapshots of the function
+    (during a rolling deploy) fall back gracefully.
+    """
+    if not mastery_result:
+        return {field: 0 for field in _TIER_FIELDS}
+    return {
+        field: int(getattr(mastery_result, field, 0) or 0) for field in _TIER_FIELDS
+    }
+
+
 @router.get("/assignments")
 async def get_student_assignments(
     sort_by: Literal[
@@ -1469,6 +1494,7 @@ async def start_word_selection_practice(
     )
     words_mastered = int(mastery_result.words_mastered) if mastery_result else 0
     achieved = bool(mastery_result.achieved) if mastery_result else False
+    tier_counts = _tier_counts(mastery_result)
 
     # Issue #460: Tell frontend if this is practice-only mode (already submitted)
     is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
@@ -1480,6 +1506,7 @@ async def start_word_selection_practice(
         "current_proficiency": current_proficiency,
         "target_proficiency": target_proficiency,
         "words_mastered": words_mastered,
+        **tier_counts,
         "achieved": achieved,
         "is_practice_mode": is_practice_mode,
         "show_word": assignment.show_word if assignment else True,
@@ -1740,6 +1767,11 @@ async def get_word_selection_proficiency(
             "target_mastery": target_proficiency,
             "achieved": False,
             "words_mastered": 0,
+            "words_master": 0,
+            "words_familiar": 0,
+            "words_medium": 0,
+            "words_unfamiliar": 0,
+            "words_very_unfamiliar": 0,
             "total_words": 0,
         }
 
@@ -1751,6 +1783,7 @@ async def get_word_selection_proficiency(
         "target_mastery": target_proficiency,
         "achieved": achieved,
         "words_mastered": result.words_mastered,
+        **_tier_counts(result),
         "total_words": result.total_words,
     }
 
@@ -2026,6 +2059,7 @@ async def start_word_spelling_practice(
     )
     words_mastered = int(mastery_result.words_mastered) if mastery_result else 0
     achieved = bool(mastery_result.achieved) if mastery_result else False
+    tier_counts = _tier_counts(mastery_result)
     is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
 
     return {
@@ -2035,6 +2069,7 @@ async def start_word_spelling_practice(
         "current_proficiency": current_proficiency,
         "target_proficiency": target_proficiency,
         "words_mastered": words_mastered,
+        **tier_counts,
         "achieved": achieved,
         "is_practice_mode": is_practice_mode,
         "show_translation": (assignment.show_translation if assignment else True),
@@ -2254,6 +2289,11 @@ async def get_word_spelling_proficiency(
             "target_mastery": target_proficiency,
             "achieved": False,
             "words_mastered": 0,
+            "words_master": 0,
+            "words_familiar": 0,
+            "words_medium": 0,
+            "words_unfamiliar": 0,
+            "words_very_unfamiliar": 0,
             "total_words": 0,
         }
     current_mastery = float(result.current_mastery) * 100
@@ -2262,6 +2302,7 @@ async def get_word_spelling_proficiency(
         "target_mastery": target_proficiency,
         "achieved": current_mastery >= target_proficiency,
         "words_mastered": result.words_mastered,
+        **_tier_counts(result),
         "total_words": result.total_words,
     }
 
@@ -2699,6 +2740,7 @@ async def start_word_cloze_practice(
     )
     words_mastered = int(mastery_result.words_mastered) if mastery_result else 0
     achieved = bool(mastery_result.achieved) if mastery_result else False
+    tier_counts = _tier_counts(mastery_result)
     is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
 
     return {
@@ -2708,6 +2750,7 @@ async def start_word_cloze_practice(
         "current_proficiency": current_proficiency,
         "target_proficiency": target_proficiency,
         "words_mastered": words_mastered,
+        **tier_counts,
         "achieved": achieved,
         "is_practice_mode": is_practice_mode,
         "show_translation": (assignment.show_translation if assignment else True),
@@ -2925,6 +2968,11 @@ async def get_word_cloze_proficiency(
             "target_mastery": target_proficiency,
             "achieved": False,
             "words_mastered": 0,
+            "words_master": 0,
+            "words_familiar": 0,
+            "words_medium": 0,
+            "words_unfamiliar": 0,
+            "words_very_unfamiliar": 0,
             "total_words": 0,
         }
     current_mastery = float(result.current_mastery) * 100
@@ -2933,6 +2981,7 @@ async def get_word_cloze_proficiency(
         "target_mastery": target_proficiency,
         "achieved": current_mastery >= target_proficiency,
         "words_mastered": result.words_mastered,
+        **_tier_counts(result),
         "total_words": result.total_words,
     }
 
