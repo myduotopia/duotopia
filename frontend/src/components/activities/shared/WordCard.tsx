@@ -118,7 +118,7 @@ export function WordCard({
         {showNext && <NavArrow direction="next" onClick={onNext!} />}
         <div
           className={cn(
-            "relative w-full grid min-h-[480px]",
+            "relative w-full grid",
             animateFlip && "transition-transform duration-[600ms] ease-in-out",
           )}
           style={{
