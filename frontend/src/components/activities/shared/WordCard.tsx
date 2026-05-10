@@ -118,7 +118,7 @@ export function WordCard({
         {showNext && <NavArrow direction="next" onClick={onNext!} />}
         <div
           className={cn(
-            "relative w-full grid",
+            "relative w-full grid min-h-[480px]",
             animateFlip && "transition-transform duration-[600ms] ease-in-out",
           )}
           style={{
@@ -142,8 +142,10 @@ export function WordCard({
           </CardFace>
 
           <CardFace rotated>
-            <Card className="overflow-hidden">
-              <CardContent className="p-6">{back}</CardContent>
+            <Card className="overflow-hidden h-full">
+              <CardContent className="p-6 h-full flex flex-col justify-center">
+                {back}
+              </CardContent>
             </Card>
           </CardFace>
         </div>
@@ -270,7 +272,7 @@ function WordCardFront({
   return (
     <Card
       className={cn(
-        "overflow-hidden",
+        "overflow-hidden h-full",
         viewMode === "desktop" && showImage && "flex flex-row",
       )}
     >
@@ -295,7 +297,7 @@ function WordCardFront({
 
       <CardContent
         className={cn(
-          "flex-1 p-6 select-none",
+          "flex-1 p-6 select-none flex flex-col justify-center",
           viewMode === "desktop" && showImage && "p-8",
         )}
       >
