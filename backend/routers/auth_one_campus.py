@@ -732,7 +732,7 @@ async def _handle_identity_code_flow(
         # Schedule a class roster sync for this school in the background so
         # login isn't blocked on it. Identity-code flow always carries exactly
         # one school_dsns (the school the user came from).
-        schedule_background_sync(school_dsns, teacher.id)
+        schedule_background_sync(school_dsns, teacher.id, teacher_acc=account)
 
         access_token = create_access_token(
             data={
@@ -1005,7 +1005,7 @@ async def _handle_oauth_flow(
         # Schedule class roster sync for every school where the user has a
         # teacherRole. Runs in the background so login isn't blocked.
         for dsns in teacher_school_dsns_list:
-            schedule_background_sync(dsns, user.id)
+            schedule_background_sync(dsns, user.id, teacher_acc=mail)
 
         return OneCampusCallbackResponse(
             access_token=access_token,

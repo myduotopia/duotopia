@@ -14,12 +14,15 @@ Behaviour rules (locked by the issue spec):
 - Failure-tolerant: API errors are collected into SyncResult.errors instead
   of raising, so a partial sync still commits useful work.
 
-Expected upstream JSON shape (mocked in tests; real shape may differ slightly
-and only this layer should need touching when the real API is wired up):
+Expected upstream JSON shape (verified against the real jasmine API; see
+docs/integrations/1campus-jasmine-api.md):
 
-    get_class:           {"class": [{"classID": "...", "className": "..."}]}
-    get_class_student:   {"student": [{"studentID": "...", "studentName": "...",
-                                       "studentNumber": "..."}]}
+    get_class:           {"class": [{"classID": 0, "className": "..."}, ...]}
+    get_class_student:   {"class": [{"student": [{"studentID": 0,
+                                                  "studentName": "...",
+                                                  "studentNumber": "..."},
+                                                 ...]},
+                                    ...]}
 """
 
 from __future__ import annotations
@@ -63,7 +66,9 @@ class SyncResult:
 _live_background_tasks: "set[asyncio.Task]" = set()
 
 
-def schedule_background_sync(school_dsns: str, teacher_id: int) -> None:
+def schedule_background_sync(
+    school_dsns: str, teacher_id: int, teacher_acc: Optional[str] = None
+) -> None:
     """Fire-and-forget background sync for a single school.
 
     Used by the OAuth login paths so that returning the access token isn't
@@ -72,7 +77,9 @@ def schedule_background_sync(school_dsns: str, teacher_id: int) -> None:
     swallows all exceptions — login must not break when 1Campus is misbehaving.
     """
     try:
-        task = asyncio.create_task(_run_sync_in_background(school_dsns, teacher_id))
+        task = asyncio.create_task(
+            _run_sync_in_background(school_dsns, teacher_id, teacher_acc)
+        )
     except RuntimeError:
         # No running event loop (rare — e.g. when called from sync code).
         # Skip rather than crash: the manual sync button is the recovery path.
@@ -88,7 +95,9 @@ def schedule_background_sync(school_dsns: str, teacher_id: int) -> None:
     task.add_done_callback(_live_background_tasks.discard)
 
 
-async def _run_sync_in_background(school_dsns: str, teacher_id: int) -> None:
+async def _run_sync_in_background(
+    school_dsns: str, teacher_id: int, teacher_acc: Optional[str]
+) -> None:
     """Run the sync with a fresh DB session, logging exceptions."""
     # Late import to avoid a circular-import chain at module-load time.
     from database import SessionLocal
@@ -96,7 +105,7 @@ async def _run_sync_in_background(school_dsns: str, teacher_id: int) -> None:
     db = SessionLocal()
     try:
         result = await OneCampusClassSyncService.sync_school(
-            db, school_dsns, teacher_id
+            db, school_dsns, teacher_id, teacher_acc=teacher_acc
         )
         logger.info(
             "Background 1Campus sync done (school=%s, teacher=%s): %s",
@@ -141,12 +150,23 @@ class OneCampusClassSyncService:
         db: Session,
         school_dsns: str,
         teacher_id: int,
+        teacher_acc: Optional[str] = None,
     ) -> SyncResult:
+        """Sync the classes + students this teacher is responsible for in one school.
+
+        teacher_acc is the teacher's 1Campus account email. When provided, the
+        upstream `getClass` call filters to only the classes where the teacher
+        is homeroom (班導) or co-homeroom (副班導). Without it the API would
+        return *every* class in the school and we'd mis-assign other teachers'
+        classes to this user — so callers should always supply it.
+        """
         result = SyncResult()
         now = datetime.now(timezone.utc)
 
         try:
-            classes_data = await OneCampusService.get_class(school_dsns)
+            classes_data = await OneCampusService.get_class(
+                school_dsns, teacher_acc=teacher_acc
+            )
         except Exception as e:
             msg = f"getClass failed for {school_dsns}: {e}"
             logger.warning(msg)
@@ -185,7 +205,15 @@ class OneCampusClassSyncService:
                 result.errors.append(msg)
                 continue
 
-            for stu in students_data.get("student") or []:
+            # getClassStudent returns {"class": [{"student": [...]}]} — the
+            # student list is nested one level inside a `class` array. With a
+            # specific classID we expect exactly one class object, but iterate
+            # defensively in case the API returns more.
+            students = []
+            for cls_in_resp in students_data.get("class") or []:
+                students.extend(cls_in_resp.get("student") or [])
+
+            for stu in students:
                 try:
                     student, student_created, student_renamed = _upsert_student(db, stu)
                     if student_created:

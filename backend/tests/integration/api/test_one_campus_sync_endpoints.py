@@ -95,7 +95,7 @@ class TestManualSyncEndpoint:
             ]
         }
 
-        async def _fake_sync(db, school_dsns, teacher_id):
+        async def _fake_sync(db, school_dsns, teacher_id, teacher_acc=None):
             # Each per-school result contributes; the endpoint sums them.
             return SyncResult(classrooms_added=1, students_added=3)
 
@@ -157,7 +157,7 @@ class TestManualSyncEndpoint:
             ]
         }
 
-        async def _fake_sync(db, school_dsns, teacher_id):
+        async def _fake_sync(db, school_dsns, teacher_id, teacher_acc=None):
             if school_dsns == "school.b":
                 return SyncResult(errors=["upstream timeout"])
             return SyncResult(classrooms_added=1)

@@ -110,7 +110,10 @@ async def sync_one_campus_classes(
     for dsns in teacher_school_dsns:
         try:
             result = await OneCampusClassSyncService.sync_school(
-                db, school_dsns=dsns, teacher_id=current_teacher.id
+                db,
+                school_dsns=dsns,
+                teacher_id=current_teacher.id,
+                teacher_acc=identity.one_campus_account,
             )
         except Exception as e:
             # sync_school is designed to swallow upstream errors into

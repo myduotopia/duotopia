@@ -193,25 +193,33 @@ class OneCampusService:
         return resp.json()
 
     @staticmethod
-    async def get_class(school_dsns: str) -> dict:
-        """List all classes in a school via the jasmine API.
+    async def get_class(school_dsns: str, teacher_acc: Optional[str] = None) -> dict:
+        """List classes in a school via the jasmine API.
 
-        GET /api/jasmine/getClass?schoolDsns=xxx
+        GET /api/jasmine/{schoolDsns}/getClass[?teacherAcc=...]
 
-        Returns the raw JSON response. The exact shape is documented by
-        1Campus, but is expected to contain a list of classes with at least
-        an identifier and a display name. The sync service is responsible
-        for parsing the response shape — keep this method dumb on purpose so
-        that an upstream schema change only requires touching the sync layer.
+        - schoolDsns goes in the URL path (NOT a query param — earlier
+          versions of this code had it wrong and got 401).
+        - teacher_acc, if provided, filters to classes where the teacher is
+          homeroom (班導) or co-homeroom (副班導). Without it, the API
+          returns *every* class in the school — which would let a sync mis-
+          assign other teachers' classes to the calling user.
+
+        Returns the raw JSON response. The exact shape is documented in
+        docs/integrations/1campus-jasmine-api.md.
         """
         if not _DSNS_RE.match(school_dsns):
             raise ValueError(f"Invalid schoolDsns format: {school_dsns!r}")
 
+        params: dict = {}
+        if teacher_acc:
+            params["teacherAcc"] = teacher_acc
+
         token = await _get_access_token()
         client = get_http_client()
         resp = await client.get(
-            f"{ONE_CAMPUS_API_BASE}/api/jasmine/getClass",
-            params={"schoolDsns": school_dsns},
+            f"{ONE_CAMPUS_API_BASE}/api/jasmine/{school_dsns}/getClass",
+            params=params,
             headers={"Authorization": f"Bearer {token}"},
         )
         resp.raise_for_status()
@@ -221,7 +229,7 @@ class OneCampusService:
     async def get_class_student(school_dsns: str, class_id: str) -> dict:
         """List students in a 1Campus class via the jasmine API.
 
-        GET /api/jasmine/getClassStudent?schoolDsns=xxx&classID=yyy
+        GET /api/jasmine/{schoolDsns}/getClassStudent?classID=yyy
 
         See `get_class` for the rationale behind keeping the response opaque.
         """
@@ -233,8 +241,8 @@ class OneCampusService:
         token = await _get_access_token()
         client = get_http_client()
         resp = await client.get(
-            f"{ONE_CAMPUS_API_BASE}/api/jasmine/getClassStudent",
-            params={"schoolDsns": school_dsns, "classID": class_id},
+            f"{ONE_CAMPUS_API_BASE}/api/jasmine/{school_dsns}/getClassStudent",
+            params={"classID": class_id},
             headers={"Authorization": f"Bearer {token}"},
         )
         resp.raise_for_status()
