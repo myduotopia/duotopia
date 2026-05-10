@@ -1979,9 +1979,16 @@ async def start_word_spelling_practice(
         )
         .all()
     )
-    from services.preview_service import ensure_word_audio
+    from services.preview_service import (
+        ensure_word_audio,
+        ensure_example_sentence_audio,
+    )
 
     item_audio_by_id = await ensure_word_audio(list(all_content_items), db)
+    sentence_audio_by_id = await ensure_example_sentence_audio(
+        list(all_content_items), db
+    )
+    item_by_id = {ci.id: ci for ci in all_content_items}
 
     # Ebbinghaus: pick 10 words student is least familiar with
     words_result = db.execute(
@@ -2014,13 +2021,21 @@ async def start_word_spelling_practice(
                 "audio_url": item_audio_by_id.get(ci.id) or ci.audio_url,
                 "image_url": ci.image_url,
                 "memory_strength": 0,
+                # Issue #715: 答對後翻面顯示完整單字卡所需欄位
+                "part_of_speech": ci.part_of_speech,
+                "example_sentence": ci.example_sentence,
+                "example_sentence_translation": ci.example_sentence_translation,
+                "example_sentence_audio_url": (
+                    sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
+                ),
             }
             for ci in content_items
         ]
     else:
         # Prefer freshly-backfilled audio over the function's cached value
-        words_data = [
-            {
+        def _build_spelling_word(row):
+            ci = item_by_id.get(row.content_item_id)
+            return {
                 "content_item_id": row.content_item_id,
                 "text": row.text,
                 "translation": row.translation or "",
@@ -2029,9 +2044,19 @@ async def start_word_spelling_practice(
                 "memory_strength": (
                     float(row.memory_strength) if row.memory_strength else 0
                 ),
+                # Issue #715: 答對後翻面顯示完整單字卡所需欄位
+                "part_of_speech": ci.part_of_speech if ci else None,
+                "example_sentence": ci.example_sentence if ci else None,
+                "example_sentence_translation": (
+                    ci.example_sentence_translation if ci else None
+                ),
+                "example_sentence_audio_url": sentence_audio_by_id.get(
+                    row.content_item_id,
+                    ci.example_sentence_audio_url if ci else None,
+                ),
             }
-            for row in words_result
-        ]
+
+        words_data = [_build_spelling_word(row) for row in words_result]
 
     if assignment and assignment.shuffle_questions:
         random.shuffle(words_data)
@@ -2687,6 +2712,11 @@ async def start_word_cloze_practice(
             continue
         blanked_sentence, correct_answer = cloze
         is_vocab_item = bool(ci.example_sentence)
+        sentence_audio_for_item = (
+            sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
+            if is_vocab_item
+            else ci.audio_url
+        )
         questions.append(
             {
                 "content_item_id": ci.id,
@@ -2699,13 +2729,19 @@ async def start_word_cloze_practice(
                     else (ci.translation or "")
                 )
                 or "",
-                "audio_url": (
-                    sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
-                    if is_vocab_item
-                    else ci.audio_url
-                ),
+                "audio_url": sentence_audio_for_item,
                 "correct_answer": correct_answer,
                 "correct_answer_length": len(correct_answer),
+                # Issue #715: 答對後翻面顯示完整單字卡所需欄位
+                "part_of_speech": ci.part_of_speech if is_vocab_item else None,
+                "example_sentence": ci.example_sentence if is_vocab_item else None,
+                "example_sentence_translation": (
+                    ci.example_sentence_translation if is_vocab_item else None
+                ),
+                "example_sentence_audio_url": (
+                    sentence_audio_for_item if is_vocab_item else None
+                ),
+                "word_audio_url": ci.audio_url if is_vocab_item else None,
             }
         )
 
