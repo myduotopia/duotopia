@@ -99,6 +99,7 @@ export function WordCard({
   // front → back（切換到下一題）瞬間 snap，避免閃現正面。
   const lastFaceRef = useRef(face);
   const [animateFlip, setAnimateFlip] = useState(false);
+  const flipPlaybackRef = useRef<HTMLAudioElement | null>(null);
   useEffect(() => {
     if (lastFaceRef.current === face) return;
     const goingToFront = face === "front";
@@ -107,9 +108,18 @@ export function WordCard({
     if (!goingToFront) return;
     const timer = window.setTimeout(() => {
       onFlipped?.();
+      // Issue #715: 翻到正面後自動播放一次單字音檔（不播例句）
+      if (audioUrl) {
+        try {
+          flipPlaybackRef.current = new Audio(audioUrl);
+          void flipPlaybackRef.current.play();
+        } catch {
+          /* ignore play errors (e.g. autoplay blocked) */
+        }
+      }
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [face, onFlipped]);
+  }, [face, onFlipped, audioUrl]);
 
   return (
     <div className="w-full">
@@ -233,11 +243,11 @@ function PlayAudioButton({
       disabled={!audioUrl}
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex items-center justify-center rounded-full transition-colors shrink-0",
+        "inline-flex items-center justify-center transition-colors shrink-0 bg-transparent",
         dim,
         audioUrl
-          ? "bg-blue-500 text-white hover:bg-blue-600"
-          : "bg-gray-200 text-gray-400 cursor-not-allowed",
+          ? "text-blue-500 hover:text-blue-600"
+          : "text-gray-300 cursor-not-allowed",
       )}
     >
       <Volume2 className={icon} />
