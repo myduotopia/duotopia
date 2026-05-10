@@ -108,9 +108,8 @@ export default function WordClozeActivity({
   const [completing, setCompleting] = useState(false);
   const [scoreOverlayOpen, setScoreOverlayOpen] = useState(false);
   const nextQuestionCalledRef = useRef(false);
-  // Issue #715: 答對後翻面顯示完整單字卡，5 秒後自動切下一題（或手動點右箭頭）
+  // Issue #715: 答對後翻面顯示完整單字卡；學生用左右箭頭手動翻頁
   const [cardFace, setCardFace] = useState<"front" | "back">("back");
-  const autoAdvanceTimerRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [showTranslation, setShowTranslation] = useState(true);
@@ -453,11 +452,6 @@ export default function WordClozeActivity({
       nextQuestionCalledRef.current = false;
     }, 300);
 
-    if (autoAdvanceTimerRef.current !== null) {
-      window.clearTimeout(autoAdvanceTimerRef.current);
-      autoAdvanceTimerRef.current = null;
-    }
-
     setScoreOverlayOpen(false);
     setCardFace("back");
     setShowResult(false);
@@ -475,10 +469,6 @@ export default function WordClozeActivity({
   // Issue #715: 上一題（只在正面顯示時可用）
   const goToPrev = useCallback(() => {
     if (currentIndex === 0) return;
-    if (autoAdvanceTimerRef.current !== null) {
-      window.clearTimeout(autoAdvanceTimerRef.current);
-      autoAdvanceTimerRef.current = null;
-    }
     setScoreOverlayOpen(false);
     setCardFace("back");
     setShowResult(false);
@@ -488,26 +478,10 @@ export default function WordClozeActivity({
     setCurrentIndex(currentIndex - 1);
   }, [currentIndex, timeLimit]);
 
-  // ScoreOverlay 結束 → 啟動 5 秒倒數，5 秒後自動切下一題
+  // ScoreOverlay 結束 → 關閉動畫，等學生用左右箭頭手動翻頁
   const handleOverlayComplete = () => {
     setScoreOverlayOpen(false);
-    if (autoAdvanceTimerRef.current !== null) {
-      window.clearTimeout(autoAdvanceTimerRef.current);
-    }
-    autoAdvanceTimerRef.current = window.setTimeout(() => {
-      autoAdvanceTimerRef.current = null;
-      advanceToNext();
-    }, 5000);
   };
-
-  // 卸載時清掉 timer
-  useEffect(() => {
-    return () => {
-      if (autoAdvanceTimerRef.current !== null) {
-        window.clearTimeout(autoAdvanceTimerRef.current);
-      }
-    };
-  }, []);
 
   const handleRetry = () => {
     setShowResult(false);

@@ -332,11 +332,11 @@ function WordCardFront({
         {/* 分隔線 */}
         {hasExample && <div className="my-5 border-t border-gray-200" />}
 
-        {/* 例句區 */}
+        {/* 例句區（區塊置中、文字左對齊以利閱讀） */}
         {hasExample && (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 max-w-md w-full mx-auto">
             <div className="flex items-start gap-3">
-              <p className="flex-1 text-base md:text-lg leading-relaxed text-gray-900">
+              <p className="flex-1 text-base md:text-lg leading-relaxed text-gray-900 text-left">
                 <HighlightedSentence
                   sentence={exampleSentence!}
                   target={word}
@@ -349,7 +349,7 @@ function WordCardFront({
               />
             </div>
             {exampleSentenceTranslation && (
-              <p className="text-sm md:text-base text-gray-600 leading-relaxed">
+              <p className="text-sm md:text-base text-gray-600 leading-relaxed text-left">
                 {exampleSentenceTranslation}
               </p>
             )}
