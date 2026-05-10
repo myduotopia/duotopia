@@ -118,12 +118,13 @@ export function WordCard({
         {showNext && <NavArrow direction="next" onClick={onNext!} />}
         <div
           className={cn(
-            "relative w-full",
+            "relative w-full grid",
             animateFlip && "transition-transform duration-[600ms] ease-in-out",
           )}
           style={{
             transformStyle: "preserve-3d",
             transform: isBack ? "rotateY(180deg)" : "rotateY(0deg)",
+            gridTemplateAreas: '"stack"',
           }}
         >
           <CardFace>
@@ -140,7 +141,11 @@ export function WordCard({
             />
           </CardFace>
 
-          <CardFace rotated>{back}</CardFace>
+          <CardFace rotated>
+            <Card className="overflow-hidden">
+              <CardContent className="p-6">{back}</CardContent>
+            </Card>
+          </CardFace>
         </div>
       </div>
 
@@ -189,8 +194,8 @@ function CardFace({
 }) {
   return (
     <div
-      className={cn(rotated && "absolute inset-0")}
       style={{
+        gridArea: "stack",
         backfaceVisibility: "hidden",
         WebkitBackfaceVisibility: "hidden",
         transform: rotated ? "rotateY(180deg)" : undefined,
