@@ -379,7 +379,10 @@ class ApiClient {
       students_added: number;
       students_updated: number;
       errors: string[];
-      message: string;
+      // The backend always returns `message`, but the UI builds its own
+      // summary string from the counts; mark optional to signal that
+      // callers should not rely on `message` as the primary copy.
+      message?: string;
     }>("/api/teachers/me/sync-1campus-classes", {
       method: "POST",
     });

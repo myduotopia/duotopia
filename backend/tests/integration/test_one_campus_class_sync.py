@@ -52,7 +52,7 @@ def _patch_one_campus_apis(get_class_payload, get_class_student_map):
         val = get_class_student_map.get(class_id)
         if isinstance(val, Exception):
             raise val
-        return val if val is not None else {"student": []}
+        return val if val is not None else {"class": [{"student": []}]}
 
     return (
         patch(
@@ -86,28 +86,38 @@ class TestOneCampusClassSyncService:
                 {"classID": "C002", "className": "Class 1B"},
             ]
         }
+        # Real getClassStudent response wraps `student` inside `class[]` —
+        # see docs/integrations/1campus-jasmine-api.md.
         get_class_student_map = {
             "C001": {
-                "student": [
+                "class": [
                     {
-                        "studentID": "S001",
-                        "studentName": "Alice",
-                        "studentNumber": "001",
-                    },
-                    {
-                        "studentID": "S002",
-                        "studentName": "Bob",
-                        "studentNumber": "002",
-                    },
+                        "student": [
+                            {
+                                "studentID": "S001",
+                                "studentName": "Alice",
+                                "studentNumber": "001",
+                            },
+                            {
+                                "studentID": "S002",
+                                "studentName": "Bob",
+                                "studentNumber": "002",
+                            },
+                        ]
+                    }
                 ]
             },
             "C002": {
-                "student": [
+                "class": [
                     {
-                        "studentID": "S003",
-                        "studentName": "Charlie",
-                        "studentNumber": "003",
-                    },
+                        "student": [
+                            {
+                                "studentID": "S003",
+                                "studentName": "Charlie",
+                                "studentNumber": "003",
+                            },
+                        ]
+                    }
                 ]
             },
         }
@@ -211,7 +221,11 @@ class TestOneCampusClassSyncService:
 
         get_class_payload = {"class": [{"classID": "C001", "className": "X"}]}
         get_class_student_map = {
-            "C001": {"student": [{"studentID": "S500", "studentName": "New Name"}]}
+            "C001": {
+                "class": [
+                    {"student": [{"studentID": "S500", "studentName": "New Name"}]}
+                ]
+            }
         }
         p_class, p_student = _patch_one_campus_apis(
             get_class_payload, get_class_student_map
@@ -245,7 +259,7 @@ class TestOneCampusClassSyncService:
 
         get_class_payload = {"class": [{"classID": "C001", "className": "Live class"}]}
         p_class, p_student = _patch_one_campus_apis(
-            get_class_payload, {"C001": {"student": []}}
+            get_class_payload, {"C001": {"class": [{"student": []}]}}
         )
         with p_class, p_student:
             await OneCampusClassSyncService.sync_school(
@@ -278,7 +292,7 @@ class TestOneCampusClassSyncService:
             "class": [{"classID": "C001", "className": "1Campus class"}]
         }
         p_class, p_student = _patch_one_campus_apis(
-            get_class_payload, {"C001": {"student": []}}
+            get_class_payload, {"C001": {"class": [{"student": []}]}}
         )
         with p_class, p_student:
             await OneCampusClassSyncService.sync_school(
@@ -323,7 +337,11 @@ class TestOneCampusClassSyncService:
         }
         get_class_student_map = {
             "C001": RuntimeError("class 001 timeout"),
-            "C002": {"student": [{"studentID": "S010", "studentName": "Zoe"}]},
+            "C002": {
+                "class": [
+                    {"student": [{"studentID": "S010", "studentName": "Zoe"}]}
+                ]
+            },
         }
         p_class, p_student = _patch_one_campus_apis(
             get_class_payload, get_class_student_map

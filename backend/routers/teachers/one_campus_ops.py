@@ -9,11 +9,13 @@ rosters are small enough that running this inside the request finishes well
 within Cloud Run's request timeout.
 """
 
+import hashlib
 import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 import httpx
@@ -35,6 +37,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _sync_rate_limit_key(request: Request) -> str:
+    """Per-teacher rate-limit key derived from the JWT in the Authorization
+    header.
+
+    The default `core.limiter.get_user_identifier` reads `email`/`id` from
+    the request body, but the sync endpoint has no body, so it falls back to
+    the remote IP. In Cloud Run that IP is the load balancer's, so every
+    teacher in a school (sharing one egress IP) ends up in the same bucket
+    and can DoS each other on the `1/minute` limit.
+
+    We hash the raw token to avoid storing it in slowapi's internal state in
+    plaintext. Each fresh login yields a new bucket (new JWT → new hash),
+    which is acceptable — the goal is preventing one teacher from spamming
+    the upstream 1Campus API, not enforcing a permanent per-account quota.
+    """
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        digest = hashlib.sha256(auth.encode()).hexdigest()[:16]
+        return f"sync-1campus:token:{digest}"
+    return f"sync-1campus:ip:{get_remote_address(request)}"
+
+
 class OneCampusSyncResponse(BaseModel):
     synced: bool
     schools: List[str]
@@ -47,7 +71,7 @@ class OneCampusSyncResponse(BaseModel):
 
 
 @router.post("/me/sync-1campus-classes", response_model=OneCampusSyncResponse)
-@limiter.limit("1/minute")
+@limiter.limit("5/minute", key_func=_sync_rate_limit_key)
 async def sync_one_campus_classes(
     request: Request,
     current_teacher: Teacher = Depends(get_current_teacher),
