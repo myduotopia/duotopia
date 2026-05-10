@@ -784,7 +784,7 @@ export default function WordSpellingActivity({
           currentWord.example_sentence_audio_url ?? undefined
         }
         hasPrev={cardFace === "front" && currentIndex > 0}
-        hasNext={cardFace === "front" && currentIndex < words.length - 1}
+        hasNext={cardFace === "front"}
         onPrev={goToPrev}
         onNext={advanceToNext}
         back={

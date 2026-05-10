@@ -142,8 +142,8 @@ export function WordCard({
           </CardFace>
 
           <CardFace rotated>
-            <Card className="overflow-hidden h-full">
-              <CardContent className="p-6 h-full flex flex-col justify-center">
+            <Card className="overflow-hidden h-full flex flex-col">
+              <CardContent className="flex-1 p-6 flex flex-col justify-center">
                 {back}
               </CardContent>
             </Card>
@@ -272,8 +272,8 @@ function WordCardFront({
   return (
     <Card
       className={cn(
-        "overflow-hidden h-full",
-        viewMode === "desktop" && showImage && "flex flex-row",
+        "overflow-hidden h-full flex",
+        viewMode === "desktop" && showImage ? "flex-row" : "flex-col",
       )}
     >
       {showImage && (
