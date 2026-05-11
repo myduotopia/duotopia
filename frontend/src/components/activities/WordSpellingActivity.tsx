@@ -31,7 +31,6 @@ import {
   XCircle,
   Clock,
   Send,
-  RotateCcw,
   Keyboard,
   Trophy,
   RefreshCw,
@@ -492,14 +491,6 @@ export default function WordSpellingActivity({
     setScoreOverlayOpen(false);
   };
 
-  const handleRetry = () => {
-    setShowResult(false);
-    setTypedAnswer("");
-    setIncorrectAnswer(null);
-    if (timeLimit) setTimeRemaining(timeLimit);
-    inputRef.current?.focus();
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !showResult && !submitting && typedAnswer.trim()) {
       handleSubmitAnswer();
@@ -836,7 +827,11 @@ export default function WordSpellingActivity({
                 ref={inputRef}
                 type="text"
                 value={typedAnswer}
-                onChange={(e) => setTypedAnswer(e.target.value)}
+                onChange={(e) => {
+                  setTypedAnswer(e.target.value);
+                  // Issue #716: 一打字立刻清除錯誤提示，不必按 Retry
+                  if (showResult && !isCorrect) setShowResult(false);
+                }}
                 onKeyDown={handleKeyDown}
                 onPaste={(e) => e.preventDefault()}
                 onDrop={(e) => e.preventDefault()}
@@ -846,7 +841,7 @@ export default function WordSpellingActivity({
                     : t("wordSpelling.inputPlaceholder") ||
                       "Type the word here..."
                 }
-                disabled={showResult || submitting}
+                disabled={(showResult && isCorrect) || submitting}
                 className={cn(
                   "text-center text-xl h-14 rounded-xl border-2",
                   showResult && isCorrect && "border-green-500 bg-green-50",
@@ -860,29 +855,19 @@ export default function WordSpellingActivity({
               />
 
               {showResult && !isCorrect && (
-                <div className="text-center space-y-2">
-                  <div className="flex items-center justify-center gap-2 text-red-600">
-                    <XCircle className="h-5 w-5" />
-                    <span className="font-medium">
-                      {incorrectAnswer
-                        ? t("wordSpelling.incorrectTryAgain") ||
-                          "Incorrect, try again!"
-                        : t("wordSpelling.timeUpTryAgain") ||
-                          "Time's up! Try again."}
-                    </span>
-                  </div>
-                  <Button
-                    onClick={handleRetry}
-                    variant="outline"
-                    className="gap-2"
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    {t("wordSpelling.retry") || "Retry"}
-                  </Button>
+                <div className="flex items-center justify-center gap-2 text-red-600">
+                  <XCircle className="h-5 w-5" />
+                  <span className="font-medium">
+                    {incorrectAnswer
+                      ? t("wordSpelling.incorrectTryAgain") ||
+                        "Incorrect, try again!"
+                      : t("wordSpelling.timeUpTryAgain") ||
+                        "Time's up! Try again."}
+                  </span>
                 </div>
               )}
 
-              {!showResult && (
+              {!(showResult && isCorrect) && (
                 <Button
                   onClick={() => handleSubmitAnswer()}
                   disabled={!typedAnswer.trim() || submitting}
