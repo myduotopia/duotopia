@@ -730,7 +730,7 @@ export default function WordSpellingActivity({
   const currentWord = words[currentIndex];
 
   return (
-    <div className={cn("space-y-6", deviceMode === "mobile" && "pb-72")}>
+    <div className="space-y-6">
       {isPracticeMode && (
         <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
           <BookOpen className="h-4 w-4" />
@@ -905,8 +905,12 @@ export default function WordSpellingActivity({
         }
       />
         </div>
-        {deviceMode === "tablet" && (
-          <div className="flex-[4] min-w-0">
+        {useVirtualKeyboard && (
+          <div
+            className={cn(
+              deviceMode === "tablet" ? "flex-[4] min-w-0" : "mt-3",
+            )}
+          >
             <VirtualKeyboard
               onKey={vkAppend}
               onBackspace={vkBackspace}
@@ -915,15 +919,6 @@ export default function WordSpellingActivity({
           </div>
         )}
       </div>
-
-      {deviceMode === "mobile" && (
-        <VirtualKeyboard
-          onKey={vkAppend}
-          onBackspace={vkBackspace}
-          onEnter={vkEnter}
-          className="fixed bottom-0 left-0 right-0 z-50 border-t shadow-2xl"
-        />
-      )}
 
       <ScoreOverlay
         open={scoreOverlayOpen}
