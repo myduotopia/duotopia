@@ -758,7 +758,15 @@ export default function WordSpellingActivity({
         onPrev={goToPrev}
         onNext={advanceToNext}
         back={
-          <div className="space-y-6">
+          <div className="relative space-y-6">
+            {timeLimit && timeRemaining !== null && (
+              <CountdownRing
+                key={currentIndex}
+                seconds={timeRemaining}
+                total={timeLimit}
+                className="absolute top-0 right-0 z-10"
+              />
+            )}
             {showTranslation && currentWord.translation && (
               <div className="text-center py-3 space-y-1">
                 <h2 className="text-3xl md:text-4xl font-bold text-gray-800 tracking-wide">
@@ -795,13 +803,8 @@ export default function WordSpellingActivity({
               </div>
             )}
 
-            {timeLimit && timeRemaining !== null && (
-              <div className="flex justify-center">
-                <CountdownRing seconds={timeRemaining} total={timeLimit} />
-              </div>
-            )}
 
-            <div className="max-w-md mx-auto space-y-3">
+            <div className="max-w-md mx-auto relative">
               <Input
                 ref={inputRef}
                 type="text"
@@ -822,7 +825,7 @@ export default function WordSpellingActivity({
                 }
                 disabled={(showResult && isCorrect) || submitting}
                 className={cn(
-                  "text-center text-2xl h-14 px-0 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
+                  "text-center text-2xl h-14 pl-10 pr-10 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
                   "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
                   showResult && isCorrect && "border-green-500 text-green-700",
                   showResult &&
@@ -837,22 +840,24 @@ export default function WordSpellingActivity({
                 autoCorrect="off"
                 spellCheck={false}
               />
-
               {!(showResult && isCorrect) && (
-                <Button
+                <button
+                  type="button"
                   onClick={() => handleSubmitAnswer()}
                   disabled={!typedAnswer.trim() || submitting}
-                  className="w-full h-12 text-lg"
+                  aria-label={t("wordSpelling.checkAnswer") || "Check"}
+                  className={cn(
+                    "absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors",
+                    "text-indigo-600 hover:bg-indigo-50",
+                    "disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed",
+                  )}
                 >
                   {submitting ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
                   ) : (
-                    <>
-                      <CheckCircle className="h-5 w-5 mr-2" />
-                      {t("wordSpelling.checkAnswer") || "Check"}
-                    </>
+                    <Send className="h-5 w-5" />
                   )}
-                </Button>
+                </button>
               )}
             </div>
           </div>

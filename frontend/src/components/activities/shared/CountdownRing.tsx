@@ -1,22 +1,26 @@
 /**
- * CountdownRing - circular countdown indicator for timed activities.
+ * CountdownRing - compact circular countdown for timed activities.
  *
- * Compact 48px ring: SVG stroke shrinks as time elapses, colour shifts
- * gray → yellow (≤10s) → red (≤5s), and the ring pulses in the red zone.
+ * The SVG stroke is drained via a CSS keyframe that runs for the full
+ * `total` duration (smooth linear motion, independent of React's 1Hz
+ * timer ticks). Colour shifts gray → yellow (≤10s) → red+pulse (≤5s).
+ *
+ * Caller is responsible for remounting (e.g. `key={questionIndex}`) so the
+ * keyframe restarts on a new question.
  */
 
 import { cn } from "@/lib/utils";
 
 interface CountdownRingProps {
-  /** Current seconds remaining. 0 displays "0". */
+  /** Current seconds remaining (drives the centre label + colour). */
   seconds: number;
-  /** Original time budget for this question (controls progress). */
+  /** Original time budget for this question (drives animation length). */
   total: number;
   className?: string;
 }
 
-const SIZE = 48;
-const STROKE = 4;
+const SIZE = 36;
+const STROKE = 3;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
@@ -25,9 +29,6 @@ export default function CountdownRing({
   total,
   className,
 }: CountdownRingProps) {
-  const ratio = total > 0 ? Math.max(0, Math.min(1, seconds / total)) : 0;
-  const dashOffset = CIRCUMFERENCE * (1 - ratio);
-
   const danger = seconds <= 5;
   const warn = !danger && seconds <= 10;
 
@@ -72,14 +73,19 @@ export default function CountdownRing({
           r={RADIUS}
           strokeWidth={STROKE}
           strokeLinecap="round"
-          className={cn("fill-none transition-all duration-500", stroke)}
           strokeDasharray={CIRCUMFERENCE}
-          strokeDashoffset={dashOffset}
+          className={cn("fill-none countdown-drain", stroke)}
+          style={
+            {
+              "--countdown-circ": `${CIRCUMFERENCE}px`,
+              animationDuration: `${total}s`,
+            } as React.CSSProperties
+          }
         />
       </svg>
       <span
         className={cn(
-          "absolute text-sm font-semibold tabular-nums",
+          "absolute text-xs font-semibold tabular-nums",
           text,
         )}
       >
