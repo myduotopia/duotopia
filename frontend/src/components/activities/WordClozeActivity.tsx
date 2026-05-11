@@ -28,8 +28,6 @@ import {
   Loader2,
   Volume2,
   CheckCircle,
-  XCircle,
-  Clock,
   Send,
   FileText,
   Trophy,
@@ -42,6 +40,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
+import CountdownRing from "./shared/CountdownRing";
 import { WordCard } from "./shared/WordCard";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
@@ -199,7 +198,6 @@ export default function WordClozeActivity({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [incorrectAnswer, setIncorrectAnswer] = useState<string | null>(null);
 
   const startPractice = useCallback(async () => {
     try {
@@ -399,7 +397,6 @@ export default function WordClozeActivity({
         // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
         setCardFace("front");
       } else {
-        setIncorrectAnswer(answer);
         setLastAttemptWrong(true);
         // Issue #716: 清空 input 讓正解 placeholder 露出來
         setTypedAnswer("");
@@ -430,7 +427,6 @@ export default function WordClozeActivity({
         // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
         setCardFace("front");
       } else {
-        setIncorrectAnswer(answer);
         setLastAttemptWrong(true);
         // Issue #716: 清空 input 讓正解 placeholder 露出來
         setTypedAnswer("");
@@ -465,7 +461,6 @@ export default function WordClozeActivity({
     setCardFace("back");
     setShowResult(false);
     setTypedAnswer("");
-    setIncorrectAnswer(null);
     setLastAttemptWrong(false);
     if (timeLimit) setTimeRemaining(timeLimit);
 
@@ -483,7 +478,6 @@ export default function WordClozeActivity({
     setCardFace("back");
     setShowResult(false);
     setTypedAnswer("");
-    setIncorrectAnswer(null);
     setLastAttemptWrong(false);
     if (timeLimit) setTimeRemaining(timeLimit);
     setCurrentIndex(currentIndex - 1);
@@ -802,30 +796,7 @@ export default function WordClozeActivity({
 
             {timeLimit && timeRemaining !== null && (
               <div className="flex justify-center">
-                <div
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium",
-                    timeRemaining === 0
-                      ? "bg-red-100 text-red-700"
-                      : timeRemaining <= 5
-                        ? "bg-red-100 text-red-700"
-                        : timeRemaining <= 10
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-gray-100 text-gray-700",
-                  )}
-                >
-                  <Clock className="h-5 w-5" />
-                  {timeRemaining === 0 ? (
-                    <span>{t("wordCloze.timeUp") || "Time's up!"}</span>
-                  ) : (
-                    <>
-                      <span>{timeRemaining}</span>
-                      <span className="text-sm">
-                        {t("wordCloze.seconds") || "s"}
-                      </span>
-                    </>
-                  )}
-                </div>
+                <CountdownRing seconds={timeRemaining} total={timeLimit} />
               </div>
             )}
 
@@ -866,19 +837,6 @@ export default function WordClozeActivity({
                 autoCorrect="off"
                 spellCheck={false}
               />
-
-              {showResult && !isCorrect && (
-                <div className="flex items-center justify-center gap-2 text-red-600">
-                  <XCircle className="h-5 w-5" />
-                  <span className="font-medium">
-                    {incorrectAnswer
-                      ? t("wordCloze.incorrectTryAgain") ||
-                        "Incorrect, try again!"
-                      : t("wordCloze.timeUpTryAgain") ||
-                        "Time's up! Try again."}
-                  </span>
-                </div>
-              )}
 
               {!(showResult && isCorrect) && (
                 <Button

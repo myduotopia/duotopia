@@ -28,8 +28,6 @@ import {
   Loader2,
   Volume2,
   CheckCircle,
-  XCircle,
-  Clock,
   Send,
   Keyboard,
   Trophy,
@@ -42,6 +40,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
+import CountdownRing from "./shared/CountdownRing";
 import { WordCard } from "./shared/WordCard";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
@@ -208,7 +207,6 @@ export default function WordSpellingActivity({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [incorrectAnswer, setIncorrectAnswer] = useState<string | null>(null);
 
   // Start practice session — picks a round of 10 unfamiliar words
   const startPractice = useCallback(async () => {
@@ -409,7 +407,6 @@ export default function WordSpellingActivity({
       // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
       setCardFace("front");
     } else {
-      setIncorrectAnswer(answer);
       setLastAttemptWrong(true);
       // Issue #716: 清空 input 讓正解 placeholder 露出來
       setTypedAnswer("");
@@ -462,7 +459,6 @@ export default function WordSpellingActivity({
     setCardFace("back");
     setShowResult(false);
     setTypedAnswer("");
-    setIncorrectAnswer(null);
     setLastAttemptWrong(false);
     if (timeLimit) setTimeRemaining(timeLimit);
 
@@ -480,7 +476,6 @@ export default function WordSpellingActivity({
     setCardFace("back");
     setShowResult(false);
     setTypedAnswer("");
-    setIncorrectAnswer(null);
     setLastAttemptWrong(false);
     if (timeLimit) setTimeRemaining(timeLimit);
     setCurrentIndex(currentIndex - 1);
@@ -802,30 +797,7 @@ export default function WordSpellingActivity({
 
             {timeLimit && timeRemaining !== null && (
               <div className="flex justify-center">
-                <div
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium",
-                    timeRemaining === 0
-                      ? "bg-red-100 text-red-700"
-                      : timeRemaining <= 5
-                        ? "bg-red-100 text-red-700"
-                        : timeRemaining <= 10
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-gray-100 text-gray-700",
-                  )}
-                >
-                  <Clock className="h-5 w-5" />
-                  {timeRemaining === 0 ? (
-                    <span>{t("wordSpelling.timeUp") || "Time's up!"}</span>
-                  ) : (
-                    <>
-                      <span>{timeRemaining}</span>
-                      <span className="text-sm">
-                        {t("wordSpelling.seconds") || "s"}
-                      </span>
-                    </>
-                  )}
-                </div>
+                <CountdownRing seconds={timeRemaining} total={timeLimit} />
               </div>
             )}
 
@@ -865,19 +837,6 @@ export default function WordSpellingActivity({
                 autoCorrect="off"
                 spellCheck={false}
               />
-
-              {showResult && !isCorrect && (
-                <div className="flex items-center justify-center gap-2 text-red-600">
-                  <XCircle className="h-5 w-5" />
-                  <span className="font-medium">
-                    {incorrectAnswer
-                      ? t("wordSpelling.incorrectTryAgain") ||
-                        "Incorrect, try again!"
-                      : t("wordSpelling.timeUpTryAgain") ||
-                        "Time's up! Try again."}
-                  </span>
-                </div>
-              )}
 
               {!(showResult && isCorrect) && (
                 <Button
