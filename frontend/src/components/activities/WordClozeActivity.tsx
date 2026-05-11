@@ -797,6 +797,20 @@ export default function WordClozeActivity({
             )}
             {/* Issue #716: cloze Display Translation 僅顯示例句翻譯，不顯示單字翻譯 → 移除單字翻譯 hint */}
 
+            {/* Issue #716: Play Audio 模式音檔鈕置中於例句上方，避免 inline 對齊問題 */}
+            {audioOnlyMode && currentQ.audio_url && (
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={playQuestionAudio}
+                  aria-label={t("wordCloze.playAudio") || "Play Audio"}
+                  className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-12 w-12 text-blue-500 hover:text-blue-600"
+                >
+                  <Volume2 className="h-7 w-7" />
+                </button>
+              </div>
+            )}
+
             <div className="max-w-2xl mx-auto text-center py-2 space-y-2">
               {currentQ.part_of_speech && (
                 <div className="flex justify-center">
@@ -808,22 +822,9 @@ export default function WordClozeActivity({
                   </Badge>
                 </div>
               )}
-              {/* Issue #716: Play Audio 模式音檔鈕緊接例句左側，採 WordCard 風格 */}
-              <div className="flex items-start justify-center gap-2 px-4">
-                {audioOnlyMode && currentQ.audio_url && (
-                  <button
-                    type="button"
-                    onClick={playQuestionAudio}
-                    aria-label={t("wordCloze.playAudio") || "Play Audio"}
-                    className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-10 w-10 text-blue-500 hover:text-blue-600 mt-1"
-                  >
-                    <Volume2 className="h-5 w-5" />
-                  </button>
-                )}
-                <p className="text-xl md:text-2xl leading-relaxed text-gray-800 font-semibold tracking-wide">
-                  {currentQ.blanked_sentence}
-                </p>
-              </div>
+              <p className="text-xl md:text-2xl leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
+                {currentQ.blanked_sentence}
+              </p>
               {showTranslation && currentQ.sentence_translation && (
                 <p className="text-sm text-gray-500">
                   {currentQ.sentence_translation}
