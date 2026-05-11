@@ -402,6 +402,8 @@ export default function WordClozeActivity({
       } else {
         setIncorrectAnswer(answer);
         setLastAttemptWrong(true);
+        // Issue #716: 清空 input 讓正解 placeholder 露出來
+        setTypedAnswer("");
       }
       recordPreviewAnswer(currentQ.content_item_id, correct);
       setSubmitting(false);
@@ -431,6 +433,8 @@ export default function WordClozeActivity({
       } else {
         setIncorrectAnswer(answer);
         setLastAttemptWrong(true);
+        // Issue #716: 清空 input 讓正解 placeholder 露出來
+        setTypedAnswer("");
       }
       await fetchProficiency();
     } catch (error) {

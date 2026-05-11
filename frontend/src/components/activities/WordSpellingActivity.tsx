@@ -412,6 +412,8 @@ export default function WordSpellingActivity({
     } else {
       setIncorrectAnswer(answer);
       setLastAttemptWrong(true);
+      // Issue #716: 清空 input 讓正解 placeholder 露出來
+      setTypedAnswer("");
     }
 
     // Preview/demo: track local counts so the tier breakdown matches live mode.
