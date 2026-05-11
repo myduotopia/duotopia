@@ -500,47 +500,22 @@ export default function WordClozeActivity({
     setTypedAnswer((prev) => prev.slice(0, -1));
   }, [showResult, isCorrect]);
   const vkEnter = useCallback(() => {
-    if (cardFace === "front") {
-      advanceToNext();
-    } else if (!showResult && !submitting && typedAnswer.trim()) {
+    // Issue #716: 虛擬鍵盤 Enter 只負責送出；看正面時改用右箭頭手動切下一題。
+    if (
+      cardFace === "back" &&
+      !showResult &&
+      !submitting &&
+      typedAnswer.trim()
+    ) {
       handleSubmitAnswer();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardFace, showResult, submitting, typedAnswer, advanceToNext]);
+  }, [cardFace, showResult, submitting, typedAnswer]);
 
   // ScoreOverlay 結束 → 關閉動畫，等學生用左右箭頭手動翻頁
   const handleOverlayComplete = () => {
     setScoreOverlayOpen(false);
   };
-
-  // Issue #716: 桌機 Enter — 作答時送出、看卡時切下一題。
-  useEffect(() => {
-    if (deviceMode !== "desktop" || roundCompleted || loading) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter") return;
-      // Issue #716: 過濾 auto-repeat，避免「送出 → 翻面 → 立刻下一題」。
-      if (e.repeat) return;
-      if (cardFace === "front") {
-        e.preventDefault();
-        advanceToNext();
-      } else if (!showResult && !submitting && typedAnswer.trim()) {
-        e.preventDefault();
-        handleSubmitAnswer();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    deviceMode,
-    cardFace,
-    showResult,
-    submitting,
-    typedAnswer,
-    roundCompleted,
-    loading,
-    advanceToNext,
-  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !showResult && !submitting && typedAnswer.trim()) {

@@ -500,51 +500,22 @@ export default function WordSpellingActivity({
     setTypedAnswer((prev) => prev.slice(0, -1));
   }, [showResult, isCorrect]);
   const vkEnter = useCallback(() => {
-    // 卡正面（答對後）→ 下一題；卡背面 → 提交
-    if (cardFace === "front") {
-      advanceToNext();
-    } else if (!showResult && !submitting && typedAnswer.trim()) {
+    // Issue #716: 虛擬鍵盤 Enter 只負責送出；看正面時改用右箭頭手動切下一題。
+    if (
+      cardFace === "back" &&
+      !showResult &&
+      !submitting &&
+      typedAnswer.trim()
+    ) {
       handleSubmitAnswer();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardFace, showResult, submitting, typedAnswer, advanceToNext]);
+  }, [cardFace, showResult, submitting, typedAnswer]);
 
   // ScoreOverlay 結束 → 關閉動畫，等學生用左右箭頭手動翻頁
   const handleOverlayComplete = () => {
     setScoreOverlayOpen(false);
   };
-
-  // Issue #716: 桌機 Enter — 作答時送出、看卡時切下一題。
-  // window 級監聽，不依賴 input 的 focus（翻面後焦點通常離開 input）。
-  useEffect(() => {
-    if (deviceMode !== "desktop" || roundCompleted || loading) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter") return;
-      // Issue #716: 過濾按住 Enter 的 auto-repeat，避免一次連續觸發
-      // 「送出 → 翻面 → 立刻下一題」造成卡片沒看到。
-      if (e.repeat) return;
-      if (cardFace === "front") {
-        e.preventDefault();
-        advanceToNext();
-      } else if (!showResult && !submitting && typedAnswer.trim()) {
-        e.preventDefault();
-        handleSubmitAnswer();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // handleSubmitAnswer 是 component 級函式，這裡省略保持監聽穩定。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    deviceMode,
-    cardFace,
-    showResult,
-    submitting,
-    typedAnswer,
-    roundCompleted,
-    loading,
-    advanceToNext,
-  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !showResult && !submitting && typedAnswer.trim()) {
