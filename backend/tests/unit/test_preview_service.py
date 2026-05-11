@@ -635,7 +635,9 @@ class TestGetWordClozeStart:
         assert q["part_of_speech"] == "n."
         assert q["example_sentence"] == "I eat an apple every day."
         assert q["example_sentence_translation"] == "我每天吃一顆蘋果。"
-        assert q["example_sentence_audio_url"] == "https://cdn.example.com/apple_sent.mp3"
+        assert (
+            q["example_sentence_audio_url"] == "https://cdn.example.com/apple_sent.mp3"
+        )
         assert q["word_audio_url"] == "https://cdn.example.com/apple.mp3"
         # Sanity: cloze actually blanks out the target word
         assert "_____" in q["blanked_sentence"]
