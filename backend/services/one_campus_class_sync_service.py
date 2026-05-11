@@ -141,6 +141,14 @@ def collect_teacher_school_dsns(user_role_data: dict) -> list[str]:
             dsns = school.get("schoolDsns")
             if dsns and dsns not in result:
                 result.append(dsns)
+            elif not dsns:
+                # Surface this when triaging "teacher synced 0 classes"
+                # tickets — the upstream payload had a teacherRole but no
+                # schoolDsns, which is unusual.
+                logger.debug(
+                    "Skipping school with teacherRole but no schoolDsns: %r",
+                    school,
+                )
     return result
 
 
@@ -336,6 +344,13 @@ def _upsert_student(db: Session, stu: dict) -> tuple[Student, bool, bool]:
         for s in linked_students:
             if s.name != student_name:
                 s.name = student_name
+                renamed = True
+    # Schools sometimes renumber students mid-year. Without this, Duotopia
+    # student_number drifts from 1Campus indefinitely.
+    if student_number:
+        for s in linked_students:
+            if s.student_number != student_number:
+                s.student_number = student_number
                 renamed = True
 
     primary = next(
