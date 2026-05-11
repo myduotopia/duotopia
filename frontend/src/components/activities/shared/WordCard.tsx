@@ -230,6 +230,12 @@ function PlayAudioButton({
   ariaLabel: string;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // 父層常複用同一個 WordCard instance 切換不同單字，audioUrl 變更時
+  // 必須清掉舊的 Audio，否則點擊會播到上一張卡的音檔。
+  useEffect(() => {
+    audioRef.current?.pause();
+    audioRef.current = null;
+  }, [audioUrl]);
   const handleClick = () => {
     if (!audioUrl) return;
     if (!audioRef.current) audioRef.current = new Audio(audioUrl);
