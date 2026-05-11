@@ -43,6 +43,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
+import { WordCard } from "./shared/WordCard";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
 interface SpellingWord {
@@ -52,6 +53,11 @@ interface SpellingWord {
   audio_url?: string;
   image_url?: string;
   memory_strength: number;
+  // Issue #715: 答對後翻面顯示完整單字卡所需欄位
+  part_of_speech?: string | null;
+  example_sentence?: string | null;
+  example_sentence_translation?: string | null;
+  example_sentence_audio_url?: string | null;
 }
 
 interface ProficiencyStatus {
@@ -98,6 +104,8 @@ export default function WordSpellingActivity({
   const [completing, setCompleting] = useState(false);
   const [scoreOverlayOpen, setScoreOverlayOpen] = useState(false);
   const nextQuestionCalledRef = useRef(false);
+  // Issue #715: 答對後翻面顯示完整單字卡；學生用左右箭頭手動翻頁
+  const [cardFace, setCardFace] = useState<"front" | "back">("back");
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Settings
@@ -394,7 +402,8 @@ export default function WordSpellingActivity({
 
     if (correct) {
       setCorrectCount((prev) => prev + 1);
-      setScoreOverlayOpen(true);
+      // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
+      setCardFace("front");
     } else {
       setIncorrectAnswer(answer);
     }
@@ -427,8 +436,15 @@ export default function WordSpellingActivity({
     }
   };
 
-  // Correct overlay → next question; or retry on incorrect
-  const handleOverlayComplete = () => {
+  // Issue #715: 翻面動畫結束 → 顯示答對動畫
+  const handleCardFlipped = useCallback(() => {
+    if (cardFace === "front") {
+      setScoreOverlayOpen(true);
+    }
+  }, [cardFace]);
+
+  // Issue #715: 推進到下一題（共用：5 秒自動 / 右箭頭手動）
+  const advanceToNext = useCallback(() => {
     if (nextQuestionCalledRef.current) return;
     nextQuestionCalledRef.current = true;
     setTimeout(() => {
@@ -436,6 +452,7 @@ export default function WordSpellingActivity({
     }, 300);
 
     setScoreOverlayOpen(false);
+    setCardFace("back");
     setShowResult(false);
     setTypedAnswer("");
     setIncorrectAnswer(null);
@@ -446,6 +463,23 @@ export default function WordSpellingActivity({
     } else {
       setRoundCompleted(true);
     }
+  }, [currentIndex, words.length, timeLimit]);
+
+  // Issue #715: 上一題（只在正面顯示時可用）
+  const goToPrev = useCallback(() => {
+    if (currentIndex === 0) return;
+    setScoreOverlayOpen(false);
+    setCardFace("back");
+    setShowResult(false);
+    setTypedAnswer("");
+    setIncorrectAnswer(null);
+    if (timeLimit) setTimeRemaining(timeLimit);
+    setCurrentIndex(currentIndex - 1);
+  }, [currentIndex, timeLimit]);
+
+  // ScoreOverlay 結束 → 關閉動畫，等學生用左右箭頭手動翻頁
+  const handleOverlayComplete = () => {
+    setScoreOverlayOpen(false);
   };
 
   const handleRetry = () => {
@@ -708,140 +742,166 @@ export default function WordSpellingActivity({
         />
       </div>
 
-      <div className="space-y-6">
-        {showTranslation && currentWord.translation && (
-          <div className="text-center">
-            <p className="text-sm text-gray-500 mb-1">
-              {t("wordSpelling.translationHint") || "Translation"}
-            </p>
-            <h2 className="text-2xl font-bold text-gray-800">
-              {currentWord.translation}
-            </h2>
-          </div>
-        )}
-
-        {currentWord.audio_url && (
-          <div className="flex flex-col items-center gap-2">
-            <Button
-              variant={audioOnlyMode ? "default" : "outline"}
-              size="lg"
-              onClick={playWordAudio}
-              className={cn(
-                "gap-2",
-                audioOnlyMode &&
-                  "h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg",
-              )}
-            >
-              <Volume2 className={audioOnlyMode ? "h-7 w-7" : "h-5 w-5"} />
-              {t("wordSpelling.playAudio") || "Play Audio"}
-            </Button>
-            {audioOnlyMode && (
-              <p className="text-xs text-gray-500">
-                {t("wordSpelling.tapToReplay") || "點擊播放，可以重複聆聽"}
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="text-center text-gray-600">
-          {t("wordSpelling.typeTheWord") || "Type the correct spelling:"}
-        </div>
-
-        {timeLimit && timeRemaining !== null && (
-          <div className="flex justify-center">
-            <div
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium",
-                timeRemaining === 0
-                  ? "bg-red-100 text-red-700"
-                  : timeRemaining <= 5
-                    ? "bg-red-100 text-red-700"
-                    : timeRemaining <= 10
-                      ? "bg-yellow-100 text-yellow-700"
-                      : "bg-gray-100 text-gray-700",
-              )}
-            >
-              <Clock className="h-5 w-5" />
-              {timeRemaining === 0 ? (
-                <span>{t("wordSpelling.timeUp") || "Time's up!"}</span>
-              ) : (
-                <>
-                  <span>{timeRemaining}</span>
-                  <span className="text-sm">
-                    {t("wordSpelling.seconds") || "s"}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="max-w-md mx-auto space-y-3">
-          <Input
-            ref={inputRef}
-            type="text"
-            value={typedAnswer}
-            onChange={(e) => setTypedAnswer(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              t("wordSpelling.inputPlaceholder") || "Type the word here..."
-            }
-            disabled={showResult || submitting}
-            className={cn(
-              "text-center text-xl h-14 rounded-xl border-2",
-              showResult && isCorrect && "border-green-500 bg-green-50",
-              showResult && !isCorrect && "border-red-500 bg-red-50",
-              !showResult && "border-gray-300 focus:border-indigo-500",
-            )}
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-
-          {showResult && !isCorrect && (
-            <div className="text-center space-y-2">
-              <div className="flex items-center justify-center gap-2 text-red-600">
-                <XCircle className="h-5 w-5" />
-                <span className="font-medium">
-                  {incorrectAnswer
-                    ? t("wordSpelling.incorrectTryAgain") ||
-                      "Incorrect, try again!"
-                    : t("wordSpelling.timeUpTryAgain") ||
-                      "Time's up! Try again."}
-                </span>
-              </div>
-              {showAnswerOnWrong && currentWord.text && (
-                <p className="text-sm text-gray-700">
-                  {t("wordSpelling.correctAnswerLabel") || "正確答案"}:{" "}
-                  <span className="font-bold">{currentWord.text}</span>
+      <WordCard
+        viewMode="desktop"
+        face={cardFace}
+        onFlipped={handleCardFlipped}
+        word={currentWord.text}
+        partOfSpeech={currentWord.part_of_speech ?? undefined}
+        translation={currentWord.translation || undefined}
+        audioUrl={currentWord.audio_url}
+        exampleSentence={currentWord.example_sentence ?? undefined}
+        exampleSentenceTranslation={
+          currentWord.example_sentence_translation ?? undefined
+        }
+        exampleSentenceAudioUrl={
+          currentWord.example_sentence_audio_url ?? undefined
+        }
+        hasPrev={cardFace === "front" && currentIndex > 0}
+        hasNext={cardFace === "front"}
+        onPrev={goToPrev}
+        onNext={advanceToNext}
+        back={
+          <div className="space-y-6">
+            {showTranslation && currentWord.translation && (
+              <div className="text-center">
+                <p className="text-sm text-gray-500 mb-1">
+                  {t("wordSpelling.translationHint") || "Translation"}
                 </p>
-              )}
-              <Button onClick={handleRetry} variant="outline" className="gap-2">
-                <RotateCcw className="h-4 w-4" />
-                {t("wordSpelling.retry") || "Retry"}
-              </Button>
-            </div>
-          )}
+                <h2 className="text-2xl font-bold text-gray-800">
+                  {currentWord.translation}
+                </h2>
+              </div>
+            )}
 
-          {!showResult && (
-            <Button
-              onClick={() => handleSubmitAnswer()}
-              disabled={!typedAnswer.trim() || submitting}
-              className="w-full h-12 text-lg"
-            >
-              {submitting ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  <CheckCircle className="h-5 w-5 mr-2" />
-                  {t("wordSpelling.checkAnswer") || "Check"}
-                </>
+            {currentWord.audio_url && (
+              <div className="flex flex-col items-center gap-2">
+                <Button
+                  variant={audioOnlyMode ? "default" : "outline"}
+                  size="lg"
+                  onClick={playWordAudio}
+                  className={cn(
+                    "gap-2",
+                    audioOnlyMode &&
+                      "h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg",
+                  )}
+                >
+                  <Volume2 className={audioOnlyMode ? "h-7 w-7" : "h-5 w-5"} />
+                  {t("wordSpelling.playAudio") || "Play Audio"}
+                </Button>
+                {audioOnlyMode && (
+                  <p className="text-xs text-gray-500">
+                    {t("wordSpelling.tapToReplay") || "點擊播放，可以重複聆聽"}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="text-center text-gray-600">
+              {t("wordSpelling.typeTheWord") || "Type the correct spelling:"}
+            </div>
+
+            {timeLimit && timeRemaining !== null && (
+              <div className="flex justify-center">
+                <div
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium",
+                    timeRemaining === 0
+                      ? "bg-red-100 text-red-700"
+                      : timeRemaining <= 5
+                        ? "bg-red-100 text-red-700"
+                        : timeRemaining <= 10
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-gray-100 text-gray-700",
+                  )}
+                >
+                  <Clock className="h-5 w-5" />
+                  {timeRemaining === 0 ? (
+                    <span>{t("wordSpelling.timeUp") || "Time's up!"}</span>
+                  ) : (
+                    <>
+                      <span>{timeRemaining}</span>
+                      <span className="text-sm">
+                        {t("wordSpelling.seconds") || "s"}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="max-w-md mx-auto space-y-3">
+              <Input
+                ref={inputRef}
+                type="text"
+                value={typedAnswer}
+                onChange={(e) => setTypedAnswer(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  t("wordSpelling.inputPlaceholder") || "Type the word here..."
+                }
+                disabled={showResult || submitting}
+                className={cn(
+                  "text-center text-xl h-14 rounded-xl border-2",
+                  showResult && isCorrect && "border-green-500 bg-green-50",
+                  showResult && !isCorrect && "border-red-500 bg-red-50",
+                  !showResult && "border-gray-300 focus:border-indigo-500",
+                )}
+                autoComplete="off"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+
+              {showResult && !isCorrect && (
+                <div className="text-center space-y-2">
+                  <div className="flex items-center justify-center gap-2 text-red-600">
+                    <XCircle className="h-5 w-5" />
+                    <span className="font-medium">
+                      {incorrectAnswer
+                        ? t("wordSpelling.incorrectTryAgain") ||
+                          "Incorrect, try again!"
+                        : t("wordSpelling.timeUpTryAgain") ||
+                          "Time's up! Try again."}
+                    </span>
+                  </div>
+                  {showAnswerOnWrong && currentWord.text && (
+                    <p className="text-sm text-gray-700">
+                      {t("wordSpelling.correctAnswerLabel") || "正確答案"}:{" "}
+                      <span className="font-bold">{currentWord.text}</span>
+                    </p>
+                  )}
+                  <Button
+                    onClick={handleRetry}
+                    variant="outline"
+                    className="gap-2"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    {t("wordSpelling.retry") || "Retry"}
+                  </Button>
+                </div>
               )}
-            </Button>
-          )}
-        </div>
-      </div>
+
+              {!showResult && (
+                <Button
+                  onClick={() => handleSubmitAnswer()}
+                  disabled={!typedAnswer.trim() || submitting}
+                  className="w-full h-12 text-lg"
+                >
+                  {submitting ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle className="h-5 w-5 mr-2" />
+                      {t("wordSpelling.checkAnswer") || "Check"}
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        }
+      />
 
       <ScoreOverlay
         open={scoreOverlayOpen}

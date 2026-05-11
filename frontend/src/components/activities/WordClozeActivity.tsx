@@ -43,6 +43,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
+import { WordCard } from "./shared/WordCard";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
 interface ClozeQuestion {
@@ -56,6 +57,12 @@ interface ClozeQuestion {
   // preview/demo mode (mirrors how word_selection exposes translation).
   correct_answer: string;
   correct_answer_length: number;
+  // Issue #715: 答對後翻面顯示完整單字卡所需欄位
+  part_of_speech?: string | null;
+  example_sentence?: string | null;
+  example_sentence_translation?: string | null;
+  example_sentence_audio_url?: string | null;
+  word_audio_url?: string | null;
 }
 
 interface ProficiencyStatus {
@@ -101,6 +108,8 @@ export default function WordClozeActivity({
   const [completing, setCompleting] = useState(false);
   const [scoreOverlayOpen, setScoreOverlayOpen] = useState(false);
   const nextQuestionCalledRef = useRef(false);
+  // Issue #715: 答對後翻面顯示完整單字卡；學生用左右箭頭手動翻頁
+  const [cardFace, setCardFace] = useState<"front" | "back">("back");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [showTranslation, setShowTranslation] = useState(true);
@@ -385,7 +394,8 @@ export default function WordClozeActivity({
       setShowResult(true);
       if (correct) {
         setCorrectCount((prev) => prev + 1);
-        setScoreOverlayOpen(true);
+        // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
+        setCardFace("front");
       } else {
         setIncorrectAnswer(answer);
       }
@@ -411,7 +421,8 @@ export default function WordClozeActivity({
       setShowResult(true);
       if (correct) {
         setCorrectCount((prev) => prev + 1);
-        setScoreOverlayOpen(true);
+        // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
+        setCardFace("front");
       } else {
         setIncorrectAnswer(answer);
       }
@@ -426,7 +437,15 @@ export default function WordClozeActivity({
     }
   };
 
-  const handleOverlayComplete = () => {
+  // Issue #715: 翻面動畫結束 → 顯示答對動畫
+  const handleCardFlipped = useCallback(() => {
+    if (cardFace === "front") {
+      setScoreOverlayOpen(true);
+    }
+  }, [cardFace]);
+
+  // Issue #715: 推進到下一題（共用：5 秒自動 / 右箭頭手動）
+  const advanceToNext = useCallback(() => {
     if (nextQuestionCalledRef.current) return;
     nextQuestionCalledRef.current = true;
     setTimeout(() => {
@@ -434,6 +453,7 @@ export default function WordClozeActivity({
     }, 300);
 
     setScoreOverlayOpen(false);
+    setCardFace("back");
     setShowResult(false);
     setTypedAnswer("");
     setIncorrectAnswer(null);
@@ -444,6 +464,23 @@ export default function WordClozeActivity({
     } else {
       setRoundCompleted(true);
     }
+  }, [currentIndex, questions.length, timeLimit]);
+
+  // Issue #715: 上一題（只在正面顯示時可用）
+  const goToPrev = useCallback(() => {
+    if (currentIndex === 0) return;
+    setScoreOverlayOpen(false);
+    setCardFace("back");
+    setShowResult(false);
+    setTypedAnswer("");
+    setIncorrectAnswer(null);
+    if (timeLimit) setTimeRemaining(timeLimit);
+    setCurrentIndex(currentIndex - 1);
+  }, [currentIndex, timeLimit]);
+
+  // ScoreOverlay 結束 → 關閉動畫，等學生用左右箭頭手動翻頁
+  const handleOverlayComplete = () => {
+    setScoreOverlayOpen(false);
   };
 
   const handleRetry = () => {
@@ -698,147 +735,176 @@ export default function WordClozeActivity({
         />
       </div>
 
-      <div className="space-y-6">
-        {/* Translation hint (Chinese meaning only — never show base word) */}
-        {showTranslation && currentQ.translation && (
-          <div className="text-center">
-            <p className="text-sm text-gray-500 mb-1">
-              {t("wordCloze.translationHint") || "Translation"}
-            </p>
-            <h2 className="text-xl font-bold text-gray-800">
-              {currentQ.translation}
-            </h2>
-          </div>
-        )}
-
-        {currentQ.audio_url && (
-          <div className="flex flex-col items-center gap-2">
-            <Button
-              variant={audioOnlyMode ? "default" : "outline"}
-              size="lg"
-              onClick={playQuestionAudio}
-              className={cn(
-                "gap-2",
-                audioOnlyMode &&
-                  "h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg",
-              )}
-            >
-              <Volume2 className={audioOnlyMode ? "h-7 w-7" : "h-5 w-5"} />
-              {t("wordCloze.playAudio") || "Play Audio"}
-            </Button>
-            {audioOnlyMode && (
-              <p className="text-xs text-gray-500">
-                {t("wordCloze.tapToReplay") || "點擊播放，可以重複聆聽"}
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="max-w-2xl mx-auto text-center">
-          <p className="text-xl leading-relaxed text-gray-800 font-medium px-4">
-            {currentQ.blanked_sentence}
-          </p>
-          {showTranslation && currentQ.sentence_translation && (
-            <p className="text-sm text-gray-500 mt-2">
-              {currentQ.sentence_translation}
-            </p>
-          )}
-        </div>
-
-        {timeLimit && timeRemaining !== null && (
-          <div className="flex justify-center">
-            <div
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium",
-                timeRemaining === 0
-                  ? "bg-red-100 text-red-700"
-                  : timeRemaining <= 5
-                    ? "bg-red-100 text-red-700"
-                    : timeRemaining <= 10
-                      ? "bg-yellow-100 text-yellow-700"
-                      : "bg-gray-100 text-gray-700",
-              )}
-            >
-              <Clock className="h-5 w-5" />
-              {timeRemaining === 0 ? (
-                <span>{t("wordCloze.timeUp") || "Time's up!"}</span>
-              ) : (
-                <>
-                  <span>{timeRemaining}</span>
-                  <span className="text-sm">
-                    {t("wordCloze.seconds") || "s"}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="max-w-md mx-auto space-y-3">
-          <Input
-            ref={inputRef}
-            type="text"
-            value={typedAnswer}
-            onChange={(e) => setTypedAnswer(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              t("wordCloze.inputPlaceholder") || "Fill in the blank..."
-            }
-            disabled={showResult || submitting}
-            className={cn(
-              "text-center text-xl h-14 rounded-xl border-2",
-              showResult && isCorrect && "border-green-500 bg-green-50",
-              showResult && !isCorrect && "border-red-500 bg-red-50",
-              !showResult && "border-gray-300 focus:border-indigo-500",
-            )}
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-
-          {showResult && !isCorrect && (
-            <div className="text-center space-y-2">
-              <div className="flex items-center justify-center gap-2 text-red-600">
-                <XCircle className="h-5 w-5" />
-                <span className="font-medium">
-                  {incorrectAnswer
-                    ? t("wordCloze.incorrectTryAgain") ||
-                      "Incorrect, try again!"
-                    : t("wordCloze.timeUpTryAgain") || "Time's up! Try again."}
-                </span>
+      <WordCard
+        viewMode="desktop"
+        face={cardFace}
+        onFlipped={handleCardFlipped}
+        word={currentQ.base_word || currentQ.correct_answer}
+        partOfSpeech={currentQ.part_of_speech ?? undefined}
+        translation={currentQ.translation || undefined}
+        audioUrl={currentQ.word_audio_url ?? undefined}
+        exampleSentence={currentQ.example_sentence ?? undefined}
+        exampleSentenceTranslation={
+          currentQ.example_sentence_translation ?? undefined
+        }
+        exampleSentenceAudioUrl={
+          currentQ.example_sentence_audio_url ?? undefined
+        }
+        hasPrev={cardFace === "front" && currentIndex > 0}
+        hasNext={cardFace === "front"}
+        onPrev={goToPrev}
+        onNext={advanceToNext}
+        back={
+          <div className="space-y-6">
+            {/* Translation hint (Chinese meaning only — never show base word) */}
+            {showTranslation && currentQ.translation && (
+              <div className="text-center">
+                <p className="text-sm text-gray-500 mb-1">
+                  {t("wordCloze.translationHint") || "Translation"}
+                </p>
+                <h2 className="text-xl font-bold text-gray-800">
+                  {currentQ.translation}
+                </h2>
               </div>
-              {showAnswerOnWrong && currentQ.correct_answer && (
-                <p className="text-sm text-gray-700">
-                  {t("wordCloze.correctAnswerLabel") || "正確答案"}:{" "}
-                  <span className="font-bold">{currentQ.correct_answer}</span>
+            )}
+
+            {currentQ.audio_url && (
+              <div className="flex flex-col items-center gap-2">
+                <Button
+                  variant={audioOnlyMode ? "default" : "outline"}
+                  size="lg"
+                  onClick={playQuestionAudio}
+                  className={cn(
+                    "gap-2",
+                    audioOnlyMode &&
+                      "h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg",
+                  )}
+                >
+                  <Volume2 className={audioOnlyMode ? "h-7 w-7" : "h-5 w-5"} />
+                  {t("wordCloze.playAudio") || "Play Audio"}
+                </Button>
+                {audioOnlyMode && (
+                  <p className="text-xs text-gray-500">
+                    {t("wordCloze.tapToReplay") || "點擊播放，可以重複聆聽"}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="max-w-2xl mx-auto text-center">
+              <p className="text-xl leading-relaxed text-gray-800 font-medium px-4">
+                {currentQ.blanked_sentence}
+              </p>
+              {showTranslation && currentQ.sentence_translation && (
+                <p className="text-sm text-gray-500 mt-2">
+                  {currentQ.sentence_translation}
                 </p>
               )}
-              <Button onClick={handleRetry} variant="outline" className="gap-2">
-                <RotateCcw className="h-4 w-4" />
-                {t("wordCloze.retry") || "Retry"}
-              </Button>
             </div>
-          )}
 
-          {!showResult && (
-            <Button
-              onClick={() => handleSubmitAnswer()}
-              disabled={!typedAnswer.trim() || submitting}
-              className="w-full h-12 text-lg"
-            >
-              {submitting ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  <CheckCircle className="h-5 w-5 mr-2" />
-                  {t("wordCloze.checkAnswer") || "Check"}
-                </>
+            {timeLimit && timeRemaining !== null && (
+              <div className="flex justify-center">
+                <div
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium",
+                    timeRemaining === 0
+                      ? "bg-red-100 text-red-700"
+                      : timeRemaining <= 5
+                        ? "bg-red-100 text-red-700"
+                        : timeRemaining <= 10
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-gray-100 text-gray-700",
+                  )}
+                >
+                  <Clock className="h-5 w-5" />
+                  {timeRemaining === 0 ? (
+                    <span>{t("wordCloze.timeUp") || "Time's up!"}</span>
+                  ) : (
+                    <>
+                      <span>{timeRemaining}</span>
+                      <span className="text-sm">
+                        {t("wordCloze.seconds") || "s"}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="max-w-md mx-auto space-y-3">
+              <Input
+                ref={inputRef}
+                type="text"
+                value={typedAnswer}
+                onChange={(e) => setTypedAnswer(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  t("wordCloze.inputPlaceholder") || "Fill in the blank..."
+                }
+                disabled={showResult || submitting}
+                className={cn(
+                  "text-center text-xl h-14 rounded-xl border-2",
+                  showResult && isCorrect && "border-green-500 bg-green-50",
+                  showResult && !isCorrect && "border-red-500 bg-red-50",
+                  !showResult && "border-gray-300 focus:border-indigo-500",
+                )}
+                autoComplete="off"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+
+              {showResult && !isCorrect && (
+                <div className="text-center space-y-2">
+                  <div className="flex items-center justify-center gap-2 text-red-600">
+                    <XCircle className="h-5 w-5" />
+                    <span className="font-medium">
+                      {incorrectAnswer
+                        ? t("wordCloze.incorrectTryAgain") ||
+                          "Incorrect, try again!"
+                        : t("wordCloze.timeUpTryAgain") ||
+                          "Time's up! Try again."}
+                    </span>
+                  </div>
+                  {showAnswerOnWrong && currentQ.correct_answer && (
+                    <p className="text-sm text-gray-700">
+                      {t("wordCloze.correctAnswerLabel") || "正確答案"}:{" "}
+                      <span className="font-bold">
+                        {currentQ.correct_answer}
+                      </span>
+                    </p>
+                  )}
+                  <Button
+                    onClick={handleRetry}
+                    variant="outline"
+                    className="gap-2"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    {t("wordCloze.retry") || "Retry"}
+                  </Button>
+                </div>
               )}
-            </Button>
-          )}
-        </div>
-      </div>
+
+              {!showResult && (
+                <Button
+                  onClick={() => handleSubmitAnswer()}
+                  disabled={!typedAnswer.trim() || submitting}
+                  className="w-full h-12 text-lg"
+                >
+                  {submitting ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle className="h-5 w-5 mr-2" />
+                      {t("wordCloze.checkAnswer") || "Check"}
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        }
+      />
 
       <ScoreOverlay
         open={scoreOverlayOpen}
