@@ -513,6 +513,33 @@ export default function WordClozeActivity({
     setScoreOverlayOpen(false);
   };
 
+  // Issue #716: 桌機 Enter — 作答時送出、看卡時切下一題。
+  useEffect(() => {
+    if (deviceMode !== "desktop" || roundCompleted || loading) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter") return;
+      if (cardFace === "front") {
+        e.preventDefault();
+        advanceToNext();
+      } else if (!showResult && !submitting && typedAnswer.trim()) {
+        e.preventDefault();
+        handleSubmitAnswer();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    deviceMode,
+    cardFace,
+    showResult,
+    submitting,
+    typedAnswer,
+    roundCompleted,
+    loading,
+    advanceToNext,
+  ]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !showResult && !submitting && typedAnswer.trim()) {
       handleSubmitAnswer();

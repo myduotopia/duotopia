@@ -514,6 +514,35 @@ export default function WordSpellingActivity({
     setScoreOverlayOpen(false);
   };
 
+  // Issue #716: 桌機 Enter — 作答時送出、看卡時切下一題。
+  // window 級監聽，不依賴 input 的 focus（翻面後焦點通常離開 input）。
+  useEffect(() => {
+    if (deviceMode !== "desktop" || roundCompleted || loading) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter") return;
+      if (cardFace === "front") {
+        e.preventDefault();
+        advanceToNext();
+      } else if (!showResult && !submitting && typedAnswer.trim()) {
+        e.preventDefault();
+        handleSubmitAnswer();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // handleSubmitAnswer 是 component 級函式，這裡省略保持監聽穩定。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    deviceMode,
+    cardFace,
+    showResult,
+    submitting,
+    typedAnswer,
+    roundCompleted,
+    loading,
+    advanceToNext,
+  ]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !showResult && !submitting && typedAnswer.trim()) {
       handleSubmitAnswer();
