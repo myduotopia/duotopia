@@ -186,7 +186,7 @@ function NavArrow({
         "flex items-center justify-center",
         "h-10 w-10 md:h-12 md:w-12",
         "text-gray-400 hover:text-gray-700 transition-colors",
-        isPrev ? "left-2" : "right-2",
+        isPrev ? "left-1" : "right-1",
       )}
     >
       {isPrev ? (
@@ -314,10 +314,10 @@ function WordCardFront({
 
       <CardContent
         className={cn(
-          // Issue #716 (mobile): prev/next arrows live inside the card at
-          // left-2/right-2 (each 40px wide), so reserve >=48px horizontal
-          // gutter for content. Desktop pushes arrows outside via -left-6.
-          "flex-1 py-6 px-14 md:p-6 select-none flex flex-col justify-center",
+          // Issue #716: only the right (next) arrow remains, so use an
+          // asymmetric gutter — small on the left, big enough on the right
+          // to clear the 40px arrow button sitting at right-1.
+          "flex-1 py-6 pl-4 pr-12 md:py-6 md:pl-6 md:pr-14 select-none flex flex-col justify-center",
           viewMode === "desktop" && showImage && "md:p-8",
         )}
       >
