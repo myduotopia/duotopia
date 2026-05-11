@@ -3246,6 +3246,18 @@
       "studentCountDesc": "學生數 多→少",
       "createdAtDesc": "最新建立",
       "createdAtAsc": "最早建立"
+    },
+    "oneCampusSync": {
+      "buttonIdle": "同步 1Campus",
+      "buttonSyncing": "同步中…",
+      "tooltip": "從 1Campus 拉取最新班級和學生名冊",
+      "success": "同步完成 {{schools}} 間學校：新增 {{classrooms_added}} 個班級、{{students_added}} 位學生",
+      "noChanges": "資料已是最新——沒有新的班級或學生",
+      "noSchools": "您的帳號沒有對應的 1Campus 學校",
+      "errorsSuffix": "個錯誤——請查看伺服器記錄",
+      "notLinked": "您的帳號尚未綁定 1Campus，請先以 1Campus 方式登入",
+      "rateLimited": "剛剛已觸發過同步，請稍候片刻再試",
+      "failed": "1Campus 同步失敗，請稍後再試"
     }
   },
   "teacherStudents": {
