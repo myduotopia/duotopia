@@ -38,6 +38,7 @@ import StudentStatusPanel, {
   StudentProgress,
 } from "@/components/StudentStatusPanel";
 import { useSidebar } from "@/contexts/SidebarContext";
+import { FEATURE_FLAGS } from "@/config/featureFlags";
 
 interface AssignmentContent {
   id: number;
@@ -946,7 +947,8 @@ export function AssignmentDetailSheet({
                     )}
 
                     {/* 顯示選項圖片 (word_selection only) Issue #631 */}
-                    {assignment.practice_mode === "word_selection" && (
+                    {FEATURE_FLAGS.SHOW_OPTION_IMAGES &&
+                      assignment.practice_mode === "word_selection" && (
                       <div className="space-y-1.5">
                         <Label className="text-xs text-gray-600 dark:text-gray-400">
                           {t(
