@@ -870,7 +870,7 @@ export default function WordSpellingActivity({
                 disabled={(showResult && isCorrect) || submitting}
                 className={cn(
                   "text-center text-2xl h-14 pl-10 pr-10 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
-                  "placeholder:text-base focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
+                  "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
                   showResult && isCorrect && "border-green-500 text-green-700",
                   showResult &&
                     !isCorrect &&
