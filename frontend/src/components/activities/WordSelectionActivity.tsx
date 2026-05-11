@@ -103,6 +103,9 @@ const OPTION_COLORS = [
   "bg-teal-50 border-teal-200 hover:bg-teal-100 hover:border-teal-400",
 ];
 
+// 選項網格寬度門檻：≥ 4 × ~140px 圖片 + 3 × 16px gap ⇒ 4 欄；否則 2 欄
+const FOUR_COL_MIN_WIDTH = 600;
+
 export default function WordSelectionActivity({
   assignmentId,
   isPreviewMode = false,
@@ -267,6 +270,14 @@ export default function WordSelectionActivity({
       optionsObserverRef.current = ro;
     }
   }, []);
+
+  // show_image 模式下正解為英文 (word.text)，否則為翻譯。優先信任後端傳的
+  // correct_text；舊版後端未回傳時依 showImage flag fallback。
+  const getExpectedAnswer = useCallback(
+    (word: WordOption) =>
+      word.correct_text ?? (showImage ? word.text : word.translation),
+    [showImage],
+  );
 
   // Start practice session
   const startPractice = useCallback(async () => {
@@ -523,10 +534,7 @@ export default function WordSelectionActivity({
     if (showResult || submitting) return;
 
     const currentWord = words[currentIndex];
-    // show_image 模式：正解是英文 (currentWord.text)，否則是翻譯
-    const expected =
-      currentWord.correct_text ??
-      (showImage ? currentWord.text : currentWord.translation);
+    const expected = getExpectedAnswer(currentWord);
     const correct = answer === expected;
 
     setSelectedAnswer(answer);
@@ -831,8 +839,8 @@ export default function WordSelectionActivity({
   const useHorizontal = showImage && !!currentWord?.image_url && isWideViewport;
 
   // 選項有圖時，若容器寬度足夠就排成 4×1（節省垂直空間）；不夠則 2×2
-  // 600px 約等於 4 × 140px + 3 × 16px gap
-  const useFourColOptions = showOptionImages && optionsGridWidth >= 600;
+  const useFourColOptions =
+    showOptionImages && optionsGridWidth >= FOUR_COL_MIN_WIDTH;
 
   return (
     <div className="space-y-6">
@@ -887,7 +895,9 @@ export default function WordSelectionActivity({
             className={cn(
               "flex justify-center",
               // relative 配合 img absolute，讓圖片父層自然高度為 0、不貢獻 flex 高度
-              useHorizontal && "w-1/2 shrink-0 relative",
+              // min-h-48 防呆：若右欄內容極少（如沒有 Timer、題目單字短），
+              // 仍保留與直式 max-h-48 一致的最小可視高度，避免圖片塌成零高度
+              useHorizontal && "w-1/2 shrink-0 relative min-h-48",
             )}
           >
             <img
@@ -971,10 +981,7 @@ export default function WordSelectionActivity({
               const optionText = option.text;
               const optionImage = option.image_url || null;
               const isSelected = selectedAnswer === optionText;
-              // show_image 模式：正解是英文，否則是翻譯
-              const expectedAnswer =
-                currentWord.correct_text ??
-                (showImage ? currentWord.text : currentWord.translation);
+              const expectedAnswer = getExpectedAnswer(currentWord);
               const isCorrectAnswer = optionText === expectedAnswer;
               // 答對時揭示；答錯時只有老師開啟 showAnswer 才揭示（Issue #538）
               const showCorrect =

@@ -1427,7 +1427,7 @@ async def start_word_selection_practice(
         if assignment and assignment.show_image is not None
         else True
     )
-    answer_key = "text" if show_image_for_options else "translation"
+    answer_key = text_field_for_show_image(show_image_for_options)
 
     words_with_options = []
 
@@ -1452,7 +1452,7 @@ async def start_word_selection_practice(
             pool = [
                 {"text": w.get(answer_key), "image_url": w.get("image_url")}
                 for w in words_data
-                if w.get(answer_key) and w[answer_key].lower().strip() != target
+                if w.get(answer_key) and w.get(answer_key, "").lower().strip() != target
             ]
             random.shuffle(pool)
             final_distractors = pool[:3]
@@ -1571,11 +1571,7 @@ async def submit_word_selection_answer(
         )
 
     # 取得作業設定，依 show_image 決定正解語言（true=英文 / false=翻譯）
-    assignment_for_check = (
-        db.query(Assignment)
-        .filter(Assignment.id == student_assignment.assignment_id)
-        .first()
-    )
+    assignment_for_check = student_assignment.assignment
     show_image_mode = bool(
         assignment_for_check.show_image
         if assignment_for_check and assignment_for_check.show_image is not None
