@@ -16,10 +16,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Volume2, Clock, RotateCcw } from "lucide-react";
+import { Loader2, Volume2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import ScoreOverlay from "./shared/ScoreOverlay";
+import CountdownRing from "./shared/CountdownRing";
 
 export interface RearrangementQuestion {
   content_item_id: number;
@@ -877,12 +878,6 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     [playAudioAsync],
   );
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
   // Loading 狀態
   if (loading) {
     return (
@@ -910,7 +905,6 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   }
 
   const isUnlimited = currentQuestion.time_limit === 0;
-  const isLowTime = !isUnlimited && currentState.timeRemaining <= 10;
   const progressPercent =
     ((currentQuestionIndex + (currentState.completed ? 1 : 0)) /
       questions.length) *
@@ -991,22 +985,18 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
               })}
             </CardTitle>
             <div className="flex items-center gap-3">
-              {/* 計時器 - 不限時模式顯示 "不限時"，有限時模式顯示倒數 */}
-              <div
-                className={cn(
-                  "flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium",
-                  isUnlimited
-                    ? "bg-green-100 text-green-700"
-                    : isLowTime
-                      ? "bg-red-100 text-red-700 animate-pulse"
-                      : "bg-gray-100 text-gray-700",
-                )}
-              >
-                <Clock className="h-4 w-4" />
-                {isUnlimited
-                  ? t("rearrangement.unlimited")
-                  : formatTime(currentState.timeRemaining)}
-              </div>
+              {/* Issue #716: 限時用環狀倒數；不限時顯示綠色 badge */}
+              {isUnlimited ? (
+                <div className="flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
+                  {t("rearrangement.unlimited")}
+                </div>
+              ) : (
+                <CountdownRing
+                  key={currentQuestionIndex}
+                  seconds={currentState.timeRemaining}
+                  total={currentQuestion.time_limit}
+                />
+              )}
 
               {/* 音檔按鈕與語速選單 - 已完成的題目不能播放 */}
               {currentQuestion.play_audio && currentQuestion.audio_url && (

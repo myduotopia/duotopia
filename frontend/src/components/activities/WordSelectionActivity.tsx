@@ -42,7 +42,6 @@ import {
   XCircle,
   Trophy,
   RefreshCw,
-  Clock,
   Send,
   BookOpen,
   Info,
@@ -52,6 +51,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
+import CountdownRing from "./shared/CountdownRing";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
 interface OptionEntry {
@@ -478,6 +478,7 @@ export default function WordSelectionActivity({
       // Time expired - trigger wrong answer
       handleTimeoutAnswer();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRemaining, showResult, submitting, words.length]);
 
   // Handle timeout answer (separate from regular answer to avoid loops)
@@ -883,12 +884,21 @@ export default function WordSelectionActivity({
       {/* Question content */}
       <div
         className={cn(
-          "space-y-6",
+          "relative space-y-6",
           // 橫式（圖左、右欄文字+選項）— 不加 items-start，
           // 用預設 items-stretch 讓兩欄等高，圖片高度由右欄決定
           useHorizontal && "flex flex-row gap-6 space-y-0",
         )}
       >
+        {/* Issue #716: countdown ring anchored top-right of the question card */}
+        {timeLimit && timeRemaining !== null && (
+          <CountdownRing
+            key={currentIndex}
+            seconds={timeRemaining}
+            total={timeLimit}
+            className="absolute top-0 right-0 z-10"
+          />
+        )}
         {/* Image */}
         {showImage && currentWord.image_url && (
           <div
@@ -911,7 +921,7 @@ export default function WordSelectionActivity({
           </div>
         )}
 
-        {/* 右側欄（橫式時把文字/音檔/題目/Timer/選項都放這裡） */}
+        {/* 右側欄（橫式時把文字/音檔/題目/選項都放這裡） */}
         <div className={cn("space-y-6", useHorizontal && "flex-1 min-w-0")}>
           {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
               即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
@@ -935,36 +945,6 @@ export default function WordSelectionActivity({
                 <Volume2 className="h-5 w-5" />
                 {t("wordSelection.playAudio") || "Play Audio"}
               </Button>
-            </div>
-          )}
-
-          {/* Timer Display - stays visible when time is up to prevent visual jump */}
-          {timeLimit && timeRemaining !== null && (
-            <div className="flex justify-center">
-              <div
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium",
-                  timeRemaining === 0
-                    ? "bg-red-100 text-red-700"
-                    : timeRemaining <= 5
-                      ? "bg-red-100 text-red-700"
-                      : timeRemaining <= 10
-                        ? "bg-yellow-100 text-yellow-700"
-                        : "bg-gray-100 text-gray-700",
-                )}
-              >
-                <Clock className="h-5 w-5" />
-                {timeRemaining === 0 ? (
-                  <span>{t("wordSelection.timeUp") || "Time's up!"}</span>
-                ) : (
-                  <>
-                    <span>{timeRemaining}</span>
-                    <span className="text-sm">
-                      {t("wordSelection.seconds") || "s"}
-                    </span>
-                  </>
-                )}
-              </div>
             </div>
           )}
 
