@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ReactNode } from "react";
-import { render, waitFor } from "@testing-library/react";
+import { render, waitFor, fireEvent, screen } from "@testing-library/react";
 import VocabularySetPanel from "../VocabularySetPanel";
 import { SidebarProvider } from "@/contexts/SidebarContext";
 
@@ -132,5 +132,154 @@ describe("VocabularySetPanel data loading", () => {
 
     // Should render without crashing
     expect(container).toBeTruthy();
+  });
+});
+
+// Issue #729: distractor edit panel must not stringify objects as [object Object]
+// and must preserve image_url when user edits text. Regression from PR #707 (#631).
+describe("VocabularySetPanel distractor edit panel (assignment copy)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders distractor text from new object shape, not '[object Object]'", async () => {
+    mockGetContentDetail.mockResolvedValue({
+      id: 1,
+      title: "Vocab",
+      items: [
+        {
+          text: "apple",
+          definition: "蘋果",
+          distractors: [
+            { text: "banana", image_url: "https://example.com/b.png" },
+            { text: "cherry", image_url: null },
+          ],
+        },
+      ],
+    });
+
+    render(
+      <VocabularySetPanel content={{ id: 1 }} isAssignmentCopy={true} />,
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(mockGetContentDetail).toHaveBeenCalled();
+    });
+
+    // The distractor inputs should show real text, not "[object Object]"
+    const bananaInput = await screen.findByDisplayValue("banana");
+    const cherryInput = await screen.findByDisplayValue("cherry");
+    expect(bananaInput).toBeTruthy();
+    expect(cherryInput).toBeTruthy();
+    expect(screen.queryByDisplayValue("[object Object]")).toBeNull();
+  });
+
+  it("renders legacy string-shaped distractors (backwards compatible)", async () => {
+    mockGetContentDetail.mockResolvedValue({
+      id: 2,
+      title: "Legacy",
+      items: [
+        {
+          text: "dog",
+          definition: "狗",
+          distractors: ["cat", "bird"],
+        },
+      ],
+    });
+
+    render(
+      <VocabularySetPanel content={{ id: 2 }} isAssignmentCopy={true} />,
+      { wrapper },
+    );
+
+    await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
+
+    expect(await screen.findByDisplayValue("cat")).toBeTruthy();
+    expect(await screen.findByDisplayValue("bird")).toBeTruthy();
+  });
+
+  it("preserves image_url when editing distractor text (showOptionImages=false)", async () => {
+    mockGetContentDetail.mockResolvedValue({
+      id: 3,
+      title: "Vocab",
+      items: [
+        {
+          text: "apple",
+          definition: "蘋果",
+          distractors: [
+            { text: "banana", image_url: "https://example.com/b.png" },
+          ],
+        },
+      ],
+    });
+
+    const onUpdateContent = vi.fn();
+
+    render(
+      <VocabularySetPanel
+        content={{ id: 3 }}
+        isAssignmentCopy={true}
+        showOptionImages={false}
+        onUpdateContent={onUpdateContent}
+      />,
+      { wrapper },
+    );
+
+    const bananaInput = (await screen.findByDisplayValue(
+      "banana",
+    )) as HTMLInputElement;
+
+    fireEvent.change(bananaInput, { target: { value: "blueberry" } });
+
+    await waitFor(() => {
+      const lastCall =
+        onUpdateContent.mock.calls[onUpdateContent.mock.calls.length - 1];
+      const items = (lastCall?.[0] as { items?: unknown[] })?.items as
+        | Array<{ distractors?: unknown[] }>
+        | undefined;
+      expect(items?.[0]?.distractors?.[0]).toEqual({
+        text: "blueberry",
+        image_url: "https://example.com/b.png",
+      });
+    });
+  });
+
+  it("when showOptionImages=true, distractors render read-only with image (no input)", async () => {
+    mockGetContentDetail.mockResolvedValue({
+      id: 4,
+      title: "Vocab",
+      items: [
+        {
+          text: "apple",
+          definition: "蘋果",
+          distractors: [
+            { text: "banana", image_url: "https://example.com/b.png" },
+          ],
+        },
+      ],
+    });
+
+    render(
+      <VocabularySetPanel
+        content={{ id: 4 }}
+        isAssignmentCopy={true}
+        showOptionImages={true}
+      />,
+      { wrapper },
+    );
+
+    await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
+
+    // Read-only: text is shown as plain content, not as an editable input.
+    const bananaText = await screen.findByText("banana");
+    expect(bananaText).toBeTruthy();
+    expect(screen.queryByDisplayValue("banana")).toBeNull();
+
+    // Image thumbnail should be rendered.
+    const img = bananaText.parentElement?.querySelector(
+      'img[src="https://example.com/b.png"]',
+    );
+    expect(img).toBeTruthy();
   });
 });
