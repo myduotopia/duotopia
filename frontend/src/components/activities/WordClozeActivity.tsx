@@ -779,12 +779,12 @@ export default function WordClozeActivity({
               </div>
             )}
 
-            <div className="max-w-2xl mx-auto text-center">
-              <p className="text-xl leading-relaxed text-gray-800 font-medium px-4">
+            <div className="max-w-2xl mx-auto text-center py-2 space-y-3">
+              <p className="text-2xl md:text-3xl leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
                 {currentQ.blanked_sentence}
               </p>
               {showTranslation && currentQ.sentence_translation && (
-                <p className="text-sm text-gray-500 mt-2">
+                <p className="text-base text-gray-500">
                   {currentQ.sentence_translation}
                 </p>
               )}
@@ -841,10 +841,15 @@ export default function WordClozeActivity({
                 }
                 disabled={(showResult && isCorrect) || submitting}
                 className={cn(
-                  "text-center text-xl h-14 rounded-xl border-2",
-                  showResult && isCorrect && "border-green-500 bg-green-50",
-                  showResult && !isCorrect && "border-red-500 bg-red-50",
-                  !showResult && "border-gray-300 focus:border-indigo-500",
+                  "text-center text-2xl h-14 px-0 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
+                  "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
+                  showResult && isCorrect && "border-green-500 text-green-700",
+                  showResult &&
+                    !isCorrect &&
+                    "border-red-500 text-red-600 placeholder:text-red-400",
+                  !(showResult && !isCorrect) &&
+                    !(showResult && isCorrect) &&
+                    "border-gray-300 focus:border-indigo-500",
                 )}
                 autoComplete="off"
                 autoCapitalize="off"

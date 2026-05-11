@@ -765,11 +765,8 @@ export default function WordSpellingActivity({
         back={
           <div className="space-y-6">
             {showTranslation && currentWord.translation && (
-              <div className="text-center">
-                <p className="text-sm text-gray-500 mb-1">
-                  {t("wordSpelling.translationHint") || "Translation"}
-                </p>
-                <h2 className="text-2xl font-bold text-gray-800">
+              <div className="text-center py-4">
+                <h2 className="text-4xl md:text-5xl font-bold text-gray-800 tracking-wide">
                   {currentWord.translation}
                 </h2>
               </div>
@@ -843,10 +840,15 @@ export default function WordSpellingActivity({
                 }
                 disabled={(showResult && isCorrect) || submitting}
                 className={cn(
-                  "text-center text-xl h-14 rounded-xl border-2",
-                  showResult && isCorrect && "border-green-500 bg-green-50",
-                  showResult && !isCorrect && "border-red-500 bg-red-50",
-                  !showResult && "border-gray-300 focus:border-indigo-500",
+                  "text-center text-2xl h-14 px-0 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
+                  "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
+                  showResult && isCorrect && "border-green-500 text-green-700",
+                  showResult &&
+                    !isCorrect &&
+                    "border-red-500 text-red-600 placeholder:text-red-400",
+                  !(showResult && !isCorrect) &&
+                    !(showResult && isCorrect) &&
+                    "border-gray-300 focus:border-indigo-500",
                 )}
                 autoComplete="off"
                 autoCapitalize="off"
