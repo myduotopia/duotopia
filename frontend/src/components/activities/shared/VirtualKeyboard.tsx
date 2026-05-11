@@ -47,7 +47,7 @@ const DISPLAY = {
   "{shift}": "⇧",
   "{bksp}": "⌫",
   "{enter}": "Enter",
-  "{space}": " ",
+  "{space}": "Space",
 };
 
 export default function VirtualKeyboard({
