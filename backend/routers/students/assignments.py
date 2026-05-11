@@ -20,6 +20,7 @@ from models import (
     AssignmentContent,
     Content,
     ContentItem,
+    ContentType,
     StudentItemProgress,
     AssignmentStatus,
     PracticeSession,
@@ -43,9 +44,36 @@ logger = logging.getLogger(__name__)
 # 自動批改的練習模式（不需要老師批改）
 # - rearrangement: 例句重組
 # - word_selection: 單字選擇
-AUTO_GRADED_MODES = frozenset({"rearrangement", "word_selection"})
+AUTO_GRADED_MODES = frozenset(
+    {"rearrangement", "word_selection", "word_spelling", "word_cloze"}
+)
 
 router = APIRouter()
+
+
+_TIER_FIELDS = (
+    "words_master",
+    "words_familiar",
+    "words_medium",
+    "words_unfamiliar",
+    "words_very_unfamiliar",
+)
+
+
+def _tier_counts(mastery_result) -> Dict[str, int]:
+    """Extract 5-tier word counts from a calculate_assignment_mastery row.
+
+    Issue #711 (5-tier extension): the SQL function returns
+    words_master / words_familiar / words_medium / words_unfamiliar /
+    words_very_unfamiliar alongside the legacy ``words_mastered`` alias.
+    We use getattr with default 0 so older snapshots of the function
+    (during a rolling deploy) fall back gracefully.
+    """
+    if not mastery_result:
+        return {field: 0 for field in _TIER_FIELDS}
+    return {
+        field: int(getattr(mastery_result, field, 0) or 0) for field in _TIER_FIELDS
+    }
 
 
 @router.get("/assignments")
@@ -54,7 +82,14 @@ async def get_student_assignments(
         "due_date_asc", "due_date_desc", "assigned_at_desc", "status"
     ] = Query("due_date_asc"),
     practice_mode: Optional[
-        Literal["reading", "rearrangement", "word_selection", "word_reading"]
+        Literal[
+            "reading",
+            "rearrangement",
+            "word_selection",
+            "word_reading",
+            "word_spelling",
+            "word_cloze",
+        ]
     ] = None,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -268,70 +303,28 @@ async def get_assignment_activities(
             .all()
         )
 
-        # Lazy TTS：朗讀/重組模式下，補生成缺少例句音檔的單字集 items
-        if _practice_mode in ("reading", "rearrangement"):
-            vocab_content_ids = [
-                cid
-                for cid, c in content_dict.items()
-                if c.type in _VOCABULARY_CONTENT_TYPES
+        # Lazy TTS：依練習模式補生成缺少的音檔
+        # - reading / rearrangement / word_cloze → 例句音檔 (example_sentence_audio_url)
+        # - word_reading / word_spelling → 單字音檔 (audio_url)
+        vocab_content_ids = {
+            cid
+            for cid, c in content_dict.items()
+            if c.type in _VOCABULARY_CONTENT_TYPES
+        }
+        if vocab_content_ids:
+            vocab_items = [
+                ci for ci in all_content_items if ci.content_id in vocab_content_ids
             ]
-            if vocab_content_ids:
-                missing_audio_items = [
-                    ci
-                    for ci in all_content_items
-                    if ci.content_id in vocab_content_ids
-                    and ci.example_sentence
-                    and ci.example_sentence.strip()
-                    and not ci.example_sentence_audio_url
-                ]
-                if missing_audio_items:
-                    from services.tts import TTSService
-                    from utils.ttsVoiceResolver import get_voice_and_rate
+            if _practice_mode in ("reading", "rearrangement", "word_cloze"):
+                from services.preview_service import (
+                    ensure_example_sentence_audio,
+                )
 
-                    tts_service = TTSService()
-                    tts_generated = 0
-                    for item in missing_audio_items:
-                        try:
-                            audio_settings = (
-                                item.item_metadata.get("audio_settings", {})
-                                if item.item_metadata
-                                else {}
-                            )
-                            voice, rate = get_voice_and_rate(
-                                audio_settings.get("accent", "American English"),
-                                audio_settings.get("gender", "Male"),
-                                audio_settings.get("speed", "Normal x1"),
-                            )
-                            url = await tts_service.generate_tts(
-                                item.example_sentence, voice, rate
-                            )
-                            # 條件式更新：只在仍為 NULL 時寫入，避免並行覆蓋
-                            rows = db.execute(
-                                text(
-                                    "UPDATE content_items "
-                                    "SET example_sentence_audio_url = :url "
-                                    "WHERE id = :id "
-                                    "AND example_sentence_audio_url IS NULL"
-                                ),
-                                {"url": url, "id": item.id},
-                            ).rowcount
-                            if rows > 0:
-                                item.example_sentence_audio_url = url
-                                tts_generated += 1
-                            else:
-                                # 已被其他 request 更新，重讀最新值
-                                db.refresh(item)
-                        except Exception as e:
-                            logger.warning(
-                                f"Lazy TTS generation failed for item {item.id}: {e}"
-                            )
-                    if tts_generated > 0:
-                        db.commit()
-                        logger.info(
-                            f"Lazy-generated example sentence TTS for "
-                            f"{tts_generated} items in assignment "
-                            f"{student_assignment.assignment_id}"
-                        )
+                await ensure_example_sentence_audio(vocab_items, db)
+            if _practice_mode in ("word_reading", "word_spelling"):
+                from services.preview_service import ensure_word_audio
+
+                await ensure_word_audio(vocab_items, db)
 
         # 建立 content_id -> [items] 的索引
         content_items_map = {}
@@ -412,6 +405,13 @@ async def get_assignment_activities(
                             item_data[
                                 "progress_id"
                             ] = item_progress.id  # 返回 progress_id 給前端用於批次分析
+                            # Server-authoritative AI analysis quota count.
+                            # Frontend hook seeds its initial state with
+                            # max(localStorage, this) so cross-device users
+                            # always see the real remaining attempts.
+                            item_data["ai_analysis_count"] = (
+                                item_progress.ai_analysis_count or 0
+                            )
 
                             # 加入老師評語相關資料
                             item_data[
@@ -494,17 +494,30 @@ async def get_assignment_activities(
                     activity_data["items"] = []
                     activity_data["item_count"] = 0
 
-                # 如果完全沒有項目，提供一個空的預設項目
-                if not activity_data.get("items"):
-                    single_item = {
-                        "text": "",
-                        "translation": "",
-                    }
-                    activity_data["items"] = [single_item]
-                    activity_data["item_count"] = 1
+                # 注意：以前這裡有個 fallback 在 items=[] 時硬塞一個
+                # {text: "", translation: ""} 讓 item_count=1。當 vocab 集
+                # 在 reading 模式下所有 item 都被 get_sentence_fields 過濾
+                # （沒有 example_sentence）時，前端就會看到「1題 + 無題目
+                # 文字」。reading mode 現在已會 fallback 到單字本身，所以
+                # 這個假 item 沒有存在意義，反而會誤導前端 routing 邏輯，
+                # 故移除。
 
                 activity_data["content"] = ""
                 activity_data["target_text"] = ""
+
+                # 例句朗讀（reading_assessment / EXAMPLE_SENTENCES）需要在 top-level 提供
+                # example_audio_url，前端 ReadingAssessmentPanel 才能播放例句音檔。
+                # 沒有這欄位時，audio.src 為 undefined → 瀏覽器拋 NotSupportedError (issue #673)
+                if content.type == ContentType.EXAMPLE_SENTENCES:
+                    first_item = (
+                        activity_data["items"][0]
+                        if activity_data.get("items")
+                        else None
+                    )
+                    if first_item:
+                        activity_data["example_audio_url"] = first_item.get("audio_url")
+                        activity_data["content"] = first_item.get("translation") or ""
+                        activity_data["target_text"] = first_item.get("text") or ""
 
                 # 現在統一使用 StudentItemProgress 的資料，不再從 response_data 讀取
                 # recordings 和 AI 評分都應該從 items 的 recording_url 和 ai_assessment 取得
@@ -1403,14 +1416,21 @@ async def start_word_selection_practice(
     db.refresh(practice_session)
 
     # Build response with words and their options
+    # Issue #631: options 升級為 list[{text, image_url}]，給 show_option_images 模式渲染圖片用。
+    # 雙形狀相容：舊 distractors 是 list[str]、新的是 list[{text, image_url}]，由
+    # normalize_distractors 統一吐 dict 形狀。
+    from utils.distractors import normalize_distractors
+
     words_with_options = []
 
-    # Collect all unique translations for picking distractors from the word set
-    all_translations = {
-        w["translation"].lower().strip(): w["translation"]
-        for w in words_data
-        if w["translation"]
-    }
+    # Collect translations + image_url for fallback distractor sourcing
+    translation_to_image: Dict[str, Optional[str]] = {}
+    for w in words_data:
+        if not w.get("translation"):
+            continue
+        key = w["translation"].lower().strip()
+        # Prefer first non-null image; if multiple items share a translation, last write wins
+        translation_to_image.setdefault(key, w.get("image_url"))
 
     # Query stored AI distractors from DB
     content_item_ids = [w["content_item_id"] for w in words_data]
@@ -1421,28 +1441,34 @@ async def start_word_selection_practice(
 
     for i, word in enumerate(words_data):
         correct_answer = word["translation"]
-        stored_distractors = distractors_map.get(word["content_item_id"])
+        stored_distractors = normalize_distractors(
+            distractors_map.get(word["content_item_id"])
+        )
 
-        if isinstance(stored_distractors, list) and len(stored_distractors) >= 3:
-            # 使用已儲存的干擾項（來自同作業其他單字翻譯）
+        if len(stored_distractors) >= 3:
             final_distractors = list(stored_distractors[:3])
         else:
-            # Fallback: 從其他單字翻譯取
-            other_translations = [
-                t
-                for key, t in all_translations.items()
-                if key != correct_answer.lower().strip()
+            # Fallback: 從其他單字翻譯取（同時帶 image_url）
+            target = correct_answer.lower().strip()
+            pool = [
+                {"text": w["translation"], "image_url": w.get("image_url")}
+                for w in words_data
+                if w.get("translation") and w["translation"].lower().strip() != target
             ]
-            random.shuffle(other_translations)
-            final_distractors = other_translations[:3]
+            random.shuffle(pool)
+            final_distractors = pool[:3]
 
         # Fallback for small word sets
         num_needed = 3 - len(final_distractors)
         for j in range(num_needed):
-            final_distractors.append(f"選項{chr(65 + j)}")
+            final_distractors.append({"text": f"選項{chr(65 + j)}", "image_url": None})
 
-        # Create options array with correct answer and 3 distractors = 4 total
-        options = [correct_answer] + final_distractors
+        # 正確答案 option 用該單字本身的 image_url
+        correct_option = {
+            "text": correct_answer,
+            "image_url": word.get("image_url"),
+        }
+        options = [correct_option] + final_distractors
         random.shuffle(options)
 
         words_with_options.append(
@@ -1468,6 +1494,7 @@ async def start_word_selection_practice(
     )
     words_mastered = int(mastery_result.words_mastered) if mastery_result else 0
     achieved = bool(mastery_result.achieved) if mastery_result else False
+    tier_counts = _tier_counts(mastery_result)
 
     # Issue #460: Tell frontend if this is practice-only mode (already submitted)
     is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
@@ -1479,10 +1506,14 @@ async def start_word_selection_practice(
         "current_proficiency": current_proficiency,
         "target_proficiency": target_proficiency,
         "words_mastered": words_mastered,
+        **tier_counts,
         "achieved": achieved,
         "is_practice_mode": is_practice_mode,
         "show_word": assignment.show_word if assignment else True,
         "show_image": assignment.show_image if assignment else True,
+        "show_option_images": (
+            bool(assignment.show_option_images) if assignment else False
+        ),
         "play_audio": assignment.play_audio if assignment else False,
         "time_limit_per_question": (
             assignment.time_limit_per_question if assignment else None
@@ -1736,6 +1767,11 @@ async def get_word_selection_proficiency(
             "target_mastery": target_proficiency,
             "achieved": False,
             "words_mastered": 0,
+            "words_master": 0,
+            "words_familiar": 0,
+            "words_medium": 0,
+            "words_unfamiliar": 0,
+            "words_very_unfamiliar": 0,
             "total_words": 0,
         }
 
@@ -1747,6 +1783,7 @@ async def get_word_selection_proficiency(
         "target_mastery": target_proficiency,
         "achieved": achieved,
         "words_mastered": result.words_mastered,
+        **_tier_counts(result),
         "total_words": result.total_words,
     }
 
@@ -1827,6 +1864,1179 @@ async def complete_word_selection_assignment(
         "status": "COMPLETED",
         "final_score": student_assignment.score,
         "achieved_target": current_mastery >= target_proficiency,
+    }
+
+
+# =============================================================================
+# 單字拼寫 (Word Spelling) APIs
+# =============================================================================
+
+
+class WordSpellingAnswerRequest(BaseModel):
+    content_item_id: int
+    typed_answer: str = Field(max_length=200)
+    time_spent_seconds: int = 0
+    session_id: Optional[int] = None
+
+
+@router.get("/assignments/{assignment_id}/vocabulary/spelling/start")
+async def start_word_spelling_practice(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    Start a word spelling practice session.
+
+    Returns ALL words in sequential order (non-Ebbinghaus, normal practice mode).
+    Students see translation/audio and type the word.
+    """
+    student_id = int(current_student.get("sub"))
+
+    # Verify student has this assignment
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    # Get the Assignment to check practice_mode
+    assignment = None
+    if student_assignment.assignment_id:
+        assignment = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+
+    if assignment and assignment.practice_mode != "word_spelling":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This is not a word spelling assignment",
+        )
+
+    # Update assignment status to IN_PROGRESS if not started
+    # Issue #460: Allow GRADED assignments to start practice (score won't change)
+    if student_assignment.status == AssignmentStatus.NOT_STARTED:
+        student_assignment.status = AssignmentStatus.IN_PROGRESS
+        student_assignment.started_at = datetime.now(timezone.utc)
+        db.commit()
+
+    target_proficiency = assignment.target_proficiency if assignment else 80
+
+    # Get total words in assignment (for proficiency display)
+    total_words_result = db.execute(
+        text(
+            """
+            SELECT COUNT(DISTINCT ci.id) as total_count
+            FROM student_content_progress scp
+            JOIN content_items ci ON ci.content_id = scp.content_id
+            WHERE scp.student_assignment_id = :sa_id
+            """
+        ),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    total_words_in_assignment = (
+        total_words_result.total_count if total_words_result else 0
+    )
+    if total_words_in_assignment == 0:
+        fallback_count = db.execute(
+            text(
+                """
+                SELECT COUNT(DISTINCT ci.id) as total_count
+                FROM assignment_contents ac
+                JOIN content_items ci ON ci.content_id = ac.content_id
+                WHERE ac.assignment_id = :assignment_id
+                """
+            ),
+            {"assignment_id": student_assignment.assignment_id},
+        ).fetchone()
+        total_words_in_assignment = fallback_count.total_count if fallback_count else 0
+
+    # Defensive: lazily generate single-word audio so 播放音檔 mode is usable.
+    # Pull all assignment items so the helper can backfill anything missing.
+    all_assignment_contents = (
+        db.query(AssignmentContent)
+        .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
+        .all()
+    )
+    all_content_items = (
+        db.query(ContentItem)
+        .filter(
+            ContentItem.content_id.in_(
+                [ac.content_id for ac in all_assignment_contents]
+            )
+        )
+        .all()
+    )
+    from services.preview_service import ensure_word_audio
+
+    item_audio_by_id = await ensure_word_audio(list(all_content_items), db)
+
+    # Ebbinghaus: pick 10 words student is least familiar with
+    words_result = db.execute(
+        text("SELECT * FROM get_words_for_practice(:sa_id, :limit_count)"),
+        {"sa_id": assignment_id, "limit_count": 10},
+    ).fetchall()
+
+    if not words_result:
+        # Fallback: no progress records yet, just take first 10 items
+        content_items = (
+            db.query(ContentItem)
+            .filter(
+                ContentItem.content_id.in_(
+                    [ac.content_id for ac in all_assignment_contents]
+                )
+            )
+            .limit(10)
+            .all()
+        )
+        if not content_items:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No vocabulary items found for this assignment",
+            )
+        words_data = [
+            {
+                "content_item_id": ci.id,
+                "text": ci.text,
+                "translation": ci.translation or "",
+                "audio_url": item_audio_by_id.get(ci.id) or ci.audio_url,
+                "image_url": ci.image_url,
+                "memory_strength": 0,
+            }
+            for ci in content_items
+        ]
+    else:
+        # Prefer freshly-backfilled audio over the function's cached value
+        words_data = [
+            {
+                "content_item_id": row.content_item_id,
+                "text": row.text,
+                "translation": row.translation or "",
+                "audio_url": item_audio_by_id.get(row.content_item_id, row.audio_url),
+                "image_url": getattr(row, "image_url", None),
+                "memory_strength": (
+                    float(row.memory_strength) if row.memory_strength else 0
+                ),
+            }
+            for row in words_result
+        ]
+
+    if assignment and assignment.shuffle_questions:
+        random.shuffle(words_data)
+
+    # Create practice session
+    practice_session = PracticeSession(
+        student_id=student_id,
+        student_assignment_id=assignment_id,
+        practice_mode="word_spelling",
+        words_practiced=0,
+        correct_count=0,
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(practice_session)
+    db.commit()
+    db.refresh(practice_session)
+
+    # Current proficiency
+    mastery_result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    current_proficiency = (
+        float(mastery_result.current_mastery) * 100 if mastery_result else 0
+    )
+    words_mastered = int(mastery_result.words_mastered) if mastery_result else 0
+    achieved = bool(mastery_result.achieved) if mastery_result else False
+    tier_counts = _tier_counts(mastery_result)
+    is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
+
+    return {
+        "session_id": practice_session.id,
+        "words": words_data,
+        "total_words": total_words_in_assignment,
+        "current_proficiency": current_proficiency,
+        "target_proficiency": target_proficiency,
+        "words_mastered": words_mastered,
+        **tier_counts,
+        "achieved": achieved,
+        "is_practice_mode": is_practice_mode,
+        "show_translation": (assignment.show_translation if assignment else True),
+        "show_image": assignment.show_image if assignment else True,
+        "play_audio": assignment.play_audio if assignment else False,
+        "show_answer": assignment.show_answer if assignment else False,
+        "time_limit_per_question": (
+            assignment.time_limit_per_question if assignment else None
+        ),
+    }
+
+
+@router.post("/assignments/{assignment_id}/vocabulary/spelling/answer")
+async def submit_word_spelling_answer(
+    assignment_id: int,
+    request: WordSpellingAnswerRequest,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    Submit an answer for a word spelling question.
+
+    Compares typed answer against content_item.text (case-insensitive).
+    """
+    student_id = int(current_student.get("sub"))
+
+    # Verify student has this assignment
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    # Get the correct answer from content item
+    content_item = (
+        db.query(ContentItem)
+        .join(Content, ContentItem.content_id == Content.id)
+        .join(AssignmentContent, AssignmentContent.content_id == Content.id)
+        .filter(
+            ContentItem.id == request.content_item_id,
+            AssignmentContent.assignment_id == student_assignment.assignment_id,
+        )
+        .first()
+    )
+
+    if not content_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content item not found",
+        )
+
+    correct_answer = content_item.text or ""
+
+    # Case-insensitive comparison, trim whitespace
+    is_correct = request.typed_answer.strip().lower() == correct_answer.strip().lower()
+
+    # Update memory strength via SM-2 function
+    result = db.execute(
+        text(
+            """
+            SELECT * FROM update_memory_strength(
+                :sa_id,
+                :item_id,
+                :is_correct
+            )
+            """
+        ),
+        {
+            "sa_id": assignment_id,
+            "item_id": request.content_item_id,
+            "is_correct": is_correct,
+        },
+    ).fetchone()
+
+    new_memory_strength = float(result.memory_strength) if result else 0
+
+    # Record PracticeAnswer for analytics
+    if request.session_id:
+        practice_session = (
+            db.query(PracticeSession)
+            .filter(
+                PracticeSession.id == request.session_id,
+                PracticeSession.student_id == student_id,
+                PracticeSession.student_assignment_id == assignment_id,
+            )
+            .first()
+        )
+        if practice_session:
+            practice_answer = PracticeAnswer(
+                practice_session_id=practice_session.id,
+                content_item_id=request.content_item_id,
+                is_correct=is_correct,
+                time_spent_seconds=request.time_spent_seconds,
+                answer_data={
+                    "type": "word_spelling",
+                    "typed_answer": request.typed_answer,
+                    "correct_answer": correct_answer,
+                },
+            )
+            db.add(practice_answer)
+
+            practice_session.words_practiced = (
+                practice_session.words_practiced or 0
+            ) + 1
+            if is_correct:
+                practice_session.correct_count = (
+                    practice_session.correct_count or 0
+                ) + 1
+
+    # Track progress on StudentItemProgress
+    item_progress = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == assignment_id,
+            StudentItemProgress.content_item_id == request.content_item_id,
+        )
+        .first()
+    )
+    if item_progress:
+        ws_data = item_progress.word_selection_data or {
+            "correct_count": 0,
+            "error_count": 0,
+            "error_selections": [],
+        }
+        if is_correct:
+            ws_data["correct_count"] = ws_data.get("correct_count", 0) + 1
+        else:
+            ws_data["error_count"] = ws_data.get("error_count", 0) + 1
+            if request.typed_answer.strip():
+                error_selections = ws_data.get("error_selections", [])
+                found = False
+                for entry in error_selections:
+                    if entry["selected"] == request.typed_answer:
+                        entry["count"] = entry.get("count", 0) + 1
+                        found = True
+                        break
+                if not found and len(error_selections) < 20:
+                    error_selections.append(
+                        {"selected": request.typed_answer, "count": 1}
+                    )
+                ws_data["error_selections"] = error_selections
+        ws_data["last_answered_at"] = datetime.now(timezone.utc).isoformat()
+        item_progress.word_selection_data = dict(ws_data)
+
+    # Issue #460 mirror: auto-submit only when mastery hits 100%
+    mastery_result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    if mastery_result and student_assignment.status != AssignmentStatus.GRADED:
+        current_mastery = float(mastery_result.current_mastery)
+        if current_mastery >= 1.0:
+            student_assignment.score = min(100, round(current_mastery * 100))
+            student_assignment.status = AssignmentStatus.GRADED
+            student_assignment.submitted_at = datetime.now(timezone.utc)
+
+    db.commit()
+
+    return {
+        "success": True,
+        "is_correct": is_correct,
+        "correct_answer": correct_answer,
+        "new_memory_strength": new_memory_strength,
+    }
+
+
+@router.get("/assignments/{assignment_id}/vocabulary/spelling/proficiency")
+async def get_word_spelling_proficiency(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Return current proficiency for a word spelling assignment."""
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    assignment = None
+    if student_assignment.assignment_id:
+        assignment = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+    target_proficiency = assignment.target_proficiency if assignment else 80
+
+    result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    if not result:
+        return {
+            "current_mastery": 0,
+            "target_mastery": target_proficiency,
+            "achieved": False,
+            "words_mastered": 0,
+            "words_master": 0,
+            "words_familiar": 0,
+            "words_medium": 0,
+            "words_unfamiliar": 0,
+            "words_very_unfamiliar": 0,
+            "total_words": 0,
+        }
+    current_mastery = float(result.current_mastery) * 100
+    return {
+        "current_mastery": current_mastery,
+        "target_mastery": target_proficiency,
+        "achieved": current_mastery >= target_proficiency,
+        "words_mastered": result.words_mastered,
+        **_tier_counts(result),
+        "total_words": result.total_words,
+    }
+
+
+@router.post("/assignments/{assignment_id}/vocabulary/spelling/complete")
+async def complete_word_spelling_assignment(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    Mark word spelling assignment as completed.
+
+    Calculates final score based on practice session accuracy.
+    """
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    if student_assignment.status == AssignmentStatus.GRADED:
+        return {
+            "success": True,
+            "message": "作業已提交",
+            "status": "COMPLETED",
+            "final_score": student_assignment.score,
+        }
+
+    # Calculate score from mastery
+    result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+
+    current_mastery = float(result.current_mastery) * 100 if result else 0
+
+    student_assignment.status = AssignmentStatus.GRADED
+    student_assignment.submitted_at = datetime.now(timezone.utc)
+    student_assignment.score = min(100, round(current_mastery))
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "作業已完成！",
+        "status": "COMPLETED",
+        "final_score": student_assignment.score,
+    }
+
+
+# =============================================================================
+# 克漏字 (Word Cloze) APIs
+# =============================================================================
+
+
+class WordClozeAnswerRequest(BaseModel):
+    content_item_id: int
+    typed_answer: str = Field(max_length=200)
+    time_spent_seconds: int = 0
+    session_id: Optional[int] = None
+
+
+_CLOZE_STOPWORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "can",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "and",
+        "or",
+        "but",
+        "if",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "with",
+        "by",
+        "from",
+        "as",
+        "it",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "he",
+        "she",
+        "we",
+        "they",
+        "you",
+        "my",
+        "your",
+        "his",
+        "their",
+        "our",
+        "her",
+        "him",
+        "me",
+        "us",
+        "them",
+    }
+)
+
+
+def extract_cloze(base_word: str, example_sentence: str) -> Optional[tuple]:
+    """
+    Find the target word in an example sentence and return
+    (blanked_sentence, correct_answer).
+
+    Strategy:
+    1. Exact word match (case-insensitive, word boundary)
+    2. Prefix match (e.g., "apple" → "apples", "watch" → "watching")
+
+    Returns None if no match found (e.g., contractions like "am" in "I'm").
+    """
+    import re as _re
+
+    if not base_word or not example_sentence:
+        return None
+
+    base = base_word.strip().lower()
+    if not base:
+        return None
+
+    escaped = _re.escape(base)
+
+    # Try exact match first
+    exact_pattern = rf"\b{escaped}\b"
+    match = _re.search(exact_pattern, example_sentence, _re.IGNORECASE)
+    if match:
+        actual_word = match.group(0)
+        blanked = (
+            example_sentence[: match.start()]
+            + "_____"
+            + example_sentence[match.end() :]
+        )
+        return blanked, actual_word
+
+    # Fallback: prefix match (word starting with base + more letters)
+    prefix_pattern = rf"\b{escaped}\w*\b"
+    match = _re.search(prefix_pattern, example_sentence, _re.IGNORECASE)
+    if match:
+        actual_word = match.group(0)
+        blanked = (
+            example_sentence[: match.start()]
+            + "_____"
+            + example_sentence[match.end() :]
+        )
+        return blanked, actual_word
+
+    return None
+
+
+def _pick_cloze_target_from_sentence(sentence: str) -> Optional[tuple]:
+    """
+    Pick a target word from a sentence to blank out.
+    Deterministically chooses the longest content word (>= 4 chars,
+    not a stopword). Returns (blanked_sentence, target_word) or None.
+    """
+    import re as _re
+
+    if not sentence:
+        return None
+
+    matches = [
+        (m.start(), m.end(), m.group(0))
+        for m in _re.finditer(r"\b[a-zA-Z][a-zA-Z']*\b", sentence)
+    ]
+    candidates = [
+        (s, e, w)
+        for (s, e, w) in matches
+        if len(w) >= 4 and w.lower() not in _CLOZE_STOPWORDS
+    ]
+    if not candidates:
+        return None
+
+    # Pick longest; tie-break by earliest position
+    best = max(candidates, key=lambda x: (len(x[2]), -x[0]))
+    start, end, word = best
+    blanked = sentence[:start] + "_____" + sentence[end:]
+    return blanked, word
+
+
+def extract_cloze_for_item(content_item) -> Optional[tuple]:
+    """
+    Extract (blanked_sentence, correct_answer) from a ContentItem.
+
+    Supports two content shapes:
+    1. VOCABULARY_SET: ci.text is base word,
+       ci.example_sentence contains the sentence
+    2. EXAMPLE_SENTENCES: ci.text IS the sentence,
+       pick a target word automatically
+    """
+    base = (content_item.text or "").strip()
+    example = content_item.example_sentence or ""
+
+    # Strategy 1: VOCABULARY_SET-style (use base word + example sentence)
+    if example:
+        result = extract_cloze(base, example)
+        if result:
+            return result
+
+    # Strategy 2: EXAMPLE_SENTENCES-style (text itself is a sentence)
+    if base and " " in base:
+        return _pick_cloze_target_from_sentence(base)
+
+    return None
+
+
+@router.get("/assignments/{assignment_id}/vocabulary/cloze/start")
+async def start_word_cloze_practice(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    Start a word cloze practice session.
+
+    For each word with an example sentence, blank out the target word form
+    and let the student fill it in. Items without a usable example sentence
+    are skipped.
+    """
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    assignment = None
+    if student_assignment.assignment_id:
+        assignment = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+
+    if assignment and assignment.practice_mode != "word_cloze":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This is not a word cloze assignment",
+        )
+
+    # Issue #460 mirror: allow GRADED to re-practice (score won't change)
+    if student_assignment.status == AssignmentStatus.NOT_STARTED:
+        student_assignment.status = AssignmentStatus.IN_PROGRESS
+        student_assignment.started_at = datetime.now(timezone.utc)
+        db.commit()
+
+    target_proficiency = assignment.target_proficiency if assignment else 80
+
+    # total words for proficiency display
+    total_words_result = db.execute(
+        text(
+            """
+            SELECT COUNT(DISTINCT ci.id) as total_count
+            FROM student_content_progress scp
+            JOIN content_items ci ON ci.content_id = scp.content_id
+            WHERE scp.student_assignment_id = :sa_id
+            """
+        ),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    total_words_in_assignment = (
+        total_words_result.total_count if total_words_result else 0
+    )
+    if total_words_in_assignment == 0:
+        fallback_count = db.execute(
+            text(
+                """
+                SELECT COUNT(DISTINCT ci.id) as total_count
+                FROM assignment_contents ac
+                JOIN content_items ci ON ci.content_id = ac.content_id
+                WHERE ac.assignment_id = :assignment_id
+                """
+            ),
+            {"assignment_id": student_assignment.assignment_id},
+        ).fetchone()
+        total_words_in_assignment = fallback_count.total_count if fallback_count else 0
+
+    # Defensive: ensure example sentence audio exists for vocab items.
+    # Pull all assignment items so the helper can backfill anything missing
+    # before we run cloze extraction.
+    assignment_contents = (
+        db.query(AssignmentContent)
+        .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
+        .all()
+    )
+    all_content_items = (
+        db.query(ContentItem)
+        .filter(
+            ContentItem.content_id.in_([ac.content_id for ac in assignment_contents])
+        )
+        .all()
+    )
+    from services.preview_service import ensure_example_sentence_audio
+
+    sentence_audio_by_id = await ensure_example_sentence_audio(
+        list(all_content_items), db
+    )
+
+    # Ebbinghaus: pick 10 least-familiar words; oversample to absorb any
+    # items we'll filter out (those without a usable cloze sentence).
+    words_result = db.execute(
+        text("SELECT * FROM get_words_for_practice(:sa_id, :limit_count)"),
+        {"sa_id": assignment_id, "limit_count": 30},
+    ).fetchall()
+
+    item_by_id = {ci.id: ci for ci in all_content_items}
+
+    candidate_items = []
+    if words_result:
+        for row in words_result:
+            ci = item_by_id.get(row.content_item_id)
+            if ci is not None:
+                candidate_items.append(ci)
+    else:
+        candidate_items = list(all_content_items)
+
+    if assignment and assignment.shuffle_questions:
+        random.shuffle(candidate_items)
+
+    # Build cloze questions, skip items without usable example sentence,
+    # cap at 10 per round.
+    questions = []
+    for ci in candidate_items:
+        if len(questions) >= 10:
+            break
+        cloze = extract_cloze_for_item(ci)
+        if cloze is None:
+            logger.info(
+                "Skipping cloze for content_item %s: no usable sentence",
+                ci.id,
+            )
+            continue
+        blanked_sentence, correct_answer = cloze
+        is_vocab_item = bool(ci.example_sentence)
+        questions.append(
+            {
+                "content_item_id": ci.id,
+                "base_word": ci.text if is_vocab_item else "",
+                "translation": ci.translation if is_vocab_item else "",
+                "blanked_sentence": blanked_sentence,
+                "sentence_translation": (
+                    ci.example_sentence_translation
+                    if is_vocab_item
+                    else (ci.translation or "")
+                )
+                or "",
+                "audio_url": (
+                    sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
+                    if is_vocab_item
+                    else ci.audio_url
+                ),
+                "correct_answer": correct_answer,
+                "correct_answer_length": len(correct_answer),
+            }
+        )
+
+    if not questions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "No usable cloze questions: example sentences do not contain "
+                "the target word."
+            ),
+        )
+
+    practice_session = PracticeSession(
+        student_id=student_id,
+        student_assignment_id=assignment_id,
+        practice_mode="word_cloze",
+        words_practiced=0,
+        correct_count=0,
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(practice_session)
+    db.commit()
+    db.refresh(practice_session)
+
+    # current proficiency
+    mastery_result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    current_proficiency = (
+        float(mastery_result.current_mastery) * 100 if mastery_result else 0
+    )
+    words_mastered = int(mastery_result.words_mastered) if mastery_result else 0
+    achieved = bool(mastery_result.achieved) if mastery_result else False
+    tier_counts = _tier_counts(mastery_result)
+    is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
+
+    return {
+        "session_id": practice_session.id,
+        "questions": questions,
+        "total_questions": total_words_in_assignment,
+        "current_proficiency": current_proficiency,
+        "target_proficiency": target_proficiency,
+        "words_mastered": words_mastered,
+        **tier_counts,
+        "achieved": achieved,
+        "is_practice_mode": is_practice_mode,
+        "show_translation": (assignment.show_translation if assignment else True),
+        "play_audio": assignment.play_audio if assignment else False,
+        "show_answer": assignment.show_answer if assignment else False,
+        "time_limit_per_question": (
+            assignment.time_limit_per_question if assignment else None
+        ),
+    }
+
+
+@router.post("/assignments/{assignment_id}/vocabulary/cloze/answer")
+async def submit_word_cloze_answer(
+    assignment_id: int,
+    request: WordClozeAnswerRequest,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    Submit a cloze answer. The correct answer is the actual word form that
+    appears in the example sentence (e.g., "apples" for base "apple").
+    """
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    content_item = (
+        db.query(ContentItem)
+        .join(Content, ContentItem.content_id == Content.id)
+        .join(AssignmentContent, AssignmentContent.content_id == Content.id)
+        .filter(
+            ContentItem.id == request.content_item_id,
+            AssignmentContent.assignment_id == student_assignment.assignment_id,
+        )
+        .first()
+    )
+
+    if not content_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content item not found",
+        )
+
+    cloze = extract_cloze_for_item(content_item)
+    if cloze is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This item has no usable cloze sentence",
+        )
+    _blanked, correct_answer = cloze
+
+    is_correct = request.typed_answer.strip().lower() == correct_answer.strip().lower()
+
+    result = db.execute(
+        text(
+            """
+            SELECT * FROM update_memory_strength(
+                :sa_id,
+                :item_id,
+                :is_correct
+            )
+            """
+        ),
+        {
+            "sa_id": assignment_id,
+            "item_id": request.content_item_id,
+            "is_correct": is_correct,
+        },
+    ).fetchone()
+
+    new_memory_strength = float(result.memory_strength) if result else 0
+
+    if request.session_id:
+        practice_session = (
+            db.query(PracticeSession)
+            .filter(
+                PracticeSession.id == request.session_id,
+                PracticeSession.student_id == student_id,
+                PracticeSession.student_assignment_id == assignment_id,
+            )
+            .first()
+        )
+        if practice_session:
+            practice_answer = PracticeAnswer(
+                practice_session_id=practice_session.id,
+                content_item_id=request.content_item_id,
+                is_correct=is_correct,
+                time_spent_seconds=request.time_spent_seconds,
+                answer_data={
+                    "type": "word_cloze",
+                    "typed_answer": request.typed_answer,
+                    "correct_answer": correct_answer,
+                },
+            )
+            db.add(practice_answer)
+
+            practice_session.words_practiced = (
+                practice_session.words_practiced or 0
+            ) + 1
+            if is_correct:
+                practice_session.correct_count = (
+                    practice_session.correct_count or 0
+                ) + 1
+
+    item_progress = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == assignment_id,
+            StudentItemProgress.content_item_id == request.content_item_id,
+        )
+        .first()
+    )
+    if item_progress:
+        ws_data = item_progress.word_selection_data or {
+            "correct_count": 0,
+            "error_count": 0,
+            "error_selections": [],
+        }
+        if is_correct:
+            ws_data["correct_count"] = ws_data.get("correct_count", 0) + 1
+        else:
+            ws_data["error_count"] = ws_data.get("error_count", 0) + 1
+            if request.typed_answer.strip():
+                error_selections = ws_data.get("error_selections", [])
+                found = False
+                for entry in error_selections:
+                    if entry["selected"] == request.typed_answer:
+                        entry["count"] = entry.get("count", 0) + 1
+                        found = True
+                        break
+                if not found and len(error_selections) < 20:
+                    error_selections.append(
+                        {"selected": request.typed_answer, "count": 1}
+                    )
+                ws_data["error_selections"] = error_selections
+        ws_data["last_answered_at"] = datetime.now(timezone.utc).isoformat()
+        item_progress.word_selection_data = dict(ws_data)
+
+    # Auto-submit when mastery hits 100%
+    mastery_result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    if mastery_result and student_assignment.status != AssignmentStatus.GRADED:
+        current_mastery = float(mastery_result.current_mastery)
+        if current_mastery >= 1.0:
+            student_assignment.score = min(100, round(current_mastery * 100))
+            student_assignment.status = AssignmentStatus.GRADED
+            student_assignment.submitted_at = datetime.now(timezone.utc)
+
+    db.commit()
+
+    return {
+        "success": True,
+        "is_correct": is_correct,
+        "correct_answer": correct_answer,
+        "new_memory_strength": new_memory_strength,
+    }
+
+
+@router.get("/assignments/{assignment_id}/vocabulary/cloze/proficiency")
+async def get_word_cloze_proficiency(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Return current proficiency for a word cloze assignment."""
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    assignment = None
+    if student_assignment.assignment_id:
+        assignment = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+    target_proficiency = assignment.target_proficiency if assignment else 80
+
+    result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+    if not result:
+        return {
+            "current_mastery": 0,
+            "target_mastery": target_proficiency,
+            "achieved": False,
+            "words_mastered": 0,
+            "words_master": 0,
+            "words_familiar": 0,
+            "words_medium": 0,
+            "words_unfamiliar": 0,
+            "words_very_unfamiliar": 0,
+            "total_words": 0,
+        }
+    current_mastery = float(result.current_mastery) * 100
+    return {
+        "current_mastery": current_mastery,
+        "target_mastery": target_proficiency,
+        "achieved": current_mastery >= target_proficiency,
+        "words_mastered": result.words_mastered,
+        **_tier_counts(result),
+        "total_words": result.total_words,
+    }
+
+
+@router.post("/assignments/{assignment_id}/vocabulary/cloze/complete")
+async def complete_word_cloze_assignment(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Mark word cloze assignment as completed."""
+    student_id = int(current_student.get("sub"))
+
+    student_assignment = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not student_assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+
+    if student_assignment.status == AssignmentStatus.GRADED:
+        return {
+            "success": True,
+            "message": "作業已提交",
+            "status": "COMPLETED",
+            "final_score": student_assignment.score,
+        }
+
+    result = db.execute(
+        text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+        {"sa_id": assignment_id},
+    ).fetchone()
+
+    current_mastery = float(result.current_mastery) * 100 if result else 0
+
+    student_assignment.status = AssignmentStatus.GRADED
+    student_assignment.submitted_at = datetime.now(timezone.utc)
+    student_assignment.score = min(100, round(current_mastery))
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "作業已完成！",
+        "status": "COMPLETED",
+        "final_score": student_assignment.score,
     }
 
 

@@ -37,8 +37,10 @@ import {
   ClipboardList,
   Search,
 } from "lucide-react";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
 import { AssignmentDialog } from "@/components/AssignmentDialog";
+import { toast } from "sonner";
+import { CloudDownload } from "lucide-react";
 
 interface ClassroomDetail {
   id: number;
@@ -56,6 +58,9 @@ interface ClassroomDetail {
   school_id?: string;
   school_name?: string;
   organization_id?: string;
+  // 1Campus sync metadata (#635); only populated for synced classrooms.
+  one_campus_class_id?: string | null;
+  last_synced_at?: string | null;
 }
 
 type SortField = "name" | "student_count" | "created_at";
@@ -95,6 +100,58 @@ export default function TeacherClassrooms() {
   // Assignment dialog
   const [assignmentClassroom, setAssignmentClassroom] =
     useState<ClassroomDetail | null>(null);
+
+  // 1Campus class sync (#635)
+  const [syncingOneCampus, setSyncingOneCampus] = useState(false);
+
+  const handleSyncOneCampusClasses = async () => {
+    if (syncingOneCampus) return;
+    setSyncingOneCampus(true);
+    try {
+      const res = await apiClient.syncOneCampusClasses();
+      if (res.enqueued && res.schools.length > 0) {
+        toast.success(
+          t("teacherClassrooms.oneCampusSync.success", {
+            defaultValue: `Sync started for ${res.schools.length} school(s). Refresh shortly to see updates.`,
+          }),
+        );
+        // Re-fetch after a short delay so the user sees the freshly-synced data.
+        setTimeout(() => fetchClassrooms(), 4000);
+      } else {
+        toast.info(
+          res.message ||
+            t("teacherClassrooms.oneCampusSync.noSchools", {
+              defaultValue: "No 1Campus schools found for your account.",
+            }),
+        );
+      }
+    } catch (err: unknown) {
+      const status = err instanceof ApiError ? err.status : undefined;
+      if (status === 403) {
+        toast.error(
+          t("teacherClassrooms.oneCampusSync.notLinked", {
+            defaultValue:
+              "Your account is not linked to 1Campus. Log in via 1Campus first.",
+          }),
+        );
+      } else if (status === 429) {
+        toast.error(
+          t("teacherClassrooms.oneCampusSync.rateLimited", {
+            defaultValue:
+              "Sync was triggered recently — please wait a minute and try again.",
+          }),
+        );
+      } else {
+        toast.error(
+          t("teacherClassrooms.oneCampusSync.failed", {
+            defaultValue: "Failed to start 1Campus sync. Please try again.",
+          }),
+        );
+      }
+    } finally {
+      setSyncingOneCampus(false);
+    }
+  };
 
   const fetchClassrooms = useCallback(async () => {
     try {
@@ -387,6 +444,23 @@ export default function TeacherClassrooms() {
             <RefreshCw className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">
               {t("teacherClassrooms.buttons.reload")}
+            </span>
+          </Button>
+          <Button
+            onClick={handleSyncOneCampusClasses}
+            variant="outline"
+            size="sm"
+            className="flex-1 sm:flex-none"
+            disabled={syncingOneCampus}
+            title={t("teacherClassrooms.oneCampusSync.tooltip", {
+              defaultValue: "Pull latest classes + students from 1Campus",
+            })}
+          >
+            <CloudDownload className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">
+              {t("teacherClassrooms.oneCampusSync.button", {
+                defaultValue: syncingOneCampus ? "Syncing..." : "Sync 1Campus",
+              })}
             </span>
           </Button>
           <Button

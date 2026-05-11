@@ -38,6 +38,10 @@ from .validators import (
 )
 from .dependencies import get_current_teacher
 from .detail import _compute_interim_score
+from services.analysis_quota import (
+    reset_analysis_count_for_assignment,
+    reset_analysis_count_for_assignments,
+)
 from .utils import (
     process_audio_with_whisper,
     calculate_text_similarity,
@@ -934,6 +938,12 @@ async def return_for_revision(
     if message and hasattr(assignment, "return_message"):
         assignment.return_message = message
 
+    # Refresh per-item AI analysis quota for the new revision cycle.
+    # Already-passed items (teacher_passed=True) are still locked from
+    # re-analysis by the speech endpoint, so a blanket reset is safe —
+    # and matches the frontend hook's reset semantics exactly.
+    reset_analysis_count_for_assignment(assignment.id, db)
+
     db.commit()
 
     return {
@@ -1503,6 +1513,7 @@ async def finalize_batch_grade(
     returned_count = 0
     graded_count = 0
     unchanged_count = 0
+    returned_sa_ids: list[int] = []
 
     with start_span("Update Student Statuses"):
         for sa in student_assignments:
@@ -1514,6 +1525,7 @@ async def finalize_batch_grade(
             if decision == "RETURNED":
                 sa.status = AssignmentStatus.RETURNED
                 sa.returned_at = datetime.now(timezone.utc)
+                returned_sa_ids.append(sa.id)
                 returned_count += 1
             elif decision == "GRADED":
                 sa.status = AssignmentStatus.GRADED
@@ -1526,6 +1538,11 @@ async def finalize_batch_grade(
             else:
                 # None or missing → keep original status unchanged
                 unchanged_count += 1
+
+        # Mirror the single-return path: zero per-item AI analysis quota
+        # for every student we just RETURNED, in one bulk UPDATE rather
+        # than N individual ones (the loop runs across the whole class).
+        reset_analysis_count_for_assignments(returned_sa_ids, db)
 
         perf.checkpoint("Updated Student Statuses")
 

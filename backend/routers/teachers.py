@@ -4624,35 +4624,30 @@ async def preview_word_selection_start(
     #             item._generated_distractors = ["選項A", "選項B", "選項C"]
     # --- end AI distractor generation ---
 
-    # 建立回應資料
+    # 建立回應資料 — Issue #631: options 升級為 list[{text, image_url}]
     words_with_options = []
-
-    # 收集所有單字的翻譯，用於從單字集隨機挑選干擾項
-    all_translations = {
-        item.translation.lower().strip(): item.translation
-        for item in content_items
-        if item.translation
-    }
 
     for item in content_items:
         correct_answer = item.translation or ""
 
-        # 從同集內其他單字的翻譯隨機挑 3 個作為錯誤選項 (#303)
-        other_translations = [
-            t
-            for key, t in all_translations.items()
-            if key != correct_answer.lower().strip()
+        # 從同集內其他單字隨機挑 3 個（同時帶 image_url）作為錯誤選項 (#303)
+        target = correct_answer.lower().strip()
+        pool = [
+            {"text": other.translation, "image_url": other.image_url}
+            for other in content_items
+            if other.translation and other.translation.lower().strip() != target
         ]
-        random.shuffle(other_translations)
-        final_distractors = other_translations[:3]
+        random.shuffle(pool)
+        final_distractors = pool[:3]
 
         # Fallback for small word sets
         num_needed = 3 - len(final_distractors)
         for i in range(num_needed):
-            final_distractors.append(f"選項{chr(65 + i)}")
+            final_distractors.append({"text": f"選項{chr(65 + i)}", "image_url": None})
 
         # 建立選項陣列並打亂
-        options = [correct_answer] + final_distractors
+        correct_option = {"text": correct_answer, "image_url": item.image_url}
+        options = [correct_option] + final_distractors
         random.shuffle(options)
 
         words_with_options.append(
@@ -4677,6 +4672,7 @@ async def preview_word_selection_start(
         "show_image": (
             assignment.show_image if assignment.show_image is not None else True
         ),
+        "show_option_images": bool(getattr(assignment, "show_option_images", False)),
         "play_audio": assignment.play_audio or False,
         "time_limit_per_question": assignment.time_limit_per_question,
     }

@@ -20,6 +20,7 @@ from . import (
     assignment_ops,
     instant_practice,
     teacher_organizations,
+    one_campus_ops,
 )
 
 # Create main router with prefix and tags
@@ -39,6 +40,7 @@ router.include_router(upload_ops.router, tags=["teachers-upload"])
 router.include_router(assignment_ops.router, tags=["teachers-assignments"])
 router.include_router(instant_practice.router, tags=["teachers-instant-practice"])
 router.include_router(teacher_organizations.router, tags=["teachers-organizations"])
+router.include_router(one_campus_ops.router, tags=["teachers-one-campus"])
 
 # Re-export router and dependencies for backward compatibility
 from .dependencies import get_current_teacher  # noqa: E402

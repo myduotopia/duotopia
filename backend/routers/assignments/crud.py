@@ -46,6 +46,58 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Practice modes that require each vocab item to carry a non-empty example
+# sentence + translation. With vocab content, these modes read from the
+# example fields; missing data degrades silently to playing the single-word
+# audio (reading), skipping the item (rearrangement), or returning an empty
+# question set (word_cloze) — see services.preview_service.get_sentence_fields
+# and routers.students.assignments.extract_cloze_for_item. We block creation
+# at the API boundary rather than letting the broken UX surface to students
+# (issue #673).
+_PRACTICE_MODES_REQUIRING_EXAMPLES = {"reading", "rearrangement", "word_cloze"}
+
+
+def _collect_contents_missing_examples(
+    contents: List[Content], practice_mode: Optional[str]
+) -> List[str]:
+    """Return titles of vocab contents whose items lack example sentences.
+
+    Empty list ⇒ payload is valid for the given practice mode.
+
+    Caller must ensure ``content.content_items`` are eager-loaded; this helper
+    does not query the database.
+    """
+    if practice_mode not in _PRACTICE_MODES_REQUIRING_EXAMPLES:
+        return []
+
+    missing_titles: List[str] = []
+    for content in contents:
+        if content.type not in _VOCABULARY_CONTENT_TYPES:
+            continue
+        for item in content.content_items:
+            sentence = (item.example_sentence or "").strip()
+            translation = (item.example_sentence_translation or "").strip()
+            if not sentence or not translation:
+                missing_titles.append(content.title)
+                break
+    return missing_titles
+
+
+def _raise_if_missing_examples(
+    contents: List[Content], practice_mode: Optional[str]
+) -> None:
+    """Raise 422 with structured detail when vocab contents miss example data."""
+    missing = _collect_contents_missing_examples(contents, practice_mode)
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "EXAMPLE_SENTENCE_REQUIRED",
+                "practice_mode": practice_mode,
+                "content_titles": missing,
+            },
+        )
+
 
 @router.post("/create")
 async def create_assignment(
@@ -134,6 +186,10 @@ async def create_assignment(
     if len(contents) != len(request.content_ids):
         raise HTTPException(status_code=404, detail="Some contents not found")
 
+    # Issue #673: block reading / rearrangement / word_cloze on vocab contents
+    # whose items don't carry example_sentence + example_sentence_translation.
+    _raise_if_missing_examples(contents, request.practice_mode)
+
     # Sanitize answer_mode - deprecated field with database constraint
     # Only 'listening' and 'writing' are allowed by database CHECK constraint
     # If value is invalid (e.g., 'speaking'), use default 'writing'
@@ -162,6 +218,7 @@ async def create_assignment(
         show_word=request.show_word,
         show_image=request.show_image,
         show_translation=request.show_translation,
+        show_option_images=bool(request.show_option_images),  # Issue #631
         score_category=request.score_category,
     )
     db.add(assignment)
@@ -228,7 +285,11 @@ async def create_assignment(
             content_items_copy_map[original_item.id] = item_copy.id
 
     # word_selection 模式：為缺少干擾項的 items 從作業內所有 content 的單字翻譯生成
+    # Issue #631: 干擾項升級為 list[{text, image_url}]，方便 show_option_images 模式
+    # 用 snapshot 的 image_url 渲染選項圖。reader 端會做雙形狀相容。
     if request.practice_mode == "word_selection":
+        from utils.distractors import make_distractor
+
         # 收集作業內所有 content copies 的翻譯（跨 content）
         all_copy_content_ids = list(content_copy_map.values())
         all_items_in_assignment = (
@@ -239,18 +300,24 @@ async def create_assignment(
             .order_by(ContentItem.order_index)
             .all()
         )
-        all_translations = [item.translation for item in all_items_in_assignment]
+        # 候選池：每個 item 同時帶 translation + image_url
+        all_candidates = [
+            (item.translation, item.image_url) for item in all_items_in_assignment
+        ]
 
         generated_count = 0
         for item in all_items_in_assignment:
             if not isinstance(item.distractors, list) or len(item.distractors) == 0:
-                candidates = [
-                    t
-                    for t in all_translations
-                    if t.lower().strip() != item.translation.lower().strip()
+                target = item.translation.lower().strip()
+                pool = [
+                    (t, img)
+                    for (t, img) in all_candidates
+                    if t.lower().strip() != target
                 ]
-                random.shuffle(candidates)
-                item.distractors = candidates[:3]
+                random.shuffle(pool)
+                item.distractors = [
+                    make_distractor(text=t, image_url=img) for (t, img) in pool[:3]
+                ]
                 generated_count += 1
         if generated_count > 0:
             logger.info(
@@ -614,6 +681,23 @@ async def update_assignment(
             status_code=404, detail="Assignment not found or you don't have permission"
         )
 
+    # Issue #673: validate example-sentence requirements on the new content set
+    # before mutating anything (so a failed validation leaves the existing
+    # assignment intact).
+    new_contents = (
+        db.query(Content)
+        .options(selectinload(Content.content_items))
+        .filter(Content.id.in_(request.content_ids))
+        .all()
+    )
+    if len(new_contents) != len(request.content_ids):
+        raise HTTPException(status_code=404, detail="Some contents not found")
+    # Use the request's practice_mode if provided, otherwise the existing one
+    # on the assignment (PUT replaces the resource so practice_mode may be
+    # unchanged from the request side).
+    effective_mode = request.practice_mode or assignment.practice_mode
+    _raise_if_missing_examples(new_contents, effective_mode)
+
     # 更新基本資訊
     assignment.title = request.title
     assignment.description = request.description
@@ -676,6 +760,12 @@ async def patch_assignment(
             status_code=404, detail="Assignment not found or you don't have permission"
         )
 
+    # Issue #673: no example-sentence validation needed here. PATCH cannot
+    # change practice_mode or content_ids (UpdateAssignmentRequest does not
+    # expose them); both were validated at create / PUT time. If those fields
+    # are added to UpdateAssignmentRequest in the future, port the
+    # _raise_if_missing_examples call from create_assignment / update_assignment.
+
     # 只更新提供的欄位（使用 model_fields_set 區分「未提供」和「明確傳 null」）
     provided = request.model_fields_set
 
@@ -703,10 +793,18 @@ async def patch_assignment(
         "show_word",
         "show_image",
         "show_translation",
+        "show_option_images",  # Issue #631
     ]
     for field in advanced_fields:
         if field in provided:
             setattr(assignment, field, getattr(request, field))
+
+    # Issue #631: 互斥校驗 — 部分更新後若兩者皆 True 則拒絕
+    if assignment.show_image and assignment.show_option_images:
+        raise HTTPException(
+            status_code=422,
+            detail="show_image and show_option_images are mutually exclusive",
+        )
 
     # 更新 StudentAssignment 記錄
     update_fields = {}

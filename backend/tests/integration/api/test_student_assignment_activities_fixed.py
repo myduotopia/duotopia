@@ -244,6 +244,89 @@ class TestStudentAssignmentActivities:
         assert response.status_code == 403
 
 
+class TestStudentAssignmentExampleAudio:
+    """Regression tests for issue #673: example_audio_url must be returned for
+    EXAMPLE_SENTENCES content so the student player can load the audio source."""
+
+    @pytest.fixture
+    def example_audio_data(self, db_session):
+        """Build an assignment with EXAMPLE_SENTENCES content carrying an audio_url."""
+        from models import AssignmentContent, StudentAssignment
+
+        data = TestDataFactory.create_full_assignment_chain(
+            db_session,
+            content_items=[
+                {
+                    "text": "In the park there is a big tree.",
+                    "translation": "公園裡有一棵大樹。",
+                    "audio_url": "https://storage.googleapis.com/test/example-1.mp3",
+                },
+                {
+                    "text": "Children are playing on the grass.",
+                    "translation": "孩子們在草地上玩耍。",
+                    "audio_url": "https://storage.googleapis.com/test/example-2.mp3",
+                },
+            ],
+        )
+
+        # Re-create StudentAssignment via assignment_id path to mirror real flow
+        # (factory's create_student_assignment already does this, but we need the
+        # IN_PROGRESS state to exercise the live activity-fetching code path).
+        sa = (
+            db_session.query(StudentAssignment)
+            .filter_by(student_id=data["student"].id)
+            .first()
+        )
+        sa.status = AssignmentStatus.IN_PROGRESS
+        sa.is_active = True
+        db_session.commit()
+        db_session.refresh(sa)
+
+        # Sanity: the AssignmentContent link from the factory is in place
+        assert (
+            db_session.query(AssignmentContent)
+            .filter_by(assignment_id=data["assignment"].id)
+            .count()
+            == 1
+        )
+
+        return {**data, "student_assignment": sa}
+
+    @pytest.mark.asyncio
+    async def test_example_audio_url_populated_for_example_sentences(
+        self, client, example_audio_data
+    ):
+        """Issue #673: EXAMPLE_SENTENCES activity must expose example_audio_url
+        at the top level so frontend ReadingAssessmentPanel can play it."""
+        student_token = create_access_token(
+            data={
+                "sub": str(example_audio_data["student"].id),
+                "type": "student",
+            }
+        )
+
+        response = client.get(
+            f"/api/students/assignments/{example_audio_data['student_assignment'].id}/activities",
+            headers={"Authorization": f"Bearer {student_token}"},
+        )
+        assert response.status_code == 200, response.text
+
+        activities = response.json()["activities"]
+        assert len(activities) == 1
+        activity = activities[0]
+
+        # The bug: example_audio_url was never set, so it came back undefined and
+        # the <audio> element threw NotSupportedError on play. After the fix it
+        # mirrors the teacher-preview behaviour.
+        assert activity.get("example_audio_url") == (
+            "https://storage.googleapis.com/test/example-1.mp3"
+        )
+        # And the helper text fields populated from the first item, matching the
+        # teacher preview endpoint contract.
+        assert activity["target_text"] == "In the park there is a big tree."
+        assert activity["content"] == "公園裡有一棵大樹。"
+
+
 if __name__ == "__main__":
     print(
         "Run this test with: pytest tests/integration/api/test_student_assignment_activities_fixed.py -v"

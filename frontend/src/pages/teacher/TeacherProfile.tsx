@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
+import OneCampusBindSection from "@/components/settings/OneCampusBindSection";
 import {
   User,
   Mail,
@@ -460,6 +461,9 @@ export default function TeacherProfile() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 1Campus Binding Card */}
+      <OneCampusBindSection userType="teacher" />
 
       {/* Quota Info Card */}
       <QuotaCard />

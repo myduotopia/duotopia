@@ -4,7 +4,7 @@ Pydantic models and validators for assignments
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class CreateAssignmentRequest(BaseModel):
@@ -23,7 +23,7 @@ class CreateAssignmentRequest(BaseModel):
     # 作答模式設定
     practice_mode: Optional[
         str
-    ] = None  # reading, rearrangement, word_reading, word_selection
+    ] = None  # reading, rearrangement, word_reading, word_selection, word_spelling, word_cloze
     answer_mode: Optional[
         str
     ] = None  # DEPRECATED: only 'listening'/'writing' allowed by DB
@@ -36,7 +36,15 @@ class CreateAssignmentRequest(BaseModel):
     show_word: Optional[bool] = None
     show_image: Optional[bool] = None
     show_translation: Optional[bool] = None
+    show_option_images: Optional[bool] = None  # Issue #631
     score_category: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _option_images_xor_image(self) -> "CreateAssignmentRequest":
+        # Issue #631: show_image 與 show_option_images 互斥，避免題目圖片直接洩漏答案
+        if self.show_image and self.show_option_images:
+            raise ValueError("show_image and show_option_images are mutually exclusive")
+        return self
 
 
 class UpdateAssignmentRequest(BaseModel):
@@ -57,6 +65,15 @@ class UpdateAssignmentRequest(BaseModel):
     show_word: Optional[bool] = None
     show_image: Optional[bool] = None
     show_translation: Optional[bool] = None
+    show_option_images: Optional[bool] = None  # Issue #631
+
+    @model_validator(mode="after")
+    def _option_images_xor_image(self) -> "UpdateAssignmentRequest":
+        # 只在兩者都明確 True 時才阻擋；其中一邊為 None 表示「不更新」，由後端保留現值，
+        # 不在 validator 階段判斷，留給 CRUD 層讀現值再檢查。
+        if self.show_image is True and self.show_option_images is True:
+            raise ValueError("show_image and show_option_images are mutually exclusive")
+        return self
 
 
 class AssignmentResponse(BaseModel):

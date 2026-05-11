@@ -3,6 +3,7 @@
 
 Handles:
 - OAuth client_credentials token management with caching
+- OAuth 2.0 Authorization Code flow (auth.ischool.com.tw)
 - Identity code exchange (SSO login)
 - getUserRole for cross-school identity data (idNumberHash)
 """
@@ -12,8 +13,7 @@ import logging
 import re
 import time
 from typing import Optional
-
-import httpx
+from urllib.parse import urlencode
 
 from utils.http_client import get_http_client
 from core.config import settings
@@ -31,6 +31,14 @@ ONE_CAMPUS_API_BASE = (
 
 ONE_CAMPUS_CLIENT_ID = getattr(settings, "ONE_CAMPUS_CLIENT_ID", None)
 ONE_CAMPUS_CLIENT_SECRET = getattr(settings, "ONE_CAMPUS_CLIENT_SECRET", None)
+
+# 1Campus OAuth (auth.ischool.com.tw)
+ONE_CAMPUS_OAUTH_BASE = "https://auth.ischool.com.tw"
+ONE_CAMPUS_OAUTH_CLIENT_ID = getattr(settings, "ONE_CAMPUS_OAUTH_CLIENT_ID", None)
+ONE_CAMPUS_OAUTH_CLIENT_SECRET = getattr(
+    settings, "ONE_CAMPUS_OAUTH_CLIENT_SECRET", None
+)
+ONE_CAMPUS_OAUTH_REDIRECT_URI = getattr(settings, "ONE_CAMPUS_OAUTH_REDIRECT_URI", None)
 
 # Token cache (module-level singleton) with asyncio.Lock to prevent race conditions
 _token_cache: dict = {"access_token": None, "expires_at": 0}
@@ -84,6 +92,75 @@ class OneCampusService:
     """1Campus API client."""
 
     @staticmethod
+    def get_oauth_authorize_url(state: str) -> str:
+        """Build the OAuth authorize URL for 1Campus SSO.
+
+        Caller must pass a CSRF state token (verified on the callback).
+        All query parameters are URL-encoded to handle special characters
+        in redirect_uri or client_id safely.
+        """
+        if not ONE_CAMPUS_OAUTH_CLIENT_ID or not ONE_CAMPUS_OAUTH_REDIRECT_URI:
+            raise RuntimeError(
+                "ONE_CAMPUS_OAUTH_CLIENT_ID and ONE_CAMPUS_OAUTH_REDIRECT_URI must be set"
+            )
+        params = urlencode(
+            {
+                "client_id": ONE_CAMPUS_OAUTH_CLIENT_ID,
+                "response_type": "code",
+                "redirect_uri": ONE_CAMPUS_OAUTH_REDIRECT_URI,
+                "scope": "User.Mail,User.BasicInfo",
+                "state": state,
+            }
+        )
+        return f"{ONE_CAMPUS_OAUTH_BASE}/oauth/authorize.php?{params}"
+
+    @staticmethod
+    async def exchange_oauth_code(code: str) -> dict:
+        """Exchange an OAuth authorization code for an access token.
+
+        POST https://auth.ischool.com.tw/oauth/token.php
+
+        Returns dict with keys: access_token, expires_in, token_type, scope, refresh_token.
+        """
+        if not ONE_CAMPUS_OAUTH_CLIENT_ID or not ONE_CAMPUS_OAUTH_CLIENT_SECRET:
+            raise RuntimeError(
+                "ONE_CAMPUS_OAUTH_CLIENT_ID and ONE_CAMPUS_OAUTH_CLIENT_SECRET must be set"
+            )
+        if not ONE_CAMPUS_OAUTH_REDIRECT_URI:
+            raise RuntimeError("ONE_CAMPUS_OAUTH_REDIRECT_URI must be set")
+
+        client = get_http_client()
+        resp = await client.post(
+            f"{ONE_CAMPUS_OAUTH_BASE}/oauth/token.php",
+            data={
+                "client_id": ONE_CAMPUS_OAUTH_CLIENT_ID,
+                "client_secret": ONE_CAMPUS_OAUTH_CLIENT_SECRET,
+                "redirect_uri": ONE_CAMPUS_OAUTH_REDIRECT_URI,
+                "code": code,
+                "grant_type": "authorization_code",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    @staticmethod
+    async def get_oauth_user_info(access_token: str) -> dict:
+        """Get user info from 1Campus OAuth.
+
+        Token is passed via Authorization header (not query string) to
+        avoid leaking via server logs, browser history, or Referer headers.
+
+        Returns dict with keys: uuid, firstName, lastName, language, mail.
+        """
+        client = get_http_client()
+        resp = await client.get(
+            f"{ONE_CAMPUS_OAUTH_BASE}/services/me.php",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    @staticmethod
     async def exchange_identity_code(school_dsns: str, code: str) -> dict:
         """Exchange a one-time identity code for user info.
 
@@ -106,6 +183,54 @@ class OneCampusService:
             raise OneCampusCodeNotFoundError("Identity code not found or already used")
         if resp.status_code == 410:
             raise OneCampusCodeExpiredError("Identity code expired (30s limit)")
+        resp.raise_for_status()
+        return resp.json()
+
+    @staticmethod
+    async def get_class(school_dsns: str) -> dict:
+        """List all classes in a school via the jasmine API.
+
+        GET /api/jasmine/getClass?schoolDsns=xxx
+
+        Returns the raw JSON response. The exact shape is documented by
+        1Campus, but is expected to contain a list of classes with at least
+        an identifier and a display name. The sync service is responsible
+        for parsing the response shape — keep this method dumb on purpose so
+        that an upstream schema change only requires touching the sync layer.
+        """
+        if not _DSNS_RE.match(school_dsns):
+            raise ValueError(f"Invalid schoolDsns format: {school_dsns!r}")
+
+        token = await _get_access_token()
+        client = get_http_client()
+        resp = await client.get(
+            f"{ONE_CAMPUS_API_BASE}/api/jasmine/getClass",
+            params={"schoolDsns": school_dsns},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    @staticmethod
+    async def get_class_student(school_dsns: str, class_id: str) -> dict:
+        """List students in a 1Campus class via the jasmine API.
+
+        GET /api/jasmine/getClassStudent?schoolDsns=xxx&classID=yyy
+
+        See `get_class` for the rationale behind keeping the response opaque.
+        """
+        if not _DSNS_RE.match(school_dsns):
+            raise ValueError(f"Invalid schoolDsns format: {school_dsns!r}")
+        if not class_id or not isinstance(class_id, str):
+            raise ValueError("class_id must be a non-empty string")
+
+        token = await _get_access_token()
+        client = get_http_client()
+        resp = await client.get(
+            f"{ONE_CAMPUS_API_BASE}/api/jasmine/getClassStudent",
+            params={"schoolDsns": school_dsns, "classID": class_id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
         resp.raise_for_status()
         return resp.json()
 

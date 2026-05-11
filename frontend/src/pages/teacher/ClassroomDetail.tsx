@@ -1830,6 +1830,7 @@ export default function ClassroomDetail({
                                 | undefined,
                               order: 0,
                               hasMissingAudio: false,
+                              hasMissingImage: false,
                             };
                             setAssignContents([cartItem]);
                             setShowAssignDialog(true);
@@ -2140,6 +2141,33 @@ export default function ClassroomDetail({
                                       "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
                                   };
                                 }
+                                if (practiceMode === "word_spelling") {
+                                  return {
+                                    label: t(
+                                      "classroomDetail.contentTypes.WORD_SPELLING",
+                                    ),
+                                    color:
+                                      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+                                  };
+                                }
+                                if (practiceMode === "word_cloze") {
+                                  return {
+                                    label: t(
+                                      "classroomDetail.contentTypes.WORD_CLOZE",
+                                    ),
+                                    color:
+                                      "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300",
+                                  };
+                                }
+                                if (practiceMode === "tug_of_war") {
+                                  return {
+                                    label: t(
+                                      "classroomDetail.contentTypes.TUG_OF_WAR",
+                                    ),
+                                    color:
+                                      "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
+                                  };
+                                }
                                 if (practiceMode === "rearrangement") {
                                   return {
                                     label: t(
@@ -2266,11 +2294,16 @@ export default function ClassroomDetail({
                                       {typeInfo.label}
                                     </span>
                                   </div>
-                                  {/* 🆕 rearrangement / word_selection 模式不顯示 AI 批改按鈕 */}
+                                  {/* 自動批改模式 (rearrangement / word_selection /
+                                      word_spelling / word_cloze / tug_of_war) 不顯示 AI 批改按鈕 */}
                                   {assignment.practice_mode !==
                                     "rearrangement" &&
                                     assignment.practice_mode !==
                                       "word_selection" &&
+                                    assignment.practice_mode !==
+                                      "word_spelling" &&
+                                    assignment.practice_mode !== "word_cloze" &&
+                                    assignment.practice_mode !== "tug_of_war" &&
                                     canUseAiGrading && (
                                       <div className="flex flex-col items-end flex-shrink-0">
                                         <Button
@@ -2478,6 +2511,33 @@ export default function ClassroomDetail({
                                           "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
                                       };
                                     }
+                                    if (practiceMode === "word_spelling") {
+                                      return {
+                                        label: t(
+                                          "classroomDetail.contentTypes.WORD_SPELLING",
+                                        ),
+                                        color:
+                                          "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+                                      };
+                                    }
+                                    if (practiceMode === "word_cloze") {
+                                      return {
+                                        label: t(
+                                          "classroomDetail.contentTypes.WORD_CLOZE",
+                                        ),
+                                        color:
+                                          "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300",
+                                      };
+                                    }
+                                    if (practiceMode === "tug_of_war") {
+                                      return {
+                                        label: t(
+                                          "classroomDetail.contentTypes.TUG_OF_WAR",
+                                        ),
+                                        color:
+                                          "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
+                                      };
+                                    }
                                     if (practiceMode === "rearrangement") {
                                       return {
                                         label: t(
@@ -2680,11 +2740,18 @@ export default function ClassroomDetail({
                                             "classroomDetail.buttons.previewDemo",
                                           )}
                                         </Button>
-                                        {/* 🆕 rearrangement / word_selection 模式不顯示 AI 批改按鈕 */}
+                                        {/* 自動批改模式 (rearrangement / word_selection /
+                                            word_spelling / word_cloze / tug_of_war) 不顯示 AI 批改按鈕 */}
                                         {assignment.practice_mode !==
                                           "rearrangement" &&
                                           assignment.practice_mode !==
                                             "word_selection" &&
+                                          assignment.practice_mode !==
+                                            "word_spelling" &&
+                                          assignment.practice_mode !==
+                                            "word_cloze" &&
+                                          assignment.practice_mode !==
+                                            "tug_of_war" &&
                                           canUseAiGrading && (
                                             <Button
                                               variant="default"

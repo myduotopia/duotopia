@@ -100,6 +100,7 @@ class AudioUploadService:
         item_index: int = None,
         assignment_id: int = None,
         student_id: int = None,
+        user_agent: Optional[str] = None,
     ) -> str:
         """
         上傳音檔到 GCS
@@ -128,9 +129,10 @@ class AudioUploadService:
             )
 
             if not is_allowed:
+                allowed_str = ", ".join(self.allowed_formats)
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid file type '{content_type}'. Allowed: {', '.join(self.allowed_formats)}",
+                    detail=f"Invalid file type '{content_type}'. Allowed: {allowed_str}",
                 )
 
             # 讀取檔案內容
@@ -139,19 +141,25 @@ class AudioUploadService:
             # 檢查檔案大小（至少 500B，最多 2MB）
             min_file_size = 500  # 500B
             if len(content) < min_file_size:
-                # 記錄到 BigQuery
+                # 記錄到 BigQuery（含 user_agent 和 magic_bytes 供 codec 診斷）
                 from services.bigquery_logger import get_bigquery_logger
 
+                magic_bytes_hex = content[:64].hex()
                 logger = get_bigquery_logger()
+                err_msg = (
+                    f"File size {len(content)} bytes < minimum {min_file_size} bytes"
+                )
                 await logger.log_audio_error(
                     {
                         "error_type": "backend_validation_file_too_small",
-                        "error_message": f"File size {len(content)} bytes < minimum {min_file_size} bytes",
+                        "error_message": err_msg,
                         "audio_url": file.filename or "unknown",
                         "audio_size": len(content),
                         "content_type": file.content_type,
                         "assignment_id": assignment_id,
                         "student_id": student_id,
+                        "user_agent": user_agent or "",
+                        "magic_bytes_hex": magic_bytes_hex,
                     }
                 )
 
@@ -195,7 +203,10 @@ class AudioUploadService:
 
             # 如果有 content_id 和 item_index，加入檔名中
             if content_id and item_index is not None:
-                filename = f"recording_c{content_id}_i{item_index}_{timestamp}_{file_id}.{extension}"
+                filename = (
+                    f"recording_c{content_id}_i{item_index}"
+                    f"_{timestamp}_{file_id}.{extension}"
+                )
             else:
                 filename = f"recording_{timestamp}_{file_id}.{extension}"
 

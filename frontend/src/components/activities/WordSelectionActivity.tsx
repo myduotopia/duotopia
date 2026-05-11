@@ -41,6 +41,12 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
+import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
+
+interface OptionEntry {
+  text: string;
+  image_url?: string | null;
+}
 
 interface WordOption {
   content_item_id: number;
@@ -49,7 +55,7 @@ interface WordOption {
   audio_url?: string;
   image_url?: string;
   memory_strength: number;
-  options: string[];
+  options: OptionEntry[];
 }
 
 interface ProficiencyStatus {
@@ -57,6 +63,13 @@ interface ProficiencyStatus {
   target_mastery: number;
   achieved: boolean;
   words_mastered: number;
+  // Issue #711: 5-tier classification counts. Optional so a backend
+  // serving the older 3-tier shape still type-checks during rollout.
+  words_master?: number;
+  words_familiar?: number;
+  words_medium?: number;
+  words_unfamiliar?: number;
+  words_very_unfamiliar?: number;
   total_words: number;
 }
 
@@ -99,6 +112,7 @@ export default function WordSelectionActivity({
   // Settings
   const [showWord, setShowWord] = useState(true);
   const [showImage, setShowImage] = useState(true);
+  const [showOptionImages, setShowOptionImages] = useState(false); // Issue #631
   const [playAudio, setPlayAudio] = useState(false);
 
   // Proficiency
@@ -107,6 +121,11 @@ export default function WordSelectionActivity({
     target_mastery: 80,
     achieved: false,
     words_mastered: 0,
+    words_master: 0,
+    words_familiar: 0,
+    words_medium: 0,
+    words_unfamiliar: 0,
+    words_very_unfamiliar: 0,
     total_words: 0,
   });
   const [showAchievementDialog, setShowAchievementDialog] = useState(false);
@@ -120,46 +139,39 @@ export default function WordSelectionActivity({
   // (#379) Preview/demo mode: track practiced word IDs to avoid repetition
   const practicedWordIdsRef = useRef<number[]>([]);
 
-  // Preview mode local proficiency tracking (不存入資料庫，離開後重置)
-  // 模擬學生模式的 SM-2 算法：追蹤每個單字的 memory_strength
-  const [previewWordStrengths, setPreviewWordStrengths] = useState<
-    Record<number, number>
+  // Preview/demo: track per-word correct/incorrect counts locally (not persisted).
+  // Issue #711: classification is now count-based, mirroring the SQL function.
+  const [previewWordCounts, setPreviewWordCounts] = useState<
+    Record<number, { correct: number; incorrect: number }>
   >({});
 
-  // SM-2 簡化版：計算新的 memory_strength
-  const calculateNewStrength = (
-    currentStrength: number | undefined,
-    isCorrect: boolean,
-  ): number => {
-    if (currentStrength === undefined) {
-      // 第一次作答
-      return isCorrect ? 0.5 : 0.0;
-    }
-    // 後續作答：答對 +0.15，答錯 -0.2（可降至 0）
-    if (isCorrect) {
-      return Math.min(1.0, currentStrength + 0.15);
-    } else {
-      return Math.max(0.0, currentStrength - 0.2);
-    }
-  };
+  // Update local counts for preview/demo: increments correct or incorrect.
+  const recordPreviewAnswer = useCallback(
+    (wordId: number, isCorrectAnswer: boolean) => {
+      setPreviewWordCounts((prev) => {
+        const cur = prev[wordId] ?? { correct: 0, incorrect: 0 };
+        return {
+          ...prev,
+          [wordId]: isCorrectAnswer
+            ? { ...cur, correct: cur.correct + 1 }
+            : { ...cur, incorrect: cur.incorrect + 1 },
+        };
+      });
+    },
+    [],
+  );
 
-  // Computed: 預覽模式的平均熟練度（模擬學生模式）
-  const previewProficiency = useMemo(() => {
-    const strengths = Object.values(previewWordStrengths);
-    if (strengths.length === 0) return 0;
-    const totalWords = proficiency.total_words || strengths.length;
-    // 未練習的單字視為 0 強度
-    const sum = strengths.reduce((acc, s) => acc + s, 0);
-    return (sum / totalWords) * 100;
-  }, [previewWordStrengths, proficiency.total_words]);
+  // Computed: tier breakdown for preview/demo (live mode reads from API).
+  const previewTierCounts = useMemo(
+    () => aggregateTierCounts(previewWordCounts, proficiency.total_words),
+    [previewWordCounts, proficiency.total_words],
+  );
 
-  // Computed: 預覽模式的已熟練單字數（memory_strength >= target * 0.8）
-  const previewWordsMastered = useMemo(() => {
-    const targetThreshold = ((proficiency.target_mastery || 80) / 100) * 0.8;
-    return Object.values(previewWordStrengths).filter(
-      (s) => s >= targetThreshold,
-    ).length;
-  }, [previewWordStrengths, proficiency.target_mastery]);
+  // Computed: weighted preview proficiency (medium counts as 0.5).
+  const previewProficiency = useMemo(
+    () => weightedMastery(previewTierCounts) * 100,
+    [previewTierCounts],
+  );
 
   // Computed: 顯示用的熟練度（預覽模式和 demo 模式用本地計算，學生模式用 API 回傳）
   const displayProficiency =
@@ -167,11 +179,31 @@ export default function WordSelectionActivity({
       ? previewProficiency
       : proficiency.current_mastery;
 
-  // Computed: 顯示用的已熟練單字數（預覽模式和 demo 模式用本地計算）
-  const displayWordsMastered =
-    isPreviewMode || isDemoMode
-      ? previewWordsMastered
-      : proficiency.words_mastered;
+  // Computed: tier counts shown in UI (live = API, preview/demo = local).
+  const displayTierCounts = useMemo(() => {
+    if (isPreviewMode || isDemoMode) {
+      return previewTierCounts;
+    }
+    const master = proficiency.words_master ?? proficiency.words_mastered ?? 0;
+    const familiar = proficiency.words_familiar ?? 0;
+    const medium = proficiency.words_medium ?? 0;
+    const unfamiliar = proficiency.words_unfamiliar ?? 0;
+    const accountedFor = master + familiar + medium + unfamiliar;
+    const very_unfamiliar =
+      proficiency.words_very_unfamiliar ??
+      Math.max(0, proficiency.total_words - accountedFor);
+    return {
+      master,
+      familiar,
+      medium,
+      unfamiliar,
+      very_unfamiliar,
+      total: proficiency.total_words,
+    };
+  }, [isPreviewMode, isDemoMode, previewTierCounts, proficiency]);
+
+  // Computed: 顯示用的已熟練單字數（同等於 master tier 數）
+  const displayWordsMastered = displayTierCounts.master;
 
   // Timer
   const [timeLimit, setTimeLimit] = useState<number | null>(null);
@@ -206,10 +238,16 @@ export default function WordSelectionActivity({
         current_proficiency: number;
         target_proficiency: number;
         words_mastered: number;
+        words_master?: number;
+        words_familiar?: number;
+        words_medium?: number;
+        words_unfamiliar?: number;
+        words_very_unfamiliar?: number;
         achieved: boolean;
         is_practice_mode?: boolean;
         show_word: boolean;
         show_image: boolean;
+        show_option_images?: boolean;
         play_audio: boolean;
         time_limit_per_question: number | null;
       }>(apiEndpoint);
@@ -219,6 +257,7 @@ export default function WordSelectionActivity({
       setIsPracticeMode(data.is_practice_mode ?? false);
       setShowWord(data.show_word ?? true);
       setShowImage(data.show_image ?? true);
+      setShowOptionImages(data.show_option_images ?? false);
       setPlayAudio(data.play_audio ?? false);
       setTimeLimit(data.time_limit_per_question || null);
       setTimeRemaining(data.time_limit_per_question || null);
@@ -227,6 +266,11 @@ export default function WordSelectionActivity({
         target_mastery: data.target_proficiency || 80,
         achieved: data.achieved ?? false,
         words_mastered: data.words_mastered ?? 0,
+        words_master: data.words_master ?? data.words_mastered ?? 0,
+        words_familiar: data.words_familiar ?? 0,
+        words_medium: data.words_medium ?? 0,
+        words_unfamiliar: data.words_unfamiliar ?? 0,
+        words_very_unfamiliar: data.words_very_unfamiliar ?? 0,
         total_words: data.total_words || 0,
       });
       setCurrentIndex(0);
@@ -392,13 +436,10 @@ export default function WordSelectionActivity({
     }
     setSubmitting(true);
 
-    // Skip API call in preview mode and demo mode, but track local stats (SM-2 simulation)
+    // Skip API call in preview/demo mode, but track local counts so the
+    // local tier breakdown matches what students would see.
     if (isPreviewMode || isDemoMode) {
-      const wordId = currentWord.content_item_id;
-      setPreviewWordStrengths((prev) => ({
-        ...prev,
-        [wordId]: calculateNewStrength(prev[wordId], false), // timeout = incorrect
-      }));
+      recordPreviewAnswer(currentWord.content_item_id, false);
       setSubmitting(false);
       return;
     }
@@ -445,13 +486,10 @@ export default function WordSelectionActivity({
     }
     setSubmitting(true);
 
-    // Skip API call in preview mode and demo mode, but track local stats (SM-2 simulation)
+    // Skip API call in preview/demo mode, but track local counts so the
+    // local tier breakdown matches what students would see.
     if (isPreviewMode || isDemoMode) {
-      const wordId = currentWord.content_item_id;
-      setPreviewWordStrengths((prev) => ({
-        ...prev,
-        [wordId]: calculateNewStrength(prev[wordId], correct),
-      }));
+      recordPreviewAnswer(currentWord.content_item_id, correct);
       setSubmitting(false);
       return;
     }
@@ -629,6 +667,50 @@ export default function WordSelectionActivity({
               }) ||
                 `${displayWordsMastered} / ${proficiency.total_words} words mastered`}
             </p>
+          </div>
+
+          {/* Issue #711: 五檔熟悉度單字數量 */}
+          <div className="grid grid-cols-5 gap-1.5 max-w-md mx-auto">
+            <div className="rounded bg-green-100 px-1 py-1.5 text-center">
+              <div className="text-[10px] font-medium text-green-800">
+                {t("wordFamiliarity.tierMaster") || "精熟"}
+              </div>
+              <div className="text-base font-semibold text-green-800">
+                {displayTierCounts.master}
+              </div>
+            </div>
+            <div className="rounded bg-lime-100 px-1 py-1.5 text-center">
+              <div className="text-[10px] font-medium text-lime-800">
+                {t("wordFamiliarity.tierFamiliar") || "熟悉"}
+              </div>
+              <div className="text-base font-semibold text-lime-800">
+                {displayTierCounts.familiar}
+              </div>
+            </div>
+            <div className="rounded bg-yellow-100 px-1 py-1.5 text-center">
+              <div className="text-[10px] font-medium text-yellow-800">
+                {t("wordFamiliarity.tierMedium") || "普通"}
+              </div>
+              <div className="text-base font-semibold text-yellow-800">
+                {displayTierCounts.medium}
+              </div>
+            </div>
+            <div className="rounded bg-orange-100 px-1 py-1.5 text-center">
+              <div className="text-[10px] font-medium text-orange-800">
+                {t("wordFamiliarity.tierUnfamiliar") || "不熟悉"}
+              </div>
+              <div className="text-base font-semibold text-orange-800">
+                {displayTierCounts.unfamiliar}
+              </div>
+            </div>
+            <div className="rounded bg-gray-100 px-1 py-1.5 text-center">
+              <div className="text-[10px] font-medium text-gray-700">
+                {t("wordFamiliarity.tierVeryUnfamiliar") || "很不熟"}
+              </div>
+              <div className="text-base font-semibold text-gray-700">
+                {displayTierCounts.very_unfamiliar}
+              </div>
+            </div>
           </div>
 
           {isPracticeMode ? (
@@ -809,14 +891,18 @@ export default function WordSelectionActivity({
           style={{ gridAutoRows: "1fr" }}
         >
           {currentWord.options.map((option, index) => {
-            const isSelected = selectedAnswer === option;
-            const isCorrectAnswer = option === currentWord.translation;
+            const optionText = option.text;
+            const optionImage = option.image_url || null;
+            const isSelected = selectedAnswer === optionText;
+            const isCorrectAnswer = optionText === currentWord.translation;
             // 答對時揭示；答錯時只有老師開啟 showAnswer 才揭示（Issue #538）
             const showCorrect =
               showResult && isCorrectAnswer && (isCorrect || showAnswer);
             const showIncorrect = showResult && isSelected && !isCorrectAnswer;
             // 答錯後才揭示的正解需要打勾動畫引導注意
             const animateReveal = showCorrect && !isCorrect;
+            // Issue #631: 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字
+            const renderAsImage = showOptionImages && !!optionImage;
 
             // 四個選項各用不同淺色
             const optionColors = [
@@ -831,7 +917,7 @@ export default function WordSelectionActivity({
                 key={index}
                 className={cn(
                   "h-full min-h-16 py-3 px-4 text-base sm:text-lg font-medium",
-                  "rounded-2xl border-2 shadow-md select-none",
+                  "rounded-2xl border-2 shadow-md select-none relative",
                   "transition-all duration-200",
                   "whitespace-normal text-center break-words",
                   !showResult &&
@@ -846,22 +932,37 @@ export default function WordSelectionActivity({
                     "ring-2 ring-indigo-400 scale-95",
                   showResult && !showCorrect && !showIncorrect && "opacity-50",
                 )}
-                onClick={() => handleSelectAnswer(option)}
+                onClick={() => handleSelectAnswer(optionText)}
                 disabled={showResult || submitting}
+                aria-label={optionText}
               >
-                {showCorrect && (
-                  <CheckCircle
+                {(showCorrect || showIncorrect) && (
+                  <span
                     className={cn(
-                      "h-5 w-5 mr-2 shrink-0 text-green-600 inline",
+                      "absolute top-2 left-2 z-10",
                       animateReveal &&
                         "animate-in zoom-in-50 fade-in duration-500",
                     )}
-                  />
+                  >
+                    {showCorrect ? (
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-600" />
+                    )}
+                  </span>
                 )}
-                {showIncorrect && (
-                  <XCircle className="h-5 w-5 mr-2 shrink-0 text-red-600 inline" />
+                {renderAsImage ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <img
+                      src={optionImage as string}
+                      alt={optionText}
+                      className="max-h-28 sm:max-h-36 w-full object-contain rounded-md"
+                    />
+                    <span>{optionText}</span>
+                  </div>
+                ) : (
+                  <span>{optionText}</span>
                 )}
-                {option}
               </button>
             );
           })}

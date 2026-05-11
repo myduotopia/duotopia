@@ -76,6 +76,13 @@ interface AssessmentResult {
     assessment_time?: string;
   };
   error_type?: string;
+  // Server-authoritative AI analysis quota state (from /assess and
+  // /upload-analysis responses). Used by useRecordingAttempts to
+  // reconcile localStorage so a stale cache can never grant more
+  // attempts than the server allows.
+  ai_analysis_count?: number;
+  ai_analysis_remaining?: number;
+  max_attempts?: number;
 }
 
 type ItemAnalysisStatus =

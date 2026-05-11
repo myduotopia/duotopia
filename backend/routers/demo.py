@@ -45,6 +45,8 @@ from services.preview_service import (
     assess_speech_preview,
     get_vocabulary_activities,
     get_word_selection_start,
+    get_word_spelling_start,
+    get_word_cloze_start,
     check_word_selection_answer,
     get_rearrangement_questions,
     check_rearrangement_answer,
@@ -341,6 +343,36 @@ async def demo_word_selection_start(
     """Demo mode: Start word selection practice."""
     assignment = get_demo_assignment(assignment_id, db)
     return get_word_selection_start(assignment, db, exclude_ids)
+
+
+@router.get("/assignments/{assignment_id}/preview/word-spelling-start")
+@limiter.limit("60/minute")
+async def demo_word_spelling_start(
+    request: Request,
+    assignment_id: int,
+    exclude_ids: str = Query(
+        default="", description="Already-practiced content_item_ids, comma-separated"
+    ),
+    db: Session = Depends(get_db),
+):
+    """Demo mode: Start word spelling practice."""
+    assignment = get_demo_assignment(assignment_id, db)
+    return await get_word_spelling_start(assignment, db, exclude_ids)
+
+
+@router.get("/assignments/{assignment_id}/preview/word-cloze-start")
+@limiter.limit("60/minute")
+async def demo_word_cloze_start(
+    request: Request,
+    assignment_id: int,
+    exclude_ids: str = Query(
+        default="", description="Already-practiced content_item_ids, comma-separated"
+    ),
+    db: Session = Depends(get_db),
+):
+    """Demo mode: Start word cloze practice."""
+    assignment = get_demo_assignment(assignment_id, db)
+    return await get_word_cloze_start(assignment, db, exclude_ids)
 
 
 @router.post("/assignments/{assignment_id}/preview/word-selection-answer")

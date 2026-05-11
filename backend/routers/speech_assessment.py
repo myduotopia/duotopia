@@ -36,6 +36,11 @@ from models.subscription import PointUsageLog
 from services.quota_service import QuotaService
 from services.organization_points_service import OrganizationPointsService
 from services.bigquery_logger import get_bigquery_logger
+from services.analysis_quota import (
+    check_can_analyze,
+    increment_analysis_count,
+    MAX_AI_ANALYSIS_ATTEMPTS,
+)
 from sqlalchemy.orm import joinedload
 from sqlalchemy import cast, String
 
@@ -152,6 +157,11 @@ class AssessmentResponse(BaseModel):
     prosody_score: Optional[float] = None
     analysis_summary: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
+    # Server-authoritative AI analysis quota state. Optional so legacy
+    # callers without progress context still validate against this schema.
+    ai_analysis_count: Optional[int] = None
+    ai_analysis_remaining: Optional[int] = None
+    max_attempts: Optional[int] = None
 
 
 # Commented out - no longer using Cloud Tasks for background analysis
@@ -549,17 +559,22 @@ def save_assessment_result(
     item_index: Optional[int] = None,
     audio_url: Optional[str] = None,
     student_assignment_id: Optional[int] = None,
+    progress: Optional[StudentItemProgress] = None,
 ) -> StudentItemProgress:
     """
     儲存評估結果到 StudentItemProgress
     progress_id 應該是 StudentItemProgress 的 ID
+    Optional `progress` lets callers that already loaded the row skip
+    the second SELECT round-trip (the assess endpoint queries earlier
+    for the quota gate).
     """
     # 查找 StudentItemProgress 記錄
-    progress = (
-        db.query(StudentItemProgress)
-        .filter(StudentItemProgress.id == progress_id)
-        .first()
-    )
+    if progress is None:
+        progress = (
+            db.query(StudentItemProgress)
+            .filter(StudentItemProgress.id == progress_id)
+            .first()
+        )
 
     if not progress:
         logger.error(
@@ -635,6 +650,8 @@ def save_assessment_result(
     # 更新狀態為已完成
     progress.status = "SUBMITTED"
     progress.submitted_at = datetime.now()
+
+    increment_analysis_count(progress, db)
 
     db.commit()
     db.refresh(progress)
@@ -831,6 +848,19 @@ async def assess_pronunciation_endpoint(
         except Exception as e:
             logger.error(f"❌ Quota/Points check failed: {e}")
             # 計算時長失敗，允許繼續評分
+
+    # Gate AI-analysis quota BEFORE Azure is called so a 4th attempt
+    # costs neither Azure quota nor teacher points. The loaded row is
+    # passed through to save_assessment_result below to avoid a second
+    # SELECT. A missing row falls through silently — matches the
+    # surrounding "log, don't block learning" quota policy.
+    quota_progress = (
+        db.query(StudentItemProgress)
+        .filter(StudentItemProgress.id == progress_id)
+        .first()
+    )
+    if quota_progress is not None:
+        check_can_analyze(quota_progress)
 
     # 進行發音評估（Azure Speech SDK）
     # ⚡ 使用自訂語音線程池避免阻塞 event loop
@@ -1116,6 +1146,7 @@ async def assess_pronunciation_endpoint(
             reference_text=reference_text,
             item_index=item_index,
             student_assignment_id=student_assignment_id,
+            progress=quota_progress,
         )
         perf.checkpoint("Database Save Complete")
 
@@ -1123,6 +1154,7 @@ async def assess_pronunciation_endpoint(
     perf.finish()
 
     # 回傳結果 - 包含完整的詳細資料
+    quota_count = int(updated_progress.ai_analysis_count or 0)
     return AssessmentResponse(
         id=updated_progress.id,
         accuracy_score=assessment_result["accuracy_score"],
@@ -1137,6 +1169,9 @@ async def assess_pronunciation_endpoint(
         prosody_score=assessment_result.get("prosody_score"),
         analysis_summary=assessment_result.get("analysis_summary"),
         created_at=updated_progress.submitted_at,
+        ai_analysis_count=quota_count,
+        ai_analysis_remaining=max(0, MAX_AI_ANALYSIS_ATTEMPTS - quota_count),
+        max_attempts=MAX_AI_ANALYSIS_ATTEMPTS,
     )
 
 
@@ -1602,6 +1637,12 @@ async def upload_pronunciation_analysis(
         elif user_type not in ["student", "teacher"]:
             raise HTTPException(status_code=403, detail="Invalid user type")
 
+        # Server-authoritative AI-analysis quota gate. Runs after auth so a
+        # 401/403 reason isn't masked by 429, and before point deduction so
+        # a 4th attempt costs no teacher points.
+        if progress is not None:
+            check_can_analyze(progress)
+
         # 🎯 Issue #208: 扣除配額/點數（在上傳音檔之前）
         if progress and analysis_id:
             try:
@@ -1862,6 +1903,8 @@ async def upload_pronunciation_analysis(
             # 增加尝试次数
             progress.attempts = (progress.attempts or 0) + 1
 
+            increment_analysis_count(progress, db)
+
             db.commit()
             db.refresh(progress)
 
@@ -1870,10 +1913,24 @@ async def upload_pronunciation_analysis(
             f"user_id={user_id}, latency_ms={latency_ms}"
         )
 
+        # Surface server-authoritative quota state so the frontend hook
+        # can reconcile its localStorage counter via syncServerCount.
+        ai_analysis_count = (
+            int(progress.ai_analysis_count or 0) if progress is not None else None
+        )
+        ai_analysis_remaining = (
+            max(0, MAX_AI_ANALYSIS_ATTEMPTS - ai_analysis_count)
+            if ai_analysis_count is not None
+            else None
+        )
+
         return {
             "status": "success",
             "progress_id": progress.id if progress else None,
             "audio_url": audio_url,
+            "ai_analysis_count": ai_analysis_count,
+            "ai_analysis_remaining": ai_analysis_remaining,
+            "max_attempts": MAX_AI_ANALYSIS_ATTEMPTS,
         }
 
     except HTTPException:

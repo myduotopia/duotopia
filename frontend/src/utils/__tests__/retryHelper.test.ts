@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { retryWithBackoff } from "../retryHelper";
+import { retryWithBackoff, retryAudioUpload } from "../retryHelper";
 
 describe("retryWithBackoff", () => {
   it("should succeed on first try if function succeeds", async () => {
@@ -90,6 +90,66 @@ describe("retryWithBackoff", () => {
     ).rejects.toThrow("Validation error");
 
     // Should stop retrying after validation error
+    expect(mockFn).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// retryAudioUpload — shouldRetry behaviour
+// ---------------------------------------------------------------------------
+
+describe("retryAudioUpload shouldRetry", () => {
+  it("retries on 429 (Too Many Requests)", async () => {
+    const mockFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Upload failed: 429"))
+      .mockResolvedValueOnce("ok");
+
+    const result = await retryAudioUpload(mockFn, undefined);
+    expect(result).toBe("ok");
+    expect(mockFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries on 408 (Request Timeout)", async () => {
+    const mockFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Upload failed: 408"))
+      .mockResolvedValueOnce("ok");
+
+    const result = await retryAudioUpload(mockFn, undefined);
+    expect(result).toBe("ok");
+    expect(mockFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries on 425 (Too Early)", async () => {
+    const mockFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Upload failed: 425"))
+      .mockResolvedValueOnce("ok");
+
+    const result = await retryAudioUpload(mockFn, undefined);
+    expect(result).toBe("ok");
+    expect(mockFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("does NOT retry on 400 (Bad Request)", async () => {
+    const mockFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Upload failed: 400"));
+
+    await expect(retryAudioUpload(mockFn, undefined)).rejects.toThrow("400");
+    // Should fail immediately — no retry
+    expect(mockFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries on NetworkError", async () => {
+    const mockFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("NetworkError while uploading"))
+      .mockResolvedValueOnce("ok");
+
+    const result = await retryAudioUpload(mockFn, undefined);
+    expect(result).toBe("ok");
     expect(mockFn).toHaveBeenCalledTimes(2);
   });
 });

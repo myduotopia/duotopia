@@ -695,6 +695,7 @@ function TeacherTemplateProgramsInner() {
                   itemsCount: item.items_count as number | undefined,
                   order: 0,
                   hasMissingAudio: false,
+                  hasMissingImage: false,
                 };
                 setAssignContents([cartItem]);
                 setShowAssignmentDialog(true);
@@ -764,6 +765,7 @@ function TeacherTemplateProgramsInner() {
                 itemsCount: content.items_count,
                 order: 0,
                 hasMissingAudio: false,
+                hasMissingImage: false,
               };
               setAssignContents([cartItem]);
               setShowAssignmentDialog(true);

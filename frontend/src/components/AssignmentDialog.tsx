@@ -58,11 +58,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceSafe } from "@/contexts/WorkspaceContext";
+import { FEATURE_FLAGS } from "@/config/featureFlags";
 
 interface Student {
   id: number;
@@ -77,6 +78,7 @@ interface ContentItemData {
   text: string;
   translation?: string;
   audio_url?: string | null;
+  image_url?: string | null;
 }
 
 interface Content {
@@ -188,6 +190,7 @@ export interface CartItem {
   itemsCount?: number;
   order: number; // 用於排序
   hasMissingAudio: boolean; // 是否有缺少音檔的項目
+  hasMissingImage: boolean; // 是否有缺少題目圖片的項目（單字選擇 show_option_images 前置驗證用）
 }
 
 // 可拖曳的購物車項目組件
@@ -267,6 +270,33 @@ function SortableCartItem({ item, index, onRemove, t }: SortableCartItemProps) {
 }
 
 const EMPTY_STUDENTS: Student[] = [];
+
+interface ExampleSentenceErrorDetail {
+  code: "EXAMPLE_SENTENCE_REQUIRED";
+  practice_mode?: string | null;
+  content_titles?: string[];
+}
+
+const getExampleSentenceErrorDetail = (
+  error: unknown,
+): ExampleSentenceErrorDetail | null => {
+  // apiClient throws ApiError (fetch-based wrapper); the structured backend
+  // detail lives on `error.detail`, not `error.response.data.detail`.
+  if (!(error instanceof ApiError) || error.status !== 422) return null;
+  const detail = error.detail;
+  if (
+    detail &&
+    typeof detail === "object" &&
+    !Array.isArray(detail) &&
+    (detail as { code?: unknown }).code === "EXAMPLE_SENTENCE_REQUIRED"
+  ) {
+    return detail as unknown as ExampleSentenceErrorDetail;
+  }
+  return null;
+};
+
+const isExampleSentenceRequiredError = (error: unknown): boolean =>
+  getExampleSentenceErrorDetail(error) !== null;
 
 const sortByStudentNumber = (a: Student, b: Student) => {
   if (!a.student_number && !b.student_number) return 0;
@@ -386,7 +416,9 @@ export function AssignmentDialog({
       | "reading"
       | "rearrangement"
       | "word_reading"
-      | "word_selection", // 作答模式（空字串 = 未選擇）
+      | "word_selection"
+      | "word_spelling"
+      | "word_cloze", // 作答模式（空字串 = 未選擇）
     time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40, // 每題時間限制 (0 = 不限時)
     shuffle_questions: false, // 是否打亂順序
     show_answer: false, // 答題結束後是否顯示正確答案（例句重組專用）
@@ -395,7 +427,8 @@ export function AssignmentDialog({
     target_proficiency: 80, // 達標熟悉度 (50-100%)
     show_translation: true, // 顯示翻譯（單字朗讀專用）
     show_word: true, // 顯示單字（單字選擇專用）
-    show_image: true, // 顯示圖片
+    show_image: true, // 顯示題目圖片
+    show_option_images: false, // 顯示選項圖片（單字選擇專用，與 show_image 互斥，Issue #631）
   });
 
   // 內部載入學生列表（當外部未傳入時，單班級模式）
@@ -560,6 +593,7 @@ export function AssignmentDialog({
         show_translation: true,
         show_word: true,
         show_image: true,
+        show_option_images: false,
       });
       setCurrentStep(needsClassroomStep ? 0 : 1);
       setActiveTab(showOrgTab ? "organization" : "template");
@@ -573,7 +607,9 @@ export function AssignmentDialog({
   useEffect(() => {
     if (
       formData.practice_mode === "word_reading" ||
-      formData.practice_mode === "word_selection"
+      formData.practice_mode === "word_selection" ||
+      formData.practice_mode === "word_spelling" ||
+      formData.practice_mode === "word_cloze"
     ) {
       setCartItems((prev) => {
         const filtered = prev.filter((item) =>
@@ -837,8 +873,13 @@ export function AssignmentDialog({
     if (mode === "reading" || mode === "rearrangement") {
       return true;
     }
-    // 單字模式：只能選單字集
-    if (mode === "word_reading" || mode === "word_selection") {
+    // 單字模式（含克漏字）：只能選單字集
+    if (
+      mode === "word_reading" ||
+      mode === "word_selection" ||
+      mode === "word_spelling" ||
+      mode === "word_cloze"
+    ) {
       return isVocabularySetType(contentType);
     }
     return true;
@@ -869,9 +910,12 @@ export function AssignmentDialog({
         // 移除
         return prev.filter((item) => item.contentId !== contentId);
       } else {
-        // 添加 - 檢查是否有缺少音檔的項目
+        // 添加 - 檢查是否有缺少音檔/圖片的項目
         const hasMissingAudio = content.items
           ? content.items.some((item) => !item.audio_url)
+          : false;
+        const hasMissingImage = content.items
+          ? content.items.some((item) => !item.image_url)
           : false;
         return [
           ...prev,
@@ -884,6 +928,7 @@ export function AssignmentDialog({
             itemsCount: content.items_count,
             order: prev.length, // 順序為當前數量
             hasMissingAudio,
+            hasMissingImage,
           },
         ];
       }
@@ -973,6 +1018,9 @@ export function AssignmentDialog({
             order: prev.length + idx,
             hasMissingAudio: content.items
               ? content.items.some((item) => !item.audio_url)
+              : false,
+            hasMissingImage: content.items
+              ? content.items.some((item) => !item.image_url)
               : false,
           }));
         return [...prev, ...newItems];
@@ -1069,6 +1117,7 @@ export function AssignmentDialog({
         show_translation: formData.show_translation,
         show_word: formData.show_word,
         show_image: formData.show_image,
+        show_option_images: formData.show_option_images,
         ...(effectiveOrganizationId && {
           organization_id: effectiveOrganizationId,
         }),
@@ -1100,6 +1149,12 @@ export function AssignmentDialog({
             totalStudents += result.student_count || 0;
             successCount++;
           } catch (err) {
+            // Issue #673: example-sentence validation rejects the *payload*,
+            // not the per-classroom config. Bubble up so the outer handler
+            // shows the specific toast instead of a generic per-class fail.
+            if (isExampleSentenceRequiredError(err)) {
+              throw err;
+            }
             failedClassroomNames.push(classroom.name);
             console.error(
               `Failed to create assignment for ${classroom.name}:`,
@@ -1155,8 +1210,30 @@ export function AssignmentDialog({
     } catch (error: unknown) {
       console.error("Failed to create assignment:", error);
 
-      // 處理 HTTP 402 配額不足錯誤
-      if (
+      // Issue #673: 422 with structured detail telling us which contents lack
+      // example sentences for the chosen practice mode. Surface the specific
+      // toast so the teacher knows what to fix.
+      if (isExampleSentenceRequiredError(error)) {
+        const detail = getExampleSentenceErrorDetail(error);
+        const modeKey = detail?.practice_mode
+          ? `assignment.practiceMode.${detail.practice_mode}`
+          : "";
+        const modeLabel = modeKey
+          ? t(modeKey, { defaultValue: detail?.practice_mode || "" })
+          : "";
+        const titles = detail?.content_titles?.join("、") || "";
+        toast.error(
+          t("dialogs.assignmentDialog.errors.exampleSentenceRequired", {
+            mode: modeLabel,
+          }),
+          {
+            description: t(
+              "dialogs.assignmentDialog.errors.exampleSentenceRequiredDesc",
+              { contents: titles },
+            ),
+          },
+        );
+      } else if (
         error &&
         typeof error === "object" &&
         "response" in error &&
@@ -1210,6 +1287,7 @@ export function AssignmentDialog({
       show_translation: true,
       show_word: true,
       show_image: true,
+      show_option_images: false,
     });
     setCartItems([]);
     setExpandedPrograms(new Set());
@@ -2744,6 +2822,88 @@ export function AssignmentDialog({
                         </div>
                       </div>
                     </button>
+
+                    {/* 單字拼寫 */}
+                    {FEATURE_FLAGS.WORD_SPELLING_CLOZE && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            practice_mode: "word_spelling",
+                            time_limit_per_question: 0,
+                            // 預設：顯示翻譯、不播音檔、不顯示答案、達標 80%
+                            show_translation: true,
+                            play_audio: false,
+                            show_answer: false,
+                            target_proficiency: 80,
+                            shuffle_questions: false,
+                          }))
+                        }
+                        className={`p-6 rounded-xl border-2 transition-all ${
+                          formData.practice_mode === "word_spelling"
+                            ? "border-blue-500 bg-blue-50 shadow-md"
+                            : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
+                        }`}
+                      >
+                        <div className="flex flex-col items-center gap-3">
+                          <span className="text-4xl">✏️</span>
+                          <div className="text-center">
+                            <div className="font-semibold text-lg">
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.wordSpelling",
+                              ) || "單字拼寫"}
+                            </div>
+                            <div className="text-sm text-gray-500 mt-1">
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.wordSpellingDesc",
+                              ) || "看翻譯或聽音檔，拼寫正確的單字"}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    )}
+
+                    {/* 克漏字 */}
+                    {FEATURE_FLAGS.WORD_SPELLING_CLOZE && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            practice_mode: "word_cloze",
+                            time_limit_per_question: 0,
+                            // 預設：顯示翻譯、不播音檔、不顯示答案、達標 80%
+                            show_translation: true,
+                            play_audio: false,
+                            show_answer: false,
+                            target_proficiency: 80,
+                            shuffle_questions: false,
+                          }))
+                        }
+                        className={`p-6 rounded-xl border-2 transition-all ${
+                          formData.practice_mode === "word_cloze"
+                            ? "border-blue-500 bg-blue-50 shadow-md"
+                            : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
+                        }`}
+                      >
+                        <div className="flex flex-col items-center gap-3">
+                          <span className="text-4xl">📝</span>
+                          <div className="text-center">
+                            <div className="font-semibold text-lg">
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.wordCloze",
+                              ) || "克漏字"}
+                            </div>
+                            <div className="text-sm text-gray-500 mt-1">
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.wordClozeDesc",
+                              ) || "看例句填空，輸入正確的單字變形"}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    )}
                   </div>
 
                   {/* ===== 例句集細節設定 (reading / rearrangement) ===== */}
@@ -2935,9 +3095,11 @@ export function AssignmentDialog({
                     </Card>
                   )}
 
-                  {/* ===== 單字集細節設定 (word_reading / word_selection) ===== */}
+                  {/* ===== 單字集細節設定 (word_reading / word_selection / word_spelling / word_cloze) ===== */}
                   {(formData.practice_mode === "word_reading" ||
-                    formData.practice_mode === "word_selection") && (
+                    formData.practice_mode === "word_selection" ||
+                    formData.practice_mode === "word_spelling" ||
+                    formData.practice_mode === "word_cloze") && (
                     <Card className="p-4 border-gray-200">
                       <h4 className="text-sm font-medium mb-3 text-gray-700">
                         {t(
@@ -2945,8 +3107,10 @@ export function AssignmentDialog({
                         )}
                       </h4>
 
-                      {/* 單字選擇專用 - 達標熟悉度 */}
-                      {formData.practice_mode === "word_selection" && (
+                      {/* 達標熟悉度（word_selection / word_spelling / word_cloze 共用） */}
+                      {(formData.practice_mode === "word_selection" ||
+                        formData.practice_mode === "word_spelling" ||
+                        formData.practice_mode === "word_cloze") && (
                         <div className="mb-4 pb-4 border-b">
                           <div className="flex items-center justify-between mb-2">
                             <Label className="text-xs text-gray-600">
@@ -2980,8 +3144,10 @@ export function AssignmentDialog({
                         </div>
                       )}
 
-                      {/* 單字選擇專用 - 題目呈現方式 (顯示單字 vs 播放音檔 二擇一) */}
-                      {formData.practice_mode === "word_selection" && (
+                      {/* 題目呈現方式：word_selection 用 show_word；spelling/cloze 用 show_translation */}
+                      {(formData.practice_mode === "word_selection" ||
+                        formData.practice_mode === "word_spelling" ||
+                        formData.practice_mode === "word_cloze") && (
                         <div className="mb-4 pb-4 border-b">
                           <Label className="text-xs text-gray-600 mb-2 block">
                             {t(
@@ -2991,40 +3157,81 @@ export function AssignmentDialog({
                           <div className="flex gap-3">
                             <button
                               type="button"
-                              onClick={() =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  show_word: true,
-                                  play_audio: false,
-                                }))
-                              }
+                              onClick={() => {
+                                if (
+                                  formData.practice_mode === "word_selection"
+                                ) {
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    show_word: true,
+                                    play_audio: false,
+                                  }));
+                                } else {
+                                  // spelling / cloze: 顯示翻譯
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    show_translation: true,
+                                    play_audio: false,
+                                  }));
+                                }
+                              }}
                               className={`flex-1 p-3 rounded-lg border text-sm ${
-                                formData.show_word && !formData.play_audio
+                                (
+                                  formData.practice_mode === "word_selection"
+                                    ? formData.show_word && !formData.play_audio
+                                    : formData.show_translation &&
+                                      !formData.play_audio
+                                )
                                   ? "border-blue-500 bg-blue-50 text-blue-700"
                                   : "border-gray-200 hover:border-gray-300"
                               }`}
                             >
                               👁️{" "}
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.displayWord",
-                              )}
+                              {formData.practice_mode === "word_selection"
+                                ? t(
+                                    "dialogs.assignmentDialog.practiceMode.displayWord",
+                                  )
+                                : t(
+                                    "dialogs.assignmentDialog.practiceMode.displayTranslation",
+                                  )}
                               <span className="block text-xs text-gray-500 mt-0.5">
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.displayWordDesc",
-                                )}
+                                {formData.practice_mode === "word_selection"
+                                  ? t(
+                                      "dialogs.assignmentDialog.practiceMode.displayWordDesc",
+                                    )
+                                  : t(
+                                      "dialogs.assignmentDialog.practiceMode.displayTranslationDesc",
+                                    )}
                               </span>
                             </button>
                             <button
                               type="button"
-                              onClick={() =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  show_word: false,
-                                  play_audio: true,
-                                }))
-                              }
+                              onClick={() => {
+                                if (
+                                  formData.practice_mode === "word_selection"
+                                ) {
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    show_word: false,
+                                    play_audio: true,
+                                  }));
+                                } else {
+                                  // spelling / cloze: 切到播放音檔 → 強制 show_answer=true
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    show_translation: false,
+                                    play_audio: true,
+                                    show_answer: true,
+                                  }));
+                                }
+                              }}
                               className={`flex-1 p-3 rounded-lg border text-sm ${
-                                !formData.show_word && formData.play_audio
+                                (
+                                  formData.practice_mode === "word_selection"
+                                    ? !formData.show_word && formData.play_audio
+                                    : !formData.show_translation &&
+                                      formData.play_audio
+                                )
                                   ? "border-blue-500 bg-blue-50 text-blue-700"
                                   : "border-gray-200 hover:border-gray-300"
                               }`}
@@ -3034,9 +3241,13 @@ export function AssignmentDialog({
                                 "dialogs.assignmentDialog.practiceMode.playAudioWord",
                               )}
                               <span className="block text-xs text-gray-500 mt-0.5">
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.playAudioWordDesc",
-                                )}
+                                {formData.practice_mode === "word_selection"
+                                  ? t(
+                                      "dialogs.assignmentDialog.practiceMode.playAudioWordDesc",
+                                    )
+                                  : t(
+                                      "dialogs.assignmentDialog.practiceMode.playAudioFillDesc",
+                                    )}
                               </span>
                             </button>
                           </div>
@@ -3067,7 +3278,9 @@ export function AssignmentDialog({
                               {t(
                                 "dialogs.assignmentDialog.practiceMode.unlimited",
                               )}
-                              {formData.practice_mode === "word_reading" &&
+                              {(formData.practice_mode === "word_reading" ||
+                                formData.practice_mode === "word_spelling" ||
+                                formData.practice_mode === "word_cloze") &&
                                 ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
                             </option>
                             <option value={20}>
@@ -3093,35 +3306,40 @@ export function AssignmentDialog({
                           </select>
                         </div>
 
-                        {/* 打亂順序 */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-gray-600">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.shuffleQuestions",
-                            )}
-                          </Label>
-                          <div className="flex items-center h-9">
-                            <input
-                              type="checkbox"
-                              checked={formData.shuffle_questions}
-                              onChange={(e) =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  shuffle_questions: e.target.checked,
-                                }))
-                              }
-                              className="h-4 w-4 rounded border-gray-300"
-                            />
-                            <span className="ml-2 text-sm text-gray-600">
+                        {/* 打亂順序 — word_reading 保留；word_selection/spelling/cloze 移除（艾賓浩斯每輪自選） */}
+                        {formData.practice_mode === "word_reading" && (
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-gray-600">
                               {t(
-                                "dialogs.assignmentDialog.practiceMode.shuffleQuestionsDesc",
+                                "dialogs.assignmentDialog.practiceMode.shuffleQuestions",
                               )}
-                            </span>
+                            </Label>
+                            <div className="flex items-center h-9">
+                              <input
+                                type="checkbox"
+                                checked={formData.shuffle_questions}
+                                onChange={(e) =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    shuffle_questions: e.target.checked,
+                                  }))
+                                }
+                                className="h-4 w-4 rounded border-gray-300"
+                              />
+                              <span className="ml-2 text-sm text-gray-600">
+                                {t(
+                                  "dialogs.assignmentDialog.practiceMode.shuffleQuestionsDesc",
+                                )}
+                              </span>
+                            </div>
                           </div>
-                        </div>
+                        )}
 
-                        {/* 單字選擇專用 - 答錯後顯示答案 */}
-                        {formData.practice_mode === "word_selection" && (
+                        {/* 顯示答案 — word_selection / word_spelling / word_cloze 共用
+                            spelling/cloze 在 play_audio=true 時強制勾選 + 反灰 */}
+                        {(formData.practice_mode === "word_selection" ||
+                          formData.practice_mode === "word_spelling" ||
+                          formData.practice_mode === "word_cloze") && (
                           <div className="space-y-1.5">
                             <Label className="text-xs text-gray-600">
                               {t(
@@ -3132,13 +3350,18 @@ export function AssignmentDialog({
                               <input
                                 type="checkbox"
                                 checked={formData.show_answer}
+                                disabled={
+                                  (formData.practice_mode === "word_spelling" ||
+                                    formData.practice_mode === "word_cloze") &&
+                                  formData.play_audio
+                                }
                                 onChange={(e) =>
                                   setFormData((prev) => ({
                                     ...prev,
                                     show_answer: e.target.checked,
                                   }))
                                 }
-                                className="h-4 w-4 rounded border-gray-300"
+                                className="h-4 w-4 rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                               />
                               <span className="ml-2 text-sm text-gray-600">
                                 {t(
@@ -3146,10 +3369,19 @@ export function AssignmentDialog({
                                 )}
                               </span>
                             </div>
+                            {(formData.practice_mode === "word_spelling" ||
+                              formData.practice_mode === "word_cloze") &&
+                              formData.play_audio && (
+                                <p className="text-xs text-red-600">
+                                  {t(
+                                    "dialogs.assignmentDialog.practiceMode.showAnswerLockedByAudio",
+                                  )}
+                                </p>
+                              )}
                           </div>
                         )}
 
-                        {/* 單字朗讀專用 - 顯示翻譯 */}
+                        {/* 單字朗讀 - 顯示翻譯（spelling/cloze 已移到上方 toggle） */}
                         {formData.practice_mode === "word_reading" && (
                           <div className="space-y-1.5">
                             <Label className="text-xs text-gray-600">
@@ -3178,7 +3410,7 @@ export function AssignmentDialog({
                           </div>
                         )}
 
-                        {/* 顯示圖片 */}
+                        {/* 顯示題目圖片 */}
                         <div className="space-y-1.5">
                           <Label className="text-xs text-gray-600">
                             {t(
@@ -3193,6 +3425,10 @@ export function AssignmentDialog({
                                 setFormData((prev) => ({
                                   ...prev,
                                   show_image: e.target.checked,
+                                  // Issue #631: show_image 與 show_option_images 互斥
+                                  show_option_images: e.target.checked
+                                    ? false
+                                    : prev.show_option_images,
                                 }))
                               }
                               className="h-4 w-4 rounded border-gray-300"
@@ -3204,6 +3440,69 @@ export function AssignmentDialog({
                             </span>
                           </div>
                         </div>
+
+                        {/* 顯示選項圖片（單字選擇專用，與顯示題目圖片互斥）Issue #631 */}
+                        {FEATURE_FLAGS.SHOW_OPTION_IMAGES &&
+                          formData.practice_mode === "word_selection" &&
+                          (() => {
+                            const hasMissingImage = cartItems.some(
+                              (i) => i.hasMissingImage,
+                            );
+                            const disabled =
+                              hasMissingImage && !formData.show_option_images;
+                            return (
+                              <div className="space-y-1.5">
+                                <Label className="text-xs text-gray-600">
+                                  {t(
+                                    "dialogs.assignmentDialog.practiceMode.showOptionImages",
+                                  )}
+                                </Label>
+                                <div className="flex items-center h-9">
+                                  <input
+                                    type="checkbox"
+                                    checked={formData.show_option_images}
+                                    disabled={disabled}
+                                    onChange={(e) =>
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        show_option_images: e.target.checked,
+                                        show_image: e.target.checked
+                                          ? false
+                                          : prev.show_image,
+                                      }))
+                                    }
+                                    className="h-4 w-4 rounded border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+                                  />
+                                  <span
+                                    className={cn(
+                                      "ml-2 text-sm",
+                                      disabled
+                                        ? "text-gray-400"
+                                        : "text-gray-600",
+                                    )}
+                                    title={
+                                      disabled
+                                        ? t(
+                                            "dialogs.assignmentDialog.practiceMode.showOptionImagesMissing",
+                                          )
+                                        : undefined
+                                    }
+                                  >
+                                    {t(
+                                      "dialogs.assignmentDialog.practiceMode.showOptionImagesDesc",
+                                    )}
+                                  </span>
+                                </div>
+                                {disabled && (
+                                  <p className="text-xs text-amber-600 mt-1">
+                                    {t(
+                                      "dialogs.assignmentDialog.practiceMode.showOptionImagesMissing",
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })()}
                       </div>
                     </Card>
                   )}

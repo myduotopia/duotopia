@@ -64,6 +64,15 @@ class Settings:
         "ONE_CAMPUS_API_BASE_URL", "https://devapi.1campus.net"
     )
 
+    # 1Campus OAuth (auth.ischool.com.tw)
+    ONE_CAMPUS_OAUTH_CLIENT_ID: Optional[str] = os.getenv("ONE_CAMPUS_OAUTH_CLIENT_ID")
+    ONE_CAMPUS_OAUTH_CLIENT_SECRET: Optional[str] = os.getenv(
+        "ONE_CAMPUS_OAUTH_CLIENT_SECRET"
+    )
+    ONE_CAMPUS_OAUTH_REDIRECT_URI: Optional[str] = os.getenv(
+        "ONE_CAMPUS_OAUTH_REDIRECT_URI"
+    )
+
     # OpenAI (optional)
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
 
@@ -79,6 +88,18 @@ class Settings:
 
     # GCP (optional)
     GCP_PROJECT_ID: Optional[str] = os.getenv("GCP_PROJECT_ID", "duotopia-469413")
+
+    # Cloud Tasks (optional). When unset the app falls back to in-process
+    # asyncio.create_task — fine for local dev / tests / per-issue envs, but
+    # not durable across Cloud Run revisions, so production must set these.
+    CLOUD_TASKS_QUEUE: Optional[str] = os.getenv("CLOUD_TASKS_QUEUE")
+    CLOUD_TASKS_LOCATION: Optional[str] = os.getenv(
+        "CLOUD_TASKS_LOCATION", "asia-east1"
+    )
+    CLOUD_TASKS_TARGET_BASE_URL: Optional[str] = os.getenv(
+        "CLOUD_TASKS_TARGET_BASE_URL"
+    )
+    CLOUD_TASKS_INVOKER_SECRET: Optional[str] = os.getenv("CLOUD_TASKS_INVOKER_SECRET")
 
     # Vertex AI (Gemini) - 用於替代 OpenAI
     USE_VERTEX_AI: bool = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
