@@ -63,7 +63,6 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceSafe } from "@/contexts/WorkspaceContext";
-import { FEATURE_FLAGS } from "@/config/featureFlags";
 
 interface Student {
   id: number;
@@ -2824,86 +2823,82 @@ export function AssignmentDialog({
                     </button>
 
                     {/* 單字拼寫 */}
-                    {FEATURE_FLAGS.WORD_SPELLING_CLOZE && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            practice_mode: "word_spelling",
-                            time_limit_per_question: 0,
-                            // 預設：顯示翻譯、不播音檔、不顯示答案、達標 80%
-                            show_translation: true,
-                            play_audio: false,
-                            show_answer: false,
-                            target_proficiency: 80,
-                            shuffle_questions: false,
-                          }))
-                        }
-                        className={`p-6 rounded-xl border-2 transition-all ${
-                          formData.practice_mode === "word_spelling"
-                            ? "border-blue-500 bg-blue-50 shadow-md"
-                            : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
-                        }`}
-                      >
-                        <div className="flex flex-col items-center gap-3">
-                          <span className="text-4xl">✏️</span>
-                          <div className="text-center">
-                            <div className="font-semibold text-lg">
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.wordSpelling",
-                              ) || "單字拼寫"}
-                            </div>
-                            <div className="text-sm text-gray-500 mt-1">
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.wordSpellingDesc",
-                              ) || "看翻譯或聽音檔，拼寫正確的單字"}
-                            </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          practice_mode: "word_spelling",
+                          time_limit_per_question: 0,
+                          // 預設：顯示翻譯、不播音檔、不顯示答案、達標 80%
+                          show_translation: true,
+                          play_audio: false,
+                          show_answer: false,
+                          target_proficiency: 80,
+                          shuffle_questions: false,
+                        }))
+                      }
+                      className={`p-6 rounded-xl border-2 transition-all ${
+                        formData.practice_mode === "word_spelling"
+                          ? "border-blue-500 bg-blue-50 shadow-md"
+                          : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-3">
+                        <span className="text-4xl">✏️</span>
+                        <div className="text-center">
+                          <div className="font-semibold text-lg">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.wordSpelling",
+                            ) || "單字拼寫"}
+                          </div>
+                          <div className="text-sm text-gray-500 mt-1">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.wordSpellingDesc",
+                            ) || "看翻譯或聽音檔，拼寫正確的單字"}
                           </div>
                         </div>
-                      </button>
-                    )}
+                      </div>
+                    </button>
 
                     {/* 克漏字 */}
-                    {FEATURE_FLAGS.WORD_SPELLING_CLOZE && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            practice_mode: "word_cloze",
-                            time_limit_per_question: 0,
-                            // 預設：顯示翻譯、不播音檔、不顯示答案、達標 80%
-                            show_translation: true,
-                            play_audio: false,
-                            show_answer: false,
-                            target_proficiency: 80,
-                            shuffle_questions: false,
-                          }))
-                        }
-                        className={`p-6 rounded-xl border-2 transition-all ${
-                          formData.practice_mode === "word_cloze"
-                            ? "border-blue-500 bg-blue-50 shadow-md"
-                            : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
-                        }`}
-                      >
-                        <div className="flex flex-col items-center gap-3">
-                          <span className="text-4xl">📝</span>
-                          <div className="text-center">
-                            <div className="font-semibold text-lg">
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.wordCloze",
-                              ) || "克漏字"}
-                            </div>
-                            <div className="text-sm text-gray-500 mt-1">
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.wordClozeDesc",
-                              ) || "看例句填空，輸入正確的單字變形"}
-                            </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          practice_mode: "word_cloze",
+                          time_limit_per_question: 0,
+                          // 預設：顯示翻譯、不播音檔、不顯示答案、達標 80%
+                          show_translation: true,
+                          play_audio: false,
+                          show_answer: false,
+                          target_proficiency: 80,
+                          shuffle_questions: false,
+                        }))
+                      }
+                      className={`p-6 rounded-xl border-2 transition-all ${
+                        formData.practice_mode === "word_cloze"
+                          ? "border-blue-500 bg-blue-50 shadow-md"
+                          : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-3">
+                        <span className="text-4xl">📝</span>
+                        <div className="text-center">
+                          <div className="font-semibold text-lg">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.wordCloze",
+                            ) || "克漏字"}
+                          </div>
+                          <div className="text-sm text-gray-500 mt-1">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.wordClozeDesc",
+                            ) || "看例句填空，輸入正確的單字變形"}
                           </div>
                         </div>
-                      </button>
-                    )}
+                      </div>
+                    </button>
                   </div>
 
                   {/* ===== 例句集細節設定 (reading / rearrangement) ===== */}
@@ -3442,8 +3437,7 @@ export function AssignmentDialog({
                         </div>
 
                         {/* 顯示選項圖片（單字選擇專用，與顯示題目圖片互斥）Issue #631 */}
-                        {FEATURE_FLAGS.SHOW_OPTION_IMAGES &&
-                          formData.practice_mode === "word_selection" &&
+                        {formData.practice_mode === "word_selection" &&
                           (() => {
                             const hasMissingImage = cartItems.some(
                               (i) => i.hasMissingImage,
