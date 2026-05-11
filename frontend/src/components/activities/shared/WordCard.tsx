@@ -186,7 +186,7 @@ function NavArrow({
         "flex items-center justify-center",
         "h-10 w-10 md:h-12 md:w-12",
         "text-gray-400 hover:text-gray-700 transition-colors",
-        isPrev ? "left-2 md:-left-6" : "right-2 md:-right-6",
+        isPrev ? "left-2" : "right-2",
       )}
     >
       {isPrev ? (
