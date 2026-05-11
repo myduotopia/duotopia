@@ -315,8 +315,11 @@ function WordCardFront({
 
       <CardContent
         className={cn(
-          "flex-1 p-6 select-none flex flex-col justify-center",
-          viewMode === "desktop" && showImage && "p-8",
+          // Issue #716 (mobile): prev/next arrows live inside the card at
+          // left-2/right-2 (each 40px wide), so reserve >=48px horizontal
+          // gutter for content. Desktop pushes arrows outside via -left-6.
+          "flex-1 py-6 px-14 md:p-6 select-none flex flex-col justify-center",
+          viewMode === "desktop" && showImage && "md:p-8",
         )}
       >
         {/* 單字區（區塊置中、內容左對齊） */}
