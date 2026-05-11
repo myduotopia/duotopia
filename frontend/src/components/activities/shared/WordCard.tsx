@@ -111,6 +111,8 @@ export function WordCard({
       // Issue #715: 翻到正面後自動播放一次單字音檔（不播例句）
       if (audioUrl) {
         try {
+          // 先暫停上一張卡的播放，避免快速切換時音檔疊播
+          flipPlaybackRef.current?.pause();
           flipPlaybackRef.current = new Audio(audioUrl);
           void flipPlaybackRef.current.play();
         } catch {

@@ -33,6 +33,7 @@ from services.preview_service import (
     check_rearrangement_answer,
     handle_rearrangement_retry,
     handle_rearrangement_complete,
+    get_word_cloze_start,
     _parse_exclude_ids,
     ALLOWED_AUDIO_FORMATS,
     MAX_AUDIO_FILE_SIZE,
@@ -510,3 +511,174 @@ class TestAssessSpeechPreview:
                 await assess_speech_preview(mock_file, "hello")
             # If we get 413 (too large), that means format check passed
             assert exc_info.value.status_code == 413
+
+
+# ---------------------------------------------------------------------------
+# Tests: get_word_cloze_start (Issue #715)
+# ---------------------------------------------------------------------------
+
+
+def _make_word_cloze_assignment(
+    session,
+    classroom,
+    teacher,
+    lesson,
+    items,
+    **assignment_overrides,
+):
+    """Helper: build a VOCABULARY_SET assignment in word_cloze mode.
+
+    `items` is a list of dicts with keys: text, example_sentence (optional),
+    example_sentence_audio_url (optional), part_of_speech (optional),
+    example_sentence_translation (optional), audio_url (optional).
+    Pre-populating example_sentence_audio_url avoids triggering real TTS
+    calls inside ensure_example_sentence_audio.
+    """
+    defaults = dict(
+        title="Cloze Assignment",
+        classroom_id=classroom.id,
+        teacher_id=teacher.id,
+        due_date=datetime.utcnow() + timedelta(days=7),
+        practice_mode="word_cloze",
+    )
+    defaults.update(assignment_overrides)
+    assignment = Assignment(**defaults)
+    session.add(assignment)
+    session.flush()
+
+    content = Content(
+        lesson_id=lesson.id,
+        type=ContentType.VOCABULARY_SET,
+        title="Cloze Content",
+    )
+    session.add(content)
+    session.flush()
+
+    for idx, spec in enumerate(items):
+        item = ContentItem(
+            content_id=content.id,
+            order_index=idx,
+            text=spec["text"],
+            translation=spec.get("translation", ""),
+            audio_url=spec.get("audio_url"),
+            example_sentence=spec.get("example_sentence"),
+            example_sentence_translation=spec.get("example_sentence_translation"),
+            example_sentence_audio_url=spec.get("example_sentence_audio_url"),
+            part_of_speech=spec.get("part_of_speech"),
+        )
+        session.add(item)
+    session.flush()
+
+    session.add(
+        AssignmentContent(
+            assignment_id=assignment.id,
+            content_id=content.id,
+            order_index=0,
+        )
+    )
+    session.commit()
+    session.refresh(assignment)
+    return assignment
+
+
+class TestGetWordClozeStart:
+    @pytest.mark.asyncio
+    async def test_wrong_mode_raises(
+        self,
+        shared_test_session,
+        preview_teacher,
+        preview_classroom,
+        _program_and_lesson,
+    ):
+        assignment = _make_assignment(
+            shared_test_session,
+            preview_classroom,
+            preview_teacher,
+            _program_and_lesson,
+            practice_mode="word_reading",
+        )
+        with pytest.raises(Exception) as exc_info:
+            await get_word_cloze_start(assignment, shared_test_session)
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_returns_questions_with_715_fields(
+        self,
+        shared_test_session,
+        preview_teacher,
+        preview_classroom,
+        _program_and_lesson,
+    ):
+        assignment = _make_word_cloze_assignment(
+            shared_test_session,
+            preview_classroom,
+            preview_teacher,
+            _program_and_lesson,
+            items=[
+                {
+                    "text": "apple",
+                    "translation": "蘋果",
+                    "audio_url": "https://cdn.example.com/apple.mp3",
+                    "example_sentence": "I eat an apple every day.",
+                    "example_sentence_translation": "我每天吃一顆蘋果。",
+                    "example_sentence_audio_url": "https://cdn.example.com/apple_sent.mp3",
+                    "part_of_speech": "n.",
+                },
+            ],
+        )
+        result = await get_word_cloze_start(assignment, shared_test_session)
+
+        assert "questions" in result
+        assert len(result["questions"]) == 1
+        q = result["questions"][0]
+        # Five #715 fields must be present
+        assert q["part_of_speech"] == "n."
+        assert q["example_sentence"] == "I eat an apple every day."
+        assert q["example_sentence_translation"] == "我每天吃一顆蘋果。"
+        assert q["example_sentence_audio_url"] == "https://cdn.example.com/apple_sent.mp3"
+        assert q["word_audio_url"] == "https://cdn.example.com/apple.mp3"
+        # Sanity: cloze actually blanks out the target word
+        assert "_____" in q["blanked_sentence"]
+        assert q["correct_answer"].lower() == "apple"
+
+    @pytest.mark.asyncio
+    async def test_items_missing_example_sentence_are_skipped(
+        self,
+        shared_test_session,
+        preview_teacher,
+        preview_classroom,
+        _program_and_lesson,
+    ):
+        # Mix: 2 valid items + 1 with no example sentence and no multi-word text.
+        # The third item has no usable cloze source and must be silently skipped.
+        assignment = _make_word_cloze_assignment(
+            shared_test_session,
+            preview_classroom,
+            preview_teacher,
+            _program_and_lesson,
+            items=[
+                {
+                    "text": "apple",
+                    "example_sentence": "I eat an apple every day.",
+                    "example_sentence_audio_url": "https://x/apple.mp3",
+                },
+                {
+                    "text": "book",
+                    "example_sentence": "She reads a book.",
+                    "example_sentence_audio_url": "https://x/book.mp3",
+                },
+                {
+                    # No example_sentence and single-word text → unusable
+                    "text": "banana",
+                },
+            ],
+            shuffle_questions=False,
+        )
+        result = await get_word_cloze_start(assignment, shared_test_session)
+
+        # total_questions counts ALL items in the assignment (used by frontend
+        # progress display), while questions[] only contains usable cloze items.
+        assert result["total_questions"] == 3
+        assert len(result["questions"]) == 2
+        returned_words = {q["base_word"] for q in result["questions"]}
+        assert returned_words == {"apple", "book"}
