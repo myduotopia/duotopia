@@ -184,9 +184,8 @@ function NavArrow({
       className={cn(
         "absolute top-1/2 -translate-y-1/2 z-10",
         "flex items-center justify-center",
-        "h-10 w-10 md:h-12 md:w-12 rounded-full",
-        "bg-white/90 hover:bg-white border border-gray-200 shadow-md",
-        "text-gray-600 hover:text-gray-900 transition-colors",
+        "h-10 w-10 md:h-12 md:w-12",
+        "text-gray-400 hover:text-gray-700 transition-colors",
         isPrev ? "left-2 md:-left-6" : "right-2 md:-right-6",
       )}
     >
