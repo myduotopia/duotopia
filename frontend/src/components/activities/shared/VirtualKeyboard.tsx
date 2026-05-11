@@ -82,10 +82,9 @@ export default function VirtualKeyboard({
         physicalKeyboardHighlight={false}
         preventMouseDownDefault
         buttonTheme={[
-          {
-            class: "vk-shift",
-            buttons: "{shift}",
-          },
+          { class: "vk-shift", buttons: "{shift}" },
+          // Issue #716: 母音用紅色標示（教學常用標法）
+          { class: "vk-vowel", buttons: "a e i o u A E I O U" },
         ]}
       />
     </div>
