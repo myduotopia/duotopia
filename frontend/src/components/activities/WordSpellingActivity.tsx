@@ -770,9 +770,14 @@ export default function WordSpellingActivity({
                   {currentWord.translation}
                 </h2>
                 {currentWord.part_of_speech && (
-                  <p className="text-sm italic text-gray-500">
-                    {currentWord.part_of_speech}
-                  </p>
+                  <div className="flex justify-center">
+                    <Badge
+                      variant="secondary"
+                      className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
+                    >
+                      {currentWord.part_of_speech}
+                    </Badge>
+                  </div>
                 )}
               </div>
             )}

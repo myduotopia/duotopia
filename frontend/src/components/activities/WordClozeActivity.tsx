@@ -781,9 +781,14 @@ export default function WordClozeActivity({
 
             <div className="max-w-2xl mx-auto text-center py-2 space-y-2">
               {currentQ.part_of_speech && (
-                <p className="text-sm italic text-gray-500">
-                  {currentQ.part_of_speech}
-                </p>
+                <div className="flex justify-center">
+                  <Badge
+                    variant="secondary"
+                    className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
+                  >
+                    {currentQ.part_of_speech}
+                  </Badge>
+                </div>
               )}
               <p className="text-xl md:text-2xl leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
                 {currentQ.blanked_sentence}
