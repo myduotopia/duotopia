@@ -779,12 +779,17 @@ export default function WordClozeActivity({
               </div>
             )}
 
-            <div className="max-w-2xl mx-auto text-center py-2 space-y-3">
-              <p className="text-2xl md:text-3xl leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
+            <div className="max-w-2xl mx-auto text-center py-2 space-y-2">
+              {currentQ.part_of_speech && (
+                <p className="text-sm italic text-gray-500">
+                  {currentQ.part_of_speech}
+                </p>
+              )}
+              <p className="text-xl md:text-2xl leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
                 {currentQ.blanked_sentence}
               </p>
               {showTranslation && currentQ.sentence_translation && (
-                <p className="text-base text-gray-500">
+                <p className="text-sm text-gray-500">
                   {currentQ.sentence_translation}
                 </p>
               )}

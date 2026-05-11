@@ -765,10 +765,15 @@ export default function WordSpellingActivity({
         back={
           <div className="space-y-6">
             {showTranslation && currentWord.translation && (
-              <div className="text-center py-4">
-                <h2 className="text-4xl md:text-5xl font-bold text-gray-800 tracking-wide">
+              <div className="text-center py-3 space-y-1">
+                <h2 className="text-3xl md:text-4xl font-bold text-gray-800 tracking-wide">
                   {currentWord.translation}
                 </h2>
+                {currentWord.part_of_speech && (
+                  <p className="text-sm italic text-gray-500">
+                    {currentWord.part_of_speech}
+                  </p>
+                )}
               </div>
             )}
 
