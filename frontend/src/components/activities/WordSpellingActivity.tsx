@@ -46,9 +46,9 @@ import { WordCard } from "./shared/WordCard";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
-// Issue #716: Spelling/cloze 答案只允許英文字母與連字號；其它（注音、
+// Issue #716: 答案允許英文字母、連字號、空格（"United States"）；其它（注音、
 // 數字、Emoji、貼上的多字元）一律過濾掉，順便擋住手機輸入法的建議選字。
-const ALLOWED_CHAR = /[a-zA-Z-]/;
+const ALLOWED_CHAR = /[a-zA-Z\- ]/;
 const sanitizeAnswer = (raw: string) =>
   Array.from(raw)
     .filter((c) => ALLOWED_CHAR.test(c))

@@ -26,18 +26,20 @@ interface VirtualKeyboardProps {
   className?: string;
 }
 
-// Layout B (mobile-style): Enter sits on the bottom utility row, not on
-// its own line — matches how iOS/Gboard place return alongside shift/bksp.
+// Layout B (mobile-style): bottom utility row carries shift / bksp; a
+// dedicated 4th row holds space + Enter the way iOS / Gboard do it.
 const LAYOUT = {
   default: [
     "q w e r t y u i o p",
     "a s d f g h j k l",
-    "{shift} z x c v b n m {bksp} {enter}",
+    "{shift} z x c v b n m {bksp}",
+    "{space} {enter}",
   ],
   shift: [
     "Q W E R T Y U I O P",
     "A S D F G H J K L",
-    "{shift} Z X C V B N M {bksp} {enter}",
+    "{shift} Z X C V B N M {bksp}",
+    "{space} {enter}",
   ],
 };
 
@@ -45,6 +47,7 @@ const DISPLAY = {
   "{shift}": "⇧",
   "{bksp}": "⌫",
   "{enter}": "Enter",
+  "{space}": " ",
 };
 
 export default function VirtualKeyboard({
@@ -66,6 +69,11 @@ export default function VirtualKeyboard({
     }
     if (button === "{enter}") {
       onEnter();
+      return;
+    }
+    if (button === "{space}") {
+      onKey(" ");
+      if (shifted) setShifted(false);
       return;
     }
     onKey(button);

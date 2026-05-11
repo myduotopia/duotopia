@@ -46,8 +46,8 @@ import { WordCard } from "./shared/WordCard";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
-// Issue #716: 答案僅允許英文字母與連字號；過濾掉建議選字、注音、Emoji。
-const ALLOWED_CHAR = /[a-zA-Z-]/;
+// Issue #716: 答案允許英文字母、連字號、空格；過濾掉建議選字、注音、Emoji。
+const ALLOWED_CHAR = /[a-zA-Z\- ]/;
 const sanitizeAnswer = (raw: string) =>
   Array.from(raw)
     .filter((c) => ALLOWED_CHAR.test(c))
