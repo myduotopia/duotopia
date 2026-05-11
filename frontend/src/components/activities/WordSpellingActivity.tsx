@@ -520,6 +520,9 @@ export default function WordSpellingActivity({
     if (deviceMode !== "desktop" || roundCompleted || loading) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter") return;
+      // Issue #716: 過濾按住 Enter 的 auto-repeat，避免一次連續觸發
+      // 「送出 → 翻面 → 立刻下一題」造成卡片沒看到。
+      if (e.repeat) return;
       if (cardFace === "front") {
         e.preventDefault();
         advanceToNext();

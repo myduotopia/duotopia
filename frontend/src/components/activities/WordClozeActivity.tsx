@@ -518,6 +518,8 @@ export default function WordClozeActivity({
     if (deviceMode !== "desktop" || roundCompleted || loading) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter") return;
+      // Issue #716: 過濾 auto-repeat，避免「送出 → 翻面 → 立刻下一題」。
+      if (e.repeat) return;
       if (cardFace === "front") {
         e.preventDefault();
         advanceToNext();
