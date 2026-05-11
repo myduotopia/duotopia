@@ -186,7 +186,7 @@ function NavArrow({
         "flex items-center justify-center",
         "h-10 w-10 md:h-12 md:w-12",
         "text-gray-400 hover:text-gray-700 transition-colors",
-        isPrev ? "left-1" : "right-1",
+        isPrev ? "left-0" : "right-0",
       )}
     >
       {isPrev ? (
@@ -317,7 +317,7 @@ function WordCardFront({
           // Issue #716: only the right (next) arrow remains, so use an
           // asymmetric gutter — small on the left, big enough on the right
           // to clear the 40px arrow button sitting at right-1.
-          "flex-1 py-6 pl-4 pr-12 md:py-6 md:pl-6 md:pr-14 select-none flex flex-col justify-center",
+          "flex-1 py-6 pl-6 pr-12 md:py-6 md:pl-8 md:pr-14 select-none flex flex-col justify-center",
           viewMode === "desktop" && showImage && "md:p-8",
         )}
       >
