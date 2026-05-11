@@ -732,6 +732,9 @@ async def _handle_identity_code_flow(
         # Schedule a class roster sync for this school in the background so
         # login isn't blocked on it. Identity-code flow always carries exactly
         # one school_dsns (the school the user came from).
+        # `account` here is identity_data["account"], the user's 1Campus
+        # account email (per /{schoolDsns}/identity/{code} spec) — same shape
+        # as `mail` from getOAuthUserInfo used in the OAuth branch below.
         schedule_background_sync(school_dsns, teacher.id, teacher_acc=account)
 
         access_token = create_access_token(

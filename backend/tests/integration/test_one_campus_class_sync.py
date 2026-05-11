@@ -241,6 +241,77 @@ class TestOneCampusClassSyncService:
         assert s_secondary.name == "New Name"
 
     @pytest.mark.asyncio
+    async def test_syncs_student_number_when_school_renumbers(
+        self, shared_test_session
+    ):
+        """student_number drift between 1Campus and Duotopia must be corrected.
+
+        Schools sometimes renumber students mid-year. The rename helper used
+        to update only `name` and silently leave `student_number` stale.
+        Verify both linked students get the new number, and the result
+        registers as an update.
+        """
+        db = shared_test_session
+        teacher = _make_teacher(db)
+
+        identity = Identity(
+            one_campus_student_id="S700",
+            email_verified=False,
+            is_active=True,
+        )
+        db.add(identity)
+        db.flush()
+
+        s_primary = Student(
+            name="Renumbered Student",
+            student_number="001",
+            identity_id=identity.id,
+            is_primary_account=True,
+            is_active=True,
+        )
+        s_secondary = Student(
+            name="Renumbered Student",
+            student_number="001",
+            identity_id=identity.id,
+            is_primary_account=False,
+            is_active=True,
+        )
+        db.add_all([s_primary, s_secondary])
+        db.commit()
+
+        get_class_payload = {"class": [{"classID": "C700", "className": "Room 7"}]}
+        # Same name as the seeded students, so name comparison is a no-op —
+        # the only thing that should change is student_number.
+        get_class_student_map = {
+            "C700": {
+                "class": [
+                    {
+                        "student": [
+                            {
+                                "studentID": "S700",
+                                "studentName": "Renumbered Student",
+                                "studentNumber": "002",
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        p_class, p_student = _patch_one_campus_apis(
+            get_class_payload, get_class_student_map
+        )
+        with p_class, p_student:
+            result = await OneCampusClassSyncService.sync_school(
+                db, school_dsns="my.school", teacher_id=teacher.id
+            )
+
+        db.refresh(s_primary)
+        db.refresh(s_secondary)
+        assert s_primary.student_number == "002"
+        assert s_secondary.student_number == "002"
+        assert result.students_updated == 1
+
+    @pytest.mark.asyncio
     async def test_does_not_delete_disappeared_classrooms(self, shared_test_session):
         """A 1Campus classroom that no longer appears in getClass must NOT be deleted."""
         db = shared_test_session
