@@ -174,7 +174,7 @@ class TestOneCampusClassSyncService:
 
         get_class_payload = {"class": [{"classID": "C100", "className": "New Name"}]}
         p_class, p_student = _patch_one_campus_apis(
-            get_class_payload, {"C100": {"student": []}}
+            get_class_payload, {"C100": {"class": [{"student": []}]}}
         )
         with p_class, p_student:
             result = await OneCampusClassSyncService.sync_school(
@@ -338,9 +338,7 @@ class TestOneCampusClassSyncService:
         get_class_student_map = {
             "C001": RuntimeError("class 001 timeout"),
             "C002": {
-                "class": [
-                    {"student": [{"studentID": "S010", "studentName": "Zoe"}]}
-                ]
+                "class": [{"student": [{"studentID": "S010", "studentName": "Zoe"}]}]
             },
         }
         p_class, p_student = _patch_one_campus_apis(
