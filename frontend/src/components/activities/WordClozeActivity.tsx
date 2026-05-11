@@ -797,24 +797,6 @@ export default function WordClozeActivity({
             )}
             {/* Issue #716: cloze Display Translation 僅顯示例句翻譯，不顯示單字翻譯 → 移除單字翻譯 hint */}
 
-            {/* Issue #716: 音檔功能僅在 Play Audio 模式出現 */}
-            {audioOnlyMode && currentQ.audio_url && (
-              <div className="flex flex-col items-center gap-2">
-                <Button
-                  variant="default"
-                  size="lg"
-                  onClick={playQuestionAudio}
-                  className="gap-2 h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
-                >
-                  <Volume2 className="h-7 w-7" />
-                  {t("wordCloze.playAudio") || "Play Audio"}
-                </Button>
-                <p className="text-xs text-gray-500">
-                  {t("wordCloze.tapToReplay") || "點擊播放，可以重複聆聽"}
-                </p>
-              </div>
-            )}
-
             <div className="max-w-2xl mx-auto text-center py-2 space-y-2">
               {currentQ.part_of_speech && (
                 <div className="flex justify-center">
@@ -826,9 +808,22 @@ export default function WordClozeActivity({
                   </Badge>
                 </div>
               )}
-              <p className="text-xl md:text-2xl leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
-                {currentQ.blanked_sentence}
-              </p>
+              {/* Issue #716: Play Audio 模式音檔鈕緊接例句左側，採 WordCard 風格 */}
+              <div className="flex items-start justify-center gap-2 px-4">
+                {audioOnlyMode && currentQ.audio_url && (
+                  <button
+                    type="button"
+                    onClick={playQuestionAudio}
+                    aria-label={t("wordCloze.playAudio") || "Play Audio"}
+                    className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-10 w-10 text-blue-500 hover:text-blue-600 mt-1"
+                  >
+                    <Volume2 className="h-5 w-5" />
+                  </button>
+                )}
+                <p className="text-xl md:text-2xl leading-relaxed text-gray-800 font-semibold tracking-wide">
+                  {currentQ.blanked_sentence}
+                </p>
+              </div>
               {showTranslation && currentQ.sentence_translation && (
                 <p className="text-sm text-gray-500">
                   {currentQ.sentence_translation}

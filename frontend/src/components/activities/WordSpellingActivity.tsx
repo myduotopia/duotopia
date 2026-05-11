@@ -821,21 +821,17 @@ export default function WordSpellingActivity({
               </div>
             )}
 
-            {/* Issue #716: 音檔功能僅在 Play Audio 模式出現；同時移除重複的 "Type the correct spelling" 標語 */}
+            {/* Issue #716: Play Audio 模式用 WordCard 風格的小喇叭，置中。 */}
             {audioOnlyMode && currentWord.audio_url && (
-              <div className="flex flex-col items-center gap-2">
-                <Button
-                  variant="default"
-                  size="lg"
+              <div className="flex justify-center">
+                <button
+                  type="button"
                   onClick={playWordAudio}
-                  className="gap-2 h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+                  aria-label={t("wordSpelling.playAudio") || "Play Audio"}
+                  className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-12 w-12 text-blue-500 hover:text-blue-600"
                 >
                   <Volume2 className="h-7 w-7" />
-                  {t("wordSpelling.playAudio") || "Play Audio"}
-                </Button>
-                <p className="text-xs text-gray-500">
-                  {t("wordSpelling.tapToReplay") || "點擊播放，可以重複聆聽"}
-                </p>
+                </button>
               </div>
             )}
 
