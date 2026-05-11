@@ -114,6 +114,8 @@ export default function WordSpellingActivity({
   // audio button becomes the primary hint, so make it visually prominent.
   const [audioOnlyMode, setAudioOnlyMode] = useState(false);
   const [showAnswerOnWrong, setShowAnswerOnWrong] = useState(false);
+  // Issue #716: 答錯後改用 placeholder 顯示正解，需要記錄上一次是否答錯
+  const [lastAttemptWrong, setLastAttemptWrong] = useState(false);
 
   // Proficiency
   const [proficiency, setProficiency] = useState<ProficiencyStatus>({
@@ -336,9 +338,11 @@ export default function WordSpellingActivity({
     }
   }, [words, currentIndex]);
 
-  // Auto-play audio once per new question (audio is the spelling hint)
+  // Auto-play audio once per new question (audio is the spelling hint).
+  // Issue #716: 僅 Play Audio (audioOnlyMode) 子模式播放；Display Translation 不播。
   useEffect(() => {
     if (
+      audioOnlyMode &&
       words[currentIndex]?.audio_url &&
       !showResult &&
       !roundCompleted &&
@@ -347,7 +351,7 @@ export default function WordSpellingActivity({
       playWordAudio();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, words.length, roundCompleted, loading]);
+  }, [currentIndex, words.length, roundCompleted, loading, audioOnlyMode]);
 
   // Timer
   useEffect(() => {
@@ -390,11 +394,11 @@ export default function WordSpellingActivity({
 
     const currentWord = words[currentIndex];
     const answer = isTimeout ? "" : typedAnswer.trim();
-    const expected = (currentWord.text || "").trim().toLowerCase();
+    // Issue #716: 答案區分大小寫，僅 trim
+    const expected = (currentWord.text || "").trim();
     // Defensive: if the backend somehow sent an empty word, treat as
     // incorrect rather than letting "" === "" mark every answer correct.
-    const correct =
-      !isTimeout && expected.length > 0 && answer.toLowerCase() === expected;
+    const correct = !isTimeout && expected.length > 0 && answer === expected;
 
     setIsCorrect(correct);
     setShowResult(true);
@@ -402,10 +406,12 @@ export default function WordSpellingActivity({
 
     if (correct) {
       setCorrectCount((prev) => prev + 1);
+      setLastAttemptWrong(false);
       // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
       setCardFace("front");
     } else {
       setIncorrectAnswer(answer);
+      setLastAttemptWrong(true);
     }
 
     // Preview/demo: track local counts so the tier breakdown matches live mode.
@@ -456,6 +462,7 @@ export default function WordSpellingActivity({
     setShowResult(false);
     setTypedAnswer("");
     setIncorrectAnswer(null);
+    setLastAttemptWrong(false);
     if (timeLimit) setTimeRemaining(timeLimit);
 
     if (currentIndex < words.length - 1) {
@@ -473,6 +480,7 @@ export default function WordSpellingActivity({
     setShowResult(false);
     setTypedAnswer("");
     setIncorrectAnswer(null);
+    setLastAttemptWrong(false);
     if (timeLimit) setTimeRemaining(timeLimit);
     setCurrentIndex(currentIndex - 1);
   }, [currentIndex, timeLimit]);
@@ -749,13 +757,15 @@ export default function WordSpellingActivity({
         word={currentWord.text}
         partOfSpeech={currentWord.part_of_speech ?? undefined}
         translation={currentWord.translation || undefined}
-        audioUrl={currentWord.audio_url}
+        audioUrl={audioOnlyMode ? currentWord.audio_url : undefined}
         exampleSentence={currentWord.example_sentence ?? undefined}
         exampleSentenceTranslation={
           currentWord.example_sentence_translation ?? undefined
         }
         exampleSentenceAudioUrl={
-          currentWord.example_sentence_audio_url ?? undefined
+          audioOnlyMode
+            ? (currentWord.example_sentence_audio_url ?? undefined)
+            : undefined
         }
         hasPrev={cardFace === "front" && currentIndex > 0}
         hasNext={cardFace === "front"}
@@ -774,32 +784,23 @@ export default function WordSpellingActivity({
               </div>
             )}
 
-            {currentWord.audio_url && (
+            {/* Issue #716: 音檔功能僅在 Play Audio 模式出現；同時移除重複的 "Type the correct spelling" 標語 */}
+            {audioOnlyMode && currentWord.audio_url && (
               <div className="flex flex-col items-center gap-2">
                 <Button
-                  variant={audioOnlyMode ? "default" : "outline"}
+                  variant="default"
                   size="lg"
                   onClick={playWordAudio}
-                  className={cn(
-                    "gap-2",
-                    audioOnlyMode &&
-                      "h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg",
-                  )}
+                  className="gap-2 h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
                 >
-                  <Volume2 className={audioOnlyMode ? "h-7 w-7" : "h-5 w-5"} />
+                  <Volume2 className="h-7 w-7" />
                   {t("wordSpelling.playAudio") || "Play Audio"}
                 </Button>
-                {audioOnlyMode && (
-                  <p className="text-xs text-gray-500">
-                    {t("wordSpelling.tapToReplay") || "點擊播放，可以重複聆聽"}
-                  </p>
-                )}
+                <p className="text-xs text-gray-500">
+                  {t("wordSpelling.tapToReplay") || "點擊播放，可以重複聆聽"}
+                </p>
               </div>
             )}
-
-            <div className="text-center text-gray-600">
-              {t("wordSpelling.typeTheWord") || "Type the correct spelling:"}
-            </div>
 
             {timeLimit && timeRemaining !== null && (
               <div className="flex justify-center">
@@ -837,8 +838,13 @@ export default function WordSpellingActivity({
                 value={typedAnswer}
                 onChange={(e) => setTypedAnswer(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={(e) => e.preventDefault()}
+                onDrop={(e) => e.preventDefault()}
                 placeholder={
-                  t("wordSpelling.inputPlaceholder") || "Type the word here..."
+                  showAnswerOnWrong && lastAttemptWrong && currentWord.text
+                    ? currentWord.text
+                    : t("wordSpelling.inputPlaceholder") ||
+                      "Type the word here..."
                 }
                 disabled={showResult || submitting}
                 className={cn(
@@ -865,12 +871,6 @@ export default function WordSpellingActivity({
                           "Time's up! Try again."}
                     </span>
                   </div>
-                  {showAnswerOnWrong && currentWord.text && (
-                    <p className="text-sm text-gray-700">
-                      {t("wordSpelling.correctAnswerLabel") || "正確答案"}:{" "}
-                      <span className="font-bold">{currentWord.text}</span>
-                    </p>
-                  )}
                   <Button
                     onClick={handleRetry}
                     variant="outline"

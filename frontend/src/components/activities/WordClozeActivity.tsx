@@ -115,6 +115,8 @@ export default function WordClozeActivity({
   const [showTranslation, setShowTranslation] = useState(true);
   const [audioOnlyMode, setAudioOnlyMode] = useState(false);
   const [showAnswerOnWrong, setShowAnswerOnWrong] = useState(false);
+  // Issue #716: 答錯後改用 placeholder 顯示正解，需要記錄上一次是否答錯
+  const [lastAttemptWrong, setLastAttemptWrong] = useState(false);
 
   const [proficiency, setProficiency] = useState<ProficiencyStatus>({
     current_mastery: 0,
@@ -324,9 +326,11 @@ export default function WordClozeActivity({
     }
   }, [questions, currentIndex]);
 
-  // Auto-play sentence audio on each new question
+  // Auto-play sentence audio on each new question.
+  // Issue #716: 僅 Play Audio (audioOnlyMode) 子模式播放；Display Translation 不播。
   useEffect(() => {
     if (
+      audioOnlyMode &&
       questions[currentIndex]?.audio_url &&
       !showResult &&
       !roundCompleted &&
@@ -335,7 +339,7 @@ export default function WordClozeActivity({
       playQuestionAudio();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, questions.length, roundCompleted, loading]);
+  }, [currentIndex, questions.length, roundCompleted, loading, audioOnlyMode]);
 
   // Timer
   useEffect(() => {
@@ -385,19 +389,19 @@ export default function WordClozeActivity({
     setSubmitting(true);
 
     if (isPreviewMode || isDemoMode) {
-      // Local compare against the backend-supplied correct answer
-      // (case-insensitive, trimmed) — same pattern as spelling.
-      const expected = (currentQ.correct_answer || "").trim().toLowerCase();
-      const correct =
-        !isTimeout && expected.length > 0 && answer.toLowerCase() === expected;
+      // Issue #716: case-sensitive comparison (trim only) — match backend.
+      const expected = (currentQ.correct_answer || "").trim();
+      const correct = !isTimeout && expected.length > 0 && answer === expected;
       setIsCorrect(correct);
       setShowResult(true);
       if (correct) {
         setCorrectCount((prev) => prev + 1);
+        setLastAttemptWrong(false);
         // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
         setCardFace("front");
       } else {
         setIncorrectAnswer(answer);
+        setLastAttemptWrong(true);
       }
       recordPreviewAnswer(currentQ.content_item_id, correct);
       setSubmitting(false);
@@ -421,10 +425,12 @@ export default function WordClozeActivity({
       setShowResult(true);
       if (correct) {
         setCorrectCount((prev) => prev + 1);
+        setLastAttemptWrong(false);
         // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
         setCardFace("front");
       } else {
         setIncorrectAnswer(answer);
+        setLastAttemptWrong(true);
       }
       await fetchProficiency();
     } catch (error) {
@@ -457,6 +463,7 @@ export default function WordClozeActivity({
     setShowResult(false);
     setTypedAnswer("");
     setIncorrectAnswer(null);
+    setLastAttemptWrong(false);
     if (timeLimit) setTimeRemaining(timeLimit);
 
     if (currentIndex < questions.length - 1) {
@@ -474,6 +481,7 @@ export default function WordClozeActivity({
     setShowResult(false);
     setTypedAnswer("");
     setIncorrectAnswer(null);
+    setLastAttemptWrong(false);
     if (timeLimit) setTimeRemaining(timeLimit);
     setCurrentIndex(currentIndex - 1);
   }, [currentIndex, timeLimit]);
@@ -742,13 +750,17 @@ export default function WordClozeActivity({
         word={currentQ.base_word || currentQ.correct_answer}
         partOfSpeech={currentQ.part_of_speech ?? undefined}
         translation={currentQ.translation || undefined}
-        audioUrl={currentQ.word_audio_url ?? undefined}
+        audioUrl={
+          audioOnlyMode ? (currentQ.word_audio_url ?? undefined) : undefined
+        }
         exampleSentence={currentQ.example_sentence ?? undefined}
         exampleSentenceTranslation={
           currentQ.example_sentence_translation ?? undefined
         }
         exampleSentenceAudioUrl={
-          currentQ.example_sentence_audio_url ?? undefined
+          audioOnlyMode
+            ? (currentQ.example_sentence_audio_url ?? undefined)
+            : undefined
         }
         hasPrev={cardFace === "front" && currentIndex > 0}
         hasNext={cardFace === "front"}
@@ -756,38 +768,23 @@ export default function WordClozeActivity({
         onNext={advanceToNext}
         back={
           <div className="space-y-6">
-            {/* Translation hint (Chinese meaning only — never show base word) */}
-            {showTranslation && currentQ.translation && (
-              <div className="text-center">
-                <p className="text-sm text-gray-500 mb-1">
-                  {t("wordCloze.translationHint") || "Translation"}
-                </p>
-                <h2 className="text-xl font-bold text-gray-800">
-                  {currentQ.translation}
-                </h2>
-              </div>
-            )}
+            {/* Issue #716: cloze Display Translation 僅顯示例句翻譯，不顯示單字翻譯 → 移除單字翻譯 hint */}
 
-            {currentQ.audio_url && (
+            {/* Issue #716: 音檔功能僅在 Play Audio 模式出現 */}
+            {audioOnlyMode && currentQ.audio_url && (
               <div className="flex flex-col items-center gap-2">
                 <Button
-                  variant={audioOnlyMode ? "default" : "outline"}
+                  variant="default"
                   size="lg"
                   onClick={playQuestionAudio}
-                  className={cn(
-                    "gap-2",
-                    audioOnlyMode &&
-                      "h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg",
-                  )}
+                  className="gap-2 h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
                 >
-                  <Volume2 className={audioOnlyMode ? "h-7 w-7" : "h-5 w-5"} />
+                  <Volume2 className="h-7 w-7" />
                   {t("wordCloze.playAudio") || "Play Audio"}
                 </Button>
-                {audioOnlyMode && (
-                  <p className="text-xs text-gray-500">
-                    {t("wordCloze.tapToReplay") || "點擊播放，可以重複聆聽"}
-                  </p>
-                )}
+                <p className="text-xs text-gray-500">
+                  {t("wordCloze.tapToReplay") || "點擊播放，可以重複聆聽"}
+                </p>
               </div>
             )}
 
@@ -838,8 +835,14 @@ export default function WordClozeActivity({
                 value={typedAnswer}
                 onChange={(e) => setTypedAnswer(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={(e) => e.preventDefault()}
+                onDrop={(e) => e.preventDefault()}
                 placeholder={
-                  t("wordCloze.inputPlaceholder") || "Fill in the blank..."
+                  showAnswerOnWrong &&
+                  lastAttemptWrong &&
+                  currentQ.correct_answer
+                    ? currentQ.correct_answer
+                    : t("wordCloze.inputPlaceholder") || "Fill in the blank..."
                 }
                 disabled={showResult || submitting}
                 className={cn(
@@ -866,14 +869,6 @@ export default function WordClozeActivity({
                           "Time's up! Try again."}
                     </span>
                   </div>
-                  {showAnswerOnWrong && currentQ.correct_answer && (
-                    <p className="text-sm text-gray-700">
-                      {t("wordCloze.correctAnswerLabel") || "正確答案"}:{" "}
-                      <span className="font-bold">
-                        {currentQ.correct_answer}
-                      </span>
-                    </p>
-                  )}
                   <Button
                     onClick={handleRetry}
                     variant="outline"
