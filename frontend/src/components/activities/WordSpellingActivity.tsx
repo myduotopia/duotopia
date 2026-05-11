@@ -41,8 +41,18 @@ import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
+import VirtualKeyboard from "./shared/VirtualKeyboard";
 import { WordCard } from "./shared/WordCard";
+import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
+
+// Issue #716: Spelling/cloze 答案只允許英文字母與連字號；其它（注音、
+// 數字、Emoji、貼上的多字元）一律過濾掉，順便擋住手機輸入法的建議選字。
+const ALLOWED_CHAR = /[a-zA-Z-]/;
+const sanitizeAnswer = (raw: string) =>
+  Array.from(raw)
+    .filter((c) => ALLOWED_CHAR.test(c))
+    .join("");
 
 interface SpellingWord {
   content_item_id: number;
@@ -89,6 +99,10 @@ export default function WordSpellingActivity({
   onComplete,
 }: WordSpellingActivityProps) {
   const { t } = useTranslation();
+  // Issue #716: 觸控裝置（手機 / 平板）改用 VirtualKeyboard，避免系統鍵盤的
+  // 「建議選字」讓學生直接點答案。桌機保留實體鍵盤。
+  const deviceMode = useInputDeviceMode();
+  const useVirtualKeyboard = deviceMode !== "desktop";
 
   // State
   const [loading, setLoading] = useState(true);
@@ -469,17 +483,31 @@ export default function WordSpellingActivity({
     }
   }, [currentIndex, words.length, timeLimit]);
 
-  // Issue #715: 上一題（只在正面顯示時可用）
-  const goToPrev = useCallback(() => {
-    if (currentIndex === 0) return;
-    setScoreOverlayOpen(false);
-    setCardFace("back");
-    setShowResult(false);
-    setTypedAnswer("");
-    setLastAttemptWrong(false);
-    if (timeLimit) setTimeRemaining(timeLimit);
-    setCurrentIndex(currentIndex - 1);
-  }, [currentIndex, timeLimit]);
+  // Issue #716: 移除「上一題」— 艾賓浩斯算法鼓勵把 10 題跑完，不回頭。
+
+  // Issue #716: VirtualKeyboard 輸入回調
+  const vkAppend = useCallback(
+    (ch: string) => {
+      const sanitized = sanitizeAnswer(ch);
+      if (!sanitized) return;
+      if (showResult && !isCorrect) setShowResult(false);
+      setTypedAnswer((prev) => prev + sanitized);
+    },
+    [showResult, isCorrect],
+  );
+  const vkBackspace = useCallback(() => {
+    if (showResult && !isCorrect) setShowResult(false);
+    setTypedAnswer((prev) => prev.slice(0, -1));
+  }, [showResult, isCorrect]);
+  const vkEnter = useCallback(() => {
+    // 卡正面（答對後）→ 下一題；卡背面 → 提交
+    if (cardFace === "front") {
+      advanceToNext();
+    } else if (!showResult && !submitting && typedAnswer.trim()) {
+      handleSubmitAnswer();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardFace, showResult, submitting, typedAnswer, advanceToNext]);
 
   // ScoreOverlay 結束 → 關閉動畫，等學生用左右箭頭手動翻頁
   const handleOverlayComplete = () => {
@@ -702,7 +730,7 @@ export default function WordSpellingActivity({
   const currentWord = words[currentIndex];
 
   return (
-    <div className="space-y-6">
+    <div className={cn("space-y-6", deviceMode === "mobile" && "pb-72")}>
       {isPracticeMode && (
         <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
           <BookOpen className="h-4 w-4" />
@@ -738,8 +766,14 @@ export default function WordSpellingActivity({
         />
       </div>
 
+      <div
+        className={cn(
+          deviceMode === "tablet" && "flex items-start gap-4",
+        )}
+      >
+        <div className={cn("min-w-0", deviceMode === "tablet" && "flex-[6]")}>
       <WordCard
-        viewMode="desktop"
+        viewMode={deviceMode === "mobile" ? "mobile" : "desktop"}
         face={cardFace}
         onFlipped={handleCardFlipped}
         word={currentWord.text}
@@ -753,9 +787,8 @@ export default function WordSpellingActivity({
         exampleSentenceAudioUrl={
           currentWord.example_sentence_audio_url ?? undefined
         }
-        hasPrev={cardFace === "front" && currentIndex > 0}
+        hasPrev={false}
         hasNext={cardFace === "front"}
-        onPrev={goToPrev}
         onNext={advanceToNext}
         back={
           <div className="relative space-y-6">
@@ -809,10 +842,18 @@ export default function WordSpellingActivity({
                 ref={inputRef}
                 type="text"
                 value={typedAnswer}
+                inputMode={useVirtualKeyboard ? "none" : "text"}
                 onChange={(e) => {
-                  setTypedAnswer(e.target.value);
-                  // Issue #716: 一打字立刻清除錯誤提示，不必按 Retry
+                  // Issue #716: 過濾非字母／連字號字元，順便擋住手機建議選字
+                  // 一次塞多字（建議選字 / 自動修正）→ 過濾後通常變空字串。
+                  setTypedAnswer(sanitizeAnswer(e.target.value));
                   if (showResult && !isCorrect) setShowResult(false);
+                }}
+                onBeforeInput={(e) => {
+                  const ev = e.nativeEvent as InputEvent;
+                  if (ev.inputType === "insertReplacementText") {
+                    e.preventDefault();
+                  }
                 }}
                 onKeyDown={handleKeyDown}
                 onPaste={(e) => e.preventDefault()}
@@ -863,6 +904,26 @@ export default function WordSpellingActivity({
           </div>
         }
       />
+        </div>
+        {deviceMode === "tablet" && (
+          <div className="flex-[4] min-w-0">
+            <VirtualKeyboard
+              onKey={vkAppend}
+              onBackspace={vkBackspace}
+              onEnter={vkEnter}
+            />
+          </div>
+        )}
+      </div>
+
+      {deviceMode === "mobile" && (
+        <VirtualKeyboard
+          onKey={vkAppend}
+          onBackspace={vkBackspace}
+          onEnter={vkEnter}
+          className="fixed bottom-0 left-0 right-0 z-50 border-t shadow-2xl"
+        />
+      )}
 
       <ScoreOverlay
         open={scoreOverlayOpen}

@@ -41,8 +41,17 @@ import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
+import VirtualKeyboard from "./shared/VirtualKeyboard";
 import { WordCard } from "./shared/WordCard";
+import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
+
+// Issue #716: 答案僅允許英文字母與連字號；過濾掉建議選字、注音、Emoji。
+const ALLOWED_CHAR = /[a-zA-Z-]/;
+const sanitizeAnswer = (raw: string) =>
+  Array.from(raw)
+    .filter((c) => ALLOWED_CHAR.test(c))
+    .join("");
 
 interface ClozeQuestion {
   content_item_id: number;
@@ -94,6 +103,9 @@ export default function WordClozeActivity({
   onComplete,
 }: WordClozeActivityProps) {
   const { t } = useTranslation();
+  // Issue #716: 觸控裝置改用 VirtualKeyboard，避免系統建議選字。
+  const deviceMode = useInputDeviceMode();
+  const useVirtualKeyboard = deviceMode !== "desktop";
 
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<ClozeQuestion[]>([]);
@@ -471,17 +483,30 @@ export default function WordClozeActivity({
     }
   }, [currentIndex, questions.length, timeLimit]);
 
-  // Issue #715: 上一題（只在正面顯示時可用）
-  const goToPrev = useCallback(() => {
-    if (currentIndex === 0) return;
-    setScoreOverlayOpen(false);
-    setCardFace("back");
-    setShowResult(false);
-    setTypedAnswer("");
-    setLastAttemptWrong(false);
-    if (timeLimit) setTimeRemaining(timeLimit);
-    setCurrentIndex(currentIndex - 1);
-  }, [currentIndex, timeLimit]);
+  // Issue #716: 移除「上一題」— 艾賓浩斯算法鼓勵把 10 題跑完。
+
+  // Issue #716: VirtualKeyboard 輸入回調
+  const vkAppend = useCallback(
+    (ch: string) => {
+      const sanitized = sanitizeAnswer(ch);
+      if (!sanitized) return;
+      if (showResult && !isCorrect) setShowResult(false);
+      setTypedAnswer((prev) => prev + sanitized);
+    },
+    [showResult, isCorrect],
+  );
+  const vkBackspace = useCallback(() => {
+    if (showResult && !isCorrect) setShowResult(false);
+    setTypedAnswer((prev) => prev.slice(0, -1));
+  }, [showResult, isCorrect]);
+  const vkEnter = useCallback(() => {
+    if (cardFace === "front") {
+      advanceToNext();
+    } else if (!showResult && !submitting && typedAnswer.trim()) {
+      handleSubmitAnswer();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardFace, showResult, submitting, typedAnswer, advanceToNext]);
 
   // ScoreOverlay 結束 → 關閉動畫，等學生用左右箭頭手動翻頁
   const handleOverlayComplete = () => {
@@ -696,7 +721,7 @@ export default function WordClozeActivity({
   const currentQ = questions[currentIndex];
 
   return (
-    <div className="space-y-6">
+    <div className={cn("space-y-6", deviceMode === "mobile" && "pb-72")}>
       {isPracticeMode && (
         <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
           <BookOpen className="h-4 w-4" />
@@ -732,8 +757,14 @@ export default function WordClozeActivity({
         />
       </div>
 
+      <div
+        className={cn(
+          deviceMode === "tablet" && "flex items-start gap-4",
+        )}
+      >
+        <div className={cn("min-w-0", deviceMode === "tablet" && "flex-[6]")}>
       <WordCard
-        viewMode="desktop"
+        viewMode={deviceMode === "mobile" ? "mobile" : "desktop"}
         face={cardFace}
         onFlipped={handleCardFlipped}
         word={currentQ.base_word || currentQ.correct_answer}
@@ -747,9 +778,8 @@ export default function WordClozeActivity({
         exampleSentenceAudioUrl={
           currentQ.example_sentence_audio_url ?? undefined
         }
-        hasPrev={cardFace === "front" && currentIndex > 0}
+        hasPrev={false}
         hasNext={cardFace === "front"}
-        onPrev={goToPrev}
         onNext={advanceToNext}
         back={
           <div className="relative space-y-6">
@@ -808,10 +838,16 @@ export default function WordClozeActivity({
                 ref={inputRef}
                 type="text"
                 value={typedAnswer}
+                inputMode={useVirtualKeyboard ? "none" : "text"}
                 onChange={(e) => {
-                  setTypedAnswer(e.target.value);
-                  // Issue #716: 一打字立刻清除錯誤提示，不必按 Retry
+                  setTypedAnswer(sanitizeAnswer(e.target.value));
                   if (showResult && !isCorrect) setShowResult(false);
+                }}
+                onBeforeInput={(e) => {
+                  const ev = e.nativeEvent as InputEvent;
+                  if (ev.inputType === "insertReplacementText") {
+                    e.preventDefault();
+                  }
                 }}
                 onKeyDown={handleKeyDown}
                 onPaste={(e) => e.preventDefault()}
@@ -863,6 +899,26 @@ export default function WordClozeActivity({
           </div>
         }
       />
+        </div>
+        {deviceMode === "tablet" && (
+          <div className="flex-[4] min-w-0">
+            <VirtualKeyboard
+              onKey={vkAppend}
+              onBackspace={vkBackspace}
+              onEnter={vkEnter}
+            />
+          </div>
+        )}
+      </div>
+
+      {deviceMode === "mobile" && (
+        <VirtualKeyboard
+          onKey={vkAppend}
+          onBackspace={vkBackspace}
+          onEnter={vkEnter}
+          className="fixed bottom-0 left-0 right-0 z-50 border-t shadow-2xl"
+        />
+      )}
 
       <ScoreOverlay
         open={scoreOverlayOpen}
