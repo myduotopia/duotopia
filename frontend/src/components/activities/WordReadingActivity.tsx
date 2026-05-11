@@ -348,9 +348,11 @@ export default function WordReadingActivity({
   // Handle clear recording — 同步刪除後端錄音和評估
   const handleClearRecording = useCallback(async () => {
     const currentItem = items[currentIndex];
-    if (!currentItem?.progress_id) return;
 
-    // 清除本地 state（題號按鈕立即變白）
+    // Issue #683: 本地 state 清除無條件執行。
+    // preview/即刻練習沒有 progress_id，但仍須清掉 ai_assessment，否則
+    // WordReadingTemplate 的 sync effect 會把舊結果回填到 assessmentResult，
+    // 造成重錄後分析仍顯示第一次的結果。
     setItems((prev) => {
       const updated = [...prev];
       updated[currentIndex] = {
@@ -361,18 +363,16 @@ export default function WordReadingActivity({
       return updated;
     });
 
-    // 背景呼叫後端 DELETE API（優先使用 progress_id，避免 index 排序問題）
-    if (!isPreviewMode && !isDemoMode) {
-      const apiUrl = import.meta.env.VITE_API_URL || "";
-      const progressId = currentItem?.progress_id;
-      const deleteUrl = progressId
-        ? `${apiUrl}/api/speech/assessment/${assignmentId}/progress/${progressId}`
-        : `${apiUrl}/api/speech/assessment/${assignmentId}/item/${currentIndex}`;
-      fetch(deleteUrl, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch((err) => console.error("Clear recording failed:", err));
-    }
+    // 背景呼叫後端 DELETE API：需要 persisted progress，且非 preview/demo
+    if (!currentItem?.progress_id) return;
+    if (isPreviewMode || isDemoMode) return;
+
+    const apiUrl = import.meta.env.VITE_API_URL || "";
+    const deleteUrl = `${apiUrl}/api/speech/assessment/${assignmentId}/progress/${currentItem.progress_id}`;
+    fetch(deleteUrl, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch((err) => console.error("Clear recording failed:", err));
   }, [items, currentIndex, assignmentId, token, isPreviewMode, isDemoMode]);
 
   // Submit assignment
