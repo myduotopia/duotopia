@@ -768,7 +768,7 @@ export default function WordSpellingActivity({
 
       <div
         className={cn(
-          deviceMode === "tablet" && "flex items-start gap-4",
+          deviceMode === "tablet" && "flex items-stretch gap-4",
         )}
       >
         <div className={cn("min-w-0", deviceMode === "tablet" && "flex-[6]")}>
@@ -908,7 +908,9 @@ export default function WordSpellingActivity({
         {useVirtualKeyboard && (
           <div
             className={cn(
-              deviceMode === "tablet" ? "flex-[4] min-w-0" : "mt-3",
+              deviceMode === "tablet"
+                ? "flex-[4] min-w-0 flex flex-col justify-center"
+                : "mt-3",
             )}
           >
             <VirtualKeyboard
