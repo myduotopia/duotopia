@@ -750,17 +750,13 @@ export default function WordClozeActivity({
         word={currentQ.base_word || currentQ.correct_answer}
         partOfSpeech={currentQ.part_of_speech ?? undefined}
         translation={currentQ.translation || undefined}
-        audioUrl={
-          audioOnlyMode ? (currentQ.word_audio_url ?? undefined) : undefined
-        }
+        audioUrl={currentQ.word_audio_url ?? undefined}
         exampleSentence={currentQ.example_sentence ?? undefined}
         exampleSentenceTranslation={
           currentQ.example_sentence_translation ?? undefined
         }
         exampleSentenceAudioUrl={
-          audioOnlyMode
-            ? (currentQ.example_sentence_audio_url ?? undefined)
-            : undefined
+          currentQ.example_sentence_audio_url ?? undefined
         }
         hasPrev={cardFace === "front" && currentIndex > 0}
         hasNext={cardFace === "front"}

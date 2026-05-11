@@ -757,15 +757,13 @@ export default function WordSpellingActivity({
         word={currentWord.text}
         partOfSpeech={currentWord.part_of_speech ?? undefined}
         translation={currentWord.translation || undefined}
-        audioUrl={audioOnlyMode ? currentWord.audio_url : undefined}
+        audioUrl={currentWord.audio_url}
         exampleSentence={currentWord.example_sentence ?? undefined}
         exampleSentenceTranslation={
           currentWord.example_sentence_translation ?? undefined
         }
         exampleSentenceAudioUrl={
-          audioOnlyMode
-            ? (currentWord.example_sentence_audio_url ?? undefined)
-            : undefined
+          currentWord.example_sentence_audio_url ?? undefined
         }
         hasPrev={cardFace === "front" && currentIndex > 0}
         hasNext={cardFace === "front"}
