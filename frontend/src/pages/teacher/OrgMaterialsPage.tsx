@@ -1046,6 +1046,7 @@ export default function OrgMaterialsPage() {
           program={selectedProgram}
           dialogType={programDialogType}
           isTemplate={true}
+          organizationId={selectedOrganization?.id}
           onClose={() => {
             setProgramDialogType(null);
             setSelectedProgram(null);

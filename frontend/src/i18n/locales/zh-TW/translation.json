@@ -3335,7 +3335,7 @@
   "teacherTemplatePrograms": {
     "title": "我的教材",
     "buttons": {
-      "addProgram": "新增教材資源包"
+      "addProgram": "新增教材包"
     },
     "messages": {
       "loadFailed": "載入公版課程失敗",
