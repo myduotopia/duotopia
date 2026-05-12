@@ -31,9 +31,9 @@ export default function OrgMaterialsPage() {
   const { sidebarWidth, setSidebarDisabled, editorBusy } = useSidebar();
   const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
   const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
-  const canManage =
-    selectedOrganization?.role === "org_owner" ||
-    selectedOrganization?.role === "org_admin";
+  // Any active org member can manage (create / edit / delete / reorder).
+  // Soft delete protects data; per-creator restriction not required.
+  const canManage = !!selectedOrganization;
 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);

@@ -2426,18 +2426,26 @@ async def add_lesson(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """新增課程單元"""
+    """新增課程單元 (teacher's own program OR any org program where teacher is a member)"""
+    from utils.permissions import has_read_org_materials_permission
+
     program = (
         db.query(Program)
-        .filter(
-            Program.id == program_id,
-            Program.teacher_id == current_teacher.id,
-            Program.is_active.is_(True),
-        )
+        .filter(Program.id == program_id, Program.is_active.is_(True))
         .first()
     )
 
     if not program:
+        raise HTTPException(status_code=404, detail="Program not found")
+
+    # Personal program: must be the owner.
+    # Org program: any active org member can add lessons.
+    if program.organization_id and program.school_id is None:
+        if not has_read_org_materials_permission(
+            current_teacher.id, program.organization_id, db
+        ):
+            raise HTTPException(status_code=404, detail="Program not found")
+    elif program.teacher_id != current_teacher.id:
         raise HTTPException(status_code=404, detail="Program not found")
 
     lesson = Lesson(

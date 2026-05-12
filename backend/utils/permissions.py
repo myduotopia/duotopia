@@ -158,13 +158,12 @@ def has_program_permission(
     ):
         return program.teacher_id == teacher_id
 
-    # Organization-owned
+    # Organization-owned: any active org member can read AND write
+    # (Soft delete protects data; per-creator restriction not required.)
     if program.organization_id and program.school_id is None:
-        if action == "read":
-            return has_read_org_materials_permission(
-                teacher_id, program.organization_id, db
-            )
-        return has_manage_materials_permission(teacher_id, program.organization_id, db)
+        return has_read_org_materials_permission(
+            teacher_id, program.organization_id, db
+        )
 
     # School-owned
     if program.school_id:
@@ -253,15 +252,8 @@ def check_program_access(
                 status_code=403, detail="No access to this organization's materials"
             )
 
-        # Check role requirement for edit operations
-        if require_owner and not has_manage_materials_permission(
-            current_teacher.id, program.organization_id, db
-        ):
-            raise HTTPException(
-                status_code=403,
-                detail="Insufficient permissions. Only org owners/admins can edit.",
-            )
-
+        # Any active org member can edit; require_owner intentionally ignored
+        # for org programs (soft delete protects data).
         return program
 
     # Case 3: Template program (read-only for all teachers)

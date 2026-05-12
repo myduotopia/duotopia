@@ -40,7 +40,7 @@ from schemas import (
 )
 from auth import verify_token
 from utils.permissions import (
-    has_manage_materials_permission,
+    has_read_org_materials_permission,
     has_school_materials_permission,
 )
 
@@ -1027,12 +1027,12 @@ async def copy_program(
         )
 
     if source_scope == "organization":
-        if not has_manage_materials_permission(
+        if not has_read_org_materials_permission(
             current_teacher.id, source_program.organization_id, db
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No permission to access organization materials",
+                detail="Not a member of this organization",
             )
 
         organization = (
@@ -1392,7 +1392,7 @@ async def reorder_programs(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid organization_id format",
             )
-        if not has_manage_materials_permission(current_teacher.id, org_uuid, db):
+        if not has_read_org_materials_permission(current_teacher.id, org_uuid, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No permission to reorder organization materials",
@@ -1729,7 +1729,7 @@ async def reorder_lessons(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid organization_id format",
             )
-        if not has_manage_materials_permission(current_teacher.id, org_uuid, db):
+        if not has_read_org_materials_permission(current_teacher.id, org_uuid, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No permission to reorder organization materials",
@@ -1818,7 +1818,7 @@ async def reorder_contents(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid organization_id format",
             )
-        if not has_manage_materials_permission(current_teacher.id, org_uuid, db):
+        if not has_read_org_materials_permission(current_teacher.id, org_uuid, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No permission to reorder organization materials",

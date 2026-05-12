@@ -37,7 +37,7 @@ from models.program import ProgramCopyLog
 from routers.teachers import get_current_teacher
 from utils.permissions import (
     has_read_org_materials_permission,
-    has_manage_materials_permission,
+    has_manage_materials_permission,  # noqa: F401 (kept for copy-to-classroom branch)
 )
 
 logger = logging.getLogger(__name__)
@@ -412,10 +412,10 @@ async def create_organization_material(
     - classroom_id = None
     """
     # Check permission
-    if not has_manage_materials_permission(current_teacher.id, org_id, db):
+    if not has_read_org_materials_permission(current_teacher.id, org_id, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="No permission to create organization materials",
+            detail="Not a member of this organization",
         )
 
     # Verify organization exists and is active
@@ -465,10 +465,10 @@ async def update_organization_material(
     Note: Cannot change organization_id
     """
     # Check permission
-    if not has_manage_materials_permission(current_teacher.id, org_id, db):
+    if not has_read_org_materials_permission(current_teacher.id, org_id, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="No permission to update organization materials",
+            detail="Not a member of this organization",
         )
 
     # Get program
@@ -518,10 +518,10 @@ async def soft_delete_organization_material(
     Action: Set is_active = False (NOT hard delete)
     """
     # Check permission
-    if not has_manage_materials_permission(current_teacher.id, org_id, db):
+    if not has_read_org_materials_permission(current_teacher.id, org_id, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="No permission to delete organization materials",
+            detail="Not a member of this organization",
         )
 
     # Get program
