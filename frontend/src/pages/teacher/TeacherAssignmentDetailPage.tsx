@@ -1382,6 +1382,12 @@ export default function TeacherAssignmentDetailPage() {
                   };
 
                   if (isVocabSet) {
+                    // Issue #729: show_option_images locks distractor images,
+                    // so the orange-box edit panel must be read-only when on.
+                    const showOptionImages = Boolean(
+                      (assignment as { show_option_images?: boolean })
+                        ?.show_option_images,
+                    );
                     return (
                       <VocabularySetPanel
                         content={{
@@ -1396,6 +1402,7 @@ export default function TeacherAssignmentDetailPage() {
                         isAssignmentCopy={
                           assignment?.practice_mode === "word_selection"
                         }
+                        showOptionImages={showOptionImages}
                       />
                     );
                   }

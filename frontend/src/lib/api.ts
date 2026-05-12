@@ -981,7 +981,9 @@ class ApiClient {
       definition?: string;
       audio_url?: string;
       has_student_progress?: boolean;
-      distractors?: string[];
+      // Issue #631 / #729: canonical shape is { text, image_url }; legacy
+      // data may still be string[]. Both shapes flow through unchanged.
+      distractors?: Array<string | { text: string; image_url?: string | null }>;
       item_metadata?: Record<string, unknown>;
       order_index?: number;
       content_id?: number;
@@ -1059,7 +1061,10 @@ class ApiClient {
         example_sentence_translation?: string;
         example_sentence_translation_lang?: string;
         image_url?: string;
-        distractors?: string[];
+        // Issue #631 / #729: accept both legacy string[] and new object shape.
+        distractors?: Array<
+          string | { text: string; image_url?: string | null }
+        >;
       }>;
       target_wpm?: number;
       target_accuracy?: number;

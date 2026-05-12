@@ -1358,6 +1358,7 @@ export function AssignmentDetailSheet({
                           lessonId={0}
                           isCreating={false}
                           isAssignmentCopy={true}
+                          showOptionImages={editAdvanced.show_option_images}
                         />
                       ) : (
                         <ReadingAssessmentPanel
