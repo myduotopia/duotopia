@@ -158,10 +158,9 @@ describe("VocabularySetPanel distractor edit panel (assignment copy)", () => {
       ],
     });
 
-    render(
-      <VocabularySetPanel content={{ id: 1 }} isAssignmentCopy={true} />,
-      { wrapper },
-    );
+    render(<VocabularySetPanel content={{ id: 1 }} isAssignmentCopy={true} />, {
+      wrapper,
+    });
 
     await waitFor(() => {
       expect(mockGetContentDetail).toHaveBeenCalled();
@@ -188,10 +187,9 @@ describe("VocabularySetPanel distractor edit panel (assignment copy)", () => {
       ],
     });
 
-    render(
-      <VocabularySetPanel content={{ id: 2 }} isAssignmentCopy={true} />,
-      { wrapper },
-    );
+    render(<VocabularySetPanel content={{ id: 2 }} isAssignmentCopy={true} />, {
+      wrapper,
+    });
 
     await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
 
