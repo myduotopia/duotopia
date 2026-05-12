@@ -78,6 +78,7 @@ class ContentItemResponse(BaseModel):
     text: str
     translation: Optional[str]
     audio_url: Optional[str]
+    image_url: Optional[str] = None
 
     class Config:
         from_attributes = True
