@@ -684,6 +684,11 @@ export default function OrgMaterialsPage() {
               onCreateContent={(programId, lessonId) =>
                 canManage && handleCreateContent(programId, lessonId)
               }
+              onReorderPrograms={
+                canManage ? handleReorderPrograms : undefined
+              }
+              onReorderLessons={canManage ? handleReorderLessons : undefined}
+              onReorderContents={canManage ? handleReorderContents : undefined}
             />
           )}
         </div>
