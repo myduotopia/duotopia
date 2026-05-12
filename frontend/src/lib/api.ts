@@ -860,7 +860,19 @@ class ApiClient {
     });
   }
 
-  async reorderPrograms(orderData: { id: number; order_index: number }[]) {
+  async reorderPrograms(
+    orderData: { id: number; order_index: number }[],
+    organizationId?: string,
+  ) {
+    if (organizationId) {
+      return this.request(
+        `/api/programs/reorder?scope=organization&organization_id=${organizationId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(orderData),
+        },
+      );
+    }
     return this.request("/api/teachers/programs/reorder", {
       method: "PUT",
       body: JSON.stringify(orderData),
@@ -870,7 +882,17 @@ class ApiClient {
   async reorderLessons(
     programId: number,
     orderData: { id: number; order_index: number }[],
+    organizationId?: string,
   ) {
+    if (organizationId) {
+      return this.request(
+        `/api/programs/${programId}/lessons/reorder?scope=organization&organization_id=${organizationId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(orderData),
+        },
+      );
+    }
     return this.request(`/api/teachers/programs/${programId}/lessons/reorder`, {
       method: "PUT",
       body: JSON.stringify(orderData),
@@ -880,7 +902,17 @@ class ApiClient {
   async reorderContents(
     lessonId: number,
     orderData: { id: number; order_index: number }[],
+    organizationId?: string,
   ) {
+    if (organizationId) {
+      return this.request(
+        `/api/programs/lessons/${lessonId}/contents/reorder?scope=organization&organization_id=${organizationId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(orderData),
+        },
+      );
+    }
     return this.request(`/api/teachers/lessons/${lessonId}/contents/reorder`, {
       method: "PUT",
       body: JSON.stringify(orderData),

@@ -340,7 +340,7 @@ export default function OrgMaterialsPage() {
         order_index: index,
       }));
 
-      await apiClient.reorderPrograms(orderData);
+      await apiClient.reorderPrograms(orderData, selectedOrganization?.id);
 
       toast.success(t("teacherTemplatePrograms.messages.reorderSuccess"));
       setIsReordering(false);
@@ -388,7 +388,11 @@ export default function OrgMaterialsPage() {
         order_index: index,
       }));
 
-      await apiClient.reorderLessons(programId, orderData);
+      await apiClient.reorderLessons(
+        programId,
+        orderData,
+        selectedOrganization?.id,
+      );
 
       toast.success(t("teacherTemplatePrograms.messages.reorderSuccess"));
       setIsReordering(false);
@@ -455,7 +459,11 @@ export default function OrgMaterialsPage() {
         order_index: index,
       }));
 
-      await apiClient.reorderContents(lessonId, orderData);
+      await apiClient.reorderContents(
+        lessonId,
+        orderData,
+        selectedOrganization?.id,
+      );
 
       toast.success(t("teacherTemplatePrograms.messages.reorderSuccess"));
       setIsReordering(false);
