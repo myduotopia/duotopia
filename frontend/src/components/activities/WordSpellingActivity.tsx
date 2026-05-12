@@ -770,139 +770,138 @@ export default function WordSpellingActivity({
       </div>
 
       <div
-        className={cn(
-          deviceMode === "tablet" && "flex items-stretch gap-4",
-        )}
+        className={cn(deviceMode === "tablet" && "flex items-stretch gap-4")}
       >
         <div className={cn("min-w-0", deviceMode === "tablet" && "flex-[6]")}>
-      <WordCard
-        viewMode={deviceMode === "mobile" ? "mobile" : "desktop"}
-        face={cardFace}
-        onFlipped={handleCardFlipped}
-        word={currentWord.text}
-        partOfSpeech={currentWord.part_of_speech ?? undefined}
-        translation={currentWord.translation || undefined}
-        audioUrl={currentWord.audio_url}
-        exampleSentence={currentWord.example_sentence ?? undefined}
-        exampleSentenceTranslation={
-          currentWord.example_sentence_translation ?? undefined
-        }
-        exampleSentenceAudioUrl={
-          currentWord.example_sentence_audio_url ?? undefined
-        }
-        hasPrev={false}
-        hasNext={cardFace === "front"}
-        onNext={advanceToNext}
-        back={
-          <div className="relative space-y-6">
-            {timeLimit && timeRemaining !== null && (
-              <CountdownRing
-                key={currentIndex}
-                seconds={timeRemaining}
-                total={timeLimit}
-                className="absolute top-0 right-0 z-10"
-              />
-            )}
-            {showTranslation && currentWord.translation && (
-              <div className="text-center py-3 space-y-1">
-                <h2 className="text-3xl md:text-4xl font-bold text-gray-800 tracking-wide">
-                  {currentWord.translation}
-                </h2>
-                {currentWord.part_of_speech && (
-                  <div className="flex justify-center">
-                    <Badge
-                      variant="secondary"
-                      className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
-                    >
-                      {currentWord.part_of_speech}
-                    </Badge>
+          <WordCard
+            viewMode={deviceMode === "mobile" ? "mobile" : "desktop"}
+            face={cardFace}
+            onFlipped={handleCardFlipped}
+            word={currentWord.text}
+            partOfSpeech={currentWord.part_of_speech ?? undefined}
+            translation={currentWord.translation || undefined}
+            audioUrl={currentWord.audio_url}
+            exampleSentence={currentWord.example_sentence ?? undefined}
+            exampleSentenceTranslation={
+              currentWord.example_sentence_translation ?? undefined
+            }
+            exampleSentenceAudioUrl={
+              currentWord.example_sentence_audio_url ?? undefined
+            }
+            hasPrev={false}
+            hasNext={cardFace === "front"}
+            onNext={advanceToNext}
+            back={
+              <div className="relative space-y-6">
+                {timeLimit && timeRemaining !== null && (
+                  <CountdownRing
+                    key={currentIndex}
+                    seconds={timeRemaining}
+                    total={timeLimit}
+                    className="absolute top-0 right-0 z-10"
+                  />
+                )}
+                {showTranslation && currentWord.translation && (
+                  <div className="text-center py-3 space-y-1">
+                    <h2 className="text-3xl md:text-4xl font-bold text-gray-800 tracking-wide">
+                      {currentWord.translation}
+                    </h2>
+                    {currentWord.part_of_speech && (
+                      <div className="flex justify-center">
+                        <Badge
+                          variant="secondary"
+                          className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
+                        >
+                          {currentWord.part_of_speech}
+                        </Badge>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* Issue #716: Play Audio 模式用 WordCard 風格的小喇叭，置中。 */}
-            {audioOnlyMode && currentWord.audio_url && (
-              <div className="flex justify-center">
-                <button
-                  type="button"
-                  onClick={playWordAudio}
-                  aria-label={t("wordSpelling.playAudio") || "Play Audio"}
-                  className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-12 w-12 text-blue-500 hover:text-blue-600"
-                >
-                  <Volume2 className="h-7 w-7" />
-                </button>
-              </div>
-            )}
-
-
-            <div className="max-w-md mx-auto relative">
-              <Input
-                ref={inputRef}
-                type="text"
-                value={typedAnswer}
-                inputMode={useVirtualKeyboard ? "none" : "text"}
-                onChange={(e) => {
-                  // Issue #716: 過濾非字母／連字號字元，順便擋住手機建議選字
-                  // 一次塞多字（建議選字 / 自動修正）→ 過濾後通常變空字串。
-                  setTypedAnswer(sanitizeAnswer(e.target.value));
-                  if (showResult && !isCorrect) setShowResult(false);
-                }}
-                onBeforeInput={(e) => {
-                  const ev = e.nativeEvent as InputEvent;
-                  if (ev.inputType === "insertReplacementText") {
-                    e.preventDefault();
-                  }
-                }}
-                onKeyDown={handleKeyDown}
-                onPaste={(e) => e.preventDefault()}
-                onDrop={(e) => e.preventDefault()}
-                placeholder={
-                  showAnswerOnWrong && lastAttemptWrong && currentWord.text
-                    ? currentWord.text
-                    : t("wordSpelling.inputPlaceholder") ||
-                      "Type the word here..."
-                }
-                disabled={(showResult && isCorrect) || submitting}
-                className={cn(
-                  "text-center text-2xl h-14 pl-10 pr-10 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
-                  "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
-                  showResult && isCorrect && "border-green-500 text-green-700",
-                  showResult &&
-                    !isCorrect &&
-                    "border-red-500 text-red-600 placeholder:text-red-400",
-                  !(showResult && !isCorrect) &&
-                    !(showResult && isCorrect) &&
-                    "border-gray-300 focus:border-indigo-500",
+                {/* Issue #716: Play Audio 模式用 WordCard 風格的小喇叭，置中。 */}
+                {audioOnlyMode && currentWord.audio_url && (
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      onClick={playWordAudio}
+                      aria-label={t("wordSpelling.playAudio") || "Play Audio"}
+                      className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-12 w-12 text-blue-500 hover:text-blue-600"
+                    >
+                      <Volume2 className="h-7 w-7" />
+                    </button>
+                  </div>
                 )}
-                autoComplete="off"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-              {!(showResult && isCorrect) && (
-                <button
-                  type="button"
-                  onClick={() => handleSubmitAnswer()}
-                  disabled={!typedAnswer.trim() || submitting}
-                  aria-label={t("wordSpelling.checkAnswer") || "Check"}
-                  className={cn(
-                    "absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors",
-                    "text-indigo-600 hover:bg-indigo-50",
-                    "disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed",
+
+                <div className="max-w-md mx-auto relative">
+                  <Input
+                    ref={inputRef}
+                    type="text"
+                    value={typedAnswer}
+                    inputMode={useVirtualKeyboard ? "none" : "text"}
+                    onChange={(e) => {
+                      // Issue #716: 過濾非字母／連字號字元，順便擋住手機建議選字
+                      // 一次塞多字（建議選字 / 自動修正）→ 過濾後通常變空字串。
+                      setTypedAnswer(sanitizeAnswer(e.target.value));
+                      if (showResult && !isCorrect) setShowResult(false);
+                    }}
+                    onBeforeInput={(e) => {
+                      const ev = e.nativeEvent as InputEvent;
+                      if (ev.inputType === "insertReplacementText") {
+                        e.preventDefault();
+                      }
+                    }}
+                    onKeyDown={handleKeyDown}
+                    onPaste={(e) => e.preventDefault()}
+                    onDrop={(e) => e.preventDefault()}
+                    placeholder={
+                      showAnswerOnWrong && lastAttemptWrong && currentWord.text
+                        ? currentWord.text
+                        : t("wordSpelling.inputPlaceholder") ||
+                          "Type the word here..."
+                    }
+                    disabled={(showResult && isCorrect) || submitting}
+                    className={cn(
+                      "text-center text-2xl h-14 pl-10 pr-10 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
+                      "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
+                      showResult &&
+                        isCorrect &&
+                        "border-green-500 text-green-700",
+                      showResult &&
+                        !isCorrect &&
+                        "border-red-500 text-red-600 placeholder:text-red-400",
+                      !(showResult && !isCorrect) &&
+                        !(showResult && isCorrect) &&
+                        "border-gray-300 focus:border-indigo-500",
+                    )}
+                    autoComplete="off"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                  {!(showResult && isCorrect) && (
+                    <button
+                      type="button"
+                      onClick={() => handleSubmitAnswer()}
+                      disabled={!typedAnswer.trim() || submitting}
+                      aria-label={t("wordSpelling.checkAnswer") || "Check"}
+                      className={cn(
+                        "absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors",
+                        "text-indigo-600 hover:bg-indigo-50",
+                        "disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed",
+                      )}
+                    >
+                      {submitting ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Send className="h-5 w-5" />
+                      )}
+                    </button>
                   )}
-                >
-                  {submitting ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <Send className="h-5 w-5" />
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-        }
-      />
+                </div>
+              </div>
+            }
+          />
         </div>
         {useVirtualKeyboard && (
           <div

@@ -83,12 +83,7 @@ export default function CountdownRing({
           }
         />
       </svg>
-      <span
-        className={cn(
-          "absolute text-xs font-semibold tabular-nums",
-          text,
-        )}
-      >
+      <span className={cn("absolute text-xs font-semibold tabular-nums", text)}>
         {seconds}
       </span>
     </div>

@@ -120,8 +120,12 @@ body {
    The element sets `--countdown-circ` (circumference) and
    `animation-duration` (total seconds) inline. */
 @keyframes countdown-drain {
-  from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: var(--countdown-circ); }
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: var(--countdown-circ);
+  }
 }
 .countdown-drain {
   animation-name: countdown-drain;
