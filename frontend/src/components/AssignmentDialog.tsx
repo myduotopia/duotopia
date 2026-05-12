@@ -461,12 +461,20 @@ export function AssignmentDialog({
   };
 
   // 載入班級列表（多班級選擇模式）
+  // Match the workspace context: org mode shows the teacher's classrooms in
+  // schools under this org; school mode shows classrooms in this school;
+  // personal mode shows classrooms not linked to any school.
   const loadClassroomOptions = async () => {
     setLoadingClassrooms(true);
     try {
-      const data = (await apiClient.getTeacherClassrooms({
-        mode: "personal",
-      })) as ClassroomOption[];
+      const params = effectiveOrganizationId
+        ? { mode: "organization", organization_id: effectiveOrganizationId }
+        : effectiveSchoolId
+          ? { mode: "school", school_id: effectiveSchoolId }
+          : { mode: "personal" };
+      const data = (await apiClient.getTeacherClassrooms(
+        params,
+      )) as ClassroomOption[];
       setClassroomOptions(data || []);
     } catch {
       toast.error(t("dialogs.assignmentDialog.errors.loadClassroomsFailed"));

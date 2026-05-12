@@ -1227,6 +1227,7 @@ export default function OrgMaterialsPage() {
           setAssignContents([]);
         }}
         preSelectedContents={assignContents}
+        organizationId={selectedOrganization?.id}
         onSuccess={() => {
           setShowAssignmentDialog(false);
           setAssignContents([]);
