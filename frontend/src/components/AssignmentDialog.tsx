@@ -2829,7 +2829,7 @@ export function AssignmentDialog({
                         setFormData((prev) => ({
                           ...prev,
                           practice_mode: "word_spelling",
-                          time_limit_per_question: 0,
+                          time_limit_per_question: 30,
                           // 預設：顯示翻譯、不播音檔、不顯示答案、達標 80%
                           show_translation: true,
                           play_audio: false,
@@ -2868,7 +2868,7 @@ export function AssignmentDialog({
                         setFormData((prev) => ({
                           ...prev,
                           practice_mode: "word_cloze",
-                          time_limit_per_question: 0,
+                          time_limit_per_question: 30,
                           // 預設：顯示翻譯、不播音檔、不顯示答案、達標 80%
                           show_translation: true,
                           play_audio: false,

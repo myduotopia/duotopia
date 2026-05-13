@@ -72,6 +72,7 @@
     "react-i18next": "^16.2.1",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.18.0",
+    "react-simple-keyboard": "^3.8.205",
     "recharts": "^3.8.0",
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
