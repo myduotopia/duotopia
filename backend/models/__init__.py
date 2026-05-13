@@ -34,6 +34,9 @@ from .subscription import (
 # Credit package models
 from .credit_package import CreditPackage
 
+# Plan models (admin-editable price/quota overrides)
+from .plan import Plan
+
 # Organization models
 from .organization import (
     Organization,
@@ -103,6 +106,8 @@ __all__ = [
     "InvoiceStatusHistory",
     # Credit packages
     "CreditPackage",
+    # Plans
+    "Plan",
     # Organizations
     "Organization",
     "School",
