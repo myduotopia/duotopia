@@ -28,6 +28,18 @@ export default function BlogHeader() {
           />
         </Link>
         <div className="flex items-center gap-1.5 sm:gap-3">
+          {isTeacherAuth && teacherUser?.is_admin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                window.open("/admin/blog", "_blank", "noopener,noreferrer")
+              }
+              className="text-xs sm:text-sm px-2 sm:px-3 h-8 sm:h-9 font-semibold text-amber-700"
+            >
+              Admin
+            </Button>
+          )}
           <Link to="/blog">
             <Button
               variant="ghost"
