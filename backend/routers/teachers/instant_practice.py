@@ -31,6 +31,7 @@ from models import (
     AssignmentStatus,
 )
 from utils.permissions import check_content_access
+from utils.score_category import resolve_score_category
 from .dependencies import get_current_teacher
 
 logger = logging.getLogger(__name__)
@@ -206,6 +207,9 @@ async def create_instant_practice(
         show_word=request.show_word,
         show_image=request.show_image,
         show_option_images=bool(request.show_option_images),  # Issue #631
+        score_category=resolve_score_category(
+            request.practice_mode, request.play_audio
+        ),
     )
     db.add(assignment)
     db.flush()
