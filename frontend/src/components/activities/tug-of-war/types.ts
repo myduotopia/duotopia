@@ -9,7 +9,8 @@ export type QuestionMode =
   | "audio_to_chinese" // 音檔播放 → 選中文
   | "english_to_chinese" // 英文 → 選中文
   | "chinese_to_english" // 中文 → 選英文
-  | "image_to_english"; // 看圖 → 選英文
+  | "image_to_english" // 看圖 → 選英文
+  | "cloze_to_english"; // 例句克漏字 → 選英文
 
 export type Team = "a" | "b";
 
@@ -22,6 +23,8 @@ export interface VocabItem {
   audio_url?: string;
   image_url?: string;
   part_of_speech?: string;
+  example_sentence?: string;
+  example_sentence_translation?: string;
 }
 
 export interface Question {
@@ -33,6 +36,9 @@ export interface Question {
   optionsB: string[]; // Shuffled differently for Team B
   hasAudio: boolean; // Whether this question uses audio playback
   hasImage: boolean; // Whether this question uses image as prompt
+  hasCloze: boolean; // Whether this question shows a cloze sentence as prompt
+  clozeSentence?: string; // Sentence with target word blanked
+  clozeTranslation?: string; // Optional translation of the sentence
 }
 
 export interface AnswerRecord {
@@ -47,6 +53,7 @@ export interface GameState {
   teamACooldown: boolean;
   teamBCooldown: boolean;
   questionMode: QuestionMode;
+  showSentenceTranslation: boolean; // For cloze mode — default false
   gameStatus: GameStatus;
   scores: { a: number; b: number };
   answeredBy: Team | null; // Who answered the current question

@@ -553,6 +553,8 @@ def get_word_selection_start(
                 "correct_text": correct_answer,
                 "audio_url": item.audio_url,
                 "image_url": item.image_url,
+                "example_sentence": item.example_sentence or "",
+                "example_sentence_translation": item.example_sentence_translation or "",
                 "memory_strength": 0,
                 "options": options,
             }

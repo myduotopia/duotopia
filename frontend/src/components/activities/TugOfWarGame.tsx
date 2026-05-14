@@ -42,6 +42,8 @@ interface WordOptionResponse {
   translation: string;
   audio_url?: string;
   image_url?: string;
+  example_sentence?: string;
+  example_sentence_translation?: string;
 }
 
 const QUESTION_MODES: { value: QuestionMode; labelKey: string }[] = [
@@ -50,6 +52,7 @@ const QUESTION_MODES: { value: QuestionMode; labelKey: string }[] = [
   { value: "english_to_chinese", labelKey: "tugOfWar.modes.englishToChinese" },
   { value: "chinese_to_english", labelKey: "tugOfWar.modes.chineseToEnglish" },
   { value: "image_to_english", labelKey: "tugOfWar.modes.imageToEnglish" },
+  { value: "cloze_to_english", labelKey: "tugOfWar.modes.clozeToEnglish" },
 ];
 
 export function TugOfWarGame({
@@ -129,6 +132,8 @@ export function TugOfWarGame({
           translation: w.translation,
           audio_url: w.audio_url,
           image_url: w.image_url,
+          example_sentence: w.example_sentence,
+          example_sentence_translation: w.example_sentence_translation,
         }));
 
         setVocabItems(items);
@@ -154,9 +159,13 @@ export function TugOfWarGame({
     startGame,
     changeMode,
     handleAnswer,
+    toggleSentenceTranslation,
   } = useGameLogic(vocabItems);
 
   const hasEnoughImages = vocabItems.filter((v) => !!v.image_url).length >= 4;
+  const hasEnoughSentences =
+    vocabItems.filter((v) => !!v.example_sentence).length >= 4;
+  const isClozeMode = gameState.questionMode === "cloze_to_english";
 
   // Auto-start when vocab loads
   useEffect(() => {
@@ -316,7 +325,20 @@ export function TugOfWarGame({
           <DropdownMenuContent className="bg-white dark:bg-gray-900 border shadow-lg">
             {QUESTION_MODES.map((mode) => {
               const isDisabled =
-                mode.value === "image_to_english" && !hasEnoughImages;
+                (mode.value === "image_to_english" && !hasEnoughImages) ||
+                (mode.value === "cloze_to_english" && !hasEnoughSentences);
+              const disabledTitle =
+                mode.value === "image_to_english"
+                  ? t(
+                      "tugOfWar.imagesModeRequirement",
+                      "需要至少 4 個單字有圖片",
+                    )
+                  : mode.value === "cloze_to_english"
+                    ? t(
+                        "tugOfWar.clozeModeRequirement",
+                        "需要至少 4 個單字有例句",
+                      )
+                    : undefined;
               return (
                 <DropdownMenuItem
                   key={mode.value}
@@ -329,14 +351,7 @@ export function TugOfWarGame({
                         ? "opacity-40 cursor-not-allowed"
                         : ""
                   }
-                  title={
-                    isDisabled
-                      ? t(
-                          "tugOfWar.imagesModeRequirement",
-                          "需要至少 4 個單字有圖片",
-                        )
-                      : undefined
-                  }
+                  title={isDisabled ? disabledTitle : undefined}
                 >
                   {t(mode.labelKey)}
                 </DropdownMenuItem>
@@ -346,17 +361,29 @@ export function TugOfWarGame({
         </DropdownMenu>
 
         <label
-          className={`flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none ${isImageMode ? "opacity-40 pointer-events-none" : ""}`}
+          className={`flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none ${isImageMode || isClozeMode ? "opacity-40 pointer-events-none" : ""}`}
         >
           <input
             type="checkbox"
             checked={showImages}
             onChange={(e) => setShowImages(e.target.checked)}
-            disabled={isImageMode}
+            disabled={isImageMode || isClozeMode}
             className="rounded border-gray-300"
           />
           {t("tugOfWar.showImages")}
         </label>
+
+        {isClozeMode && (
+          <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={gameState.showSentenceTranslation}
+              onChange={toggleSentenceTranslation}
+              className="rounded border-gray-300"
+            />
+            {t("tugOfWar.showSentenceTranslation", "顯示例句翻譯")}
+          </label>
+        )}
 
         <div className="pixel-font text-sm text-gray-500">
           {progress} / {totalQuestions}
@@ -411,7 +438,8 @@ export function TugOfWarGame({
               useHandwriteFont={
                 gameState.questionMode === "audio_to_english" ||
                 gameState.questionMode === "chinese_to_english" ||
-                gameState.questionMode === "image_to_english"
+                gameState.questionMode === "image_to_english" ||
+                gameState.questionMode === "cloze_to_english"
               }
             />
           ) : winner && answerHistory.length > 0 ? (
@@ -451,6 +479,7 @@ export function TugOfWarGame({
               <QuestionDisplay
                 question={currentQuestion}
                 showPrompt={!isAnswered}
+                showSentenceTranslation={gameState.showSentenceTranslation}
               />
             </div>
           )}
@@ -487,7 +516,8 @@ export function TugOfWarGame({
               useHandwriteFont={
                 gameState.questionMode === "audio_to_english" ||
                 gameState.questionMode === "chinese_to_english" ||
-                gameState.questionMode === "image_to_english"
+                gameState.questionMode === "image_to_english" ||
+                gameState.questionMode === "cloze_to_english"
               }
             />
           ) : winner && answerHistory.length > 0 ? (
