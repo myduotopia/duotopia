@@ -2920,14 +2920,11 @@ export function AssignmentDialog({
                             }
                             className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm"
                           >
-                            {/* Unlimited option only available for rearrangement mode */}
-                            {formData.practice_mode === "rearrangement" && (
-                              <option value={0}>
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.unlimited",
-                                )}
-                              </option>
-                            )}
+                            <option value={0}>
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.unlimited",
+                              )}
+                            </option>
                             <option value={10}>
                               10{" "}
                               {t(
@@ -3254,7 +3251,7 @@ export function AssignmentDialog({
                                 ...prev,
                                 time_limit_per_question: Number(
                                   e.target.value,
-                                ) as 0 | 20 | 30 | 40,
+                                ) as 0 | 10 | 20 | 30 | 40,
                               }))
                             }
                             className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm"
@@ -3267,6 +3264,12 @@ export function AssignmentDialog({
                                 formData.practice_mode === "word_spelling" ||
                                 formData.practice_mode === "word_cloze") &&
                                 ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
+                            </option>
+                            <option value={10}>
+                              10{" "}
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.seconds",
+                              )}
                             </option>
                             <option value={20}>
                               20{" "}
