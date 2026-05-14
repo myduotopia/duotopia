@@ -55,6 +55,7 @@ export interface GameState {
   teamBCooldown: boolean;
   questionMode: QuestionMode;
   showSentenceTranslation: boolean; // For cloze mode — default false
+  audioMuted: boolean; // Persistent mute toggle across audio-mode questions
   gameStatus: GameStatus;
   scores: { a: number; b: number };
   answeredBy: Team | null; // Who answered the current question

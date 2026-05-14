@@ -162,6 +162,7 @@ export function TugOfWarGame({
     changeMode,
     handleAnswer,
     toggleSentenceTranslation,
+    toggleAudioMute,
   } = useGameLogic(vocabItems);
 
   const hasEnoughImages = vocabItems.filter((v) => !!v.image_url).length >= 4;
@@ -496,6 +497,8 @@ export function TugOfWarGame({
               <QuestionDisplay
                 question={currentQuestion}
                 showPrompt={!isAnswered}
+                audioMuted={gameState.audioMuted}
+                onToggleMute={toggleAudioMute}
               />
             </div>
           )}

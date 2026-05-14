@@ -160,6 +160,7 @@ export function useGameLogic(
     teamBCooldown: false,
     questionMode: "audio_to_english",
     showSentenceTranslation: false,
+    audioMuted: false,
     gameStatus: "waiting",
     scores: { a: 0, b: 0 },
     answeredBy: null,
@@ -191,6 +192,7 @@ export function useGameLogic(
         teamBCooldown: false,
         questionMode: mode,
         showSentenceTranslation: prev.showSentenceTranslation,
+        audioMuted: prev.audioMuted,
         gameStatus: "playing",
         scores: { a: 0, b: 0 },
         answeredBy: null,
@@ -213,6 +215,7 @@ export function useGameLogic(
         teamBCooldown: false,
         questionMode: mode,
         showSentenceTranslation: prev.showSentenceTranslation,
+        audioMuted: prev.audioMuted,
         gameStatus: "playing",
         scores: { a: 0, b: 0 },
         answeredBy: null,
@@ -228,6 +231,10 @@ export function useGameLogic(
       ...prev,
       showSentenceTranslation: !prev.showSentenceTranslation,
     }));
+  }, []);
+
+  const toggleAudioMute = useCallback(() => {
+    setGameState((prev) => ({ ...prev, audioMuted: !prev.audioMuted }));
   }, []);
 
   const handleAnswer = useCallback(
@@ -372,5 +379,6 @@ export function useGameLogic(
     changeMode,
     handleAnswer,
     toggleSentenceTranslation,
+    toggleAudioMute,
   };
 }
