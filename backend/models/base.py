@@ -140,12 +140,15 @@ class PracticeMode(str, enum.Enum):
 
 
 class ScoreCategory(str, enum.Enum):
-    """分數記錄分類"""
+    """分數記錄分類 — 由 practice_mode + play_audio 自動推導。
+
+    對照表見 docs/design/score-category-mapping.md。
+    """
 
     SPEAKING = "speaking"  # 口說
     LISTENING = "listening"  # 聽力
     WRITING = "writing"  # 寫作
-    VOCABULARY = "vocabulary"  # 單字（Phase 2 新增）
+    READING = "reading"  # 閱讀
 
 
 class ProgramVisibility(str, enum.Enum):

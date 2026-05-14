@@ -33,6 +33,7 @@ from models import (
     AssignmentStatus,
 )
 from utils.permissions import has_read_org_materials_permission
+from utils.score_category import resolve_score_category
 from .validators import (
     CreateAssignmentRequest,
     UpdateAssignmentRequest,
@@ -219,7 +220,11 @@ async def create_assignment(
         show_image=request.show_image,
         show_translation=request.show_translation,
         show_option_images=bool(request.show_option_images),  # Issue #631
-        score_category=request.score_category,
+        # score_category is auto-resolved; any client-supplied value is ignored.
+        # See docs/design/score-category-mapping.md
+        score_category=resolve_score_category(
+            request.practice_mode, request.play_audio or False
+        ),
     )
     db.add(assignment)
     db.flush()  # 取得 assignment.id
@@ -809,6 +814,14 @@ async def patch_assignment(
     for field in advanced_fields:
         if field in provided:
             setattr(assignment, field, getattr(request, field))
+
+    # If play_audio changed, recompute score_category (practice_mode is
+    # immutable on PATCH so we only need to react to audio toggles).
+    # See docs/design/score-category-mapping.md
+    if "play_audio" in provided:
+        assignment.score_category = resolve_score_category(
+            assignment.practice_mode, assignment.play_audio
+        )
 
     # Issue #631: 互斥校驗 — 部分更新後若兩者皆 True 則拒絕
     if assignment.show_image and assignment.show_option_images:
