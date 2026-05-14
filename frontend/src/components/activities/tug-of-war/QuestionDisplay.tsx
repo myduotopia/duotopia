@@ -12,13 +12,11 @@ import type { Question } from "./types";
 interface QuestionDisplayProps {
   question: Question;
   showPrompt: boolean; // false when question is answered
-  showSentenceTranslation?: boolean; // For cloze mode only
 }
 
 export function QuestionDisplay({
   question,
   showPrompt,
-  showSentenceTranslation = false,
 }: QuestionDisplayProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const loopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,9 +39,16 @@ export function QuestionDisplay({
   }, []);
 
   const playOnce = useCallback(() => {
-    const url = question.vocabItem.audio_url;
+    const isCloze = question.hasCloze;
+    const url = isCloze
+      ? question.vocabItem.example_sentence_audio_url
+      : question.vocabItem.audio_url;
+    const ttsText = isCloze
+      ? question.vocabItem.example_sentence || ""
+      : question.vocabItem.text;
+
     if (!url) {
-      const utterance = new SpeechSynthesisUtterance(question.vocabItem.text);
+      const utterance = new SpeechSynthesisUtterance(ttsText);
       utterance.lang = "en-US";
       utterance.rate = 0.9;
       speechSynthesis.speak(utterance);
@@ -56,13 +61,19 @@ export function QuestionDisplay({
     const audio = new Audio(url);
     audioRef.current = audio;
     audio.play().catch(() => {
-      const utterance = new SpeechSynthesisUtterance(question.vocabItem.text);
+      const utterance = new SpeechSynthesisUtterance(ttsText);
       utterance.lang = "en-US";
       utterance.rate = 0.9;
       speechSynthesis.speak(utterance);
     });
     return audio;
-  }, [question.vocabItem.audio_url, question.vocabItem.text]);
+  }, [
+    question.hasCloze,
+    question.vocabItem.audio_url,
+    question.vocabItem.example_sentence_audio_url,
+    question.vocabItem.example_sentence,
+    question.vocabItem.text,
+  ]);
 
   const startLoop = useCallback(() => {
     if (!isMountedRef.current) return;
@@ -112,38 +123,19 @@ export function QuestionDisplay({
   // Fixed height for image mode to prevent container from jumping
   const imageContainerClass =
     "text-center py-2 h-72 flex items-center justify-center";
-  const clozeContainerClass =
-    "text-center py-2 h-28 flex flex-col items-center justify-center gap-1 px-4";
   const defaultContainerClass =
     "text-center py-2 h-16 flex items-end justify-center pb-4";
 
-  const answeredContainerClass = question.hasImage
-    ? imageContainerClass
-    : question.hasCloze
-      ? clozeContainerClass
-      : defaultContainerClass;
-
   if (!showPrompt) {
     return (
-      <div className={answeredContainerClass}>
+      <div
+        className={
+          question.hasImage ? imageContainerClass : defaultContainerClass
+        }
+      >
         <span className="text-4xl font-bold text-green-600 handwrite-font">
           {question.correctAnswer}
         </span>
-      </div>
-    );
-  }
-
-  if (question.hasCloze) {
-    return (
-      <div className={clozeContainerClass}>
-        <span className="text-2xl md:text-3xl font-semibold leading-snug">
-          {question.clozeSentence}
-        </span>
-        {showSentenceTranslation && question.clozeTranslation && (
-          <span className="text-base md:text-lg text-gray-600">
-            {question.clozeTranslation}
-          </span>
-        )}
       </div>
     );
   }

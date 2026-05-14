@@ -25,6 +25,7 @@ export interface VocabItem {
   part_of_speech?: string;
   example_sentence?: string;
   example_sentence_translation?: string;
+  example_sentence_audio_url?: string;
 }
 
 export interface Question {

@@ -104,6 +104,7 @@ function generateQuestions(
         correctAnswer = item.text;
         prompt = "";
         hasCloze = true;
+        hasAudio = true;
         clozeSentence = makeCloze(item.example_sentence || "", item.text);
         clozeTranslation = item.example_sentence_translation || undefined;
         break;

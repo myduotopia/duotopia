@@ -460,7 +460,7 @@ def _parse_exclude_ids(exclude_ids: str) -> set:
     return result
 
 
-def get_word_selection_start(
+async def get_word_selection_start(
     assignment: Assignment,
     db: Session,
     exclude_ids: str = "",
@@ -486,6 +486,12 @@ def get_word_selection_start(
             status_code=404,
             detail="No vocabulary items found for this assignment",
         )
+
+    # Backfill missing example_sentence_audio_url so tug_of_war cloze mode
+    # always has audio (TTS-generated on demand if needed).
+    sentence_audio_by_id = await ensure_example_sentence_audio(
+        list(content_items), db
+    )
 
     total_words_in_assignment = len(content_items)
 
@@ -555,6 +561,11 @@ def get_word_selection_start(
                 "image_url": item.image_url,
                 "example_sentence": item.example_sentence or "",
                 "example_sentence_translation": item.example_sentence_translation or "",
+                "example_sentence_audio_url": (
+                    sentence_audio_by_id.get(item.id)
+                    or item.example_sentence_audio_url
+                    or ""
+                ),
                 "memory_strength": 0,
                 "options": options,
             }

@@ -44,6 +44,7 @@ interface WordOptionResponse {
   image_url?: string;
   example_sentence?: string;
   example_sentence_translation?: string;
+  example_sentence_audio_url?: string;
 }
 
 const QUESTION_MODES: { value: QuestionMode; labelKey: string }[] = [
@@ -134,6 +135,7 @@ export function TugOfWarGame({
           image_url: w.image_url,
           example_sentence: w.example_sentence,
           example_sentence_translation: w.example_sentence_translation,
+          example_sentence_audio_url: w.example_sentence_audio_url,
         }));
 
         setVocabItems(items);
@@ -420,6 +422,21 @@ export function TugOfWarGame({
         </div>
       </div>
 
+      {/* Cloze sentence banner — only shown in cloze mode, sits between score row and game area */}
+      {isClozeMode && currentQuestion && currentQuestion.hasCloze && (
+        <div className="flex flex-col items-center gap-1 px-4 py-2">
+          <span className="text-2xl md:text-3xl font-semibold leading-snug text-gray-800 text-center">
+            {currentQuestion.clozeSentence}
+          </span>
+          {gameState.showSentenceTranslation &&
+            currentQuestion.clozeTranslation && (
+              <span className="text-base md:text-lg text-gray-600 text-center">
+                {currentQuestion.clozeTranslation}
+              </span>
+            )}
+        </div>
+      )}
+
       {/* Game area: three-column layout, fills remaining parent space */}
       <div className="flex gap-3 items-stretch flex-1 min-h-0">
         {/* Team A — left */}
@@ -479,7 +496,6 @@ export function TugOfWarGame({
               <QuestionDisplay
                 question={currentQuestion}
                 showPrompt={!isAnswered}
-                showSentenceTranslation={gameState.showSentenceTranslation}
               />
             </div>
           )}
