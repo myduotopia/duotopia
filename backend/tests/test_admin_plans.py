@@ -39,9 +39,7 @@ def regular_teacher(shared_test_session):
 
 @pytest.fixture
 def auth_headers_admin(admin_teacher):
-    token = create_access_token(
-        data={"sub": str(admin_teacher.id), "type": "teacher"}
-    )
+    token = create_access_token(data={"sub": str(admin_teacher.id), "type": "teacher"})
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -90,9 +88,7 @@ def test_list_plans_as_admin_returns_seeded_rows(
     assert tutor["is_active"] is True
 
 
-def test_list_plans_non_admin_forbidden(
-    seed_plans, auth_headers_regular, test_client
-):
+def test_list_plans_non_admin_forbidden(seed_plans, auth_headers_regular, test_client):
     response = test_client.get("/api/admin/plans", headers=auth_headers_regular)
     assert response.status_code == 403
 
@@ -120,11 +116,7 @@ def test_update_plan_price_and_quota_as_admin(
 
     # Persisted in DB
     shared_test_session.expire_all()
-    row = (
-        shared_test_session.query(Plan)
-        .filter(Plan.name == "Tutor Teachers")
-        .first()
-    )
+    row = shared_test_session.query(Plan).filter(Plan.name == "Tutor Teachers").first()
     assert row.price == 350
     assert row.quota == 2500
     assert row.updated_by_admin_id == admin_teacher.id
@@ -141,11 +133,7 @@ def test_update_plan_partial_only_price(
     assert response.status_code == 200
 
     shared_test_session.expire_all()
-    row = (
-        shared_test_session.query(Plan)
-        .filter(Plan.name == "School Teachers")
-        .first()
-    )
+    row = shared_test_session.query(Plan).filter(Plan.name == "School Teachers").first()
     assert row.price == 699
     assert row.quota == 6000  # untouched
 
@@ -195,9 +183,7 @@ def test_update_plan_negative_quota_rejected(
     assert response.status_code == 422
 
 
-def test_update_plan_non_admin_forbidden(
-    seed_plans, auth_headers_regular, test_client
-):
+def test_update_plan_non_admin_forbidden(seed_plans, auth_headers_regular, test_client):
     response = test_client.put(
         "/api/admin/plans/Tutor Teachers",
         headers=auth_headers_regular,
@@ -211,11 +197,7 @@ def test_get_plan_price_prefers_db_override(seed_plans, shared_test_session):
     """After admin edits Plan row, get_plan_price returns the new value."""
     from config.plans import get_plan_price
 
-    row = (
-        shared_test_session.query(Plan)
-        .filter(Plan.name == "Tutor Teachers")
-        .first()
-    )
+    row = shared_test_session.query(Plan).filter(Plan.name == "Tutor Teachers").first()
     row.price = 450
     shared_test_session.commit()
 
@@ -225,11 +207,7 @@ def test_get_plan_price_prefers_db_override(seed_plans, shared_test_session):
 def test_get_plan_quota_prefers_db_override(seed_plans, shared_test_session):
     from config.plans import get_plan_quota
 
-    row = (
-        shared_test_session.query(Plan)
-        .filter(Plan.name == "School Teachers")
-        .first()
-    )
+    row = shared_test_session.query(Plan).filter(Plan.name == "School Teachers").first()
     row.quota = 8000
     shared_test_session.commit()
 

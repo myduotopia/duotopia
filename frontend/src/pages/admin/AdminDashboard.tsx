@@ -1,12 +1,6 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Crown,
-  DollarSign,
-  AlertTriangle,
-  Building,
-  Tag,
-} from "lucide-react";
+import { Crown, DollarSign, AlertTriangle, Building, Tag } from "lucide-react";
 import AdminSubscriptionDashboard from "./AdminSubscriptionDashboard";
 import AdminBillingDashboard from "./AdminBillingDashboard";
 import AdminAudioErrorDashboard from "./AdminAudioErrorDashboard";

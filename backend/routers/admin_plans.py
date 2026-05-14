@@ -51,11 +51,7 @@ async def list_plans(
     _: Teacher = Depends(get_current_admin),
 ) -> List[PlanResponse]:
     """List all plans, ordered by display_order then name."""
-    rows = (
-        db.query(Plan)
-        .order_by(Plan.display_order.asc(), Plan.name.asc())
-        .all()
-    )
+    rows = db.query(Plan).order_by(Plan.display_order.asc(), Plan.name.asc()).all()
     return [PlanResponse.model_validate(r) for r in rows]
 
 
@@ -69,15 +65,11 @@ async def update_plan(
     """Update price / quota / is_active / display_order for a plan."""
     row = db.query(Plan).filter(Plan.name == plan_name).first()
     if row is None:
-        raise HTTPException(
-            status_code=404, detail=f"Plan '{plan_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Plan '{plan_name}' not found")
 
     payload = request.model_dump(exclude_unset=True)
     if not payload:
-        raise HTTPException(
-            status_code=400, detail="No fields provided to update"
-        )
+        raise HTTPException(status_code=400, detail="No fields provided to update")
 
     for field, value in payload.items():
         setattr(row, field, value)
