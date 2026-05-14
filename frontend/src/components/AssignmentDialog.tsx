@@ -63,6 +63,10 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceSafe } from "@/contexts/WorkspaceContext";
+import {
+  getScoreCategory,
+  type ScoreCategory,
+} from "@/utils/scoreCategory";
 
 interface Student {
   id: number;
@@ -2676,232 +2680,218 @@ export function AssignmentDialog({
             </div>
           )}
 
-          {/* Step 1: Practice Mode Settings (was Step 2) */}
-          {currentStep === 1 && (
-            <div className="h-full flex flex-col">
-              <div className="mb-4">
-                <p className="text-sm text-gray-600">
-                  {t("dialogs.assignmentDialog.practiceMode.description")}
-                </p>
-              </div>
-
-              <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto w-full">
-                {/* 作答模式選擇 - 顯示所有練習模式 */}
-                <div className="space-y-6">
-                  {/* ===== 所有練習模式卡片 (2x2 grid) ===== */}
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* 例句朗讀 */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          practice_mode: "reading",
-                          time_limit_per_question:
-                            prev.time_limit_per_question === 0
-                              ? 30
-                              : prev.time_limit_per_question,
-                        }))
-                      }
-                      className={`p-6 rounded-xl border-2 transition-all ${
-                        formData.practice_mode === "reading"
-                          ? "border-blue-500 bg-blue-50 shadow-md"
-                          : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
-                      }`}
+          {/* Step 1: Practice Mode Settings */}
+          {currentStep === 1 &&
+            (() => {
+              const PRACTICE_MODES: Array<{
+                id:
+                  | "reading"
+                  | "rearrangement"
+                  | "word_reading"
+                  | "word_selection"
+                  | "word_spelling"
+                  | "word_cloze";
+                emoji: string;
+                titleKey: string;
+                descKey: string;
+                onClick: () => void;
+              }> = [
+                {
+                  id: "reading",
+                  emoji: "🎙️",
+                  titleKey: "dialogs.assignmentDialog.practiceMode.reading",
+                  descKey: "dialogs.assignmentDialog.practiceMode.readingDesc",
+                  onClick: () =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      practice_mode: "reading",
+                      time_limit_per_question:
+                        prev.time_limit_per_question === 0
+                          ? 30
+                          : prev.time_limit_per_question,
+                    })),
+                },
+                {
+                  id: "rearrangement",
+                  emoji: "🔀",
+                  titleKey:
+                    "dialogs.assignmentDialog.practiceMode.rearrangement",
+                  descKey:
+                    "dialogs.assignmentDialog.practiceMode.rearrangementDesc",
+                  onClick: () =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      practice_mode: "rearrangement",
+                    })),
+                },
+                {
+                  id: "word_reading",
+                  emoji: "🎙️",
+                  titleKey:
+                    "dialogs.assignmentDialog.practiceMode.wordReading",
+                  descKey:
+                    "dialogs.assignmentDialog.practiceMode.wordReadingDesc",
+                  onClick: () =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      practice_mode: "word_reading",
+                      time_limit_per_question: 0,
+                    })),
+                },
+                {
+                  id: "word_selection",
+                  emoji: "🧠",
+                  titleKey:
+                    "dialogs.assignmentDialog.practiceMode.wordSelection",
+                  descKey:
+                    "dialogs.assignmentDialog.practiceMode.wordSelectionDesc",
+                  onClick: () =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      practice_mode: "word_selection",
+                      time_limit_per_question: 30,
+                    })),
+                },
+                {
+                  id: "word_spelling",
+                  emoji: "✏️",
+                  titleKey:
+                    "dialogs.assignmentDialog.practiceMode.wordSpelling",
+                  descKey:
+                    "dialogs.assignmentDialog.practiceMode.wordSpellingDesc",
+                  onClick: () =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      practice_mode: "word_spelling",
+                      time_limit_per_question: 30,
+                      show_translation: true,
+                      play_audio: false,
+                      show_answer: false,
+                      target_proficiency: 80,
+                      shuffle_questions: false,
+                    })),
+                },
+                {
+                  id: "word_cloze",
+                  emoji: "📝",
+                  titleKey: "dialogs.assignmentDialog.practiceMode.wordCloze",
+                  descKey:
+                    "dialogs.assignmentDialog.practiceMode.wordClozeDesc",
+                  onClick: () =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      practice_mode: "word_cloze",
+                      time_limit_per_question: 30,
+                      show_translation: true,
+                      play_audio: false,
+                      show_answer: false,
+                      target_proficiency: 80,
+                      shuffle_questions: false,
+                    })),
+                },
+              ];
+              const currentMode = PRACTICE_MODES.find(
+                (m) => m.id === formData.practice_mode,
+              );
+              const currentCategory: ScoreCategory = getScoreCategory(
+                formData.practice_mode,
+                formData.play_audio,
+              );
+              const badgeStyles: Record<ScoreCategory, string> = {
+                speaking: "bg-purple-100 text-purple-700",
+                listening: "bg-amber-100 text-amber-700",
+                reading: "bg-emerald-100 text-emerald-700",
+                writing: "bg-sky-100 text-sky-700",
+              };
+              return (
+                <div className="h-full flex flex-col">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      {t("dialogs.assignmentDialog.steps.practiceMode")}
+                    </h2>
+                    <span
+                      className={cn(
+                        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold",
+                        badgeStyles[currentCategory],
+                      )}
                     >
-                      <div className="flex flex-col items-center gap-3">
-                        <span className="text-4xl">🎙️</span>
-                        <div className="text-center">
-                          <div className="font-semibold text-lg">
-                            {t("dialogs.assignmentDialog.practiceMode.reading")}
-                          </div>
-                          <div className="text-sm text-gray-500 mt-1">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.readingDesc",
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* 例句重組 */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          practice_mode: "rearrangement",
-                        }))
-                      }
-                      className={`p-6 rounded-xl border-2 transition-all ${
-                        formData.practice_mode === "rearrangement"
-                          ? "border-blue-500 bg-blue-50 shadow-md"
-                          : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
-                      }`}
-                    >
-                      <div className="flex flex-col items-center gap-3">
-                        <span className="text-4xl">🔀</span>
-                        <div className="text-center">
-                          <div className="font-semibold text-lg">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.rearrangement",
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-500 mt-1">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.rearrangementDesc",
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* 單字朗讀 */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          practice_mode: "word_reading",
-                          time_limit_per_question: 0,
-                        }))
-                      }
-                      className={`p-6 rounded-xl border-2 transition-all ${
-                        formData.practice_mode === "word_reading"
-                          ? "border-blue-500 bg-blue-50 shadow-md"
-                          : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
-                      }`}
-                    >
-                      <div className="flex flex-col items-center gap-3">
-                        <span className="text-4xl">🎙️</span>
-                        <div className="text-center">
-                          <div className="font-semibold text-lg">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.wordReading",
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-500 mt-1">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.wordReadingDesc",
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* 單字選擇 */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          practice_mode: "word_selection",
-                          time_limit_per_question: 30,
-                        }))
-                      }
-                      className={`p-6 rounded-xl border-2 transition-all ${
-                        formData.practice_mode === "word_selection"
-                          ? "border-blue-500 bg-blue-50 shadow-md"
-                          : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
-                      }`}
-                    >
-                      <div className="flex flex-col items-center gap-3">
-                        <span className="text-4xl">🧠</span>
-                        <div className="text-center">
-                          <div className="font-semibold text-lg">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.wordSelection",
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-500 mt-1">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.wordSelectionDesc",
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* 單字拼寫 */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          practice_mode: "word_spelling",
-                          time_limit_per_question: 30,
-                          // 預設：顯示翻譯、不播音檔、不顯示答案、達標 80%
-                          show_translation: true,
-                          play_audio: false,
-                          show_answer: false,
-                          target_proficiency: 80,
-                          shuffle_questions: false,
-                        }))
-                      }
-                      className={`p-6 rounded-xl border-2 transition-all ${
-                        formData.practice_mode === "word_spelling"
-                          ? "border-blue-500 bg-blue-50 shadow-md"
-                          : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
-                      }`}
-                    >
-                      <div className="flex flex-col items-center gap-3">
-                        <span className="text-4xl">✏️</span>
-                        <div className="text-center">
-                          <div className="font-semibold text-lg">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.wordSpelling",
-                            ) || "單字拼寫"}
-                          </div>
-                          <div className="text-sm text-gray-500 mt-1">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.wordSpellingDesc",
-                            ) || "看翻譯或聽音檔，拼寫正確的單字"}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* 克漏字 */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          practice_mode: "word_cloze",
-                          time_limit_per_question: 30,
-                          // 預設：顯示翻譯、不播音檔、不顯示答案、達標 80%
-                          show_translation: true,
-                          play_audio: false,
-                          show_answer: false,
-                          target_proficiency: 80,
-                          shuffle_questions: false,
-                        }))
-                      }
-                      className={`p-6 rounded-xl border-2 transition-all ${
-                        formData.practice_mode === "word_cloze"
-                          ? "border-blue-500 bg-blue-50 shadow-md"
-                          : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
-                      }`}
-                    >
-                      <div className="flex flex-col items-center gap-3">
-                        <span className="text-4xl">📝</span>
-                        <div className="text-center">
-                          <div className="font-semibold text-lg">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.wordCloze",
-                            ) || "克漏字"}
-                          </div>
-                          <div className="text-sm text-gray-500 mt-1">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.wordClozeDesc",
-                            ) || "看例句填空，輸入正確的單字變形"}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
+                      {t(
+                        `dialogs.assignmentDialog.practiceMode.scoreCategory.${currentCategory}`,
+                      )}
+                    </span>
+                  </div>
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600">
+                      {t("dialogs.assignmentDialog.practiceMode.description")}
+                    </p>
                   </div>
 
-                  {/* ===== 例句集細節設定 (reading / rearrangement) ===== */}
+                  <div className="flex-1 flex gap-6 max-w-4xl mx-auto w-full">
+                    {/* 左 rail：練習模式 row list */}
+                    <div className="w-[220px] shrink-0 space-y-2">
+                      {PRACTICE_MODES.map((m) => {
+                        const selected = formData.practice_mode === m.id;
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={m.onClick}
+                            className={cn(
+                              "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                              selected
+                                ? "border-blue-500 bg-blue-50 shadow-sm"
+                                : "border-gray-200 hover:border-gray-300 hover:bg-gray-50",
+                            )}
+                          >
+                            <span className="text-xl shrink-0">
+                              {m.emoji}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div
+                                className={cn(
+                                  "text-sm font-semibold truncate",
+                                  selected
+                                    ? "text-blue-700"
+                                    : "text-gray-900",
+                                )}
+                              >
+                                {t(m.titleKey)}
+                              </div>
+                              <div
+                                className={cn(
+                                  "text-xs truncate",
+                                  selected
+                                    ? "text-blue-600"
+                                    : "text-gray-500",
+                                )}
+                              >
+                                {t(m.descKey)}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* 右 panel：Hero + 進階設定 */}
+                    <div className="flex-1 min-w-0 space-y-4">
+                      {currentMode && (
+                        <div className="flex items-start gap-4 p-4 rounded-xl bg-gray-50">
+                          <span className="text-4xl shrink-0">
+                            {currentMode.emoji}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-base font-semibold text-gray-900">
+                              {t(currentMode.titleKey)}
+                            </div>
+                            <div className="text-sm text-gray-600 mt-0.5">
+                              {t(currentMode.descKey)}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ===== 例句集細節設定 (reading / rearrangement) ===== */}
                   {(formData.practice_mode === "reading" ||
                     formData.practice_mode === "rearrangement") && (
                     <Card className="p-4 border-gray-200">
@@ -3500,10 +3490,11 @@ export function AssignmentDialog({
                       </div>
                     </Card>
                   )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              );
+            })()}
 
           {/* Step 3: Select Students */}
           {currentStep === 3 && (

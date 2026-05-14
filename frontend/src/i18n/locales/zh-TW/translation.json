@@ -1817,6 +1817,12 @@
         "title": "練習模式設定",
         "description": "選擇學生練習的模式和相關設定",
         "advancedSettings": "進階設定",
+        "scoreCategory": {
+          "speaking": "口說",
+          "listening": "聽力",
+          "reading": "閱讀",
+          "writing": "寫作"
+        },
         "reading": "例句朗讀",
         "readingDesc": "學生朗讀例句，系統評分發音",
         "rearrangement": "例句重組",

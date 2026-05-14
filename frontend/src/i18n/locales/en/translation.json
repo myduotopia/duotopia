@@ -1764,6 +1764,12 @@
         "title": "Practice Mode Settings",
         "description": "Select the practice mode and related settings for students",
         "advancedSettings": "Advanced Settings",
+        "scoreCategory": {
+          "speaking": "Speaking",
+          "listening": "Listening",
+          "reading": "Reading",
+          "writing": "Writing"
+        },
         "reading": "Sentence Reading",
         "readingDesc": "Students read sentences aloud, system scores pronunciation",
         "rearrangement": "Sentence Rearrangement",
