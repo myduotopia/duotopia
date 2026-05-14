@@ -508,12 +508,18 @@ def get_word_selection_start(
         content_items = remaining_items[:10]
 
     # Build response — Issue #631: options 升級為 list[{text, image_url}]
-    from utils.distractors import normalize_distractors
+    # show_image 模式：選項用英文（item.text），題目隱藏英文，避免答案太明顯。
+    from utils.distractors import normalize_distractors, text_field_for_show_image
+
+    show_image_for_options = (
+        assignment.show_image if assignment.show_image is not None else True
+    )
+    answer_field = text_field_for_show_image(show_image_for_options)
 
     words_with_options = []
 
     for item in content_items:
-        correct_answer = item.translation or ""
+        correct_answer = getattr(item, answer_field) or ""
 
         # Use stored distractors if available (≥3), else fallback to other words
         stored = normalize_distractors(item.distractors)
@@ -522,9 +528,10 @@ def get_word_selection_start(
         else:
             target = correct_answer.lower().strip()
             pool = [
-                {"text": other.translation, "image_url": other.image_url}
+                {"text": getattr(other, answer_field), "image_url": other.image_url}
                 for other in content_items
-                if other.translation and other.translation.lower().strip() != target
+                if getattr(other, answer_field)
+                and getattr(other, answer_field).lower().strip() != target
             ]
             random.shuffle(pool)
             final_distractors = pool[:3]
@@ -542,7 +549,8 @@ def get_word_selection_start(
             {
                 "content_item_id": item.id,
                 "text": item.text,
-                "translation": correct_answer,
+                "translation": item.translation or "",
+                "correct_text": correct_answer,
                 "audio_url": item.audio_url,
                 "image_url": item.image_url,
                 "memory_strength": 0,
@@ -584,11 +592,17 @@ def check_word_selection_answer(
     if not content_item:
         raise HTTPException(status_code=404, detail="Content item not found")
 
-    is_correct = selected_answer == content_item.translation
+    show_image_mode = (
+        assignment.show_image if assignment.show_image is not None else True
+    )
+    correct_text = (
+        content_item.text if show_image_mode else content_item.translation
+    ) or ""
+    is_correct = selected_answer == correct_text
 
     return {
         "is_correct": is_correct,
-        "correct_answer": content_item.translation,
+        "correct_answer": correct_text,
         "new_memory_strength": 0.5 if is_correct else 0,
         "current_mastery": 50.0,
         "target_mastery": assignment.target_proficiency or 80,
@@ -800,6 +814,7 @@ async def get_word_spelling_start(
 
     # Backfill missing single-word audio so 播放音檔 mode actually has audio.
     word_audio_by_id = await ensure_word_audio(list(content_items), db)
+    sentence_audio_by_id = await ensure_example_sentence_audio(list(content_items), db)
 
     total_words_in_assignment = len(content_items)
     exclude_id_set = _parse_exclude_ids(exclude_ids)
@@ -819,6 +834,13 @@ async def get_word_spelling_start(
             "audio_url": word_audio_by_id.get(ci.id) or ci.audio_url,
             "image_url": ci.image_url,
             "memory_strength": 0,
+            # Issue #715: 答對後翻面顯示完整單字卡所需欄位
+            "part_of_speech": ci.part_of_speech,
+            "example_sentence": ci.example_sentence,
+            "example_sentence_translation": ci.example_sentence_translation,
+            "example_sentence_audio_url": (
+                sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
+            ),
         }
         for ci in items_list
     ]
@@ -910,6 +932,11 @@ async def get_word_cloze_start(
             continue
         blanked_sentence, correct_answer = cloze
         is_vocab_item = bool(ci.example_sentence)
+        sentence_audio_for_item = (
+            sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
+            if is_vocab_item
+            else ci.audio_url
+        )
         questions.append(
             {
                 "content_item_id": ci.id,
@@ -927,13 +954,19 @@ async def get_word_cloze_start(
                 # own audio_url which IS the sentence audio.
                 # Use the helper's authoritative dict to dodge SQLAlchemy
                 # expire_on_commit edge cases.
-                "audio_url": (
-                    sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
-                    if is_vocab_item
-                    else ci.audio_url
-                ),
+                "audio_url": sentence_audio_for_item,
                 "correct_answer": correct_answer,
                 "correct_answer_length": len(correct_answer),
+                # Issue #715: 答對後翻面顯示完整單字卡所需欄位
+                "part_of_speech": ci.part_of_speech if is_vocab_item else None,
+                "example_sentence": ci.example_sentence if is_vocab_item else None,
+                "example_sentence_translation": (
+                    ci.example_sentence_translation if is_vocab_item else None
+                ),
+                "example_sentence_audio_url": (
+                    sentence_audio_for_item if is_vocab_item else None
+                ),
+                "word_audio_url": ci.audio_url if is_vocab_item else None,
             }
         )
 

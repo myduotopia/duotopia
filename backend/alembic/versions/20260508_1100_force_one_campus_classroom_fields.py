@@ -14,6 +14,8 @@ Safe to run on any DB state because every step uses IF NOT EXISTS.
 Related: #635
 """
 
+import re
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -24,6 +26,20 @@ depends_on = None
 
 
 def _add_column_if_missing(column_name: str, column_def: str) -> None:
+    # Both args are interpolated into PL/pgSQL; only safe because every caller
+    # in this migration passes hardcoded literals. Reject anything that
+    # doesn't look like a plain SQL identifier / type to make accidental
+    # reuse of this helper with dynamic input loud rather than silently
+    # injectable.
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", column_name):
+        raise ValueError(
+            f"Unsafe column_name for PL/pgSQL interpolation: {column_name!r}"
+        )
+    if not re.fullmatch(r"[A-Za-z0-9_ ()]+", column_def):
+        raise ValueError(
+            f"Unsafe column_def for PL/pgSQL interpolation: {column_def!r}"
+        )
+
     op.execute(
         f"""
         DO $$ BEGIN
@@ -56,4 +72,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Intentionally empty: project rule is no destructive migrations
+    # (CLAUDE.md "Database Migration 鐵則"). Dropping these columns would
+    # destroy linked roster data on rollback. Rollbacks are handled by
+    # redeploying an older application image, not by reversing schema.
     pass

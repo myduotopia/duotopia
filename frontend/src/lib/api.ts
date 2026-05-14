@@ -372,9 +372,17 @@ class ApiClient {
 
   async syncOneCampusClasses() {
     return this.request<{
-      enqueued: boolean;
+      synced: boolean;
       schools: string[];
-      message: string;
+      classrooms_added: number;
+      classrooms_updated: number;
+      students_added: number;
+      students_updated: number;
+      errors: string[];
+      // The backend always returns `message`, but the UI builds its own
+      // summary string from the counts; mark optional to signal that
+      // callers should not rely on `message` as the primary copy.
+      message?: string;
     }>("/api/teachers/me/sync-1campus-classes", {
       method: "POST",
     });
@@ -973,7 +981,9 @@ class ApiClient {
       definition?: string;
       audio_url?: string;
       has_student_progress?: boolean;
-      distractors?: string[];
+      // Issue #631 / #729: canonical shape is { text, image_url }; legacy
+      // data may still be string[]. Both shapes flow through unchanged.
+      distractors?: Array<string | { text: string; image_url?: string | null }>;
       item_metadata?: Record<string, unknown>;
       order_index?: number;
       content_id?: number;
@@ -1051,7 +1061,10 @@ class ApiClient {
         example_sentence_translation?: string;
         example_sentence_translation_lang?: string;
         image_url?: string;
-        distractors?: string[];
+        // Issue #631 / #729: accept both legacy string[] and new object shape.
+        distractors?: Array<
+          string | { text: string; image_url?: string | null }
+        >;
       }>;
       target_wpm?: number;
       target_accuracy?: number;

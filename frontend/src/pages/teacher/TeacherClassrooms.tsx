@@ -109,14 +109,40 @@ export default function TeacherClassrooms() {
     setSyncingOneCampus(true);
     try {
       const res = await apiClient.syncOneCampusClasses();
-      if (res.enqueued && res.schools.length > 0) {
-        toast.success(
-          t("teacherClassrooms.oneCampusSync.success", {
-            defaultValue: `Sync started for ${res.schools.length} school(s). Refresh shortly to see updates.`,
-          }),
-        );
-        // Re-fetch after a short delay so the user sees the freshly-synced data.
-        setTimeout(() => fetchClassrooms(), 4000);
+      if (res.synced && res.schools.length > 0) {
+        // Count *all* changes — additions and updates — when deciding whether
+        // to show the "no changes" message. A rename of an existing student
+        // bumps students_updated but not students_added; we still want the
+        // teacher to know something refreshed.
+        const changed =
+          res.classrooms_added +
+          res.classrooms_updated +
+          res.students_added +
+          res.students_updated;
+        const summary = t("teacherClassrooms.oneCampusSync.success", {
+          defaultValue: `Synced ${res.schools.length} school(s): ${res.classrooms_added} classroom(s), ${res.students_added} student(s) added.`,
+          schools: res.schools.length,
+          classrooms_added: res.classrooms_added,
+          students_added: res.students_added,
+        });
+        if (res.errors && res.errors.length > 0) {
+          toast.warning(
+            `${summary} (${res.errors.length} ${t(
+              "teacherClassrooms.oneCampusSync.errorsSuffix",
+              { defaultValue: "error(s) — see logs" },
+            )})`,
+          );
+        } else if (changed === 0) {
+          toast.info(
+            t("teacherClassrooms.oneCampusSync.noChanges", {
+              defaultValue:
+                "Already up to date — no new classrooms or students.",
+            }),
+          );
+        } else {
+          toast.success(summary);
+        }
+        await fetchClassrooms();
       } else {
         toast.info(
           res.message ||
@@ -458,9 +484,13 @@ export default function TeacherClassrooms() {
           >
             <CloudDownload className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">
-              {t("teacherClassrooms.oneCampusSync.button", {
-                defaultValue: syncingOneCampus ? "Syncing..." : "Sync 1Campus",
-              })}
+              {syncingOneCampus
+                ? t("teacherClassrooms.oneCampusSync.buttonSyncing", {
+                    defaultValue: "Syncing...",
+                  })
+                : t("teacherClassrooms.oneCampusSync.buttonIdle", {
+                    defaultValue: "Sync 1Campus",
+                  })}
             </span>
           </Button>
           <Button

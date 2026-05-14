@@ -234,7 +234,7 @@ export interface StudentAssignmentCard {
   estimated_time?: string;
   content_type?: string;
   practice_mode?: string; // 'reading' | 'rearrangement' | 'word_selection' | 'word_reading'
-  score_category?: string; // 'speaking' | 'listening' | 'writing' | 'vocabulary' | 'reading'
+  score_category?: string; // 'speaking' | 'listening' | 'writing' | 'reading' — auto-resolved from practice_mode + play_audio; see docs/design/score-category-mapping.md
   classroom_name?: string;
   teacher_name?: string;
   score?: number;

@@ -38,7 +38,6 @@ import StudentStatusPanel, {
   StudentProgress,
 } from "@/components/StudentStatusPanel";
 import { useSidebar } from "@/contexts/SidebarContext";
-import { FEATURE_FLAGS } from "@/config/featureFlags";
 
 interface AssignmentContent {
   id: number;
@@ -776,7 +775,9 @@ export function AssignmentDetailSheet({
                       >
                         {(assignment.practice_mode === "rearrangement" ||
                           assignment.practice_mode === "word_reading" ||
-                          assignment.practice_mode === "word_selection") && (
+                          assignment.practice_mode === "word_selection" ||
+                          assignment.practice_mode === "word_spelling" ||
+                          assignment.practice_mode === "word_cloze") && (
                           <option value={0}>
                             {t(
                               "dialogs.assignmentDialog.practiceMode.unlimited",
@@ -947,37 +948,36 @@ export function AssignmentDetailSheet({
                     )}
 
                     {/* 顯示選項圖片 (word_selection only) Issue #631 */}
-                    {FEATURE_FLAGS.SHOW_OPTION_IMAGES &&
-                      assignment.practice_mode === "word_selection" && (
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-gray-600 dark:text-gray-400">
+                    {assignment.practice_mode === "word_selection" && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-600 dark:text-gray-400">
+                          {t(
+                            "dialogs.assignmentDialog.practiceMode.showOptionImages",
+                          )}
+                        </Label>
+                        <div className="flex items-center h-9">
+                          <input
+                            type="checkbox"
+                            checked={editAdvanced.show_option_images}
+                            onChange={(e) =>
+                              setEditAdvanced((prev) => ({
+                                ...prev,
+                                show_option_images: e.target.checked,
+                                show_image: e.target.checked
+                                  ? false
+                                  : prev.show_image,
+                              }))
+                            }
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
                             {t(
-                              "dialogs.assignmentDialog.practiceMode.showOptionImages",
+                              "dialogs.assignmentDialog.practiceMode.showOptionImagesDesc",
                             )}
-                          </Label>
-                          <div className="flex items-center h-9">
-                            <input
-                              type="checkbox"
-                              checked={editAdvanced.show_option_images}
-                              onChange={(e) =>
-                                setEditAdvanced((prev) => ({
-                                  ...prev,
-                                  show_option_images: e.target.checked,
-                                  show_image: e.target.checked
-                                    ? false
-                                    : prev.show_image,
-                                }))
-                              }
-                              className="h-4 w-4 rounded border-gray-300"
-                            />
-                            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.showOptionImagesDesc",
-                              )}
-                            </span>
-                          </div>
+                          </span>
                         </div>
-                      )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1360,6 +1360,7 @@ export function AssignmentDetailSheet({
                           lessonId={0}
                           isCreating={false}
                           isAssignmentCopy={true}
+                          showOptionImages={editAdvanced.show_option_images}
                         />
                       ) : (
                         <ReadingAssessmentPanel

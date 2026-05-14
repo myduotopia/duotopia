@@ -899,7 +899,6 @@
       "speaking": "Speaking",
       "listening": "Listening",
       "writing": "Writing",
-      "vocabulary": "Vocabulary",
       "reading": "Reading"
     },
     "practiceMode": {
@@ -3242,6 +3241,18 @@
       "studentCountDesc": "Most Students",
       "createdAtDesc": "Newest First",
       "createdAtAsc": "Oldest First"
+    },
+    "oneCampusSync": {
+      "buttonIdle": "Sync 1Campus",
+      "buttonSyncing": "Syncing…",
+      "tooltip": "Pull latest classes + students from 1Campus",
+      "success": "Synced {{schools}} school(s): {{classrooms_added}} classroom(s), {{students_added}} student(s) added.",
+      "noChanges": "Already up to date — no new classrooms or students.",
+      "noSchools": "No 1Campus schools found for your account.",
+      "errorsSuffix": "error(s) — see logs",
+      "notLinked": "Your account is not linked to 1Campus. Log in via 1Campus first.",
+      "rateLimited": "Sync was triggered recently — please wait a minute and try again.",
+      "failed": "Failed to start 1Campus sync. Please try again."
     }
   },
   "teacherStudents": {
@@ -4773,8 +4784,6 @@
     "proficiency": "Proficiency",
     "currentProficiency": "Current Proficiency",
     "playAudio": "Play Audio",
-    "selectTranslation": "Select the correct translation:",
-    "selectTranslationAudio": "Listen and select the correct translation:",
     "seconds": "s",
     "timeUp": "Time's up!",
     "correct": "Correct!",

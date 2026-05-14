@@ -33,6 +33,7 @@ from models import (
     AssignmentStatus,
 )
 from utils.permissions import has_read_org_materials_permission
+from utils.score_category import resolve_score_category
 from .validators import (
     CreateAssignmentRequest,
     UpdateAssignmentRequest,
@@ -219,7 +220,11 @@ async def create_assignment(
         show_image=request.show_image,
         show_translation=request.show_translation,
         show_option_images=bool(request.show_option_images),  # Issue #631
-        score_category=request.score_category,
+        # score_category is auto-resolved; any client-supplied value is ignored.
+        # See docs/design/score-category-mapping.md
+        score_category=resolve_score_category(
+            request.practice_mode, request.play_audio or False
+        ),
     )
     db.add(assignment)
     db.flush()  # 取得 assignment.id
@@ -284,31 +289,40 @@ async def create_assignment(
             db.flush()
             content_items_copy_map[original_item.id] = item_copy.id
 
-    # word_selection 模式：為缺少干擾項的 items 從作業內所有 content 的單字翻譯生成
+    # word_selection 模式：為缺少干擾項的 items 從作業內所有 content 生成
     # Issue #631: 干擾項升級為 list[{text, image_url}]，方便 show_option_images 模式
     # 用 snapshot 的 image_url 渲染選項圖。reader 端會做雙形狀相容。
+    # show_image 模式：選項用英文（item.text），避免圖片+翻譯讓答案太明顯。
     if request.practice_mode == "word_selection":
-        from utils.distractors import make_distractor
+        from utils.distractors import make_distractor, text_field_for_show_image
 
-        # 收集作業內所有 content copies 的翻譯（跨 content）
+        show_image_for_options = (
+            assignment.show_image if assignment.show_image is not None else True
+        )
+        field = text_field_for_show_image(show_image_for_options)
+
+        # 收集作業內所有 content copies 的可用候選（跨 content）
         all_copy_content_ids = list(content_copy_map.values())
         all_items_in_assignment = (
             db.query(ContentItem)
             .filter(ContentItem.content_id.in_(all_copy_content_ids))
-            .filter(ContentItem.translation.isnot(None))
-            .filter(ContentItem.translation != "")
             .order_by(ContentItem.order_index)
             .all()
         )
-        # 候選池：每個 item 同時帶 translation + image_url
+        # 候選池：每個 item 同時帶顯示文字 + image_url；過濾掉沒有對應欄位的
         all_candidates = [
-            (item.translation, item.image_url) for item in all_items_in_assignment
+            (getattr(item, field), item.image_url)
+            for item in all_items_in_assignment
+            if getattr(item, field, None)
         ]
 
         generated_count = 0
         for item in all_items_in_assignment:
+            target_text = getattr(item, field, None)
+            if not target_text:
+                continue
             if not isinstance(item.distractors, list) or len(item.distractors) == 0:
-                target = item.translation.lower().strip()
+                target = target_text.lower().strip()
                 pool = [
                     (t, img)
                     for (t, img) in all_candidates
@@ -322,7 +336,8 @@ async def create_assignment(
         if generated_count > 0:
             logger.info(
                 f"Auto-generated cross-content distractors for "
-                f"{generated_count} items in assignment {assignment.id}"
+                f"{generated_count} items in assignment {assignment.id} "
+                f"(show_image={show_image_for_options})"
             )
 
     # 例句模式 + 單字集：為缺少例句音檔的 items 自動 TTS 生成
@@ -795,9 +810,18 @@ async def patch_assignment(
         "show_translation",
         "show_option_images",  # Issue #631
     ]
+    prev_show_image = assignment.show_image
     for field in advanced_fields:
         if field in provided:
             setattr(assignment, field, getattr(request, field))
+
+    # If play_audio changed, recompute score_category (practice_mode is
+    # immutable on PATCH so we only need to react to audio toggles).
+    # See docs/design/score-category-mapping.md
+    if "play_audio" in provided:
+        assignment.score_category = resolve_score_category(
+            assignment.practice_mode, assignment.play_audio
+        )
 
     # Issue #631: 互斥校驗 — 部分更新後若兩者皆 True 則拒絕
     if assignment.show_image and assignment.show_option_images:
@@ -805,6 +829,32 @@ async def patch_assignment(
             status_code=422,
             detail="show_image and show_option_images are mutually exclusive",
         )
+
+    # word_selection: show_image 切換 → 選項語言要跟著翻面（英文 ↔ 翻譯），
+    # 必須重生 distractors，否則學生端會看到語言不一致的選項。
+    if (
+        "show_image" in provided
+        and prev_show_image != assignment.show_image
+        and assignment.practice_mode == "word_selection"
+    ):
+        from utils.distractors import regenerate_word_selection_distractors
+
+        content_ids = [ac.content_id for ac in assignment.contents]
+        if content_ids:
+            items = (
+                db.query(ContentItem)
+                .filter(ContentItem.content_id.in_(content_ids))
+                .order_by(ContentItem.order_index)
+                .all()
+            )
+            updated = regenerate_word_selection_distractors(
+                items, bool(assignment.show_image)
+            )
+            logger.info(
+                f"Regenerated distractors for {updated} items in assignment "
+                f"{assignment.id} after show_image toggle "
+                f"({prev_show_image} -> {assignment.show_image})"
+            )
 
     # 更新 StudentAssignment 記錄
     update_fields = {}

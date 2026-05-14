@@ -110,6 +110,29 @@ body {
   animation: slide-out-to-right 0.28s ease-in-out both;
 }
 
+/* VirtualKeyboard: highlight vowels in red to mirror common teaching aids. */
+.simple-keyboard .hg-button.vk-vowel {
+  color: #dc2626; /* tailwind red-600 */
+  font-weight: 600;
+}
+
+/* Countdown ring: drain the stroke over the question's full duration.
+   The element sets `--countdown-circ` (circumference) and
+   `animation-duration` (total seconds) inline. */
+@keyframes countdown-drain {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: var(--countdown-circ);
+  }
+}
+.countdown-drain {
+  animation-name: countdown-drain;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
 .bg-notebook {
   background-image: linear-gradient(to bottom, #e5e7eb 1px, transparent 1px);
   background-size: 100% 24px;

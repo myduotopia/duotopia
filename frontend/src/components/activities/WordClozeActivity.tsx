@@ -28,10 +28,7 @@ import {
   Loader2,
   Volume2,
   CheckCircle,
-  XCircle,
-  Clock,
   Send,
-  RotateCcw,
   FileText,
   Trophy,
   RefreshCw,
@@ -43,7 +40,18 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
+import CountdownRing from "./shared/CountdownRing";
+import VirtualKeyboard from "./shared/VirtualKeyboard";
+import { WordCard } from "./shared/WordCard";
+import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
+
+// Issue #716: 答案允許英文字母、連字號、空格；過濾掉建議選字、注音、Emoji。
+const ALLOWED_CHAR = /[a-zA-Z\- ]/;
+const sanitizeAnswer = (raw: string) =>
+  Array.from(raw)
+    .filter((c) => ALLOWED_CHAR.test(c))
+    .join("");
 
 interface ClozeQuestion {
   content_item_id: number;
@@ -56,6 +64,12 @@ interface ClozeQuestion {
   // preview/demo mode (mirrors how word_selection exposes translation).
   correct_answer: string;
   correct_answer_length: number;
+  // Issue #715: 答對後翻面顯示完整單字卡所需欄位
+  part_of_speech?: string | null;
+  example_sentence?: string | null;
+  example_sentence_translation?: string | null;
+  example_sentence_audio_url?: string | null;
+  word_audio_url?: string | null;
 }
 
 interface ProficiencyStatus {
@@ -89,6 +103,9 @@ export default function WordClozeActivity({
   onComplete,
 }: WordClozeActivityProps) {
   const { t } = useTranslation();
+  // Issue #716: 觸控裝置改用 VirtualKeyboard，避免系統建議選字。
+  const deviceMode = useInputDeviceMode();
+  const useVirtualKeyboard = deviceMode !== "desktop";
 
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<ClozeQuestion[]>([]);
@@ -101,11 +118,15 @@ export default function WordClozeActivity({
   const [completing, setCompleting] = useState(false);
   const [scoreOverlayOpen, setScoreOverlayOpen] = useState(false);
   const nextQuestionCalledRef = useRef(false);
+  // Issue #715: 答對後翻面顯示完整單字卡；學生用左右箭頭手動翻頁
+  const [cardFace, setCardFace] = useState<"front" | "back">("back");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [showTranslation, setShowTranslation] = useState(true);
   const [audioOnlyMode, setAudioOnlyMode] = useState(false);
   const [showAnswerOnWrong, setShowAnswerOnWrong] = useState(false);
+  // Issue #716: 答錯後改用 placeholder 顯示正解，需要記錄上一次是否答錯
+  const [lastAttemptWrong, setLastAttemptWrong] = useState(false);
 
   const [proficiency, setProficiency] = useState<ProficiencyStatus>({
     current_mastery: 0,
@@ -189,7 +210,6 @@ export default function WordClozeActivity({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [incorrectAnswer, setIncorrectAnswer] = useState<string | null>(null);
 
   const startPractice = useCallback(async () => {
     try {
@@ -315,9 +335,11 @@ export default function WordClozeActivity({
     }
   }, [questions, currentIndex]);
 
-  // Auto-play sentence audio on each new question
+  // Auto-play sentence audio on each new question.
+  // Issue #716: 僅 Play Audio (audioOnlyMode) 子模式播放；Display Translation 不播。
   useEffect(() => {
     if (
+      audioOnlyMode &&
       questions[currentIndex]?.audio_url &&
       !showResult &&
       !roundCompleted &&
@@ -326,7 +348,7 @@ export default function WordClozeActivity({
       playQuestionAudio();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, questions.length, roundCompleted, loading]);
+  }, [currentIndex, questions.length, roundCompleted, loading, audioOnlyMode]);
 
   // Timer
   useEffect(() => {
@@ -376,18 +398,20 @@ export default function WordClozeActivity({
     setSubmitting(true);
 
     if (isPreviewMode || isDemoMode) {
-      // Local compare against the backend-supplied correct answer
-      // (case-insensitive, trimmed) — same pattern as spelling.
-      const expected = (currentQ.correct_answer || "").trim().toLowerCase();
-      const correct =
-        !isTimeout && expected.length > 0 && answer.toLowerCase() === expected;
+      // Issue #716: case-sensitive comparison (trim only) — match backend.
+      const expected = (currentQ.correct_answer || "").trim();
+      const correct = !isTimeout && expected.length > 0 && answer === expected;
       setIsCorrect(correct);
       setShowResult(true);
       if (correct) {
         setCorrectCount((prev) => prev + 1);
-        setScoreOverlayOpen(true);
+        setLastAttemptWrong(false);
+        // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
+        setCardFace("front");
       } else {
-        setIncorrectAnswer(answer);
+        setLastAttemptWrong(true);
+        // Issue #716: 清空 input 讓正解 placeholder 露出來
+        setTypedAnswer("");
       }
       recordPreviewAnswer(currentQ.content_item_id, correct);
       setSubmitting(false);
@@ -411,9 +435,13 @@ export default function WordClozeActivity({
       setShowResult(true);
       if (correct) {
         setCorrectCount((prev) => prev + 1);
-        setScoreOverlayOpen(true);
+        setLastAttemptWrong(false);
+        // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
+        setCardFace("front");
       } else {
-        setIncorrectAnswer(answer);
+        setLastAttemptWrong(true);
+        // Issue #716: 清空 input 讓正解 placeholder 露出來
+        setTypedAnswer("");
       }
       await fetchProficiency();
     } catch (error) {
@@ -426,7 +454,15 @@ export default function WordClozeActivity({
     }
   };
 
-  const handleOverlayComplete = () => {
+  // Issue #715: 翻面動畫結束 → 顯示答對動畫
+  const handleCardFlipped = useCallback(() => {
+    if (cardFace === "front") {
+      setScoreOverlayOpen(true);
+    }
+  }, [cardFace]);
+
+  // Issue #715: 推進到下一題（共用：5 秒自動 / 右箭頭手動）
+  const advanceToNext = useCallback(() => {
     if (nextQuestionCalledRef.current) return;
     nextQuestionCalledRef.current = true;
     setTimeout(() => {
@@ -434,9 +470,10 @@ export default function WordClozeActivity({
     }, 300);
 
     setScoreOverlayOpen(false);
+    setCardFace("back");
     setShowResult(false);
     setTypedAnswer("");
-    setIncorrectAnswer(null);
+    setLastAttemptWrong(false);
     if (timeLimit) setTimeRemaining(timeLimit);
 
     if (currentIndex < questions.length - 1) {
@@ -444,14 +481,40 @@ export default function WordClozeActivity({
     } else {
       setRoundCompleted(true);
     }
-  };
+  }, [currentIndex, questions.length, timeLimit]);
 
-  const handleRetry = () => {
-    setShowResult(false);
-    setTypedAnswer("");
-    setIncorrectAnswer(null);
-    if (timeLimit) setTimeRemaining(timeLimit);
-    inputRef.current?.focus();
+  // Issue #716: 移除「上一題」— 艾賓浩斯算法鼓勵把 10 題跑完。
+
+  // Issue #716: VirtualKeyboard 輸入回調
+  const vkAppend = useCallback(
+    (ch: string) => {
+      const sanitized = sanitizeAnswer(ch);
+      if (!sanitized) return;
+      if (showResult && !isCorrect) setShowResult(false);
+      setTypedAnswer((prev) => prev + sanitized);
+    },
+    [showResult, isCorrect],
+  );
+  const vkBackspace = useCallback(() => {
+    if (showResult && !isCorrect) setShowResult(false);
+    setTypedAnswer((prev) => prev.slice(0, -1));
+  }, [showResult, isCorrect]);
+  const vkEnter = useCallback(() => {
+    // Issue #716: 虛擬鍵盤 Enter 只負責送出；看正面時改用右箭頭手動切下一題。
+    if (
+      cardFace === "back" &&
+      !showResult &&
+      !submitting &&
+      typedAnswer.trim()
+    ) {
+      handleSubmitAnswer();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardFace, showResult, submitting, typedAnswer]);
+
+  // ScoreOverlay 結束 → 關閉動畫，等學生用左右箭頭手動翻頁
+  const handleOverlayComplete = () => {
+    setScoreOverlayOpen(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -662,7 +725,7 @@ export default function WordClozeActivity({
   const currentQ = questions[currentIndex];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {isPracticeMode && (
         <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
           <BookOpen className="h-4 w-4" />
@@ -698,146 +761,160 @@ export default function WordClozeActivity({
         />
       </div>
 
-      <div className="space-y-6">
-        {/* Translation hint (Chinese meaning only — never show base word) */}
-        {showTranslation && currentQ.translation && (
-          <div className="text-center">
-            <p className="text-sm text-gray-500 mb-1">
-              {t("wordCloze.translationHint") || "Translation"}
-            </p>
-            <h2 className="text-xl font-bold text-gray-800">
-              {currentQ.translation}
-            </h2>
-          </div>
-        )}
-
-        {currentQ.audio_url && (
-          <div className="flex flex-col items-center gap-2">
-            <Button
-              variant={audioOnlyMode ? "default" : "outline"}
-              size="lg"
-              onClick={playQuestionAudio}
-              className={cn(
-                "gap-2",
-                audioOnlyMode &&
-                  "h-16 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg",
-              )}
-            >
-              <Volume2 className={audioOnlyMode ? "h-7 w-7" : "h-5 w-5"} />
-              {t("wordCloze.playAudio") || "Play Audio"}
-            </Button>
-            {audioOnlyMode && (
-              <p className="text-xs text-gray-500">
-                {t("wordCloze.tapToReplay") || "點擊播放，可以重複聆聽"}
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="max-w-2xl mx-auto text-center">
-          <p className="text-xl leading-relaxed text-gray-800 font-medium px-4">
-            {currentQ.blanked_sentence}
-          </p>
-          {showTranslation && currentQ.sentence_translation && (
-            <p className="text-sm text-gray-500 mt-2">
-              {currentQ.sentence_translation}
-            </p>
-          )}
-        </div>
-
-        {timeLimit && timeRemaining !== null && (
-          <div className="flex justify-center">
-            <div
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium",
-                timeRemaining === 0
-                  ? "bg-red-100 text-red-700"
-                  : timeRemaining <= 5
-                    ? "bg-red-100 text-red-700"
-                    : timeRemaining <= 10
-                      ? "bg-yellow-100 text-yellow-700"
-                      : "bg-gray-100 text-gray-700",
-              )}
-            >
-              <Clock className="h-5 w-5" />
-              {timeRemaining === 0 ? (
-                <span>{t("wordCloze.timeUp") || "Time's up!"}</span>
-              ) : (
-                <>
-                  <span>{timeRemaining}</span>
-                  <span className="text-sm">
-                    {t("wordCloze.seconds") || "s"}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="max-w-md mx-auto space-y-3">
-          <Input
-            ref={inputRef}
-            type="text"
-            value={typedAnswer}
-            onChange={(e) => setTypedAnswer(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              t("wordCloze.inputPlaceholder") || "Fill in the blank..."
+      <div
+        className={cn(deviceMode === "tablet" && "flex items-stretch gap-4")}
+      >
+        <div className={cn("min-w-0", deviceMode === "tablet" && "flex-[6]")}>
+          <WordCard
+            viewMode={deviceMode === "mobile" ? "mobile" : "desktop"}
+            face={cardFace}
+            onFlipped={handleCardFlipped}
+            word={currentQ.base_word || currentQ.correct_answer}
+            partOfSpeech={currentQ.part_of_speech ?? undefined}
+            translation={currentQ.translation || undefined}
+            audioUrl={currentQ.word_audio_url ?? undefined}
+            exampleSentence={currentQ.example_sentence ?? undefined}
+            exampleSentenceTranslation={
+              currentQ.example_sentence_translation ?? undefined
             }
-            disabled={showResult || submitting}
-            className={cn(
-              "text-center text-xl h-14 rounded-xl border-2",
-              showResult && isCorrect && "border-green-500 bg-green-50",
-              showResult && !isCorrect && "border-red-500 bg-red-50",
-              !showResult && "border-gray-300 focus:border-indigo-500",
-            )}
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
+            exampleSentenceAudioUrl={
+              currentQ.example_sentence_audio_url ?? undefined
+            }
+            hasPrev={false}
+            hasNext={cardFace === "front"}
+            onNext={advanceToNext}
+            back={
+              <div className="relative space-y-6">
+                {timeLimit && timeRemaining !== null && (
+                  <CountdownRing
+                    key={currentIndex}
+                    seconds={timeRemaining}
+                    total={timeLimit}
+                    className="absolute top-0 right-0 z-10"
+                  />
+                )}
+                {/* Issue #716: cloze Display Translation 僅顯示例句翻譯，不顯示單字翻譯 → 移除單字翻譯 hint */}
 
-          {showResult && !isCorrect && (
-            <div className="text-center space-y-2">
-              <div className="flex items-center justify-center gap-2 text-red-600">
-                <XCircle className="h-5 w-5" />
-                <span className="font-medium">
-                  {incorrectAnswer
-                    ? t("wordCloze.incorrectTryAgain") ||
-                      "Incorrect, try again!"
-                    : t("wordCloze.timeUpTryAgain") || "Time's up! Try again."}
-                </span>
+                {/* Issue #716: Play Audio 模式音檔鈕置中於例句上方，避免 inline 對齊問題 */}
+                {audioOnlyMode && currentQ.audio_url && (
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      onClick={playQuestionAudio}
+                      aria-label={t("wordCloze.playAudio") || "Play Audio"}
+                      className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-12 w-12 text-blue-500 hover:text-blue-600"
+                    >
+                      <Volume2 className="h-7 w-7" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="max-w-2xl mx-auto text-center py-2 space-y-2">
+                  {currentQ.part_of_speech && (
+                    <div className="flex justify-center">
+                      <Badge
+                        variant="secondary"
+                        className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
+                      >
+                        {currentQ.part_of_speech}
+                      </Badge>
+                    </div>
+                  )}
+                  <p className="text-lg md:text-xl leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
+                    {currentQ.blanked_sentence}
+                  </p>
+                  {showTranslation && currentQ.sentence_translation && (
+                    <p className="text-sm text-gray-500">
+                      {currentQ.sentence_translation}
+                    </p>
+                  )}
+                </div>
+
+                <div className="max-w-md mx-auto relative">
+                  <Input
+                    ref={inputRef}
+                    type="text"
+                    value={typedAnswer}
+                    inputMode={useVirtualKeyboard ? "none" : "text"}
+                    onChange={(e) => {
+                      setTypedAnswer(sanitizeAnswer(e.target.value));
+                      if (showResult && !isCorrect) setShowResult(false);
+                    }}
+                    onBeforeInput={(e) => {
+                      const ev = e.nativeEvent as InputEvent;
+                      if (ev.inputType === "insertReplacementText") {
+                        e.preventDefault();
+                      }
+                    }}
+                    onKeyDown={handleKeyDown}
+                    onPaste={(e) => e.preventDefault()}
+                    onDrop={(e) => e.preventDefault()}
+                    placeholder={
+                      showAnswerOnWrong &&
+                      lastAttemptWrong &&
+                      currentQ.correct_answer
+                        ? currentQ.correct_answer
+                        : t("wordCloze.inputPlaceholder") ||
+                          "Fill in the blank..."
+                    }
+                    disabled={(showResult && isCorrect) || submitting}
+                    className={cn(
+                      "text-center text-2xl h-14 pl-10 pr-10 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
+                      "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
+                      showResult &&
+                        isCorrect &&
+                        "border-green-500 text-green-700",
+                      showResult &&
+                        !isCorrect &&
+                        "border-red-500 text-red-600 placeholder:text-red-400",
+                      !(showResult && !isCorrect) &&
+                        !(showResult && isCorrect) &&
+                        "border-gray-300 focus:border-indigo-500",
+                    )}
+                    autoComplete="off"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                  {!(showResult && isCorrect) && (
+                    <button
+                      type="button"
+                      onClick={() => handleSubmitAnswer()}
+                      disabled={!typedAnswer.trim() || submitting}
+                      aria-label={t("wordCloze.checkAnswer") || "Check"}
+                      className={cn(
+                        "absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors",
+                        "text-indigo-600 hover:bg-indigo-50",
+                        "disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed",
+                      )}
+                    >
+                      {submitting ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Send className="h-5 w-5" />
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
-              {showAnswerOnWrong && currentQ.correct_answer && (
-                <p className="text-sm text-gray-700">
-                  {t("wordCloze.correctAnswerLabel") || "正確答案"}:{" "}
-                  <span className="font-bold">{currentQ.correct_answer}</span>
-                </p>
-              )}
-              <Button onClick={handleRetry} variant="outline" className="gap-2">
-                <RotateCcw className="h-4 w-4" />
-                {t("wordCloze.retry") || "Retry"}
-              </Button>
-            </div>
-          )}
-
-          {!showResult && (
-            <Button
-              onClick={() => handleSubmitAnswer()}
-              disabled={!typedAnswer.trim() || submitting}
-              className="w-full h-12 text-lg"
-            >
-              {submitting ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  <CheckCircle className="h-5 w-5 mr-2" />
-                  {t("wordCloze.checkAnswer") || "Check"}
-                </>
-              )}
-            </Button>
-          )}
+            }
+          />
         </div>
+        {useVirtualKeyboard && (
+          <div
+            className={cn(
+              deviceMode === "tablet"
+                ? "flex-[4] min-w-0 flex flex-col justify-center"
+                : "mt-3",
+            )}
+          >
+            <VirtualKeyboard
+              onKey={vkAppend}
+              onBackspace={vkBackspace}
+              onEnter={vkEnter}
+            />
+          </div>
+        )}
       </div>
 
       <ScoreOverlay

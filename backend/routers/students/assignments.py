@@ -1419,18 +1419,17 @@ async def start_word_selection_practice(
     # Issue #631: options 升級為 list[{text, image_url}]，給 show_option_images 模式渲染圖片用。
     # 雙形狀相容：舊 distractors 是 list[str]、新的是 list[{text, image_url}]，由
     # normalize_distractors 統一吐 dict 形狀。
-    from utils.distractors import normalize_distractors
+    # show_image 模式：選項與正解用英文（item.text），題目隱藏英文。
+    from utils.distractors import normalize_distractors, text_field_for_show_image
+
+    show_image_for_options = (
+        assignment.show_image
+        if assignment and assignment.show_image is not None
+        else True
+    )
+    answer_key = text_field_for_show_image(show_image_for_options)
 
     words_with_options = []
-
-    # Collect translations + image_url for fallback distractor sourcing
-    translation_to_image: Dict[str, Optional[str]] = {}
-    for w in words_data:
-        if not w.get("translation"):
-            continue
-        key = w["translation"].lower().strip()
-        # Prefer first non-null image; if multiple items share a translation, last write wins
-        translation_to_image.setdefault(key, w.get("image_url"))
 
     # Query stored AI distractors from DB
     content_item_ids = [w["content_item_id"] for w in words_data]
@@ -1440,7 +1439,7 @@ async def start_word_selection_practice(
     distractors_map = {item.id: item.distractors for item in items_with_distractors}
 
     for i, word in enumerate(words_data):
-        correct_answer = word["translation"]
+        correct_answer = word.get(answer_key) or ""
         stored_distractors = normalize_distractors(
             distractors_map.get(word["content_item_id"])
         )
@@ -1448,12 +1447,12 @@ async def start_word_selection_practice(
         if len(stored_distractors) >= 3:
             final_distractors = list(stored_distractors[:3])
         else:
-            # Fallback: 從其他單字翻譯取（同時帶 image_url）
+            # Fallback: 從其他單字取（同時帶 image_url）— 依 show_image 決定語言
             target = correct_answer.lower().strip()
             pool = [
-                {"text": w["translation"], "image_url": w.get("image_url")}
+                {"text": w.get(answer_key), "image_url": w.get("image_url")}
                 for w in words_data
-                if w.get("translation") and w["translation"].lower().strip() != target
+                if w.get(answer_key) and w.get(answer_key, "").lower().strip() != target
             ]
             random.shuffle(pool)
             final_distractors = pool[:3]
@@ -1475,7 +1474,8 @@ async def start_word_selection_practice(
             {
                 "content_item_id": word["content_item_id"],
                 "text": word["text"],
-                "translation": correct_answer,
+                "translation": word.get("translation") or "",
+                "correct_text": correct_answer,
                 "audio_url": word.get("audio_url"),
                 "image_url": word.get("image_url"),
                 "memory_strength": word.get("memory_strength", 0),
@@ -1570,7 +1570,16 @@ async def submit_word_selection_answer(
             detail="Content item not found",
         )
 
-    correct_answer = content_item.translation or ""
+    # 取得作業設定，依 show_image 決定正解語言（true=英文 / false=翻譯）
+    assignment_for_check = student_assignment.assignment
+    show_image_mode = bool(
+        assignment_for_check.show_image
+        if assignment_for_check and assignment_for_check.show_image is not None
+        else True
+    )
+    correct_answer = (
+        content_item.text if show_image_mode else content_item.translation
+    ) or ""
 
     # 伺服器端驗證答案正確性（不信任客戶端的 is_correct）
     is_correct = request.selected_answer.strip() == correct_answer.strip()
@@ -1979,9 +1988,16 @@ async def start_word_spelling_practice(
         )
         .all()
     )
-    from services.preview_service import ensure_word_audio
+    from services.preview_service import (
+        ensure_word_audio,
+        ensure_example_sentence_audio,
+    )
 
     item_audio_by_id = await ensure_word_audio(list(all_content_items), db)
+    sentence_audio_by_id = await ensure_example_sentence_audio(
+        list(all_content_items), db
+    )
+    item_by_id = {ci.id: ci for ci in all_content_items}
 
     # Ebbinghaus: pick 10 words student is least familiar with
     words_result = db.execute(
@@ -2014,13 +2030,21 @@ async def start_word_spelling_practice(
                 "audio_url": item_audio_by_id.get(ci.id) or ci.audio_url,
                 "image_url": ci.image_url,
                 "memory_strength": 0,
+                # Issue #715: 答對後翻面顯示完整單字卡所需欄位
+                "part_of_speech": ci.part_of_speech,
+                "example_sentence": ci.example_sentence,
+                "example_sentence_translation": ci.example_sentence_translation,
+                "example_sentence_audio_url": (
+                    sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
+                ),
             }
             for ci in content_items
         ]
     else:
         # Prefer freshly-backfilled audio over the function's cached value
-        words_data = [
-            {
+        def _build_spelling_word(row):
+            ci = item_by_id.get(row.content_item_id)
+            return {
                 "content_item_id": row.content_item_id,
                 "text": row.text,
                 "translation": row.translation or "",
@@ -2029,9 +2053,19 @@ async def start_word_spelling_practice(
                 "memory_strength": (
                     float(row.memory_strength) if row.memory_strength else 0
                 ),
+                # Issue #715: 答對後翻面顯示完整單字卡所需欄位
+                "part_of_speech": ci.part_of_speech if ci else None,
+                "example_sentence": ci.example_sentence if ci else None,
+                "example_sentence_translation": (
+                    ci.example_sentence_translation if ci else None
+                ),
+                "example_sentence_audio_url": sentence_audio_by_id.get(
+                    row.content_item_id,
+                    ci.example_sentence_audio_url if ci else None,
+                ),
             }
-            for row in words_result
-        ]
+
+        words_data = [_build_spelling_word(row) for row in words_result]
 
     if assignment and assignment.shuffle_questions:
         random.shuffle(words_data)
@@ -2133,8 +2167,8 @@ async def submit_word_spelling_answer(
 
     correct_answer = content_item.text or ""
 
-    # Case-insensitive comparison, trim whitespace
-    is_correct = request.typed_answer.strip().lower() == correct_answer.strip().lower()
+    # Issue #716: case-sensitive comparison (trim only)
+    is_correct = request.typed_answer.strip() == correct_answer.strip()
 
     # Update memory strength via SM-2 function
     result = db.execute(
@@ -2687,6 +2721,11 @@ async def start_word_cloze_practice(
             continue
         blanked_sentence, correct_answer = cloze
         is_vocab_item = bool(ci.example_sentence)
+        sentence_audio_for_item = (
+            sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
+            if is_vocab_item
+            else ci.audio_url
+        )
         questions.append(
             {
                 "content_item_id": ci.id,
@@ -2699,13 +2738,19 @@ async def start_word_cloze_practice(
                     else (ci.translation or "")
                 )
                 or "",
-                "audio_url": (
-                    sentence_audio_by_id.get(ci.id) or ci.example_sentence_audio_url
-                    if is_vocab_item
-                    else ci.audio_url
-                ),
+                "audio_url": sentence_audio_for_item,
                 "correct_answer": correct_answer,
                 "correct_answer_length": len(correct_answer),
+                # Issue #715: 答對後翻面顯示完整單字卡所需欄位
+                "part_of_speech": ci.part_of_speech if is_vocab_item else None,
+                "example_sentence": ci.example_sentence if is_vocab_item else None,
+                "example_sentence_translation": (
+                    ci.example_sentence_translation if is_vocab_item else None
+                ),
+                "example_sentence_audio_url": (
+                    sentence_audio_for_item if is_vocab_item else None
+                ),
+                "word_audio_url": ci.audio_url if is_vocab_item else None,
             }
         )
 
@@ -2816,7 +2861,8 @@ async def submit_word_cloze_answer(
         )
     _blanked, correct_answer = cloze
 
-    is_correct = request.typed_answer.strip().lower() == correct_answer.strip().lower()
+    # Issue #716: case-sensitive comparison (trim only)
+    is_correct = request.typed_answer.strip() == correct_answer.strip()
 
     result = db.execute(
         text(

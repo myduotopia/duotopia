@@ -52,7 +52,7 @@ def _patch_one_campus_apis(get_class_payload, get_class_student_map):
         val = get_class_student_map.get(class_id)
         if isinstance(val, Exception):
             raise val
-        return val if val is not None else {"student": []}
+        return val if val is not None else {"class": [{"student": []}]}
 
     return (
         patch(
@@ -86,28 +86,38 @@ class TestOneCampusClassSyncService:
                 {"classID": "C002", "className": "Class 1B"},
             ]
         }
+        # Real getClassStudent response wraps `student` inside `class[]` —
+        # see docs/integrations/1campus-jasmine-api.md.
         get_class_student_map = {
             "C001": {
-                "student": [
+                "class": [
                     {
-                        "studentID": "S001",
-                        "studentName": "Alice",
-                        "studentNumber": "001",
-                    },
-                    {
-                        "studentID": "S002",
-                        "studentName": "Bob",
-                        "studentNumber": "002",
-                    },
+                        "student": [
+                            {
+                                "studentID": "S001",
+                                "studentName": "Alice",
+                                "studentNumber": "001",
+                            },
+                            {
+                                "studentID": "S002",
+                                "studentName": "Bob",
+                                "studentNumber": "002",
+                            },
+                        ]
+                    }
                 ]
             },
             "C002": {
-                "student": [
+                "class": [
                     {
-                        "studentID": "S003",
-                        "studentName": "Charlie",
-                        "studentNumber": "003",
-                    },
+                        "student": [
+                            {
+                                "studentID": "S003",
+                                "studentName": "Charlie",
+                                "studentNumber": "003",
+                            },
+                        ]
+                    }
                 ]
             },
         }
@@ -164,7 +174,7 @@ class TestOneCampusClassSyncService:
 
         get_class_payload = {"class": [{"classID": "C100", "className": "New Name"}]}
         p_class, p_student = _patch_one_campus_apis(
-            get_class_payload, {"C100": {"student": []}}
+            get_class_payload, {"C100": {"class": [{"student": []}]}}
         )
         with p_class, p_student:
             result = await OneCampusClassSyncService.sync_school(
@@ -211,7 +221,11 @@ class TestOneCampusClassSyncService:
 
         get_class_payload = {"class": [{"classID": "C001", "className": "X"}]}
         get_class_student_map = {
-            "C001": {"student": [{"studentID": "S500", "studentName": "New Name"}]}
+            "C001": {
+                "class": [
+                    {"student": [{"studentID": "S500", "studentName": "New Name"}]}
+                ]
+            }
         }
         p_class, p_student = _patch_one_campus_apis(
             get_class_payload, get_class_student_map
@@ -225,6 +239,77 @@ class TestOneCampusClassSyncService:
         db.refresh(s_secondary)
         assert s_primary.name == "New Name"
         assert s_secondary.name == "New Name"
+
+    @pytest.mark.asyncio
+    async def test_syncs_student_number_when_school_renumbers(
+        self, shared_test_session
+    ):
+        """student_number drift between 1Campus and Duotopia must be corrected.
+
+        Schools sometimes renumber students mid-year. The rename helper used
+        to update only `name` and silently leave `student_number` stale.
+        Verify both linked students get the new number, and the result
+        registers as an update.
+        """
+        db = shared_test_session
+        teacher = _make_teacher(db)
+
+        identity = Identity(
+            one_campus_student_id="S700",
+            email_verified=False,
+            is_active=True,
+        )
+        db.add(identity)
+        db.flush()
+
+        s_primary = Student(
+            name="Renumbered Student",
+            student_number="001",
+            identity_id=identity.id,
+            is_primary_account=True,
+            is_active=True,
+        )
+        s_secondary = Student(
+            name="Renumbered Student",
+            student_number="001",
+            identity_id=identity.id,
+            is_primary_account=False,
+            is_active=True,
+        )
+        db.add_all([s_primary, s_secondary])
+        db.commit()
+
+        get_class_payload = {"class": [{"classID": "C700", "className": "Room 7"}]}
+        # Same name as the seeded students, so name comparison is a no-op —
+        # the only thing that should change is student_number.
+        get_class_student_map = {
+            "C700": {
+                "class": [
+                    {
+                        "student": [
+                            {
+                                "studentID": "S700",
+                                "studentName": "Renumbered Student",
+                                "studentNumber": "002",
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        p_class, p_student = _patch_one_campus_apis(
+            get_class_payload, get_class_student_map
+        )
+        with p_class, p_student:
+            result = await OneCampusClassSyncService.sync_school(
+                db, school_dsns="my.school", teacher_id=teacher.id
+            )
+
+        db.refresh(s_primary)
+        db.refresh(s_secondary)
+        assert s_primary.student_number == "002"
+        assert s_secondary.student_number == "002"
+        assert result.students_updated == 1
 
     @pytest.mark.asyncio
     async def test_does_not_delete_disappeared_classrooms(self, shared_test_session):
@@ -245,7 +330,7 @@ class TestOneCampusClassSyncService:
 
         get_class_payload = {"class": [{"classID": "C001", "className": "Live class"}]}
         p_class, p_student = _patch_one_campus_apis(
-            get_class_payload, {"C001": {"student": []}}
+            get_class_payload, {"C001": {"class": [{"student": []}]}}
         )
         with p_class, p_student:
             await OneCampusClassSyncService.sync_school(
@@ -278,7 +363,7 @@ class TestOneCampusClassSyncService:
             "class": [{"classID": "C001", "className": "1Campus class"}]
         }
         p_class, p_student = _patch_one_campus_apis(
-            get_class_payload, {"C001": {"student": []}}
+            get_class_payload, {"C001": {"class": [{"student": []}]}}
         )
         with p_class, p_student:
             await OneCampusClassSyncService.sync_school(
@@ -323,7 +408,9 @@ class TestOneCampusClassSyncService:
         }
         get_class_student_map = {
             "C001": RuntimeError("class 001 timeout"),
-            "C002": {"student": [{"studentID": "S010", "studentName": "Zoe"}]},
+            "C002": {
+                "class": [{"student": [{"studentID": "S010", "studentName": "Zoe"}]}]
+            },
         }
         p_class, p_student = _patch_one_campus_apis(
             get_class_payload, get_class_student_map

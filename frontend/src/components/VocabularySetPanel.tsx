@@ -272,7 +272,27 @@ interface ContentRow {
   example_sentence_korean?: string; // 例句韓文翻譯
   example_sentence_audio_url?: string; // 例句音檔 URL
   // 干擾項（單字選擇題用）
-  distractors?: string[];
+  // Issue #631 / #729: canonical shape is { text, image_url }. Legacy data may
+  // still be string[]; both shapes flow through unchanged so we don't drop
+  // image_url on round-trip.
+  distractors?: Distractor[];
+}
+
+export type Distractor = string | { text: string; image_url?: string | null };
+
+function getDistractorText(d: Distractor): string {
+  if (typeof d === "string") return d;
+  return d?.text ?? "";
+}
+
+function getDistractorImage(d: Distractor): string | null {
+  if (typeof d === "string") return null;
+  return d?.image_url ?? null;
+}
+
+function setDistractorText(d: Distractor, text: string): Distractor {
+  if (typeof d === "string") return text;
+  return { ...d, text };
 }
 
 interface TTSModalProps {
@@ -1012,7 +1032,7 @@ interface SortableRowInnerProps {
   handleUpdateRow: (
     index: number,
     field: keyof ContentRow,
-    value: string | string[],
+    value: string | string[] | Distractor[],
   ) => void;
   handleRemoveRow: (index: number) => void;
   handleDuplicateRow: (index: number) => void;
@@ -1038,6 +1058,7 @@ interface SortableRowInnerProps {
   onRowFocus?: () => void;
   onWordLanguageChange?: (lang: WordTranslationLanguage) => void;
   isAssignmentCopy?: boolean; // 是否為作業副本（顯示干擾項編輯）
+  showOptionImages?: boolean; // Issue #729: 派發時若勾選顯示選項圖片，干擾項唯讀
   duplicateReasons?: string[]; // 重複的原因
   customTranslationLang?: string; // 自訂翻譯語言名稱
   sentenceTranslationLang?: string; // 例句翻譯語言
@@ -1067,6 +1088,7 @@ function SortableRowInner({
   onRowFocus,
   onWordLanguageChange: _onWordLanguageChange,
   isAssignmentCopy = false,
+  showOptionImages = false,
   duplicateReasons,
   customTranslationLang = "",
   sentenceTranslationLang = "",
@@ -1535,7 +1557,11 @@ function SortableRowInner({
         </div>
       </div>
 
-      {/* 干擾項編輯區塊（僅在作業副本模式 + 有干擾項時顯示） */}
+      {/* 干擾項編輯區塊（僅在作業副本模式 + 有干擾項時顯示）
+        Issue #729: distractors may be legacy string[] or { text, image_url }[].
+        When showOptionImages=true the snapshotted images are committed and
+        the panel renders read-only; otherwise text inputs preserve image_url
+        on edit by only mutating the .text field of the object shape. */}
       {isAssignmentCopy && row.distractors && row.distractors.length > 0 && (
         <div className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
@@ -1546,24 +1572,50 @@ function SortableRowInner({
               })}
             </span>
           </div>
-          <div className="flex gap-2">
-            {row.distractors.map((distractor, dIdx) => (
-              <input
-                key={dIdx}
-                type="text"
-                value={distractor}
-                onChange={(e) => {
-                  const newDistractors = [...(row.distractors || [])];
-                  newDistractors[dIdx] = e.target.value;
-                  handleUpdateRow(index, "distractors", newDistractors);
-                }}
-                className="flex-1 px-2 py-1.5 border border-gray-300 rounded-md text-sm bg-white"
-                placeholder={t("vocabularySet.distractors.placeholder", {
-                  defaultValue: `干擾項 ${dIdx + 1}`,
-                  number: dIdx + 1,
-                })}
-              />
-            ))}
+          <div className="flex gap-2 flex-wrap">
+            {row.distractors.map((distractor, dIdx) => {
+              const text = getDistractorText(distractor);
+              const imageUrl = getDistractorImage(distractor);
+
+              if (showOptionImages) {
+                return (
+                  <div
+                    key={dIdx}
+                    className="flex-1 min-w-[120px] flex items-center gap-2 px-2 py-1.5 border border-gray-200 rounded-md bg-gray-50 text-sm"
+                  >
+                    {imageUrl && (
+                      <img
+                        src={imageUrl}
+                        alt={text}
+                        className="h-10 w-10 object-cover rounded border border-gray-200 flex-shrink-0"
+                      />
+                    )}
+                    <span className="truncate text-gray-700">{text}</span>
+                  </div>
+                );
+              }
+
+              return (
+                <input
+                  key={dIdx}
+                  type="text"
+                  value={text}
+                  onChange={(e) => {
+                    const newDistractors = [...(row.distractors || [])];
+                    newDistractors[dIdx] = setDistractorText(
+                      distractor,
+                      e.target.value,
+                    );
+                    handleUpdateRow(index, "distractors", newDistractors);
+                  }}
+                  className="flex-1 px-2 py-1.5 border border-gray-300 rounded-md text-sm bg-white"
+                  placeholder={t("vocabularySet.distractors.placeholder", {
+                    defaultValue: `干擾項 ${dIdx + 1}`,
+                    number: dIdx + 1,
+                  })}
+                />
+              );
+            })}
           </div>
         </div>
       )}
@@ -1589,6 +1641,7 @@ interface VocabularySetPanelProps {
   isOpen?: boolean;
   isCreating?: boolean; // 是否為新增模式
   isAssignmentCopy?: boolean; // 是否為作業副本（顯示干擾項編輯）
+  showOptionImages?: boolean; // Issue #729: 派發時若啟用顯示選項圖片，干擾項唯讀
 }
 
 const VocabularySetPanel = forwardRef<
@@ -1604,6 +1657,7 @@ const VocabularySetPanel = forwardRef<
     programLevel,
     isCreating = false,
     isAssignmentCopy = false,
+    showOptionImages = false,
   },
   ref,
 ) {
@@ -2006,7 +2060,7 @@ const VocabularySetPanel = forwardRef<
   const handleUpdateRow = (
     index: number,
     field: keyof ContentRow,
-    value: string | string[],
+    value: string | string[] | Distractor[],
   ) => {
     const newRows = [...rows];
     newRows[index] = { ...newRows[index], [field]: value };
@@ -4350,6 +4404,7 @@ const VocabularySetPanel = forwardRef<
                       onRowFocus={() => setActiveRowIndex(index)}
                       onWordLanguageChange={setLastSelectedWordLang}
                       isAssignmentCopy={isAssignmentCopy}
+                      showOptionImages={showOptionImages}
                       duplicateReasons={duplicateMap.get(index)}
                       customTranslationLang={customTranslationLang}
                       sentenceTranslationLang={aiGenerateTranslateLang}

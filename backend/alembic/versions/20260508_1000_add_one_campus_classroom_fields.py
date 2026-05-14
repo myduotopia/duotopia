@@ -75,4 +75,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Intentionally empty: project rule is no destructive migrations
+    # (CLAUDE.md "Database Migration 鐵則"). Dropping these columns would
+    # destroy linked roster data on rollback. Rollbacks are handled by
+    # redeploying an older application image, not by reversing schema.
     pass

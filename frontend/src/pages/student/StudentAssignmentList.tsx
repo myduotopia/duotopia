@@ -44,12 +44,12 @@ const PRACTICE_MODE_ICONS: Record<string, React.ReactNode> = {
   word_cloze: <FileText className="h-7 w-7 sm:h-8 sm:w-8" />,
 };
 
-// Score category colors
+// Score category colors — keys must match ScoreCategory enum values
+// (see docs/design/score-category-mapping.md)
 const SCORE_CATEGORY_COLORS: Record<string, string> = {
   speaking: "bg-orange-100 text-orange-700 border-orange-200",
   listening: "bg-purple-100 text-purple-700 border-purple-200",
   writing: "bg-blue-100 text-blue-700 border-blue-200",
-  vocabulary: "bg-emerald-100 text-emerald-700 border-emerald-200",
   reading: "bg-pink-100 text-pink-700 border-pink-200",
 };
 
