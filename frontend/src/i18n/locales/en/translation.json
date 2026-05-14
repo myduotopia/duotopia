@@ -2693,6 +2693,22 @@
       "updateFailed": "Update failed, but audio was generated"
     }
   },
+  "studentGradeDownloadDialog": {
+    "title": "Download Student Grades ({{count}} student(s))",
+    "description": "Optionally filter by assignment-released date. Leave empty to include everything.",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "confirm": "Download",
+    "cancel": "Cancel",
+    "downloading": "Downloading…",
+    "downloadStarted": "Grade report download started",
+    "downloadFailed": "Download failed, please try again",
+    "invalidRange": "Start date must be on or before end date"
+  },
+  "classGradeDownload": {
+    "downloadStarted": "Grade report download started",
+    "downloadFailed": "Download failed, please try again"
+  },
   "classroomDetail": {
     "title": "Classroom Detail",
     "messages": {
@@ -2750,6 +2766,8 @@
       "backToList": "Back to Classroom List",
       "backToProgramList": "Back to Program List",
       "addStudent": "Add Student",
+      "downloadStudentGrades": "Download Student Grades",
+      "downloadClassGrades": "Download Grade Report",
       "createProgram": "Create Program",
       "assignNewHomework": "Assign New Homework",
       "batchArchive": "Batch Archive",
