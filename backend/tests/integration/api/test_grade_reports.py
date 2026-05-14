@@ -278,17 +278,22 @@ def test_class_grade_report_happy_path(seeded):
     assert ws.cell(row=3, column=3).value == "個人平均"
     # Categories appear in 聽力 → 閱讀 → 寫作 → 口說 order
     banner_cells = [
-        str(c.value)
-        for c in ws[3]
-        if c.value and c.value not in ("座號", "姓名", "個人平均", "班級平均")
+        str(c.value) for c in ws[3] if c.value and c.value not in ("座號", "姓名", "個人平均")
     ]
     assert banner_cells == ["聽力", "閱讀", "口說"]
+    # The rightmost 班級平均 column was removed (issue #708 follow-up):
+    # the rightmost header cell must be the last assignment's category banner
+    # or an assignment cell — never "班級平均".
+    row3_values = [c.value for c in ws[3] if c.value]
+    assert "班級平均" not in row3_values
     # 王小明 row: student_number 01, has scores 88 / 76 / 95
     student_rows = [r for r in ws.iter_rows(min_row=6, max_row=7, values_only=True)]
     names = [r[1] for r in student_rows]
     assert "王小明" in names
     assert "林小花" in names
-    # Footer: 班級平均
+    # Footer: 班級平均 label still anchors the bottom row in cols 1-2,
+    # and the rightmost footer cell is now a per-assignment average (or
+    # blank), never the duplicated overall average.
     last_row = list(ws.iter_rows(values_only=True))[-1]
     assert last_row[0] == "班級平均"
 

@@ -237,14 +237,12 @@ def _build_class_workbook(
             ordered.append((cat, a))
             col += 1
         cat_spans.append((cat, start, col - 1))
-    class_avg_col = col  # 班級平均 sits right after the last assignment.
 
     wb = Workbook()
     ws = wb.active
     ws.title = _sanitize_sheet_title(f"{classroom.name}成績總覽")
 
-    total_cols = class_avg_col
-    last_letter = get_column_letter(total_cols)
+    total_cols = col - 1  # last assignment column
 
     # --- Row 1: title ---
     ws.cell(row=1, column=1, value=f"{classroom.name} 班成績總覽")
@@ -268,10 +266,9 @@ def _build_class_workbook(
         if start != end:
             ws.merge_cells(start_row=3, start_column=start, end_row=3, end_column=end)
         ws.cell(row=3, column=start).alignment = Alignment(horizontal="center")
-    ws.cell(row=3, column=class_avg_col, value="班級平均")
-    # Vertically merge the static columns (座號/姓名/個人平均/班級平均) over
+    # Vertically merge the static columns (座號/姓名/個人平均) over
     # rows 3..5 so they read as a single header cell.
-    for static_col in (1, 2, 3, class_avg_col):
+    for static_col in (1, 2, 3):
         ws.merge_cells(
             start_row=3,
             start_column=static_col,
@@ -355,25 +352,7 @@ def _build_class_workbook(
         ws.cell(row=footer_row, column=4 + col_idx).alignment = Alignment(
             horizontal="center"
         )
-    if overall_avg is not None:
-        ws.cell(row=footer_row, column=class_avg_col, value=overall_avg)
     ws.cell(row=footer_row, column=3).alignment = Alignment(horizontal="center")
-    ws.cell(row=footer_row, column=class_avg_col).alignment = Alignment(
-        horizontal="center"
-    )
-
-    # --- Also fill the per-student 班級平均 column with the overall avg ---
-    # (matches sample: every student row shows the same global number)
-    if overall_avg is not None:
-        for student_idx in range(len(students)):
-            ws.cell(
-                row=first_data_row + student_idx,
-                column=class_avg_col,
-                value=overall_avg,
-            )
-            ws.cell(
-                row=first_data_row + student_idx, column=class_avg_col
-            ).alignment = Alignment(horizontal="center")
 
     # --- Light styling: header background + borders ---
     header_fill = PatternFill("solid", fgColor="F2F2F2")
@@ -393,9 +372,8 @@ def _build_class_workbook(
     ws.column_dimensions["A"].width = 8
     ws.column_dimensions["B"].width = 12
     ws.column_dimensions["C"].width = 10
-    for c in range(4, total_cols):
+    for c in range(4, total_cols + 1):
         ws.column_dimensions[get_column_letter(c)].width = 16
-    ws.column_dimensions[last_letter].width = 10
     ws.row_dimensions[1].height = 24
     ws.row_dimensions[4].height = 30
 
