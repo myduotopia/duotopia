@@ -2909,9 +2909,9 @@ export function AssignmentDialog({
                     </div>
                   </div>
 
-                  <div className="flex-1 min-h-0 w-full grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {/* 左：設定區（mobile 全寬 / desktop 1/4） */}
-                    <div className="col-span-1 min-w-0 space-y-4 overflow-y-auto pr-1 h-full">
+                  <div className="flex-1 min-h-0 w-full flex flex-col md:flex-row gap-4">
+                    {/* 左：設定區（mobile 全寬 / desktop 固定 320px） */}
+                    <div className="md:w-80 md:shrink-0 space-y-4 overflow-y-auto pr-1 h-full">
                       {currentMode && (
                         <div className="p-4 rounded-xl bg-gray-50">
                           <div className="flex items-center gap-3">
@@ -3545,8 +3545,8 @@ export function AssignmentDialog({
 
                     </div>
 
-                    {/* 右：學生畫面預覽（mobile 隱藏 / desktop 3/4） */}
-                    <div className="hidden md:block md:col-span-3 min-w-0 overflow-y-auto pr-1 h-full">
+                    {/* 右：學生畫面預覽（mobile 隱藏 / desktop 吃剩餘空間，太窄自動切 mobile 樣式） */}
+                    <div className="hidden md:block flex-1 min-w-0 overflow-y-auto pr-1 h-full">
                       {formData.practice_mode === "word_reading" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
