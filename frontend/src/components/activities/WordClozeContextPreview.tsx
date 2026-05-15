@@ -143,6 +143,11 @@ export default function WordClozeContextPreview({
 
   return (
     <div className="space-y-2">
+      {settings.play_audio && (
+        <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">
+          🔊 預覽無法預聽音檔，正式作業可聽到音檔
+        </div>
+      )}
       {settings.shuffle_questions && (
         <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
           🔀 學生實際作答時題目順序會被打亂（預覽固定按原順序顯示）
