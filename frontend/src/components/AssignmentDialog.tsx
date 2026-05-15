@@ -3545,8 +3545,8 @@ export function AssignmentDialog({
 
                     </div>
 
-                    {/* 右：學生畫面預覽（mobile 隱藏 / desktop 吃剩餘空間，太窄自動切 mobile 樣式） */}
-                    <div className="hidden md:block flex-1 min-w-0 overflow-y-auto pr-1 h-full">
+                    {/* 右：學生畫面預覽（viewport ≥ 1100px 才顯示，避免被擠扁；min-w 確保可讀） */}
+                    <div className="hidden min-[1100px]:block flex-1 min-w-[480px] overflow-y-auto pr-1 h-full">
                       {formData.practice_mode === "word_reading" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
