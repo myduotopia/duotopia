@@ -71,10 +71,12 @@ import WordReadingPreview from "@/components/activities/WordReadingPreview";
 import WordSelectionPreview from "@/components/activities/WordSelectionPreview";
 import WordSpellingPreview from "@/components/activities/WordSpellingPreview";
 import WordClozeContextPreview from "@/components/activities/WordClozeContextPreview";
+import RearrangementPreview from "@/components/activities/RearrangementPreview";
+import ReadingPreview from "@/components/activities/ReadingPreview";
 
 // Issue #752 PoC: 預覽固定使用 contact@duotopia.co 的「翰林佳音 第二冊 Unit 1」
 const PREVIEW_VOCAB_CONTENT_ID = 282; // Warm up（單字集）
-// PREVIEW_SENTENCES_CONTENT_ID = 283 (Dialogue) — 之後 reading / rearrangement 預覽用
+const PREVIEW_SENTENCES_CONTENT_ID = 283; // Dialogue（例句集）
 
 interface Student {
   id: number;
@@ -3539,6 +3541,36 @@ export function AssignmentDialog({
                               play_audio: formData.play_audio,
                               show_answer: formData.show_answer,
                               target_proficiency: formData.target_proficiency,
+                              time_limit_per_question:
+                                formData.time_limit_per_question,
+                              shuffle_questions: formData.shuffle_questions,
+                            }}
+                          />
+                        </Card>
+                      ) : formData.practice_mode === "rearrangement" ? (
+                        <Card className="p-3 border-gray-200">
+                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
+                            學生畫面預覽（demo 教材）
+                          </h4>
+                          <RearrangementPreview
+                            contentId={PREVIEW_SENTENCES_CONTENT_ID}
+                            settings={{
+                              play_audio: formData.play_audio,
+                              show_answer: formData.show_answer,
+                              time_limit_per_question:
+                                formData.time_limit_per_question,
+                              shuffle_questions: formData.shuffle_questions,
+                            }}
+                          />
+                        </Card>
+                      ) : formData.practice_mode === "reading" ? (
+                        <Card className="p-3 border-gray-200">
+                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
+                            學生畫面預覽（demo 教材）
+                          </h4>
+                          <ReadingPreview
+                            contentId={PREVIEW_SENTENCES_CONTENT_ID}
+                            settings={{
                               time_limit_per_question:
                                 formData.time_limit_per_question,
                               shuffle_questions: formData.shuffle_questions,
