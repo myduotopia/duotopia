@@ -1408,7 +1408,7 @@ export function AssignmentDialog({
         setFormData((prev) => ({
           ...prev,
           practice_mode: "word_reading",
-          time_limit_per_question: 0, // 單字朗讀預設不限時
+          time_limit_per_question: 10, // 單字朗讀固定 10 秒
         }));
       } else {
         // 例句集預設為例句朗讀模式
@@ -2739,7 +2739,7 @@ export function AssignmentDialog({
                     setFormData((prev) => ({
                       ...prev,
                       practice_mode: "word_reading",
-                      time_limit_per_question: 0,
+                      time_limit_per_question: 10,
                     })),
                 },
                 {
@@ -3208,61 +3208,63 @@ export function AssignmentDialog({
 
                       <div className="grid grid-cols-1 gap-y-2">
                         {/* 時間限制 */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-gray-600">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.timeLimit",
-                            )}
-                          </Label>
-                          <select
-                            value={formData.time_limit_per_question}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                time_limit_per_question: Number(
-                                  e.target.value,
-                                ) as 0 | 10 | 20 | 30 | 40,
-                              }))
-                            }
-                            className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm"
-                          >
-                            <option value={0}>
+                        {/* 時間限制 — word_reading 固定 10 秒，不顯示選擇器 */}
+                        {formData.practice_mode !== "word_reading" && (
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-gray-600">
                               {t(
-                                "dialogs.assignmentDialog.practiceMode.unlimited",
+                                "dialogs.assignmentDialog.practiceMode.timeLimit",
                               )}
-                              {(formData.practice_mode === "word_reading" ||
-                                formData.practice_mode === "word_spelling" ||
-                                formData.practice_mode === "word_cloze") &&
-                                ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
-                            </option>
-                            <option value={10}>
-                              10{" "}
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.seconds",
-                              )}
-                            </option>
-                            <option value={20}>
-                              20{" "}
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.seconds",
-                              )}
-                            </option>
-                            <option value={30}>
-                              30{" "}
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.seconds",
-                              )}
-                              {formData.practice_mode === "word_selection" &&
-                                ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
-                            </option>
-                            <option value={40}>
-                              40{" "}
-                              {t(
-                                "dialogs.assignmentDialog.practiceMode.seconds",
-                              )}
-                            </option>
-                          </select>
-                        </div>
+                            </Label>
+                            <select
+                              value={formData.time_limit_per_question}
+                              onChange={(e) =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  time_limit_per_question: Number(
+                                    e.target.value,
+                                  ) as 0 | 10 | 20 | 30 | 40,
+                                }))
+                              }
+                              className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm"
+                            >
+                              <option value={0}>
+                                {t(
+                                  "dialogs.assignmentDialog.practiceMode.unlimited",
+                                )}
+                                {(formData.practice_mode === "word_spelling" ||
+                                  formData.practice_mode === "word_cloze") &&
+                                  ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
+                              </option>
+                              <option value={10}>
+                                10{" "}
+                                {t(
+                                  "dialogs.assignmentDialog.practiceMode.seconds",
+                                )}
+                              </option>
+                              <option value={20}>
+                                20{" "}
+                                {t(
+                                  "dialogs.assignmentDialog.practiceMode.seconds",
+                                )}
+                              </option>
+                              <option value={30}>
+                                30{" "}
+                                {t(
+                                  "dialogs.assignmentDialog.practiceMode.seconds",
+                                )}
+                                {formData.practice_mode === "word_selection" &&
+                                  ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
+                              </option>
+                              <option value={40}>
+                                40{" "}
+                                {t(
+                                  "dialogs.assignmentDialog.practiceMode.seconds",
+                                )}
+                              </option>
+                            </select>
+                          </div>
+                        )}
 
                         {/* 打亂順序 — word_reading 保留；word_selection/spelling/cloze 移除（艾賓浩斯每輪自選） */}
                         {formData.practice_mode === "word_reading" && (
