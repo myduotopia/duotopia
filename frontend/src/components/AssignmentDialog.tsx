@@ -2836,29 +2836,27 @@ export function AssignmentDialog({
                     {/* 左：設定區（1/4） */}
                     <div className="col-span-1 min-w-0 space-y-4 overflow-y-auto pr-1 h-full">
                       {currentMode && (
-                        <div className="flex items-start gap-4 p-4 rounded-xl bg-gray-50">
-                          <span className="text-4xl shrink-0">
-                            {currentMode.emoji}
-                          </span>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <div className="text-base font-semibold text-gray-900">
-                                {t(currentMode.titleKey)}
-                              </div>
-                              <span
-                                className={cn(
-                                  "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold",
-                                  badgeStyles[currentCategory],
-                                )}
-                              >
-                                {t(
-                                  `dialogs.assignmentDialog.practiceMode.scoreCategory.${currentCategory}`,
-                                )}
-                              </span>
+                        <div className="p-4 rounded-xl bg-gray-50">
+                          <div className="flex items-center gap-3">
+                            <span className="text-4xl shrink-0">
+                              {currentMode.emoji}
+                            </span>
+                            <div className="text-base font-semibold text-gray-900">
+                              {t(currentMode.titleKey)}
                             </div>
-                            <div className="text-sm text-gray-600 mt-0.5">
-                              {t(currentMode.descKey)}
-                            </div>
+                            <span
+                              className={cn(
+                                "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold",
+                                badgeStyles[currentCategory],
+                              )}
+                            >
+                              {t(
+                                `dialogs.assignmentDialog.practiceMode.scoreCategory.${currentCategory}`,
+                              )}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-600 mt-2">
+                            {t(currentMode.descKey)}
                           </div>
                         </div>
                       )}
