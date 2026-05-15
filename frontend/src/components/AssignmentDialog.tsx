@@ -2832,9 +2832,9 @@ export function AssignmentDialog({
                     })}
                   </div>
 
-                  <div className="flex-1 min-h-0 w-full">
-                    {/* 設定區：Hero + 進階設定 */}
-                    <div className="space-y-4 overflow-y-auto pr-1 h-full">
+                  <div className="flex-1 min-h-0 w-full flex gap-4">
+                    {/* 左：設定區 */}
+                    <div className="w-[440px] shrink-0 space-y-4 overflow-y-auto pr-1 h-full">
                       {currentMode && (
                         <div className="flex items-start gap-4 p-4 rounded-xl bg-gray-50">
                           <span className="text-4xl shrink-0">
@@ -3466,23 +3466,32 @@ export function AssignmentDialog({
                     </Card>
                   )}
 
-                  {/* Issue #752 PoC: word_reading 即時預覽 */}
-                  {formData.practice_mode === "word_reading" && (
-                    <Card className="p-3 border-gray-200">
-                      <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                        學生畫面預覽（demo 教材）
-                      </h4>
-                      <WordReadingPreview
-                        contentId={PREVIEW_CONTENT_ID_WORD_READING}
-                        settings={{
-                          time_limit_per_question:
-                            formData.time_limit_per_question,
-                          show_image: formData.show_image,
-                          show_translation: formData.show_translation,
-                        }}
-                      />
-                    </Card>
-                  )}
+                    </div>
+
+                    {/* 右：學生畫面預覽 */}
+                    <div className="flex-1 min-w-0 overflow-y-auto pr-1 h-full">
+                      {formData.practice_mode === "word_reading" ? (
+                        <Card className="p-3 border-gray-200">
+                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
+                            學生畫面預覽（demo 教材）
+                          </h4>
+                          <WordReadingPreview
+                            contentId={PREVIEW_CONTENT_ID_WORD_READING}
+                            settings={{
+                              time_limit_per_question:
+                                formData.time_limit_per_question,
+                              show_image: formData.show_image,
+                              show_translation: formData.show_translation,
+                            }}
+                          />
+                        </Card>
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">
+                          {currentMode
+                            ? "此模式預覽尚未實作"
+                            : "選擇一個模式查看預覽"}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
