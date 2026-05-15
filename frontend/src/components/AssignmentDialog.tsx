@@ -2872,7 +2872,7 @@ export function AssignmentDialog({
                           "dialogs.assignmentDialog.practiceMode.advancedSettings",
                         )}
                       </h4>
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                      <div className="grid grid-cols-1 gap-y-2">
                         {/* 時間限制 */}
                         <div className="space-y-1.5">
                           <Label className="text-xs text-gray-600">
@@ -3208,7 +3208,7 @@ export function AssignmentDialog({
                         </div>
                       )}
 
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                      <div className="grid grid-cols-1 gap-y-2">
                         {/* 時間限制 */}
                         <div className="space-y-1.5">
                           <Label className="text-xs text-gray-600">
