@@ -2851,31 +2851,34 @@ export function AssignmentDialog({
               };
               return (
                 <div className="h-full flex flex-col">
-                  {/* 上方 chip 列：橫向卷 + 內容超寬時顯示箭頭 */}
+                  {/* 上方 chip 列：橫向卷 + 箭頭永遠顯示 + 邊緣漸層 */}
                   <div className="relative mb-4">
+                    <button
+                      type="button"
+                      onClick={() => scrollChips("left")}
+                      className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-7 w-7 flex items-center justify-center rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50"
+                      aria-label="向左滑動"
+                    >
+                      <ChevronLeft className="h-4 w-4 text-gray-600" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollChips("right")}
+                      className="absolute right-0 top-1/2 -translate-y-1/2 z-20 h-7 w-7 flex items-center justify-center rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50"
+                      aria-label="向右滑動"
+                    >
+                      <ChevronRight className="h-4 w-4 text-gray-600" />
+                    </button>
+                    {/* 邊緣漸層：暗示「還有更多」（overflow 才顯示） */}
                     {chipCanScrollLeft && (
-                      <button
-                        type="button"
-                        onClick={() => scrollChips("left")}
-                        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 h-7 w-7 flex items-center justify-center rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50"
-                        aria-label="向左滑動"
-                      >
-                        <ChevronLeft className="h-4 w-4 text-gray-600" />
-                      </button>
+                      <div className="pointer-events-none absolute left-7 top-0 bottom-0 z-10 w-6 bg-gradient-to-r from-white to-transparent" />
                     )}
                     {chipCanScrollRight && (
-                      <button
-                        type="button"
-                        onClick={() => scrollChips("right")}
-                        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 h-7 w-7 flex items-center justify-center rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50"
-                        aria-label="向右滑動"
-                      >
-                        <ChevronRight className="h-4 w-4 text-gray-600" />
-                      </button>
+                      <div className="pointer-events-none absolute right-7 top-0 bottom-0 z-10 w-6 bg-gradient-to-l from-white to-transparent" />
                     )}
                     <div
                       ref={chipRowRef}
-                      className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+                      className="flex gap-2 overflow-x-auto px-9 [&::-webkit-scrollbar]:hidden"
                       style={{ scrollbarWidth: "none" }}
                     >
                       {PRACTICE_MODES.map((m) => {
