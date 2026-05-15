@@ -8,6 +8,9 @@
  * - Correct → animation → next question.
  * - Incorrect → retry button (same question stays).
  * - On round completion: stats + Next Round / Submit.
+ *
+ * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
+ *    改動前必讀：docs/design/preview-architecture.md
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";

@@ -4,6 +4,8 @@
  * 從指定的 vocab content 抓單字 + example_sentence，前端把例句中的單字
  * 替換成空格組成 cloze 題，餵給 WordClozeActivity 的 previewQuestions /
  * previewSettings 路徑，不打 student/preview/demo 任何 API。
+ *
+ * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
 import { useEffect, useMemo, useState } from "react";
 import WordClozeActivity from "./WordClozeActivity";

@@ -8,6 +8,8 @@
  * 取捨：設定（play_audio、time_limit 等）來自 demo assignment 自己存的值，
  * 不是老師當下調整的 formData。reading 模式 score_category 固定為 speaking，
  * 影響不大。
+ *
+ * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
 import { useEffect, useState } from "react";
 import { demoApi } from "@/lib/demoApi";

@@ -8,6 +8,9 @@
  * - Incorrect → retry button (same word stays).
  * - When the round is complete, show stats + "Start Next Round" or
  *   "Submit Assignment" once target proficiency is reached.
+ *
+ * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
+ *    改動前必讀：docs/design/preview-architecture.md
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";

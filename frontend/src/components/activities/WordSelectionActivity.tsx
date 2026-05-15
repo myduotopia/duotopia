@@ -20,6 +20,9 @@
  * - 4 個選項顯示英文（後端依 show_image 切換 distractors 語言）
  * - 答案比對使用後端傳的 correct_text（fallback: 依 showImage flag 決定 text/translation）
  * - 不顯示文字提示語（畫面已直覺）
+ *
+ * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
+ *    改動前必讀：docs/design/preview-architecture.md
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";

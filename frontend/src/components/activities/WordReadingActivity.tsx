@@ -9,6 +9,9 @@
  * - 處理錄音上傳
  * - 顯示 AI 評估結果
  * - 提交作業
+ *
+ * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
+ *    改動前必讀：docs/design/preview-architecture.md
  */
 
 import { useState, useEffect, useCallback } from "react";

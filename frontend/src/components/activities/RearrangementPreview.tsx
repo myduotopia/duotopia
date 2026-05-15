@@ -9,6 +9,8 @@
  *
  * 取捨：預覽顯示的設定來自 demo assignment 自己存的值，不會跟著老師
  * 當下調 toggle 變動。
+ *
+ * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
 import { useEffect, useState } from "react";
 import { demoApi } from "@/lib/demoApi";

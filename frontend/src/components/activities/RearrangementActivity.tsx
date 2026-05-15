@@ -7,6 +7,9 @@
  * - 錯誤限制：<=10字 3次, 11-25字 5次
  * - 可選音檔播放（聽力模式）
  * - 計時功能
+ *
+ * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
+ *    改動前必讀：docs/design/preview-architecture.md
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";

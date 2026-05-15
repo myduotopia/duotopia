@@ -7,6 +7,8 @@
  *
  * 不會打 student/preview/demo 任何路徑——透過 WordReadingActivity 的
  * `previewItems` + `previewSettings` 走完全離線渲染。
+ *
+ * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
 import { useEffect, useState } from "react";
 import WordReadingActivity from "./WordReadingActivity";

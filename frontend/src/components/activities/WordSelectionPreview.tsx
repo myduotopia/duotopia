@@ -4,6 +4,8 @@
  * 從指定的公開 content_id 抓單字，前端組成 4 選項（正解 + 3 干擾項），
  * 餵給 WordSelectionActivity 的 previewWords / previewSettings 路徑，
  * 不打 student/preview/demo 任何 API。
+ *
+ * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
 import { useEffect, useMemo, useState } from "react";
 import WordSelectionActivity from "./WordSelectionActivity";

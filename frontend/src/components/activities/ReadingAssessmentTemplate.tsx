@@ -1,3 +1,9 @@
+/**
+ * ReadingAssessmentTemplate — 例句朗讀單題顯示元件
+ *
+ * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
+ *    改動前必讀：docs/design/preview-architecture.md
+ */
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
