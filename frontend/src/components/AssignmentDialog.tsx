@@ -2740,6 +2740,13 @@ export function AssignmentDialog({
                 titleKey: string;
                 descKey: string;
                 isMemoryBased?: boolean; // 採用艾賓浩斯記憶曲線
+                /**
+                 * 顏色與學生端 StudentAssignmentList.tsx 對齊。
+                 * chipSelected: chip 選中時的 border + bg + text
+                 * iconColor: Hero 區塊 icon 顏色
+                 */
+                chipSelected: string;
+                iconColor: string;
                 onClick: () => void;
               }> = [
                 {
@@ -2747,6 +2754,9 @@ export function AssignmentDialog({
                   Icon: Mic,
                   titleKey: "dialogs.assignmentDialog.practiceMode.reading",
                   descKey: "dialogs.assignmentDialog.practiceMode.readingDesc",
+                  chipSelected:
+                    "border-orange-500 bg-orange-50 text-orange-700",
+                  iconColor: "text-orange-600",
                   onClick: () =>
                     setFormData((prev) => ({
                       ...prev,
@@ -2761,6 +2771,8 @@ export function AssignmentDialog({
                     "dialogs.assignmentDialog.practiceMode.rearrangement",
                   descKey:
                     "dialogs.assignmentDialog.practiceMode.rearrangementDesc",
+                  chipSelected: "border-blue-500 bg-blue-50 text-blue-700",
+                  iconColor: "text-blue-600",
                   onClick: () =>
                     setFormData((prev) => ({
                       ...prev,
@@ -2774,6 +2786,9 @@ export function AssignmentDialog({
                     "dialogs.assignmentDialog.practiceMode.wordReading",
                   descKey:
                     "dialogs.assignmentDialog.practiceMode.wordReadingDesc",
+                  chipSelected:
+                    "border-purple-500 bg-purple-50 text-purple-700",
+                  iconColor: "text-purple-600",
                   onClick: () =>
                     setFormData((prev) => ({
                       ...prev,
@@ -2789,6 +2804,9 @@ export function AssignmentDialog({
                   descKey:
                     "dialogs.assignmentDialog.practiceMode.wordSelectionDesc",
                   isMemoryBased: true,
+                  chipSelected:
+                    "border-emerald-500 bg-emerald-50 text-emerald-700",
+                  iconColor: "text-emerald-600",
                   onClick: () =>
                     setFormData((prev) => ({
                       ...prev,
@@ -2804,6 +2822,8 @@ export function AssignmentDialog({
                   descKey:
                     "dialogs.assignmentDialog.practiceMode.wordSpellingDesc",
                   isMemoryBased: true,
+                  chipSelected: "border-amber-500 bg-amber-50 text-amber-700",
+                  iconColor: "text-amber-600",
                   onClick: () =>
                     setFormData((prev) => ({
                       ...prev,
@@ -2823,6 +2843,8 @@ export function AssignmentDialog({
                   descKey:
                     "dialogs.assignmentDialog.practiceMode.wordClozeDesc",
                   isMemoryBased: true,
+                  chipSelected: "border-pink-500 bg-pink-50 text-pink-700",
+                  iconColor: "text-pink-600",
                   onClick: () =>
                     setFormData((prev) => ({
                       ...prev,
@@ -2891,7 +2913,7 @@ export function AssignmentDialog({
                             className={cn(
                               "shrink-0 flex items-center gap-2 px-3 py-2 rounded-full border text-sm transition-all",
                               selected
-                                ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm font-semibold"
+                                ? cn(m.chipSelected, "shadow-sm font-semibold")
                                 : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50",
                             )}
                           >
@@ -2915,7 +2937,12 @@ export function AssignmentDialog({
                       {currentMode && (
                         <div className="p-4 rounded-xl bg-gray-50">
                           <div className="flex items-center gap-3">
-                            <currentMode.Icon className="h-8 w-8 shrink-0 text-gray-700" />
+                            <currentMode.Icon
+                              className={cn(
+                                "h-8 w-8 shrink-0",
+                                currentMode.iconColor,
+                              )}
+                            />
                             <div className="text-base font-semibold text-gray-900">
                               {t(currentMode.titleKey)}
                             </div>
