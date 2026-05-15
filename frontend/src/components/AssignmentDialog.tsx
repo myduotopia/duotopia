@@ -2805,11 +2805,8 @@ export function AssignmentDialog({
               };
               return (
                 <div className="h-full flex flex-col">
-                  <div className="flex items-center gap-3 mb-4">
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      {t("dialogs.assignmentDialog.steps.practiceMode")}
-                    </h2>
-                    {currentMode && (
+                  {currentMode && (
+                    <div className="flex items-center gap-3 mb-4">
                       <span
                         className={cn(
                           "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold",
@@ -2820,8 +2817,8 @@ export function AssignmentDialog({
                           `dialogs.assignmentDialog.practiceMode.scoreCategory.${currentCategory}`,
                         )}
                       </span>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* 上方 chip 列：練習模式選擇 */}
                   <div className="flex flex-wrap gap-2 mb-4">
