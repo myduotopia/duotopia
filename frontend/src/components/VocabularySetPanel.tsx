@@ -4178,7 +4178,8 @@ const VocabularySetPanel = forwardRef<
 
       {/* Desktop: Side-by-side layout / Mobile: Editor only */}
       <div className="flex flex-1 gap-4 min-h-0">
-        {/* Left: Batch Work Area (Desktop only) */}
+        {/* Left: Batch Work Area (Desktop only) — hidden for assignment copy */}
+        {!isAssignmentCopy && (
         <BatchWorkPanel
           text={batchPasteText}
           onTextChange={setBatchPasteText}
@@ -4329,6 +4330,7 @@ const VocabularySetPanel = forwardRef<
             )}
           </div>
         </BatchWorkPanel>
+        )}
 
         {/* Right: Word Editor Area */}
         <div className="flex-1 flex flex-col min-h-0">
@@ -4388,15 +4390,17 @@ const VocabularySetPanel = forwardRef<
                   );
                 })}
 
-                {/* Add Row Button */}
-                <button
-                  onClick={handleAddRow}
-                  className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600"
-                  disabled={rows.length >= BATCH_PASTE_MAX}
-                >
-                  <Plus className="h-5 w-5" />
-                  {t("contentEditor.buttons.addItem")}
-                </button>
+                {/* Add Row Button — hidden for assignment copy */}
+                {!isAssignmentCopy && (
+                  <button
+                    onClick={handleAddRow}
+                    className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600"
+                    disabled={rows.length >= BATCH_PASTE_MAX}
+                  >
+                    <Plus className="h-5 w-5" />
+                    {t("contentEditor.buttons.addItem")}
+                  </button>
+                )}
               </div>
             </SortableContext>
           </DndContext>

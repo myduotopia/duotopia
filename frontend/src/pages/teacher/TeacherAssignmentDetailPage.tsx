@@ -1350,7 +1350,13 @@ export default function TeacherAssignmentDetailPage() {
             open={editingContentId !== null}
             onOpenChange={(open) => !open && setEditingContentId(null)}
           >
-            <DialogContent className="max-w-[100vw] sm:max-w-4xl h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-y-auto rounded-none sm:rounded-lg p-4 sm:p-6">
+            <DialogContent
+              className={`max-w-[100vw] h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-y-auto rounded-none sm:rounded-lg p-4 sm:p-6 ${
+                assignment?.practice_mode === "word_selection"
+                  ? "sm:max-w-3xl"
+                  : "sm:max-w-4xl"
+              }`}
+            >
               <DialogHeader>
                 <DialogTitle>
                   {t("assignmentDetail.labels.editContent", "編輯作業內容")}
