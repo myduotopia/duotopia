@@ -40,6 +40,13 @@ import {
   Globe,
   Building2,
   Settings,
+  Mic,
+  Shuffle,
+  MousePointerClick,
+  Volume2,
+  Keyboard,
+  Brain,
+  type LucideIcon,
 } from "lucide-react";
 import {
   DndContext,
@@ -2701,14 +2708,15 @@ export function AssignmentDialog({
                   | "word_selection"
                   | "word_spelling"
                   | "word_cloze";
-                emoji: string;
+                Icon: LucideIcon;
                 titleKey: string;
                 descKey: string;
+                isMemoryBased?: boolean; // 採用艾賓浩斯記憶曲線
                 onClick: () => void;
               }> = [
                 {
                   id: "reading",
-                  emoji: "🎙️",
+                  Icon: Mic,
                   titleKey: "dialogs.assignmentDialog.practiceMode.reading",
                   descKey: "dialogs.assignmentDialog.practiceMode.readingDesc",
                   onClick: () =>
@@ -2720,7 +2728,7 @@ export function AssignmentDialog({
                 },
                 {
                   id: "rearrangement",
-                  emoji: "🔀",
+                  Icon: Shuffle,
                   titleKey:
                     "dialogs.assignmentDialog.practiceMode.rearrangement",
                   descKey:
@@ -2733,7 +2741,7 @@ export function AssignmentDialog({
                 },
                 {
                   id: "word_reading",
-                  emoji: "🎙️",
+                  Icon: Volume2,
                   titleKey:
                     "dialogs.assignmentDialog.practiceMode.wordReading",
                   descKey:
@@ -2747,11 +2755,12 @@ export function AssignmentDialog({
                 },
                 {
                   id: "word_selection",
-                  emoji: "🧠",
+                  Icon: MousePointerClick,
                   titleKey:
                     "dialogs.assignmentDialog.practiceMode.wordSelection",
                   descKey:
                     "dialogs.assignmentDialog.practiceMode.wordSelectionDesc",
+                  isMemoryBased: true,
                   onClick: () =>
                     setFormData((prev) => ({
                       ...prev,
@@ -2761,11 +2770,12 @@ export function AssignmentDialog({
                 },
                 {
                   id: "word_spelling",
-                  emoji: "✏️",
+                  Icon: Keyboard,
                   titleKey:
                     "dialogs.assignmentDialog.practiceMode.wordSpelling",
                   descKey:
                     "dialogs.assignmentDialog.practiceMode.wordSpellingDesc",
+                  isMemoryBased: true,
                   onClick: () =>
                     setFormData((prev) => ({
                       ...prev,
@@ -2780,10 +2790,11 @@ export function AssignmentDialog({
                 },
                 {
                   id: "word_cloze",
-                  emoji: "📝",
+                  Icon: FileText,
                   titleKey: "dialogs.assignmentDialog.practiceMode.wordCloze",
                   descKey:
                     "dialogs.assignmentDialog.practiceMode.wordClozeDesc",
+                  isMemoryBased: true,
                   onClick: () =>
                     setFormData((prev) => ({
                       ...prev,
@@ -2828,8 +2839,14 @@ export function AssignmentDialog({
                               : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50",
                           )}
                         >
-                          <span className="text-base">{m.emoji}</span>
+                          <m.Icon className="h-4 w-4 shrink-0" />
                           <span>{t(m.titleKey)}</span>
+                          {m.isMemoryBased && (
+                            <Brain
+                              className="h-3.5 w-3.5 shrink-0 opacity-70"
+                              aria-label="採用艾賓浩斯記憶曲線"
+                            />
+                          )}
                         </button>
                       );
                     })}
@@ -2841,9 +2858,7 @@ export function AssignmentDialog({
                       {currentMode && (
                         <div className="p-4 rounded-xl bg-gray-50">
                           <div className="flex items-center gap-3">
-                            <span className="text-4xl shrink-0">
-                              {currentMode.emoji}
-                            </span>
+                            <currentMode.Icon className="h-8 w-8 shrink-0 text-gray-700" />
                             <div className="text-base font-semibold text-gray-900">
                               {t(currentMode.titleKey)}
                             </div>
@@ -3551,14 +3566,18 @@ export function AssignmentDialog({
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
                             學生畫面預覽（demo 教材）
                           </h4>
-                          <RearrangementPreview />
+                          <RearrangementPreview
+                            shuffleQuestions={formData.shuffle_questions}
+                          />
                         </Card>
                       ) : formData.practice_mode === "reading" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
                             學生畫面預覽（demo 教材）
                           </h4>
-                          <ReadingPreview />
+                          <ReadingPreview
+                            shuffleQuestions={formData.shuffle_questions}
+                          />
                         </Card>
                       ) : (
                         <div className="h-full flex items-center justify-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">

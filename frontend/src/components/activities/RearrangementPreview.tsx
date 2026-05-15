@@ -26,7 +26,13 @@ interface DemoActivityResponse {
   activities: Activity[];
 }
 
-export default function RearrangementPreview() {
+interface RearrangementPreviewProps {
+  shuffleQuestions?: boolean;
+}
+
+export default function RearrangementPreview({
+  shuffleQuestions,
+}: RearrangementPreviewProps = {}) {
   const [data, setData] = useState<DemoActivityResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +80,12 @@ export default function RearrangementPreview() {
   }
 
   return (
+    <div className="space-y-2">
+      {shuffleQuestions && (
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
+          🔀 學生實際作答時題目順序會被打亂（預覽固定按原順序顯示）
+        </div>
+      )}
     <StudentActivityPageContent
       activities={data.activities}
       assignmentTitle={data.title}
@@ -86,5 +98,6 @@ export default function RearrangementPreview() {
       onBack={() => {}}
       onSubmit={async () => {}}
     />
+    </div>
   );
 }
