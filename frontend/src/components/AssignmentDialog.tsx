@@ -2866,13 +2866,13 @@ export function AssignmentDialog({
                       {/* ===== 例句集細節設定 (reading / rearrangement) ===== */}
                   {(formData.practice_mode === "reading" ||
                     formData.practice_mode === "rearrangement") && (
-                    <Card className="p-4 border-gray-200">
-                      <h4 className="text-sm font-medium mb-3 text-gray-700">
+                    <Card className="p-3 border-gray-200">
+                      <h4 className="text-xs font-semibold mb-2 text-gray-700">
                         {t(
                           "dialogs.assignmentDialog.practiceMode.advancedSettings",
                         )}
                       </h4>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                         {/* 時間限制 */}
                         <div className="space-y-1.5">
                           <Label className="text-xs text-gray-600">
@@ -3054,8 +3054,8 @@ export function AssignmentDialog({
                     formData.practice_mode === "word_selection" ||
                     formData.practice_mode === "word_spelling" ||
                     formData.practice_mode === "word_cloze") && (
-                    <Card className="p-4 border-gray-200">
-                      <h4 className="text-sm font-medium mb-3 text-gray-700">
+                    <Card className="p-3 border-gray-200">
+                      <h4 className="text-xs font-semibold mb-2 text-gray-700">
                         {t(
                           "dialogs.assignmentDialog.practiceMode.advancedSettings",
                         )}
@@ -3065,7 +3065,7 @@ export function AssignmentDialog({
                       {(formData.practice_mode === "word_selection" ||
                         formData.practice_mode === "word_spelling" ||
                         formData.practice_mode === "word_cloze") && (
-                        <div className="mb-4 pb-4 border-b">
+                        <div className="mb-3 pb-3 border-b">
                           <div className="flex items-center justify-between mb-2">
                             <Label className="text-xs text-gray-600">
                               {t(
@@ -3102,7 +3102,7 @@ export function AssignmentDialog({
                       {(formData.practice_mode === "word_selection" ||
                         formData.practice_mode === "word_spelling" ||
                         formData.practice_mode === "word_cloze") && (
-                        <div className="mb-4 pb-4 border-b">
+                        <div className="mb-3 pb-3 border-b">
                           <Label className="text-xs text-gray-600 mb-2 block">
                             {t(
                               "dialogs.assignmentDialog.practiceMode.questionDisplay",
@@ -3208,7 +3208,7 @@ export function AssignmentDialog({
                         </div>
                       )}
 
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                         {/* 時間限制 */}
                         <div className="space-y-1.5">
                           <Label className="text-xs text-gray-600">
@@ -3468,8 +3468,8 @@ export function AssignmentDialog({
 
                   {/* Issue #752 PoC: word_reading 即時預覽 */}
                   {formData.practice_mode === "word_reading" && (
-                    <Card className="p-4 border-gray-200">
-                      <h4 className="text-sm font-medium mb-3 text-gray-700">
+                    <Card className="p-3 border-gray-200">
+                      <h4 className="text-xs font-semibold mb-2 text-gray-700">
                         學生畫面預覽（demo 教材）
                       </h4>
                       <WordReadingPreview
