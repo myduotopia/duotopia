@@ -1,0 +1,101 @@
+/**
+ * WordReadingPreview — 派發 sheet 內的 word_reading 即時預覽
+ *
+ * 用途：在 AssignmentDialog 設定區下方掛載，老師調整設定時可看見
+ * 學生畫面樣貌。資料來自指定的公開 content（content_id），設定來自
+ * 老師當下調整的 formData。
+ *
+ * 不會打 student/preview/demo 任何路徑——透過 WordReadingActivity 的
+ * `previewItems` + `previewSettings` 走完全離線渲染。
+ */
+import { useEffect, useState } from "react";
+import WordReadingActivity from "./WordReadingActivity";
+import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
+
+interface WordReadingPreviewProps {
+  contentId: number;
+  settings: {
+    time_limit_per_question?: number;
+    show_image?: boolean;
+    show_translation?: boolean;
+  };
+}
+
+interface ContentItem {
+  id: number;
+  text: string;
+  translation?: string;
+  audio_url?: string;
+  image_url?: string;
+  part_of_speech?: string;
+}
+
+export default function WordReadingPreview({
+  contentId,
+  settings,
+}: WordReadingPreviewProps) {
+  const { token } = useTeacherAuthStore();
+  const [items, setItems] = useState<ContentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchContent() {
+      setLoading(true);
+      setError(null);
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "";
+        const resp = await fetch(`${apiUrl}/api/teachers/contents/${contentId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (!cancelled) {
+          setItems(data.items || []);
+          setLoading(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load preview");
+          setLoading(false);
+        }
+      }
+    }
+    if (token) fetchContent();
+    return () => {
+      cancelled = true;
+    };
+  }, [contentId, token]);
+
+  if (!token) {
+    return (
+      <div className="p-4 text-sm text-gray-500">
+        Preview unavailable (no teacher token)
+      </div>
+    );
+  }
+  if (loading) {
+    return <div className="p-4 text-sm text-gray-500">Loading preview…</div>;
+  }
+  if (error) {
+    return (
+      <div className="p-4 text-sm text-red-600">
+        Preview error: {error}
+      </div>
+    );
+  }
+
+  return (
+    <WordReadingActivity
+      assignmentId={0}
+      previewItems={items}
+      previewSettings={{
+        time_limit_per_question: settings.time_limit_per_question,
+        show_image: settings.show_image,
+        show_translation: settings.show_translation,
+        can_use_ai_analysis: false,
+      }}
+    />
+  );
+}

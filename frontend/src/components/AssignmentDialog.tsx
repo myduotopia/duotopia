@@ -67,6 +67,10 @@ import {
   getScoreCategory,
   type ScoreCategory,
 } from "@/utils/scoreCategory";
+import WordReadingPreview from "@/components/activities/WordReadingPreview";
+
+// Issue #752 PoC: 預覽固定使用 contact@duotopia.co 的「翰林佳音 第二冊 Unit 1 Warm up」
+const PREVIEW_CONTENT_ID_WORD_READING = 282;
 
 interface Student {
   id: number;
@@ -3459,6 +3463,24 @@ export function AssignmentDialog({
                             );
                           })()}
                       </div>
+                    </Card>
+                  )}
+
+                  {/* Issue #752 PoC: word_reading 即時預覽 */}
+                  {formData.practice_mode === "word_reading" && (
+                    <Card className="p-4 border-gray-200">
+                      <h4 className="text-sm font-medium mb-3 text-gray-700">
+                        學生畫面預覽（demo 教材）
+                      </h4>
+                      <WordReadingPreview
+                        contentId={PREVIEW_CONTENT_ID_WORD_READING}
+                        settings={{
+                          time_limit_per_question:
+                            formData.time_limit_per_question,
+                          show_image: formData.show_image,
+                          show_translation: formData.show_translation,
+                        }}
+                      />
                     </Card>
                   )}
                     </div>

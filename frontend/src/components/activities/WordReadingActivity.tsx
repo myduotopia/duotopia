@@ -80,6 +80,14 @@ interface WordReadingActivityProps {
   // Issue #689: 用於前端錄音次數限制重置條件
   assignmentStatus?: AssignmentStatusLike | null;
   returnedAt?: string | null;
+  // Issue #752: dialog 內即時預覽 — 跳過 API fetch，直接吃 props
+  previewItems?: WordItem[];
+  previewSettings?: {
+    time_limit_per_question?: number;
+    show_image?: boolean;
+    show_translation?: boolean;
+    can_use_ai_analysis?: boolean;
+  };
 }
 
 export default function WordReadingActivity({
@@ -95,7 +103,10 @@ export default function WordReadingActivity({
   timeLimitPerQuestion: timeLimitProp,
   assignmentStatus,
   returnedAt,
+  previewItems,
+  previewSettings,
 }: WordReadingActivityProps) {
+  const isLivePreview = !!previewItems;
   const { t } = useTranslation();
   const { token: studentToken } = useStudentAuthStore();
   // 預覽模式使用傳入的 authToken（老師 token），否則使用學生 token
@@ -150,6 +161,7 @@ export default function WordReadingActivity({
     !readOnly &&
     !isPreviewMode &&
     !isDemoMode &&
+    !isLivePreview &&
     canUseAiAnalysisProp !== false;
   const recordingDisabledForCurrent =
     currentItemLockedInReturnedMode || (gateActive && !currentCanRecord);
@@ -212,8 +224,17 @@ export default function WordReadingActivity({
   }, [assignmentId, token, isPreviewMode, isDemoMode, t]);
 
   useEffect(() => {
+    if (isLivePreview && previewItems) {
+      setItems(previewItems);
+      setTimeLimitFromApi(previewSettings?.time_limit_per_question ?? 0);
+      setShowImageFromApi(previewSettings?.show_image ?? true);
+      setShowTranslationFromApi(previewSettings?.show_translation ?? true);
+      setCanUseAiAnalysisFromApi(previewSettings?.can_use_ai_analysis ?? true);
+      setLoading(false);
+      return;
+    }
     loadItems();
-  }, [loadItems]);
+  }, [loadItems, isLivePreview, previewItems, previewSettings]);
 
   // Handle recording complete
   const handleRecordingComplete = async (blob: Blob, url: string) => {
@@ -231,8 +252,8 @@ export default function WordReadingActivity({
       return updated;
     });
 
-    // Skip upload in preview mode or demo mode
-    if (isPreviewMode || isDemoMode) {
+    // Skip upload in preview mode, demo mode, or live preview
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       toast.success(
         t("wordReading.toast.recordedPreview") ||
           "Recording saved (preview mode)",
@@ -365,7 +386,7 @@ export default function WordReadingActivity({
 
     // 背景呼叫後端 DELETE API：需要 persisted progress，且非 preview/demo
     if (!currentItem?.progress_id) return;
-    if (isPreviewMode || isDemoMode) return;
+    if (isPreviewMode || isDemoMode || isLivePreview) return;
 
     const apiUrl = import.meta.env.VITE_API_URL || "";
     const deleteUrl = `${apiUrl}/api/speech/assessment/${assignmentId}/progress/${currentItem.progress_id}`;
@@ -377,7 +398,7 @@ export default function WordReadingActivity({
 
   // Submit assignment
   const handleSubmit = async () => {
-    if (isPreviewMode || isDemoMode) {
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       toast.info(
         t("wordReading.toast.cannotSubmitPreview") ||
           "Cannot submit in preview mode",
