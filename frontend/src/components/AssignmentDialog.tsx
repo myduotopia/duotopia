@@ -2832,9 +2832,9 @@ export function AssignmentDialog({
                     })}
                   </div>
 
-                  <div className="flex-1 min-h-0 w-full flex gap-4">
-                    {/* 左：設定區 */}
-                    <div className="w-[440px] shrink-0 space-y-4 overflow-y-auto pr-1 h-full">
+                  <div className="flex-1 min-h-0 w-full grid grid-cols-4 gap-4">
+                    {/* 左：設定區（1/4） */}
+                    <div className="col-span-1 min-w-0 space-y-4 overflow-y-auto pr-1 h-full">
                       {currentMode && (
                         <div className="flex items-start gap-4 p-4 rounded-xl bg-gray-50">
                           <span className="text-4xl shrink-0">
@@ -3468,8 +3468,8 @@ export function AssignmentDialog({
 
                     </div>
 
-                    {/* 右：學生畫面預覽 */}
-                    <div className="flex-1 min-w-0 overflow-y-auto pr-1 h-full">
+                    {/* 右：學生畫面預覽（3/4） */}
+                    <div className="col-span-3 min-w-0 overflow-y-auto pr-1 h-full">
                       {formData.practice_mode === "word_reading" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
