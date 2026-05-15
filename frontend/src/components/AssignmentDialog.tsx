@@ -430,14 +430,14 @@ export function AssignmentDialog({
     due_date: undefined as Date | undefined,
     start_date: undefined as Date | undefined,
     // ===== 例句集作答模式設定 =====
-    practice_mode: "" as
+    practice_mode: "word_selection" as
       | ""
       | "reading"
       | "rearrangement"
       | "word_reading"
       | "word_selection"
       | "word_spelling"
-      | "word_cloze", // 作答模式（空字串 = 未選擇）
+      | "word_cloze", // 作答模式（預設單字選擇）
     time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40, // 每題時間限制 (0 = 不限時)
     shuffle_questions: false, // 是否打亂順序
     show_answer: false, // 答題結束後是否顯示正確答案（例句重組專用）
@@ -631,7 +631,7 @@ export function AssignmentDialog({
         assign_to_all: true,
         due_date: undefined,
         start_date: new Date(),
-        practice_mode: "",
+        practice_mode: "word_selection",
         time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40,
         shuffle_questions: false,
         show_answer: false,
@@ -1325,7 +1325,7 @@ export function AssignmentDialog({
       assign_to_all: true,
       due_date: undefined,
       start_date: undefined,
-      practice_mode: "",
+      practice_mode: "word_selection",
       time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40,
       shuffle_questions: false,
       show_answer: false,
