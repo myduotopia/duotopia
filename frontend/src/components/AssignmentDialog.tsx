@@ -1445,7 +1445,7 @@ export function AssignmentDialog({
         className={cn(
           "!w-full h-full flex flex-col p-0 transition-[max-width] duration-300 ease-out",
           currentStep === 1 && !formData.practice_mode
-            ? "!max-w-[320px] sm:!max-w-[320px]"
+            ? "!max-w-[340px] sm:!max-w-[340px]"
             : "!max-w-[calc(100vw-16rem)] sm:!max-w-[calc(100vw-16rem)]",
         )}
       >
@@ -2833,7 +2833,7 @@ export function AssignmentDialog({
 
                   <div className="flex-1 min-h-0 flex gap-6 w-full">
                     {/* 左 rail：練習模式 row list */}
-                    <div className="w-[220px] shrink-0 space-y-2 overflow-y-auto pr-1">
+                    <div className="w-[260px] shrink-0 space-y-2 overflow-y-auto pr-1">
                       {PRACTICE_MODES.map((m) => {
                         const selected = formData.practice_mode === m.id;
                         return (
@@ -2864,7 +2864,7 @@ export function AssignmentDialog({
                               </div>
                               <div
                                 className={cn(
-                                  "text-xs truncate",
+                                  "text-xs leading-snug",
                                   selected
                                     ? "text-blue-600"
                                     : "text-gray-500",
