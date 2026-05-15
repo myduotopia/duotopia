@@ -1442,7 +1442,7 @@ export function AssignmentDialog({
       <SheetContent
         side="right"
         aria-describedby={undefined}
-        className="!w-full !max-w-5xl h-full flex flex-col p-0 sm:!max-w-5xl"
+        className="!w-full !max-w-[calc(100vw-16rem)] h-full flex flex-col p-0 sm:!max-w-[calc(100vw-16rem)]"
       >
         {/* Compact Header with Clear Steps - 響應式方案 C */}
         <div className="px-6 py-3 border-b bg-gray-50">
