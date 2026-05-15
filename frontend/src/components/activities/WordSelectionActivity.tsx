@@ -410,8 +410,8 @@ export default function WordSelectionActivity({
       setShowImage(previewSettings?.show_image ?? true);
       setShowOptionImages(previewSettings?.show_option_images ?? false);
       setPlayAudio(previewSettings?.play_audio ?? false);
-      setTimeLimit(previewSettings?.time_limit_per_question ?? null);
-      setTimeRemaining(previewSettings?.time_limit_per_question ?? null);
+      setTimeLimit(previewSettings?.time_limit_per_question || null);
+      setTimeRemaining(previewSettings?.time_limit_per_question || null);
       setProficiency({
         current_mastery: 0,
         target_mastery: previewSettings?.target_proficiency ?? 80,

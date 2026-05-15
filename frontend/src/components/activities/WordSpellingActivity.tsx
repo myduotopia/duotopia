@@ -356,8 +356,8 @@ export default function WordSpellingActivity({
         (previewSettings?.show_answer ?? false) ||
           (previewSettings?.play_audio ?? false),
       );
-      setTimeLimit(previewSettings?.time_limit_per_question ?? null);
-      setTimeRemaining(previewSettings?.time_limit_per_question ?? null);
+      setTimeLimit(previewSettings?.time_limit_per_question || null);
+      setTimeRemaining(previewSettings?.time_limit_per_question || null);
       setProficiency({
         current_mastery: 0,
         target_mastery: previewSettings?.target_proficiency ?? 80,
