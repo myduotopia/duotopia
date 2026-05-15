@@ -1416,10 +1416,11 @@ export function AssignmentDialog({
           time_limit_per_question: 10, // 單字朗讀固定 10 秒
         }));
       } else {
-        // 例句集預設為例句朗讀模式
+        // 例句集預設為例句朗讀模式（固定 30 秒）
         setFormData((prev) => ({
           ...prev,
           practice_mode: "reading",
+          time_limit_per_question: 30,
         }));
       }
     }
@@ -2714,10 +2715,7 @@ export function AssignmentDialog({
                     setFormData((prev) => ({
                       ...prev,
                       practice_mode: "reading",
-                      time_limit_per_question:
-                        prev.time_limit_per_question === 0
-                          ? 30
-                          : prev.time_limit_per_question,
+                      time_limit_per_question: 30, // reading 固定 30 秒
                     })),
                 },
                 {
@@ -2876,7 +2874,8 @@ export function AssignmentDialog({
                         )}
                       </h4>
                       <div className="grid grid-cols-1 gap-y-2">
-                        {/* 時間限制 */}
+                        {/* 時間限制 — reading 固定 30 秒，不顯示選擇器 */}
+                        {formData.practice_mode !== "reading" && (
                         <div className="space-y-1.5">
                           <Label className="text-xs text-gray-600">
                             {t(
@@ -2931,6 +2930,7 @@ export function AssignmentDialog({
                             </option>
                           </select>
                         </div>
+                        )}
 
                         {/* 打亂順序 */}
                         <div className="space-y-1.5">
