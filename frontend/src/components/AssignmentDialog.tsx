@@ -1459,7 +1459,7 @@ export function AssignmentDialog({
       <SheetContent
         side="right"
         aria-describedby={undefined}
-        className="!w-full !max-w-[calc(100vw-16rem)] h-full flex flex-col p-0 sm:!max-w-[calc(100vw-16rem)]"
+        className="!w-full !max-w-full md:!max-w-[calc(100vw-16rem)] h-full flex flex-col p-0"
       >
         {/* Compact Header with Clear Steps - 響應式方案 C */}
         <div className="px-6 py-3 border-b bg-gray-50">
@@ -2852,8 +2852,8 @@ export function AssignmentDialog({
                     })}
                   </div>
 
-                  <div className="flex-1 min-h-0 w-full grid grid-cols-4 gap-4">
-                    {/* 左：設定區（1/4） */}
+                  <div className="flex-1 min-h-0 w-full grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* 左：設定區（mobile 全寬 / desktop 1/4） */}
                     <div className="col-span-1 min-w-0 space-y-4 overflow-y-auto pr-1 h-full">
                       {currentMode && (
                         <div className="p-4 rounded-xl bg-gray-50">
@@ -3488,8 +3488,8 @@ export function AssignmentDialog({
 
                     </div>
 
-                    {/* 右：學生畫面預覽（3/4） */}
-                    <div className="col-span-3 min-w-0 overflow-y-auto pr-1 h-full">
+                    {/* 右：學生畫面預覽（mobile 隱藏 / desktop 3/4） */}
+                    <div className="hidden md:block md:col-span-3 min-w-0 overflow-y-auto pr-1 h-full">
                       {formData.practice_mode === "word_reading" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
