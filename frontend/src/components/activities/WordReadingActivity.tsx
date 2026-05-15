@@ -548,33 +548,35 @@ export default function WordReadingActivity({
 
   return (
     <div className="space-y-6">
-      {/* Progress Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">
-            {t("wordReading.wordReading") || "Word Reading"}
-          </Badge>
-          <span className="text-sm text-gray-600">
-            {t("wordReading.itemProgress", {
-              current: currentIndex + 1,
-              total: items.length,
-            }) || `${currentIndex + 1} / ${items.length}`}
-          </span>
+      {/* Header group (status + progress + nav dots) — 內距壓縮 */}
+      <div className="space-y-2">
+        {/* Progress Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs">
+              {t("wordReading.wordReading") || "Word Reading"}
+            </Badge>
+            <span className="text-xs text-gray-600">
+              {t("wordReading.itemProgress", {
+                current: currentIndex + 1,
+                total: items.length,
+              }) || `${currentIndex + 1} / ${items.length}`}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-gray-600">
+            <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+            <span>
+              {t("wordReading.completedCount", { count: completedCount }) ||
+                `${completedCount} completed`}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <CheckCircle className="h-4 w-4 text-green-500" />
-          <span>
-            {t("wordReading.completedCount", { count: completedCount }) ||
-              `${completedCount} completed`}
-          </span>
-        </div>
-      </div>
 
-      {/* Progress Bar */}
-      <Progress value={progress} className="h-2" />
+        {/* Progress Bar */}
+        <Progress value={progress} className="h-1.5" />
 
-      {/* Item Navigation Dots */}
-      <div className="flex gap-1 overflow-x-auto pb-1 mx-auto w-fit max-w-full">
+        {/* Item Navigation Dots */}
+        <div className="flex gap-1 overflow-x-auto pb-1 mx-auto w-fit max-w-full">
         {items.map((item, index) => {
           const isActive = index === currentIndex;
           const isCompleted = !!item.recording_url;
@@ -623,6 +625,7 @@ export default function WordReadingActivity({
             </button>
           );
         })}
+        </div>
       </div>
 
       {/* Word Reading Template */}
