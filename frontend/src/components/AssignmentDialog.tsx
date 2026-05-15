@@ -1442,12 +1442,7 @@ export function AssignmentDialog({
       <SheetContent
         side="right"
         aria-describedby={undefined}
-        className={cn(
-          "!w-full h-full flex flex-col p-0 transition-[max-width] duration-300 ease-out",
-          currentStep === 1 && !formData.practice_mode
-            ? "!max-w-[340px] sm:!max-w-[340px]"
-            : "!max-w-[calc(100vw-16rem)] sm:!max-w-[calc(100vw-16rem)]",
-        )}
+        className="!w-full !max-w-[calc(100vw-16rem)] h-full flex flex-col p-0 sm:!max-w-[calc(100vw-16rem)]"
       >
         {/* Compact Header with Clear Steps - 響應式方案 C */}
         <div className="px-6 py-3 border-b bg-gray-50">
@@ -2831,55 +2826,32 @@ export function AssignmentDialog({
                     </p>
                   </div>
 
-                  <div className="flex-1 min-h-0 flex gap-6 w-full">
-                    {/* 左 rail：練習模式 row list */}
-                    <div className="w-[260px] shrink-0 space-y-2 overflow-y-auto pr-1">
-                      {PRACTICE_MODES.map((m) => {
-                        const selected = formData.practice_mode === m.id;
-                        return (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={m.onClick}
-                            className={cn(
-                              "w-full flex items-center gap-3 p-2 rounded-lg border text-left transition-all",
-                              selected
-                                ? "border-blue-500 bg-blue-50 shadow-sm"
-                                : "border-gray-200 hover:border-gray-300 hover:bg-gray-50",
-                            )}
-                          >
-                            <span className="text-xl shrink-0">
-                              {m.emoji}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div
-                                className={cn(
-                                  "text-sm font-semibold truncate",
-                                  selected
-                                    ? "text-blue-700"
-                                    : "text-gray-900",
-                                )}
-                              >
-                                {t(m.titleKey)}
-                              </div>
-                              <div
-                                className={cn(
-                                  "text-xs leading-snug",
-                                  selected
-                                    ? "text-blue-600"
-                                    : "text-gray-500",
-                                )}
-                              >
-                                {t(m.descKey)}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                  {/* 上方 chip 列：練習模式選擇 */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {PRACTICE_MODES.map((m) => {
+                      const selected = formData.practice_mode === m.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={m.onClick}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2 rounded-full border text-sm transition-all",
+                            selected
+                              ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm font-semibold"
+                              : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50",
+                          )}
+                        >
+                          <span className="text-base">{m.emoji}</span>
+                          <span>{t(m.titleKey)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                    {/* 右 panel：Hero + 進階設定 */}
-                    <div className="flex-1 min-w-0 space-y-4 overflow-y-auto pr-1">
+                  <div className="flex-1 min-h-0 w-full">
+                    {/* 設定區：Hero + 進階設定 */}
+                    <div className="space-y-4 overflow-y-auto pr-1 h-full">
                       {currentMode && (
                         <div className="flex items-start gap-4 p-4 rounded-xl bg-gray-50">
                           <span className="text-4xl shrink-0">
