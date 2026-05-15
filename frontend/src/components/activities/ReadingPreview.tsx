@@ -1,50 +1,51 @@
 /**
  * ReadingPreview — 派發 sheet 內的 reading 即時預覽
  *
- * 從指定的 EXAMPLE_SENTENCES content 抓第一句，餵給 ReadingAssessmentTemplate
- * （純 presentational）。預覽僅顯示一題，不做題目導覽。
+ * 直接重用既有的 demo 路徑：抓 /api/demo/config 拿 demo_reading_assignment_id，
+ * 再用 demoApi.getPreview() 拿 activities，最後渲染 StudentActivityPageContent
+ * （isDemoMode + isPreviewMode 開），與 https://duotopia.co/demo/<id> 同等體驗。
+ *
+ * 取捨：設定（play_audio、time_limit 等）來自 demo assignment 自己存的值，
+ * 不是老師當下調整的 formData。reading 模式 score_category 固定為 speaking，
+ * 影響不大。
  */
 import { useEffect, useState } from "react";
-import ReadingAssessmentTemplate from "./ReadingAssessmentTemplate";
-import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
+import { demoApi } from "@/lib/demoApi";
+import StudentActivityPageContent, {
+  type Activity,
+} from "@/pages/student/StudentActivityPageContent";
 
-interface ReadingPreviewProps {
-  contentId: number;
-  settings: {
-    time_limit_per_question?: number;
-    shuffle_questions?: boolean;
-  };
+interface DemoActivityResponse {
+  assignment_id: number;
+  title: string;
+  practice_mode?: string | null;
+  show_answer?: boolean;
+  time_limit_per_question?: number;
+  total_activities: number;
+  activities: Activity[];
 }
 
-interface ContentItem {
-  id: number;
-  text: string;
-  audio_url?: string;
-}
-
-export default function ReadingPreview({
-  contentId,
-  settings,
-}: ReadingPreviewProps) {
-  const { token } = useTeacherAuthStore();
-  const [items, setItems] = useState<ContentItem[]>([]);
+export default function ReadingPreview() {
+  const [data, setData] = useState<DemoActivityResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    async function fetchContent() {
+    async function load() {
       setLoading(true);
       setError(null);
       try {
-        const apiUrl = import.meta.env.VITE_API_URL || "";
-        const resp = await fetch(`${apiUrl}/api/teachers/contents/${contentId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
+        const config = await demoApi.getConfig();
+        const idStr = config.demo_reading_assignment_id;
+        if (!idStr) {
+          throw new Error("Demo reading assignment ID not configured");
+        }
+        const resp = (await demoApi.getPreview(
+          parseInt(idStr, 10),
+        )) as DemoActivityResponse;
         if (!cancelled) {
-          setItems(data.items || []);
+          setData(resp);
           setLoading(false);
         }
       } catch (e) {
@@ -54,53 +55,35 @@ export default function ReadingPreview({
         }
       }
     }
-    if (token) fetchContent();
+    load();
     return () => {
       cancelled = true;
     };
-  }, [contentId, token]);
+  }, []);
 
-  if (!token) {
-    return (
-      <div className="p-4 text-sm text-gray-500">
-        Preview unavailable (no teacher token)
-      </div>
-    );
-  }
   if (loading) {
     return <div className="p-4 text-sm text-gray-500">Loading preview…</div>;
   }
-  if (error) {
+  if (error || !data) {
     return (
-      <div className="p-4 text-sm text-red-600">Preview error: {error}</div>
-    );
-  }
-
-  const first = items[0];
-  if (!first) {
-    return (
-      <div className="p-4 text-sm text-gray-500">此教材沒有可預覽的例句</div>
+      <div className="p-4 text-sm text-red-600">
+        Preview error: {error || "no data"}
+      </div>
     );
   }
 
   return (
-    <div className="space-y-2">
-      {settings.shuffle_questions && (
-        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
-          🔀 學生實際作答時題目順序會被打亂（預覽固定按原順序顯示）
-        </div>
-      )}
-      <div className="text-xs text-gray-500">
-        預覽僅顯示第一題；學生實際作答會看到全部 {items.length} 題
-      </div>
-      <ReadingAssessmentTemplate
-        content={first.text}
-        targetText={first.text}
-        exampleAudioUrl={first.audio_url}
-        timeLimit={settings.time_limit_per_question ?? 0}
-        canUseAiAnalysis={true}
-        isLivePreview={true}
-      />
-    </div>
+    <StudentActivityPageContent
+      activities={data.activities}
+      assignmentTitle={data.title}
+      assignmentId={data.assignment_id}
+      practiceMode={data.practice_mode || null}
+      showAnswer={data.show_answer || false}
+      timeLimitPerQuestion={data.time_limit_per_question ?? 0}
+      isDemoMode={true}
+      isPreviewMode={true}
+      onBack={() => {}}
+      onSubmit={async () => {}}
+    />
   );
 }

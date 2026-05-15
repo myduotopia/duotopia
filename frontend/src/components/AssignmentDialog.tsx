@@ -3568,14 +3568,7 @@ export function AssignmentDialog({
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
                             學生畫面預覽（demo 教材）
                           </h4>
-                          <ReadingPreview
-                            contentId={PREVIEW_SENTENCES_CONTENT_ID}
-                            settings={{
-                              time_limit_per_question:
-                                formData.time_limit_per_question,
-                              shuffle_questions: formData.shuffle_questions,
-                            }}
-                          />
+                          <ReadingPreview />
                         </Card>
                       ) : (
                         <div className="h-full flex items-center justify-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">
