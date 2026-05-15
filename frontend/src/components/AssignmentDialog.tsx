@@ -2826,7 +2826,7 @@ export function AssignmentDialog({
                     </p>
                   </div>
 
-                  <div className="flex-1 min-h-0 flex gap-6 max-w-4xl mx-auto w-full">
+                  <div className="flex-1 min-h-0 flex gap-6 w-full">
                     {/* 左 rail：練習模式 row list */}
                     <div className="w-[220px] shrink-0 space-y-2 overflow-y-auto pr-1">
                       {PRACTICE_MODES.map((m) => {
@@ -2837,7 +2837,7 @@ export function AssignmentDialog({
                             type="button"
                             onClick={m.onClick}
                             className={cn(
-                              "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                              "w-full flex items-center gap-3 p-2 rounded-lg border text-left transition-all",
                               selected
                                 ? "border-blue-500 bg-blue-50 shadow-sm"
                                 : "border-gray-200 hover:border-gray-300 hover:bg-gray-50",
