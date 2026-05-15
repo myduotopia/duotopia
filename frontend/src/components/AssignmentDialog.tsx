@@ -2805,21 +2805,6 @@ export function AssignmentDialog({
               };
               return (
                 <div className="h-full flex flex-col">
-                  {currentMode && (
-                    <div className="flex items-center gap-3 mb-4">
-                      <span
-                        className={cn(
-                          "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold",
-                          badgeStyles[currentCategory],
-                        )}
-                      >
-                        {t(
-                          `dialogs.assignmentDialog.practiceMode.scoreCategory.${currentCategory}`,
-                        )}
-                      </span>
-                    </div>
-                  )}
-
                   {/* 上方 chip 列：練習模式選擇 */}
                   <div className="flex flex-wrap gap-2 mb-4">
                     {PRACTICE_MODES.map((m) => {
@@ -2852,8 +2837,20 @@ export function AssignmentDialog({
                             {currentMode.emoji}
                           </span>
                           <div className="min-w-0">
-                            <div className="text-base font-semibold text-gray-900">
-                              {t(currentMode.titleKey)}
+                            <div className="flex items-center gap-2">
+                              <div className="text-base font-semibold text-gray-900">
+                                {t(currentMode.titleKey)}
+                              </div>
+                              <span
+                                className={cn(
+                                  "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold",
+                                  badgeStyles[currentCategory],
+                                )}
+                              >
+                                {t(
+                                  `dialogs.assignmentDialog.practiceMode.scoreCategory.${currentCategory}`,
+                                )}
+                              </span>
                             </div>
                             <div className="text-sm text-gray-600 mt-0.5">
                               {t(currentMode.descKey)}
