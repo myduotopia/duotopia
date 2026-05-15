@@ -2826,9 +2826,9 @@ export function AssignmentDialog({
                     </p>
                   </div>
 
-                  <div className="flex-1 flex gap-6 max-w-4xl mx-auto w-full">
+                  <div className="flex-1 min-h-0 flex gap-6 max-w-4xl mx-auto w-full">
                     {/* 左 rail：練習模式 row list */}
-                    <div className="w-[220px] shrink-0 space-y-2">
+                    <div className="w-[220px] shrink-0 space-y-2 overflow-y-auto pr-1">
                       {PRACTICE_MODES.map((m) => {
                         const selected = formData.practice_mode === m.id;
                         return (
@@ -2874,7 +2874,7 @@ export function AssignmentDialog({
                     </div>
 
                     {/* 右 panel：Hero + 進階設定 */}
-                    <div className="flex-1 min-w-0 space-y-4">
+                    <div className="flex-1 min-w-0 space-y-4 overflow-y-auto pr-1">
                       {currentMode && (
                         <div className="flex items-start gap-4 p-4 rounded-xl bg-gray-50">
                           <span className="text-4xl shrink-0">
