@@ -280,6 +280,101 @@ interface ContentRow {
 
 export type Distractor = string | { text: string; image_url?: string | null };
 
+interface ApiContentItem {
+  text?: string;
+  definition?: string;
+  audio_url?: string;
+  image_url?: string;
+  example_sentence?: string;
+  example_sentence_translation?: string;
+  parts_of_speech?: string[];
+  distractors?: Distractor[];
+  vocabulary_translation?: string;
+  vocabulary_translation_lang?: WordTranslationLanguage;
+  example_sentence_translation_lang?: SentenceTranslationLanguage;
+  english_definition?: string;
+  selectedWordLanguage?: WordTranslationLanguage;
+  translation?: string;
+  japanese_translation?: string;
+  korean_translation?: string;
+  example_sentence_japanese?: string;
+  example_sentence_korean?: string;
+  example_sentence_audio_url?: string;
+  selectedSentenceLanguage?: SentenceTranslationLanguage;
+}
+
+// Single source of truth for API item -> ContentRow conversion. Reused by the
+// initial content load and by handlers that re-fetch after a save (e.g. TTS
+// regen) to avoid silently dropping fields like image_url / example_sentence /
+// translations (Issue #706).
+function mapApiItemToRow(item: ApiContentItem, index: number): ContentRow {
+  let definition = "";
+  let translation = "";
+  let japanese_translation = "";
+  let korean_translation = "";
+  let selectedWordLanguage: WordTranslationLanguage = "chinese";
+
+  if (item.vocabulary_translation_lang && item.vocabulary_translation) {
+    selectedWordLanguage = item.vocabulary_translation_lang;
+    definition = item.definition || "";
+    if (selectedWordLanguage === "chinese") {
+      definition = item.vocabulary_translation;
+    } else if (selectedWordLanguage === "english") {
+      translation = item.vocabulary_translation;
+    } else if (selectedWordLanguage === "japanese") {
+      japanese_translation = item.vocabulary_translation;
+    } else if (selectedWordLanguage === "korean") {
+      korean_translation = item.vocabulary_translation;
+    }
+  } else {
+    definition = item.definition || "";
+  }
+
+  let example_sentence_translation = "";
+  let example_sentence_japanese = "";
+  let example_sentence_korean = "";
+  let selectedSentenceLanguage: SentenceTranslationLanguage = "chinese";
+
+  if (
+    item.example_sentence_translation_lang &&
+    item.example_sentence_translation
+  ) {
+    selectedSentenceLanguage = item.example_sentence_translation_lang;
+    if (item.example_sentence_translation_lang === "chinese") {
+      example_sentence_translation = item.example_sentence_translation;
+    } else if (item.example_sentence_translation_lang === "japanese") {
+      example_sentence_japanese = item.example_sentence_translation;
+    } else if (item.example_sentence_translation_lang === "korean") {
+      example_sentence_korean = item.example_sentence_translation;
+    }
+  } else {
+    example_sentence_translation = item.example_sentence_translation || "";
+    example_sentence_japanese = item.example_sentence_japanese || "";
+    example_sentence_korean = item.example_sentence_korean || "";
+    selectedSentenceLanguage = item.selectedSentenceLanguage || "chinese";
+  }
+
+  return {
+    id: (index + 1).toString(),
+    text: item.text || "",
+    definition,
+    translation,
+    japanese_translation,
+    korean_translation,
+    audioUrl: item.audio_url || "",
+    imageUrl: item.image_url || "",
+    selectedWordLanguage,
+    selectedSentenceLanguage,
+    example_sentence: item.example_sentence || "",
+    example_sentence_translation,
+    example_sentence_japanese,
+    example_sentence_korean,
+    example_sentence_audio_url: item.example_sentence_audio_url || "",
+    partsOfSpeech: item.parts_of_speech || [],
+    distractors: item.distractors || undefined,
+  };
+}
+
 function getDistractorText(d: Distractor): string {
   if (typeof d === "string") return d;
   return d?.text ?? "";
@@ -1839,117 +1934,8 @@ const VocabularySetPanel = forwardRef<
 
       // Convert items to rows format
       if (data.items && Array.isArray(data.items)) {
-        const convertedRows = data.items.map(
-          (
-            item: {
-              text?: string;
-              definition?: string;
-              audio_url?: string;
-              image_url?: string;
-              example_sentence?: string;
-              example_sentence_translation?: string;
-              parts_of_speech?: string[];
-              distractors?: string[];
-              // 統一翻譯欄位（canonical）
-              vocabulary_translation?: string;
-              vocabulary_translation_lang?: WordTranslationLanguage;
-              example_sentence_translation_lang?: SentenceTranslationLanguage;
-              // 向後相容（ReadingAssessmentPanel 仍使用，VocabularySetPanel 不讀取）
-              english_definition?: string;
-              selectedWordLanguage?: WordTranslationLanguage;
-              translation?: string;
-              japanese_translation?: string;
-              korean_translation?: string;
-              example_sentence_japanese?: string;
-              example_sentence_korean?: string;
-              example_sentence_audio_url?: string;
-              selectedSentenceLanguage?: SentenceTranslationLanguage;
-            },
-            index: number,
-          ) => {
-            // 處理單字翻譯：優先使用新的統一欄位
-            let definition = "";
-            let translation = "";
-            let japanese_translation = "";
-            let korean_translation = "";
-            let selectedWordLanguage: WordTranslationLanguage = "chinese";
-
-            if (
-              item.vocabulary_translation_lang &&
-              item.vocabulary_translation
-            ) {
-              // 使用新的統一欄位格式
-              selectedWordLanguage = item.vocabulary_translation_lang;
-              // 永遠先載入中文翻譯，避免切換其他語言後中文遺失 (#366)
-              definition = item.definition || "";
-              // 再把 vocabulary_translation 放到對應語言欄位
-              if (selectedWordLanguage === "chinese") {
-                definition = item.vocabulary_translation;
-              } else if (selectedWordLanguage === "english") {
-                translation = item.vocabulary_translation;
-              } else if (selectedWordLanguage === "japanese") {
-                japanese_translation = item.vocabulary_translation;
-              } else if (selectedWordLanguage === "korean") {
-                korean_translation = item.vocabulary_translation;
-              }
-            } else {
-              // Fallback：vocabulary_translation 不存在時，從 definition 讀取中文
-              definition = item.definition || "";
-            }
-
-            // 處理例句翻譯：優先使用新的統一欄位
-            let example_sentence_translation = "";
-            let example_sentence_japanese = "";
-            let example_sentence_korean = "";
-            let selectedSentenceLanguage: SentenceTranslationLanguage =
-              "chinese";
-
-            if (
-              item.example_sentence_translation_lang &&
-              item.example_sentence_translation
-            ) {
-              // 使用新的統一欄位格式
-              selectedSentenceLanguage = item.example_sentence_translation_lang;
-              if (item.example_sentence_translation_lang === "chinese") {
-                example_sentence_translation =
-                  item.example_sentence_translation;
-              } else if (
-                item.example_sentence_translation_lang === "japanese"
-              ) {
-                example_sentence_japanese = item.example_sentence_translation;
-              } else if (item.example_sentence_translation_lang === "korean") {
-                example_sentence_korean = item.example_sentence_translation;
-              }
-            } else {
-              // 向後相容：使用舊的欄位格式
-              example_sentence_translation =
-                item.example_sentence_translation || "";
-              example_sentence_japanese = item.example_sentence_japanese || "";
-              example_sentence_korean = item.example_sentence_korean || "";
-              selectedSentenceLanguage =
-                item.selectedSentenceLanguage || "chinese";
-            }
-
-            return {
-              id: (index + 1).toString(),
-              text: item.text || "",
-              definition,
-              translation,
-              japanese_translation,
-              korean_translation,
-              audioUrl: item.audio_url || "",
-              imageUrl: item.image_url || "",
-              selectedWordLanguage,
-              selectedSentenceLanguage,
-              example_sentence: item.example_sentence || "",
-              example_sentence_translation,
-              example_sentence_japanese,
-              example_sentence_korean,
-              example_sentence_audio_url: item.example_sentence_audio_url || "",
-              partsOfSpeech: item.parts_of_speech || [],
-              distractors: item.distractors || undefined,
-            };
-          },
+        const convertedRows = data.items.map((item, index) =>
+          mapApiItemToRow(item as ApiContentItem, index),
         );
         setRows(convertedRows);
 
@@ -2308,21 +2294,8 @@ const VocabularySetPanel = forwardRef<
               editingContent.id,
             );
             if (response && response.items) {
-              const updatedRows = response.items.map(
-                (
-                  item: {
-                    text?: string;
-                    translation?: string;
-                    definition?: string;
-                    audio_url?: string;
-                  },
-                  index: number,
-                ) => ({
-                  id: String(index + 1),
-                  text: item.text || "",
-                  definition: item.definition || "",
-                  audioUrl: item.audio_url || "",
-                }),
+              const updatedRows = response.items.map((item, index) =>
+                mapApiItemToRow(item as ApiContentItem, index),
               );
               setRows(updatedRows);
             }
