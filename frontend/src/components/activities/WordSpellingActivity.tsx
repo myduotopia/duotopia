@@ -89,6 +89,16 @@ interface WordSpellingActivityProps {
   isDemoMode?: boolean;
   initialPracticeMode?: boolean;
   onComplete?: () => void;
+  // Issue #752: dialog 內即時預覽
+  previewWords?: SpellingWord[];
+  previewSettings?: {
+    show_translation?: boolean;
+    show_image?: boolean;
+    play_audio?: boolean;
+    show_answer?: boolean;
+    target_proficiency?: number;
+    time_limit_per_question?: number | null;
+  };
 }
 
 export default function WordSpellingActivity({
@@ -97,15 +107,18 @@ export default function WordSpellingActivity({
   isDemoMode = false,
   initialPracticeMode = false,
   onComplete,
+  previewWords,
+  previewSettings,
 }: WordSpellingActivityProps) {
+  const isLivePreview = !!previewWords;
   const { t } = useTranslation();
   // Issue #716: 觸控裝置（手機 / 平板）改用 VirtualKeyboard，避免系統鍵盤的
   // 「建議選字」讓學生直接點答案。桌機保留實體鍵盤。
   const deviceMode = useInputDeviceMode();
   const useVirtualKeyboard = deviceMode !== "desktop";
 
-  // State
-  const [loading, setLoading] = useState(true);
+  // State — 預覽模式 items 從 props 來，不需要 loading
+  const [loading, setLoading] = useState(!isLivePreview);
   const [words, setWords] = useState<SpellingWord[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -185,12 +198,12 @@ export default function WordSpellingActivity({
   );
 
   const displayProficiency =
-    isPreviewMode || isDemoMode
+    isPreviewMode || isDemoMode || isLivePreview
       ? previewProficiency
       : proficiency.current_mastery;
 
   const displayTierCounts = useMemo(() => {
-    if (isPreviewMode || isDemoMode) return previewTierCounts;
+    if (isPreviewMode || isDemoMode || isLivePreview) return previewTierCounts;
     const master = proficiency.words_master ?? proficiency.words_mastered ?? 0;
     const familiar = proficiency.words_familiar ?? 0;
     const medium = proficiency.words_medium ?? 0;
@@ -207,7 +220,7 @@ export default function WordSpellingActivity({
       very_unfamiliar,
       total: proficiency.total_words,
     };
-  }, [isPreviewMode, isDemoMode, previewTierCounts, proficiency]);
+  }, [isPreviewMode, isDemoMode, isLivePreview, previewTierCounts, proficiency]);
 
   const displayWordsMastered = displayTierCounts.master;
 
@@ -291,7 +304,7 @@ export default function WordSpellingActivity({
       setShowResult(false);
       setCorrectCount(0);
 
-      if (isPreviewMode || isDemoMode) {
+      if (isPreviewMode || isDemoMode || isLivePreview) {
         const newWordIds = (data.words || []).map(
           (w: SpellingWord) => w.content_item_id,
         );
@@ -318,7 +331,7 @@ export default function WordSpellingActivity({
   }, [assignmentId, isPreviewMode, isDemoMode, t]);
 
   const fetchProficiency = useCallback(async () => {
-    if (isPreviewMode || isDemoMode) return;
+    if (isPreviewMode || isDemoMode || isLivePreview) return;
     try {
       const data = await apiClient.get<ProficiencyStatus>(
         `/api/students/assignments/${assignmentId}/vocabulary/spelling/proficiency`,
@@ -330,8 +343,37 @@ export default function WordSpellingActivity({
   }, [assignmentId, isPreviewMode, isDemoMode]);
 
   useEffect(() => {
+    if (isLivePreview && previewWords) {
+      setWords(previewWords);
+      setSessionId(null);
+      setIsPracticeMode(false);
+      setAudioOnlyMode(previewSettings?.play_audio ?? false);
+      setShowTranslation(
+        (previewSettings?.show_translation ?? true) &&
+          !(previewSettings?.play_audio ?? false),
+      );
+      setShowAnswerOnWrong(
+        (previewSettings?.show_answer ?? false) ||
+          (previewSettings?.play_audio ?? false),
+      );
+      setTimeLimit(previewSettings?.time_limit_per_question ?? null);
+      setTimeRemaining(previewSettings?.time_limit_per_question ?? null);
+      setProficiency({
+        current_mastery: 0,
+        target_mastery: previewSettings?.target_proficiency ?? 80,
+        achieved: false,
+        words_mastered: 0,
+        total_words: previewWords.length,
+      });
+      setCurrentIndex(0);
+      setRoundCompleted(false);
+      setTypedAnswer("");
+      setShowResult(false);
+      setLoading(false);
+      return;
+    }
     startPractice();
-  }, [startPractice]);
+  }, [startPractice, isLivePreview, previewWords, previewSettings]);
 
   // Focus input on question switch
   useEffect(() => {
@@ -427,7 +469,7 @@ export default function WordSpellingActivity({
     }
 
     // Preview/demo: track local counts so the tier breakdown matches live mode.
-    if (isPreviewMode || isDemoMode) {
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       recordPreviewAnswer(currentWord.content_item_id, correct);
       setSubmitting(false);
       return;
@@ -528,7 +570,7 @@ export default function WordSpellingActivity({
   };
 
   const handleSubmitAssignment = async () => {
-    if (isPreviewMode || isDemoMode) {
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       toast.success(
         t("wordSpelling.toast.completed") || "Assignment completed!",
       );

@@ -69,10 +69,12 @@ import {
 } from "@/utils/scoreCategory";
 import WordReadingPreview from "@/components/activities/WordReadingPreview";
 import WordSelectionPreview from "@/components/activities/WordSelectionPreview";
+import WordSpellingPreview from "@/components/activities/WordSpellingPreview";
+import WordClozeContextPreview from "@/components/activities/WordClozeContextPreview";
 
-// Issue #752 PoC: 預覽固定使用 contact@duotopia.co 的「翰林佳音 第二冊 Unit 1 Warm up」
-const PREVIEW_CONTENT_ID_WORD_READING = 282;
-const PREVIEW_CONTENT_ID_WORD_SELECTION = 282;
+// Issue #752 PoC: 預覽固定使用 contact@duotopia.co 的「翰林佳音 第二冊 Unit 1」
+const PREVIEW_VOCAB_CONTENT_ID = 282; // Warm up（單字集）
+// PREVIEW_SENTENCES_CONTENT_ID = 283 (Dialogue) — 之後 reading / rearrangement 預覽用
 
 interface Student {
   id: number;
@@ -3478,7 +3480,7 @@ export function AssignmentDialog({
                             學生畫面預覽（demo 教材）
                           </h4>
                           <WordReadingPreview
-                            contentId={PREVIEW_CONTENT_ID_WORD_READING}
+                            contentId={PREVIEW_VOCAB_CONTENT_ID}
                             settings={{
                               time_limit_per_question:
                                 formData.time_limit_per_question,
@@ -3494,11 +3496,48 @@ export function AssignmentDialog({
                             學生畫面預覽（demo 教材）
                           </h4>
                           <WordSelectionPreview
-                            contentId={PREVIEW_CONTENT_ID_WORD_SELECTION}
+                            contentId={PREVIEW_VOCAB_CONTENT_ID}
                             settings={{
                               show_image: formData.show_image,
                               show_option_images: formData.show_option_images,
                               play_audio: formData.play_audio,
+                              target_proficiency: formData.target_proficiency,
+                              time_limit_per_question:
+                                formData.time_limit_per_question,
+                              shuffle_questions: formData.shuffle_questions,
+                            }}
+                          />
+                        </Card>
+                      ) : formData.practice_mode === "word_spelling" ? (
+                        <Card className="p-3 border-gray-200">
+                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
+                            學生畫面預覽（demo 教材）
+                          </h4>
+                          <WordSpellingPreview
+                            contentId={PREVIEW_VOCAB_CONTENT_ID}
+                            settings={{
+                              show_translation: formData.show_translation,
+                              show_image: formData.show_image,
+                              play_audio: formData.play_audio,
+                              show_answer: formData.show_answer,
+                              target_proficiency: formData.target_proficiency,
+                              time_limit_per_question:
+                                formData.time_limit_per_question,
+                              shuffle_questions: formData.shuffle_questions,
+                            }}
+                          />
+                        </Card>
+                      ) : formData.practice_mode === "word_cloze" ? (
+                        <Card className="p-3 border-gray-200">
+                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
+                            學生畫面預覽（demo 教材）
+                          </h4>
+                          <WordClozeContextPreview
+                            contentId={PREVIEW_VOCAB_CONTENT_ID}
+                            settings={{
+                              show_translation: formData.show_translation,
+                              play_audio: formData.play_audio,
+                              show_answer: formData.show_answer,
                               target_proficiency: formData.target_proficiency,
                               time_limit_per_question:
                                 formData.time_limit_per_question,
