@@ -3482,6 +3482,7 @@ export function AssignmentDialog({
                                 formData.time_limit_per_question,
                               show_image: formData.show_image,
                               show_translation: formData.show_translation,
+                              shuffle_questions: formData.shuffle_questions,
                             }}
                           />
                         </Card>

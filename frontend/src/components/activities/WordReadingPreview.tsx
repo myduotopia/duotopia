@@ -18,6 +18,7 @@ interface WordReadingPreviewProps {
     time_limit_per_question?: number;
     show_image?: boolean;
     show_translation?: boolean;
+    shuffle_questions?: boolean;
   };
 }
 
@@ -87,15 +88,22 @@ export default function WordReadingPreview({
   }
 
   return (
-    <WordReadingActivity
-      assignmentId={0}
-      previewItems={items}
-      previewSettings={{
-        time_limit_per_question: settings.time_limit_per_question,
-        show_image: settings.show_image,
-        show_translation: settings.show_translation,
-        can_use_ai_analysis: true,
-      }}
-    />
+    <div className="space-y-2">
+      {settings.shuffle_questions && (
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
+          🔀 學生實際作答時題目順序會被打亂（預覽固定按原順序顯示）
+        </div>
+      )}
+      <WordReadingActivity
+        assignmentId={0}
+        previewItems={items}
+        previewSettings={{
+          time_limit_per_question: settings.time_limit_per_question,
+          show_image: settings.show_image,
+          show_translation: settings.show_translation,
+          can_use_ai_analysis: true,
+        }}
+      />
+    </div>
   );
 }
