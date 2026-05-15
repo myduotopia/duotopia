@@ -2805,25 +2805,22 @@ export function AssignmentDialog({
               };
               return (
                 <div className="h-full flex flex-col">
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className="flex items-center gap-3 mb-4">
                     <h2 className="text-lg font-semibold text-gray-900">
                       {t("dialogs.assignmentDialog.steps.practiceMode")}
                     </h2>
-                    <span
-                      className={cn(
-                        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold",
-                        badgeStyles[currentCategory],
-                      )}
-                    >
-                      {t(
-                        `dialogs.assignmentDialog.practiceMode.scoreCategory.${currentCategory}`,
-                      )}
-                    </span>
-                  </div>
-                  <div className="mb-4">
-                    <p className="text-sm text-gray-600">
-                      {t("dialogs.assignmentDialog.practiceMode.description")}
-                    </p>
+                    {currentMode && (
+                      <span
+                        className={cn(
+                          "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold",
+                          badgeStyles[currentCategory],
+                        )}
+                      >
+                        {t(
+                          `dialogs.assignmentDialog.practiceMode.scoreCategory.${currentCategory}`,
+                        )}
+                      </span>
+                    )}
                   </div>
 
                   {/* 上方 chip 列：練習模式選擇 */}
