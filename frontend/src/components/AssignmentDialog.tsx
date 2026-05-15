@@ -68,9 +68,11 @@ import {
   type ScoreCategory,
 } from "@/utils/scoreCategory";
 import WordReadingPreview from "@/components/activities/WordReadingPreview";
+import WordSelectionPreview from "@/components/activities/WordSelectionPreview";
 
 // Issue #752 PoC: 預覽固定使用 contact@duotopia.co 的「翰林佳音 第二冊 Unit 1 Warm up」
 const PREVIEW_CONTENT_ID_WORD_READING = 282;
+const PREVIEW_CONTENT_ID_WORD_SELECTION = 282;
 
 interface Student {
   id: number;
@@ -3482,6 +3484,24 @@ export function AssignmentDialog({
                                 formData.time_limit_per_question,
                               show_image: formData.show_image,
                               show_translation: formData.show_translation,
+                              shuffle_questions: formData.shuffle_questions,
+                            }}
+                          />
+                        </Card>
+                      ) : formData.practice_mode === "word_selection" ? (
+                        <Card className="p-3 border-gray-200">
+                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
+                            學生畫面預覽（demo 教材）
+                          </h4>
+                          <WordSelectionPreview
+                            contentId={PREVIEW_CONTENT_ID_WORD_SELECTION}
+                            settings={{
+                              show_image: formData.show_image,
+                              show_option_images: formData.show_option_images,
+                              play_audio: formData.play_audio,
+                              target_proficiency: formData.target_proficiency,
+                              time_limit_per_question:
+                                formData.time_limit_per_question,
                               shuffle_questions: formData.shuffle_questions,
                             }}
                           />
