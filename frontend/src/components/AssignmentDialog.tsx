@@ -1442,7 +1442,12 @@ export function AssignmentDialog({
       <SheetContent
         side="right"
         aria-describedby={undefined}
-        className="!w-full !max-w-[calc(100vw-16rem)] h-full flex flex-col p-0 sm:!max-w-[calc(100vw-16rem)]"
+        className={cn(
+          "!w-full h-full flex flex-col p-0 transition-[max-width] duration-300 ease-out",
+          currentStep === 1 && !formData.practice_mode
+            ? "!max-w-[320px] sm:!max-w-[320px]"
+            : "!max-w-[calc(100vw-16rem)] sm:!max-w-[calc(100vw-16rem)]",
+        )}
       >
         {/* Compact Header with Clear Steps - 響應式方案 C */}
         <div className="px-6 py-3 border-b bg-gray-50">
