@@ -94,7 +94,7 @@ export default function WordReadingPreview({
         time_limit_per_question: settings.time_limit_per_question,
         show_image: settings.show_image,
         show_translation: settings.show_translation,
-        can_use_ai_analysis: false,
+        can_use_ai_analysis: true,
       }}
     />
   );
