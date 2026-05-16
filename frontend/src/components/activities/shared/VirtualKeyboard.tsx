@@ -28,17 +28,22 @@ interface VirtualKeyboardProps {
 
 // Layout B (mobile-style): bottom utility row carries shift / bksp; a
 // dedicated 4th row holds space + Enter the way iOS / Gboard do it.
+// Punctuation row (#763) sits between letters and space/enter so answers
+// like don't / Mr. / sentence-level cloze (? ! ,) can be typed on tablet/mobile.
+const PUNCTUATION_ROW = "' . , ? !";
 const LAYOUT = {
   default: [
     "q w e r t y u i o p",
     "a s d f g h j k l",
     "{shift} z x c v b n m {bksp}",
+    PUNCTUATION_ROW,
     "{space} {enter}",
   ],
   shift: [
     "Q W E R T Y U I O P",
     "A S D F G H J K L",
     "{shift} Z X C V B N M {bksp}",
+    PUNCTUATION_ROW,
     "{space} {enter}",
   ],
 };
