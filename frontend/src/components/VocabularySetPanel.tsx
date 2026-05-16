@@ -303,10 +303,7 @@ interface ApiContentItem {
   selectedSentenceLanguage?: SentenceTranslationLanguage;
 }
 
-// Single source of truth for API item -> ContentRow conversion. Reused by the
-// initial content load and by handlers that re-fetch after a save (e.g. TTS
-// regen) to avoid silently dropping fields like image_url / example_sentence /
-// translations (Issue #706).
+// Must stay in sync with the API response shape — used by every reload path to avoid silently dropping fields.
 function mapApiItemToRow(item: ApiContentItem, index: number): ContentRow {
   let definition = "";
   let translation = "";
@@ -371,7 +368,7 @@ function mapApiItemToRow(item: ApiContentItem, index: number): ContentRow {
     example_sentence_korean,
     example_sentence_audio_url: item.example_sentence_audio_url || "",
     partsOfSpeech: item.parts_of_speech || [],
-    distractors: item.distractors || undefined,
+    distractors: item.distractors,
   };
 }
 
