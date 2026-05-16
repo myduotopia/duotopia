@@ -233,10 +233,6 @@ export default function WordSpellingActivity({
 
   const displayWordsMastered = displayTierCounts.master;
 
-  // Stats (per round) — kept for completeness; current implementation
-  // doesn't display per-round count, but useful for future analytics.
-  const [, setCorrectCount] = useState(0);
-
   // Timer
   const [timeLimit, setTimeLimit] = useState<number | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
@@ -311,7 +307,6 @@ export default function WordSpellingActivity({
       setRoundCompleted(false);
       setTypedAnswer("");
       setShowResult(false);
-      setCorrectCount(0);
 
       if (isPreviewMode || isDemoMode || isLivePreview) {
         const newWordIds = (data.words || []).map(
@@ -467,7 +462,6 @@ export default function WordSpellingActivity({
     setSubmitting(true);
 
     if (correct) {
-      setCorrectCount((prev) => prev + 1);
       setLastAttemptWrong(false);
       // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
       setCardFace("front");

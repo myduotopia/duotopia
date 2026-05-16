@@ -29,6 +29,12 @@ interface DemoActivityResponse {
 }
 
 interface RearrangementPreviewProps {
+  /**
+   * When true, render the "questions will be shuffled" banner.
+   * Note: this prop controls the banner only — preview content always
+   * follows the demo assignment's own stored shuffle setting. The actual
+   * student-facing shuffle takes effect when the assignment is dispatched.
+   */
   shuffleQuestions?: boolean;
 }
 

@@ -54,7 +54,7 @@ function buildBlankedSentence(sentence: string, word: string): string {
   if (!sentence || !word) return sentence;
   // 不分大小寫替換第一次出現的整字（盡量），其餘位置交給 placeholder 顯示
   const re = new RegExp(
-    `\\b${word.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`,
+    `\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
     "i",
   );
   return sentence.replace(re, "_____");

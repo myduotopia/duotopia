@@ -1833,6 +1833,7 @@
         "default": "預設",
         "shuffleQuestions": "隨機題目順序",
         "shuffleQuestionsDesc": "每次練習時隨機排列題目順序",
+        "studentPreview": "學生畫面預覽（demo 教材）",
         "showAnswer": "顯示答案",
         "showAnswerDesc": "答題結束後顯示正確答案",
         "wordSelectionShowAnswerDesc": "學生答錯後揭示正確答案",

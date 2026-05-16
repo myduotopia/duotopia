@@ -1780,6 +1780,7 @@
         "default": "Default",
         "shuffleQuestions": "Shuffle Questions",
         "shuffleQuestionsDesc": "Randomize question order for each practice session",
+        "studentPreview": "Student preview (demo content)",
         "showAnswer": "Show Answer",
         "showAnswerDesc": "Show correct answer after completing each question",
         "wordSelectionShowAnswerDesc": "Reveal correct answer when student answers wrong",

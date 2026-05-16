@@ -3585,7 +3585,9 @@ export function AssignmentDialog({
                       {formData.practice_mode === "word_reading" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            學生畫面預覽（demo 教材）
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.studentPreview",
+                            )}
                           </h4>
                           <WordReadingPreview
                             contentId={PREVIEW_VOCAB_CONTENT_ID}
@@ -3601,7 +3603,9 @@ export function AssignmentDialog({
                       ) : formData.practice_mode === "word_selection" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            學生畫面預覽（demo 教材）
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.studentPreview",
+                            )}
                           </h4>
                           <WordSelectionPreview
                             contentId={PREVIEW_VOCAB_CONTENT_ID}
@@ -3619,7 +3623,9 @@ export function AssignmentDialog({
                       ) : formData.practice_mode === "word_spelling" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            學生畫面預覽（demo 教材）
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.studentPreview",
+                            )}
                           </h4>
                           <WordSpellingPreview
                             contentId={PREVIEW_VOCAB_CONTENT_ID}
@@ -3638,7 +3644,9 @@ export function AssignmentDialog({
                       ) : formData.practice_mode === "word_cloze" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            學生畫面預覽（demo 教材）
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.studentPreview",
+                            )}
                           </h4>
                           <WordClozeContextPreview
                             contentId={PREVIEW_VOCAB_CONTENT_ID}
@@ -3656,7 +3664,9 @@ export function AssignmentDialog({
                       ) : formData.practice_mode === "rearrangement" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            學生畫面預覽（demo 教材）
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.studentPreview",
+                            )}
                           </h4>
                           <RearrangementPreview
                             shuffleQuestions={formData.shuffle_questions}
@@ -3665,7 +3675,9 @@ export function AssignmentDialog({
                       ) : formData.practice_mode === "reading" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            學生畫面預覽（demo 教材）
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.studentPreview",
+                            )}
                           </h4>
                           <ReadingPreview
                             shuffleQuestions={formData.shuffle_questions}

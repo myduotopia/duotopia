@@ -5,7 +5,7 @@
  * 只是從老師 preview API 載入資料，不儲存進度
  */
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -54,11 +54,7 @@ export default function TeacherAssignmentPreviewPage() {
   const [loading, setLoading] = useState(true);
   const [showBanner, setShowBanner] = useState(true);
 
-  useEffect(() => {
-    fetchPreviewData();
-  }, [assignmentId]);
-
-  const fetchPreviewData = async () => {
+  const fetchPreviewData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -73,7 +69,11 @@ export default function TeacherAssignmentPreviewPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [assignmentId, t]);
+
+  useEffect(() => {
+    fetchPreviewData();
+  }, [fetchPreviewData]);
 
   if (loading) {
     return (
