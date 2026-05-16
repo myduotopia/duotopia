@@ -238,7 +238,13 @@ export default function WordSelectionActivity({
       very_unfamiliar,
       total: proficiency.total_words,
     };
-  }, [isPreviewMode, isDemoMode, isLivePreview, previewTierCounts, proficiency]);
+  }, [
+    isPreviewMode,
+    isDemoMode,
+    isLivePreview,
+    previewTierCounts,
+    proficiency,
+  ]);
 
   // Computed: 顯示用的已熟練單字數（同等於 master tier 數）
   const displayWordsMastered = displayTierCounts.master;

@@ -49,9 +49,12 @@ export default function WordReadingPreview({
       setError(null);
       try {
         const apiUrl = import.meta.env.VITE_API_URL || "";
-        const resp = await fetch(`${apiUrl}/api/teachers/contents/${contentId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const resp = await fetch(
+          `${apiUrl}/api/teachers/contents/${contentId}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         if (!cancelled) {
@@ -83,9 +86,7 @@ export default function WordReadingPreview({
   }
   if (error) {
     return (
-      <div className="p-4 text-sm text-red-600">
-        Preview error: {error}
-      </div>
+      <div className="p-4 text-sm text-red-600">Preview error: {error}</div>
     );
   }
 

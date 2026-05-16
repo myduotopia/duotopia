@@ -88,18 +88,18 @@ export default function RearrangementPreview({
           🔀 學生實際作答時題目順序會被打亂（預覽固定按原順序顯示）
         </div>
       )}
-    <StudentActivityPageContent
-      activities={data.activities}
-      assignmentTitle={data.title}
-      assignmentId={data.assignment_id}
-      practiceMode={data.practice_mode || null}
-      showAnswer={data.show_answer || false}
-      timeLimitPerQuestion={data.time_limit_per_question ?? 0}
-      isDemoMode={true}
-      isPreviewMode={true}
-      onBack={() => {}}
-      onSubmit={async () => {}}
-    />
+      <StudentActivityPageContent
+        activities={data.activities}
+        assignmentTitle={data.title}
+        assignmentId={data.assignment_id}
+        practiceMode={data.practice_mode || null}
+        showAnswer={data.show_answer || false}
+        timeLimitPerQuestion={data.time_limit_per_question ?? 0}
+        isDemoMode={true}
+        isPreviewMode={true}
+        onBack={() => {}}
+        onSubmit={async () => {}}
+      />
     </div>
   );
 }

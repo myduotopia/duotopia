@@ -580,54 +580,54 @@ export default function WordReadingActivity({
 
         {/* Item Navigation Dots */}
         <div className="flex gap-1 overflow-x-auto pb-1 mx-auto w-fit max-w-full">
-        {items.map((item, index) => {
-          const isActive = index === currentIndex;
-          const isCompleted = !!item.recording_url;
-          const hasAssessment = !!item.ai_assessment;
-          // Issue #689 後續：點點顏色委派 getItemPassFailStatus 統一處理。
-          // RETURNED 模式下純看 teacher_passed；其他狀態才用 AI 分數 fallback。
-          const aiScore =
-            item.ai_assessment?.pronunciation_score ??
-            item.ai_assessment?.accuracy_score ??
-            null;
-          const { passed: passedByScore, failed: failedByScore } =
-            getItemPassFailStatus({
-              teacherPassed: item.teacher_passed ?? null,
-              aiScore,
-              assignmentStatus: assignmentStatus ?? null,
-            });
-          const colorClass = passedByScore
-            ? "bg-green-100 text-green-800 border-green-400"
-            : failedByScore
-              ? "bg-red-100 text-red-800 border-red-400"
-              : hasAssessment || isCompleted
-                ? "bg-yellow-100 text-yellow-800 border-yellow-400"
-                : "bg-white text-gray-600 border-gray-300 hover:border-blue-400";
-          const titleText = passedByScore
-            ? t("wordReading.passed") || "通過"
-            : failedByScore
-              ? t("wordReading.notPassed") || "未通過"
-              : hasAssessment
-                ? t("wordReading.assessed") || "Assessed"
-                : isCompleted
-                  ? t("wordReading.recorded") || "Recorded"
-                  : t("wordReading.notRecorded") || "Not recorded";
+          {items.map((item, index) => {
+            const isActive = index === currentIndex;
+            const isCompleted = !!item.recording_url;
+            const hasAssessment = !!item.ai_assessment;
+            // Issue #689 後續：點點顏色委派 getItemPassFailStatus 統一處理。
+            // RETURNED 模式下純看 teacher_passed；其他狀態才用 AI 分數 fallback。
+            const aiScore =
+              item.ai_assessment?.pronunciation_score ??
+              item.ai_assessment?.accuracy_score ??
+              null;
+            const { passed: passedByScore, failed: failedByScore } =
+              getItemPassFailStatus({
+                teacherPassed: item.teacher_passed ?? null,
+                aiScore,
+                assignmentStatus: assignmentStatus ?? null,
+              });
+            const colorClass = passedByScore
+              ? "bg-green-100 text-green-800 border-green-400"
+              : failedByScore
+                ? "bg-red-100 text-red-800 border-red-400"
+                : hasAssessment || isCompleted
+                  ? "bg-yellow-100 text-yellow-800 border-yellow-400"
+                  : "bg-white text-gray-600 border-gray-300 hover:border-blue-400";
+            const titleText = passedByScore
+              ? t("wordReading.passed") || "通過"
+              : failedByScore
+                ? t("wordReading.notPassed") || "未通過"
+                : hasAssessment
+                  ? t("wordReading.assessed") || "Assessed"
+                  : isCompleted
+                    ? t("wordReading.recorded") || "Recorded"
+                    : t("wordReading.notRecorded") || "Not recorded";
 
-          return (
-            <button
-              key={item.id}
-              onClick={() => setCurrentIndex(index)}
-              className={cn(
-                "w-8 h-8 rounded border transition-all flex items-center justify-center text-xs font-medium flex-shrink-0",
-                isActive && "border-2 border-blue-600",
-                colorClass,
-              )}
-              title={titleText}
-            >
-              {index + 1}
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={item.id}
+                onClick={() => setCurrentIndex(index)}
+                className={cn(
+                  "w-8 h-8 rounded border transition-all flex items-center justify-center text-xs font-medium flex-shrink-0",
+                  isActive && "border-2 border-blue-600",
+                  colorClass,
+                )}
+                title={titleText}
+              >
+                {index + 1}
+              </button>
+            );
+          })}
         </div>
       </div>
 

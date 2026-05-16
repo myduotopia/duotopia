@@ -98,9 +98,12 @@ export default function WordSelectionPreview({
       setError(null);
       try {
         const apiUrl = import.meta.env.VITE_API_URL || "";
-        const resp = await fetch(`${apiUrl}/api/teachers/contents/${contentId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const resp = await fetch(
+          `${apiUrl}/api/teachers/contents/${contentId}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         if (!cancelled) {

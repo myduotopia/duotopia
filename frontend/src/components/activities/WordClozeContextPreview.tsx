@@ -53,7 +53,10 @@ interface ClozeQuestion {
 function buildBlankedSentence(sentence: string, word: string): string {
   if (!sentence || !word) return sentence;
   // 不分大小寫替換第一次出現的整字（盡量），其餘位置交給 placeholder 顯示
-  const re = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`, "i");
+  const re = new RegExp(
+    `\\b${word.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`,
+    "i",
+  );
   return sentence.replace(re, "_____");
 }
 
@@ -73,9 +76,12 @@ export default function WordClozeContextPreview({
       setError(null);
       try {
         const apiUrl = import.meta.env.VITE_API_URL || "";
-        const resp = await fetch(`${apiUrl}/api/teachers/contents/${contentId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const resp = await fetch(
+          `${apiUrl}/api/teachers/contents/${contentId}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         if (!cancelled) {
@@ -113,7 +119,8 @@ export default function WordClozeContextPreview({
           correct_answer_length: item.text.length,
           part_of_speech: item.part_of_speech ?? null,
           example_sentence: item.example_sentence ?? null,
-          example_sentence_translation: item.example_sentence_translation ?? null,
+          example_sentence_translation:
+            item.example_sentence_translation ?? null,
           example_sentence_audio_url: item.example_sentence_audio_url ?? null,
           word_audio_url: item.audio_url ?? null,
         })),

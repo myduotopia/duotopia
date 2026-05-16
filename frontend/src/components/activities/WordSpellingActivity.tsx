@@ -223,7 +223,13 @@ export default function WordSpellingActivity({
       very_unfamiliar,
       total: proficiency.total_words,
     };
-  }, [isPreviewMode, isDemoMode, isLivePreview, previewTierCounts, proficiency]);
+  }, [
+    isPreviewMode,
+    isDemoMode,
+    isLivePreview,
+    previewTierCounts,
+    proficiency,
+  ]);
 
   const displayWordsMastered = displayTierCounts.master;
 
