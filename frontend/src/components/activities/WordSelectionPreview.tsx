@@ -82,6 +82,8 @@ function buildOptions(
   return allOptions;
 }
 
+const MIN_PREVIEW_WORDS = 4;
+
 export default function WordSelectionPreview({
   contentId,
   settings,
@@ -138,6 +140,25 @@ export default function WordSelectionPreview({
     }));
   }, [items, settings.show_image]);
 
+  // 穩定的 previewSettings reference — 否則 WordSelectionActivity 的 useEffect
+  // 會在 AssignmentDialog 每次表單按鍵時重觸發，把預覽 reset 回第 1 題
+  const previewSettings = useMemo(
+    () => ({
+      show_image: settings.show_image,
+      show_option_images: settings.show_option_images,
+      play_audio: settings.play_audio,
+      target_proficiency: settings.target_proficiency,
+      time_limit_per_question: settings.time_limit_per_question ?? null,
+    }),
+    [
+      settings.show_image,
+      settings.show_option_images,
+      settings.play_audio,
+      settings.target_proficiency,
+      settings.time_limit_per_question,
+    ],
+  );
+
   if (!token) {
     return (
       <div className="p-4 text-sm text-gray-500">
@@ -153,6 +174,13 @@ export default function WordSelectionPreview({
       <div className="p-4 text-sm text-red-600">Preview error: {error}</div>
     );
   }
+  if (items.length < MIN_PREVIEW_WORDS) {
+    return (
+      <div className="p-4 text-sm text-gray-500 border border-dashed border-gray-200 rounded">
+        預覽至少需要 {MIN_PREVIEW_WORDS} 個單字（此教材僅 {items.length} 個）
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -164,13 +192,7 @@ export default function WordSelectionPreview({
       <WordSelectionActivity
         assignmentId={0}
         previewWords={previewWords}
-        previewSettings={{
-          show_image: settings.show_image,
-          show_option_images: settings.show_option_images,
-          play_audio: settings.play_audio,
-          target_proficiency: settings.target_proficiency,
-          time_limit_per_question: settings.time_limit_per_question ?? null,
-        }}
+        previewSettings={previewSettings}
       />
     </div>
   );
