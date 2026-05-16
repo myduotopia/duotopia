@@ -3582,6 +3582,13 @@ export function AssignmentDialog({
 
                     {/* 右：學生畫面預覽（viewport ≥ 960px 才顯示；min-w 320 確保可讀） */}
                     <div className="hidden min-[960px]:block flex-1 min-w-[320px] overflow-y-auto pr-1 h-full">
+                      {formData.practice_mode && (
+                        <div className="mb-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">
+                          {t(
+                            "dialogs.assignmentDialog.practiceMode.studentPreviewDisclaimer",
+                          )}
+                        </div>
+                      )}
                       {formData.practice_mode === "word_reading" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
