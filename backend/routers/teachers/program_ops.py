@@ -580,19 +580,11 @@ async def add_lesson(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """新增課程單元"""
-    program = (
-        db.query(Program)
-        .filter(
-            Program.id == program_id,
-            Program.teacher_id == current_teacher.id,
-            Program.is_active.is_(True),
-        )
-        .first()
-    )
+    """新增課程單元 (personal program owner OR any active org member)"""
+    from utils.permissions import check_program_access
 
-    if not program:
-        raise HTTPException(status_code=404, detail="Program not found")
+    # check_program_access handles both personal-owned and org-owned programs.
+    check_program_access(db, program_id, current_teacher, require_owner=True)
 
     lesson = Lesson(
         program_id=program_id,
@@ -621,22 +613,12 @@ async def update_lesson(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """更新課程單元"""
-    # 驗證 lesson 屬於當前教師
-    lesson = (
-        db.query(Lesson)
-        .join(Program)
-        .filter(
-            Lesson.id == lesson_id,
-            Program.teacher_id == current_teacher.id,
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .first()
-    )
+    """更新課程單元 (personal program owner OR any active org member)"""
+    from utils.permissions import check_lesson_access
 
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found")
+    _program, lesson = check_lesson_access(
+        db, lesson_id, current_teacher, require_owner=True
+    )
 
     # 更新資料
     lesson.name = lesson_data.name
@@ -662,23 +644,12 @@ async def delete_lesson(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """刪除課程單元 - 使用軟刪除保護資料完整性"""
+    """刪除課程單元 - 軟刪除（personal program owner OR any active org member）"""
+    from utils.permissions import check_lesson_access
 
-    # 驗證 lesson 屬於當前教師
-    lesson = (
-        db.query(Lesson)
-        .join(Program)
-        .filter(
-            Lesson.id == lesson_id,
-            Program.teacher_id == current_teacher.id,
-            Lesson.is_active.is_(True),
-            Program.is_active.is_(True),
-        )
-        .first()
+    _program, lesson = check_lesson_access(
+        db, lesson_id, current_teacher, require_owner=True
     )
-
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found")
 
     # 檢查相關資料
     content_count = (

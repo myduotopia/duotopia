@@ -3338,7 +3338,7 @@
   "teacherTemplatePrograms": {
     "title": "My Teaching Materials",
     "buttons": {
-      "addProgram": "Add Resource Pack"
+      "addProgram": "Add Material Pack"
     },
     "messages": {
       "loadFailed": "Failed to load template programs",

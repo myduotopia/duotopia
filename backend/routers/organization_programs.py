@@ -78,6 +78,7 @@ class ContentItemResponse(BaseModel):
     text: str
     translation: Optional[str]
     audio_url: Optional[str]
+    image_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -405,17 +406,17 @@ async def create_organization_material(
     """
     Create organization material (template).
 
-    Permission: org_owner or org_admin with manage_materials
+    Permission: any active organization member
     Auto-set:
     - is_template = True
     - organization_id in source_metadata
     - classroom_id = None
     """
     # Check permission
-    if not has_manage_materials_permission(current_teacher.id, org_id, db):
+    if not has_read_org_materials_permission(current_teacher.id, org_id, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="No permission to create organization materials",
+            detail="Not a member of this organization",
         )
 
     # Verify organization exists and is active
@@ -461,14 +462,14 @@ async def update_organization_material(
     """
     Update organization material.
 
-    Permission: org_owner or org_admin with manage_materials
+    Permission: any active organization member
     Note: Cannot change organization_id
     """
     # Check permission
-    if not has_manage_materials_permission(current_teacher.id, org_id, db):
+    if not has_read_org_materials_permission(current_teacher.id, org_id, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="No permission to update organization materials",
+            detail="Not a member of this organization",
         )
 
     # Get program
@@ -514,14 +515,14 @@ async def soft_delete_organization_material(
     """
     Soft delete organization material.
 
-    Permission: org_owner or org_admin with manage_materials
+    Permission: any active organization member
     Action: Set is_active = False (NOT hard delete)
     """
     # Check permission
-    if not has_manage_materials_permission(current_teacher.id, org_id, db):
+    if not has_read_org_materials_permission(current_teacher.id, org_id, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="No permission to delete organization materials",
+            detail="Not a member of this organization",
         )
 
     # Get program

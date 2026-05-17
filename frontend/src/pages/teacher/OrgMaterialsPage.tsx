@@ -16,6 +16,8 @@ import VocabularySetPanel, {
   type VocabularySetPanelHandle,
 } from "@/components/VocabularySetPanel";
 import ContentCopyDialog from "@/components/ContentCopyDialog";
+import { InstantPracticeDialog } from "@/components/InstantPracticeDialog";
+import { AssignmentDialog, CartItem } from "@/components/AssignmentDialog";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import { Button } from "@/components/ui/button";
 import { X, AlertCircle } from "lucide-react";
@@ -31,9 +33,10 @@ export default function OrgMaterialsPage() {
   const { sidebarWidth, setSidebarDisabled, editorBusy } = useSidebar();
   const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
   const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
-  const canManage =
-    selectedOrganization?.role === "org_owner" ||
-    selectedOrganization?.role === "org_admin";
+  // UI gate: show manage controls whenever an org is selected.
+  // Authoritative permission check (active org member) happens on the backend;
+  // any unauthorized request returns 403 and is surfaced as a toast.
+  const canManage = !!selectedOrganization;
 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,6 +102,18 @@ export default function OrgMaterialsPage() {
     id: number;
     title: string;
   } | null>(null);
+
+  // Instant practice dialog state
+  const [showInstantPractice, setShowInstantPractice] = useState(false);
+  const [instantPracticeContent, setInstantPracticeContent] = useState<{
+    id: number;
+    title: string;
+    type?: string;
+  } | null>(null);
+
+  // Assignment dialog state
+  const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
+  const [assignContents, setAssignContents] = useState<CartItem[]>([]);
 
   useEffect(() => {
     fetchOrgPrograms();
@@ -340,7 +355,7 @@ export default function OrgMaterialsPage() {
         order_index: index,
       }));
 
-      await apiClient.reorderPrograms(orderData);
+      await apiClient.reorderPrograms(orderData, selectedOrganization?.id);
 
       toast.success(t("teacherTemplatePrograms.messages.reorderSuccess"));
       setIsReordering(false);
@@ -388,7 +403,11 @@ export default function OrgMaterialsPage() {
         order_index: index,
       }));
 
-      await apiClient.reorderLessons(programId, orderData);
+      await apiClient.reorderLessons(
+        programId,
+        orderData,
+        selectedOrganization?.id,
+      );
 
       toast.success(t("teacherTemplatePrograms.messages.reorderSuccess"));
       setIsReordering(false);
@@ -455,7 +474,11 @@ export default function OrgMaterialsPage() {
         order_index: index,
       }));
 
-      await apiClient.reorderContents(lessonId, orderData);
+      await apiClient.reorderContents(
+        lessonId,
+        orderData,
+        selectedOrganization?.id,
+      );
 
       toast.success(t("teacherTemplatePrograms.messages.reorderSuccess"));
       setIsReordering(false);
@@ -676,6 +699,36 @@ export default function OrgMaterialsPage() {
               onCreateContent={(programId, lessonId) =>
                 canManage && handleCreateContent(programId, lessonId)
               }
+              onInstantPractice={(content) => {
+                setInstantPracticeContent({
+                  id: content.id,
+                  title: content.title,
+                  type: content.type,
+                });
+                setShowInstantPractice(true);
+              }}
+              onAssignContent={(content, lessonId) => {
+                const program = programs.find((p) =>
+                  p.lessons?.some((l) => l.id === lessonId),
+                );
+                const lesson = program?.lessons?.find((l) => l.id === lessonId);
+                const cartItem: CartItem = {
+                  contentId: content.id,
+                  programName: program?.name || "",
+                  lessonName: lesson?.name || "",
+                  contentTitle: content.title,
+                  contentType: content.type || "",
+                  itemsCount: content.items_count,
+                  order: 0,
+                  hasMissingAudio: false,
+                  hasMissingImage: false,
+                };
+                setAssignContents([cartItem]);
+                setShowAssignmentDialog(true);
+              }}
+              onReorderPrograms={canManage ? handleReorderPrograms : undefined}
+              onReorderLessons={canManage ? handleReorderLessons : undefined}
+              onReorderContents={canManage ? handleReorderContents : undefined}
             />
           )}
         </div>
@@ -1046,6 +1099,7 @@ export default function OrgMaterialsPage() {
           program={selectedProgram}
           dialogType={programDialogType}
           isTemplate={true}
+          organizationId={selectedOrganization?.id}
           onClose={() => {
             setProgramDialogType(null);
             setSelectedProgram(null);
@@ -1137,6 +1191,44 @@ export default function OrgMaterialsPage() {
         }}
         contentId={downloadContentInfo?.id ?? null}
         contentTitle={downloadContentInfo?.title}
+      />
+
+      {/* Instant Practice Dialog */}
+      {instantPracticeContent && (
+        <InstantPracticeDialog
+          open={showInstantPractice}
+          onClose={() => {
+            setShowInstantPractice(false);
+            setInstantPracticeContent(null);
+          }}
+          contentId={instantPracticeContent.id}
+          contentTitle={instantPracticeContent.title}
+          contentType={instantPracticeContent.type}
+          onStartPractice={(assignmentId) => {
+            window.open(
+              `/teacher/assignment/${assignmentId}/preview`,
+              "_blank",
+              "noopener,noreferrer",
+            );
+            setShowInstantPractice(false);
+            setInstantPracticeContent(null);
+          }}
+        />
+      )}
+
+      {/* Assignment Dialog (no classroomId = multi-classroom mode) */}
+      <AssignmentDialog
+        open={showAssignmentDialog}
+        onClose={() => {
+          setShowAssignmentDialog(false);
+          setAssignContents([]);
+        }}
+        preSelectedContents={assignContents}
+        organizationId={selectedOrganization?.id}
+        onSuccess={() => {
+          setShowAssignmentDialog(false);
+          setAssignContents([]);
+        }}
       />
     </>
   );
