@@ -117,10 +117,14 @@ body {
 }
 
 /* Issue #763: 標點鍵與字母排同寬。字母排為 10 鍵 + 9 個 5px gap，
-   每鍵寬 (rowWidth − 45px) / 10；標點直接用同公式當 flex-basis，
+   每鍵寬 (rowWidth − 9×gap) / 10；標點直接用同公式當 flex-basis，
    Space / Enter 維持 flex-grow:1 自動吃剩餘空間。 */
+.simple-keyboard {
+  --vk-gap: 5px; /* simple-keyboard default buttonGap */
+}
+
 .simple-keyboard .hg-button.vk-punct {
-  flex: 0 0 calc((100% - 45px) / 10);
+  flex: 0 0 calc((100% - 9 * var(--vk-gap)) / 10);
 }
 
 /* Countdown ring: drain the stroke over the question's full duration.
