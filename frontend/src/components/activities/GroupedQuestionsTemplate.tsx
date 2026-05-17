@@ -23,6 +23,7 @@ import {
 import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { useDemoAzurePronunciation } from "@/hooks/useDemoAzurePronunciation";
 import { appendAudioToFormData } from "@/utils/audioFormatDetection";
+import { speakEnglish } from "@/utils/speakEnglish";
 
 interface Question {
   text?: string;
@@ -714,22 +715,7 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
                             <span
                               key={wordIndex}
                               className="cursor-pointer hover:text-blue-600 hover:underline transition-colors px-1"
-                              onClick={() => {
-                                // 使用 Web Speech API 發音
-                                if ("speechSynthesis" in window) {
-                                  // 取消之前的發音
-                                  window.speechSynthesis.cancel();
-
-                                  const utterance =
-                                    new SpeechSynthesisUtterance(word);
-                                  utterance.lang = "en-US"; // 設定為英文發音
-                                  utterance.rate = 1.0; // 正常速度
-                                  utterance.pitch = 1.0; // 正常音調
-                                  utterance.volume = 1.0; // 最大音量
-
-                                  window.speechSynthesis.speak(utterance);
-                                }
-                              }}
+                              onClick={() => speakEnglish(word)}
                               title={`${t("groupedQuestionsTemplate.labels.clickToPronounciate")}: ${word}`}
                             >
                               {word}
