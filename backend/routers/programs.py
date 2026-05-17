@@ -1281,6 +1281,9 @@ async def copy_program(
             .filter(Program.id == new_program.id)
             .first()
         )
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         logger.error(
