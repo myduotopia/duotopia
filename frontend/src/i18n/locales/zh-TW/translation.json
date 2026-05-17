@@ -1817,6 +1817,12 @@
         "title": "練習模式設定",
         "description": "選擇學生練習的模式和相關設定",
         "advancedSettings": "進階設定",
+        "scoreCategory": {
+          "speaking": "口說",
+          "listening": "聽力",
+          "reading": "閱讀",
+          "writing": "寫作"
+        },
         "reading": "例句朗讀",
         "readingDesc": "學生朗讀例句，系統評分發音",
         "rearrangement": "例句重組",
@@ -1827,6 +1833,8 @@
         "default": "預設",
         "shuffleQuestions": "隨機題目順序",
         "shuffleQuestionsDesc": "每次練習時隨機排列題目順序",
+        "studentPreview": "學生畫面預覽（demo 教材）",
+        "studentPreviewDisclaimer": "預覽使用範例教材，部分模式（例句朗讀、例句重組）的時間／音檔等設定以示範作業為準，不會跟著左側設定變動。",
         "showAnswer": "顯示答案",
         "showAnswerDesc": "答題結束後顯示正確答案",
         "wordSelectionShowAnswerDesc": "學生答錯後揭示正確答案",

@@ -1764,6 +1764,12 @@
         "title": "Practice Mode Settings",
         "description": "Select the practice mode and related settings for students",
         "advancedSettings": "Advanced Settings",
+        "scoreCategory": {
+          "speaking": "Speaking",
+          "listening": "Listening",
+          "reading": "Reading",
+          "writing": "Writing"
+        },
         "reading": "Sentence Reading",
         "readingDesc": "Students read sentences aloud, system scores pronunciation",
         "rearrangement": "Sentence Rearrangement",
@@ -1774,6 +1780,8 @@
         "default": "Default",
         "shuffleQuestions": "Shuffle Questions",
         "shuffleQuestionsDesc": "Randomize question order for each practice session",
+        "studentPreview": "Student preview (demo content)",
+        "studentPreviewDisclaimer": "Preview uses demo content. For some modes (Reading, Rearrangement) the timing / audio / shuffle settings come from the demo assignment and don't reflect your selections on the left.",
         "showAnswer": "Show Answer",
         "showAnswerDesc": "Show correct answer after completing each question",
         "wordSelectionShowAnswerDesc": "Reveal correct answer when student answers wrong",

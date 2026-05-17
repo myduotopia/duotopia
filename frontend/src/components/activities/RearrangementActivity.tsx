@@ -7,6 +7,9 @@
  * - 錯誤限制：<=10字 3次, 11-25字 5次
  * - 可選音檔播放（聽力模式）
  * - 計時功能
+ *
+ * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
+ *    改動前必讀：docs/design/preview-architecture.md
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -55,6 +58,8 @@ interface RearrangementActivityProps {
   onQuestionStateChange?: (
     questionStates: Map<number, RearrangementQuestionState>,
   ) => void;
+  // Issue #752: dialog 內即時預覽 — 跳過 API fetch，直接吃 props
+  previewQuestions?: RearrangementQuestion[];
 }
 
 export interface RearrangementQuestionState {
@@ -83,9 +88,11 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   onQuestionIndexChange,
   onQuestionsLoaded,
   onQuestionStateChange,
+  previewQuestions,
 }) => {
+  const isLivePreview = !!previewQuestions;
   const { t } = useTranslation();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isLivePreview);
   const [questions, setQuestions] = useState<RearrangementQuestion[]>([]);
   const [internalQuestionIndex, setInternalQuestionIndex] = useState(0);
   const [questionStates, setQuestionStates] = useState<
@@ -151,6 +158,32 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
   // 載入題目
   const lastLoadedAssignmentRef = useRef<number | null>(null);
   useEffect(() => {
+    if (isLivePreview && previewQuestions) {
+      // Issue #752: 直接吃 props，不打 API
+      setQuestions(previewQuestions);
+      questionsRef.current = previewQuestions;
+      const initialStates = new Map<number, QuestionState>();
+      previewQuestions.forEach((q) => {
+        initialStates.set(q.content_item_id, {
+          selectedWords: [],
+          remainingWords: [...q.shuffled_words],
+          errorCount: 0,
+          expectedScore: 100,
+          completed: false,
+          challengeFailed: false,
+          timeRemaining: q.time_limit,
+          hasSeenAnswer: false,
+          maxScore: 100,
+        });
+      });
+      setQuestionStates(initialStates);
+      setLoading(false);
+      return () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+        }
+      };
+    }
     if (lastLoadedAssignmentRef.current === studentAssignmentId) return;
     lastLoadedAssignmentRef.current = studentAssignmentId;
     hasPlayedFirstAudioRef.current = false; // 重置狀態
@@ -160,7 +193,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
         clearInterval(timerRef.current);
       }
     };
-  }, [studentAssignmentId]);
+  }, [studentAssignmentId, isLivePreview, previewQuestions]);
 
   // 第一題音檔自動播放（題目載入完成後）
   useEffect(() => {
@@ -412,7 +445,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       setResultModalOpen(true);
 
       // 呼叫 API 儲存完成分數
-      if (!isPreviewMode && !isDemoMode && !isPracticeMode) {
+      if (!isPreviewMode && !isDemoMode && !isLivePreview && !isPracticeMode) {
         try {
           await apiClient.post(
             `/api/students/assignments/${studentAssignmentId}/rearrangement-complete`,
@@ -585,7 +618,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       setResultModalOpen(true); // 打開結果 Modal
 
       // 學生模式：完成時呼叫 API 儲存分數（練習模式不存）
-      if (!isPreviewMode && !isDemoMode && !isPracticeMode) {
+      if (!isPreviewMode && !isDemoMode && !isLivePreview && !isPracticeMode) {
         try {
           await apiClient.post(
             `/api/students/assignments/${studentAssignmentId}/rearrangement-complete`,
