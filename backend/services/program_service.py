@@ -85,6 +85,9 @@ def _copy_content_with_items(
             example_sentence_definition=original_item.example_sentence_definition
             if hasattr(original_item, "example_sentence_definition")
             else None,
+            example_sentence_audio_url=original_item.example_sentence_audio_url
+            if hasattr(original_item, "example_sentence_audio_url")
+            else None,
             # Sentence assembly fields
             word_count=original_item.word_count
             if hasattr(original_item, "word_count")

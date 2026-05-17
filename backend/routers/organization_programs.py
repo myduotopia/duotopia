@@ -406,7 +406,7 @@ async def create_organization_material(
     """
     Create organization material (template).
 
-    Permission: org_owner or org_admin with manage_materials
+    Permission: any active organization member
     Auto-set:
     - is_template = True
     - organization_id in source_metadata
@@ -462,7 +462,7 @@ async def update_organization_material(
     """
     Update organization material.
 
-    Permission: org_owner or org_admin with manage_materials
+    Permission: any active organization member
     Note: Cannot change organization_id
     """
     # Check permission
@@ -515,7 +515,7 @@ async def soft_delete_organization_material(
     """
     Soft delete organization material.
 
-    Permission: org_owner or org_admin with manage_materials
+    Permission: any active organization member
     Action: Set is_active = False (NOT hard delete)
     """
     # Check permission
