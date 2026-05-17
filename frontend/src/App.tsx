@@ -58,7 +58,7 @@ import WordCardSample from "./pages/sample/WordCardSample";
 import TugOfWarSample from "./pages/sample/TugOfWarSample";
 import { Toaster } from "sonner";
 import { useCrossTabAuthSync } from "./hooks/useCrossTabAuthSync";
-import { useBlogPageTracking } from "./hooks/useBlogPageTracking";
+import { useAnalyticsPageView } from "./hooks/useAnalyticsPageView";
 
 /**
  * Custom hook to detect mobile screen size
@@ -90,8 +90,8 @@ function App() {
   const isMobile = useIsMobile();
   // Issue #472: Cross-tab auth sync
   useCrossTabAuthSync();
-  // Issue #593: Blog GA4 page view tracking
-  useBlogPageTracking();
+  // Issue #764: SPA route page view tracking for GA4 + Meta Pixel
+  useAnalyticsPageView();
 
   return (
     <>
