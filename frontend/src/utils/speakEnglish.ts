@@ -28,7 +28,10 @@ function pickEnglishVoice(): SpeechSynthesisVoice | null {
   );
 }
 
-export function speakEnglish(text: string, options: SpeakEnglishOptions = {}) {
+export function speakEnglish(
+  text: string,
+  options: SpeakEnglishOptions = {},
+): (() => void) | void {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
   const synth = window.speechSynthesis;
@@ -59,7 +62,11 @@ export function speakEnglish(text: string, options: SpeakEnglishOptions = {}) {
       doSpeak();
     };
     synth.addEventListener("voiceschanged", handler);
-    return;
+    // Return cleanup so callers (e.g. React useEffect) can cancel on unmount
+    return () => {
+      synth.removeEventListener("voiceschanged", handler);
+      synth.cancel();
+    };
   }
 
   doSpeak();
