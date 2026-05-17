@@ -51,7 +51,8 @@ import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
 // Issue #716: 答案允許英文字母、連字號、空格（"United States"）；其它（注音、
 // 數字、Emoji、貼上的多字元）一律過濾掉，順便擋住手機輸入法的建議選字。
-const ALLOWED_CHAR = /[a-zA-Z\- ]/;
+// Issue #763: 放行 ' . , ? !（don't / Mr. / 整句填空）。
+const ALLOWED_CHAR = /[a-zA-Z\-' .,?!]/;
 const sanitizeAnswer = (raw: string) =>
   Array.from(raw)
     .filter((c) => ALLOWED_CHAR.test(c))
