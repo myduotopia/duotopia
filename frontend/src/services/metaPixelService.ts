@@ -9,7 +9,11 @@
 
 const PIXEL_ID = import.meta.env.VITE_META_PIXEL_ID as string | undefined;
 
-type FbqFn = (...args: unknown[]) => void;
+type FbqFn = (
+  command: string,
+  eventOrPixelId: string,
+  params?: Record<string, unknown>,
+) => void;
 
 declare global {
   interface Window {
@@ -31,11 +35,7 @@ export function trackEvent(
   params?: Record<string, unknown>,
 ): void {
   if (!isEnabled()) return;
-  if (params) {
-    window.fbq!("track", eventName, params);
-  } else {
-    window.fbq!("track", eventName);
-  }
+  window.fbq!("track", eventName, params);
 }
 
 /**
