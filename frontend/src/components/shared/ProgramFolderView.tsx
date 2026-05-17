@@ -175,12 +175,14 @@ function ProgramCard({
   onClick,
   onEdit,
   onDelete,
+  onCopyTo,
 }: {
   program: Program;
   isSelected: boolean;
   onClick: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onCopyTo?: () => void;
 }) {
   const { t } = useTranslation();
   const lessons = program.lessons ?? [];
@@ -230,6 +232,15 @@ function ProgramCard({
               icon: <Pencil size={13} />,
               onClick: onEdit,
             },
+            ...(onCopyTo
+              ? [
+                  {
+                    label: t("programFolderView.copyTo", "Copy to"),
+                    icon: <Copy size={13} />,
+                    onClick: onCopyTo,
+                  },
+                ]
+              : []),
             {
               label: t("common.delete", "刪除"),
               icon: <Trash2 size={13} />,
@@ -731,6 +742,7 @@ export interface ProgramFolderViewProps {
   programs: Program[];
   onEditProgram: (programId: number) => void;
   onDeleteProgram: (programId: number) => void;
+  onCopyProgramTo?: (programId: number) => void;
   onEditLesson: (programId: number, lessonId: number) => void;
   onDeleteLesson: (programId: number, lessonId: number) => void;
   onCreateLesson: (programId: number) => void;
@@ -758,6 +770,7 @@ export default function ProgramFolderView({
   programs,
   onEditProgram,
   onDeleteProgram,
+  onCopyProgramTo,
   onEditLesson,
   onDeleteLesson,
   onCreateLesson,
@@ -849,6 +862,11 @@ export default function ProgramFolderView({
                       }
                       onEdit={() => onEditProgram(program.id)}
                       onDelete={() => onDeleteProgram(program.id)}
+                      onCopyTo={
+                        onCopyProgramTo
+                          ? () => onCopyProgramTo(program.id)
+                          : undefined
+                      }
                     />
                   </SortableItem>
                 ))}
