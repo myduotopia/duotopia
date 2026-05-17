@@ -127,6 +127,25 @@ export default function WordClozeContextPreview({
     [items],
   );
 
+  // 穩定的 previewSettings reference — 否則 WordClozeActivity 的 useEffect
+  // 會在 AssignmentDialog 每次表單按鍵時重觸發，把預覽 reset 回第 1 題
+  const previewSettings = useMemo(
+    () => ({
+      show_translation: settings.show_translation,
+      play_audio: settings.play_audio,
+      show_answer: settings.show_answer,
+      target_proficiency: settings.target_proficiency,
+      time_limit_per_question: settings.time_limit_per_question ?? null,
+    }),
+    [
+      settings.show_translation,
+      settings.play_audio,
+      settings.show_answer,
+      settings.target_proficiency,
+      settings.time_limit_per_question,
+    ],
+  );
+
   if (!token) {
     return (
       <div className="p-4 text-sm text-gray-500">
@@ -165,13 +184,7 @@ export default function WordClozeContextPreview({
       <WordClozeActivity
         assignmentId={0}
         previewQuestions={previewQuestions}
-        previewSettings={{
-          show_translation: settings.show_translation,
-          play_audio: settings.play_audio,
-          show_answer: settings.show_answer,
-          target_proficiency: settings.target_proficiency,
-          time_limit_per_question: settings.time_limit_per_question ?? null,
-        }}
+        previewSettings={previewSettings}
       />
     </div>
   );

@@ -106,6 +106,27 @@ export default function WordSpellingPreview({
     [items],
   );
 
+  // 穩定的 previewSettings reference — 否則 WordSpellingActivity 的 useEffect
+  // 會在 AssignmentDialog 每次表單按鍵時重觸發，把預覽 reset 回第 1 題
+  const previewSettings = useMemo(
+    () => ({
+      show_translation: settings.show_translation,
+      show_image: settings.show_image,
+      play_audio: settings.play_audio,
+      show_answer: settings.show_answer,
+      target_proficiency: settings.target_proficiency,
+      time_limit_per_question: settings.time_limit_per_question ?? null,
+    }),
+    [
+      settings.show_translation,
+      settings.show_image,
+      settings.play_audio,
+      settings.show_answer,
+      settings.target_proficiency,
+      settings.time_limit_per_question,
+    ],
+  );
+
   if (!token) {
     return (
       <div className="p-4 text-sm text-gray-500">
@@ -132,14 +153,7 @@ export default function WordSpellingPreview({
       <WordSpellingActivity
         assignmentId={0}
         previewWords={previewWords}
-        previewSettings={{
-          show_translation: settings.show_translation,
-          show_image: settings.show_image,
-          play_audio: settings.play_audio,
-          show_answer: settings.show_answer,
-          target_proficiency: settings.target_proficiency,
-          time_limit_per_question: settings.time_limit_per_question ?? null,
-        }}
+        previewSettings={previewSettings}
       />
     </div>
   );

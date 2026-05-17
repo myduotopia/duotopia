@@ -10,7 +10,7 @@
  *
  * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import WordReadingActivity from "./WordReadingActivity";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
@@ -74,6 +74,23 @@ export default function WordReadingPreview({
     };
   }, [contentId, token]);
 
+  // 穩定的 previewSettings reference — 否則 WordReadingActivity 的 useEffect
+  // 會在 AssignmentDialog 每次表單按鍵時重觸發，把預覽 reset 回第 1 題。
+  // can_use_ai_analysis 在預覽強制 false，避免老師預覽時被扣 AI 分析點數。
+  const previewSettings = useMemo(
+    () => ({
+      time_limit_per_question: settings.time_limit_per_question,
+      show_image: settings.show_image,
+      show_translation: settings.show_translation,
+      can_use_ai_analysis: false,
+    }),
+    [
+      settings.time_limit_per_question,
+      settings.show_image,
+      settings.show_translation,
+    ],
+  );
+
   if (!token) {
     return (
       <div className="p-4 text-sm text-gray-500">
@@ -100,12 +117,7 @@ export default function WordReadingPreview({
       <WordReadingActivity
         assignmentId={0}
         previewItems={items}
-        previewSettings={{
-          time_limit_per_question: settings.time_limit_per_question,
-          show_image: settings.show_image,
-          show_translation: settings.show_translation,
-          can_use_ai_analysis: true,
-        }}
+        previewSettings={previewSettings}
       />
     </div>
   );
