@@ -1215,9 +1215,7 @@ async def copy_program(
                 .first()
             )
             if not target_organization:
-                raise HTTPException(
-                    status_code=404, detail="Organization not found"
-                )
+                raise HTTPException(status_code=404, detail="Organization not found")
 
             if not has_read_org_materials_permission(
                 current_teacher.id, target_organization.id, db

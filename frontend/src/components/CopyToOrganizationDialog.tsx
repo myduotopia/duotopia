@@ -56,10 +56,7 @@ export default function CopyToOrganizationDialog({
         name: name.trim() || undefined,
       });
       toast.success(
-        t(
-          "copyToOrganizationDialog.successToast",
-          "已複製到機構教材",
-        ),
+        t("copyToOrganizationDialog.successToast", "已複製到機構教材"),
       );
       onSuccess?.();
       onClose();
@@ -84,9 +81,7 @@ export default function CopyToOrganizationDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <Copy className="h-5 w-5" />
-            <span>
-              {t("copyToOrganizationDialog.title", "複製教材到機構")}
-            </span>
+            <span>{t("copyToOrganizationDialog.title", "複製教材到機構")}</span>
           </DialogTitle>
           <DialogDescription>
             {t(
@@ -111,10 +106,7 @@ export default function CopyToOrganizationDialog({
                 <option value="">
                   {loading
                     ? t("common.loading", "載入中…")
-                    : t(
-                        "copyToOrganizationDialog.noOrgs",
-                        "尚未加入任何機構",
-                      )}
+                    : t("copyToOrganizationDialog.noOrgs", "尚未加入任何機構")}
                 </option>
               )}
               {organizations.map((org) => (

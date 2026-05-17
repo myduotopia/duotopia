@@ -710,9 +710,7 @@ export default function OrgMaterialsPage() {
                 const program = programs.find((p) =>
                   p.lessons?.some((l) => l.id === lessonId),
                 );
-                const lesson = program?.lessons?.find(
-                  (l) => l.id === lessonId,
-                );
+                const lesson = program?.lessons?.find((l) => l.id === lessonId);
                 const cartItem: CartItem = {
                   contentId: content.id,
                   programName: program?.name || "",
@@ -727,9 +725,7 @@ export default function OrgMaterialsPage() {
                 setAssignContents([cartItem]);
                 setShowAssignmentDialog(true);
               }}
-              onReorderPrograms={
-                canManage ? handleReorderPrograms : undefined
-              }
+              onReorderPrograms={canManage ? handleReorderPrograms : undefined}
               onReorderLessons={canManage ? handleReorderLessons : undefined}
               onReorderContents={canManage ? handleReorderContents : undefined}
             />
