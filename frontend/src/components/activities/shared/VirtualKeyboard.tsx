@@ -31,6 +31,8 @@ interface VirtualKeyboardProps {
 // Punctuation (#763) sits inline on the space/enter row at letter-width so
 // answers like don't / Mr. / sentence-level cloze (? ! ,) can be typed on
 // tablet/mobile without bloating the row height.
+// 5 punct keys here + 10-key top row drive the flex-basis formula in index.css
+// (.simple-keyboard .hg-button.vk-punct). Update both together if the layout changes.
 const BOTTOM_ROW = "' . , ? ! {space} {enter}";
 const LAYOUT = {
   default: [
