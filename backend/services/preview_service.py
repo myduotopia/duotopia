@@ -489,9 +489,7 @@ async def get_word_selection_start(
 
     # Backfill missing example_sentence_audio_url so tug_of_war cloze mode
     # always has audio (TTS-generated on demand if needed).
-    sentence_audio_by_id = await ensure_example_sentence_audio(
-        list(content_items), db
-    )
+    sentence_audio_by_id = await ensure_example_sentence_audio(list(content_items), db)
 
     total_words_in_assignment = len(content_items)
 
