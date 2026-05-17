@@ -33,8 +33,9 @@ export default function OrgMaterialsPage() {
   const { sidebarWidth, setSidebarDisabled, editorBusy } = useSidebar();
   const readingPanelRef = useRef<ReadingAssessmentPanelHandle>(null);
   const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
-  // Any active org member can manage (create / edit / delete / reorder).
-  // Soft delete protects data; per-creator restriction not required.
+  // UI gate: show manage controls whenever an org is selected.
+  // Authoritative permission check (active org member) happens on the backend;
+  // any unauthorized request returns 403 and is surfaced as a toast.
   const canManage = !!selectedOrganization;
 
   const [programs, setPrograms] = useState<Program[]>([]);

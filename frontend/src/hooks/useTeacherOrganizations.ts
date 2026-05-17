@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API_URL } from "@/config/api";
+import { apiClient } from "@/lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
 export interface TeacherOrganization {
@@ -14,7 +14,6 @@ interface ApiResponse {
 }
 
 export function useTeacherOrganizations() {
-  const token = useTeacherAuthStore((s) => s.token);
   const teacherId = useTeacherAuthStore((s) => s.user?.id);
 
   const [organizations, setOrganizations] = useState<TeacherOrganization[]>([]);
@@ -22,23 +21,21 @@ export function useTeacherOrganizations() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!teacherId || !token) {
+    if (!teacherId) {
       setOrganizations([]);
       return;
     }
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${API_URL}/api/teachers/${teacherId}/organizations`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data: ApiResponse = await res.json();
+    apiClient
+      .get<ApiResponse>(`/api/teachers/${teacherId}/organizations`)
+      .then((data) => {
         if (!cancelled) setOrganizations(data.organizations ?? []);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message ?? "Failed to load");
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : "Failed to load");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -46,7 +43,7 @@ export function useTeacherOrganizations() {
     return () => {
       cancelled = true;
     };
-  }, [teacherId, token]);
+  }, [teacherId]);
 
   return { organizations, loading, error };
 }

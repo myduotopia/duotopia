@@ -74,10 +74,7 @@ export default function CopyToOrganizationDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent
-        className="bg-white max-w-md"
-        style={{ backgroundColor: "white" }}
-      >
+      <DialogContent className="bg-white max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <Copy className="h-5 w-5" />
