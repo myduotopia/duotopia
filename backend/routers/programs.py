@@ -1219,12 +1219,12 @@ async def copy_program(
                     status_code=404, detail="Organization not found"
                 )
 
-            if not has_manage_materials_permission(
+            if not has_read_org_materials_permission(
                 current_teacher.id, target_organization.id, db
             ):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="No permission to manage organization materials",
+                    detail="You are not a member of this organization",
                 )
 
             new_program = program_service.copy_program_tree_to_template(
