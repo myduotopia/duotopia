@@ -2167,8 +2167,8 @@ async def submit_word_spelling_answer(
 
     correct_answer = content_item.text or ""
 
-    # Case-insensitive comparison, trim whitespace
-    is_correct = request.typed_answer.strip().lower() == correct_answer.strip().lower()
+    # Issue #716: case-sensitive comparison (trim only)
+    is_correct = request.typed_answer.strip() == correct_answer.strip()
 
     # Update memory strength via SM-2 function
     result = db.execute(
@@ -2861,7 +2861,8 @@ async def submit_word_cloze_answer(
         )
     _blanked, correct_answer = cloze
 
-    is_correct = request.typed_answer.strip().lower() == correct_answer.strip().lower()
+    # Issue #716: case-sensitive comparison (trim only)
+    is_correct = request.typed_answer.strip() == correct_answer.strip()
 
     result = db.execute(
         text(

@@ -775,7 +775,9 @@ export function AssignmentDetailSheet({
                       >
                         {(assignment.practice_mode === "rearrangement" ||
                           assignment.practice_mode === "word_reading" ||
-                          assignment.practice_mode === "word_selection") && (
+                          assignment.practice_mode === "word_selection" ||
+                          assignment.practice_mode === "word_spelling" ||
+                          assignment.practice_mode === "word_cloze") && (
                           <option value={0}>
                             {t(
                               "dialogs.assignmentDialog.practiceMode.unlimited",
@@ -1358,6 +1360,7 @@ export function AssignmentDetailSheet({
                           lessonId={0}
                           isCreating={false}
                           isAssignmentCopy={true}
+                          showOptionImages={editAdvanced.show_option_images}
                         />
                       ) : (
                         <ReadingAssessmentPanel

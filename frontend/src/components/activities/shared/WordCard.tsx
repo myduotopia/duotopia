@@ -184,10 +184,9 @@ function NavArrow({
       className={cn(
         "absolute top-1/2 -translate-y-1/2 z-10",
         "flex items-center justify-center",
-        "h-10 w-10 md:h-12 md:w-12 rounded-full",
-        "bg-white/90 hover:bg-white border border-gray-200 shadow-md",
-        "text-gray-600 hover:text-gray-900 transition-colors",
-        isPrev ? "left-2 md:-left-6" : "right-2 md:-right-6",
+        "h-10 w-10 md:h-12 md:w-12",
+        "text-gray-400 hover:text-gray-700 transition-colors",
+        isPrev ? "left-0" : "right-0",
       )}
     >
       {isPrev ? (
@@ -315,8 +314,11 @@ function WordCardFront({
 
       <CardContent
         className={cn(
-          "flex-1 p-6 select-none flex flex-col justify-center",
-          viewMode === "desktop" && showImage && "p-8",
+          // Issue #716: only the right (next) arrow remains, so use an
+          // asymmetric gutter — small on the left, big enough on the right
+          // to clear the 40px arrow button sitting at right-1.
+          "flex-1 py-6 pl-6 pr-12 md:py-6 md:pl-8 md:pr-14 select-none flex flex-col justify-center",
+          viewMode === "desktop" && showImage && "md:p-8",
         )}
       >
         {/* 單字區（區塊置中、內容左對齊） */}

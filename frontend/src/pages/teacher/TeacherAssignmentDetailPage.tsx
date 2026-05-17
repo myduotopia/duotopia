@@ -1350,7 +1350,13 @@ export default function TeacherAssignmentDetailPage() {
             open={editingContentId !== null}
             onOpenChange={(open) => !open && setEditingContentId(null)}
           >
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent
+              className={`max-w-[100vw] h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-y-auto rounded-none sm:rounded-lg p-4 sm:p-6 ${
+                assignment?.practice_mode === "word_selection"
+                  ? "sm:max-w-3xl"
+                  : "sm:max-w-4xl"
+              }`}
+            >
               <DialogHeader>
                 <DialogTitle>
                   {t("assignmentDetail.labels.editContent", "編輯作業內容")}
@@ -1382,6 +1388,12 @@ export default function TeacherAssignmentDetailPage() {
                   };
 
                   if (isVocabSet) {
+                    // Issue #729: show_option_images locks distractor images,
+                    // so the orange-box edit panel must be read-only when on.
+                    const showOptionImages = Boolean(
+                      (assignment as { show_option_images?: boolean })
+                        ?.show_option_images,
+                    );
                     return (
                       <VocabularySetPanel
                         content={{
@@ -1396,6 +1408,7 @@ export default function TeacherAssignmentDetailPage() {
                         isAssignmentCopy={
                           assignment?.practice_mode === "word_selection"
                         }
+                        showOptionImages={showOptionImages}
                       />
                     );
                   }

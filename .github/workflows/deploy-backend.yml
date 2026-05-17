@@ -290,7 +290,7 @@ jobs:
               'programs', 'lessons', 'content', 'content_item', 'contents', 'content_items',
               'assignments', 'assignment_content', 'assignment_contents', 'student_assignments',
               'student_content_progress', 'student_item_progress',
-              'subscription_periods', 'point_usage_logs', 'credit_packages',
+              'subscription_periods', 'point_usage_logs', 'credit_packages', 'plans',
               'teacher_subscription_transaction', 'teacher_subscription_transactions', 'invoice_status_history',
               'user_word_progress', 'practice_sessions', 'practice_answers',
               'organizations', 'schools', 'teacher_organizations', 'teacher_schools', 'classroom_schools', 'student_schools',

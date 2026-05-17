@@ -272,7 +272,119 @@ interface ContentRow {
   example_sentence_korean?: string; // 例句韓文翻譯
   example_sentence_audio_url?: string; // 例句音檔 URL
   // 干擾項（單字選擇題用）
-  distractors?: string[];
+  // Issue #631 / #729: canonical shape is { text, image_url }. Legacy data may
+  // still be string[]; both shapes flow through unchanged so we don't drop
+  // image_url on round-trip.
+  distractors?: Distractor[];
+}
+
+export type Distractor = string | { text: string; image_url?: string | null };
+
+interface ApiContentItem {
+  text?: string;
+  definition?: string;
+  audio_url?: string;
+  image_url?: string;
+  example_sentence?: string;
+  example_sentence_translation?: string;
+  parts_of_speech?: string[];
+  distractors?: Distractor[];
+  vocabulary_translation?: string;
+  vocabulary_translation_lang?: WordTranslationLanguage;
+  example_sentence_translation_lang?: SentenceTranslationLanguage;
+  english_definition?: string;
+  selectedWordLanguage?: WordTranslationLanguage;
+  translation?: string;
+  japanese_translation?: string;
+  korean_translation?: string;
+  example_sentence_japanese?: string;
+  example_sentence_korean?: string;
+  example_sentence_audio_url?: string;
+  selectedSentenceLanguage?: SentenceTranslationLanguage;
+}
+
+// Must stay in sync with the API response shape — used by every reload path to avoid silently dropping fields.
+function mapApiItemToRow(item: ApiContentItem, index: number): ContentRow {
+  let definition = "";
+  let translation = "";
+  let japanese_translation = "";
+  let korean_translation = "";
+  let selectedWordLanguage: WordTranslationLanguage = "chinese";
+
+  if (item.vocabulary_translation_lang && item.vocabulary_translation) {
+    selectedWordLanguage = item.vocabulary_translation_lang;
+    definition = item.definition || "";
+    if (selectedWordLanguage === "chinese") {
+      definition = item.vocabulary_translation;
+    } else if (selectedWordLanguage === "english") {
+      translation = item.vocabulary_translation;
+    } else if (selectedWordLanguage === "japanese") {
+      japanese_translation = item.vocabulary_translation;
+    } else if (selectedWordLanguage === "korean") {
+      korean_translation = item.vocabulary_translation;
+    }
+  } else {
+    definition = item.definition || "";
+  }
+
+  let example_sentence_translation = "";
+  let example_sentence_japanese = "";
+  let example_sentence_korean = "";
+  let selectedSentenceLanguage: SentenceTranslationLanguage = "chinese";
+
+  if (
+    item.example_sentence_translation_lang &&
+    item.example_sentence_translation
+  ) {
+    selectedSentenceLanguage = item.example_sentence_translation_lang;
+    if (item.example_sentence_translation_lang === "chinese") {
+      example_sentence_translation = item.example_sentence_translation;
+    } else if (item.example_sentence_translation_lang === "japanese") {
+      example_sentence_japanese = item.example_sentence_translation;
+    } else if (item.example_sentence_translation_lang === "korean") {
+      example_sentence_korean = item.example_sentence_translation;
+    }
+  } else {
+    example_sentence_translation = item.example_sentence_translation || "";
+    example_sentence_japanese = item.example_sentence_japanese || "";
+    example_sentence_korean = item.example_sentence_korean || "";
+    selectedSentenceLanguage = item.selectedSentenceLanguage || "chinese";
+  }
+
+  return {
+    id: (index + 1).toString(),
+    text: item.text || "",
+    definition,
+    translation,
+    japanese_translation,
+    korean_translation,
+    audioUrl: item.audio_url || "",
+    imageUrl: item.image_url || "",
+    selectedWordLanguage,
+    selectedSentenceLanguage,
+    example_sentence: item.example_sentence || "",
+    example_sentence_translation,
+    example_sentence_japanese,
+    example_sentence_korean,
+    example_sentence_audio_url: item.example_sentence_audio_url || "",
+    partsOfSpeech: item.parts_of_speech || [],
+    distractors: item.distractors,
+  };
+}
+
+function getDistractorText(d: Distractor): string {
+  if (typeof d === "string") return d;
+  return d?.text ?? "";
+}
+
+function getDistractorImage(d: Distractor): string | null {
+  if (typeof d === "string") return null;
+  return d?.image_url ?? null;
+}
+
+function setDistractorText(d: Distractor, text: string): Distractor {
+  if (typeof d === "string") return text;
+  return { ...d, text };
 }
 
 interface TTSModalProps {
@@ -1012,7 +1124,7 @@ interface SortableRowInnerProps {
   handleUpdateRow: (
     index: number,
     field: keyof ContentRow,
-    value: string | string[],
+    value: string | string[] | Distractor[],
   ) => void;
   handleRemoveRow: (index: number) => void;
   handleDuplicateRow: (index: number) => void;
@@ -1038,6 +1150,7 @@ interface SortableRowInnerProps {
   onRowFocus?: () => void;
   onWordLanguageChange?: (lang: WordTranslationLanguage) => void;
   isAssignmentCopy?: boolean; // 是否為作業副本（顯示干擾項編輯）
+  showOptionImages?: boolean; // Issue #729: 派發時若勾選顯示選項圖片，干擾項唯讀
   duplicateReasons?: string[]; // 重複的原因
   customTranslationLang?: string; // 自訂翻譯語言名稱
   sentenceTranslationLang?: string; // 例句翻譯語言
@@ -1067,6 +1180,7 @@ function SortableRowInner({
   onRowFocus,
   onWordLanguageChange: _onWordLanguageChange,
   isAssignmentCopy = false,
+  showOptionImages = false,
   duplicateReasons,
   customTranslationLang = "",
   sentenceTranslationLang = "",
@@ -1535,7 +1649,11 @@ function SortableRowInner({
         </div>
       </div>
 
-      {/* 干擾項編輯區塊（僅在作業副本模式 + 有干擾項時顯示） */}
+      {/* 干擾項編輯區塊（僅在作業副本模式 + 有干擾項時顯示）
+        Issue #729: distractors may be legacy string[] or { text, image_url }[].
+        When showOptionImages=true the snapshotted images are committed and
+        the panel renders read-only; otherwise text inputs preserve image_url
+        on edit by only mutating the .text field of the object shape. */}
       {isAssignmentCopy && row.distractors && row.distractors.length > 0 && (
         <div className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
@@ -1546,24 +1664,50 @@ function SortableRowInner({
               })}
             </span>
           </div>
-          <div className="flex gap-2">
-            {row.distractors.map((distractor, dIdx) => (
-              <input
-                key={dIdx}
-                type="text"
-                value={distractor}
-                onChange={(e) => {
-                  const newDistractors = [...(row.distractors || [])];
-                  newDistractors[dIdx] = e.target.value;
-                  handleUpdateRow(index, "distractors", newDistractors);
-                }}
-                className="flex-1 px-2 py-1.5 border border-gray-300 rounded-md text-sm bg-white"
-                placeholder={t("vocabularySet.distractors.placeholder", {
-                  defaultValue: `干擾項 ${dIdx + 1}`,
-                  number: dIdx + 1,
-                })}
-              />
-            ))}
+          <div className="flex gap-2 flex-wrap">
+            {row.distractors.map((distractor, dIdx) => {
+              const text = getDistractorText(distractor);
+              const imageUrl = getDistractorImage(distractor);
+
+              if (showOptionImages) {
+                return (
+                  <div
+                    key={dIdx}
+                    className="flex-1 min-w-[120px] flex items-center gap-2 px-2 py-1.5 border border-gray-200 rounded-md bg-gray-50 text-sm"
+                  >
+                    {imageUrl && (
+                      <img
+                        src={imageUrl}
+                        alt={text}
+                        className="h-10 w-10 object-cover rounded border border-gray-200 flex-shrink-0"
+                      />
+                    )}
+                    <span className="truncate text-gray-700">{text}</span>
+                  </div>
+                );
+              }
+
+              return (
+                <input
+                  key={dIdx}
+                  type="text"
+                  value={text}
+                  onChange={(e) => {
+                    const newDistractors = [...(row.distractors || [])];
+                    newDistractors[dIdx] = setDistractorText(
+                      distractor,
+                      e.target.value,
+                    );
+                    handleUpdateRow(index, "distractors", newDistractors);
+                  }}
+                  className="flex-1 px-2 py-1.5 border border-gray-300 rounded-md text-sm bg-white"
+                  placeholder={t("vocabularySet.distractors.placeholder", {
+                    defaultValue: `干擾項 ${dIdx + 1}`,
+                    number: dIdx + 1,
+                  })}
+                />
+              );
+            })}
           </div>
         </div>
       )}
@@ -1589,6 +1733,7 @@ interface VocabularySetPanelProps {
   isOpen?: boolean;
   isCreating?: boolean; // 是否為新增模式
   isAssignmentCopy?: boolean; // 是否為作業副本（顯示干擾項編輯）
+  showOptionImages?: boolean; // Issue #729: 派發時若啟用顯示選項圖片，干擾項唯讀
 }
 
 const VocabularySetPanel = forwardRef<
@@ -1604,6 +1749,7 @@ const VocabularySetPanel = forwardRef<
     programLevel,
     isCreating = false,
     isAssignmentCopy = false,
+    showOptionImages = false,
   },
   ref,
 ) {
@@ -1785,117 +1931,8 @@ const VocabularySetPanel = forwardRef<
 
       // Convert items to rows format
       if (data.items && Array.isArray(data.items)) {
-        const convertedRows = data.items.map(
-          (
-            item: {
-              text?: string;
-              definition?: string;
-              audio_url?: string;
-              image_url?: string;
-              example_sentence?: string;
-              example_sentence_translation?: string;
-              parts_of_speech?: string[];
-              distractors?: string[];
-              // 統一翻譯欄位（canonical）
-              vocabulary_translation?: string;
-              vocabulary_translation_lang?: WordTranslationLanguage;
-              example_sentence_translation_lang?: SentenceTranslationLanguage;
-              // 向後相容（ReadingAssessmentPanel 仍使用，VocabularySetPanel 不讀取）
-              english_definition?: string;
-              selectedWordLanguage?: WordTranslationLanguage;
-              translation?: string;
-              japanese_translation?: string;
-              korean_translation?: string;
-              example_sentence_japanese?: string;
-              example_sentence_korean?: string;
-              example_sentence_audio_url?: string;
-              selectedSentenceLanguage?: SentenceTranslationLanguage;
-            },
-            index: number,
-          ) => {
-            // 處理單字翻譯：優先使用新的統一欄位
-            let definition = "";
-            let translation = "";
-            let japanese_translation = "";
-            let korean_translation = "";
-            let selectedWordLanguage: WordTranslationLanguage = "chinese";
-
-            if (
-              item.vocabulary_translation_lang &&
-              item.vocabulary_translation
-            ) {
-              // 使用新的統一欄位格式
-              selectedWordLanguage = item.vocabulary_translation_lang;
-              // 永遠先載入中文翻譯，避免切換其他語言後中文遺失 (#366)
-              definition = item.definition || "";
-              // 再把 vocabulary_translation 放到對應語言欄位
-              if (selectedWordLanguage === "chinese") {
-                definition = item.vocabulary_translation;
-              } else if (selectedWordLanguage === "english") {
-                translation = item.vocabulary_translation;
-              } else if (selectedWordLanguage === "japanese") {
-                japanese_translation = item.vocabulary_translation;
-              } else if (selectedWordLanguage === "korean") {
-                korean_translation = item.vocabulary_translation;
-              }
-            } else {
-              // Fallback：vocabulary_translation 不存在時，從 definition 讀取中文
-              definition = item.definition || "";
-            }
-
-            // 處理例句翻譯：優先使用新的統一欄位
-            let example_sentence_translation = "";
-            let example_sentence_japanese = "";
-            let example_sentence_korean = "";
-            let selectedSentenceLanguage: SentenceTranslationLanguage =
-              "chinese";
-
-            if (
-              item.example_sentence_translation_lang &&
-              item.example_sentence_translation
-            ) {
-              // 使用新的統一欄位格式
-              selectedSentenceLanguage = item.example_sentence_translation_lang;
-              if (item.example_sentence_translation_lang === "chinese") {
-                example_sentence_translation =
-                  item.example_sentence_translation;
-              } else if (
-                item.example_sentence_translation_lang === "japanese"
-              ) {
-                example_sentence_japanese = item.example_sentence_translation;
-              } else if (item.example_sentence_translation_lang === "korean") {
-                example_sentence_korean = item.example_sentence_translation;
-              }
-            } else {
-              // 向後相容：使用舊的欄位格式
-              example_sentence_translation =
-                item.example_sentence_translation || "";
-              example_sentence_japanese = item.example_sentence_japanese || "";
-              example_sentence_korean = item.example_sentence_korean || "";
-              selectedSentenceLanguage =
-                item.selectedSentenceLanguage || "chinese";
-            }
-
-            return {
-              id: (index + 1).toString(),
-              text: item.text || "",
-              definition,
-              translation,
-              japanese_translation,
-              korean_translation,
-              audioUrl: item.audio_url || "",
-              imageUrl: item.image_url || "",
-              selectedWordLanguage,
-              selectedSentenceLanguage,
-              example_sentence: item.example_sentence || "",
-              example_sentence_translation,
-              example_sentence_japanese,
-              example_sentence_korean,
-              example_sentence_audio_url: item.example_sentence_audio_url || "",
-              partsOfSpeech: item.parts_of_speech || [],
-              distractors: item.distractors || undefined,
-            };
-          },
+        const convertedRows = data.items.map((item, index) =>
+          mapApiItemToRow(item as ApiContentItem, index),
         );
         setRows(convertedRows);
 
@@ -2006,7 +2043,7 @@ const VocabularySetPanel = forwardRef<
   const handleUpdateRow = (
     index: number,
     field: keyof ContentRow,
-    value: string | string[],
+    value: string | string[] | Distractor[],
   ) => {
     const newRows = [...rows];
     newRows[index] = { ...newRows[index], [field]: value };
@@ -2254,21 +2291,8 @@ const VocabularySetPanel = forwardRef<
               editingContent.id,
             );
             if (response && response.items) {
-              const updatedRows = response.items.map(
-                (
-                  item: {
-                    text?: string;
-                    translation?: string;
-                    definition?: string;
-                    audio_url?: string;
-                  },
-                  index: number,
-                ) => ({
-                  id: String(index + 1),
-                  text: item.text || "",
-                  definition: item.definition || "",
-                  audioUrl: item.audio_url || "",
-                }),
+              const updatedRows = response.items.map((item, index) =>
+                mapApiItemToRow(item as ApiContentItem, index),
               );
               setRows(updatedRows);
             }
@@ -4151,157 +4175,160 @@ const VocabularySetPanel = forwardRef<
 
       {/* Desktop: Side-by-side layout / Mobile: Editor only */}
       <div className="flex flex-1 gap-4 min-h-0">
-        {/* Left: Batch Work Area (Desktop only) */}
-        <BatchWorkPanel
-          text={batchPasteText}
-          onTextChange={setBatchPasteText}
-          maxItems={BATCH_PASTE_MAX}
-          placeholder="apple&#10;banana&#10;orange"
-          autoTranslate={batchPasteAutoTranslate}
-          onAutoTranslateChange={setBatchPasteAutoTranslate}
-          selectedLanguage={lastSelectedWordLang}
-          onLanguageChange={(lang) => {
-            const newLang = lang as WordTranslationLanguage;
-            setLastSelectedWordLang(newLang);
-            setRows((prev) =>
-              prev.map((row) => ({ ...row, selectedWordLanguage: newLang })),
-            );
-          }}
-          translationLanguages={WORD_TRANSLATION_LANGUAGES}
-          customLanguage={customTranslationLang}
-          onCustomLanguageChange={setCustomTranslationLang}
-          autoTTS={batchPasteAutoTTS}
-          onAutoTTSChange={setBatchPasteAutoTTS}
-          ttsSettings={{
-            accent: batchTTSAccent,
-            gender: batchTTSGender,
-            speed: batchTTSSpeed,
-          }}
-          onTTSSettingsChange={(s) => {
-            setBatchTTSAccent(s.accent);
-            setBatchTTSGender(s.gender);
-            setBatchTTSSpeed(s.speed);
-          }}
-          onConfirm={() =>
-            handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)
-          }
-          onPause={() => {
-            batchPauseRef.current = true;
-          }}
-          isBusy={isBatchPasting}
-          progress={batchProgress}
-        >
-          {/* AI Generate Examples */}
-          <div className="mt-4 bg-purple-50 rounded-lg border border-purple-200 overflow-hidden">
-            <div className="flex items-center gap-2 p-3">
-              <input
-                type="checkbox"
-                checked={aiGenerateExpanded}
-                onChange={(e) => setAiGenerateExpanded(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <Sparkles className="h-4 w-4" />
-              <span className="text-sm font-semibold text-gray-800">
-                {t("vocabularySet.modals.aiGenerateExamplesTitle")}
-              </span>
-              <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">
-                Beta
-              </span>
-            </div>
-            {aiGenerateExpanded && (
-              <div className="px-3 pb-3 space-y-3">
-                {/* Difficulty Level */}
-                <div>
-                  <label className="text-xs text-gray-600 mb-1 block">
-                    {t("vocabularySet.labels.difficultyLevel")}
-                  </label>
-                  <div className="flex flex-wrap gap-1">
-                    {["A1", "A2", "B1", "B2", "C1", "C2"].map((level) => (
-                      <button
-                        key={level}
-                        onClick={() => setAiGenerateLevel(level)}
-                        className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-                          aiGenerateLevel === level
-                            ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
-                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                        }`}
-                      >
-                        {level}
-                      </button>
-                    ))}
+        {/* Left: Batch Work Area (Desktop only) — hidden for assignment copy */}
+        {!isAssignmentCopy && (
+          <BatchWorkPanel
+            text={batchPasteText}
+            onTextChange={setBatchPasteText}
+            maxItems={BATCH_PASTE_MAX}
+            placeholder="apple&#10;banana&#10;orange"
+            autoTranslate={batchPasteAutoTranslate}
+            onAutoTranslateChange={setBatchPasteAutoTranslate}
+            selectedLanguage={lastSelectedWordLang}
+            onLanguageChange={(lang) => {
+              const newLang = lang as WordTranslationLanguage;
+              setLastSelectedWordLang(newLang);
+              setRows((prev) =>
+                prev.map((row) => ({ ...row, selectedWordLanguage: newLang })),
+              );
+            }}
+            translationLanguages={WORD_TRANSLATION_LANGUAGES}
+            customLanguage={customTranslationLang}
+            onCustomLanguageChange={setCustomTranslationLang}
+            autoTTS={batchPasteAutoTTS}
+            onAutoTTSChange={setBatchPasteAutoTTS}
+            ttsSettings={{
+              accent: batchTTSAccent,
+              gender: batchTTSGender,
+              speed: batchTTSSpeed,
+            }}
+            onTTSSettingsChange={(s) => {
+              setBatchTTSAccent(s.accent);
+              setBatchTTSGender(s.gender);
+              setBatchTTSSpeed(s.speed);
+            }}
+            onConfirm={() =>
+              handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)
+            }
+            onPause={() => {
+              batchPauseRef.current = true;
+            }}
+            isBusy={isBatchPasting}
+            progress={batchProgress}
+          >
+            {/* AI Generate Examples */}
+            <div className="mt-4 bg-purple-50 rounded-lg border border-purple-200 overflow-hidden">
+              <div className="flex items-center gap-2 p-3">
+                <input
+                  type="checkbox"
+                  checked={aiGenerateExpanded}
+                  onChange={(e) => setAiGenerateExpanded(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <Sparkles className="h-4 w-4" />
+                <span className="text-sm font-semibold text-gray-800">
+                  {t("vocabularySet.modals.aiGenerateExamplesTitle")}
+                </span>
+                <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">
+                  Beta
+                </span>
+              </div>
+              {aiGenerateExpanded && (
+                <div className="px-3 pb-3 space-y-3">
+                  {/* Difficulty Level */}
+                  <div>
+                    <label className="text-xs text-gray-600 mb-1 block">
+                      {t("vocabularySet.labels.difficultyLevel")}
+                    </label>
+                    <div className="flex flex-wrap gap-1">
+                      {["A1", "A2", "B1", "B2", "C1", "C2"].map((level) => (
+                        <button
+                          key={level}
+                          onClick={() => setAiGenerateLevel(level)}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                            aiGenerateLevel === level
+                              ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
+                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                          }`}
+                        >
+                          {level}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* AI Prompt */}
+                  <div>
+                    <label className="text-xs text-gray-600 mb-1 block">
+                      {t("vocabularySet.labels.aiPrompt")}
+                    </label>
+                    <textarea
+                      value={aiGeneratePrompt}
+                      onChange={(e) => setAiGeneratePrompt(e.target.value)}
+                      placeholder={t(
+                        "vocabularySet.placeholders.aiPromptExample",
+                      )}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-none"
+                      rows={2}
+                    />
+                  </div>
+
+                  {/* Sentence translation language selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-gray-600 block">
+                      {t("vocabularySet.labels.translateTo")}
+                    </label>
+                    <select
+                      value={aiGenerateTranslateLang}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAiGenerateTranslateLang(val);
+                        if (val !== "other")
+                          setCustomSentenceTranslationLang("");
+                        // 切換語言時清空所有例句翻譯欄位
+                        setRows((prev) =>
+                          prev.map((row) => ({
+                            ...row,
+                            example_sentence_translation: "",
+                            example_sentence_japanese: "",
+                            example_sentence_korean: "",
+                            selectedSentenceLanguage: (val || undefined) as
+                              | SentenceTranslationLanguage
+                              | undefined,
+                          })),
+                        );
+                      }}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">
+                        {t("contentEditor.labels.selectLanguage")}
+                      </option>
+                      {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
+                        <option key={lang.value} value={lang.value}>
+                          {lang.label}
+                        </option>
+                      ))}
+                      <option value="other">
+                        {t("contentEditor.labels.otherLanguage")}
+                      </option>
+                    </select>
+                    {aiGenerateTranslateLang === "other" && (
+                      <input
+                        type="text"
+                        value={customSentenceTranslationLang}
+                        onChange={(e) =>
+                          setCustomSentenceTranslationLang(e.target.value)
+                        }
+                        placeholder={t("contentEditor.labels.enterLanguage")}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      />
+                    )}
                   </div>
                 </div>
-
-                {/* AI Prompt */}
-                <div>
-                  <label className="text-xs text-gray-600 mb-1 block">
-                    {t("vocabularySet.labels.aiPrompt")}
-                  </label>
-                  <textarea
-                    value={aiGeneratePrompt}
-                    onChange={(e) => setAiGeneratePrompt(e.target.value)}
-                    placeholder={t(
-                      "vocabularySet.placeholders.aiPromptExample",
-                    )}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-none"
-                    rows={2}
-                  />
-                </div>
-
-                {/* Sentence translation language selector */}
-                <div className="space-y-1.5">
-                  <label className="text-xs text-gray-600 block">
-                    {t("vocabularySet.labels.translateTo")}
-                  </label>
-                  <select
-                    value={aiGenerateTranslateLang}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setAiGenerateTranslateLang(val);
-                      if (val !== "other") setCustomSentenceTranslationLang("");
-                      // 切換語言時清空所有例句翻譯欄位
-                      setRows((prev) =>
-                        prev.map((row) => ({
-                          ...row,
-                          example_sentence_translation: "",
-                          example_sentence_japanese: "",
-                          example_sentence_korean: "",
-                          selectedSentenceLanguage: (val || undefined) as
-                            | SentenceTranslationLanguage
-                            | undefined,
-                        })),
-                      );
-                    }}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  >
-                    <option value="">
-                      {t("contentEditor.labels.selectLanguage")}
-                    </option>
-                    {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
-                      <option key={lang.value} value={lang.value}>
-                        {lang.label}
-                      </option>
-                    ))}
-                    <option value="other">
-                      {t("contentEditor.labels.otherLanguage")}
-                    </option>
-                  </select>
-                  {aiGenerateTranslateLang === "other" && (
-                    <input
-                      type="text"
-                      value={customSentenceTranslationLang}
-                      onChange={(e) =>
-                        setCustomSentenceTranslationLang(e.target.value)
-                      }
-                      placeholder={t("contentEditor.labels.enterLanguage")}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </BatchWorkPanel>
+              )}
+            </div>
+          </BatchWorkPanel>
+        )}
 
         {/* Right: Word Editor Area */}
         <div className="flex-1 flex flex-col min-h-0">
@@ -4350,6 +4377,7 @@ const VocabularySetPanel = forwardRef<
                       onRowFocus={() => setActiveRowIndex(index)}
                       onWordLanguageChange={setLastSelectedWordLang}
                       isAssignmentCopy={isAssignmentCopy}
+                      showOptionImages={showOptionImages}
                       duplicateReasons={duplicateMap.get(index)}
                       customTranslationLang={customTranslationLang}
                       sentenceTranslationLang={aiGenerateTranslateLang}
@@ -4360,15 +4388,17 @@ const VocabularySetPanel = forwardRef<
                   );
                 })}
 
-                {/* Add Row Button */}
-                <button
-                  onClick={handleAddRow}
-                  className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600"
-                  disabled={rows.length >= BATCH_PASTE_MAX}
-                >
-                  <Plus className="h-5 w-5" />
-                  {t("contentEditor.buttons.addItem")}
-                </button>
+                {/* Add Row Button — hidden for assignment copy */}
+                {!isAssignmentCopy && (
+                  <button
+                    onClick={handleAddRow}
+                    className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600"
+                    disabled={rows.length >= BATCH_PASTE_MAX}
+                  >
+                    <Plus className="h-5 w-5" />
+                    {t("contentEditor.buttons.addItem")}
+                  </button>
+                )}
               </div>
             </SortableContext>
           </DndContext>
