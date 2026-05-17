@@ -5095,12 +5095,15 @@
       "audioToChinese": "Audio → Translation",
       "englishToChinese": "English → Translation",
       "chineseToEnglish": "Translation → English",
-      "imageToEnglish": "Image → English"
+      "imageToEnglish": "Image → English",
+      "clozeToEnglish": "Cloze Sentence → English"
     },
     "rotateDevice": "Please rotate your device",
     "rotateDeviceHint": "This game is best played in landscape mode",
     "continueAnyway": "Continue anyway",
     "imagesModeRequirement": "Requires at least 4 words with images",
+    "clozeModeRequirement": "Requires at least 4 words with example sentences",
+    "showSentenceTranslation": "Show sentence translation",
     "error": {
       "loadFailed": "Failed to load vocabulary",
       "notEnoughWords": "Not enough words (minimum 4 required)"

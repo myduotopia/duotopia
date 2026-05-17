@@ -460,7 +460,7 @@ def _parse_exclude_ids(exclude_ids: str) -> set:
     return result
 
 
-def get_word_selection_start(
+async def get_word_selection_start(
     assignment: Assignment,
     db: Session,
     exclude_ids: str = "",
@@ -506,6 +506,11 @@ def get_word_selection_start(
         if assignment.shuffle_questions:
             random.shuffle(remaining_items)
         content_items = remaining_items[:10]
+
+    # Backfill missing example_sentence_audio_url so tug_of_war cloze mode
+    # always has audio (TTS-generated on demand if needed). Runs after
+    # exclude filtering so we don't generate TTS for discarded words.
+    sentence_audio_by_id = await ensure_example_sentence_audio(list(content_items), db)
 
     # Build response — Issue #631: options 升級為 list[{text, image_url}]
     # show_image 模式：選項用英文（item.text），題目隱藏英文，避免答案太明顯。
@@ -553,6 +558,13 @@ def get_word_selection_start(
                 "correct_text": correct_answer,
                 "audio_url": item.audio_url,
                 "image_url": item.image_url,
+                "example_sentence": item.example_sentence or "",
+                "example_sentence_translation": item.example_sentence_translation or "",
+                "example_sentence_audio_url": (
+                    sentence_audio_by_id.get(item.id)
+                    or item.example_sentence_audio_url
+                    or ""
+                ),
                 "memory_strength": 0,
                 "options": options,
             }

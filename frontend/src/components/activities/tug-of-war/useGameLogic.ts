@@ -25,6 +25,23 @@ function shuffleArray<T>(arr: T[]): T[] {
   return shuffled;
 }
 
+const CLOZE_BLANK = "_____";
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function makeCloze(sentence: string, target: string): string {
+  if (!sentence) return CLOZE_BLANK;
+  if (!target) return sentence;
+  const re = new RegExp(`\\b${escapeRegex(target)}\\b`, "gi");
+  if (re.test(sentence)) {
+    return sentence.replace(re, CLOZE_BLANK);
+  }
+  // Fallback: append a blank at the end so question still works
+  return `${sentence} ${CLOZE_BLANK}`;
+}
+
 function generateQuestions(
   vocabItems: VocabItem[],
   mode: QuestionMode,
@@ -39,12 +56,23 @@ function generateQuestions(
     }
   }
 
+  // Cloze mode: require example_sentence (fallback to all if < 4)
+  if (mode === "cloze_to_english") {
+    const withSentence = items.filter((i) => i.example_sentence);
+    if (withSentence.length >= 4) {
+      items = withSentence;
+    }
+  }
+
   return items.map((item) => {
     // Determine correct answer and prompt based on mode
     let correctAnswer: string;
     let prompt: string;
     let hasAudio = false;
     let hasImage = false;
+    let hasCloze = false;
+    let clozeSentence: string | undefined;
+    let clozeTranslation: string | undefined;
 
     switch (mode) {
       case "audio_to_english":
@@ -70,13 +98,22 @@ function generateQuestions(
         prompt = "";
         hasImage = true;
         break;
+      case "cloze_to_english":
+        correctAnswer = item.text;
+        prompt = "";
+        hasCloze = true;
+        hasAudio = true;
+        clozeSentence = makeCloze(item.example_sentence || "", item.text);
+        clozeTranslation = item.example_sentence_translation || undefined;
+        break;
     }
 
     // Generate distractors from other vocab items
     const isAnswerEnglish =
       mode === "audio_to_english" ||
       mode === "chinese_to_english" ||
-      mode === "image_to_english";
+      mode === "image_to_english" ||
+      mode === "cloze_to_english";
     const pool = vocabItems
       .filter((v) => v.id !== item.id)
       .map((v) => (isAnswerEnglish ? v.text : v.translation))
@@ -102,6 +139,9 @@ function generateQuestions(
       optionsB,
       hasAudio,
       hasImage,
+      hasCloze,
+      clozeSentence,
+      clozeTranslation,
     };
   });
 }
@@ -117,6 +157,8 @@ export function useGameLogic(
     teamACooldown: false,
     teamBCooldown: false,
     questionMode: "audio_to_english",
+    showSentenceTranslation: false,
+    audioMuted: false,
     gameStatus: "waiting",
     scores: { a: 0, b: 0 },
     answeredBy: null,
@@ -140,19 +182,21 @@ export function useGameLogic(
   const startGame = useCallback(
     (mode: QuestionMode = "audio_to_english") => {
       const questions = generateQuestions(vocabItems, mode);
-      setGameState({
+      setGameState((prev) => ({
         questions,
         currentIndex: 0,
         ropePosition: 0,
         teamACooldown: false,
         teamBCooldown: false,
         questionMode: mode,
+        showSentenceTranslation: prev.showSentenceTranslation,
+        audioMuted: prev.audioMuted,
         gameStatus: "playing",
         scores: { a: 0, b: 0 },
         answeredBy: null,
         lastCorrectTeam: null,
         answerHistory: [],
-      });
+      }));
     },
     [vocabItems],
   );
@@ -161,22 +205,35 @@ export function useGameLogic(
     (mode: QuestionMode) => {
       // Regenerate questions with new mode, reset game
       const questions = generateQuestions(vocabItems, mode);
-      setGameState({
+      setGameState((prev) => ({
         questions,
         currentIndex: 0,
         ropePosition: 0,
         teamACooldown: false,
         teamBCooldown: false,
         questionMode: mode,
+        showSentenceTranslation: prev.showSentenceTranslation,
+        audioMuted: prev.audioMuted,
         gameStatus: "playing",
         scores: { a: 0, b: 0 },
         answeredBy: null,
         lastCorrectTeam: null,
         answerHistory: [],
-      });
+      }));
     },
     [vocabItems],
   );
+
+  const toggleSentenceTranslation = useCallback(() => {
+    setGameState((prev) => ({
+      ...prev,
+      showSentenceTranslation: !prev.showSentenceTranslation,
+    }));
+  }, []);
+
+  const toggleAudioMute = useCallback(() => {
+    setGameState((prev) => ({ ...prev, audioMuted: !prev.audioMuted }));
+  }, []);
 
   const handleAnswer = useCallback(
     (team: Team, selectedAnswer: string) => {
@@ -319,5 +376,7 @@ export function useGameLogic(
     startGame,
     changeMode,
     handleAnswer,
+    toggleSentenceTranslation,
+    toggleAudioMute,
   };
 }

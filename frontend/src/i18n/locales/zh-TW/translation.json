@@ -5144,12 +5144,15 @@
       "audioToChinese": "聽音選翻譯/解釋",
       "englishToChinese": "英文選翻譯/解釋",
       "chineseToEnglish": "翻譯/解釋選英文",
-      "imageToEnglish": "看圖選英文"
+      "imageToEnglish": "看圖選英文",
+      "clozeToEnglish": "例句克漏字選英文"
     },
     "rotateDevice": "請將手機轉為橫向",
     "rotateDeviceHint": "此遊戲適合橫向遊玩",
     "continueAnyway": "繼續遊玩",
     "imagesModeRequirement": "需要至少 4 個單字有圖片",
+    "clozeModeRequirement": "需要至少 4 個單字有例句",
+    "showSentenceTranslation": "顯示例句翻譯",
     "error": {
       "loadFailed": "載入單字失敗",
       "notEnoughWords": "單字數量不足（至少需要 4 個）"

@@ -273,7 +273,7 @@ async def preview_word_selection_start(
 ):
     """Preview mode: Get word selection practice data."""
     assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
-    return get_word_selection_start(assignment, db, exclude_ids)
+    return await get_word_selection_start(assignment, db, exclude_ids)
 
 
 @router.get("/assignments/{assignment_id}/preview/word-spelling-start")

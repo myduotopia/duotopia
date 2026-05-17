@@ -342,7 +342,7 @@ async def demo_word_selection_start(
 ):
     """Demo mode: Start word selection practice."""
     assignment = get_demo_assignment(assignment_id, db)
-    return get_word_selection_start(assignment, db, exclude_ids)
+    return await get_word_selection_start(assignment, db, exclude_ids)
 
 
 @router.get("/assignments/{assignment_id}/preview/word-spelling-start")
