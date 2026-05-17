@@ -61,8 +61,6 @@ function generateQuestions(
     const withSentence = items.filter((i) => i.example_sentence);
     if (withSentence.length >= 4) {
       items = withSentence;
-    } else {
-      items = withSentence;
     }
   }
 
