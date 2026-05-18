@@ -1644,6 +1644,78 @@ async def delete_lesson(
 
 
 # Content endpoints
+@router.post("/{program_id}/contents", status_code=201)
+async def create_content_in_program(
+    program_id: int,
+    payload: ContentCreate,
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """
+    Issue #587: Create content directly under a program (no lesson).
+
+    Automatically checks program permission.
+    """
+    try:
+        content = program_service.create_content_in_program(
+            program_id=program_id,
+            teacher_id=current_teacher.id,
+            data=payload.dict(),
+            db=db,
+        )
+        return {
+            "id": content.id,
+            "lesson_id": content.lesson_id,
+            "program_id": content.program_id,
+            "type": content.type,
+            "title": content.title,
+            "order_index": content.order_index,
+            "is_active": content.is_active,
+        }
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.put("/{program_id}/contents/reorder")
+async def reorder_program_direct_contents(
+    program_id: int,
+    order_data: List[dict],
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """
+    Issue #587: Reorder contents that live directly under a program (lesson_id IS NULL).
+
+    Permission is checked via has_program_permission (covers teacher/org/school).
+    """
+    from utils.permissions import has_program_permission
+
+    if not has_program_permission(db, program_id, current_teacher.id, "write"):
+        raise HTTPException(status_code=403, detail="No permission to reorder contents")
+
+    content_ids = [item["id"] for item in order_data]
+    contents_list = (
+        db.query(Content)
+        .filter(
+            Content.id.in_(content_ids),
+            Content.program_id == program_id,
+            Content.lesson_id.is_(None),
+        )
+        .all()
+    )
+    contents_dict = {c.id: c for c in contents_list}
+
+    for item in order_data:
+        content = contents_dict.get(item["id"])
+        if content:
+            content.order_index = item["order_index"]
+
+    db.commit()
+    return {"message": "Contents reordered successfully"}
+
+
 @router.post("/lessons/{lesson_id}/contents", status_code=201)
 async def create_content(
     lesson_id: int,

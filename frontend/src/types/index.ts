@@ -75,7 +75,9 @@ export interface Content {
   items_count: number;
   estimated_time?: string;
   items?: ContentItem[];
-  lesson_id?: number;
+  // Issue #587: lesson_id may be null when content lives directly under a program
+  lesson_id?: number | null;
+  program_id?: number | null;
   target_wpm?: number;
   target_accuracy?: number;
   time_limit_seconds?: number;

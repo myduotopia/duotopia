@@ -91,6 +91,14 @@ class Program(Base):
         cascade="all, delete-orphan",
         order_by="Lesson.order_index",
     )
+    # Issue #587: Contents that live directly under this Program (no lesson)
+    contents = relationship(
+        "Content",
+        primaryjoin="and_(Program.id==Content.program_id, Content.lesson_id.is_(None))",
+        foreign_keys="Content.program_id",
+        viewonly=True,
+        order_by="Content.order_index",
+    )
 
     @property
     def is_public_template(self):
