@@ -1868,6 +1868,9 @@ interface VocabularySetPanelProps {
   onSave?: (content?: any) => void | Promise<void>;
   // Alternative props for ClassroomDetail usage
   lessonId?: number;
+  // Issue #587: programId is set (and lessonId omitted) when creating
+  // content directly under a program (no lesson).
+  programId?: number;
   programLevel?: string; // Program difficulty level for AI generation
   onCancel?: () => void;
   isOpen?: boolean;
@@ -1886,6 +1889,7 @@ const VocabularySetPanel = forwardRef<
     onUpdateContent,
     onSave,
     lessonId,
+    programId,
     programLevel,
     isCreating = false,
     isAssignmentCopy = false,
@@ -2780,12 +2784,30 @@ const VocabularySetPanel = forwardRef<
           console.error("Failed to update content:", error);
           toast.error(t("contentEditor.messages.savingFailed"));
         }
-      } else if (isCreating && lessonId) {
+      } else if (isCreating && (lessonId || programId)) {
         try {
-          const newContent = await apiClient.createContent(lessonId, {
-            type: "VOCABULARY_SET",
-            ...saveData,
-          });
+          // Issue #587: programId-only means create program-direct content.
+          // The program-direct endpoint takes type+title only — items are
+          // saved via a follow-up updateContent call.
+          const newContent = programId
+            ? await apiClient.createProgramContent(programId, {
+                type: "VOCABULARY_SET",
+                title: saveData.title,
+              })
+            : await apiClient.createContent(lessonId!, {
+                type: "VOCABULARY_SET",
+                ...saveData,
+              });
+
+          if (programId && saveData.items && saveData.items.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const created = newContent as any;
+            await apiClient.updateContent(created.id, {
+              title: saveData.title,
+              items: saveData.items,
+            });
+          }
+
           toast.success(t("contentEditor.messages.contentCreatedSuccess"));
           if (onSave) {
             await onSave(newContent);

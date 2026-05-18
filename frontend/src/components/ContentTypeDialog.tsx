@@ -23,6 +23,8 @@ interface ContentTypeDialogProps {
   onSelect: (selection: {
     type: string;
     lessonId: number;
+    // Issue #587: programId is set (and lessonId is 0) when creating program-direct content
+    programId?: number;
     programName: string;
     lessonName: string;
   }) => void;
@@ -30,6 +32,8 @@ interface ContentTypeDialogProps {
     programName: string;
     lessonName: string;
     lessonId: number;
+    // Issue #587: when set, creating content directly under this program (no lesson)
+    programId?: number;
   };
 }
 
@@ -90,6 +94,7 @@ export default function ContentTypeDialog({
     onSelect({
       type: contentType.type,
       lessonId: lessonInfo.lessonId,
+      programId: lessonInfo.programId,
       programName: lessonInfo.programName,
       lessonName: lessonInfo.lessonName,
     });

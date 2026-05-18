@@ -1094,6 +1094,37 @@ class ApiClient {
     });
   }
 
+  /**
+   * Issue #587: Create content directly under a program (no lesson).
+   * Calls unified endpoint that handles teacher/org/school permission internally.
+   */
+  async createProgramContent(
+    programId: number,
+    data: {
+      type: string;
+      title: string;
+      order_index?: number;
+    },
+  ) {
+    return this.request(`/api/programs/${programId}/contents`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Issue #587: Reorder contents that live directly under a program.
+   */
+  async reorderProgramContents(
+    programId: number,
+    orderData: Array<{ id: number; order_index: number }>,
+  ) {
+    return this.request(`/api/programs/${programId}/contents/reorder`, {
+      method: "PUT",
+      body: JSON.stringify(orderData),
+    });
+  }
+
   async updateContent(
     contentId: number,
     data: {
