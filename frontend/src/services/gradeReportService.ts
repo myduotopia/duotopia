@@ -34,10 +34,7 @@ function authHeader(): Record<string, string> {
  * Parse the unicode filename from a Content-Disposition header.
  * Prefers `filename*=UTF-8''<urlencoded>` over the ASCII `filename="..."`.
  */
-function parseFilename(
-  header: string | null,
-  fallback: string,
-): string {
+function parseFilename(header: string | null, fallback: string): string {
   if (!header) return fallback;
   const star = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
   if (star) {
