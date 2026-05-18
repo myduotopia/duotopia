@@ -9,11 +9,12 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Text,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
-from .base import UUID
+from .base import UUID, JSONType
 import uuid
 
 
@@ -69,13 +70,25 @@ class CreditPackage(Base):
         String, nullable=False
     )  # "purchase" / "trial_bonus" / "admin_grant" / "org_purchase"
 
+    # Admin audit (mirrors SubscriptionPeriod pattern). `admin_id` and
+    # `admin_reason` record the most recent admin write (edit or refund);
+    # `admin_metadata` JSONB accumulates the full change history.
+    admin_id = Column(
+        Integer, ForeignKey("teachers.id", ondelete="SET NULL"), nullable=True
+    )
+    admin_reason = Column(Text, nullable=True)
+    admin_metadata = Column(JSONType, nullable=True)
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    teacher = relationship("Teacher", back_populates="credit_packages")
+    teacher = relationship(
+        "Teacher", foreign_keys=[teacher_id], back_populates="credit_packages"
+    )
     organization = relationship("Organization", back_populates="credit_packages")
+    admin = relationship("Teacher", foreign_keys=[admin_id])
 
     @property
     def points_remaining(self) -> int:
