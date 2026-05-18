@@ -165,9 +165,7 @@ beforeEach(() => {
 
   window.scrollTo = vi.fn();
   window.HTMLMediaElement.prototype.load = vi.fn();
-  window.HTMLMediaElement.prototype.play = vi
-    .fn()
-    .mockResolvedValue(undefined);
+  window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
   window.HTMLMediaElement.prototype.pause = vi.fn();
 
   global.URL.createObjectURL = vi.fn(() => "blob:mock-url");

@@ -598,9 +598,7 @@ export default function StudentActivityPageContent({
           const requestDataCalled = requestDataCalledRef.current;
           const recordingTimeMs =
             recordingStartTimeMsRef.current > 0
-              ? Math.round(
-                  performance.now() - recordingStartTimeMsRef.current,
-                )
+              ? Math.round(performance.now() - recordingStartTimeMsRef.current)
               : Math.round(actualRecordingDuration * 1000);
 
           const { logAudioError } = await import("@/utils/audioErrorLogger");
