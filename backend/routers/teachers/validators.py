@@ -216,6 +216,14 @@ class BatchTranslateRequest(BaseModel):
     target_lang: str = "zh-TW"
 
 
+class GenerateSentencesAudioSettings(BaseModel):
+    """Issue #757: AI 例句生成同步跑 TTS 時用的 voice 設定。"""
+
+    accent: Optional[str] = "American English"
+    gender: Optional[str] = "Male"
+    speed: Optional[str] = "Normal x1"
+
+
 class GenerateSentencesRequest(BaseModel):
     words: List[str]
     definitions: Optional[List[str]] = None  # 單字的中文翻譯（用於消歧義）
@@ -224,6 +232,8 @@ class GenerateSentencesRequest(BaseModel):
     prompt: Optional[str] = None
     translate_to: Optional[str] = None  # zh-TW, ja, ko
     parts_of_speech: Optional[List[List[str]]] = None
+    # Issue #757: 同步生成例句音檔的 voice 設定；省略時用預設語音。
+    audio_settings: Optional[GenerateSentencesAudioSettings] = None
 
 
 class TTSRequest(BaseModel):

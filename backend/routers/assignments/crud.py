@@ -84,10 +84,68 @@ def _collect_contents_missing_examples(
     return missing_titles
 
 
+def _requires_sentence_audio(practice_mode: Optional[str], play_audio: bool) -> bool:
+    """Issue #757: which mode + play_audio combos must have audio at dispatch.
+
+    Returns True only when the student-facing UX literally cannot work
+    without a playable example sentence audio:
+      - reading: AI assesses pronunciation against the sentence audio prompt
+      - rearrangement w/ play_audio: 聽力重組 needs audio cue
+      - word_cloze w/ play_audio: 聽力克漏字 needs audio cue
+    """
+    if practice_mode == "reading":
+        return True
+    if practice_mode in ("rearrangement", "word_cloze"):
+        return bool(play_audio)
+    return False
+
+
+def _collect_contents_missing_audio(
+    contents: List[Content], practice_mode: Optional[str], play_audio: bool
+) -> List[str]:
+    """Return titles of contents whose items lack example sentence audio.
+
+    Vocab content: check ``example_sentence_audio_url`` (the per-item example
+    sentence TTS that ``/api/teachers/generate-sentences`` now produces inline).
+    Example-sentences content: the sentence lives in ``text`` so its audio is
+    in ``audio_url`` instead.
+
+    Items without an example_sentence are skipped here — they're already
+    rejected by ``_collect_contents_missing_examples`` upstream.
+    """
+    if not _requires_sentence_audio(practice_mode, play_audio):
+        return []
+
+    missing_titles: List[str] = []
+    for content in contents:
+        is_vocab = content.type in _VOCABULARY_CONTENT_TYPES
+        for item in content.content_items:
+            if is_vocab:
+                if not (item.example_sentence or "").strip():
+                    continue  # caller's example check owns this case
+                audio = (item.example_sentence_audio_url or "").strip()
+            else:
+                if not (item.text or "").strip():
+                    continue
+                audio = (item.audio_url or "").strip()
+            if not audio:
+                missing_titles.append(content.title)
+                break
+    return missing_titles
+
+
 def _raise_if_missing_examples(
-    contents: List[Content], practice_mode: Optional[str]
+    contents: List[Content],
+    practice_mode: Optional[str],
+    play_audio: bool = False,
 ) -> None:
-    """Raise 422 with structured detail when vocab contents miss example data."""
+    """Raise 422 when vocab contents miss example data (text or audio).
+
+    Sentence-text validation always runs (issue #673). Sentence-audio
+    validation only runs for the modes that actually need audio at runtime
+    (issue #757); no audio backfill happens at dispatch any more — the
+    teacher must regenerate via the AI button in the vocab set editor.
+    """
     missing = _collect_contents_missing_examples(contents, practice_mode)
     if missing:
         raise HTTPException(
@@ -96,6 +154,20 @@ def _raise_if_missing_examples(
                 "code": "EXAMPLE_SENTENCE_REQUIRED",
                 "practice_mode": practice_mode,
                 "content_titles": missing,
+            },
+        )
+
+    missing_audio = _collect_contents_missing_audio(
+        contents, practice_mode, play_audio
+    )
+    if missing_audio:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "EXAMPLE_AUDIO_REQUIRED",
+                "practice_mode": practice_mode,
+                "play_audio": play_audio,
+                "content_titles": missing_audio,
             },
         )
 
@@ -187,9 +259,14 @@ async def create_assignment(
     if len(contents) != len(request.content_ids):
         raise HTTPException(status_code=404, detail="Some contents not found")
 
-    # Issue #673: block reading / rearrangement / word_cloze on vocab contents
-    # whose items don't carry example_sentence + example_sentence_translation.
-    _raise_if_missing_examples(contents, request.practice_mode)
+    # Issue #673 / #757: block reading / rearrangement / word_cloze on vocab
+    # contents whose items don't carry example_sentence + translation, and
+    # additionally block the listening-flavoured modes when example sentence
+    # audio is missing. Teachers must fix the source vocab set first (the AI
+    # button on each row regenerates both the sentence and its TTS audio).
+    _raise_if_missing_examples(
+        contents, request.practice_mode, request.play_audio or False
+    )
 
     # Sanitize answer_mode - deprecated field with database constraint
     # Only 'listening' and 'writing' are allowed by database CHECK constraint
@@ -340,52 +417,11 @@ async def create_assignment(
                 f"(show_image={show_image_for_options})"
             )
 
-    # 例句模式 + 單字集：為缺少例句音檔的 items 自動 TTS 生成
-    if request.practice_mode in ("reading", "rearrangement"):
-        from services.tts import TTSService
-        from utils.ttsVoiceResolver import get_voice_and_rate
-
-        tts_service = TTSService()
-        all_copy_content_ids = list(content_copy_map.values())
-        db.flush()  # ensure copied items are queryable
-        vocab_items = (
-            db.query(ContentItem)
-            .join(Content)
-            .filter(
-                ContentItem.content_id.in_(all_copy_content_ids),
-                Content.type.in_(_VOCABULARY_CONTENT_TYPES),
-                ContentItem.example_sentence.isnot(None),
-                ContentItem.example_sentence != "",
-                ContentItem.example_sentence_audio_url.is_(None),
-            )
-            .all()
-        )
-        tts_generated = 0
-        for item in vocab_items:
-            try:
-                # 從 item_metadata 讀取 audio_settings，用相同 voice 生成例句音檔
-                audio_settings = (
-                    item.item_metadata.get("audio_settings", {})
-                    if item.item_metadata
-                    else {}
-                )
-                voice, rate = get_voice_and_rate(
-                    audio_settings.get("accent", "American English"),
-                    audio_settings.get("gender", "Male"),
-                    audio_settings.get("speed", "Normal x1"),
-                )
-                audio_url = await tts_service.generate_tts(
-                    item.example_sentence, voice, rate
-                )
-                item.example_sentence_audio_url = audio_url
-                tts_generated += 1
-            except Exception as e:
-                logger.warning(f"TTS generation failed for item {item.id}: {e}")
-        if tts_generated > 0:
-            logger.info(
-                f"Auto-generated example sentence TTS for "
-                f"{tts_generated} vocab items in assignment {assignment.id}"
-            )
+    # Issue #757: dispatch no longer backfills TTS. Audio must already exist
+    # on the source vocab set (produced inline by /generate-sentences). The
+    # validator above rejects the request with EXAMPLE_AUDIO_REQUIRED when
+    # the listening modes are picked without audio, so the only way to reach
+    # this point is with audio already wired up.
 
     # 建立 AssignmentContent 關聯（指向副本）
     for idx, original_content_id in enumerate(request.content_ids, 1):
@@ -711,7 +747,12 @@ async def update_assignment(
     # on the assignment (PUT replaces the resource so practice_mode may be
     # unchanged from the request side).
     effective_mode = request.practice_mode or assignment.practice_mode
-    _raise_if_missing_examples(new_contents, effective_mode)
+    effective_play_audio = (
+        request.play_audio if request.play_audio is not None else assignment.play_audio
+    )
+    _raise_if_missing_examples(
+        new_contents, effective_mode, bool(effective_play_audio)
+    )
 
     # 更新基本資訊
     assignment.title = request.title

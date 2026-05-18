@@ -95,6 +95,11 @@ interface ContentItemData {
   translation?: string;
   audio_url?: string | null;
   image_url?: string | null;
+  // Issue #757: 聽力模式（reading / rearrangement+audio / word_cloze+audio）
+  // 需要的是例句音檔，不是單字音檔；單字集用 example_sentence_audio_url，
+  // 例句集則用 audio_url 本身。
+  example_sentence?: string | null;
+  example_sentence_audio_url?: string | null;
 }
 
 interface Content {
@@ -176,6 +181,26 @@ const isVocabularySetType = (type: string): boolean => {
   return ["SENTENCE_MAKING", "VOCABULARY_SET"].includes(normalizedType);
 };
 
+// Issue #757: 聽力派發前置檢查，例句音檔對應的欄位依 content type 不同：
+//   VOCABULARY_SET → example_sentence_audio_url
+//   EXAMPLE_SENTENCES → audio_url（例句集的 audio_url 本身就是例句音檔）
+// 沒填例句的單字集 item 不算「缺音檔」，因為 EXAMPLE_SENTENCE_REQUIRED
+// 會在更上層先擋下，這裡只判定「該有音檔但沒有」的真正缺失。
+const computeHasMissingExampleAudio = (content: Content): boolean => {
+  if (!content.items || content.items.length === 0) return false;
+  if (isVocabularySetType(content.type)) {
+    return content.items.some(
+      (item) =>
+        (item.example_sentence || "").trim().length > 0 &&
+        !item.example_sentence_audio_url,
+    );
+  }
+  if (isExampleSentencesType(content.type)) {
+    return content.items.some((item) => !item.audio_url);
+  }
+  return false;
+};
+
 // Content type labels - using i18n
 // Map READING_ASSESSMENT and EXAMPLE_SENTENCES both to "例句集"
 const getContentTypeLabel = (type: string, t: (key: string) => string) => {
@@ -205,7 +230,10 @@ export interface CartItem {
   contentType: string;
   itemsCount?: number;
   order: number; // 用於排序
-  hasMissingAudio: boolean; // 是否有缺少音檔的項目
+  hasMissingAudio: boolean; // 是否有缺少單字音檔的項目
+  // Issue #757: 例句音檔（給聽力類派發前置檢查用：reading /
+  // rearrangement+play_audio / word_cloze+play_audio）
+  hasMissingExampleAudio: boolean;
   hasMissingImage: boolean; // 是否有缺少題目圖片的項目（單字選擇 show_option_images 前置驗證用）
 }
 
@@ -288,8 +316,9 @@ function SortableCartItem({ item, index, onRemove, t }: SortableCartItemProps) {
 const EMPTY_STUDENTS: Student[] = [];
 
 interface ExampleSentenceErrorDetail {
-  code: "EXAMPLE_SENTENCE_REQUIRED";
+  code: "EXAMPLE_SENTENCE_REQUIRED" | "EXAMPLE_AUDIO_REQUIRED";
   practice_mode?: string | null;
+  play_audio?: boolean | null;
   content_titles?: string[];
 }
 
@@ -300,12 +329,11 @@ const getExampleSentenceErrorDetail = (
   // detail lives on `error.detail`, not `error.response.data.detail`.
   if (!(error instanceof ApiError) || error.status !== 422) return null;
   const detail = error.detail;
-  if (
-    detail &&
-    typeof detail === "object" &&
-    !Array.isArray(detail) &&
-    (detail as { code?: unknown }).code === "EXAMPLE_SENTENCE_REQUIRED"
-  ) {
+  const code =
+    detail && typeof detail === "object" && !Array.isArray(detail)
+      ? (detail as { code?: unknown }).code
+      : null;
+  if (code === "EXAMPLE_SENTENCE_REQUIRED" || code === "EXAMPLE_AUDIO_REQUIRED") {
     return detail as unknown as ExampleSentenceErrorDetail;
   }
   return null;
@@ -966,6 +994,7 @@ export function AssignmentDialog({
         const hasMissingAudio = content.items
           ? content.items.some((item) => !item.audio_url)
           : false;
+        const hasMissingExampleAudio = computeHasMissingExampleAudio(content);
         const hasMissingImage = content.items
           ? content.items.some((item) => !item.image_url)
           : false;
@@ -980,6 +1009,7 @@ export function AssignmentDialog({
             itemsCount: content.items_count,
             order: prev.length, // 順序為當前數量
             hasMissingAudio,
+            hasMissingExampleAudio,
             hasMissingImage,
           },
         ];
@@ -1071,6 +1101,7 @@ export function AssignmentDialog({
             hasMissingAudio: content.items
               ? content.items.some((item) => !item.audio_url)
               : false,
+            hasMissingExampleAudio: computeHasMissingExampleAudio(content),
             hasMissingImage: content.items
               ? content.items.some((item) => !item.image_url)
               : false,
@@ -1262,9 +1293,10 @@ export function AssignmentDialog({
     } catch (error: unknown) {
       console.error("Failed to create assignment:", error);
 
-      // Issue #673: 422 with structured detail telling us which contents lack
-      // example sentences for the chosen practice mode. Surface the specific
-      // toast so the teacher knows what to fix.
+      // Issue #673 / #757: 422 with structured detail telling us which contents
+      // lack either example sentences (text) or example audio for the chosen
+      // practice mode. Surface the specific toast so the teacher knows what to
+      // fix and where (回單字集編輯頁手動補).
       if (isExampleSentenceRequiredError(error)) {
         const detail = getExampleSentenceErrorDetail(error);
         const modeKey = detail?.practice_mode
@@ -1274,17 +1306,25 @@ export function AssignmentDialog({
           ? t(modeKey, { defaultValue: detail?.practice_mode || "" })
           : "";
         const titles = detail?.content_titles?.join("、") || "";
-        toast.error(
-          t("dialogs.assignmentDialog.errors.exampleSentenceRequired", {
-            mode: modeLabel,
-          }),
-          {
-            description: t(
-              "dialogs.assignmentDialog.errors.exampleSentenceRequiredDesc",
-              { contents: titles },
-            ),
-          },
-        );
+        if (detail?.code === "EXAMPLE_AUDIO_REQUIRED") {
+          toast.error(t("dialogs.assignmentDialog.errors.missingAudio"), {
+            description: t("dialogs.assignmentDialog.errors.missingAudioDesc", {
+              contents: titles,
+            }),
+          });
+        } else {
+          toast.error(
+            t("dialogs.assignmentDialog.errors.exampleSentenceRequired", {
+              mode: modeLabel,
+            }),
+            {
+              description: t(
+                "dialogs.assignmentDialog.errors.exampleSentenceRequiredDesc",
+                { contents: titles },
+              ),
+            },
+          );
+        }
       } else if (
         error &&
         typeof error === "object" &&
@@ -1373,30 +1413,28 @@ export function AssignmentDialog({
     }
   };
 
-  // 檢查是否需要音檔但有缺少音檔的內容
+  // Issue #757: 三種「聽得到」的派發模式必須要有例句音檔
+  // （reading / rearrangement+play_audio / word_cloze+play_audio）
+  // 缺音檔時擋下派發，並提示老師回單字集編輯頁點 [AI] 補生。
   const checkAudioRequirement = (): boolean => {
-    // 判斷練習模式是否需要音檔
-    const needsAudio =
-      formData.practice_mode === "reading" || // 例句朗讀需要音檔
-      (formData.practice_mode === "rearrangement" && formData.play_audio); // 例句重組 + 播放音檔需要音檔
+    const needsExampleAudio =
+      formData.practice_mode === "reading" ||
+      (formData.practice_mode === "rearrangement" && formData.play_audio) ||
+      (formData.practice_mode === "word_cloze" && formData.play_audio);
 
-    if (!needsAudio) {
-      return true; // 不需要音檔，直接通過
+    if (!needsExampleAudio) {
+      return true;
     }
 
-    // 檢查是否有缺少音檔的內容
-    const hasContentWithMissingAudio = cartItems.some(
-      (item) => item.hasMissingAudio,
-    );
+    const offending = cartItems.filter((item) => item.hasMissingExampleAudio);
+    if (offending.length === 0) return true;
 
-    if (hasContentWithMissingAudio) {
-      toast.error(t("dialogs.assignmentDialog.errors.missingAudio"), {
-        description: t("dialogs.assignmentDialog.errors.missingAudioDesc"),
-      });
-      return false;
-    }
-
-    return true;
+    toast.error(t("dialogs.assignmentDialog.errors.missingAudio"), {
+      description: t("dialogs.assignmentDialog.errors.missingAudioDesc", {
+        contents: offending.map((c) => c.contentTitle).join("、"),
+      }),
+    });
+    return false;
   };
 
   // 動態步驟列表

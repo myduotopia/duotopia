@@ -310,6 +310,41 @@ async def generate_sentences(
             translate_to=request.translate_to,
             parts_of_speech=request.parts_of_speech,
         )
+
+        # Issue #757: 同步並行跑 TTS，讓前端把 audio_url 直接寫入單字集；
+        # 派發時就不需要再補跑。TTS 失敗只把該句的 audio_url 留 null，
+        # 文字流程不阻斷（老師可在內容編輯頁手動重跑 mic 按鈕補生）。
+        import asyncio
+        from services.tts import get_tts_service
+        from utils.ttsVoiceResolver import get_voice_and_rate
+
+        settings = request.audio_settings
+        voice, rate = get_voice_and_rate(
+            (settings.accent if settings else None) or "American English",
+            (settings.gender if settings else None) or "Male",
+            (settings.speed if settings else None) or "Normal x1",
+        )
+        tts_service = get_tts_service()
+
+        async def _tts(text):
+            if not text or not str(text).strip():
+                return None
+            try:
+                return await tts_service.generate_tts(text, voice, rate)
+            except Exception as exc:
+                logger.warning(
+                    "Inline TTS failed for sentence '%s...': %s",
+                    str(text)[:30],
+                    exc,
+                )
+                return None
+
+        audio_urls = await asyncio.gather(
+            *(_tts(s.get("sentence")) for s in sentences)
+        )
+        for sentence, url in zip(sentences, audio_urls):
+            sentence["audio_url"] = url
+
         elapsed = time.monotonic() - t0
         logger.info(
             "[PERF] API generate-sentences DONE | words=%d | %.2fs | avg=%.2fs/word",
