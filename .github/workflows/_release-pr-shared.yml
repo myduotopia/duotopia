@@ -20,7 +20,6 @@ permissions:
   pull-requests: write
   issues: write
   actions: read
-  id-token: write
 
 jobs:
   create-release-pr:
@@ -169,16 +168,11 @@ jobs:
           LINE_TO: ${{ secrets.LINE_USER_ID }}
           ISSUE_NUM: ${{ inputs.issue_number }}
         run: |
-          JSON=$(cat <<JSON
-          {
-            "to": "$LINE_TO",
-            "messages": [{
-              "type": "text",
-              "text": "Issue #$ISSUE_NUM - No branch found for automated Release PR.\n\nPlease create a PR manually."
-            }]
-          }
-          JSON
-          )
+          TEXT=$(printf "Issue #%s - No branch found for automated Release PR.\n\nPlease create a PR manually." "$ISSUE_NUM")
+          JSON=$(jq -n \
+            --arg to "$LINE_TO" \
+            --arg text "$TEXT" \
+            '{to: $to, messages: [{type: "text", text: $text}]}')
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $LINE_TOKEN" \
@@ -220,75 +214,58 @@ jobs:
             ACTION="Found existing"
           fi
 
-          JSON=$(cat <<JSON
-          {
-            "to": "$LINE_TO",
-            "messages": [{
-              "type": "flex",
-              "altText": "Release PR #$PR_NUM for Issue #$ISSUE_NUM",
-              "contents": {
-                "type": "bubble",
-                "size": "kilo",
-                "header": {
-                  "type": "box",
-                  "layout": "vertical",
-                  "backgroundColor": "#1DB446",
-                  "paddingAll": "12px",
-                  "contents": [{
-                    "type": "text",
-                    "text": "Release PR $ACTION",
-                    "color": "#FFFFFF",
-                    "weight": "bold",
-                    "size": "md"
-                  }]
-                },
-                "body": {
-                  "type": "box",
-                  "layout": "vertical",
-                  "spacing": "sm",
-                  "contents": [
-                    {
-                      "type": "text",
-                      "text": "#$ISSUE_NUM $ISSUE_TITLE",
-                      "wrap": true,
-                      "weight": "bold",
-                      "size": "sm"
-                    },
-                    {
-                      "type": "text",
-                      "text": "PR #$PR_NUM -> staging",
-                      "size": "sm",
-                      "color": "#666666"
-                    },
-                    {
-                      "type": "text",
-                      "text": "CI checks + auto-fix running...",
-                      "size": "xs",
-                      "color": "#FF8C00",
-                      "margin": "md"
-                    }
-                  ]
-                },
-                "footer": {
-                  "type": "box",
-                  "layout": "vertical",
-                  "contents": [{
-                    "type": "button",
-                    "action": {
-                      "type": "uri",
-                      "label": "View PR",
-                      "uri": "$PR_URL"
-                    },
-                    "style": "primary",
-                    "color": "#1DB446",
-                    "height": "sm"
-                  }]
+          JSON=$(jq -n \
+            --arg to "$LINE_TO" \
+            --arg pr_num "$PR_NUM" \
+            --arg pr_url "$PR_URL" \
+            --arg issue_num "$ISSUE_NUM" \
+            --arg issue_title "$ISSUE_TITLE" \
+            --arg action "$ACTION" \
+            '{
+              to: $to,
+              messages: [{
+                type: "flex",
+                altText: "Release PR #\($pr_num) for Issue #\($issue_num)",
+                contents: {
+                  type: "bubble",
+                  size: "kilo",
+                  header: {
+                    type: "box",
+                    layout: "vertical",
+                    backgroundColor: "#1DB446",
+                    paddingAll: "12px",
+                    contents: [{
+                      type: "text",
+                      text: "Release PR \($action)",
+                      color: "#FFFFFF",
+                      weight: "bold",
+                      size: "md"
+                    }]
+                  },
+                  body: {
+                    type: "box",
+                    layout: "vertical",
+                    spacing: "sm",
+                    contents: [
+                      {type: "text", text: "#\($issue_num) \($issue_title)", wrap: true, weight: "bold", size: "sm"},
+                      {type: "text", text: "PR #\($pr_num) -> staging", size: "sm", color: "#666666"},
+                      {type: "text", text: "CI checks + auto-fix running...", size: "xs", color: "#FF8C00", margin: "md"}
+                    ]
+                  },
+                  footer: {
+                    type: "box",
+                    layout: "vertical",
+                    contents: [{
+                      type: "button",
+                      action: {type: "uri", label: "View PR", uri: $pr_url},
+                      style: "primary",
+                      color: "#1DB446",
+                      height: "sm"
+                    }]
+                  }
                 }
-              }
-            }]
-          }
-          JSON
-          )
+              }]
+            }')
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $LINE_TOKEN" \
@@ -624,79 +601,58 @@ jobs:
           ISSUE_NUM: ${{ inputs.issue_number }}
           ISSUE_TITLE: ${{ inputs.issue_title }}
         run: |
-          JSON=$(cat <<JSON
-          {
-            "to": "$LINE_TO",
-            "messages": [{
-              "type": "flex",
-              "altText": "PR #$PR_NUM ready to merge!",
-              "contents": {
-                "type": "bubble",
-                "size": "kilo",
-                "header": {
-                  "type": "box",
-                  "layout": "vertical",
-                  "backgroundColor": "#1DB446",
-                  "paddingAll": "12px",
-                  "contents": [{
-                    "type": "text",
-                    "text": "Ready to Merge",
-                    "color": "#FFFFFF",
-                    "weight": "bold",
-                    "size": "md"
-                  }]
-                },
-                "body": {
-                  "type": "box",
-                  "layout": "vertical",
-                  "spacing": "sm",
-                  "contents": [
-                    {
-                      "type": "text",
-                      "text": "#$ISSUE_NUM $ISSUE_TITLE",
-                      "wrap": true,
-                      "weight": "bold",
-                      "size": "sm"
-                    },
-                    {
-                      "type": "text",
-                      "text": "PR #$PR_NUM - All checks passed",
-                      "size": "sm",
-                      "color": "#1DB446"
-                    },
-                    {
-                      "type": "separator",
-                      "margin": "md"
-                    },
-                    {
-                      "type": "text",
-                      "text": "gh pr merge $PR_NUM --squash",
-                      "size": "xs",
-                      "color": "#666666",
-                      "margin": "md"
-                    }
-                  ]
-                },
-                "footer": {
-                  "type": "box",
-                  "layout": "vertical",
-                  "contents": [{
-                    "type": "button",
-                    "action": {
-                      "type": "uri",
-                      "label": "View PR",
-                      "uri": "$PR_URL"
-                    },
-                    "style": "primary",
-                    "color": "#1DB446",
-                    "height": "sm"
-                  }]
+          JSON=$(jq -n \
+            --arg to "$LINE_TO" \
+            --arg pr_num "$PR_NUM" \
+            --arg pr_url "$PR_URL" \
+            --arg issue_num "$ISSUE_NUM" \
+            --arg issue_title "$ISSUE_TITLE" \
+            '{
+              to: $to,
+              messages: [{
+                type: "flex",
+                altText: "PR #\($pr_num) ready to merge!",
+                contents: {
+                  type: "bubble",
+                  size: "kilo",
+                  header: {
+                    type: "box",
+                    layout: "vertical",
+                    backgroundColor: "#1DB446",
+                    paddingAll: "12px",
+                    contents: [{
+                      type: "text",
+                      text: "Ready to Merge",
+                      color: "#FFFFFF",
+                      weight: "bold",
+                      size: "md"
+                    }]
+                  },
+                  body: {
+                    type: "box",
+                    layout: "vertical",
+                    spacing: "sm",
+                    contents: [
+                      {type: "text", text: "#\($issue_num) \($issue_title)", wrap: true, weight: "bold", size: "sm"},
+                      {type: "text", text: "PR #\($pr_num) - All checks passed", size: "sm", color: "#1DB446"},
+                      {type: "separator", margin: "md"},
+                      {type: "text", text: "gh pr merge \($pr_num) --squash", size: "xs", color: "#666666", margin: "md"}
+                    ]
+                  },
+                  footer: {
+                    type: "box",
+                    layout: "vertical",
+                    contents: [{
+                      type: "button",
+                      action: {type: "uri", label: "View PR", uri: $pr_url},
+                      style: "primary",
+                      color: "#1DB446",
+                      height: "sm"
+                    }]
+                  }
                 }
-              }
-            }]
-          }
-          JSON
-          )
+              }]
+            }')
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $LINE_TOKEN" \
@@ -714,21 +670,15 @@ jobs:
           DETAILS: ${{ steps.assess.outputs.details }}
         run: |
           if [ "$STATUS" = "needs_human" ]; then
-            MSG="PR #${PR_NUM} needs your attention.\n\nIssue #${ISSUE_NUM}\nFailing: ${DETAILS}\n\nUse /fix-workflow or /fix-review locally.\n\n${PR_URL}"
+            MSG=$(printf "PR #%s needs your attention.\n\nIssue #%s\nFailing: %s\n\nUse /fix-workflow or /fix-review locally.\n\n%s" "$PR_NUM" "$ISSUE_NUM" "$DETAILS" "$PR_URL")
           else
-            MSG="PR #${PR_NUM} still has pending checks.\n\nIssue #${ISSUE_NUM}\n\n${PR_URL}"
+            MSG=$(printf "PR #%s still has pending checks.\n\nIssue #%s\n\n%s" "$PR_NUM" "$ISSUE_NUM" "$PR_URL")
           fi
 
-          JSON=$(cat <<JSON
-          {
-            "to": "$LINE_TO",
-            "messages": [{
-              "type": "text",
-              "text": "$MSG"
-            }]
-          }
-          JSON
-          )
+          JSON=$(jq -n \
+            --arg to "$LINE_TO" \
+            --arg text "$MSG" \
+            '{to: $to, messages: [{type: "text", text: $text}]}')
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $LINE_TOKEN" \
