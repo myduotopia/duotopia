@@ -243,9 +243,7 @@ class TestPermissionHelpersHandleNullLesson:
         test_db.commit()
         test_db.refresh(content)
 
-        assert (
-            has_content_permission(test_db, content.id, teacher.id, "write") is True
-        )
+        assert has_content_permission(test_db, content.id, teacher.id, "write") is True
 
     def test_has_content_permission_program_direct_non_owner(
         self,
@@ -321,9 +319,7 @@ class TestPermissionHelpersHandleNullLesson:
         # Templates are READ-accessible to all teachers, so use require_owner=True
         # to test write-access denial for non-owner.
         with pytest.raises(HTTPException) as exc_info:
-            check_content_access(
-                test_db, content.id, other_teacher, require_owner=True
-            )
+            check_content_access(test_db, content.id, other_teacher, require_owner=True)
 
         assert exc_info.value.status_code == 403
 
@@ -405,7 +401,9 @@ class TestCopyFunctionsIncludeProgramDirectContents:
             .all()
         )
         copied_titles = {c.title for c in copied_contents}
-        assert "In lesson" in copied_titles, "Lesson-scoped content must still be copied"
+        assert (
+            "In lesson" in copied_titles
+        ), "Lesson-scoped content must still be copied"
         assert (
             "Direct under program" in copied_titles
         ), "Program-direct content must be copied"
@@ -457,9 +455,7 @@ class TestCopyFunctionsIncludeProgramDirectContents:
 
         copied = (
             test_db.query(Content)
-            .filter(
-                Content.program_id == new_program.id, Content.lesson_id.is_(None)
-            )
+            .filter(Content.program_id == new_program.id, Content.lesson_id.is_(None))
             .all()
         )
         assert len(copied) == 1
