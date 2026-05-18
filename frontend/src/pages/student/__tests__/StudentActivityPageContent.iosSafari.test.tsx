@@ -208,8 +208,14 @@ const clickMicButton = async () => {
 
 const clickStopButton = async () => {
   const user = userEvent.setup();
-  const stopButtons = await screen.findAllByText(/stopping|stop/i);
-  await user.click(stopButtons[0]);
+  // GroupedQuestionsTemplate 的紅色停止按鈕使用 i18n key 作為 label，
+  // mock 後 fallback 是 key 本身。用 exact match 避免不小心配到 "stopRecording"
+  // 之類含 "stop" 的其他字串。
+  const stopButton = await screen.findByText(
+    "groupedQuestionsTemplate.labels.stopping",
+    { exact: true },
+  );
+  await user.click(stopButton);
 };
 
 describe("StudentActivityPageContent - iOS Safari MediaRecorder race (Issue #741)", () => {
@@ -311,12 +317,13 @@ describe("StudentActivityPageContent - iOS Safari MediaRecorder race (Issue #741
     const submitButtons = screen.queryAllByRole("button", {
       name: /submit/i,
     });
-    if (submitButtons.length > 0) {
-      // 至少其中一個 submit 按鈕應該是 disabled
-      const anyDisabled = submitButtons.some(
-        (btn) => (btn as HTMLButtonElement).disabled,
-      );
-      expect(anyDisabled).toBe(true);
-    }
+    // 必須真的有 submit 按鈕被渲染——否則 assertion 變空轉，看似綠燈卻沒
+    // 驗證到任何東西。
+    expect(submitButtons.length).toBeGreaterThan(0);
+    // 至少其中一個 submit 按鈕應該被 isSubmitBlockedByRecording 鎖成 disabled
+    const anyDisabled = submitButtons.some(
+      (btn) => (btn as HTMLButtonElement).disabled,
+    );
+    expect(anyDisabled).toBe(true);
   });
 });

@@ -367,6 +367,9 @@ export default function StudentActivityPageContent({
   // 🩺 Issue #741: 診斷用 refs，用於追蹤 iOS Safari ondataavailable 競態
   const requestDataCalledRef = useRef<boolean>(false);
   const recordingStartTimeMsRef = useRef<number>(0);
+  // 🩺 Issue #741: 在呼叫 stop() 之前先抓 recorder.state；onstop 內讀取此 ref，
+  // 避免直接讀 recorder.state 永遠拿到 "inactive"。
+  const recorderStateAtStopRef = useRef<string>("");
 
   // Initialize answers
   useEffect(() => {
@@ -593,8 +596,10 @@ export default function StudentActivityPageContent({
           );
 
           // 🩺 Issue #741: 捕捉 iOS Safari 競態相關診斷資訊
+          // recorder.state 在 onstop 內永遠是 "inactive"（已轉換），所以改讀
+          // recorderStateAtStopRef，那裡保留了 stop() 呼叫前一刻的 state。
           const chunkCount = chunks.length;
-          const recorderStateAtStop = recorder.state;
+          const recorderStateAtStop = recorderStateAtStopRef.current;
           const requestDataCalled = requestDataCalledRef.current;
           const recordingTimeMs =
             recordingStartTimeMsRef.current > 0
@@ -897,6 +902,7 @@ export default function StudentActivityPageContent({
       // 🩺 Issue #741: 重置診斷狀態
       requestDataCalledRef.current = false;
       recordingStartTimeMsRef.current = performance.now();
+      recorderStateAtStopRef.current = "";
 
       // Start recording timer with 45 second limit
       let hasReachedLimit = false;
@@ -916,15 +922,21 @@ export default function StudentActivityPageContent({
           // 再呼叫 stop()。
           setTimeout(async () => {
             if (recorder && recorder.state === "recording") {
-              try {
-                recorder.requestData();
-                requestDataCalledRef.current = true;
-              } catch (e) {
-                console.warn("requestData() failed:", e);
+              // 用 requestDataCalledRef 守住，避免 45s auto-stop 與手動 stop
+              // 在 80ms 窗口內各打一次 requestData()。
+              if (!requestDataCalledRef.current) {
+                try {
+                  recorder.requestData();
+                  requestDataCalledRef.current = true;
+                } catch (e) {
+                  console.warn("requestData() failed:", e);
+                }
               }
               await new Promise<void>((resolve) => setTimeout(resolve, 80));
             }
             if (recorder && recorder.state === "recording") {
+              // 在實際 stop() 之前先記錄 state，給 onstop 診斷讀。
+              recorderStateAtStopRef.current = recorder.state;
               recorder.stop();
               setMediaRecorder(null);
               setIsRecording(false);
@@ -950,17 +962,24 @@ export default function StudentActivityPageContent({
         recordingInterval.current = null;
       }
       if (mediaRecorder.state === "recording") {
-        try {
-          mediaRecorder.requestData();
-          requestDataCalledRef.current = true;
-        } catch (e) {
-          console.warn("requestData() failed:", e);
+        // 用 requestDataCalledRef 守住，避免 45s auto-stop 與手動 stop 在
+        // 80ms 窗口內各打一次 requestData()（state 守門只擋 double stop()）。
+        if (!requestDataCalledRef.current) {
+          try {
+            mediaRecorder.requestData();
+            requestDataCalledRef.current = true;
+          } catch (e) {
+            console.warn("requestData() failed:", e);
+          }
         }
         // 給瀏覽器 ~80ms 把最後一個 ondataavailable 送出；onstop 內另有
         // 800ms blob encoding 緩衝，總延遲仍在預算內。
         await new Promise<void>((resolve) => setTimeout(resolve, 80));
       }
       if (mediaRecorder.state === "recording") {
+        // 在實際 stop() 之前先記錄 state，給 onstop 診斷讀（onstop 內讀
+        // recorder.state 永遠是 "inactive"）。
+        recorderStateAtStopRef.current = mediaRecorder.state;
         mediaRecorder.stop();
       }
     }
