@@ -1,13 +1,4 @@
-/**
- * Issue #741: 朗讀類型作業音檔丟失（iOS Safari MediaRecorder 競態）
- *
- * 本檔保證 student answering page 的 MediaRecorder 行為與 PR #705 的
- * 共用 AudioRecorder.tsx 一致：
- *   1) recorder.start() 以 1000ms timeslice 啟動
- *   2) stop() 之前先呼叫 requestData() 觸發最後一個 ondataavailable
- *   3) 當 chunks 仍為空（recording_too_small）→ 必須鎖住下一題 / 提交，
- *      強迫學生重錄
- */
+// iOS Safari MediaRecorder 競態：start(1000) + stop 前 requestData + recording_too_small 必須鎖提交
 import { describe, test, expect, beforeEach, vi, type Mock } from "vitest";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -16,8 +7,7 @@ import StudentActivityPageContent from "../StudentActivityPageContent";
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, fallbackOrParams?: string | Record<string, unknown>) => {
-      // 對齊既有測試：若第二個參數是 string fallback 就回 fallback，
-      // 否則只回 key（避免把 params object 當 React child 渲染）。
+      // params object 當 React child 會炸，所以只把 string fallback 當回傳值
       if (typeof fallbackOrParams === "string") return fallbackOrParams;
       return key;
     },
@@ -59,11 +49,10 @@ vi.mock("@/utils/retryHelper", () => ({
   retryAIAnalysis: vi.fn(async (fn: () => Promise<unknown>) => await fn()),
 }));
 
-// 共用 spy：在每個測試前重設
 const startSpy = vi.fn();
 const stopSpy = vi.fn();
 const requestDataSpy = vi.fn();
-// 模擬 chunks 變化：tests 透過 setNextRecordingChunks 切換成「空 chunks」
+// 用 setNextRecordingChunks([]) 模擬 iOS Safari 競態（ondataavailable 沒觸發）
 let nextRecordingChunks: Blob[] = [];
 const setNextRecordingChunks = (chunks: Blob[]) => {
   nextRecordingChunks = chunks;
@@ -82,9 +71,6 @@ class MockMediaRecorder {
 
   requestData() {
     requestDataSpy();
-    // 模擬「正常」狀況：requestData 同步把 chunks 推進去
-    // ※ 但 recording_too_small 測試會用 setNextRecordingChunks([]) 模擬
-    //   iOS Safari 競態（ondataavailable 完全沒觸發）
     nextRecordingChunks.forEach((chunk) => {
       this.ondataavailable?.({ data: chunk });
     });
@@ -93,7 +79,6 @@ class MockMediaRecorder {
   stop() {
     stopSpy();
     this.state = "inactive";
-    // 模擬瀏覽器在 stop() 後觸發 onstop（同步觸發避免測試需要等待過久）
     setTimeout(() => this.onstop?.(), 0);
   }
 }
@@ -126,7 +111,6 @@ beforeEach(() => {
   startSpy.mockClear();
   stopSpy.mockClear();
   requestDataSpy.mockClear();
-  // 預設讓 chunks 有資料，避免測試誤觸 recording_too_small
   setNextRecordingChunks([
     new Blob([new Uint8Array(2048)], { type: "audio/webm" }),
   ]);
@@ -193,13 +177,8 @@ beforeEach(() => {
   });
 });
 
-/**
- * 共用：點擊紅色麥克風按鈕（依 title 屬性鎖定）
- */
 const clickMicButton = async () => {
   const user = userEvent.setup();
-  // GroupedQuestionsTemplate / ReadingAssessmentTemplate 的麥克風按鈕都使用
-  // i18n key 作為 title——mock 後 fallback 是 key 本身
   const buttons = await screen.findAllByTitle(
     /startRecording|labels\.startRecording/i,
   );
@@ -208,9 +187,7 @@ const clickMicButton = async () => {
 
 const clickStopButton = async () => {
   const user = userEvent.setup();
-  // GroupedQuestionsTemplate 的紅色停止按鈕使用 i18n key 作為 label，
-  // mock 後 fallback 是 key 本身。用 exact match 避免不小心配到 "stopRecording"
-  // 之類含 "stop" 的其他字串。
+  // exact match：避免配到含 "stop" 的其他字串
   const stopButton = await screen.findByText(
     "groupedQuestionsTemplate.labels.stopping",
     { exact: true },
@@ -218,7 +195,7 @@ const clickStopButton = async () => {
   await user.click(stopButton);
 };
 
-describe("StudentActivityPageContent - iOS Safari MediaRecorder race (Issue #741)", () => {
+describe("StudentActivityPageContent - iOS Safari MediaRecorder race", () => {
   test("start(1000): recorder.start is called with a 1-second timeslice", async () => {
     render(
       <StudentActivityPageContent
@@ -250,10 +227,8 @@ describe("StudentActivityPageContent - iOS Safari MediaRecorder race (Issue #741
     await clickMicButton();
     await waitFor(() => expect(startSpy).toHaveBeenCalled());
 
-    // 觸發 stop（學生點停止按鈕）
     await clickStopButton();
 
-    // 等 stopRecording 的 80ms await 完成
     await waitFor(
       () => {
         expect(stopSpy).toHaveBeenCalled();
@@ -261,7 +236,6 @@ describe("StudentActivityPageContent - iOS Safari MediaRecorder race (Issue #741
       { timeout: 2000 },
     );
 
-    // 確認順序：requestData 必須在 stop 之前
     expect(requestDataSpy).toHaveBeenCalled();
     const requestDataOrder = requestDataSpy.mock.invocationCallOrder[0];
     const stopOrder = stopSpy.mock.invocationCallOrder[0];
@@ -269,7 +243,6 @@ describe("StudentActivityPageContent - iOS Safari MediaRecorder race (Issue #741
   });
 
   test("recording_too_small: empty chunks blocks 'next' / submit gates", async () => {
-    // 模擬 iOS Safari 競態：ondataavailable 完全沒觸發，chunks 為空
     setNextRecordingChunks([]);
 
     const onSubmit = vi.fn();
@@ -286,7 +259,6 @@ describe("StudentActivityPageContent - iOS Safari MediaRecorder race (Issue #741
     await waitFor(() => expect(startSpy).toHaveBeenCalled());
     await clickStopButton();
 
-    // 等 onstop 跑完並打 /api/logs/audio-error
     await waitFor(
       () => {
         const calls = (global.fetch as Mock).mock.calls;
@@ -298,7 +270,6 @@ describe("StudentActivityPageContent - iOS Safari MediaRecorder race (Issue #741
       { timeout: 3000 },
     );
 
-    // recording_too_small payload 應該帶有診斷欄位
     const fetchCalls = (global.fetch as Mock).mock.calls;
     const errorLogCall = fetchCalls.find((c: unknown[]) =>
       (c[0] as string).includes("/api/logs/audio-error"),
@@ -309,21 +280,58 @@ describe("StudentActivityPageContent - iOS Safari MediaRecorder race (Issue #741
     expect(typeof body.request_data_called).toBe("boolean");
     expect(typeof body.recorder_state_at_stop).toBe("string");
 
-    // recording_too_small 後，提交按鈕應該被 isSubmitBlockedByRecording 鎖住
-    // （recording_url 已被清空，hasIncompleteRecordings 回 true）
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
     const submitButtons = screen.queryAllByRole("button", {
       name: /submit/i,
     });
-    // 必須真的有 submit 按鈕被渲染——否則 assertion 變空轉，看似綠燈卻沒
-    // 驗證到任何東西。
+    // 沒按鈕的話 assertion 會空轉成綠燈
     expect(submitButtons.length).toBeGreaterThan(0);
-    // 至少其中一個 submit 按鈕應該被 isSubmitBlockedByRecording 鎖成 disabled
     const anyDisabled = submitButtons.some(
       (btn) => (btn as HTMLButtonElement).disabled,
     );
     expect(anyDisabled).toBe(true);
+  });
+
+  test("45s auto-stop: requestData() before stop(), guard prevents double requestData on manual stop", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(
+        <StudentActivityPageContent
+          activities={[makeReadingActivity()]}
+          assignmentTitle="t"
+          assignmentId={1}
+          onSubmit={vi.fn()}
+        />,
+      );
+
+      await clickMicButton();
+      await waitFor(() => expect(startSpy).toHaveBeenCalled());
+
+      // 推進 setInterval 到 45 秒觸發 auto-stop
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(46_000);
+      });
+
+      await waitFor(() => {
+        expect(stopSpy).toHaveBeenCalled();
+      });
+
+      expect(requestDataSpy).toHaveBeenCalledTimes(1);
+      const autoRequestDataOrder = requestDataSpy.mock.invocationCallOrder[0];
+      const autoStopOrder = stopSpy.mock.invocationCallOrder[0];
+      expect(autoRequestDataOrder).toBeLessThan(autoStopOrder);
+
+      // auto-stop 後 requestDataCalledRef.current === true，
+      // 即使 80ms 內又呼叫 stopRecording 也不能再打 requestData
+      requestDataSpy.mockClear();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(requestDataSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -74,16 +74,12 @@ Object.defineProperty(window, "sessionStorage", {
 // Mock environment variables - will use the actual VITE_API_URL from .env file during tests
 vi.mock("@/config/api", () => ({
   API_BASE_URL: import.meta.env.VITE_API_URL,
-  // 🩺 src/config/api.ts 實際 export 的是 API_URL；舊 mock 漏掉這個 export
-  // 導致所有 import { API_URL } 的模組（如 demoSpeechService）在測試環境
-  // 全部 module-load 失敗。補上後相關測試才能順利執行。
+  // api.ts 實際 export 的是 API_URL，舊 mock 漏掉導致 import 它的模組 module-load 失敗
   API_URL: import.meta.env.VITE_API_URL,
   apiCall: vi.fn(),
 }));
 
-// 🩺 lottie-web / lottie-react 在 module load 時會建立 HTMLCanvasElement
-// 並呼叫 getContext('2d')；jsdom 沒實作 canvas，會直接 throw。在 ScoreOverlay
-// 經 lottieCache 引入後，所有 student page 測試都會在 import 階段炸掉。
+// lottie 在 module load 時呼叫 canvas getContext，jsdom 不支援會直接 throw
 vi.mock("lottie-web", () => ({
   default: {
     loadAnimation: vi.fn(() => ({
@@ -102,8 +98,7 @@ vi.mock("lottie-react", () => ({
   useLottie: () => ({ View: null, play: vi.fn(), pause: vi.fn() }),
 }));
 
-// 🩺 phaser 在 module load 時呼叫 canvas API；jsdom 不支援。
-// TugOfWarGame 透過 phaser 動態渲染遊戲，測試不需執行其邏輯。
+// phaser 在 module load 時呼叫 canvas API，jsdom 不支援
 vi.mock("phaser", () => ({
   default: {
     Game: class {

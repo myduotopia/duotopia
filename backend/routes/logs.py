@@ -41,9 +41,7 @@ class AudioErrorLog(BaseModel):
     can_play_mp4: Optional[str] = None
     load_time_ms: Optional[int] = None
 
-    # 🩺 Issue #741: iOS Safari MediaRecorder 競態診斷欄位
-    # BigQuery 表 schema 已於 PR #777 (2026-05-18) 新增對應 NULLABLE 欄位，
-    # insert_rows_json 可安全持久化。
+    # BigQuery 表 schema 已新增對應 NULLABLE 欄位，insert_rows_json 可安全持久化
     chunk_count: Optional[int] = None
     recorder_state_at_stop: Optional[str] = None
     request_data_called: Optional[bool] = None

@@ -364,12 +364,10 @@ export default function StudentActivityPageContent({
   const hasRecordedData = useRef<boolean>(false);
   const isReRecording = useRef<boolean>(false);
   const streamRef = useRef<MediaStream | null>(null); // 🔧 追蹤 MediaStream 以便清理
-  // 🩺 Issue #741: 診斷用 refs，用於追蹤 iOS Safari ondataavailable 競態
   const requestDataCalledRef = useRef<boolean>(false);
   const recordingStartTimeMsRef = useRef<number>(0);
-  // 🩺 Issue #741: 在呼叫 stop() 之前先抓 recorder.state；onstop 內讀取此 ref，
-  // 避免直接讀 recorder.state 永遠拿到 "inactive"。
-  const recorderStateAtStopRef = useRef<string>("");
+  // onstop 內讀 recorder.state 永遠是 "inactive"；此 ref 保留 stop() 前一刻的 state
+  const recorderStateAtStopRef = useRef<string>("unknown");
 
   // Initialize answers
   useEffect(() => {
@@ -595,9 +593,6 @@ export default function StudentActivityPageContent({
             `⚠️ Recording file too small (both checks failed): chunks=${chunksSize}B, blob=${blobSize}B, min=${strategy.minFileSize}B`,
           );
 
-          // 🩺 Issue #741: 捕捉 iOS Safari 競態相關診斷資訊
-          // recorder.state 在 onstop 內永遠是 "inactive"（已轉換），所以改讀
-          // recorderStateAtStopRef，那裡保留了 stop() 呼叫前一刻的 state。
           const chunkCount = chunks.length;
           const recorderStateAtStop = recorderStateAtStopRef.current;
           const requestDataCalled = requestDataCalledRef.current;
@@ -625,10 +620,7 @@ export default function StudentActivityPageContent({
             description: t("studentActivityPage.recording.fileAbnormal"),
           });
 
-          // 🔒 Issue #741: 同 PR #705 的 upload-failure 行為 —— 阻擋學生在
-          // 沒重錄的情況下直接按「下一題 / 提交」。清掉這題的 recording_url
-          // 並把 answer 標成 uploadFailed，讓 isSubmitBlockedByRecording
-          // 與 next-button 的 !isAssessed 兩道門檻同時生效。
+          // 清掉這題的 recording_url 並標 uploadFailed，強迫學生重錄
           if (currentActivity.items && currentActivity.items.length > 0) {
             const subIdx = currentSubQuestionIndex;
             setActivities((prevActivities) => {
@@ -651,6 +643,17 @@ export default function StudentActivityPageContent({
                 };
               }
               return newActivities;
+            });
+          } else {
+            setAnswers((prev) => {
+              const next = new Map(prev);
+              const ans = next.get(currentActivity.id);
+              if (ans) {
+                ans.audioBlob = undefined;
+                ans.audioUrl = undefined;
+                next.set(currentActivity.id, ans);
+              }
+              return next;
             });
           }
           markUploadFailed(currentActivity.id);
@@ -890,19 +893,16 @@ export default function StudentActivityPageContent({
         setRecordingTime(0);
       };
 
-      // 🎯 Issue #741: 1 秒 timeslice，讓 ondataavailable 在錄音期間
-      // 週期性觸發，避免 iOS Safari 在 stop() 後才一次送回最後一個 chunk
-      // 而錯過寫入 chunks 陣列的時機（chunks=0B 導致 recording_too_small）。
+      // 1s timeslice 讓 ondataavailable 在錄音期間週期觸發，避免 iOS Safari 漏掉最後 chunk
       recorder.start(1000);
       setMediaRecorder(recorder);
       setIsRecording(true);
       setRecordingTime(0);
       recordingTimeRef.current = 0;
       hasRecordedData.current = false;
-      // 🩺 Issue #741: 重置診斷狀態
       requestDataCalledRef.current = false;
       recordingStartTimeMsRef.current = performance.now();
-      recorderStateAtStopRef.current = "";
+      recorderStateAtStopRef.current = "unknown";
 
       // Start recording timer with 45 second limit
       let hasReachedLimit = false;
@@ -917,13 +917,9 @@ export default function StudentActivityPageContent({
             clearInterval(recordingInterval.current);
             recordingInterval.current = null;
           }
-          // 🎯 Issue #741: 與 AudioRecorder.tsx 一致，先 requestData() 觸發
-          // 最後一個 chunk，等待 ~80ms 讓 iOS Safari 完成 ondataavailable，
-          // 再呼叫 stop()。
+          // requestData() → 80ms → stop()：讓 iOS Safari 在 stop 前送出最後 chunk
           setTimeout(async () => {
             if (recorder && recorder.state === "recording") {
-              // 用 requestDataCalledRef 守住，避免 45s auto-stop 與手動 stop
-              // 在 80ms 窗口內各打一次 requestData()。
               if (!requestDataCalledRef.current) {
                 try {
                   recorder.requestData();
@@ -935,7 +931,6 @@ export default function StudentActivityPageContent({
               await new Promise<void>((resolve) => setTimeout(resolve, 80));
             }
             if (recorder && recorder.state === "recording") {
-              // 在實際 stop() 之前先記錄 state，給 onstop 診斷讀。
               recorderStateAtStopRef.current = recorder.state;
               recorder.stop();
               setMediaRecorder(null);
@@ -951,19 +946,14 @@ export default function StudentActivityPageContent({
     }
   };
 
-  // 🎯 Issue #741: iOS Safari 上，requestData() 會非同步觸發 ondataavailable —
-  // 若 stop() 立刻跟著呼叫，最後一個 chunk 可能在 onstop 之後才送達而錯過寫入
-  // chunks。先 requestData()、等 ~80ms 再 stop()，與 AudioRecorder.tsx 一致。
+  // iOS Safari：requestData() → 80ms → stop()，避免最後一個 chunk 在 onstop 後才送達
   const stopRecording = async () => {
     if (mediaRecorder && isRecording) {
-      // 先停 timer，避免 45 秒 auto-stop 與手動 stop 競態
       if (recordingInterval.current) {
         clearInterval(recordingInterval.current);
         recordingInterval.current = null;
       }
       if (mediaRecorder.state === "recording") {
-        // 用 requestDataCalledRef 守住，避免 45s auto-stop 與手動 stop 在
-        // 80ms 窗口內各打一次 requestData()（state 守門只擋 double stop()）。
         if (!requestDataCalledRef.current) {
           try {
             mediaRecorder.requestData();
@@ -972,13 +962,9 @@ export default function StudentActivityPageContent({
             console.warn("requestData() failed:", e);
           }
         }
-        // 給瀏覽器 ~80ms 把最後一個 ondataavailable 送出；onstop 內另有
-        // 800ms blob encoding 緩衝，總延遲仍在預算內。
         await new Promise<void>((resolve) => setTimeout(resolve, 80));
       }
       if (mediaRecorder.state === "recording") {
-        // 在實際 stop() 之前先記錄 state，給 onstop 診斷讀（onstop 內讀
-        // recorder.state 永遠是 "inactive"）。
         recorderStateAtStopRef.current = mediaRecorder.state;
         mediaRecorder.stop();
       }
