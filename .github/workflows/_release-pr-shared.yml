@@ -78,8 +78,8 @@ jobs:
         id: check-pr
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.find-branch.outputs.branch }}
         run: |
-          BRANCH="${{ steps.find-branch.outputs.branch }}"
           EXISTING=$(gh pr list --head "$BRANCH" --base staging --state open --json number,url --jq '.[0]' 2>/dev/null || echo "")
 
           if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
@@ -99,33 +99,36 @@ jobs:
         id: create-new-pr
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          ISSUE_NUM: ${{ inputs.issue_number }}
+          ISSUE_TITLE: ${{ inputs.issue_title }}
+          BRANCH: ${{ steps.find-branch.outputs.branch }}
         run: |
-          ISSUE_NUM=${{ inputs.issue_number }}
-          ISSUE_TITLE="${{ inputs.issue_title }}"
-          BRANCH="${{ steps.find-branch.outputs.branch }}"
+          # Build PR body via heredoc — env vars expand once (single-pass),
+          # so user-controlled ISSUE_TITLE content cannot inject shell syntax.
+          BODY=$(cat <<PREOF
+          ## Release PR
+
+          Fixes #${ISSUE_NUM}
+
+          ### Source
+          - **Issue**: #${ISSUE_NUM} - ${ISSUE_TITLE}
+          - **Branch**: \`${BRANCH}\`
+          - **Created by**: Automated Release PR workflow
+
+          ### Auto-generated
+          This PR was automatically created when the \`tested-in-staging\` label was added.
+          CI checks and code review fixes will be applied automatically (1 round).
+
+          ---
+          _Merging this PR will close Issue #${ISSUE_NUM} and deploy changes to staging._
+          PREOF
+          )
 
           PR_URL=$(gh pr create \
             --base staging \
             --head "$BRANCH" \
             --title "Release: ${ISSUE_TITLE} (Fixes #${ISSUE_NUM})" \
-            --body "$(cat <<'PREOF'
-          ## Release PR
-
-          Fixes #${{ inputs.issue_number }}
-
-          ### Source
-          - **Issue**: #${{ inputs.issue_number }} - ${{ inputs.issue_title }}
-          - **Branch**: `${{ steps.find-branch.outputs.branch }}`
-          - **Created by**: Automated Release PR workflow
-
-          ### Auto-generated
-          This PR was automatically created when the `tested-in-staging` label was added.
-          CI checks and code review fixes will be applied automatically (1 round).
-
-          ---
-          _Merging this PR will close Issue #${{ inputs.issue_number }} and deploy changes to staging._
-          PREOF
-          )")
+            --body "$BODY")
 
           PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
           echo "Created PR #${PR_NUM}: ${PR_URL}"
@@ -161,17 +164,25 @@ jobs:
 
       - name: Notify LINE - No branch found
         if: steps.find-branch.outputs.skipped == 'no_branch'
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_USER_ID }}
+          ISSUE_NUM: ${{ inputs.issue_number }}
         run: |
+          JSON=$(cat <<JSON
+          {
+            "to": "$LINE_TO",
+            "messages": [{
+              "type": "text",
+              "text": "Issue #$ISSUE_NUM - No branch found for automated Release PR.\n\nPlease create a PR manually."
+            }]
+          }
+          JSON
+          )
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}" \
-            -d '{
-              "to": "${{ secrets.LINE_USER_ID }}",
-              "messages": [{
-                "type": "text",
-                "text": "Issue #${{ inputs.issue_number }} - No branch found for automated Release PR.\n\nPlease create a PR manually."
-              }]
-            }' || true
+            -H "Authorization: Bearer $LINE_TOKEN" \
+            -d "$JSON" || true
 
       - name: Comment on Issue - PR created/found
         if: steps.create-pr.outputs.pr_number != ''
@@ -196,86 +207,92 @@ jobs:
       - name: Notify LINE - PR created
         if: steps.create-pr.outputs.pr_number != ''
         env:
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_USER_ID }}
           PR_NUM: ${{ steps.create-pr.outputs.pr_number }}
           PR_URL: ${{ steps.create-pr.outputs.pr_url }}
           ISSUE_NUM: ${{ inputs.issue_number }}
           ISSUE_TITLE: ${{ inputs.issue_title }}
+          CHECK_STATUS: ${{ steps.check-pr.outputs.status }}
         run: |
-          IS_NEW="${{ steps.check-pr.outputs.status }}"
           ACTION="Created"
-          if [ "$IS_NEW" = "existing" ]; then
+          if [ "$CHECK_STATUS" = "existing" ]; then
             ACTION="Found existing"
           fi
 
+          JSON=$(cat <<JSON
+          {
+            "to": "$LINE_TO",
+            "messages": [{
+              "type": "flex",
+              "altText": "Release PR #$PR_NUM for Issue #$ISSUE_NUM",
+              "contents": {
+                "type": "bubble",
+                "size": "kilo",
+                "header": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "backgroundColor": "#1DB446",
+                  "paddingAll": "12px",
+                  "contents": [{
+                    "type": "text",
+                    "text": "Release PR $ACTION",
+                    "color": "#FFFFFF",
+                    "weight": "bold",
+                    "size": "md"
+                  }]
+                },
+                "body": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "spacing": "sm",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": "#$ISSUE_NUM $ISSUE_TITLE",
+                      "wrap": true,
+                      "weight": "bold",
+                      "size": "sm"
+                    },
+                    {
+                      "type": "text",
+                      "text": "PR #$PR_NUM -> staging",
+                      "size": "sm",
+                      "color": "#666666"
+                    },
+                    {
+                      "type": "text",
+                      "text": "CI checks + auto-fix running...",
+                      "size": "xs",
+                      "color": "#FF8C00",
+                      "margin": "md"
+                    }
+                  ]
+                },
+                "footer": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "contents": [{
+                    "type": "button",
+                    "action": {
+                      "type": "uri",
+                      "label": "View PR",
+                      "uri": "$PR_URL"
+                    },
+                    "style": "primary",
+                    "color": "#1DB446",
+                    "height": "sm"
+                  }]
+                }
+              }
+            }]
+          }
+          JSON
+          )
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}" \
-            -d '{
-              "to": "'"${{ secrets.LINE_USER_ID }}"'",
-              "messages": [{
-                "type": "flex",
-                "altText": "Release PR #'"${PR_NUM}"' for Issue #'"${ISSUE_NUM}"'",
-                "contents": {
-                  "type": "bubble",
-                  "size": "kilo",
-                  "header": {
-                    "type": "box",
-                    "layout": "vertical",
-                    "backgroundColor": "#1DB446",
-                    "paddingAll": "12px",
-                    "contents": [{
-                      "type": "text",
-                      "text": "Release PR '"${ACTION}"'",
-                      "color": "#FFFFFF",
-                      "weight": "bold",
-                      "size": "md"
-                    }]
-                  },
-                  "body": {
-                    "type": "box",
-                    "layout": "vertical",
-                    "spacing": "sm",
-                    "contents": [
-                      {
-                        "type": "text",
-                        "text": "#'"${ISSUE_NUM}"' '"${ISSUE_TITLE}"'",
-                        "wrap": true,
-                        "weight": "bold",
-                        "size": "sm"
-                      },
-                      {
-                        "type": "text",
-                        "text": "PR #'"${PR_NUM}"' -> staging",
-                        "size": "sm",
-                        "color": "#666666"
-                      },
-                      {
-                        "type": "text",
-                        "text": "CI checks + auto-fix running...",
-                        "size": "xs",
-                        "color": "#FF8C00",
-                        "margin": "md"
-                      }
-                    ]
-                  },
-                  "footer": {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [{
-                      "type": "button",
-                      "action": {
-                        "type": "uri",
-                        "label": "View PR",
-                        "uri": "'"${PR_URL}"'"
-                      },
-                      "style": "primary",
-                      "color": "#1DB446",
-                      "height": "sm"
-                    }]
-                  }
-                }
-              }]
-            }' || true
+            -H "Authorization: Bearer $LINE_TOKEN" \
+            -d "$JSON" || true
 
   auto-fix:
     needs: create-release-pr
@@ -600,88 +617,96 @@ jobs:
       - name: Notify LINE - Ready to merge
         if: steps.assess.outputs.status == 'ready'
         env:
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_USER_ID }}
           PR_NUM: ${{ needs.create-release-pr.outputs.pr_number }}
           PR_URL: ${{ needs.create-release-pr.outputs.pr_url }}
           ISSUE_NUM: ${{ inputs.issue_number }}
           ISSUE_TITLE: ${{ inputs.issue_title }}
         run: |
+          JSON=$(cat <<JSON
+          {
+            "to": "$LINE_TO",
+            "messages": [{
+              "type": "flex",
+              "altText": "PR #$PR_NUM ready to merge!",
+              "contents": {
+                "type": "bubble",
+                "size": "kilo",
+                "header": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "backgroundColor": "#1DB446",
+                  "paddingAll": "12px",
+                  "contents": [{
+                    "type": "text",
+                    "text": "Ready to Merge",
+                    "color": "#FFFFFF",
+                    "weight": "bold",
+                    "size": "md"
+                  }]
+                },
+                "body": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "spacing": "sm",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": "#$ISSUE_NUM $ISSUE_TITLE",
+                      "wrap": true,
+                      "weight": "bold",
+                      "size": "sm"
+                    },
+                    {
+                      "type": "text",
+                      "text": "PR #$PR_NUM - All checks passed",
+                      "size": "sm",
+                      "color": "#1DB446"
+                    },
+                    {
+                      "type": "separator",
+                      "margin": "md"
+                    },
+                    {
+                      "type": "text",
+                      "text": "gh pr merge $PR_NUM --squash",
+                      "size": "xs",
+                      "color": "#666666",
+                      "margin": "md"
+                    }
+                  ]
+                },
+                "footer": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "contents": [{
+                    "type": "button",
+                    "action": {
+                      "type": "uri",
+                      "label": "View PR",
+                      "uri": "$PR_URL"
+                    },
+                    "style": "primary",
+                    "color": "#1DB446",
+                    "height": "sm"
+                  }]
+                }
+              }
+            }]
+          }
+          JSON
+          )
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}" \
-            -d '{
-              "to": "'"${{ secrets.LINE_USER_ID }}"'",
-              "messages": [{
-                "type": "flex",
-                "altText": "PR #'"${PR_NUM}"' ready to merge!",
-                "contents": {
-                  "type": "bubble",
-                  "size": "kilo",
-                  "header": {
-                    "type": "box",
-                    "layout": "vertical",
-                    "backgroundColor": "#1DB446",
-                    "paddingAll": "12px",
-                    "contents": [{
-                      "type": "text",
-                      "text": "Ready to Merge",
-                      "color": "#FFFFFF",
-                      "weight": "bold",
-                      "size": "md"
-                    }]
-                  },
-                  "body": {
-                    "type": "box",
-                    "layout": "vertical",
-                    "spacing": "sm",
-                    "contents": [
-                      {
-                        "type": "text",
-                        "text": "#'"${ISSUE_NUM}"' '"${ISSUE_TITLE}"'",
-                        "wrap": true,
-                        "weight": "bold",
-                        "size": "sm"
-                      },
-                      {
-                        "type": "text",
-                        "text": "PR #'"${PR_NUM}"' - All checks passed",
-                        "size": "sm",
-                        "color": "#1DB446"
-                      },
-                      {
-                        "type": "separator",
-                        "margin": "md"
-                      },
-                      {
-                        "type": "text",
-                        "text": "gh pr merge '"${PR_NUM}"' --squash",
-                        "size": "xs",
-                        "color": "#666666",
-                        "margin": "md"
-                      }
-                    ]
-                  },
-                  "footer": {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [{
-                      "type": "button",
-                      "action": {
-                        "type": "uri",
-                        "label": "View PR",
-                        "uri": "'"${PR_URL}"'"
-                      },
-                      "style": "primary",
-                      "color": "#1DB446",
-                      "height": "sm"
-                    }]
-                  }
-                }
-              }]
-            }' || true
+            -H "Authorization: Bearer $LINE_TOKEN" \
+            -d "$JSON" || true
 
       - name: Notify LINE - Needs attention
         if: steps.assess.outputs.status == 'needs_human' || steps.assess.outputs.status == 'pending'
         env:
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_USER_ID }}
           PR_NUM: ${{ needs.create-release-pr.outputs.pr_number }}
           PR_URL: ${{ needs.create-release-pr.outputs.pr_url }}
           ISSUE_NUM: ${{ inputs.issue_number }}
@@ -694,13 +719,17 @@ jobs:
             MSG="PR #${PR_NUM} still has pending checks.\n\nIssue #${ISSUE_NUM}\n\n${PR_URL}"
           fi
 
+          JSON=$(cat <<JSON
+          {
+            "to": "$LINE_TO",
+            "messages": [{
+              "type": "text",
+              "text": "$MSG"
+            }]
+          }
+          JSON
+          )
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}" \
-            -d '{
-              "to": "'"${{ secrets.LINE_USER_ID }}"'",
-              "messages": [{
-                "type": "text",
-                "text": "'"${MSG}"'"
-              }]
-            }' || true
+            -H "Authorization: Bearer $LINE_TOKEN" \
+            -d "$JSON" || true
