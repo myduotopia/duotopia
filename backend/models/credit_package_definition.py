@@ -40,7 +40,8 @@ class CreditPackageDefinition(Base):
 
     # Matches the package_id strings used in code constants
     # (pkg-1000, pkg-2000, pkg-5000, pkg-10000, pkg-20000).
-    package_id = Column(String(50), nullable=False, unique=True, index=True)
+    # `unique=True` already creates an index — no need for index=True.
+    package_id = Column(String(50), nullable=False, unique=True)
 
     # Base points granted. NULL means inherit config default.
     points = Column(Integer, nullable=True)
@@ -64,7 +65,10 @@ class CreditPackageDefinition(Base):
 
     # Audit
     updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
     updated_by_admin_id = Column(
         Integer, ForeignKey("teachers.id", ondelete="SET NULL"), nullable=True

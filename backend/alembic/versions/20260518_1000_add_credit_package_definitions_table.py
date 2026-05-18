@@ -50,10 +50,8 @@ def upgrade() -> None:
         """
     )
 
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_credit_package_definitions_package_id "
-        "ON credit_package_definitions (package_id)"
-    )
+    # NOTE: no explicit index on package_id — the UNIQUE constraint above
+    # already creates one. Adding a second would be redundant.
 
     # FK to teachers (admin who last edited). Add after table creation so
     # re-running detects existing constraint.
