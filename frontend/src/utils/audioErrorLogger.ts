@@ -20,6 +20,15 @@ export interface AudioErrorData {
   studentId?: number;
   assignmentId?: number;
   loadTimeMs?: number;
+  // 🩺 Issue #741: iOS Safari MediaRecorder 競態診斷欄位
+  // - chunkCount: stop() 時 chunks 陣列長度（=0 表示 ondataavailable 完全沒觸發）
+  // - recorderStateAtStop: 呼叫 stop() 前後 recorder.state（除錯非法狀態）
+  // - requestDataCalled: 是否成功呼叫 requestData() 強制 flush
+  // - recordingTimeMs: 毫秒精度錄音時長（補足既有 audioDuration 只有秒）
+  chunkCount?: number;
+  recorderStateAtStop?: string;
+  requestDataCalled?: boolean;
+  recordingTimeMs?: number;
 }
 
 /**
@@ -70,6 +79,12 @@ export async function logAudioError(data: AudioErrorData): Promise<void> {
       can_play_webm: audioSupport.webm,
       can_play_mp4: audioSupport.mp4,
       load_time_ms: data.loadTimeMs,
+
+      // 🩺 Issue #741: iOS Safari MediaRecorder 競態診斷
+      chunk_count: data.chunkCount,
+      recorder_state_at_stop: data.recorderStateAtStop,
+      request_data_called: data.requestDataCalled,
+      recording_time_ms: data.recordingTimeMs,
     };
 
     console.log("📊 Logging audio error to BigQuery:", errorLog);

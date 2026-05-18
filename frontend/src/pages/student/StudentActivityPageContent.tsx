@@ -364,6 +364,9 @@ export default function StudentActivityPageContent({
   const hasRecordedData = useRef<boolean>(false);
   const isReRecording = useRef<boolean>(false);
   const streamRef = useRef<MediaStream | null>(null); // 🔧 追蹤 MediaStream 以便清理
+  // 🩺 Issue #741: 診斷用 refs，用於追蹤 iOS Safari ondataavailable 競態
+  const requestDataCalledRef = useRef<boolean>(false);
+  const recordingStartTimeMsRef = useRef<number>(0);
 
   // Initialize answers
   useEffect(() => {
@@ -589,6 +592,17 @@ export default function StudentActivityPageContent({
             `⚠️ Recording file too small (both checks failed): chunks=${chunksSize}B, blob=${blobSize}B, min=${strategy.minFileSize}B`,
           );
 
+          // 🩺 Issue #741: 捕捉 iOS Safari 競態相關診斷資訊
+          const chunkCount = chunks.length;
+          const recorderStateAtStop = recorder.state;
+          const requestDataCalled = requestDataCalledRef.current;
+          const recordingTimeMs =
+            recordingStartTimeMsRef.current > 0
+              ? Math.round(
+                  performance.now() - recordingStartTimeMsRef.current,
+                )
+              : Math.round(actualRecordingDuration * 1000);
+
           const { logAudioError } = await import("@/utils/audioErrorLogger");
           await logAudioError({
             errorType: "recording_too_small",
@@ -598,11 +612,45 @@ export default function StudentActivityPageContent({
             contentType: audioBlob.type,
             assignmentId: assignmentId,
             errorMessage: `Both chunks (${chunksSize}B) and blob (${blobSize}B) below minimum ${strategy.minFileSize}B`,
+            chunkCount,
+            recorderStateAtStop,
+            requestDataCalled,
+            recordingTimeMs,
           });
 
           toast.error(t("studentActivityPage.recording.failed"), {
             description: t("studentActivityPage.recording.fileAbnormal"),
           });
+
+          // 🔒 Issue #741: 同 PR #705 的 upload-failure 行為 —— 阻擋學生在
+          // 沒重錄的情況下直接按「下一題 / 提交」。清掉這題的 recording_url
+          // 並把 answer 標成 uploadFailed，讓 isSubmitBlockedByRecording
+          // 與 next-button 的 !isAssessed 兩道門檻同時生效。
+          if (currentActivity.items && currentActivity.items.length > 0) {
+            const subIdx = currentSubQuestionIndex;
+            setActivities((prevActivities) => {
+              const newActivities = [...prevActivities];
+              const activityIndex = newActivities.findIndex(
+                (a) => a.id === currentActivity.id,
+              );
+              if (activityIndex !== -1 && newActivities[activityIndex].items) {
+                const newItems = [...newActivities[activityIndex].items!];
+                if (newItems[subIdx]) {
+                  newItems[subIdx] = {
+                    ...newItems[subIdx],
+                    recording_url: "",
+                    ai_assessment: undefined,
+                  };
+                }
+                newActivities[activityIndex] = {
+                  ...newActivities[activityIndex],
+                  items: newItems,
+                };
+              }
+              return newActivities;
+            });
+          }
+          markUploadFailed(currentActivity.id);
 
           // 🔧 清理所有錄音狀態
           if (streamRef.current) {
@@ -839,12 +887,18 @@ export default function StudentActivityPageContent({
         setRecordingTime(0);
       };
 
-      recorder.start();
+      // 🎯 Issue #741: 1 秒 timeslice，讓 ondataavailable 在錄音期間
+      // 週期性觸發，避免 iOS Safari 在 stop() 後才一次送回最後一個 chunk
+      // 而錯過寫入 chunks 陣列的時機（chunks=0B 導致 recording_too_small）。
+      recorder.start(1000);
       setMediaRecorder(recorder);
       setIsRecording(true);
       setRecordingTime(0);
       recordingTimeRef.current = 0;
       hasRecordedData.current = false;
+      // 🩺 Issue #741: 重置診斷狀態
+      requestDataCalledRef.current = false;
+      recordingStartTimeMsRef.current = performance.now();
 
       // Start recording timer with 45 second limit
       let hasReachedLimit = false;
@@ -859,7 +913,19 @@ export default function StudentActivityPageContent({
             clearInterval(recordingInterval.current);
             recordingInterval.current = null;
           }
-          setTimeout(() => {
+          // 🎯 Issue #741: 與 AudioRecorder.tsx 一致，先 requestData() 觸發
+          // 最後一個 chunk，等待 ~80ms 讓 iOS Safari 完成 ondataavailable，
+          // 再呼叫 stop()。
+          setTimeout(async () => {
+            if (recorder && recorder.state === "recording") {
+              try {
+                recorder.requestData();
+                requestDataCalledRef.current = true;
+              } catch (e) {
+                console.warn("requestData() failed:", e);
+              }
+              await new Promise<void>((resolve) => setTimeout(resolve, 80));
+            }
             if (recorder && recorder.state === "recording") {
               recorder.stop();
               setMediaRecorder(null);
@@ -875,14 +941,29 @@ export default function StudentActivityPageContent({
     }
   };
 
-  const stopRecording = () => {
+  // 🎯 Issue #741: iOS Safari 上，requestData() 會非同步觸發 ondataavailable —
+  // 若 stop() 立刻跟著呼叫，最後一個 chunk 可能在 onstop 之後才送達而錯過寫入
+  // chunks。先 requestData()、等 ~80ms 再 stop()，與 AudioRecorder.tsx 一致。
+  const stopRecording = async () => {
     if (mediaRecorder && isRecording) {
-      mediaRecorder.stop();
-      // cleanupRecording 會在 recorder.onstop 之後自動被呼叫
-      // 這裡只清理 timer，避免干擾 onstop 事件
+      // 先停 timer，避免 45 秒 auto-stop 與手動 stop 競態
       if (recordingInterval.current) {
         clearInterval(recordingInterval.current);
         recordingInterval.current = null;
+      }
+      if (mediaRecorder.state === "recording") {
+        try {
+          mediaRecorder.requestData();
+          requestDataCalledRef.current = true;
+        } catch (e) {
+          console.warn("requestData() failed:", e);
+        }
+        // 給瀏覽器 ~80ms 把最後一個 ondataavailable 送出；onstop 內另有
+        // 800ms blob encoding 緩衝，總延遲仍在預算內。
+        await new Promise<void>((resolve) => setTimeout(resolve, 80));
+      }
+      if (mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
       }
     }
   };
