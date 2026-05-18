@@ -60,9 +60,9 @@ import {
 } from "lucide-react";
 import {
   downloadClassGradeReport,
+  downloadStudentGradeReport,
   GradeReportError,
 } from "@/services/gradeReportService";
-import { StudentGradeDownloadDialog } from "@/components/StudentGradeDownloadDialog";
 import { getContentTypeIcon } from "@/lib/contentTypeIcon";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
@@ -317,18 +317,17 @@ export default function ClassroomDetail({
     open: false,
     assignmentIndex: 0,
   });
-  // Batch selection (shared by batch print and batch archive)
+  // Batch selection (shared by batch print, batch archive, and the two
+  // grade-report downloads available on the archived view).
   const [selectedAssignments, setSelectedAssignments] = useState<Set<number>>(
     new Set(),
   );
   const [batchPrinting, setBatchPrinting] = useState(false);
   const [batchArchiving, setBatchArchiving] = useState(false);
-  // Grade-report (issue #708)
-  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<number>>(
-    new Set(),
-  );
-  const [studentGradeDialogOpen, setStudentGradeDialogOpen] = useState(false);
+  // Grade-report (issue #708) — both downloads gated on selectedAssignments
+  // and only shown on the archived assignments view.
   const [downloadingClassGrade, setDownloadingClassGrade] = useState(false);
+  const [downloadingStudentGrade, setDownloadingStudentGrade] = useState(false);
 
   // Clear selection when switching between active/archived tabs
   useEffect(() => {
@@ -512,8 +511,9 @@ export default function ClassroomDetail({
   };
 
   // Issue #708: download class grade report for the currently selected
-  // assignments. Selection state is shared with the batch print/archive
-  // buttons (the user already picked them via the same checkboxes).
+  // archived assignments. Selection state is shared with the batch
+  // print/archive buttons (the user already picked them via the same
+  // checkboxes on the archived view).
   const handleDownloadClassGrades = async () => {
     if (selectedAssignments.size === 0 || !id) return;
     setDownloadingClassGrade(true);
@@ -531,6 +531,28 @@ export default function ClassroomDetail({
       toast.error(msg);
     } finally {
       setDownloadingClassGrade(false);
+    }
+  };
+
+  // Issue #708 follow-up: download a ZIP of per-student grade reports for the
+  // selected archived assignments. One xlsx per enrolled student.
+  const handleDownloadStudentGrades = async () => {
+    if (selectedAssignments.size === 0 || !id) return;
+    setDownloadingStudentGrade(true);
+    try {
+      await downloadStudentGradeReport(
+        Number(id),
+        Array.from(selectedAssignments),
+      );
+      toast.success(t("classGradeDownload.downloadStarted"));
+    } catch (e) {
+      const msg =
+        e instanceof GradeReportError
+          ? e.detail
+          : t("classGradeDownload.downloadFailed");
+      toast.error(msg);
+    } finally {
+      setDownloadingStudentGrade(false);
     }
   };
 
@@ -1699,7 +1721,7 @@ export default function ClassroomDetail({
               {/* Students Tab - only show for classroom mode */}
               {!isTemplateMode && (
                 <TabsContent value="students" className="p-3 sm:p-6">
-                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                  <div className="flex items-center mb-4">
                     <Button
                       onClick={handleCreateStudent}
                       className="h-10 bg-blue-500 hover:bg-blue-600 text-white"
@@ -1714,17 +1736,6 @@ export default function ClassroomDetail({
                     >
                       <Plus className="h-4 w-4 mr-2" />
                       {t("classroomDetail.buttons.addStudent")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setStudentGradeDialogOpen(true)}
-                      disabled={selectedStudentIds.size === 0}
-                      className="h-10"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      {t("classroomDetail.buttons.downloadStudentGrades")}
-                      {selectedStudentIds.size > 0 &&
-                        ` (${selectedStudentIds.size})`}
                     </Button>
                   </div>
 
@@ -1741,8 +1752,6 @@ export default function ClassroomDetail({
                       );
                     })}
                     showClassroom={false}
-                    selectedIds={selectedStudentIds}
-                    onSelectionChange={setSelectedStudentIds}
                     onAddStudent={handleCreateStudent}
                     onViewStudent={handleViewStudent}
                     onEditStudent={handleEditStudent}
@@ -1753,15 +1762,6 @@ export default function ClassroomDetail({
                       "classroomDetail.messages.manageStudentsFromSchool",
                     )}
                   />
-                  {id && (
-                    <StudentGradeDownloadDialog
-                      open={studentGradeDialogOpen}
-                      onOpenChange={setStudentGradeDialogOpen}
-                      classroomId={Number(id)}
-                      studentIds={Array.from(selectedStudentIds)}
-                      selectedCount={selectedStudentIds.size}
-                    />
-                  )}
                 </TabsContent>
               )}
 
@@ -1959,7 +1959,10 @@ export default function ClassroomDetail({
                             ` (${selectedAssignments.size})`}
                         </Button>
                       )}
-                      {assignments.length > 0 && !showArchived && (
+                      {/* Issue #708: grade-report downloads are only
+                          available on the archived view — teachers download
+                          the report once a batch of assignments is sealed. */}
+                      {archivedAssignments.length > 0 && showArchived && (
                         <Button
                           variant="outline"
                           onClick={handleDownloadClassGrades}
@@ -1971,6 +1974,22 @@ export default function ClassroomDetail({
                         >
                           <Download className="h-4 w-4 mr-2" />
                           {t("classroomDetail.buttons.downloadClassGrades")}
+                          {selectedAssignments.size > 0 &&
+                            ` (${selectedAssignments.size})`}
+                        </Button>
+                      )}
+                      {archivedAssignments.length > 0 && showArchived && (
+                        <Button
+                          variant="outline"
+                          onClick={handleDownloadStudentGrades}
+                          disabled={
+                            selectedAssignments.size === 0 ||
+                            downloadingStudentGrade
+                          }
+                          className="h-10"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          {t("classroomDetail.buttons.downloadStudentGrades")}
                           {selectedAssignments.size > 0 &&
                             ` (${selectedAssignments.size})`}
                         </Button>

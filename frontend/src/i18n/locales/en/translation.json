@@ -2693,18 +2693,6 @@
       "updateFailed": "Update failed, but audio was generated"
     }
   },
-  "studentGradeDownloadDialog": {
-    "title": "Download Student Grades ({{count}} student(s))",
-    "description": "Optionally filter by assignment-released date. Leave empty to include everything.",
-    "startDate": "Start Date",
-    "endDate": "End Date",
-    "confirm": "Download",
-    "cancel": "Cancel",
-    "downloading": "Downloading…",
-    "downloadStarted": "Grade report download started",
-    "downloadFailed": "Download failed, please try again",
-    "invalidRange": "Start date must be on or before end date"
-  },
   "classGradeDownload": {
     "downloadStarted": "Grade report download started",
     "downloadFailed": "Download failed, please try again"

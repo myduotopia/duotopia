@@ -1,8 +1,10 @@
 """Grade-report Excel downloads for teachers.
 
-Issue #708 PR-2.
+Issue #708.
 
-Two endpoints, both scoped to a classroom the requesting teacher owns:
+Two endpoints, both scoped to a classroom the requesting teacher owns and
+both keyed off the same list of selected assignments (intended for use on
+the archived-assignments view):
 
 - ``POST /classrooms/{classroom_id}/grade-report``
     Body: ``{"assignment_ids": [int]}``
@@ -11,10 +13,10 @@ Two endpoints, both scoped to a classroom the requesting teacher owns:
     matching the sample on the issue.
 
 - ``POST /classrooms/{classroom_id}/student-grade-report``
-    Body: ``{"student_ids": [int], "start_date": "YYYY-MM-DD"?, "end_date": "YYYY-MM-DD"?}``
-    Returns an ``.xlsx`` with one sheet per selected student listing all of
-    that student's assignments (optionally filtered by assignment
-    ``created_at`` range) grouped by category, with an overall average.
+    Body: ``{"assignment_ids": [int]}``
+    Returns a ``.zip`` containing one ``.xlsx`` per enrolled student. Each
+    inner workbook covers the same selected assignments grouped by
+    category, ending with that student's 總平均.
 
 The category for each assignment is read from ``assignment.score_category``
 which is auto-resolved by ``utils.score_category.resolve_score_category``
@@ -24,7 +26,8 @@ from __future__ import annotations
 
 import io
 import logging
-from datetime import date, datetime, timezone
+import zipfile
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from urllib.parse import quote
 
@@ -69,7 +72,15 @@ _CATEGORY_ZH = {
 # ---------------------------------------------------------------------------
 
 
-class ClassGradeReportRequest(BaseModel):
+class _AssignmentSelectionRequest(BaseModel):
+    """Shared request shape for both reports.
+
+    Both endpoints take the same input — the list of assignment IDs the
+    teacher picked on the archived-assignments view. The student report
+    additionally fans out across every enrolled student, but that's a
+    backend concern; the contract surface is identical.
+    """
+
     assignment_ids: List[int] = Field(..., min_length=1)
 
     @field_validator("assignment_ids")
@@ -80,17 +91,9 @@ class ClassGradeReportRequest(BaseModel):
         return v
 
 
-class StudentGradeReportRequest(BaseModel):
-    student_ids: List[int] = Field(..., min_length=1)
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-
-    @field_validator("student_ids")
-    @classmethod
-    def _unique(cls, v: List[int]) -> List[int]:
-        if len(set(v)) != len(v):
-            raise ValueError("student_ids must not contain duplicates")
-        return v
+# Kept as separate names so OpenAPI / docs distinguish the two endpoints.
+ClassGradeReportRequest = _AssignmentSelectionRequest
+StudentGradeReportRequest = _AssignmentSelectionRequest
 
 
 # ---------------------------------------------------------------------------
@@ -420,14 +423,16 @@ async def class_grade_report(
 # ---------------------------------------------------------------------------
 
 
-def _build_student_workbook(
+def _build_single_student_workbook(
     classroom: Classroom,
-    students: List[Student],
-    start_date: Optional[date],
-    end_date: Optional[date],
+    student: Student,
+    assignments: List[Assignment],
+    sa_by_assignment: dict,
     db: Session,
 ) -> Workbook:
-    """One sheet per student. Sheet layout (matches sample):
+    """Build a one-sheet workbook for a single student.
+
+    Layout (matches the sample on issue #708):
 
     ::
 
@@ -438,41 +443,16 @@ def _build_student_workbook(
             Row:  ▌ <category>
             Rows: <category> | <title> | <date> | <score>
         Last: 總平均 | | | <avg>
+
+    ``sa_by_assignment`` is the caller-supplied lookup ``{assignment_id: sa}``
+    for this student — done once in the parent so the per-student loop
+    doesn't re-query the DB N times.
     """
-    # Pull all assignments owned by this teacher for this classroom in one go,
-    # so each student sheet just filters in memory.
-    teacher_id = classroom.teacher_id
-    q = db.query(Assignment).filter(
-        Assignment.classroom_id == classroom.id,
-        Assignment.teacher_id == teacher_id,
-        Assignment.is_active.is_(True),
-    )
-    if start_date is not None:
-        q = q.filter(
-            Assignment.created_at >= datetime.combine(start_date, datetime.min.time())
-        )
-    if end_date is not None:
-        # Inclusive end_date — bump to the start of next day.
-        q = q.filter(
-            Assignment.created_at < datetime.combine(end_date, datetime.max.time())
-        )
-    classroom_assignments = q.order_by(Assignment.created_at.asc()).all()
-
-    sa_rows = (
-        db.query(StudentAssignment)
-        .filter(
-            StudentAssignment.assignment_id.in_([a.id for a in classroom_assignments])
-            if classroom_assignments
-            else False,
-            StudentAssignment.is_active.is_(True),
-        )
-        .all()
-    )
-    sa_by_pair = {(sa.student_id, sa.assignment_id): sa for sa in sa_rows}
-
     wb = Workbook()
-    # Remove the default blank sheet; we'll add one per student.
-    wb.remove(wb.active)
+    ws = wb.active
+    ws.title = _sanitize_sheet_title(
+        f"{classroom.name}_{student.student_number or ''}_{student.name or ''}"
+    )
 
     today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     thin = Side(style="thin", color="BFBFBF")
@@ -480,97 +460,112 @@ def _build_student_workbook(
     header_fill = PatternFill("solid", fgColor="F2F2F2")
     banner_fill = PatternFill("solid", fgColor="E8EEF7")
 
-    for student in students:
-        title = _sanitize_sheet_title(
-            f"{classroom.name}_{student.student_number or ''}_{student.name or ''}"
-        )
-        ws = wb.create_sheet(title=title)
+    # Row 1: header
+    ws.cell(
+        row=1,
+        column=1,
+        value=(
+            f"學生成績單　{classroom.name} 班　"
+            f"{student.student_number or ''} 號　{student.name or ''}"
+        ),
+    )
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=4)
+    ws.cell(row=1, column=1).font = Font(bold=True, size=13)
+    ws.cell(row=1, column=1).alignment = Alignment(horizontal="left")
 
-        # Row 1: header
-        ws.cell(
-            row=1,
-            column=1,
-            value=(
-                f"學生成績單　{classroom.name} 班　"
-                f"{student.student_number or ''} 號　{student.name or ''}"
-            ),
-        )
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=4)
-        ws.cell(row=1, column=1).font = Font(bold=True, size=13)
-        ws.cell(row=1, column=1).alignment = Alignment(horizontal="left")
+    # Row 2: download date
+    ws.cell(row=2, column=1, value=f"下載日期：{today_iso}")
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=4)
 
-        # Row 2: download date
-        ws.cell(row=2, column=1, value=f"下載日期：{today_iso}")
-        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=4)
+    # Row 3: column headers
+    for c, h in enumerate(("類別", "作業名稱", "派發日期", "分數"), start=1):
+        cell = ws.cell(row=3, column=c, value=h)
+        cell.fill = header_fill
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = border
 
-        # Row 3: header
-        for c, h in enumerate(("類別", "作業名稱", "派發日期", "分數"), start=1):
-            cell = ws.cell(row=3, column=c, value=h)
-            cell.fill = header_fill
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal="center")
-            cell.border = border
+    # Bucket assignments by category, preserving insertion order within bucket.
+    groups: dict[str, List[Assignment]] = {k: [] for k in _CATEGORY_ORDER}
+    for a in assignments:
+        groups[_category_key(a)].append(a)
 
-        # Bucket assignments by category and write rows.
-        groups: dict[str, List[Assignment]] = {k: [] for k in _CATEGORY_ORDER}
-        for a in classroom_assignments:
-            groups[_category_key(a)].append(a)
-
-        cur_row = 4
-        scores: List[float] = []
-        for cat in _CATEGORY_ORDER:
-            items = groups[cat]
-            if not items:
-                continue
-            # Banner row
-            banner = ws.cell(row=cur_row, column=1, value=f"▌ {_CATEGORY_ZH[cat]}")
-            ws.merge_cells(
-                start_row=cur_row, start_column=1, end_row=cur_row, end_column=4
-            )
-            banner.font = Font(bold=True)
-            banner.fill = banner_fill
-            banner.alignment = Alignment(horizontal="left")
-            for c in range(1, 5):
-                ws.cell(row=cur_row, column=c).border = border
-            cur_row += 1
-
-            for a in items:
-                sa = sa_by_pair.get((student.id, a.id))
-                score = _final_score(sa, a, db)
-                d = a.created_at.date().isoformat() if a.created_at else ""
-                ws.cell(row=cur_row, column=1, value=_CATEGORY_ZH[cat])
-                ws.cell(row=cur_row, column=2, value=a.title)
-                ws.cell(row=cur_row, column=3, value=d)
-                if score is not None:
-                    ws.cell(row=cur_row, column=4, value=score)
-                    scores.append(float(score))
-                # else: blank cell
-                for c in range(1, 5):
-                    cell = ws.cell(row=cur_row, column=c)
-                    cell.border = border
-                    if c >= 3:
-                        cell.alignment = Alignment(horizontal="center")
-                cur_row += 1
-
-        # Footer: 總平均
-        avg = _avg(scores)
-        ws.cell(row=cur_row, column=1, value="總平均")
-        ws.merge_cells(start_row=cur_row, start_column=1, end_row=cur_row, end_column=3)
-        ws.cell(row=cur_row, column=1).font = Font(bold=True)
-        ws.cell(row=cur_row, column=1).alignment = Alignment(horizontal="center")
-        if avg is not None:
-            ws.cell(row=cur_row, column=4, value=avg)
-        ws.cell(row=cur_row, column=4).alignment = Alignment(horizontal="center")
+    cur_row = 4
+    scores: List[float] = []
+    for cat in _CATEGORY_ORDER:
+        items = groups[cat]
+        if not items:
+            continue
+        # Banner row
+        banner = ws.cell(row=cur_row, column=1, value=f"▌ {_CATEGORY_ZH[cat]}")
+        ws.merge_cells(start_row=cur_row, start_column=1, end_row=cur_row, end_column=4)
+        banner.font = Font(bold=True)
+        banner.fill = banner_fill
+        banner.alignment = Alignment(horizontal="left")
         for c in range(1, 5):
             ws.cell(row=cur_row, column=c).border = border
+        cur_row += 1
 
-        # Column widths
-        ws.column_dimensions["A"].width = 14
-        ws.column_dimensions["B"].width = 28
-        ws.column_dimensions["C"].width = 14
-        ws.column_dimensions["D"].width = 10
+        for a in items:
+            sa = sa_by_assignment.get(a.id)
+            score = _final_score(sa, a, db)
+            d = a.created_at.date().isoformat() if a.created_at else ""
+            ws.cell(row=cur_row, column=1, value=_CATEGORY_ZH[cat])
+            ws.cell(row=cur_row, column=2, value=a.title)
+            ws.cell(row=cur_row, column=3, value=d)
+            if score is not None:
+                ws.cell(row=cur_row, column=4, value=score)
+                scores.append(float(score))
+            # else: leave blank (per user spec)
+            for c in range(1, 5):
+                cell = ws.cell(row=cur_row, column=c)
+                cell.border = border
+                if c >= 3:
+                    cell.alignment = Alignment(horizontal="center")
+            cur_row += 1
+
+    # Footer: 總平均
+    avg = _avg(scores)
+    ws.cell(row=cur_row, column=1, value="總平均")
+    ws.merge_cells(start_row=cur_row, start_column=1, end_row=cur_row, end_column=3)
+    ws.cell(row=cur_row, column=1).font = Font(bold=True)
+    ws.cell(row=cur_row, column=1).alignment = Alignment(horizontal="center")
+    if avg is not None:
+        ws.cell(row=cur_row, column=4, value=avg)
+    ws.cell(row=cur_row, column=4).alignment = Alignment(horizontal="center")
+    for c in range(1, 5):
+        ws.cell(row=cur_row, column=c).border = border
+
+    # Column widths
+    ws.column_dimensions["A"].width = 14
+    ws.column_dimensions["B"].width = 28
+    ws.column_dimensions["C"].width = 14
+    ws.column_dimensions["D"].width = 10
 
     return wb
+
+
+def _zip_response(files: List[Tuple[str, bytes]], zip_filename: str) -> Response:
+    """Pack the (inner_filename, content) tuples into a single zip Response."""
+    buf = io.BytesIO()
+    # ZIP_DEFLATED keeps xlsx (already compressed) roughly the same size but
+    # at least makes the archive itself well-formed for every client.
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, data in files:
+            zf.writestr(name, data)
+    buf.seek(0)
+    ascii_fallback = (
+        zip_filename.encode("ascii", errors="ignore").decode() or "report.zip"
+    )
+    disposition = (
+        f'attachment; filename="{ascii_fallback}"; '
+        f"filename*=UTF-8''{quote(zip_filename)}"
+    )
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": disposition},
+    )
 
 
 @router.post("/classrooms/{classroom_id}/student-grade-report")
@@ -580,49 +575,73 @@ async def student_grade_report(
     db: Session = Depends(get_db),
     current_teacher: Teacher = Depends(get_current_teacher),
 ):
-    if (
-        request.start_date is not None
-        and request.end_date is not None
-        and request.start_date > request.end_date
-    ):
-        raise HTTPException(
-            status_code=422, detail="start_date must be on or before end_date"
-        )
+    """Per-student grade report for the selected assignments, packed as ZIP.
 
+    One ``.xlsx`` per enrolled student is generated and bundled into a
+    single ``.zip``. Even when the classroom only has one student, the
+    response is still a ZIP containing one file, so the frontend can use a
+    single code path.
+    """
     classroom = _verify_classroom_ownership(classroom_id, current_teacher.id, db)
 
-    # Validate all student IDs belong to this classroom.
-    students = (
-        db.query(Student)
-        .join(ClassroomStudent, Student.id == ClassroomStudent.student_id)
+    assignments = (
+        db.query(Assignment)
         .filter(
-            ClassroomStudent.classroom_id == classroom_id,
-            ClassroomStudent.is_active.is_(True),
-            Student.is_active.is_(True),
-            Student.id.in_(request.student_ids),
+            Assignment.id.in_(request.assignment_ids),
+            Assignment.classroom_id == classroom_id,
+            Assignment.teacher_id == current_teacher.id,
+            Assignment.is_active.is_(True),
         )
-        .order_by(Student.student_number.asc().nullslast(), Student.id.asc())
+        .order_by(Assignment.created_at.asc(), Assignment.id.asc())
         .all()
     )
-    if len(students) != len(request.student_ids):
+    if len(assignments) != len(request.assignment_ids):
         raise HTTPException(
             status_code=404,
-            detail="Some students were not found in this classroom",
+            detail=(
+                "Some assignments were not found in this classroom or are "
+                "inaccessible"
+            ),
         )
 
-    wb = _build_student_workbook(
-        classroom, students, request.start_date, request.end_date, db
+    students = _classroom_students(classroom_id, db)
+    if not students:
+        raise HTTPException(
+            status_code=404, detail="Classroom has no enrolled students"
+        )
+
+    # Pre-load all StudentAssignments for these (students, assignments) so the
+    # per-student workbook builder doesn't re-query the DB N times.
+    assignment_ids = [a.id for a in assignments]
+    student_ids = [s.id for s in students]
+    sa_rows = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.assignment_id.in_(assignment_ids),
+            StudentAssignment.student_id.in_(student_ids),
+            StudentAssignment.is_active.is_(True),
+        )
+        .all()
     )
+    sa_by_pair = {(sa.student_id, sa.assignment_id): sa for sa in sa_rows}
 
-    if len(students) == 1:
-        s = students[0]
-        filename = (
-            f"{classroom.name}_{s.student_number or ''}_{s.name or ''}_"
-            f"{_today_yyyymmdd()}.xlsx"
+    today = _today_yyyymmdd()
+    files: List[Tuple[str, bytes]] = []
+    for student in students:
+        sa_for_student = {a.id: sa_by_pair.get((student.id, a.id)) for a in assignments}
+        wb = _build_single_student_workbook(
+            classroom, student, assignments, sa_for_student, db
         )
-    else:
-        filename = f"{classroom.name}_學生成績單_{_today_yyyymmdd()}.xlsx"
-    return _xlsx_response(wb, filename)
+        buf = io.BytesIO()
+        wb.save(buf)
+        inner_name = (
+            f"{classroom.name}_{student.student_number or ''}_"
+            f"{student.name or ''}_{today}.xlsx"
+        )
+        files.append((inner_name, buf.getvalue()))
+
+    zip_filename = f"{classroom.name}_學生成績單_{today}.zip"
+    return _zip_response(files, zip_filename)
 
 
 # Re-export so the package can register this router.

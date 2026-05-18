@@ -2746,18 +2746,6 @@
       "updateFailed": "更新失敗，但音檔已生成"
     }
   },
-  "studentGradeDownloadDialog": {
-    "title": "下載學生成績（{{count}} 位學生）",
-    "description": "可選擇日期範圍，僅匯出該期間內派發的作業。留空代表全部。",
-    "startDate": "開始日期",
-    "endDate": "結束日期",
-    "confirm": "下載",
-    "cancel": "取消",
-    "downloading": "下載中…",
-    "downloadStarted": "成績單已開始下載",
-    "downloadFailed": "下載失敗，請稍後再試",
-    "invalidRange": "開始日期不能晚於結束日期"
-  },
   "classGradeDownload": {
     "downloadStarted": "成績單已開始下載",
     "downloadFailed": "下載失敗，請稍後再試"

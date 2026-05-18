@@ -1,13 +1,17 @@
 /**
  * Grade-report download client (issue #708).
  *
- * Two endpoints:
- *  - POST /api/teachers/classrooms/:id/grade-report          → class report
- *  - POST /api/teachers/classrooms/:id/student-grade-report  → student report
+ * Both endpoints take the same input — a list of selected (archived)
+ * assignment ids — and stream a binary file back:
+ *  - POST /api/teachers/classrooms/:id/grade-report
+ *      → one xlsx for the whole class (across the selected assignments).
+ *  - POST /api/teachers/classrooms/:id/student-grade-report
+ *      → one zip containing one xlsx per enrolled student. The classroom
+ *        having only one student still produces a zip with one file inside.
  *
- * Both return an xlsx blob with an RFC-5987 Content-Disposition header
- * carrying the unicode filename; we honour that and fall through to a
- * sensible default if the header is missing or malformed.
+ * Both responses carry the unicode filename via RFC-5987
+ * `Content-Disposition: filename*=UTF-8''<urlencoded>`; we honour that
+ * and fall through to a sensible default if the header is missing.
  */
 import { API_URL } from "../config/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
@@ -49,7 +53,7 @@ function parseFilename(header: string | null, fallback: string): string {
   return fallback;
 }
 
-async function downloadXlsx(
+async function downloadBinary(
   endpoint: string,
   body: unknown,
   fallbackFilename: string,
@@ -105,29 +109,20 @@ export async function downloadClassGradeReport(
   classroomId: number,
   assignmentIds: number[],
 ): Promise<void> {
-  await downloadXlsx(
+  await downloadBinary(
     `/api/teachers/classrooms/${classroomId}/grade-report`,
     { assignment_ids: assignmentIds },
     `成績總覽_${todayYYYYMMDD()}.xlsx`,
   );
 }
 
-export interface StudentGradeReportParams {
-  classroomId: number;
-  studentIds: number[];
-  startDate?: string; // YYYY-MM-DD
-  endDate?: string; // YYYY-MM-DD
-}
-
 export async function downloadStudentGradeReport(
-  params: StudentGradeReportParams,
+  classroomId: number,
+  assignmentIds: number[],
 ): Promise<void> {
-  const body: Record<string, unknown> = { student_ids: params.studentIds };
-  if (params.startDate) body.start_date = params.startDate;
-  if (params.endDate) body.end_date = params.endDate;
-  await downloadXlsx(
-    `/api/teachers/classrooms/${params.classroomId}/student-grade-report`,
-    body,
-    `學生成績單_${todayYYYYMMDD()}.xlsx`,
+  await downloadBinary(
+    `/api/teachers/classrooms/${classroomId}/student-grade-report`,
+    { assignment_ids: assignmentIds },
+    `學生成績單_${todayYYYYMMDD()}.zip`,
   );
 }

@@ -1,7 +1,8 @@
-"""Integration tests for the grade-report endpoints (issue #708 PR-2)."""
+"""Integration tests for the grade-report endpoints (issue #708)."""
 from __future__ import annotations
 
 import io
+import zipfile
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -355,90 +356,158 @@ def test_class_grade_report_unauthenticated_returns_401(seeded):
 
 
 # ---------------------------------------------------------------------------
-# Student grade report
+# Student grade report (ZIP-of-xlsx contract, issue #708 follow-up)
 # ---------------------------------------------------------------------------
 
 
-def test_student_grade_report_happy_path_two_students(seeded):
+def _open_zip(content: bytes) -> zipfile.ZipFile:
+    return zipfile.ZipFile(io.BytesIO(content))
+
+
+def test_student_grade_report_happy_path_returns_zip_per_enrolled_student(seeded):
+    """Selecting all three assignments produces a zip with one xlsx per
+    enrolled student (2 in this fixture), each containing only the selected
+    assignments and the right 總平均."""
     headers = _login()
     res = client.post(
         f"/api/teachers/classrooms/{seeded['classroom_id']}/student-grade-report",
         headers=headers,
-        json={"student_ids": seeded["student_ids"]},
+        json={"assignment_ids": seeded["assignment_ids"]},
     )
     assert res.status_code == 200, res.text
+    assert res.headers["content-type"] == "application/zip"
+    assert "Content-Disposition" in res.headers
+    assert "filename*=UTF-8''" in res.headers["Content-Disposition"]
+    # Zip filename pattern: <class>_學生成績單_<YYYYMMDD>.zip
+    assert "301_%E5%AD%B8%E7%94%9F" in res.headers["Content-Disposition"]
+    assert res.headers["Content-Disposition"].endswith(".zip")
 
-    wb = _load(res.content)
-    # One sheet per selected student.
-    assert len(wb.sheetnames) == 2
-    # Sheet titles include class name + student number + name (truncated to
-    # 31 chars by openpyxl).
-    assert any("王小明" in name for name in wb.sheetnames)
-    assert any("林小花" in name for name in wb.sheetnames)
+    zf = _open_zip(res.content)
+    names = zf.namelist()
+    assert len(names) == 2  # 王小明 + 林小花
+    assert any("王小明" in n for n in names)
+    assert any("林小花" in n for n in names)
+    # Inner files end in .xlsx
+    assert all(n.endswith(".xlsx") for n in names)
 
-    # 王小明 sheet should have:
-    #   - row 1 header mentioning student's name
-    #   - row 3 column headers
-    #   - a 總平均 row near the bottom
-    sheet = next(wb[s] for s in wb.sheetnames if "王小明" in s)
-    assert "王小明" in str(sheet.cell(row=1, column=1).value)
-    headers_row = [sheet.cell(row=3, column=c).value for c in range(1, 5)]
+    # 王小明: 88 / 76 / 95 → 總平均 86.3
+    wang_name = next(n for n in names if "王小明" in n)
+    wb = load_workbook(io.BytesIO(zf.read(wang_name)), data_only=True)
+    ws = wb.active
+    headers_row = [ws.cell(row=3, column=c).value for c in range(1, 5)]
     assert headers_row == ["類別", "作業名稱", "派發日期", "分數"]
-    rows = list(sheet.iter_rows(values_only=True))
+    rows = list(ws.iter_rows(values_only=True))
     assert rows[-1][0] == "總平均"
-    # Wang has 88 / 76 / 95 → avg 86.3 (rounded to 1dp)
     assert rows[-1][3] == pytest.approx(86.3)
 
 
-def test_student_grade_report_single_student_uses_named_file(seeded):
+def test_student_grade_report_subset_of_assignments_changes_average(seeded):
+    """Selecting only the reading assignment (王小明 scored 76) should make
+    that student's 總平均 == 76 — proves the per-student xlsx really is scoped
+    to the selection rather than always covering every assignment."""
     headers = _login()
     res = client.post(
         f"/api/teachers/classrooms/{seeded['classroom_id']}/student-grade-report",
         headers=headers,
-        json={"student_ids": [11]},
+        json={"assignment_ids": [seeded["assignment_reading_id"]]},
     )
-    assert res.status_code == 200
-    # RFC-5987 filename* should carry "王小明" url-encoded.
-    cd = res.headers["Content-Disposition"]
-    assert "%E7%8E%8B%E5%B0%8F%E6%98%8E" in cd  # 王小明 percent-encoded
+    assert res.status_code == 200, res.text
 
-
-def test_student_grade_report_respects_date_range(seeded):
-    """Only the listening assignment (created 30 days ago) should fall outside
-    a tight window around the reading + speaking dates."""
-    today = datetime.now(timezone.utc).date()
-    headers = _login()
-    res = client.post(
-        f"/api/teachers/classrooms/{seeded['classroom_id']}/student-grade-report",
-        headers=headers,
-        json={
-            "student_ids": [11],
-            "start_date": (today - timedelta(days=25)).isoformat(),
-            "end_date": today.isoformat(),
-        },
-    )
-    assert res.status_code == 200
-    wb = _load(res.content)
-    sheet = wb[wb.sheetnames[0]]
-    # Listening (30 days ago) excluded, so 聽力 banner should not appear.
-    all_text = " ".join(
-        str(c.value) for row in sheet.iter_rows() for c in row if c.value
-    )
-    assert "▌ 聽力" not in all_text
+    zf = _open_zip(res.content)
+    wang_name = next(n for n in zf.namelist() if "王小明" in n)
+    ws = load_workbook(io.BytesIO(zf.read(wang_name)), data_only=True).active
+    all_text = " ".join(str(c.value) for row in ws.iter_rows() for c in row if c.value)
     assert "▌ 閱讀" in all_text
-    assert "▌ 口說" in all_text
+    assert "▌ 聽力" not in all_text
+    assert "▌ 口說" not in all_text
+    rows = list(ws.iter_rows(values_only=True))
+    assert rows[-1][0] == "總平均"
+    assert rows[-1][3] == pytest.approx(76)
 
 
-def test_student_grade_report_404_for_student_outside_classroom(seeded):
-    # Seed a student who is NOT enrolled in classroom 1.
+def test_student_grade_report_one_student_classroom_still_returns_zip(fresh_db):
+    """A classroom with exactly one student should still come back as a ZIP
+    containing one file — frontend treats every response as a ZIP."""
     db = TestingSessionLocal()
+    now = datetime.now(timezone.utc)
+    db.add(
+        Teacher(
+            id=1,
+            name="Solo Teacher",
+            email="solo@test.com",
+            password_hash=get_password_hash("pw"),
+            email_verified=True,
+            is_active=True,
+        )
+    )
+    db.commit()
+    db.add(
+        SubscriptionPeriod(
+            teacher_id=1,
+            plan_name="Tutor Teachers",
+            amount_paid=299,
+            quota_total=2000,
+            quota_used=0,
+            start_date=now,
+            end_date=now + timedelta(days=30),
+            payment_method="credit_card",
+        )
+    )
+    db.add(Classroom(id=10, name="SoloClass", teacher_id=1, is_active=True))
+    db.commit()
     db.add(
         Student(
-            id=99,
-            name="Outsider",
-            student_number="99",
-            email="outsider@test.com",
+            id=20,
+            name="OnlyKid",
+            student_number="01",
+            email="only@test.com",
             password_hash=get_password_hash("pw"),
+            is_active=True,
+        )
+    )
+    db.commit()
+    db.add(ClassroomStudent(classroom_id=10, student_id=20, is_active=True))
+    db.add(
+        Assignment(
+            id=200,
+            title="Only Quiz",
+            classroom_id=10,
+            teacher_id=1,
+            practice_mode="word_reading",
+            play_audio=False,
+            score_category="speaking",
+            is_active=True,
+            created_at=now,
+        )
+    )
+    db.commit()
+    db.close()
+
+    headers = _login(email="solo@test.com")
+    res = client.post(
+        "/api/teachers/classrooms/10/student-grade-report",
+        headers=headers,
+        json={"assignment_ids": [200]},
+    )
+    assert res.status_code == 200, res.text
+    assert res.headers["content-type"] == "application/zip"
+    zf = _open_zip(res.content)
+    assert len(zf.namelist()) == 1
+    assert "OnlyKid" in zf.namelist()[0]
+
+
+def test_student_grade_report_rejects_assignments_in_other_classroom(seeded):
+    """T1 cannot include an assignment id that belongs to T2's classroom."""
+    db = TestingSessionLocal()
+    db.add(
+        Assignment(
+            id=999,
+            title="Other classroom assignment",
+            classroom_id=seeded["other_classroom_id"],
+            teacher_id=2,
+            practice_mode="reading",
+            play_audio=False,
+            score_category="speaking",
             is_active=True,
         )
     )
@@ -449,21 +518,34 @@ def test_student_grade_report_404_for_student_outside_classroom(seeded):
     res = client.post(
         f"/api/teachers/classrooms/{seeded['classroom_id']}/student-grade-report",
         headers=headers,
-        json={"student_ids": [11, 99]},
+        json={"assignment_ids": [seeded["assignment_listening_id"], 999]},
     )
     assert res.status_code == 404
 
 
-def test_student_grade_report_rejects_inverted_date_range(seeded):
-    today = datetime.now(timezone.utc).date()
+def test_student_grade_report_404_for_classroom_not_owned(seeded):
+    headers = _login()  # T1
+    res = client.post(
+        f"/api/teachers/classrooms/{seeded['other_classroom_id']}/student-grade-report",
+        headers=headers,
+        json={"assignment_ids": [seeded["assignment_listening_id"]]},
+    )
+    assert res.status_code == 404
+
+
+def test_student_grade_report_rejects_empty_selection(seeded):
     headers = _login()
     res = client.post(
         f"/api/teachers/classrooms/{seeded['classroom_id']}/student-grade-report",
         headers=headers,
-        json={
-            "student_ids": [11],
-            "start_date": today.isoformat(),
-            "end_date": (today - timedelta(days=1)).isoformat(),
-        },
+        json={"assignment_ids": []},
     )
     assert res.status_code == 422
+
+
+def test_student_grade_report_unauthenticated_returns_401(seeded):
+    res = client.post(
+        f"/api/teachers/classrooms/{seeded['classroom_id']}/student-grade-report",
+        json={"assignment_ids": seeded["assignment_ids"]},
+    )
+    assert res.status_code == 401
