@@ -956,7 +956,7 @@ export default function AdminSubscriptionDashboard() {
                 <Table className="min-w-[800px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs md:text-sm">
+                      <TableHead className="text-xs md:text-sm w-[260px]">
                         {t("adminSubscription.table.email")}
                       </TableHead>
                       <TableHead className="text-xs md:text-sm">
@@ -974,7 +974,7 @@ export default function AdminSubscriptionDashboard() {
                       <TableHead className="text-xs md:text-sm">
                         {t("adminSubscription.table.quota")}
                       </TableHead>
-                      <TableHead className="text-xs md:text-sm">
+                      <TableHead className="text-xs md:text-sm w-24">
                         {t("adminSubscription.table.status")}
                       </TableHead>
                       <TableHead className="text-xs md:text-sm">
@@ -1001,14 +1001,19 @@ export default function AdminSubscriptionDashboard() {
                               toggleTeacherExpand(teacher.teacher_id)
                             }
                           >
-                            <TableCell className="font-mono text-sm">
+                            <TableCell className="font-mono text-sm w-[260px] max-w-[260px]">
                               <div className="flex items-center gap-2">
                                 {expandedTeacherId === teacher.teacher_id ? (
-                                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                                  <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
                                 ) : (
-                                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                                  <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
                                 )}
-                                {teacher.teacher_email}
+                                <span
+                                  className="truncate"
+                                  title={teacher.teacher_email}
+                                >
+                                  {teacher.teacher_email}
+                                </span>
                               </div>
                             </TableCell>
                             <TableCell>{teacher.teacher_name}</TableCell>
@@ -1068,25 +1073,25 @@ export default function AdminSubscriptionDashboard() {
                             <TableCell>
                               {teacher.current_subscription?.status ===
                               "active" ? (
-                                <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
+                                <span className="inline-block whitespace-nowrap px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
                                   {t("adminSubscription.status.active")}
                                 </span>
                               ) : teacher.has_trial_bonus ? (
-                                <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
+                                <span className="inline-block whitespace-nowrap px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
                                   {t(
                                     "adminSubscription.status.trial",
                                     "Free Trial",
                                   )}
                                 </span>
                               ) : !teacher.email_verified ? (
-                                <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
+                                <span className="inline-block whitespace-nowrap px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
                                   {t(
                                     "adminSubscription.status.unverified",
                                     "Unverified",
                                   )}
                                 </span>
                               ) : (
-                                <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">
+                                <span className="inline-block whitespace-nowrap px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">
                                   {t("adminSubscription.status.none")}
                                 </span>
                               )}
@@ -1129,6 +1134,12 @@ export default function AdminSubscriptionDashboard() {
                                   className="bg-gray-50 p-0"
                                 >
                                   <div className="p-4">
+                                    <div className="mb-3 text-sm text-gray-600 font-mono break-all">
+                                      Email:{" "}
+                                      <span className="text-gray-900">
+                                        {teacher.teacher_email}
+                                      </span>
+                                    </div>
                                     <h4 className="font-semibold mb-3 text-sm">
                                       {t("adminSubscription.periodTable.title")}
                                     </h4>

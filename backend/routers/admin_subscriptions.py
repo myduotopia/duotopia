@@ -74,11 +74,11 @@ class SubscriptionResponse(BaseModel):
 
 
 # ============ Helper Functions ============
-def get_plan_quota(plan_name: str) -> int:
-    """根據方案名稱獲取對應的 quota"""
-    from config.plans import PLAN_QUOTAS
+def get_plan_quota(plan_name: str, db: Session = None) -> int:
+    """根據方案名稱獲取對應的 quota（優先讀 Plan 表的 admin 覆寫值）"""
+    from config.plans import get_plan_quota as _get_plan_quota
 
-    return PLAN_QUOTAS.get(plan_name, 0)
+    return _get_plan_quota(plan_name, db=db)
 
 
 def parse_end_date(date_str: str) -> datetime:
@@ -138,7 +138,7 @@ async def create_subscription(
         )
 
     # 計算 quota (VIP 方案可自訂)
-    quota_total = get_plan_quota(request.plan_name)
+    quota_total = get_plan_quota(request.plan_name, db=db)
 
     # VIP 方案：使用自訂 quota
     if request.plan_name == "VIP":
@@ -265,7 +265,7 @@ async def edit_subscription(
                 current_period.quota_total = request.quota_total
         else:
             # 其他方案：使用預設 quota
-            base_quota = get_plan_quota(request.plan_name)
+            base_quota = get_plan_quota(request.plan_name, db=db)
 
             new_quota = base_quota
             if new_quota != current_period.quota_total:

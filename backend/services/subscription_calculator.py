@@ -11,12 +11,17 @@ from datetime import datetime, timezone
 from typing import Tuple
 from calendar import monthrange
 
-from config.plans import PLAN_PRICES as _PLAN_PRICES, DEFAULT_PRICE as _DEFAULT_PRICE
+from config.plans import (
+    PLAN_PRICES as _PLAN_PRICES,
+    DEFAULT_PRICE as _DEFAULT_PRICE,
+    get_plan_price,
+)
 
 
 class SubscriptionCalculator:
     """訂閱計算器"""
 
+    # Kept for backward compat; prefer ``get_plan_price`` so admin overrides apply.
     PLAN_PRICES = _PLAN_PRICES
 
     DEFAULT_PRICE = _DEFAULT_PRICE
@@ -35,9 +40,7 @@ class SubscriptionCalculator:
         Returns:
             (到期日, 應付金額, 詳細資訊)
         """
-        full_price = SubscriptionCalculator.PLAN_PRICES.get(
-            plan_name, SubscriptionCalculator.DEFAULT_PRICE
-        )
+        full_price = get_plan_price(plan_name)
 
         end_date = SubscriptionCalculator._add_one_month(start_date)
 
@@ -68,9 +71,7 @@ class SubscriptionCalculator:
             (新到期日, 應付金額)
         """
         new_end_date = SubscriptionCalculator._add_one_month(current_end_date)
-        amount = SubscriptionCalculator.PLAN_PRICES.get(
-            plan_name, SubscriptionCalculator.DEFAULT_PRICE
-        )
+        amount = get_plan_price(plan_name)
 
         return new_end_date, amount
 

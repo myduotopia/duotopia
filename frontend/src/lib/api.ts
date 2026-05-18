@@ -1476,6 +1476,46 @@ class ApiClient {
       body: JSON.stringify(data),
     });
   }
+
+  // ============ Admin Plans Methods ============
+  async listAdminPlans() {
+    return this.request<
+      Array<{
+        id: number;
+        name: string;
+        price: number | null;
+        quota: number | null;
+        display_order: number;
+        is_active: boolean;
+        updated_at: string | null;
+        updated_by_admin_id: number | null;
+      }>
+    >("/api/admin/plans", { method: "GET" });
+  }
+
+  async updateAdminPlan(
+    planName: string,
+    data: {
+      price?: number;
+      quota?: number;
+      is_active?: boolean;
+      display_order?: number;
+    },
+  ) {
+    return this.request<{
+      id: number;
+      name: string;
+      price: number | null;
+      quota: number | null;
+      display_order: number;
+      is_active: boolean;
+      updated_at: string | null;
+      updated_by_admin_id: number | null;
+    }>(`/api/admin/plans/${encodeURIComponent(planName)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 // Export singleton instance
