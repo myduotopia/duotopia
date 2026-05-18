@@ -364,6 +364,10 @@ export default function StudentActivityPageContent({
   const hasRecordedData = useRef<boolean>(false);
   const isReRecording = useRef<boolean>(false);
   const streamRef = useRef<MediaStream | null>(null); // 🔧 追蹤 MediaStream 以便清理
+  const requestDataCalledRef = useRef<boolean>(false);
+  const recordingStartTimeMsRef = useRef<number>(0);
+  // onstop 內讀 recorder.state 永遠是 "inactive"；此 ref 保留 stop() 前一刻的 state
+  const recorderStateAtStopRef = useRef<string>("unknown");
 
   // Initialize answers
   useEffect(() => {
@@ -589,6 +593,14 @@ export default function StudentActivityPageContent({
             `⚠️ Recording file too small (both checks failed): chunks=${chunksSize}B, blob=${blobSize}B, min=${strategy.minFileSize}B`,
           );
 
+          const chunkCount = chunks.length;
+          const recorderStateAtStop = recorderStateAtStopRef.current;
+          const requestDataCalled = requestDataCalledRef.current;
+          const recordingTimeMs =
+            recordingStartTimeMsRef.current > 0
+              ? Math.round(performance.now() - recordingStartTimeMsRef.current)
+              : Math.round(actualRecordingDuration * 1000);
+
           const { logAudioError } = await import("@/utils/audioErrorLogger");
           await logAudioError({
             errorType: "recording_too_small",
@@ -598,11 +610,55 @@ export default function StudentActivityPageContent({
             contentType: audioBlob.type,
             assignmentId: assignmentId,
             errorMessage: `Both chunks (${chunksSize}B) and blob (${blobSize}B) below minimum ${strategy.minFileSize}B`,
+            chunkCount,
+            recorderStateAtStop,
+            requestDataCalled,
+            recordingTimeMs,
           });
 
           toast.error(t("studentActivityPage.recording.failed"), {
             description: t("studentActivityPage.recording.fileAbnormal"),
           });
+
+          // 清掉這題的 recording_url 並標 uploadFailed，強迫學生重錄
+          if (currentActivity.items && currentActivity.items.length > 0) {
+            const subIdx = currentSubQuestionIndex;
+            setActivities((prevActivities) => {
+              const newActivities = [...prevActivities];
+              const activityIndex = newActivities.findIndex(
+                (a) => a.id === currentActivity.id,
+              );
+              if (activityIndex !== -1 && newActivities[activityIndex].items) {
+                const newItems = [...newActivities[activityIndex].items!];
+                if (newItems[subIdx]) {
+                  newItems[subIdx] = {
+                    ...newItems[subIdx],
+                    recording_url: "",
+                    ai_assessment: undefined,
+                  };
+                }
+                newActivities[activityIndex] = {
+                  ...newActivities[activityIndex],
+                  items: newItems,
+                };
+              }
+              return newActivities;
+            });
+          } else {
+            setAnswers((prev) => {
+              const next = new Map(prev);
+              const ans = next.get(currentActivity.id);
+              if (ans) {
+                next.set(currentActivity.id, {
+                  ...ans,
+                  audioBlob: undefined,
+                  audioUrl: undefined,
+                });
+              }
+              return next;
+            });
+          }
+          markUploadFailed(currentActivity.id);
 
           // 🔧 清理所有錄音狀態
           if (streamRef.current) {
@@ -839,12 +895,16 @@ export default function StudentActivityPageContent({
         setRecordingTime(0);
       };
 
-      recorder.start();
+      // 1s timeslice 讓 ondataavailable 在錄音期間週期觸發，避免 iOS Safari 漏掉最後 chunk
+      recorder.start(1000);
       setMediaRecorder(recorder);
       setIsRecording(true);
       setRecordingTime(0);
       recordingTimeRef.current = 0;
       hasRecordedData.current = false;
+      requestDataCalledRef.current = false;
+      recordingStartTimeMsRef.current = performance.now();
+      recorderStateAtStopRef.current = "unknown";
 
       // Start recording timer with 45 second limit
       let hasReachedLimit = false;
@@ -859,8 +919,21 @@ export default function StudentActivityPageContent({
             clearInterval(recordingInterval.current);
             recordingInterval.current = null;
           }
-          setTimeout(() => {
+          // requestData() → 80ms → stop()：讓 iOS Safari 在 stop 前送出最後 chunk
+          setTimeout(async () => {
             if (recorder && recorder.state === "recording") {
+              if (!requestDataCalledRef.current) {
+                try {
+                  recorder.requestData();
+                  requestDataCalledRef.current = true;
+                } catch (e) {
+                  console.warn("requestData() failed:", e);
+                }
+              }
+              await new Promise<void>((resolve) => setTimeout(resolve, 80));
+            }
+            if (recorder && recorder.state === "recording") {
+              recorderStateAtStopRef.current = recorder.state;
               recorder.stop();
               setMediaRecorder(null);
               setIsRecording(false);
@@ -875,14 +948,27 @@ export default function StudentActivityPageContent({
     }
   };
 
-  const stopRecording = () => {
+  // iOS Safari：requestData() → 80ms → stop()，避免最後一個 chunk 在 onstop 後才送達
+  const stopRecording = async () => {
     if (mediaRecorder && isRecording) {
-      mediaRecorder.stop();
-      // cleanupRecording 會在 recorder.onstop 之後自動被呼叫
-      // 這裡只清理 timer，避免干擾 onstop 事件
       if (recordingInterval.current) {
         clearInterval(recordingInterval.current);
         recordingInterval.current = null;
+      }
+      if (mediaRecorder.state === "recording") {
+        if (!requestDataCalledRef.current) {
+          try {
+            mediaRecorder.requestData();
+            requestDataCalledRef.current = true;
+          } catch (e) {
+            console.warn("requestData() failed:", e);
+          }
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, 80));
+      }
+      if (mediaRecorder.state === "recording") {
+        recorderStateAtStopRef.current = mediaRecorder.state;
+        mediaRecorder.stop();
       }
     }
   };
