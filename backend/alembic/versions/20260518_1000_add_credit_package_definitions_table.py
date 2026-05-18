@@ -71,6 +71,44 @@ def upgrade() -> None:
         """
     )
 
+    # Index on the FK column. Postgres doesn't auto-index FK columns, so
+    # admin-audit joins (CreditPackageDefinition → Teacher) would otherwise
+    # seq-scan. Partial index keeps it tight given most rows have NULL here.
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS "
+        "idx_credit_package_definitions_updated_by_admin_id "
+        "ON credit_package_definitions (updated_by_admin_id) "
+        "WHERE updated_by_admin_id IS NOT NULL"
+    )
+
+    # DB-level trigger to refresh updated_at on every UPDATE, including
+    # raw-SQL writes (e.g. Supabase dashboard) that bypass SQLAlchemy's
+    # ORM-only `onupdate=func.now()`. Function uses CREATE OR REPLACE;
+    # trigger is dropped + re-created so the migration stays idempotent.
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION set_credit_package_definitions_updated_at()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            NEW.updated_at = now();
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        """
+    )
+    op.execute(
+        "DROP TRIGGER IF EXISTS trg_credit_package_definitions_updated_at "
+        "ON credit_package_definitions"
+    )
+    op.execute(
+        """
+        CREATE TRIGGER trg_credit_package_definitions_updated_at
+        BEFORE UPDATE ON credit_package_definitions
+        FOR EACH ROW
+        EXECUTE FUNCTION set_credit_package_definitions_updated_at();
+        """
+    )
+
     # Seed default packages from config constants. ON CONFLICT keeps
     # existing rows untouched so re-running won't overwrite admin edits.
     # `org_allowed = TRUE` only for pkg-20000 (matches legacy

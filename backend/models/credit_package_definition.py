@@ -63,7 +63,13 @@ class CreditPackageDefinition(Base):
     # Display order in admin UI / checkout list.
     display_order = Column(Integer, nullable=False, default=0)
 
-    # Audit
+    # Audit (column order matches migration: created_at, updated_at, FK)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # `onupdate` covers ORM writes. A DB-level BEFORE UPDATE trigger
+    # (set_credit_package_definitions_updated_at) covers raw-SQL writes
+    # such as Supabase-dashboard edits — see the matching migration.
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -72,9 +78,6 @@ class CreditPackageDefinition(Base):
     )
     updated_by_admin_id = Column(
         Integer, ForeignKey("teachers.id", ondelete="SET NULL"), nullable=True
-    )
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     updated_by = relationship("Teacher", foreign_keys=[updated_by_admin_id])
