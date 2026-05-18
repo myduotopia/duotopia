@@ -1523,6 +1523,46 @@ class ApiClient {
       body: JSON.stringify(data),
     });
   }
+
+  // ============ Admin Credit Package Instance Methods ============
+  async adminEditCreditPackage(
+    packageId: number,
+    data: {
+      points_total?: number;
+      expires_at?: string; // YYYY-MM-DD
+      reason: string;
+    },
+  ) {
+    return this.request<{
+      id: number;
+      package_id: string;
+      source: string;
+      points_total: number;
+      points_used: number;
+      points_remaining: number;
+      expires_at: string;
+      status: string;
+    }>(`/api/admin/subscription/credit-package/${packageId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async adminCancelCreditPackage(packageId: number, data: { reason: string }) {
+    return this.request<{
+      id: number;
+      package_id: string;
+      source: string;
+      points_total: number;
+      points_used: number;
+      points_remaining: number;
+      expires_at: string;
+      status: string;
+    }>(`/api/admin/subscription/credit-package/${packageId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 // Export singleton instance

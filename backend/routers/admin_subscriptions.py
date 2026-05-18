@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func
 from sqlalchemy.orm.attributes import flag_modified
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -70,6 +70,33 @@ class SubscriptionResponse(BaseModel):
     quota_total: int
     quota_used: int
     end_date: str
+    status: str
+
+
+class EditCreditPackageRequest(BaseModel):
+    """編輯點數包請求（每次至少 reason 必填）"""
+
+    points_total: Optional[int] = Field(default=None, ge=0)
+    expires_at: Optional[str] = None  # YYYY-MM-DD
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class CancelCreditPackageRequest(BaseModel):
+    """退款 / 取消點數包請求"""
+
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class CreditPackageResponse(BaseModel):
+    """點數包編輯後回應"""
+
+    id: int
+    package_id: str
+    source: str
+    points_total: int
+    points_used: int
+    points_remaining: int
+    expires_at: str
     status: str
 
 
@@ -395,6 +422,166 @@ async def cancel_subscription(
     }
 
 
+# ============ Credit Package Instance CRUD ============
+def _credit_package_response(pkg: CreditPackage) -> dict:
+    return {
+        "id": pkg.id,
+        "package_id": pkg.package_id,
+        "source": pkg.source,
+        "points_total": pkg.points_total,
+        "points_used": pkg.points_used,
+        "points_remaining": pkg.points_remaining,
+        "expires_at": pkg.expires_at.isoformat() if pkg.expires_at else None,
+        "status": pkg.status,
+    }
+
+
+def _append_admin_operation(pkg: CreditPackage, op: dict) -> None:
+    """Append `op` to pkg.admin_metadata['operations'] and flag the column
+    so SQLAlchemy persists the in-place JSONB mutation."""
+    if pkg.admin_metadata is None:
+        pkg.admin_metadata = {"operations": []}
+    if "operations" not in pkg.admin_metadata:
+        pkg.admin_metadata["operations"] = []
+    pkg.admin_metadata["operations"].append(op)
+    flag_modified(pkg, "admin_metadata")
+
+
+@router.put("/credit-package/{package_id}", response_model=CreditPackageResponse)
+async def edit_credit_package(
+    package_id: int,
+    request: EditCreditPackageRequest,
+    db: Session = Depends(get_db),
+    admin: Teacher = Depends(get_current_admin),
+):
+    """Admin: edit a teacher's CreditPackage row.
+
+    Editable fields: `points_total`, `expires_at`. `reason` is required
+    and recorded in `admin_reason` + accumulated in `admin_metadata`.
+
+    Refused (422) if `points_total < points_used` (would invalidate
+    historical PointUsageLog entries) or if the package is already
+    refunded.
+    """
+    pkg = db.query(CreditPackage).filter(CreditPackage.id == package_id).first()
+    if pkg is None:
+        raise HTTPException(
+            status_code=404, detail=f"Credit package {package_id} not found"
+        )
+
+    if pkg.status == "refunded":
+        raise HTTPException(
+            status_code=422,
+            detail="Cannot edit a refunded credit package",
+        )
+
+    payload = request.model_dump(exclude_unset=True)
+    payload.pop("reason", None)
+    if not payload:
+        raise HTTPException(status_code=400, detail="No editable fields provided")
+
+    changes: dict = {}
+
+    if "points_total" in payload:
+        new_total = payload["points_total"]
+        if new_total < pkg.points_used:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"points_total ({new_total}) cannot be less than "
+                    f"points_used ({pkg.points_used})"
+                ),
+            )
+        if new_total != pkg.points_total:
+            changes["points_total"] = {
+                "from": pkg.points_total,
+                "to": new_total,
+            }
+            pkg.points_total = new_total
+
+    if "expires_at" in payload:
+        try:
+            new_expires = datetime.strptime(payload["expires_at"], "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=422,
+                detail="expires_at must be a date in YYYY-MM-DD format",
+            )
+        old_iso = pkg.expires_at.isoformat() if pkg.expires_at else None
+        new_iso = new_expires.isoformat()
+        if old_iso != new_iso:
+            changes["expires_at"] = {"from": old_iso, "to": new_iso}
+            pkg.expires_at = new_expires
+
+    pkg.admin_id = admin.id
+    pkg.admin_reason = request.reason
+
+    _append_admin_operation(
+        pkg,
+        {
+            "action": "edit",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "admin_id": admin.id,
+            "admin_email": admin.email,
+            "admin_name": admin.name,
+            "reason": request.reason,
+            "changes": changes,
+        },
+    )
+
+    db.commit()
+    db.refresh(pkg)
+    return _credit_package_response(pkg)
+
+
+@router.post("/credit-package/{package_id}/cancel")
+async def cancel_credit_package(
+    package_id: int,
+    request: CancelCreditPackageRequest,
+    db: Session = Depends(get_db),
+    admin: Teacher = Depends(get_current_admin),
+):
+    """Admin: soft-delete a teacher's CreditPackage by setting
+    `status='refunded'`. The row is preserved so PointUsageLog audit
+    trails remain valid; the list endpoint filters refunded packages out
+    of the UI."""
+    pkg = db.query(CreditPackage).filter(CreditPackage.id == package_id).first()
+    if pkg is None:
+        raise HTTPException(
+            status_code=404, detail=f"Credit package {package_id} not found"
+        )
+
+    if pkg.status == "refunded":
+        raise HTTPException(
+            status_code=422,
+            detail="Credit package is already refunded",
+        )
+
+    old_status = pkg.status
+    pkg.status = "refunded"
+    pkg.admin_id = admin.id
+    pkg.admin_reason = request.reason
+
+    _append_admin_operation(
+        pkg,
+        {
+            "action": "cancel",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "admin_id": admin.id,
+            "admin_email": admin.email,
+            "admin_name": admin.name,
+            "reason": request.reason,
+            "changes": {"status": {"from": old_status, "to": "refunded"}},
+        },
+    )
+
+    db.commit()
+    db.refresh(pkg)
+    return _credit_package_response(pkg)
+
+
 @router.get("/all-teachers")
 async def get_all_teachers_subscriptions(
     db: Session = Depends(get_db),
@@ -522,9 +709,14 @@ async def get_teacher_periods(
         )
 
     # 🔥 Approach A: 同時撈取 credit_packages（trial_bonus / admin_grant / 加購）
+    # Refunded packages are hidden from the dashboard list (soft-delete UX);
+    # the row stays in DB so PointUsageLog audit trails remain valid.
     credit_packages = (
         db.query(CreditPackage)
-        .filter(CreditPackage.teacher_id == teacher_id)
+        .filter(
+            CreditPackage.teacher_id == teacher_id,
+            CreditPackage.status != "refunded",
+        )
         .order_by(CreditPackage.purchased_at.desc())
         .all()
     )

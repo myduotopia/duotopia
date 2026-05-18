@@ -190,6 +190,7 @@ class Teacher(Base):
         "CreditPackage",
         foreign_keys="CreditPackage.teacher_id",
         back_populates="teacher",
+        foreign_keys="CreditPackage.teacher_id",
         cascade="all, delete-orphan",
         order_by="CreditPackage.expires_at.asc()",
     )
