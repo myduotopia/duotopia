@@ -333,7 +333,10 @@ const getExampleSentenceErrorDetail = (
     detail && typeof detail === "object" && !Array.isArray(detail)
       ? (detail as { code?: unknown }).code
       : null;
-  if (code === "EXAMPLE_SENTENCE_REQUIRED" || code === "EXAMPLE_AUDIO_REQUIRED") {
+  if (
+    code === "EXAMPLE_SENTENCE_REQUIRED" ||
+    code === "EXAMPLE_AUDIO_REQUIRED"
+  ) {
     return detail as unknown as ExampleSentenceErrorDetail;
   }
   return null;

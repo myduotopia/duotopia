@@ -157,9 +157,7 @@ def _raise_if_missing_examples(
             },
         )
 
-    missing_audio = _collect_contents_missing_audio(
-        contents, practice_mode, play_audio
-    )
+    missing_audio = _collect_contents_missing_audio(contents, practice_mode, play_audio)
     if missing_audio:
         raise HTTPException(
             status_code=422,
@@ -750,9 +748,7 @@ async def update_assignment(
     effective_play_audio = (
         request.play_audio if request.play_audio is not None else assignment.play_audio
     )
-    _raise_if_missing_examples(
-        new_contents, effective_mode, bool(effective_play_audio)
-    )
+    _raise_if_missing_examples(new_contents, effective_mode, bool(effective_play_audio))
 
     # 更新基本資訊
     assignment.title = request.title

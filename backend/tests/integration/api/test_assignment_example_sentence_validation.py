@@ -588,9 +588,7 @@ def test_patch_does_not_validate_examples(fresh_db):
 # --- Issue #757: example-audio validation ---------------------------------
 
 
-def _full_text_item(
-    *, audio_url: str | None = "https://cdn/example/cat.mp3"
-) -> dict:
+def _full_text_item(*, audio_url: str | None = "https://cdn/example/cat.mp3") -> dict:
     """A vocab item with sentence + translation, optionally with audio."""
     return {
         "text": "cat",

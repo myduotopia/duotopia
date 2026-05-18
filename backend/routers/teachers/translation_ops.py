@@ -339,9 +339,7 @@ async def generate_sentences(
                 )
                 return None
 
-        audio_urls = await asyncio.gather(
-            *(_tts(s.get("sentence")) for s in sentences)
-        )
+        audio_urls = await asyncio.gather(*(_tts(s.get("sentence")) for s in sentences))
         for sentence, url in zip(sentences, audio_urls):
             sentence["audio_url"] = url
 
