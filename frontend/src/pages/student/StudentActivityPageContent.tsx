@@ -649,9 +649,11 @@ export default function StudentActivityPageContent({
               const next = new Map(prev);
               const ans = next.get(currentActivity.id);
               if (ans) {
-                ans.audioBlob = undefined;
-                ans.audioUrl = undefined;
-                next.set(currentActivity.id, ans);
+                next.set(currentActivity.id, {
+                  ...ans,
+                  audioBlob: undefined,
+                  audioUrl: undefined,
+                });
               }
               return next;
             });
