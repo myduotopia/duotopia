@@ -812,14 +812,37 @@ async def patch_assignment(
             status_code=404, detail="Assignment not found or you don't have permission"
         )
 
-    # Issue #673: no example-sentence validation needed here. PATCH cannot
-    # change practice_mode or content_ids (UpdateAssignmentRequest does not
-    # expose them); both were validated at create / PUT time. If those fields
-    # are added to UpdateAssignmentRequest in the future, port the
-    # _raise_if_missing_examples call from create_assignment / update_assignment.
+    # Issue #673: no example-sentence text validation needed on PATCH —
+    # practice_mode and content_ids are immutable here, so the create/PUT
+    # check still holds. Issue #757 adds one targeted exception below: when
+    # play_audio toggles from False → True for a listening-flavoured mode,
+    # we must re-verify the assignment's copy contents actually have audio,
+    # otherwise the student-side player will be silent.
 
     # 只更新提供的欄位（使用 model_fields_set 區分「未提供」和「明確傳 null」）
     provided = request.model_fields_set
+
+    # Issue #757: play_audio toggle validation (PATCH path)
+    if "play_audio" in provided:
+        new_play_audio = bool(request.play_audio)
+        # Only block when toggling INTO an audio-requiring config — turning
+        # audio off is always safe.
+        if new_play_audio and _requires_sentence_audio(
+            assignment.practice_mode, new_play_audio
+        ):
+            copy_contents = (
+                db.query(Content)
+                .join(
+                    AssignmentContent,
+                    AssignmentContent.content_id == Content.id,
+                )
+                .options(selectinload(Content.content_items))
+                .filter(AssignmentContent.assignment_id == assignment_id)
+                .all()
+            )
+            _raise_if_missing_examples(
+                copy_contents, assignment.practice_mode, new_play_audio
+            )
 
     if "title" in provided:
         assignment.title = request.title

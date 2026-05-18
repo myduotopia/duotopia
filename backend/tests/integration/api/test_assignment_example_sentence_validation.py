@@ -546,11 +546,11 @@ def test_put_update_uses_existing_practice_mode_when_not_in_request(fresh_db):
 
 
 def test_patch_does_not_validate_examples(fresh_db):
-    """PATCH only updates metadata fields (title/description/...). It cannot
-    change practice_mode or content_ids, so validation does not apply.
-    This test pins the contract — if PATCH ever starts mutating those
-    fields, the new path needs the validator hooked in (see the comment in
-    routers/assignments/crud.py::patch_assignment)."""
+    """PATCH skips example-sentence-text validation (practice_mode and
+    content_ids are immutable here, so the create/PUT text check still
+    holds). Issue #757 added a narrow exception for play_audio toggles —
+    covered separately in test_patch_rejects_play_audio_toggle_*. This
+    test still pins the broader contract for metadata-only updates."""
     db = TestingSessionLocal()
     seed = _seed_minimal(db)
     good = _add_vocab_content(
@@ -819,6 +819,149 @@ def test_create_audio_check_runs_after_sentence_check(fresh_db):
     )
     assert resp.status_code == 422
     assert resp.json()["detail"]["code"] == "EXAMPLE_SENTENCE_REQUIRED"
+
+
+# --- Issue #757: PATCH play_audio toggle audio validation -----------------
+
+
+def test_patch_rejects_play_audio_toggle_when_audio_missing(fresh_db):
+    """Toggling play_audio True on an existing rearrangement assignment whose
+    copy contents lack example audio must be blocked — otherwise students
+    would open the activity to silent audio prompts."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    # Create assignment in rearrangement (text-only) mode, with sentence
+    # text + translation but NO audio — that's a legal create payload because
+    # play_audio defaults to False.
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Text-Only Set",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    create_resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="rearrangement",
+            play_audio=False,
+        ),
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    assignment_id = create_resp.json()["assignment_id"]
+
+    # Now PATCH play_audio → True. Backend must validate the copy contents.
+    patch_resp = client.patch(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"play_audio": True},
+    )
+    assert patch_resp.status_code == 422, patch_resp.text
+    assert patch_resp.json()["detail"]["code"] == "EXAMPLE_AUDIO_REQUIRED"
+
+
+def test_patch_allows_play_audio_toggle_when_audio_present(fresh_db):
+    """Same flow but the vocab set DOES have audio — toggle should succeed."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Audio Set",
+        [_full_text_item(audio_url="https://cdn/example/cat.mp3")],
+    )
+    db.close()
+
+    token = _login_teacher()
+    create_resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="rearrangement",
+            play_audio=False,
+        ),
+    )
+    assignment_id = create_resp.json()["assignment_id"]
+
+    patch_resp = client.patch(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"play_audio": True},
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+
+
+def test_patch_allows_play_audio_toggle_off_without_validation(fresh_db):
+    """Turning play_audio OFF is always safe — never validate audio."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Audio Set",
+        [_full_text_item(audio_url="https://cdn/example/cat.mp3")],
+    )
+    db.close()
+
+    token = _login_teacher()
+    create_resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="rearrangement",
+            play_audio=True,
+        ),
+    )
+    assignment_id = create_resp.json()["assignment_id"]
+
+    patch_resp = client.patch(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"play_audio": False},
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+
+
+def test_patch_skips_audio_check_for_modes_that_dont_need_audio(fresh_db):
+    """play_audio True on word_selection (which doesn't read sentence audio
+    at all) should not trigger the audio check."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Word-only Set",
+        [{"text": "cat", "translation": "貓"}],  # no example, no audio
+    )
+    db.close()
+
+    token = _login_teacher()
+    create_resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection",
+        ),
+    )
+    assignment_id = create_resp.json()["assignment_id"]
+
+    patch_resp = client.patch(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"play_audio": True},
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
 
 
 if __name__ == "__main__":
