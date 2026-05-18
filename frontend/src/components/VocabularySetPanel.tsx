@@ -3512,6 +3512,9 @@ const VocabularySetPanel = forwardRef<
               return !!row.example_sentence_translation?.trim();
             })();
             if (!hasExampleTranslation) steps++;
+            // Issue #757: 例句已存在但缺音檔（舊資料常見情境）
+            // 也算一步要補，否則「無需補齊」會誤報而漏掉聽力派發要用的 TTS。
+            if (!row.example_sentence_audio_url) steps++;
           }
           return steps;
         };
@@ -3565,6 +3568,10 @@ const VocabularySetPanel = forwardRef<
         const needsTTS: number[] = [];
         const needsExamples: number[] = [];
         const needsExampleTranslation: number[] = [];
+        // Issue #757: 例句已存在但缺音檔的舊資料 → 單獨跑 TTS 補上。
+        // 與 needsExamples 互斥（needsExamples 是「沒例句」的，
+        // 走 /generate-sentences 後端會順便產 audio_url）。
+        const needsExampleAudio: number[] = [];
 
         for (const idx of itemsToProcess) {
           const row = currentRows[idx];
@@ -3594,6 +3601,9 @@ const VocabularySetPanel = forwardRef<
               return !!row.example_sentence_translation?.trim();
             })();
             if (!hasExampleTranslation) needsExampleTranslation.push(idx);
+            if (!row.example_sentence_audio_url) {
+              needsExampleAudio.push(idx);
+            }
           }
         }
 
@@ -3822,6 +3832,57 @@ const VocabularySetPanel = forwardRef<
           }
 
           completedSteps += needsExampleTranslation.length;
+          setRows([...currentRows]);
+          setBatchProgress({
+            completedItems,
+            totalItems,
+            completedSteps,
+            totalSteps,
+          });
+        }
+
+        // --- Phase 5 (Issue #757): Backfill example sentence audio ---
+        // 對「已經有例句但缺音檔」的項目跑 TTS，讓魔術貼上補完整。
+        // 沒這個 phase 的話，這些 row 永遠帶不到例句音檔，使用者派發
+        // reading / rearrangement+audio / word_cloze+audio 時會被擋下。
+        if (needsExampleAudio.length > 0 && !batchPauseRef.current) {
+          const audioResults = await Promise.allSettled(
+            needsExampleAudio.map((idx) => {
+              const row = currentRows[idx];
+              const { voice, rate } = getVoiceAndRate(
+                row.audioSettings?.accent || batchTTSAccent,
+                row.audioSettings?.gender || batchTTSGender,
+                row.audioSettings?.speed || batchTTSSpeed,
+              );
+              return withRetry(() =>
+                apiClient.generateTTS(
+                  row.example_sentence || "",
+                  voice,
+                  rate,
+                  "+0%",
+                ),
+              );
+            }),
+          );
+          audioResults.forEach((result, i) => {
+            if (result.status === "fulfilled") {
+              const url = (result.value as { audio_url?: string })?.audio_url;
+              if (url) {
+                const fullUrl = url.startsWith("http")
+                  ? url
+                  : `${import.meta.env.VITE_API_URL}${url}`;
+                const idx = needsExampleAudio[i];
+                currentRows[idx].example_sentence_audio_url = fullUrl;
+              }
+            } else {
+              console.error(
+                `Example sentence TTS failed for "${currentRows[needsExampleAudio[i]].example_sentence}":`,
+                result.reason,
+              );
+            }
+          });
+
+          completedSteps += needsExampleAudio.length;
           setRows([...currentRows]);
           setBatchProgress({
             completedItems,
