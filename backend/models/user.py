@@ -188,6 +188,7 @@ class Teacher(Base):
     )
     credit_packages = relationship(
         "CreditPackage",
+        foreign_keys="CreditPackage.teacher_id",
         back_populates="teacher",
         cascade="all, delete-orphan",
         order_by="CreditPackage.expires_at.asc()",
