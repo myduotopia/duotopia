@@ -14,7 +14,7 @@ from fastapi import (
     File,
     Form,
 )
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 
 from database import get_db
@@ -46,7 +46,6 @@ from services.preview_service import (
     handle_rearrangement_complete,
     get_word_spelling_start,
     get_word_cloze_start,
-    ensure_example_sentence_audio,
     ensure_word_audio,
     _VOCABULARY_CONTENT_TYPES,
     WordSelectionAnswerRequest,
@@ -130,39 +129,10 @@ async def get_assignment_preview(
     """取得作業的預覽內容（供老師示範用）"""
     assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
 
-    # Lazy TTS pre-pass：對齊 students/assignments.get_assignment_activities，
-    # 依 practice_mode 補生缺少的音檔。沒做的話 reading 模式會聽到單字音檔
-    # 而不是例句音檔（example_sentence_audio_url 在 staging 上常常是 ""）。
-    # build_assignment_preview 是 sync 的，沒辦法在裡面 await TTS，所以放外面
-    # 先行 pre-load 並更新 ContentItem.example_sentence_audio_url（DB 與 in-memory）。
-    _practice_mode = assignment.practice_mode or ""
-    needs_sentence_audio = _practice_mode in ("reading", "rearrangement", "word_cloze")
-    needs_word_audio = _practice_mode in ("word_reading", "word_spelling")
-    if needs_sentence_audio or needs_word_audio:
-        assignment_contents = (
-            db.query(AssignmentContent)
-            .filter(AssignmentContent.assignment_id == assignment.id)
-            .all()
-        )
-        content_ids = [ac.content_id for ac in assignment_contents]
-        contents = (
-            db.query(Content)
-            .filter(Content.id.in_(content_ids))
-            .options(selectinload(Content.content_items))
-            .all()
-        )
-        vocab_items = [
-            ci
-            for content in contents
-            if content.type in _VOCABULARY_CONTENT_TYPES
-            for ci in content.content_items
-        ]
-        if vocab_items:
-            if needs_sentence_audio:
-                await ensure_example_sentence_audio(vocab_items, db)
-            elif needs_word_audio:
-                await ensure_word_audio(vocab_items, db)
-
+    # Issue #757: dispatch validation now guarantees audio exists at the
+    # source, so the preview no longer pre-runs TTS. Practice-mode endpoints
+    # (word_selection/word_spelling/word_cloze/rearrangement) still call the
+    # ensure_* helpers internally as a safety net for legacy assignments.
     result = build_assignment_preview(assignment, db)
 
     # 即刻練習：加入 student_assignment_id 供前端使用

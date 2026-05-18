@@ -719,6 +719,7 @@ function TeacherTemplateProgramsInner() {
                   itemsCount: item.items_count as number | undefined,
                   order: 0,
                   hasMissingAudio: false,
+                  hasMissingExampleAudio: false,
                   hasMissingImage: false,
                 };
                 setAssignContents([cartItem]);
@@ -792,6 +793,7 @@ function TeacherTemplateProgramsInner() {
                 itemsCount: content.items_count,
                 order: 0,
                 hasMissingAudio: false,
+                hasMissingExampleAudio: false,
                 hasMissingImage: false,
               };
               setAssignContents([cartItem]);

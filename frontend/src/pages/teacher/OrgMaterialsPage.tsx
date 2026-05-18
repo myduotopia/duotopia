@@ -721,6 +721,7 @@ export default function OrgMaterialsPage() {
                   itemsCount: content.items_count,
                   order: 0,
                   hasMissingAudio: false,
+                  hasMissingExampleAudio: false,
                   hasMissingImage: false,
                 };
                 setAssignContents([cartItem]);

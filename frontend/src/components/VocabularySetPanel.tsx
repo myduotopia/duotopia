@@ -3195,7 +3195,8 @@ const VocabularySetPanel = forwardRef<
         }),
       );
 
-      // 呼叫 API 生成例句
+      // 呼叫 API 生成例句（後端會同步跑 TTS，audio_url 一起回來；Issue #757）
+      const firstAudioSettings = rows[targetIndices[0]]?.audioSettings;
       const response = await apiClient.generateSentences({
         words: wordsToGenerate.map((w) => w.word),
         definitions: wordsToGenerate.map((w) => w.definition),
@@ -3204,19 +3205,18 @@ const VocabularySetPanel = forwardRef<
         prompt: aiGeneratePrompt || undefined,
         translate_to: targetLanguage || undefined,
         parts_of_speech: wordsToGenerate.map((w) => w.partsOfSpeech),
+        audio_settings: firstAudioSettings
+          ? {
+              accent: firstAudioSettings.accent,
+              gender: firstAudioSettings.gender,
+              speed: firstAudioSettings.speed,
+            }
+          : undefined,
       });
 
       // 更新 rows
       const newRows = [...rows];
-      const sentencesData = (
-        response as {
-          sentences?: Array<{
-            sentence: string;
-            translation?: string;
-            word: string;
-          }>;
-        }
-      ).sentences;
+      const sentencesData = response.sentences;
 
       if (!sentencesData || !Array.isArray(sentencesData)) {
         toast.error(
@@ -3246,9 +3246,10 @@ const VocabularySetPanel = forwardRef<
       targetIndices.forEach((idx) => {
         const targetWord = newRows[idx].text;
 
-        // 先清空現有的例句和翻譯
+        // 先清空現有的例句、翻譯與音檔，避免殘留舊資料
         newRows[idx].example_sentence = "";
         newRows[idx].example_sentence_translation = "";
+        newRows[idx].example_sentence_audio_url = "";
 
         // 使用 Map 查找對應的句子（O(1) 複雜度）
         const matchedResult = resultMap.get(targetWord);
@@ -3258,6 +3259,9 @@ const VocabularySetPanel = forwardRef<
           if (matchedResult.translation) {
             newRows[idx].example_sentence_translation =
               matchedResult.translation;
+          }
+          if (matchedResult.audio_url) {
+            newRows[idx].example_sentence_audio_url = matchedResult.audio_url;
           }
         } else {
           console.warn(
@@ -3508,6 +3512,9 @@ const VocabularySetPanel = forwardRef<
               return !!row.example_sentence_translation?.trim();
             })();
             if (!hasExampleTranslation) steps++;
+            // Issue #757: 例句已存在但缺音檔（舊資料常見情境）
+            // 也算一步要補，否則「無需補齊」會誤報而漏掉聽力派發要用的 TTS。
+            if (!row.example_sentence_audio_url) steps++;
           }
           return steps;
         };
@@ -3561,6 +3568,10 @@ const VocabularySetPanel = forwardRef<
         const needsTTS: number[] = [];
         const needsExamples: number[] = [];
         const needsExampleTranslation: number[] = [];
+        // Issue #757: 例句已存在但缺音檔的舊資料 → 單獨跑 TTS 補上。
+        // 與 needsExamples 互斥（needsExamples 是「沒例句」的，
+        // 走 /generate-sentences 後端會順便產 audio_url）。
+        const needsExampleAudio: number[] = [];
 
         for (const idx of itemsToProcess) {
           const row = currentRows[idx];
@@ -3590,6 +3601,9 @@ const VocabularySetPanel = forwardRef<
               return !!row.example_sentence_translation?.trim();
             })();
             if (!hasExampleTranslation) needsExampleTranslation.push(idx);
+            if (!row.example_sentence_audio_url) {
+              needsExampleAudio.push(idx);
+            }
           }
         }
 
@@ -3734,6 +3748,9 @@ const VocabularySetPanel = forwardRef<
           );
 
           try {
+            // Issue #757: backend co-generates TTS, so audio_url comes back
+            // here and is persisted on save — no dispatch-time backfill.
+            const firstSettings = currentRows[needsExamples[0]]?.audioSettings;
             const response = await withRetry(() =>
               apiClient.generateSentences({
                 words: exWords,
@@ -3743,27 +3760,27 @@ const VocabularySetPanel = forwardRef<
                 prompt: aiGeneratePrompt || undefined,
                 translate_to: exampleTargetLang || undefined,
                 parts_of_speech: exPOS,
+                audio_settings: firstSettings
+                  ? {
+                      accent: firstSettings.accent,
+                      gender: firstSettings.gender,
+                      speed: firstSettings.speed,
+                    }
+                  : undefined,
               }),
             );
-            const sentencesData =
-              (
-                response as {
-                  sentences?: Array<{
-                    sentence?: string;
-                    translation?: string;
-                  }>;
-                }
-              ).sentences || [];
-            sentencesData.forEach(
-              (s: { sentence?: string; translation?: string }, i: number) => {
-                if (!s) return;
-                const idx = needsExamples[i];
-                currentRows[idx].example_sentence = s.sentence || "";
-                if (s.translation) {
-                  currentRows[idx].example_sentence_translation = s.translation;
-                }
-              },
-            );
+            const sentencesData = response.sentences || [];
+            sentencesData.forEach((s, i: number) => {
+              if (!s) return;
+              const idx = needsExamples[i];
+              currentRows[idx].example_sentence = s.sentence || "";
+              if (s.translation) {
+                currentRows[idx].example_sentence_translation = s.translation;
+              }
+              if (s.audio_url) {
+                currentRows[idx].example_sentence_audio_url = s.audio_url;
+              }
+            });
           } catch (error) {
             console.error("Batch example sentence generation failed:", error);
           }
@@ -3815,6 +3832,57 @@ const VocabularySetPanel = forwardRef<
           }
 
           completedSteps += needsExampleTranslation.length;
+          setRows([...currentRows]);
+          setBatchProgress({
+            completedItems,
+            totalItems,
+            completedSteps,
+            totalSteps,
+          });
+        }
+
+        // --- Phase 5 (Issue #757): Backfill example sentence audio ---
+        // 對「已經有例句但缺音檔」的項目跑 TTS，讓魔術貼上補完整。
+        // 沒這個 phase 的話，這些 row 永遠帶不到例句音檔，使用者派發
+        // reading / rearrangement+audio / word_cloze+audio 時會被擋下。
+        if (needsExampleAudio.length > 0 && !batchPauseRef.current) {
+          const audioResults = await Promise.allSettled(
+            needsExampleAudio.map((idx) => {
+              const row = currentRows[idx];
+              const { voice, rate } = getVoiceAndRate(
+                row.audioSettings?.accent || batchTTSAccent,
+                row.audioSettings?.gender || batchTTSGender,
+                row.audioSettings?.speed || batchTTSSpeed,
+              );
+              return withRetry(() =>
+                apiClient.generateTTS(
+                  row.example_sentence || "",
+                  voice,
+                  rate,
+                  "+0%",
+                ),
+              );
+            }),
+          );
+          audioResults.forEach((result, i) => {
+            if (result.status === "fulfilled") {
+              const url = (result.value as { audio_url?: string })?.audio_url;
+              if (url) {
+                const fullUrl = url.startsWith("http")
+                  ? url
+                  : `${import.meta.env.VITE_API_URL}${url}`;
+                const idx = needsExampleAudio[i];
+                currentRows[idx].example_sentence_audio_url = fullUrl;
+              }
+            } else {
+              console.error(
+                `Example sentence TTS failed for "${currentRows[needsExampleAudio[i]].example_sentence}":`,
+                result.reason,
+              );
+            }
+          });
+
+          completedSteps += needsExampleAudio.length;
           setRows([...currentRows]);
           setBatchProgress({
             completedItems,
@@ -4022,7 +4090,7 @@ const VocabularySetPanel = forwardRef<
             });
           }
 
-          // Step 3: AI 例句
+          // Step 3: AI 例句（Issue #757：audio_url 隨 sentence 一起回來）
           if (shouldGenerateExamples) {
             const response = await apiClient.generateSentences({
               words: [text],
@@ -4032,21 +4100,23 @@ const VocabularySetPanel = forwardRef<
               prompt: aiGeneratePrompt || undefined,
               translate_to: exampleTargetLang || undefined,
               parts_of_speech: [newItem.partsOfSpeech || []],
+              audio_settings: newItem.audioSettings
+                ? {
+                    accent: newItem.audioSettings.accent,
+                    gender: newItem.audioSettings.gender,
+                    speed: newItem.audioSettings.speed,
+                  }
+                : undefined,
             });
-            const sentencesData =
-              (
-                response as {
-                  sentences?: Array<{
-                    sentence?: string;
-                    translation?: string;
-                  }>;
-                }
-              ).sentences || [];
+            const sentencesData = response.sentences || [];
             if (sentencesData[0]) {
               newItem.example_sentence = sentencesData[0].sentence || "";
               if (sentencesData[0].translation) {
                 newItem.example_sentence_translation =
                   sentencesData[0].translation;
+              }
+              if (sentencesData[0].audio_url) {
+                newItem.example_sentence_audio_url = sentencesData[0].audio_url;
               }
             }
             completedSteps++;
