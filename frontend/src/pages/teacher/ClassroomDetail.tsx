@@ -2366,17 +2366,18 @@ export default function ClassroomDetail({
                               >
                                 {/* Title & AI Batch Grade Button */}
                                 <div className="flex items-start justify-between gap-2">
-                                  {!showArchived && (
-                                    <Checkbox
-                                      checked={selectedAssignments.has(
-                                        assignment.id,
-                                      )}
-                                      onCheckedChange={() =>
-                                        toggleAssignmentSelection(assignment.id)
-                                      }
-                                      className="mt-1"
-                                    />
-                                  )}
+                                  {/* Issue #708: archived view also needs
+                                      selection so teachers can pick which
+                                      assignments to download grade reports for. */}
+                                  <Checkbox
+                                    checked={selectedAssignments.has(
+                                      assignment.id,
+                                    )}
+                                    onCheckedChange={() =>
+                                      toggleAssignmentSelection(assignment.id)
+                                    }
+                                    className="mt-1"
+                                  />
                                   <div className="flex-1 min-w-0">
                                     <h4 className="font-medium text-gray-900 dark:text-gray-100 truncate">
                                       {assignment.title}
@@ -2554,18 +2555,16 @@ export default function ClassroomDetail({
                           <table className="w-full">
                             <thead className="bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
                               <tr>
-                                {!showArchived && (
-                                  <th className="w-10 px-4 py-3">
-                                    <Checkbox
-                                      checked={
-                                        filteredAssignments.length > 0 &&
-                                        selectedAssignments.size ===
-                                          filteredAssignments.length
-                                      }
-                                      onCheckedChange={toggleSelectAll}
-                                    />
-                                  </th>
-                                )}
+                                <th className="w-10 px-4 py-3">
+                                  <Checkbox
+                                    checked={
+                                      filteredAssignments.length > 0 &&
+                                      selectedAssignments.size ===
+                                        filteredAssignments.length
+                                    }
+                                    onCheckedChange={toggleSelectAll}
+                                  />
+                                </th>
                                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200">
                                   {t(
                                     "classroomDetail.labels.assignmentInfo",
@@ -2736,20 +2735,18 @@ export default function ClassroomDetail({
                                     key={assignment.id}
                                     className="border-b hover:bg-gray-50 dark:hover:bg-gray-700/50 dark:border-gray-600"
                                   >
-                                    {!showArchived && (
-                                      <td className="w-10 px-4 py-3">
-                                        <Checkbox
-                                          checked={selectedAssignments.has(
+                                    <td className="w-10 px-4 py-3">
+                                      <Checkbox
+                                        checked={selectedAssignments.has(
+                                          assignment.id,
+                                        )}
+                                        onCheckedChange={() =>
+                                          toggleAssignmentSelection(
                                             assignment.id,
-                                          )}
-                                          onCheckedChange={() =>
-                                            toggleAssignmentSelection(
-                                              assignment.id,
-                                            )
-                                          }
-                                        />
-                                      </td>
-                                    )}
+                                          )
+                                        }
+                                      />
+                                    </td>
                                     <td className="px-4 py-3">
                                       <div className="font-medium dark:text-gray-100">
                                         {assignment.title}
