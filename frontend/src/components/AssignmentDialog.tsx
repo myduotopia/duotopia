@@ -1497,10 +1497,10 @@ export function AssignmentDialog({
           time_limit_per_question: 10, // 單字朗讀固定 10 秒
         }));
       } else {
-        // 例句集預設為例句朗讀模式（固定 30 秒）
+        // 例句集預設為例句重組模式（word_* 模式不適用於例句集）
         setFormData((prev) => ({
           ...prev,
-          practice_mode: "reading",
+          practice_mode: "rearrangement",
           time_limit_per_question: 30,
         }));
       }
@@ -2948,7 +2948,12 @@ export function AssignmentDialog({
                       className="flex gap-2 overflow-x-auto px-9 [&::-webkit-scrollbar]:hidden"
                       style={{ scrollbarWidth: "none" }}
                     >
-                      {PRACTICE_MODES.map((m) => {
+                      {(getCartContentTypeCategory() === "example_sentences"
+                        ? PRACTICE_MODES.filter(
+                            (m) => !m.id.startsWith("word_"),
+                          )
+                        : PRACTICE_MODES
+                      ).map((m) => {
                         const selected = formData.practice_mode === m.id;
                         return (
                           <button
