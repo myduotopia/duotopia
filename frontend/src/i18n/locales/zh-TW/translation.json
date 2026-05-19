@@ -3341,8 +3341,12 @@
     "noDescription": "尚無描述",
     "lessonsSection": "單元",
     "contentsSection": "內容",
+    "lessonContentsSection": "單元內容",
+    "programContentsSection": "教材內容",
     "addLesson": "新增單元",
     "addContent": "新增內容",
+    "addLessonContent": "新增單元內容",
+    "addProgramContent": "新增教材內容",
     "noContents": "此單元尚無內容",
     "noProgramContents": "此教材尚無內容",
     "noLessons": "此教材尚無單元"

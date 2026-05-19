@@ -3337,8 +3337,12 @@
     "noDescription": "No description",
     "lessonsSection": "Lessons",
     "contentsSection": "Contents",
+    "lessonContentsSection": "Lesson Contents",
+    "programContentsSection": "Program Contents",
     "addLesson": "Add Lesson",
     "addContent": "Add Content",
+    "addLessonContent": "Add Lesson Content",
+    "addProgramContent": "Add Program Content",
     "noContents": "No contents in this lesson",
     "noProgramContents": "No contents in this program",
     "noLessons": "No lessons in this program"

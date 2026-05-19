@@ -521,6 +521,54 @@ function TeacherTemplateProgramsInner() {
     }
   };
 
+  /**
+   * Issue #587: Reorder contents that live directly under a program (lesson_id IS NULL).
+   * Mirrors handleReorderContents but operates on program.contents and calls
+   * the program-level reorder endpoint.
+   */
+  const handleReorderProgramContents = async (
+    programId: number,
+    fromIndex: number,
+    toIndex: number,
+  ) => {
+    if (isReordering) {
+      toast.warning(t("teacherTemplatePrograms.messages.reordering"));
+      return;
+    }
+
+    const targetProgram = programs.find((p) => p.id === programId);
+    if (!targetProgram || !targetProgram.contents) return;
+
+    setIsReordering(true);
+    const originalPrograms = [...programs];
+
+    const newContents = [...targetProgram.contents];
+    const [movedItem] = newContents.splice(fromIndex, 1);
+    newContents.splice(toIndex, 0, movedItem);
+
+    setPrograms((prevPrograms) =>
+      prevPrograms.map((p) =>
+        p.id === programId ? { ...p, contents: newContents } : p,
+      ),
+    );
+
+    try {
+      const orderData = newContents.map((content, index) => ({
+        id: content.id,
+        order_index: index,
+      }));
+
+      await apiClient.reorderProgramContents(programId, orderData);
+      toast.success(t("teacherTemplatePrograms.messages.reorderSuccess"));
+    } catch (err) {
+      console.error("[Program Contents Reorder] Failed:", err);
+      toast.error(t("teacherTemplatePrograms.messages.reorderFailed"));
+      setPrograms(originalPrograms);
+    } finally {
+      setIsReordering(false);
+    }
+  };
+
   const handleReorderContents = async (
     lessonId: number,
     fromIndex: number,
@@ -801,6 +849,7 @@ function TeacherTemplateProgramsInner() {
             onReorderPrograms={handleReorderPrograms}
             onReorderLessons={handleReorderLessons}
             onReorderContents={handleReorderContents}
+            onReorderProgramContents={handleReorderProgramContents}
             onAssignContent={(content, lessonId) => {
               const program = programs.find((p) =>
                 p.lessons?.some((l) => l.id === lessonId),

@@ -552,6 +552,7 @@ function ExpandArea({
   onAssignContent,
   onReorderLessons,
   onReorderContents,
+  onReorderProgramContents,
 }: {
   program: Program;
   onEditLesson: (programId: number, lessonId: number) => void;
@@ -574,23 +575,25 @@ function ExpandArea({
     fromIndex: number,
     toIndex: number,
   ) => void;
+  // Issue #587: program-direct content reorder
+  onReorderProgramContents?: (
+    programId: number,
+    fromIndex: number,
+    toIndex: number,
+  ) => void;
 }) {
   const { t } = useTranslation();
   const lessons = program.lessons ?? [];
-  const [selectedLessonId, setSelectedLessonId] = useState<number | null>(
-    lessons.length > 0 ? lessons[0].id : null,
-  );
+  // Issue #587: 預設不選任何單元 — 讓老師先看到「教材內容」區塊。
+  // 選了單元後才會額外顯示「單元內容」區塊。
+  const [selectedLessonId, setSelectedLessonId] = useState<number | null>(null);
   const selectedLesson = lessons.find((l) => l.id === selectedLessonId);
 
-  // Contents to display: selected lesson's contents, or program-level contents
-  const displayContents = selectedLesson
-    ? (selectedLesson.contents ?? [])
-    : (program.contents ?? []);
-  const contentsSectionTitle = selectedLesson
-    ? `${t("programFolderView.contentsSection", "內容")}: ${selectedLesson.name}`
-    : t("programFolderView.contentsSection", "內容");
-  // lessonId for callbacks: use selected lesson, or 0 for program-level
-  const contentsLessonId = selectedLesson?.id ?? 0;
+  // Issue #587: split into two independent content sections:
+  //   - lessonContents: contents under the currently-selected lesson
+  //   - programContents: contents living directly under the program (lesson_id IS NULL)
+  const lessonContents = selectedLesson?.contents ?? [];
+  const programContents = program.contents ?? [];
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -608,14 +611,23 @@ function ExpandArea({
     onReorderLessons(program.id, fromIndex, toIndex);
   };
 
-  const handleContentDragEnd = (event: DragEndEvent) => {
+  const handleLessonContentDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id || !onReorderContents) return;
-    if (contentsLessonId === 0) return;
-    const fromIndex = displayContents.findIndex((c) => c.id === active.id);
-    const toIndex = displayContents.findIndex((c) => c.id === over.id);
+    if (!over || active.id === over.id || !onReorderContents || !selectedLesson)
+      return;
+    const fromIndex = lessonContents.findIndex((c) => c.id === active.id);
+    const toIndex = lessonContents.findIndex((c) => c.id === over.id);
     if (fromIndex < 0 || toIndex < 0) return;
-    onReorderContents(contentsLessonId, fromIndex, toIndex);
+    onReorderContents(selectedLesson.id, fromIndex, toIndex);
+  };
+
+  const handleProgramContentDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !onReorderProgramContents) return;
+    const fromIndex = programContents.findIndex((c) => c.id === active.id);
+    const toIndex = programContents.findIndex((c) => c.id === over.id);
+    if (fromIndex < 0 || toIndex < 0) return;
+    onReorderProgramContents(program.id, fromIndex, toIndex);
   };
 
   return (
@@ -675,34 +687,98 @@ function ExpandArea({
         </>
       )}
 
-      {/* Contents section — always visible */}
+      {/* Issue #587: 單元內容 section — only visible when a lesson is selected */}
+      {selectedLesson && (
+        <>
+          <SectionHeader
+            icon={<FileText size={15} />}
+            title={`${t("programFolderView.lessonContentsSection", "單元內容")}: ${selectedLesson.name}`}
+            iconColor="#059669"
+            onAdd={() => onCreateContent(program.id, selectedLesson.id)}
+            addLabel={t("programFolderView.addLessonContent", "新增單元內容")}
+          />
+
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleLessonContentDragEnd}
+          >
+            <SortableContext
+              items={lessonContents.map((c) => c.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
+                {lessonContents.map((content) => (
+                  <SortableItem key={content.id} id={content.id}>
+                    <ContentCard
+                      content={content}
+                      onClick={() =>
+                        onContentClick(content, selectedLesson.id)
+                      }
+                      onDelete={() =>
+                        onDeleteContent(
+                          selectedLesson.id,
+                          content.id,
+                          content.title,
+                        )
+                      }
+                      onCopy={() => onCopyContent(content.id, content.title)}
+                      onDownload={
+                        onDownloadContent
+                          ? () => onDownloadContent(content)
+                          : undefined
+                      }
+                      onInstantPractice={
+                        onInstantPractice
+                          ? () => onInstantPractice(content)
+                          : undefined
+                      }
+                      onAssign={
+                        onAssignContent
+                          ? () => onAssignContent(content, selectedLesson.id)
+                          : undefined
+                      }
+                    />
+                  </SortableItem>
+                ))}
+                {lessonContents.length === 0 && (
+                  <p className="text-sm text-gray-400 col-span-full text-center py-8">
+                    {t("programFolderView.noContents", "此單元尚無內容")}
+                  </p>
+                )}
+              </div>
+            </SortableContext>
+          </DndContext>
+        </>
+      )}
+
+      {/* Issue #587: 教材內容 section — always visible. Header stays even when
+          there are no program-direct contents so teachers know it exists. */}
       <SectionHeader
         icon={<FileText size={15} />}
-        title={contentsSectionTitle}
+        title={t("programFolderView.programContentsSection", "教材內容")}
         iconColor="#059669"
-        // TODO: 當沒有選中 lesson 時，新增內容的 lessonId 傳 0，
-        // 後端工程師需決定 program-level content 的建立方式與儲存邏輯
-        onAdd={() => onCreateContent(program.id, selectedLesson?.id ?? 0)}
-        addLabel={t("programFolderView.addContent", "新增內容")}
+        onAdd={() => onCreateContent(program.id, 0)}
+        addLabel={t("programFolderView.addProgramContent", "新增教材內容")}
       />
 
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
-        onDragEnd={handleContentDragEnd}
+        onDragEnd={handleProgramContentDragEnd}
       >
         <SortableContext
-          items={displayContents.map((c) => c.id)}
+          items={programContents.map((c) => c.id)}
           strategy={rectSortingStrategy}
         >
           <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
-            {displayContents.map((content) => (
+            {programContents.map((content) => (
               <SortableItem key={content.id} id={content.id}>
                 <ContentCard
                   content={content}
-                  onClick={() => onContentClick(content, contentsLessonId)}
+                  onClick={() => onContentClick(content, 0)}
                   onDelete={() =>
-                    onDeleteContent(contentsLessonId, content.id, content.title)
+                    onDeleteContent(0, content.id, content.title)
                   }
                   onCopy={() => onCopyContent(content.id, content.title)}
                   onDownload={
@@ -715,19 +791,18 @@ function ExpandArea({
                       ? () => onInstantPractice(content)
                       : undefined
                   }
-                  onAssign={
-                    onAssignContent && contentsLessonId !== 0
-                      ? () => onAssignContent(content, contentsLessonId)
-                      : undefined
-                  }
+                  /* Assigning program-direct content directly isn't supported
+                     in the existing AssignmentDialog tree yet — omit the
+                     assign action here until that follow-up lands. */
                 />
               </SortableItem>
             ))}
-            {displayContents.length === 0 && (
+            {programContents.length === 0 && (
               <p className="text-sm text-gray-400 col-span-full text-center py-8">
-                {selectedLesson
-                  ? t("programFolderView.noContents", "此單元尚無內容")
-                  : t("programFolderView.noProgramContents", "此教材尚無內容")}
+                {t(
+                  "programFolderView.noProgramContents",
+                  "此教材尚無內容",
+                )}
               </p>
             )}
           </div>
@@ -764,6 +839,12 @@ export interface ProgramFolderViewProps {
     fromIndex: number,
     toIndex: number,
   ) => void;
+  // Issue #587: program-direct content reorder
+  onReorderProgramContents?: (
+    programId: number,
+    fromIndex: number,
+    toIndex: number,
+  ) => void;
 }
 
 export default function ProgramFolderView({
@@ -784,6 +865,7 @@ export default function ProgramFolderView({
   onReorderPrograms,
   onReorderLessons,
   onReorderContents,
+  onReorderProgramContents,
 }: ProgramFolderViewProps) {
   const { t } = useTranslation();
   const [selectedProgramId, setSelectedProgramId] = useState<number | null>(
@@ -896,6 +978,7 @@ export default function ProgramFolderView({
                     onAssignContent={onAssignContent}
                     onReorderLessons={onReorderLessons}
                     onReorderContents={onReorderContents}
+                    onReorderProgramContents={onReorderProgramContents}
                   />
                 </div>
               )}
