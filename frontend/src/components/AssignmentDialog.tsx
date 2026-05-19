@@ -2949,7 +2949,9 @@ export function AssignmentDialog({
                       style={{ scrollbarWidth: "none" }}
                     >
                       {(getCartContentTypeCategory() === "example_sentences"
-                        ? PRACTICE_MODES.filter((m) => !m.id.startsWith("word_"))
+                        ? PRACTICE_MODES.filter(
+                            (m) => !m.id.startsWith("word_"),
+                          )
                         : PRACTICE_MODES
                       ).map((m) => {
                         const selected = formData.practice_mode === m.id;
