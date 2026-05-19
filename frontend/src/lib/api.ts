@@ -860,7 +860,19 @@ class ApiClient {
     });
   }
 
-  async reorderPrograms(orderData: { id: number; order_index: number }[]) {
+  async reorderPrograms(
+    orderData: { id: number; order_index: number }[],
+    organizationId?: string,
+  ) {
+    if (organizationId) {
+      return this.request(
+        `/api/programs/reorder?scope=organization&organization_id=${organizationId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(orderData),
+        },
+      );
+    }
     return this.request("/api/teachers/programs/reorder", {
       method: "PUT",
       body: JSON.stringify(orderData),
@@ -870,7 +882,17 @@ class ApiClient {
   async reorderLessons(
     programId: number,
     orderData: { id: number; order_index: number }[],
+    organizationId?: string,
   ) {
+    if (organizationId) {
+      return this.request(
+        `/api/programs/${programId}/lessons/reorder?scope=organization&organization_id=${organizationId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(orderData),
+        },
+      );
+    }
     return this.request(`/api/teachers/programs/${programId}/lessons/reorder`, {
       method: "PUT",
       body: JSON.stringify(orderData),
@@ -880,7 +902,17 @@ class ApiClient {
   async reorderContents(
     lessonId: number,
     orderData: { id: number; order_index: number }[],
+    organizationId?: string,
   ) {
+    if (organizationId) {
+      return this.request(
+        `/api/programs/lessons/${lessonId}/contents/reorder?scope=organization&organization_id=${organizationId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(orderData),
+        },
+      );
+    }
     return this.request(`/api/teachers/lessons/${lessonId}/contents/reorder`, {
       method: "PUT",
       body: JSON.stringify(orderData),
@@ -1135,7 +1167,8 @@ class ApiClient {
     });
   }
 
-  // AI 生成例句
+  // AI 生成例句 + 同步 TTS（Issue #757：audio_url 在這裡一次拿到，
+  // 寫入單字集後，派發時就不需要再補跑 TTS）
   async generateSentences(params: {
     words: string[];
     definitions?: string[];
@@ -1144,8 +1177,14 @@ class ApiClient {
     prompt?: string;
     translate_to?: string;
     parts_of_speech?: string[][];
+    audio_settings?: { accent?: string; gender?: string; speed?: string };
   }): Promise<{
-    sentences: Array<{ sentence: string; translation?: string; word: string }>;
+    sentences: Array<{
+      sentence: string;
+      translation?: string;
+      word: string;
+      audio_url?: string | null;
+    }>;
   }> {
     return this.request("/api/teachers/generate-sentences", {
       method: "POST",
@@ -1440,6 +1479,46 @@ class ApiClient {
     },
   ) {
     return this.request(`/api/admin/organizations/${orgId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ============ Admin Plans Methods ============
+  async listAdminPlans() {
+    return this.request<
+      Array<{
+        id: number;
+        name: string;
+        price: number | null;
+        quota: number | null;
+        display_order: number;
+        is_active: boolean;
+        updated_at: string | null;
+        updated_by_admin_id: number | null;
+      }>
+    >("/api/admin/plans", { method: "GET" });
+  }
+
+  async updateAdminPlan(
+    planName: string,
+    data: {
+      price?: number;
+      quota?: number;
+      is_active?: boolean;
+      display_order?: number;
+    },
+  ) {
+    return this.request<{
+      id: number;
+      name: string;
+      price: number | null;
+      quota: number | null;
+      display_order: number;
+      is_active: boolean;
+      updated_at: string | null;
+      updated_by_admin_id: number | null;
+    }>(`/api/admin/plans/${encodeURIComponent(planName)}`, {
       method: "PUT",
       body: JSON.stringify(data),
     });

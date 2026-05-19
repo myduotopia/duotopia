@@ -5,6 +5,7 @@
 2. 在函數內部使用 with start_span("操作名稱") 記錄子步驟
 """
 
+import os
 import time
 import logging
 from functools import wraps
@@ -21,13 +22,21 @@ from opentelemetry.sdk.resources import Resource
 # Google Cloud Logging
 from google.cloud import logging as cloud_logging
 
-# 初始化 GCP Logging
-try:
-    client = cloud_logging.Client()
-    client.setup_logging()
-    logger = logging.getLogger(__name__)
-except Exception as e:
-    print(f"⚠️  Warning: Failed to initialize GCP logging: {e}")
+# Only attach Cloud Logging handler when running on GCP (Cloud Run sets K_SERVICE).
+# Locally the SSL handshake to logging.googleapis.com fails and each log call hangs
+# for the full 60s retry window, blocking the request handler.
+_IS_GCP_RUNTIME = bool(os.getenv("K_SERVICE"))
+
+if _IS_GCP_RUNTIME:
+    try:
+        client = cloud_logging.Client()
+        client.setup_logging()
+        logger = logging.getLogger(__name__)
+    except Exception as e:
+        print(f"⚠️  Warning: Failed to initialize GCP logging: {e}")
+        logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger(__name__)
+else:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 

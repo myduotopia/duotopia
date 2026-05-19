@@ -1,5 +1,6 @@
 """
-Issue #673: example-sentence validation on assignment create/update.
+Issue #673 / #757: example-sentence + example-audio validation on assignment
+create/update.
 
 When teachers attach vocabulary content to a practice mode that reads from
 example_sentence (reading / rearrangement / word_cloze), every selected vocab
@@ -7,6 +8,13 @@ item must carry both example_sentence and example_sentence_translation.
 Otherwise the student-side experience silently degrades — the bug we're
 preventing here. The API rejects the request with 422 and a structured detail
 the frontend can localize.
+
+Issue #757 adds a second-stage audio check for the listening flavours of the
+same modes (reading / rearrangement+play_audio / word_cloze+play_audio):
+dispatch no longer backfills missing TTS, so we must block dispatch when the
+source vocab set lacks ``example_sentence_audio_url`` and surface a distinct
+``EXAMPLE_AUDIO_REQUIRED`` code so the frontend can point teachers back to the
+content editor.
 """
 
 import pytest
@@ -159,6 +167,7 @@ def _add_vocab_content(db, lesson_id: int, title: str, items: list[dict]) -> int
                 audio_url=it.get("audio_url", ""),
                 example_sentence=it.get("example_sentence"),
                 example_sentence_translation=it.get("example_sentence_translation"),
+                example_sentence_audio_url=it.get("example_sentence_audio_url"),
             )
         )
     db.commit()
@@ -356,6 +365,8 @@ def test_create_allows_vocab_content_with_full_example_data(fresh_db):
                 "translation": "蘋果",
                 "example_sentence": "I eat an apple.",
                 "example_sentence_translation": "我吃一顆蘋果。",
+                # Issue #757: reading mode needs example audio at dispatch
+                "example_sentence_audio_url": "https://cdn/example/apple.mp3",
             }
         ],
     )
@@ -433,6 +444,7 @@ def test_put_update_rejects_swapping_in_invalid_vocab(fresh_db):
                 "translation": "貓",
                 "example_sentence": "The cat sleeps.",
                 "example_sentence_translation": "貓睡覺。",
+                "example_sentence_audio_url": "https://cdn/example/cat.mp3",
             }
         ],
     )
@@ -498,6 +510,7 @@ def test_put_update_uses_existing_practice_mode_when_not_in_request(fresh_db):
                 "translation": "貓",
                 "example_sentence": "The cat.",
                 "example_sentence_translation": "貓。",
+                "example_sentence_audio_url": "https://cdn/example/cat.mp3",
             }
         ],
     )
@@ -533,11 +546,11 @@ def test_put_update_uses_existing_practice_mode_when_not_in_request(fresh_db):
 
 
 def test_patch_does_not_validate_examples(fresh_db):
-    """PATCH only updates metadata fields (title/description/...). It cannot
-    change practice_mode or content_ids, so validation does not apply.
-    This test pins the contract — if PATCH ever starts mutating those
-    fields, the new path needs the validator hooked in (see the comment in
-    routers/assignments/crud.py::patch_assignment)."""
+    """PATCH skips example-sentence-text validation (practice_mode and
+    content_ids are immutable here, so the create/PUT text check still
+    holds). Issue #757 added a narrow exception for play_audio toggles —
+    covered separately in test_patch_rejects_play_audio_toggle_*. This
+    test still pins the broader contract for metadata-only updates."""
     db = TestingSessionLocal()
     seed = _seed_minimal(db)
     good = _add_vocab_content(
@@ -550,6 +563,7 @@ def test_patch_does_not_validate_examples(fresh_db):
                 "translation": "貓",
                 "example_sentence": "The cat.",
                 "example_sentence_translation": "貓。",
+                "example_sentence_audio_url": "https://cdn/example/cat.mp3",
             }
         ],
     )
@@ -569,6 +583,385 @@ def test_patch_does_not_validate_examples(fresh_db):
         json={"title": "Renamed"},
     )
     assert resp.status_code == 200, resp.text
+
+
+# --- Issue #757: example-audio validation ---------------------------------
+
+
+def _full_text_item(*, audio_url: str | None = "https://cdn/example/cat.mp3") -> dict:
+    """A vocab item with sentence + translation, optionally with audio."""
+    return {
+        "text": "cat",
+        "translation": "貓",
+        "example_sentence": "The cat is sleeping.",
+        "example_sentence_translation": "貓在睡覺。",
+        "example_sentence_audio_url": audio_url,
+    }
+
+
+def test_create_rejects_reading_when_example_audio_missing(fresh_db):
+    """reading mode must have example_sentence_audio_url — the student-side
+    speech assessment plays the sentence audio as the prompt."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "No Audio Set",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"], [content_id], practice_mode="reading"
+        ),
+    )
+
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "EXAMPLE_AUDIO_REQUIRED"
+    assert detail["practice_mode"] == "reading"
+    assert detail["content_titles"] == ["No Audio Set"]
+
+
+def test_create_rejects_rearrangement_when_play_audio_and_audio_missing(fresh_db):
+    """rearrangement + play_audio (聽力重組) needs the sentence audio."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Listening Rearrange",
+        [_full_text_item(audio_url="")],  # empty == missing
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="rearrangement",
+            play_audio=True,
+        ),
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "EXAMPLE_AUDIO_REQUIRED"
+    assert resp.json()["detail"]["play_audio"] is True
+
+
+def test_create_allows_rearrangement_without_play_audio_when_audio_missing(fresh_db):
+    """rearrangement without play_audio is pure text — audio not required."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Text Rearrange",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="rearrangement",
+            play_audio=False,
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_create_rejects_word_cloze_when_play_audio_and_audio_missing(fresh_db):
+    """word_cloze + play_audio (聽力克漏字) needs the sentence audio."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Listening Cloze",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_cloze",
+            play_audio=True,
+        ),
+    )
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "EXAMPLE_AUDIO_REQUIRED"
+
+
+def test_create_allows_word_cloze_without_play_audio_when_audio_missing(fresh_db):
+    """word_cloze without play_audio (pure text cloze) doesn't need audio."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Text Cloze",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_cloze",
+            play_audio=False,
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_create_audio_validation_lists_only_offenders(fresh_db):
+    """Audio-validation detail should list every content with missing audio
+    so the frontend can render a useful 'fix these vocab sets' message."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    bad_a = _add_vocab_content(
+        db, seed["lesson_id"], "Bad A", [_full_text_item(audio_url=None)]
+    )
+    bad_b = _add_vocab_content(
+        db, seed["lesson_id"], "Bad B", [_full_text_item(audio_url="")]
+    )
+    good = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Good",
+        [_full_text_item(audio_url="https://cdn/example/good.mp3")],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [bad_a, bad_b, good],
+            practice_mode="reading",
+        ),
+    )
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "EXAMPLE_AUDIO_REQUIRED"
+    assert sorted(resp.json()["detail"]["content_titles"]) == ["Bad A", "Bad B"]
+
+
+def test_create_audio_check_skips_word_selection(fresh_db):
+    """word_selection doesn't play sentence audio — missing audio is fine."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "No Audio Set",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"], [content_id], practice_mode="word_selection"
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_create_audio_check_runs_after_sentence_check(fresh_db):
+    """When BOTH the sentence text and audio are missing, the text check
+    fires first so teachers fix the more fundamental data problem before
+    they see the audio nag."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Totally Empty",
+        [{"text": "x", "translation": "甲"}],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"], [content_id], practice_mode="reading"
+        ),
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "EXAMPLE_SENTENCE_REQUIRED"
+
+
+# --- Issue #757: PATCH play_audio toggle audio validation -----------------
+
+
+def test_patch_rejects_play_audio_toggle_when_audio_missing(fresh_db):
+    """Toggling play_audio True on an existing rearrangement assignment whose
+    copy contents lack example audio must be blocked — otherwise students
+    would open the activity to silent audio prompts."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    # Create assignment in rearrangement (text-only) mode, with sentence
+    # text + translation but NO audio — that's a legal create payload because
+    # play_audio defaults to False.
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Text-Only Set",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    create_resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="rearrangement",
+            play_audio=False,
+        ),
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    assignment_id = create_resp.json()["assignment_id"]
+
+    # Now PATCH play_audio → True. Backend must validate the copy contents.
+    patch_resp = client.patch(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"play_audio": True},
+    )
+    assert patch_resp.status_code == 422, patch_resp.text
+    assert patch_resp.json()["detail"]["code"] == "EXAMPLE_AUDIO_REQUIRED"
+
+
+def test_patch_allows_play_audio_toggle_when_audio_present(fresh_db):
+    """Same flow but the vocab set DOES have audio — toggle should succeed."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Audio Set",
+        [_full_text_item(audio_url="https://cdn/example/cat.mp3")],
+    )
+    db.close()
+
+    token = _login_teacher()
+    create_resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="rearrangement",
+            play_audio=False,
+        ),
+    )
+    assignment_id = create_resp.json()["assignment_id"]
+
+    patch_resp = client.patch(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"play_audio": True},
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+
+
+def test_patch_allows_play_audio_toggle_off_without_validation(fresh_db):
+    """Turning play_audio OFF is always safe — never validate audio."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Audio Set",
+        [_full_text_item(audio_url="https://cdn/example/cat.mp3")],
+    )
+    db.close()
+
+    token = _login_teacher()
+    create_resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="rearrangement",
+            play_audio=True,
+        ),
+    )
+    assignment_id = create_resp.json()["assignment_id"]
+
+    patch_resp = client.patch(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"play_audio": False},
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+
+
+def test_patch_skips_audio_check_for_modes_that_dont_need_audio(fresh_db):
+    """play_audio True on word_selection (which doesn't read sentence audio
+    at all) should not trigger the audio check."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Word-only Set",
+        [{"text": "cat", "translation": "貓"}],  # no example, no audio
+    )
+    db.close()
+
+    token = _login_teacher()
+    create_resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection",
+        ),
+    )
+    assignment_id = create_resp.json()["assignment_id"]
+
+    patch_resp = client.patch(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"play_audio": True},
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
 
 
 if __name__ == "__main__":

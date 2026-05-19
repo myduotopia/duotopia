@@ -8,6 +8,9 @@
  * - Correct → animation → next question.
  * - Incorrect → retry button (same question stays).
  * - On round completion: stats + Next Round / Submit.
+ *
+ * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
+ *    改動前必讀：docs/design/preview-architecture.md
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
@@ -47,7 +50,8 @@ import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
 // Issue #716: 答案允許英文字母、連字號、空格；過濾掉建議選字、注音、Emoji。
-const ALLOWED_CHAR = /[a-zA-Z\- ]/;
+// Issue #763: 放行 ' . , ? !（虛擬鍵盤新增標點排，don't / Mr. / 整句填空需要）。
+const ALLOWED_CHAR = /[a-zA-Z\-' .,?!]/;
 const sanitizeAnswer = (raw: string) =>
   Array.from(raw)
     .filter((c) => ALLOWED_CHAR.test(c))
@@ -93,6 +97,15 @@ interface WordClozeActivityProps {
   isDemoMode?: boolean;
   initialPracticeMode?: boolean;
   onComplete?: () => void;
+  // Issue #752: dialog 內即時預覽
+  previewQuestions?: ClozeQuestion[];
+  previewSettings?: {
+    show_translation?: boolean;
+    play_audio?: boolean;
+    show_answer?: boolean;
+    target_proficiency?: number;
+    time_limit_per_question?: number | null;
+  };
 }
 
 export default function WordClozeActivity({
@@ -101,13 +114,16 @@ export default function WordClozeActivity({
   isDemoMode = false,
   initialPracticeMode = false,
   onComplete,
+  previewQuestions,
+  previewSettings,
 }: WordClozeActivityProps) {
+  const isLivePreview = !!previewQuestions;
   const { t } = useTranslation();
   // Issue #716: 觸控裝置改用 VirtualKeyboard，避免系統建議選字。
   const deviceMode = useInputDeviceMode();
   const useVirtualKeyboard = deviceMode !== "desktop";
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isLivePreview);
   const [questions, setQuestions] = useState<ClozeQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -177,12 +193,12 @@ export default function WordClozeActivity({
   );
 
   const displayProficiency =
-    isPreviewMode || isDemoMode
+    isPreviewMode || isDemoMode || isLivePreview
       ? previewProficiency
       : proficiency.current_mastery;
 
   const displayTierCounts = useMemo(() => {
-    if (isPreviewMode || isDemoMode) return previewTierCounts;
+    if (isPreviewMode || isDemoMode || isLivePreview) return previewTierCounts;
     const master = proficiency.words_master ?? proficiency.words_mastered ?? 0;
     const familiar = proficiency.words_familiar ?? 0;
     const medium = proficiency.words_medium ?? 0;
@@ -199,7 +215,13 @@ export default function WordClozeActivity({
       very_unfamiliar,
       total: proficiency.total_words,
     };
-  }, [isPreviewMode, isDemoMode, previewTierCounts, proficiency]);
+  }, [
+    isPreviewMode,
+    isDemoMode,
+    isLivePreview,
+    previewTierCounts,
+    proficiency,
+  ]);
 
   const displayWordsMastered = displayTierCounts.master;
 
@@ -278,7 +300,7 @@ export default function WordClozeActivity({
       setShowResult(false);
       setCorrectCount(0);
 
-      if (isPreviewMode || isDemoMode) {
+      if (isPreviewMode || isDemoMode || isLivePreview) {
         const newIds = (data.questions || []).map(
           (q: ClozeQuestion) => q.content_item_id,
         );
@@ -305,7 +327,7 @@ export default function WordClozeActivity({
   }, [assignmentId, isPreviewMode, isDemoMode, t]);
 
   const fetchProficiency = useCallback(async () => {
-    if (isPreviewMode || isDemoMode) return;
+    if (isPreviewMode || isDemoMode || isLivePreview) return;
     try {
       const data = await apiClient.get<ProficiencyStatus>(
         `/api/students/assignments/${assignmentId}/vocabulary/cloze/proficiency`,
@@ -317,8 +339,37 @@ export default function WordClozeActivity({
   }, [assignmentId, isPreviewMode, isDemoMode]);
 
   useEffect(() => {
+    if (isLivePreview && previewQuestions) {
+      setQuestions(previewQuestions);
+      setSessionId(null);
+      setIsPracticeMode(false);
+      setAudioOnlyMode(previewSettings?.play_audio ?? false);
+      setShowTranslation(
+        (previewSettings?.show_translation ?? true) &&
+          !(previewSettings?.play_audio ?? false),
+      );
+      setShowAnswerOnWrong(
+        (previewSettings?.show_answer ?? false) ||
+          (previewSettings?.play_audio ?? false),
+      );
+      setTimeLimit(previewSettings?.time_limit_per_question || null);
+      setTimeRemaining(previewSettings?.time_limit_per_question || null);
+      setProficiency({
+        current_mastery: 0,
+        target_mastery: previewSettings?.target_proficiency ?? 80,
+        achieved: false,
+        words_mastered: 0,
+        total_words: previewQuestions.length,
+      });
+      setCurrentIndex(0);
+      setRoundCompleted(false);
+      setTypedAnswer("");
+      setShowResult(false);
+      setLoading(false);
+      return;
+    }
     startPractice();
-  }, [startPractice]);
+  }, [startPractice, isLivePreview, previewQuestions, previewSettings]);
 
   useEffect(() => {
     if (!loading && !roundCompleted && inputRef.current) {
@@ -397,7 +448,7 @@ export default function WordClozeActivity({
 
     setSubmitting(true);
 
-    if (isPreviewMode || isDemoMode) {
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       // Issue #716: case-sensitive comparison (trim only) — match backend.
       const expected = (currentQ.correct_answer || "").trim();
       const correct = !isTimeout && expected.length > 0 && answer === expected;
@@ -528,7 +579,7 @@ export default function WordClozeActivity({
   };
 
   const handleSubmitAssignment = async () => {
-    if (isPreviewMode || isDemoMode) {
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       toast.success(t("wordCloze.toast.completed") || "Assignment completed!");
       setShowAchievementDialog(false);
       onComplete?.();

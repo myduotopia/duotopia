@@ -85,6 +85,9 @@ def _copy_content_with_items(
             example_sentence_definition=original_item.example_sentence_definition
             if hasattr(original_item, "example_sentence_definition")
             else None,
+            example_sentence_audio_url=original_item.example_sentence_audio_url
+            if hasattr(original_item, "example_sentence_audio_url")
+            else None,
             # Sentence assembly fields
             word_count=original_item.word_count
             if hasattr(original_item, "word_count")
@@ -174,8 +177,9 @@ def copy_program_tree_to_template(
     source_metadata: Dict[str, Any],
     name: Optional[str] = None,
     target_school_id: Optional[uuid.UUID] = None,
+    target_organization_id: Optional[uuid.UUID] = None,
 ) -> Program:
-    """Deep copy program tree into a template (teacher or school owned)."""
+    """Deep copy program tree into a template (teacher, school, or organization owned)."""
     new_program = Program(
         name=name or source_program.name,
         description=source_program.description,
@@ -183,7 +187,7 @@ def copy_program_tree_to_template(
         is_template=True,
         classroom_id=None,
         teacher_id=target_teacher_id,
-        organization_id=None,
+        organization_id=target_organization_id,
         school_id=target_school_id,
         estimated_hours=source_program.estimated_hours,
         order_index=source_program.order_index,

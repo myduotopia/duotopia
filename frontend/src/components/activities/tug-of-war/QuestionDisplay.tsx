@@ -12,11 +12,15 @@ import type { Question } from "./types";
 interface QuestionDisplayProps {
   question: Question;
   showPrompt: boolean; // false when question is answered
+  audioMuted?: boolean;
+  onToggleMute?: () => void;
 }
 
 export function QuestionDisplay({
   question,
   showPrompt,
+  audioMuted = false,
+  onToggleMute,
 }: QuestionDisplayProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const loopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -39,9 +43,16 @@ export function QuestionDisplay({
   }, []);
 
   const playOnce = useCallback(() => {
-    const url = question.vocabItem.audio_url;
+    const isCloze = question.hasCloze;
+    const url = isCloze
+      ? question.vocabItem.example_sentence_audio_url
+      : question.vocabItem.audio_url;
+    const ttsText = isCloze
+      ? question.vocabItem.example_sentence || ""
+      : question.vocabItem.text;
+
     if (!url) {
-      const utterance = new SpeechSynthesisUtterance(question.vocabItem.text);
+      const utterance = new SpeechSynthesisUtterance(ttsText);
       utterance.lang = "en-US";
       utterance.rate = 0.9;
       speechSynthesis.speak(utterance);
@@ -54,13 +65,19 @@ export function QuestionDisplay({
     const audio = new Audio(url);
     audioRef.current = audio;
     audio.play().catch(() => {
-      const utterance = new SpeechSynthesisUtterance(question.vocabItem.text);
+      const utterance = new SpeechSynthesisUtterance(ttsText);
       utterance.lang = "en-US";
       utterance.rate = 0.9;
       speechSynthesis.speak(utterance);
     });
     return audio;
-  }, [question.vocabItem.audio_url, question.vocabItem.text]);
+  }, [
+    question.hasCloze,
+    question.vocabItem.audio_url,
+    question.vocabItem.example_sentence_audio_url,
+    question.vocabItem.example_sentence,
+    question.vocabItem.text,
+  ]);
 
   const startLoop = useCallback(() => {
     if (!isMountedRef.current) return;
@@ -88,11 +105,13 @@ export function QuestionDisplay({
     playAndSchedule();
   }, [playOnce, stopLoop]);
 
-  // Auto-play loop for audio questions — only on question change
+  // Auto-play loop for audio questions — skipped when user has muted
   useEffect(() => {
     isMountedRef.current = true;
-    if (question.hasAudio && showPrompt) {
+    if (question.hasAudio && showPrompt && !audioMuted) {
       startLoop();
+    } else {
+      stopLoop();
     }
     return () => {
       isMountedRef.current = false;
@@ -103,6 +122,7 @@ export function QuestionDisplay({
     question.vocabItem.id,
     showPrompt,
     question.hasAudio,
+    audioMuted,
     startLoop,
     stopLoop,
   ]);
@@ -151,7 +171,9 @@ export function QuestionDisplay({
       <div className="text-center py-2 h-16 flex items-center justify-center">
         <button
           onClick={() => {
-            if (isPlaying) {
+            if (onToggleMute) {
+              onToggleMute();
+            } else if (isPlaying) {
               stopLoop();
             } else {
               startLoop();
@@ -159,7 +181,7 @@ export function QuestionDisplay({
           }}
           className="p-3 rounded-full hover:bg-white/30 transition-colors cursor-pointer"
         >
-          {isPlaying ? (
+          {audioMuted ? (
             <VolumeOff className="h-10 w-10 text-gray-400" strokeWidth={2.5} />
           ) : (
             <Volume2 className="h-10 w-10 text-gray-700" strokeWidth={2.5} />

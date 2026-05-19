@@ -1,7 +1,11 @@
 import { API_URL } from "@/config/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
-export type ProgramCopyTargetScope = "classroom" | "teacher" | "school";
+export type ProgramCopyTargetScope =
+  | "classroom"
+  | "teacher"
+  | "school"
+  | "organization";
 
 interface ProgramCopyRequest {
   programId: number;

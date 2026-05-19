@@ -20,6 +20,9 @@
  * - 4 個選項顯示英文（後端依 show_image 切換 distractors 語言）
  * - 答案比對使用後端傳的 correct_text（fallback: 依 showImage flag 決定 text/translation）
  * - 不顯示文字提示語（畫面已直覺）
+ *
+ * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
+ *    改動前必讀：docs/design/preview-architecture.md
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
@@ -94,6 +97,15 @@ interface WordSelectionActivityProps {
   initialPracticeMode?: boolean; // True when assignment is already GRADED (re-practice)
   showAnswer?: boolean; // 答錯後是否揭示正確答案
   onComplete?: () => void;
+  // Issue #752: dialog 內即時預覽 — 跳過 API fetch，直接吃 props
+  previewWords?: WordOption[];
+  previewSettings?: {
+    show_image?: boolean;
+    show_option_images?: boolean;
+    play_audio?: boolean;
+    target_proficiency?: number;
+    time_limit_per_question?: number | null;
+  };
 }
 
 const OPTION_COLORS = [
@@ -113,12 +125,15 @@ export default function WordSelectionActivity({
   initialPracticeMode = false,
   showAnswer = false,
   onComplete,
+  previewWords,
+  previewSettings,
 }: WordSelectionActivityProps) {
+  const isLivePreview = !!previewWords;
   const { t } = useTranslation();
   // Note: Using apiClient which auto-detects token (student or teacher)
 
-  // State
-  const [loading, setLoading] = useState(true);
+  // State — 預覽模式 items 從 props 來，不需要 loading
+  const [loading, setLoading] = useState(!isLivePreview);
   const [words, setWords] = useState<WordOption[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -198,13 +213,13 @@ export default function WordSelectionActivity({
 
   // Computed: 顯示用的熟練度（預覽模式和 demo 模式用本地計算，學生模式用 API 回傳）
   const displayProficiency =
-    isPreviewMode || isDemoMode
+    isPreviewMode || isDemoMode || isLivePreview
       ? previewProficiency
       : proficiency.current_mastery;
 
   // Computed: tier counts shown in UI (live = API, preview/demo = local).
   const displayTierCounts = useMemo(() => {
-    if (isPreviewMode || isDemoMode) {
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       return previewTierCounts;
     }
     const master = proficiency.words_master ?? proficiency.words_mastered ?? 0;
@@ -223,7 +238,13 @@ export default function WordSelectionActivity({
       very_unfamiliar,
       total: proficiency.total_words,
     };
-  }, [isPreviewMode, isDemoMode, previewTierCounts, proficiency]);
+  }, [
+    isPreviewMode,
+    isDemoMode,
+    isLivePreview,
+    previewTierCounts,
+    proficiency,
+  ]);
 
   // Computed: 顯示用的已熟練單字數（同等於 master tier 數）
   const displayWordsMastered = displayTierCounts.master;
@@ -343,7 +364,7 @@ export default function WordSelectionActivity({
       setShowResult(false);
 
       // (#379) Preview/demo 模式：累積已練習的單字 ID，避免下一輪重複
-      if (isPreviewMode || isDemoMode) {
+      if (isPreviewMode || isDemoMode || isLivePreview) {
         const newWordIds = (data.words || []).map(
           (w: WordOption) => w.content_item_id,
         );
@@ -375,7 +396,7 @@ export default function WordSelectionActivity({
   // Fetch current proficiency
   const fetchProficiency = useCallback(async () => {
     // Skip in preview mode and demo mode - no proficiency tracking
-    if (isPreviewMode || isDemoMode) return;
+    if (isPreviewMode || isDemoMode || isLivePreview) return;
 
     try {
       const data = await apiClient.get<ProficiencyStatus>(
@@ -391,8 +412,31 @@ export default function WordSelectionActivity({
   }, [assignmentId, isPreviewMode, isDemoMode]);
 
   useEffect(() => {
+    if (isLivePreview && previewWords) {
+      setWords(previewWords);
+      setSessionId(null);
+      setIsPracticeMode(false);
+      setShowImage(previewSettings?.show_image ?? true);
+      setShowOptionImages(previewSettings?.show_option_images ?? false);
+      setPlayAudio(previewSettings?.play_audio ?? false);
+      setTimeLimit(previewSettings?.time_limit_per_question || null);
+      setTimeRemaining(previewSettings?.time_limit_per_question || null);
+      setProficiency({
+        current_mastery: 0,
+        target_mastery: previewSettings?.target_proficiency ?? 80,
+        achieved: false,
+        words_mastered: 0,
+        total_words: previewWords.length,
+      });
+      setCurrentIndex(0);
+      setRoundCompleted(false);
+      setSelectedAnswer(null);
+      setShowResult(false);
+      setLoading(false);
+      return;
+    }
     startPractice();
-  }, [startPractice]);
+  }, [startPractice, isLivePreview, previewWords, previewSettings]);
 
   useEffect(() => {
     return () => {
@@ -503,7 +547,7 @@ export default function WordSelectionActivity({
 
     // Skip API call in preview/demo mode, but track local counts so the
     // local tier breakdown matches what students would see.
-    if (isPreviewMode || isDemoMode) {
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       recordPreviewAnswer(currentWord.content_item_id, false);
       setSubmitting(false);
       return;
@@ -554,7 +598,7 @@ export default function WordSelectionActivity({
 
     // Skip API call in preview/demo mode, but track local counts so the
     // local tier breakdown matches what students would see.
-    if (isPreviewMode || isDemoMode) {
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       recordPreviewAnswer(currentWord.content_item_id, correct);
       setSubmitting(false);
       return;
@@ -614,7 +658,7 @@ export default function WordSelectionActivity({
 
   const handleSubmitAssignment = async () => {
     // 預覽模式和 demo 模式不需要呼叫 API
-    if (isPreviewMode || isDemoMode) {
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       toast.success(
         t("wordSelection.toast.completed") || "Assignment completed!",
       );

@@ -1,3 +1,9 @@
+/**
+ * ReadingAssessmentTemplate — 例句朗讀單題顯示元件
+ *
+ * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
+ *    改動前必讀：docs/design/preview-architecture.md
+ */
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +41,8 @@ interface ReadingAssessmentProps {
   recordingDisabled?: boolean; // true → 麥克風 / Analyze 鎖定
   attemptsHint?: React.ReactNode; // 愛心指示器
   onAnalysisSuccess?: () => void; // Azure 分析成功時觸發 +1
+  // Issue #752: dialog 內即時預覽 — 跳過 background upload（避免扣老師點數）
+  isLivePreview?: boolean;
 }
 
 export default function ReadingAssessmentTemplate({
@@ -51,6 +59,7 @@ export default function ReadingAssessmentTemplate({
   recordingDisabled = false,
   attemptsHint,
   onAnalysisSuccess,
+  isLivePreview = false,
 }: ReadingAssessmentProps) {
   const { t } = useTranslation();
   const [audioUrl, setAudioUrl] = useState<string | undefined>(
@@ -163,8 +172,8 @@ export default function ReadingAssessmentTemplate({
       setAssessmentResult(result);
       toast.success(t("readingAssessment.toast.aiComplete"));
 
-      // 🎯 背景上傳（不阻塞 UI）
-      if (!readOnly && audioUrl.startsWith("blob:")) {
+      // 🎯 背景上傳（不阻塞 UI）— 預覽模式跳過避免扣老師點數
+      if (!readOnly && !isLivePreview && audioUrl.startsWith("blob:")) {
         uploadAnalysisInBackground(audioBlob, result);
       }
     } catch (error) {

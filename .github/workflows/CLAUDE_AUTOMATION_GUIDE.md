@@ -155,9 +155,9 @@ Claude 每次在 Issue 留言後，都會在最後提供「建議回覆選項」
 4. 案主留言「測試通過」或「✅」
 
 **自動化**：
-- 執行 `check-approvals` 會自動偵測批准
-- 自動加上 `✅ tested-in-staging` label
-- 🤖 **自動建立 Release PR**（`automation-release-pr.yml`）：
+- `automation-auto-approve.yml`：偵測到批准留言 → 自動加 `✅ tested-in-staging` label，並接著呼叫共用 release-pr workflow
+- `automation-release-pr.yml`：若人工在 GitHub UI 直接加 label，這支才會觸發（bot 加的 label 不會觸發 workflow）
+- 兩條入口都呼叫共用 `_release-pr-shared.yml`，做以下事情：
   - 找到 `claude/issue-<N>*` 分支
   - 建立 PR → staging
   - Claude Code Action 自動修正 CI/review 問題（1 round）

@@ -1830,6 +1830,7 @@ export default function ClassroomDetail({
                                 | undefined,
                               order: 0,
                               hasMissingAudio: false,
+                              hasMissingExampleAudio: false,
                               hasMissingImage: false,
                             };
                             setAssignContents([cartItem]);
@@ -2396,10 +2397,12 @@ export default function ClassroomDetail({
                                         onClick={() =>
                                           setStickyNoteModal({
                                             open: true,
-                                            assignmentIndex:
-                                              assignments.findIndex(
-                                                (a) => a.id === assignment.id,
-                                              ),
+                                            assignmentIndex: (showArchived
+                                              ? archivedAssignments
+                                              : assignments
+                                            ).findIndex(
+                                              (a) => a.id === assignment.id,
+                                            ),
                                           })
                                         }
                                       >
@@ -2778,10 +2781,12 @@ export default function ClassroomDetail({
                                           onClick={() =>
                                             setStickyNoteModal({
                                               open: true,
-                                              assignmentIndex:
-                                                assignments.findIndex(
-                                                  (a) => a.id === assignment.id,
-                                                ),
+                                              assignmentIndex: (showArchived
+                                                ? archivedAssignments
+                                                : assignments
+                                              ).findIndex(
+                                                (a) => a.id === assignment.id,
+                                              ),
                                             })
                                           }
                                         >
@@ -3634,7 +3639,7 @@ export default function ClassroomDetail({
       <AssignmentStickyNote
         open={stickyNoteModal.open}
         onClose={() => setStickyNoteModal({ open: false, assignmentIndex: 0 })}
-        assignments={assignments}
+        assignments={showArchived ? archivedAssignments : assignments}
         initialAssignmentIndex={stickyNoteModal.assignmentIndex}
         classroomId={Number(id)}
       />

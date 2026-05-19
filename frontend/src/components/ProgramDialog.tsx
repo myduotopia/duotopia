@@ -18,6 +18,7 @@ interface ProgramDialogProps {
   dialogType: "create" | "edit" | "delete" | null;
   classroomId?: number;
   isTemplate?: boolean;
+  organizationId?: string;
   onClose: () => void;
   onSave: (program: Program) => void;
   onDelete?: (programId: number) => void;
@@ -39,6 +40,7 @@ export function ProgramDialog({
   dialogType,
   classroomId,
   isTemplate = false,
+  organizationId,
   onClose,
   onSave,
   onDelete,
@@ -133,16 +135,26 @@ export function ProgramDialog({
     setLoading(true);
     try {
       if (dialogType === "create") {
-        const newProgram = await apiClient.createProgram({
-          name: formData.name,
-          description: formData.description,
-          level: formData.level,
-          classroom_id: isTemplate
-            ? undefined
-            : formData.classroom_id || classroomId,
-          tags: formData.tags,
-          is_template: isTemplate,
-        });
+        const newProgram = organizationId
+          ? await apiClient.post(
+              `/api/organizations/${organizationId}/programs`,
+              {
+                name: formData.name,
+                description: formData.description,
+                level: formData.level,
+                tags: formData.tags,
+              },
+            )
+          : await apiClient.createProgram({
+              name: formData.name,
+              description: formData.description,
+              level: formData.level,
+              classroom_id: isTemplate
+                ? undefined
+                : formData.classroom_id || classroomId,
+              tags: formData.tags,
+              is_template: isTemplate,
+            });
         // Ensure the new program has all required Program properties
         const completeProgram: Program = {
           ...(newProgram as Program),
@@ -150,14 +162,24 @@ export function ProgramDialog({
         };
         onSave(completeProgram);
       } else if (dialogType === "edit" && program?.id) {
-        // For classroom programs, we might need different API endpoint
-        // TODO: Check if this is a classroom program update
-        await apiClient.updateProgram(program.id!, {
-          name: formData.name,
-          description: formData.description,
-          level: formData.level,
-          tags: formData.tags,
-        });
+        if (organizationId) {
+          await apiClient.put(
+            `/api/organizations/${organizationId}/programs/${program.id}`,
+            {
+              name: formData.name,
+              description: formData.description,
+              level: formData.level,
+              tags: formData.tags,
+            },
+          );
+        } else {
+          await apiClient.updateProgram(program.id!, {
+            name: formData.name,
+            description: formData.description,
+            level: formData.level,
+            tags: formData.tags,
+          });
+        }
         // Ensure the updated program has all required Program properties
         const updatedProgram: Program = {
           ...program,
@@ -183,7 +205,13 @@ export function ProgramDialog({
     submittingRef.current = true;
     setLoading(true);
     try {
-      await apiClient.deleteProgram(program.id);
+      if (organizationId) {
+        await apiClient.delete(
+          `/api/organizations/${organizationId}/programs/${program.id}`,
+        );
+      } else {
+        await apiClient.deleteProgram(program.id);
+      }
       onDelete(program.id);
       onClose();
     } catch (error) {

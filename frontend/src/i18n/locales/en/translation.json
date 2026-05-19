@@ -1707,8 +1707,8 @@
         "loadContentsFailed": "Failed to load contents",
         "quotaExceeded": "Insufficient quota, cannot assign assignment",
         "quotaExceededDesc": "Please upgrade your plan or wait for the next billing cycle",
-        "missingAudio": "Selected content is missing audio",
-        "missingAudioDesc": "This practice mode requires audio. Please go to content management to generate TTS audio first",
+        "missingAudio": "Selected content is missing example sentence audio",
+        "missingAudioDesc": "The following content is missing example sentence audio. Please go to the vocabulary set editor and click the [AI] button next to each example sentence to regenerate: {{contents}}",
         "insufficientWords": "Not enough vocabulary words",
         "insufficientWordsDesc": "Word selection mode requires at least 20 words, currently only {{count}}",
         "mixedContentType": "Only {{type}} can be selected. Please clear selected content before choosing a different type",
@@ -1764,6 +1764,12 @@
         "title": "Practice Mode Settings",
         "description": "Select the practice mode and related settings for students",
         "advancedSettings": "Advanced Settings",
+        "scoreCategory": {
+          "speaking": "Speaking",
+          "listening": "Listening",
+          "reading": "Reading",
+          "writing": "Writing"
+        },
         "reading": "Sentence Reading",
         "readingDesc": "Students read sentences aloud, system scores pronunciation",
         "rearrangement": "Sentence Rearrangement",
@@ -1774,6 +1780,8 @@
         "default": "Default",
         "shuffleQuestions": "Shuffle Questions",
         "shuffleQuestionsDesc": "Randomize question order for each practice session",
+        "studentPreview": "Student preview (demo content)",
+        "studentPreviewDisclaimer": "Preview uses demo content. For some modes (Reading, Rearrangement) the timing / audio / shuffle settings come from the demo assignment and don't reflect your selections on the left.",
         "showAnswer": "Show Answer",
         "showAnswerDesc": "Show correct answer after completing each question",
         "wordSelectionShowAnswerDesc": "Reveal correct answer when student answers wrong",
@@ -3330,7 +3338,7 @@
   "teacherTemplatePrograms": {
     "title": "My Teaching Materials",
     "buttons": {
-      "addProgram": "Add Resource Pack"
+      "addProgram": "Add Material Pack"
     },
     "messages": {
       "loadFailed": "Failed to load template programs",
@@ -5087,12 +5095,15 @@
       "audioToChinese": "Audio → Translation",
       "englishToChinese": "English → Translation",
       "chineseToEnglish": "Translation → English",
-      "imageToEnglish": "Image → English"
+      "imageToEnglish": "Image → English",
+      "clozeToEnglish": "Cloze Sentence → English"
     },
     "rotateDevice": "Please rotate your device",
     "rotateDeviceHint": "This game is best played in landscape mode",
     "continueAnyway": "Continue anyway",
     "imagesModeRequirement": "Requires at least 4 words with images",
+    "clozeModeRequirement": "Requires at least 4 words with example sentences",
+    "showSentenceTranslation": "Show sentence translation",
     "error": {
       "loadFailed": "Failed to load vocabulary",
       "notEnoughWords": "Not enough words (minimum 4 required)"

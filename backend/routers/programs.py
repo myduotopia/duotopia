@@ -40,7 +40,7 @@ from schemas import (
 )
 from auth import verify_token
 from utils.permissions import (
-    has_manage_materials_permission,
+    has_read_org_materials_permission,
     has_school_materials_permission,
 )
 
@@ -969,7 +969,7 @@ async def copy_program(
     current_teacher: Teacher = Depends(get_current_teacher),
 ):
     """Unified program copy API (supports classroom target for now)."""
-    if payload.target_scope not in ["classroom", "teacher", "school"]:
+    if payload.target_scope not in ["classroom", "teacher", "school", "organization"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid target_scope",
@@ -977,6 +977,7 @@ async def copy_program(
 
     target_id_int = None
     target_school_id = None
+    target_organization_id = None
     if payload.target_scope in ["classroom", "teacher"]:
         try:
             target_id_int = int(payload.target_id)
@@ -985,13 +986,21 @@ async def copy_program(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid target_id for classroom/teacher",
             )
-    else:
+    elif payload.target_scope == "school":
         try:
             target_school_id = uuid.UUID(payload.target_id)
         except (TypeError, ValueError):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid target_id for school",
+            )
+    else:
+        try:
+            target_organization_id = uuid.UUID(payload.target_id)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid target_id for organization",
             )
 
     source_program = (
@@ -1027,12 +1036,12 @@ async def copy_program(
         )
 
     if source_scope == "organization":
-        if not has_manage_materials_permission(
+        if not has_read_org_materials_permission(
             current_teacher.id, source_program.organization_id, db
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No permission to access organization materials",
+                detail="Not a member of this organization",
             )
 
         organization = (
@@ -1125,6 +1134,9 @@ async def copy_program(
                 detail="Teacher templates cannot be copied to school",
             )
 
+        # target_scope "organization" is allowed: teacher contributes personal
+        # program to one of their affiliated organizations.
+
         source_type = "template"
         source_metadata = {
             "source_scope": "teacher",
@@ -1190,6 +1202,39 @@ async def copy_program(
                 source_metadata=source_metadata,
                 name=new_name,
             )
+        elif payload.target_scope == "organization":
+            if source_scope != "teacher":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Only teacher templates can be copied to organization",
+                )
+
+            target_organization = (
+                db.query(Organization)
+                .filter(Organization.id == target_organization_id)
+                .first()
+            )
+            if not target_organization:
+                raise HTTPException(status_code=404, detail="Organization not found")
+
+            if not has_read_org_materials_permission(
+                current_teacher.id, target_organization.id, db
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You are not a member of this organization",
+                )
+
+            new_program = program_service.copy_program_tree_to_template(
+                source_program=source_program,
+                target_teacher_id=current_teacher.id,
+                target_school_id=None,
+                target_organization_id=target_organization.id,
+                db=db,
+                source_type=source_type,
+                source_metadata=source_metadata,
+                name=new_name,
+            )
         else:
             target_school = (
                 db.query(School).filter(School.id == target_school_id).first()
@@ -1234,6 +1279,9 @@ async def copy_program(
             .filter(Program.id == new_program.id)
             .first()
         )
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         logger.error(
@@ -1392,7 +1440,7 @@ async def reorder_programs(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid organization_id format",
             )
-        if not has_manage_materials_permission(current_teacher.id, org_uuid, db):
+        if not has_read_org_materials_permission(current_teacher.id, org_uuid, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No permission to reorder organization materials",
@@ -1729,7 +1777,7 @@ async def reorder_lessons(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid organization_id format",
             )
-        if not has_manage_materials_permission(current_teacher.id, org_uuid, db):
+        if not has_read_org_materials_permission(current_teacher.id, org_uuid, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No permission to reorder organization materials",
@@ -1818,7 +1866,7 @@ async def reorder_contents(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid organization_id format",
             )
-        if not has_manage_materials_permission(current_teacher.id, org_uuid, db):
+        if not has_read_org_materials_permission(current_teacher.id, org_uuid, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No permission to reorder organization materials",

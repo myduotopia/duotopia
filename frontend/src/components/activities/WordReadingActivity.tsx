@@ -9,6 +9,9 @@
  * - 處理錄音上傳
  * - 顯示 AI 評估結果
  * - 提交作業
+ *
+ * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
+ *    改動前必讀：docs/design/preview-architecture.md
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -80,6 +83,14 @@ interface WordReadingActivityProps {
   // Issue #689: 用於前端錄音次數限制重置條件
   assignmentStatus?: AssignmentStatusLike | null;
   returnedAt?: string | null;
+  // Issue #752: dialog 內即時預覽 — 跳過 API fetch，直接吃 props
+  previewItems?: WordItem[];
+  previewSettings?: {
+    time_limit_per_question?: number;
+    show_image?: boolean;
+    show_translation?: boolean;
+    can_use_ai_analysis?: boolean;
+  };
 }
 
 export default function WordReadingActivity({
@@ -95,7 +106,10 @@ export default function WordReadingActivity({
   timeLimitPerQuestion: timeLimitProp,
   assignmentStatus,
   returnedAt,
+  previewItems,
+  previewSettings,
 }: WordReadingActivityProps) {
+  const isLivePreview = !!previewItems;
   const { t } = useTranslation();
   const { token: studentToken } = useStudentAuthStore();
   // 預覽模式使用傳入的 authToken（老師 token），否則使用學生 token
@@ -150,6 +164,7 @@ export default function WordReadingActivity({
     !readOnly &&
     !isPreviewMode &&
     !isDemoMode &&
+    !isLivePreview &&
     canUseAiAnalysisProp !== false;
   const recordingDisabledForCurrent =
     currentItemLockedInReturnedMode || (gateActive && !currentCanRecord);
@@ -212,8 +227,17 @@ export default function WordReadingActivity({
   }, [assignmentId, token, isPreviewMode, isDemoMode, t]);
 
   useEffect(() => {
+    if (isLivePreview && previewItems) {
+      setItems(previewItems);
+      setTimeLimitFromApi(previewSettings?.time_limit_per_question ?? 0);
+      setShowImageFromApi(previewSettings?.show_image ?? true);
+      setShowTranslationFromApi(previewSettings?.show_translation ?? true);
+      setCanUseAiAnalysisFromApi(previewSettings?.can_use_ai_analysis ?? true);
+      setLoading(false);
+      return;
+    }
     loadItems();
-  }, [loadItems]);
+  }, [loadItems, isLivePreview, previewItems, previewSettings]);
 
   // Handle recording complete
   const handleRecordingComplete = async (blob: Blob, url: string) => {
@@ -231,8 +255,8 @@ export default function WordReadingActivity({
       return updated;
     });
 
-    // Skip upload in preview mode or demo mode
-    if (isPreviewMode || isDemoMode) {
+    // Skip upload in preview mode, demo mode, or live preview
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       toast.success(
         t("wordReading.toast.recordedPreview") ||
           "Recording saved (preview mode)",
@@ -365,7 +389,7 @@ export default function WordReadingActivity({
 
     // 背景呼叫後端 DELETE API：需要 persisted progress，且非 preview/demo
     if (!currentItem?.progress_id) return;
-    if (isPreviewMode || isDemoMode) return;
+    if (isPreviewMode || isDemoMode || isLivePreview) return;
 
     const apiUrl = import.meta.env.VITE_API_URL || "";
     const deleteUrl = `${apiUrl}/api/speech/assessment/${assignmentId}/progress/${currentItem.progress_id}`;
@@ -377,7 +401,7 @@ export default function WordReadingActivity({
 
   // Submit assignment
   const handleSubmit = async () => {
-    if (isPreviewMode || isDemoMode) {
+    if (isPreviewMode || isDemoMode || isLivePreview) {
       toast.info(
         t("wordReading.toast.cannotSubmitPreview") ||
           "Cannot submit in preview mode",
@@ -527,81 +551,84 @@ export default function WordReadingActivity({
 
   return (
     <div className="space-y-6">
-      {/* Progress Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">
-            {t("wordReading.wordReading") || "Word Reading"}
-          </Badge>
-          <span className="text-sm text-gray-600">
-            {t("wordReading.itemProgress", {
-              current: currentIndex + 1,
-              total: items.length,
-            }) || `${currentIndex + 1} / ${items.length}`}
-          </span>
+      {/* Header group (status + progress + nav dots) — 內距壓縮 */}
+      <div className="space-y-2">
+        {/* Progress Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs">
+              {t("wordReading.wordReading") || "Word Reading"}
+            </Badge>
+            <span className="text-xs text-gray-600">
+              {t("wordReading.itemProgress", {
+                current: currentIndex + 1,
+                total: items.length,
+              }) || `${currentIndex + 1} / ${items.length}`}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-gray-600">
+            <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+            <span>
+              {t("wordReading.completedCount", { count: completedCount }) ||
+                `${completedCount} completed`}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <CheckCircle className="h-4 w-4 text-green-500" />
-          <span>
-            {t("wordReading.completedCount", { count: completedCount }) ||
-              `${completedCount} completed`}
-          </span>
+
+        {/* Progress Bar */}
+        <Progress value={progress} className="h-1.5" />
+
+        {/* Item Navigation Dots */}
+        <div className="flex gap-1 overflow-x-auto pb-1 mx-auto w-fit max-w-full">
+          {items.map((item, index) => {
+            const isActive = index === currentIndex;
+            const isCompleted = !!item.recording_url;
+            const hasAssessment = !!item.ai_assessment;
+            // Issue #689 後續：點點顏色委派 getItemPassFailStatus 統一處理。
+            // RETURNED 模式下純看 teacher_passed；其他狀態才用 AI 分數 fallback。
+            const aiScore =
+              item.ai_assessment?.pronunciation_score ??
+              item.ai_assessment?.accuracy_score ??
+              null;
+            const { passed: passedByScore, failed: failedByScore } =
+              getItemPassFailStatus({
+                teacherPassed: item.teacher_passed ?? null,
+                aiScore,
+                assignmentStatus: assignmentStatus ?? null,
+              });
+            const colorClass = passedByScore
+              ? "bg-green-100 text-green-800 border-green-400"
+              : failedByScore
+                ? "bg-red-100 text-red-800 border-red-400"
+                : hasAssessment || isCompleted
+                  ? "bg-yellow-100 text-yellow-800 border-yellow-400"
+                  : "bg-white text-gray-600 border-gray-300 hover:border-blue-400";
+            const titleText = passedByScore
+              ? t("wordReading.passed") || "通過"
+              : failedByScore
+                ? t("wordReading.notPassed") || "未通過"
+                : hasAssessment
+                  ? t("wordReading.assessed") || "Assessed"
+                  : isCompleted
+                    ? t("wordReading.recorded") || "Recorded"
+                    : t("wordReading.notRecorded") || "Not recorded";
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => setCurrentIndex(index)}
+                className={cn(
+                  "w-8 h-8 rounded border transition-all flex items-center justify-center text-xs font-medium flex-shrink-0",
+                  isActive && "border-2 border-blue-600",
+                  colorClass,
+                )}
+                title={titleText}
+              >
+                {index + 1}
+              </button>
+            );
+          })}
         </div>
-      </div>
-
-      {/* Progress Bar */}
-      <Progress value={progress} className="h-2" />
-
-      {/* Item Navigation Dots */}
-      <div className="flex gap-1 overflow-x-auto pb-1 mx-auto w-fit max-w-full">
-        {items.map((item, index) => {
-          const isActive = index === currentIndex;
-          const isCompleted = !!item.recording_url;
-          const hasAssessment = !!item.ai_assessment;
-          // Issue #689 後續：點點顏色委派 getItemPassFailStatus 統一處理。
-          // RETURNED 模式下純看 teacher_passed；其他狀態才用 AI 分數 fallback。
-          const aiScore =
-            item.ai_assessment?.pronunciation_score ??
-            item.ai_assessment?.accuracy_score ??
-            null;
-          const { passed: passedByScore, failed: failedByScore } =
-            getItemPassFailStatus({
-              teacherPassed: item.teacher_passed ?? null,
-              aiScore,
-              assignmentStatus: assignmentStatus ?? null,
-            });
-          const colorClass = passedByScore
-            ? "bg-green-100 text-green-800 border-green-400"
-            : failedByScore
-              ? "bg-red-100 text-red-800 border-red-400"
-              : hasAssessment || isCompleted
-                ? "bg-yellow-100 text-yellow-800 border-yellow-400"
-                : "bg-white text-gray-600 border-gray-300 hover:border-blue-400";
-          const titleText = passedByScore
-            ? t("wordReading.passed") || "通過"
-            : failedByScore
-              ? t("wordReading.notPassed") || "未通過"
-              : hasAssessment
-                ? t("wordReading.assessed") || "Assessed"
-                : isCompleted
-                  ? t("wordReading.recorded") || "Recorded"
-                  : t("wordReading.notRecorded") || "Not recorded";
-
-          return (
-            <button
-              key={item.id}
-              onClick={() => setCurrentIndex(index)}
-              className={cn(
-                "w-8 h-8 rounded border transition-all flex items-center justify-center text-xs font-medium flex-shrink-0",
-                isActive && "border-2 border-blue-600",
-                colorClass,
-              )}
-              title={titleText}
-            >
-              {index + 1}
-            </button>
-          );
-        })}
       </div>
 
       {/* Word Reading Template */}

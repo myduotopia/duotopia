@@ -21,6 +21,8 @@ import { AssignmentDialog, CartItem } from "@/components/AssignmentDialog";
 import { ProgramVisibilitySelector } from "@/components/ProgramVisibilitySelector";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
 import ProgramFolderView from "@/components/shared/ProgramFolderView";
+import CopyToOrganizationDialog from "@/components/CopyToOrganizationDialog";
+import { useTeacherOrganizations } from "@/hooks/useTeacherOrganizations";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import MaterialsToolbar from "@/components/shared/MaterialsToolbar";
@@ -169,6 +171,28 @@ function TeacherTemplateProgramsInner() {
   // Assign states
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
   const [assignContents, setAssignContents] = useState<CartItem[]>([]);
+
+  // Copy program → organization
+  const { organizations: teacherOrganizations } = useTeacherOrganizations();
+  const hasOrganizations = teacherOrganizations.length > 0;
+  const [copyToOrgState, setCopyToOrgState] = useState<{
+    open: boolean;
+    programId: number | null;
+    programName: string;
+  }>({ open: false, programId: null, programName: "" });
+
+  const handleCopyProgramToOrg = useCallback(
+    (programId: number) => {
+      const program = programs.find((p) => p.id === programId);
+      if (!program) return;
+      setCopyToOrgState({
+        open: true,
+        programId,
+        programName: program.name,
+      });
+    },
+    [programs],
+  );
 
   useEffect(() => {
     fetchTemplatePrograms();
@@ -695,6 +719,7 @@ function TeacherTemplateProgramsInner() {
                   itemsCount: item.items_count as number | undefined,
                   order: 0,
                   hasMissingAudio: false,
+                  hasMissingExampleAudio: false,
                   hasMissingImage: false,
                 };
                 setAssignContents([cartItem]);
@@ -707,6 +732,9 @@ function TeacherTemplateProgramsInner() {
             programs={filteredPrograms}
             onEditProgram={handleEditProgram}
             onDeleteProgram={handleDeleteProgram}
+            onCopyProgramTo={
+              hasOrganizations ? handleCopyProgramToOrg : undefined
+            }
             onEditLesson={handleEditLesson}
             onDeleteLesson={handleDeleteLesson}
             onCreateLesson={handleCreateLesson}
@@ -765,6 +793,7 @@ function TeacherTemplateProgramsInner() {
                 itemsCount: content.items_count,
                 order: 0,
                 hasMissingAudio: false,
+                hasMissingExampleAudio: false,
                 hasMissingImage: false,
               };
               setAssignContents([cartItem]);
@@ -1242,6 +1271,19 @@ function TeacherTemplateProgramsInner() {
           }}
         />
       )}
+
+      {/* Copy program (whole pack) to organization */}
+      <CopyToOrganizationDialog
+        open={copyToOrgState.open}
+        programId={copyToOrgState.programId}
+        programName={copyToOrgState.programName}
+        onClose={() =>
+          setCopyToOrgState({ open: false, programId: null, programName: "" })
+        }
+        onSuccess={() => {
+          fetchTemplatePrograms();
+        }}
+      />
 
       {/* Content Copy Dialog */}
       {copyContentInfo && (

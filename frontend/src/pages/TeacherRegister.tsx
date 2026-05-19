@@ -19,6 +19,8 @@ import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { validatePasswordStrength } from "@/utils/passwordValidation";
 import { getTeacherDashboardRoute } from "@/utils/authNavigation";
+import { trackCompleteRegistration } from "@/services/metaPixelService";
+import { sendEvent as gaSendEvent } from "@/services/gaService";
 
 export default function TeacherRegister() {
   const { t } = useTranslation();
@@ -84,6 +86,12 @@ export default function TeacherRegister() {
 
       // 🔴 不要自動登入！顯示驗證提示
       if (response.verification_required) {
+        // 廣告轉換追蹤：表單送出成功即觸發（不等 email 驗證）
+        trackCompleteRegistration({
+          content_name: "teacher_register",
+          status: "verification_required",
+        });
+        gaSendEvent("sign_up", { method: "teacher_email" });
         // 導向到驗證提示頁面或顯示成功訊息
         navigate("/teacher/verify-email-prompt", {
           state: {

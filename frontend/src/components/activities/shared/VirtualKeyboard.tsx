@@ -28,18 +28,24 @@ interface VirtualKeyboardProps {
 
 // Layout B (mobile-style): bottom utility row carries shift / bksp; a
 // dedicated 4th row holds space + Enter the way iOS / Gboard do it.
+// Punctuation (#763) sits inline on the space/enter row at letter-width so
+// answers like don't / Mr. / sentence-level cloze (? ! ,) can be typed on
+// tablet/mobile without bloating the row height.
+// 5 punct keys here + 10-key top row drive the flex-basis formula in index.css
+// (.simple-keyboard .hg-button.vk-punct). Update both together if the layout changes.
+const BOTTOM_ROW = "' . , ? ! {space} {enter}";
 const LAYOUT = {
   default: [
     "q w e r t y u i o p",
     "a s d f g h j k l",
     "{shift} z x c v b n m {bksp}",
-    "{space} {enter}",
+    BOTTOM_ROW,
   ],
   shift: [
     "Q W E R T Y U I O P",
     "A S D F G H J K L",
     "{shift} Z X C V B N M {bksp}",
-    "{space} {enter}",
+    BOTTOM_ROW,
   ],
 };
 
@@ -93,6 +99,8 @@ export default function VirtualKeyboard({
           { class: "vk-shift", buttons: "{shift}" },
           // Issue #716: 母音用紅色標示（教學常用標法）
           { class: "vk-vowel", buttons: "a e i o u A E I O U" },
+          // Issue #763: 標點鍵與字母同寬，不要被預設 flex 撐開
+          { class: "vk-punct", buttons: "' . , ? !" },
         ]}
       />
     </div>

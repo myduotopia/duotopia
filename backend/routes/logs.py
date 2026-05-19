@@ -41,6 +41,12 @@ class AudioErrorLog(BaseModel):
     can_play_mp4: Optional[str] = None
     load_time_ms: Optional[int] = None
 
+    # BigQuery 表 schema 已新增對應 NULLABLE 欄位，insert_rows_json 可安全持久化
+    chunk_count: Optional[int] = None
+    recorder_state_at_stop: Optional[str] = None
+    request_data_called: Optional[bool] = None
+    recording_time_ms: Optional[int] = None
+
 
 @router.post("/audio-error")
 async def log_audio_error(error_log: AudioErrorLog):

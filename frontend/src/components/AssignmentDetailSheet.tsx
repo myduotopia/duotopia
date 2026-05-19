@@ -18,7 +18,7 @@ import VocabularySetPanel, {
   type VocabularySetPanelHandle,
 } from "@/components/VocabularySetPanel";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import {
@@ -292,7 +292,25 @@ export function AssignmentDetailSheet({
       toast.success(t("assignmentDetail.messages.updateSuccess", "已儲存變更"));
       setIsEditing(false);
       onAssignmentUpdated?.();
-    } catch {
+    } catch (error) {
+      // Issue #757: PATCH 在 play_audio 切到 True 時若副本缺例句音檔會回
+      // 422 EXAMPLE_AUDIO_REQUIRED。對齊派發 dialog 的提示語、明確告訴
+      // 老師缺哪些單字集 + 怎麼修。
+      if (error instanceof ApiError && error.status === 422) {
+        const detail = error.detail as {
+          code?: string;
+          content_titles?: string[];
+        } | null;
+        if (detail?.code === "EXAMPLE_AUDIO_REQUIRED") {
+          const titles = detail.content_titles?.join("、") || "";
+          toast.error(t("dialogs.assignmentDialog.errors.missingAudio"), {
+            description: t("dialogs.assignmentDialog.errors.missingAudioDesc", {
+              contents: titles,
+            }),
+          });
+          return;
+        }
+      }
       toast.error(t("assignmentDetail.messages.updateError", "儲存失敗"));
     } finally {
       setSaving(false);

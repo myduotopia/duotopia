@@ -1779,8 +1779,8 @@
         "loadContentsFailed": "載入內容失敗",
         "quotaExceeded": "配額不足，無法派發作業",
         "quotaExceededDesc": "請升級方案或等待下個計費週期",
-        "missingAudio": "選擇的內容缺少音檔",
-        "missingAudioDesc": "此練習模式需要音檔，請先回到內容管理頁面產生 TTS 音檔",
+        "missingAudio": "選擇的內容缺少例句音檔",
+        "missingAudioDesc": "以下內容缺少例句音檔，請回單字集編輯頁點例句旁的 [AI] 按鈕補產生：{{contents}}",
         "insufficientWords": "單字數量不足",
         "insufficientWordsDesc": "單字選擇模式需要至少 20 個單字，目前只有 {{count}} 個",
         "mixedContentType": "目前只能選擇{{type}}，請先清除已選擇的內容再選擇其他類型",
@@ -1817,6 +1817,12 @@
         "title": "練習模式設定",
         "description": "選擇學生練習的模式和相關設定",
         "advancedSettings": "進階設定",
+        "scoreCategory": {
+          "speaking": "口說",
+          "listening": "聽力",
+          "reading": "閱讀",
+          "writing": "寫作"
+        },
         "reading": "例句朗讀",
         "readingDesc": "學生朗讀例句，系統評分發音",
         "rearrangement": "例句重組",
@@ -1827,6 +1833,8 @@
         "default": "預設",
         "shuffleQuestions": "隨機題目順序",
         "shuffleQuestionsDesc": "每次練習時隨機排列題目順序",
+        "studentPreview": "學生畫面預覽（demo 教材）",
+        "studentPreviewDisclaimer": "預覽使用範例教材，部分模式（例句朗讀、例句重組）的時間／音檔等設定以示範作業為準，不會跟著左側設定變動。",
         "showAnswer": "顯示答案",
         "showAnswerDesc": "答題結束後顯示正確答案",
         "wordSelectionShowAnswerDesc": "學生答錯後揭示正確答案",
@@ -3334,7 +3342,7 @@
   "teacherTemplatePrograms": {
     "title": "我的教材",
     "buttons": {
-      "addProgram": "新增教材資源包"
+      "addProgram": "新增教材包"
     },
     "messages": {
       "loadFailed": "載入公版課程失敗",
@@ -5136,12 +5144,15 @@
       "audioToChinese": "聽音選翻譯/解釋",
       "englishToChinese": "英文選翻譯/解釋",
       "chineseToEnglish": "翻譯/解釋選英文",
-      "imageToEnglish": "看圖選英文"
+      "imageToEnglish": "看圖選英文",
+      "clozeToEnglish": "例句克漏字選英文"
     },
     "rotateDevice": "請將手機轉為橫向",
     "rotateDeviceHint": "此遊戲適合橫向遊玩",
     "continueAnyway": "繼續遊玩",
     "imagesModeRequirement": "需要至少 4 個單字有圖片",
+    "clozeModeRequirement": "需要至少 4 個單字有例句",
+    "showSentenceTranslation": "顯示例句翻譯",
     "error": {
       "loadFailed": "載入單字失敗",
       "notEnoughWords": "單字數量不足（至少需要 4 個）"
