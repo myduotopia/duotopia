@@ -342,6 +342,76 @@ def test_cancel_credit_package_non_admin_forbidden(
     assert response.status_code == 403
 
 
+# ============ admin_operations surfacing ============
+def test_edit_response_includes_admin_operations(
+    active_package, auth_headers_admin, test_client
+):
+    response = test_client.put(
+        f"/api/admin/subscription/credit-package/{active_package.id}",
+        headers=auth_headers_admin,
+        json={"points_total": 1500, "reason": "history surfacing"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "admin_operations" in body
+    assert len(body["admin_operations"]) == 1
+    op = body["admin_operations"][0]
+    assert op["action"] == "edit"
+    assert op["reason"] == "history surfacing"
+    assert "timestamp" in op
+    assert "changes" in op
+
+
+def test_cancel_response_includes_admin_operations(
+    active_package, auth_headers_admin, test_client
+):
+    response = test_client.post(
+        f"/api/admin/subscription/credit-package/{active_package.id}/cancel",
+        headers=auth_headers_admin,
+        json={"reason": "refund test"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    ops = body["admin_operations"]
+    assert len(ops) == 1
+    assert ops[0]["action"] == "cancel"
+
+
+def test_teacher_periods_includes_admin_operations(
+    active_package, auth_headers_admin, regular_teacher, test_client
+):
+    # Generate one edit so the package has history
+    test_client.put(
+        f"/api/admin/subscription/credit-package/{active_package.id}",
+        headers=auth_headers_admin,
+        json={"points_total": 1500, "reason": "seeding history"},
+    )
+
+    response = test_client.get(
+        f"/api/admin/subscription/teacher/{regular_teacher.id}/periods",
+        headers=auth_headers_admin,
+    )
+    assert response.status_code == 200
+    pkg = next(
+        p for p in response.json()["credit_packages"] if p["id"] == active_package.id
+    )
+    assert pkg["admin_operations"]
+    assert pkg["admin_operations"][0]["action"] == "edit"
+
+
+def test_teacher_periods_empty_admin_operations_for_untouched_pkg(
+    active_package, auth_headers_admin, regular_teacher, test_client
+):
+    response = test_client.get(
+        f"/api/admin/subscription/teacher/{regular_teacher.id}/periods",
+        headers=auth_headers_admin,
+    )
+    pkg = next(
+        p for p in response.json()["credit_packages"] if p["id"] == active_package.id
+    )
+    assert pkg["admin_operations"] == []
+
+
 # ============ List filter ============
 def test_teacher_periods_excludes_refunded_packages(
     active_package,

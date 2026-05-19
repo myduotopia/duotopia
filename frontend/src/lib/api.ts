@@ -134,6 +134,19 @@ export interface RegisterRequest {
   phone?: string;
 }
 
+export interface AdminCreditPackageOperation {
+  action: "edit" | "cancel" | string;
+  timestamp: string;
+  admin_id: number;
+  admin_email?: string;
+  admin_name?: string;
+  reason: string;
+  changes: Record<
+    string,
+    { from: unknown; to: unknown } | string | number | boolean
+  >;
+}
+
 interface AdminCreditPackageResult {
   id: number;
   package_id: string;
@@ -143,6 +156,7 @@ interface AdminCreditPackageResult {
   points_remaining: number;
   expires_at: string;
   status: string;
+  admin_operations: AdminCreditPackageOperation[];
 }
 
 class ApiClient {

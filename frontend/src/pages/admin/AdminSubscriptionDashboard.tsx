@@ -51,6 +51,7 @@ import {
   GraduationCap,
   Download,
   RefreshCcw,
+  X,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import {
@@ -105,6 +106,19 @@ interface SubscriptionPeriod {
   amount_paid?: number;
 }
 
+interface CreditPackageOperation {
+  action: string; // "edit" | "cancel"
+  timestamp: string;
+  admin_id: number;
+  admin_email?: string;
+  admin_name?: string;
+  reason: string;
+  changes: Record<
+    string,
+    { from: unknown; to: unknown } | string | number | boolean
+  >;
+}
+
 interface CreditPackageInfo {
   id: number;
   package_id: string;
@@ -117,6 +131,7 @@ interface CreditPackageInfo {
   expires_at: string;
   status: string;
   payment_id?: string;
+  admin_operations?: CreditPackageOperation[];
 }
 
 interface EditHistoryRecord {
@@ -217,6 +232,108 @@ interface LearningAnalytics {
   total_points_used: number;
 }
 
+function formatOperationTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("zh-TW", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function describeOperationChanges(
+  changes: CreditPackageOperation["changes"],
+): string[] {
+  return Object.entries(changes).map(([field, value]) => {
+    if (
+      value &&
+      typeof value === "object" &&
+      "from" in value &&
+      "to" in value
+    ) {
+      const fromVal = (value as { from: unknown }).from;
+      const toVal = (value as { to: unknown }).to;
+      return `${field}: ${String(fromVal)} → ${String(toVal)}`;
+    }
+    return `${field}: ${String(value)}`;
+  });
+}
+
+function CreditPackageHistory({
+  operations,
+}: {
+  operations: CreditPackageOperation[];
+}) {
+  // Render newest first so admins see the latest change at the top.
+  const ordered = [...operations].sort((a, b) =>
+    a.timestamp < b.timestamp ? 1 : -1,
+  );
+  return (
+    <div className="p-4 pl-12 space-y-2">
+      <div className="text-xs font-semibold text-gray-700">
+        變更歷史 ({operations.length})
+      </div>
+      <div className="space-y-2">
+        {ordered.map((op, idx) => {
+          const isCancel = op.action === "cancel";
+          const badgeClass = isCancel
+            ? "bg-red-100 text-red-700"
+            : "bg-blue-100 text-blue-700";
+          return (
+            <div
+              key={`${op.timestamp}-${idx}`}
+              className="rounded-md border border-gray-200 bg-white p-3 flex gap-3"
+            >
+              <div
+                className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  isCancel
+                    ? "bg-red-50 text-red-600"
+                    : "bg-blue-50 text-blue-600"
+                }`}
+              >
+                {isCancel ? (
+                  <X className="w-4 h-4" />
+                ) : (
+                  <Edit className="w-4 h-4" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-semibold ${badgeClass}`}
+                  >
+                    {op.action}
+                  </span>
+                  {describeOperationChanges(op.changes).map((change, i) => (
+                    <span
+                      key={i}
+                      className="font-mono text-xs text-gray-600 break-all"
+                    >
+                      {change}
+                    </span>
+                  ))}
+                  <span className="ml-auto text-[11px] text-gray-400">
+                    {formatOperationTimestamp(op.timestamp)}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-900 whitespace-pre-wrap break-words">
+                  原因：{op.reason}
+                </div>
+                <div className="text-[11px] text-gray-400">
+                  by {op.admin_email || op.admin_name || `admin#${op.admin_id}`}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminSubscriptionDashboard() {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -292,6 +409,22 @@ export default function AdminSubscriptionDashboard() {
   const [creditPackageCancelReason, setCreditPackageCancelReason] =
     useState("");
   const [creditPackageSubmitting, setCreditPackageSubmitting] = useState(false);
+  // Set of credit package IDs whose history panel is expanded inline.
+  const [expandedCreditPackageIds, setExpandedCreditPackageIds] = useState<
+    Set<number>
+  >(new Set());
+
+  const toggleCreditPackageHistory = (pkgId: number) => {
+    setExpandedCreditPackageIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(pkgId)) {
+        next.delete(pkgId);
+      } else {
+        next.add(pkgId);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     loadDashboardData();
@@ -509,6 +642,7 @@ export default function AdminSubscriptionDashboard() {
                 points_remaining: updated.points_remaining,
                 expires_at: updated.expires_at,
                 status: updated.status,
+                admin_operations: updated.admin_operations,
               }
             : p,
         ),
@@ -1828,94 +1962,159 @@ export default function AdminSubscriptionDashboard() {
                                                   "bg-gray-100 text-gray-700",
                                               };
 
+                                              const isHistoryOpen =
+                                                expandedCreditPackageIds.has(
+                                                  pkg.id,
+                                                );
                                               return (
-                                                <TableRow key={`pkg-${pkg.id}`}>
-                                                  <TableCell>
-                                                    <span
-                                                      className={`px-2 py-1 rounded text-xs font-semibold ${sourceBadge.className}`}
-                                                    >
-                                                      {sourceBadge.label}
-                                                    </span>
-                                                  </TableCell>
-                                                  <TableCell className="font-mono text-xs text-gray-600">
-                                                    {pkg.package_id}
-                                                  </TableCell>
-                                                  <TableCell className="text-sm text-gray-600">
-                                                    {formatDate(
-                                                      pkg.purchased_at,
-                                                    )}{" "}
-                                                    →{" "}
-                                                    {formatDate(pkg.expires_at)}
-                                                  </TableCell>
-                                                  <TableCell>
-                                                    <div className="space-y-1">
-                                                      <div className="text-sm">
-                                                        {pkg.points_used.toLocaleString()}{" "}
-                                                        /{" "}
-                                                        {pkg.points_total.toLocaleString()}
-                                                      </div>
-                                                      <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                                        <div
-                                                          className="bg-purple-500 h-1.5 rounded-full"
-                                                          style={{
-                                                            width: `${Math.min((pkg.points_used / pkg.points_total) * 100 || 0, 100)}%`,
-                                                          }}
-                                                        />
-                                                      </div>
-                                                    </div>
-                                                  </TableCell>
-                                                  <TableCell className="text-sm">
-                                                    {pkg.price_paid > 0
-                                                      ? `NT$ ${pkg.price_paid.toLocaleString()}`
-                                                      : "-"}
-                                                  </TableCell>
-                                                  <TableCell>
-                                                    <span
-                                                      className={`px-2 py-1 rounded text-xs font-semibold ${
-                                                        pkg.status === "active"
-                                                          ? "bg-green-100 text-green-700"
-                                                          : "bg-gray-100 text-gray-600"
-                                                      }`}
-                                                    >
-                                                      {pkg.status}
-                                                    </span>
-                                                  </TableCell>
-                                                  <TableCell
-                                                    onClick={(e) =>
-                                                      e.stopPropagation()
-                                                    }
-                                                  >
-                                                    <div className="flex justify-end gap-1">
-                                                      <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="h-7 px-2 text-xs"
-                                                        onClick={() =>
-                                                          openEditCreditPackageDialog(
-                                                            teacher.teacher_id,
-                                                            pkg,
-                                                          )
-                                                        }
+                                                <React.Fragment
+                                                  key={`pkg-${pkg.id}`}
+                                                >
+                                                  <TableRow>
+                                                    <TableCell>
+                                                      <span
+                                                        className={`px-2 py-1 rounded text-xs font-semibold ${sourceBadge.className}`}
                                                       >
-                                                        <Edit className="w-3 h-3 mr-1" />
-                                                        編輯
-                                                      </Button>
-                                                      <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="h-7 px-2 text-xs text-red-600 border-red-300 hover:bg-red-50"
-                                                        onClick={() =>
-                                                          openCancelCreditPackageDialog(
-                                                            teacher.teacher_id,
-                                                            pkg,
-                                                          )
-                                                        }
+                                                        {sourceBadge.label}
+                                                      </span>
+                                                    </TableCell>
+                                                    <TableCell className="font-mono text-xs text-gray-600">
+                                                      {pkg.package_id}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-gray-600">
+                                                      {formatDate(
+                                                        pkg.purchased_at,
+                                                      )}{" "}
+                                                      →{" "}
+                                                      {formatDate(
+                                                        pkg.expires_at,
+                                                      )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <div className="space-y-1">
+                                                        <div className="text-sm">
+                                                          {pkg.points_used.toLocaleString()}{" "}
+                                                          /{" "}
+                                                          {pkg.points_total.toLocaleString()}
+                                                        </div>
+                                                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                                          <div
+                                                            className="bg-purple-500 h-1.5 rounded-full"
+                                                            style={{
+                                                              width: `${Math.min((pkg.points_used / pkg.points_total) * 100 || 0, 100)}%`,
+                                                            }}
+                                                          />
+                                                        </div>
+                                                      </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-sm">
+                                                      {pkg.price_paid > 0
+                                                        ? `NT$ ${pkg.price_paid.toLocaleString()}`
+                                                        : "-"}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <span
+                                                        className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                          pkg.status ===
+                                                          "active"
+                                                            ? "bg-green-100 text-green-700"
+                                                            : "bg-gray-100 text-gray-600"
+                                                        }`}
                                                       >
-                                                        刪除
-                                                      </Button>
-                                                    </div>
-                                                  </TableCell>
-                                                </TableRow>
+                                                        {pkg.status}
+                                                      </span>
+                                                    </TableCell>
+                                                    <TableCell
+                                                      onClick={(e) =>
+                                                        e.stopPropagation()
+                                                      }
+                                                    >
+                                                      <div className="flex justify-end gap-1">
+                                                        <Button
+                                                          size="sm"
+                                                          variant="outline"
+                                                          className="h-7 px-2 text-xs"
+                                                          onClick={() =>
+                                                            toggleCreditPackageHistory(
+                                                              pkg.id,
+                                                            )
+                                                          }
+                                                          disabled={
+                                                            !pkg
+                                                              .admin_operations
+                                                              ?.length
+                                                          }
+                                                          title={
+                                                            pkg.admin_operations
+                                                              ?.length
+                                                              ? `查看 ${pkg.admin_operations.length} 筆變更紀錄`
+                                                              : "尚無變更紀錄"
+                                                          }
+                                                        >
+                                                          {expandedCreditPackageIds.has(
+                                                            pkg.id,
+                                                          ) ? (
+                                                            <ChevronDown className="w-3 h-3 mr-1" />
+                                                          ) : (
+                                                            <ChevronRight className="w-3 h-3 mr-1" />
+                                                          )}
+                                                          紀錄
+                                                          {pkg.admin_operations
+                                                            ?.length
+                                                            ? ` (${pkg.admin_operations.length})`
+                                                            : ""}
+                                                        </Button>
+                                                        <Button
+                                                          size="sm"
+                                                          variant="outline"
+                                                          className="h-7 px-2 text-xs"
+                                                          onClick={() =>
+                                                            openEditCreditPackageDialog(
+                                                              teacher.teacher_id,
+                                                              pkg,
+                                                            )
+                                                          }
+                                                        >
+                                                          <Edit className="w-3 h-3 mr-1" />
+                                                          編輯
+                                                        </Button>
+                                                        <Button
+                                                          size="sm"
+                                                          variant="outline"
+                                                          className="h-7 px-2 text-xs text-red-600 border-red-300 hover:bg-red-50"
+                                                          onClick={() =>
+                                                            openCancelCreditPackageDialog(
+                                                              teacher.teacher_id,
+                                                              pkg,
+                                                            )
+                                                          }
+                                                        >
+                                                          刪除
+                                                        </Button>
+                                                      </div>
+                                                    </TableCell>
+                                                  </TableRow>
+                                                  {isHistoryOpen &&
+                                                    pkg.admin_operations &&
+                                                    pkg.admin_operations
+                                                      .length > 0 && (
+                                                      <TableRow
+                                                        key={`pkg-${pkg.id}-history`}
+                                                        className="bg-gray-50"
+                                                      >
+                                                        <TableCell
+                                                          colSpan={7}
+                                                          className="p-0"
+                                                        >
+                                                          <CreditPackageHistory
+                                                            operations={
+                                                              pkg.admin_operations
+                                                            }
+                                                          />
+                                                        </TableCell>
+                                                      </TableRow>
+                                                    )}
+                                                </React.Fragment>
                                               );
                                             })}
                                           </TableBody>

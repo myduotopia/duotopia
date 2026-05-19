@@ -12,7 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm.attributes import flag_modified
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from database import get_db
 from models import (
@@ -99,6 +99,9 @@ class CreditPackageResponse(BaseModel):
     # CreditPackage.expires_at is nullable=False so this is always set.
     expires_at: str
     status: str
+    # Full audit trail from admin_metadata.operations[] — every edit / cancel
+    # appends one entry. Empty list when no admin has touched the package.
+    admin_operations: List[Dict[str, Any]] = []
 
 
 # ============ Helper Functions ============
@@ -424,6 +427,18 @@ async def cancel_subscription(
 
 
 # ============ Credit Package Instance CRUD ============
+def _admin_operations(pkg: CreditPackage) -> List[Dict[str, Any]]:
+    """Return the operation history from ``pkg.admin_metadata`` as a list.
+
+    `admin_metadata` is a JSONB column shaped like ``{"operations": [...]}``
+    after the first admin write; anything else (None, missing key, wrong
+    type) is treated as no history so the response is always a list."""
+    if not isinstance(pkg.admin_metadata, dict):
+        return []
+    ops = pkg.admin_metadata.get("operations")
+    return ops if isinstance(ops, list) else []
+
+
 def _credit_package_response(pkg: CreditPackage) -> dict:
     # `CreditPackage.expires_at` is `nullable=False` in the DB schema, so it
     # is always set in practice — no None guard needed here.
@@ -436,6 +451,7 @@ def _credit_package_response(pkg: CreditPackage) -> dict:
         "points_remaining": pkg.points_remaining,
         "expires_at": pkg.expires_at.isoformat(),
         "status": pkg.status,
+        "admin_operations": _admin_operations(pkg),
     }
 
 
@@ -743,6 +759,7 @@ async def get_teacher_periods(
                 "expires_at": pkg.expires_at.isoformat() if pkg.expires_at else None,
                 "status": pkg.status,
                 "payment_id": pkg.payment_id,
+                "admin_operations": _admin_operations(pkg),
             }
         )
 
