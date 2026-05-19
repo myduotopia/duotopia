@@ -252,7 +252,15 @@ jobs:
           ISSUE=${{ needs.extract.outputs.issue_number }}
           SERVICE="duotopia-preview-issue-${ISSUE}-frontend"
           IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE}:${{ github.sha }}"
-          BACKEND_URL="${{ needs.deploy-backend.outputs.url }}"
+
+          # Construct backend URL locally instead of reading from deploy-backend.outputs.url:
+          # if any secret contains the ISSUE number as a substring, GitHub Actions strips
+          # the URL from job outputs (substring masking applies to outputs, not just logs),
+          # leaving the frontend built with an empty VITE_API_URL.
+          # The Cloud Run "fully-qualified" form (https://<service>-<projectNumber>.<region>.run.app)
+          # is deterministic so we can build it here without relying on `gcloud run describe`.
+          PROJECT_NUMBER=$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')
+          BACKEND_URL="https://duotopia-preview-issue-${ISSUE}-backend-${PROJECT_NUMBER}.${REGION}.run.app"
 
           echo "🔍 DEBUG: Backend URL: ${BACKEND_URL}"
           echo "🔍 DEBUG: Configuring docker"
@@ -327,7 +335,11 @@ jobs:
           echo "🔄 Updating backend FRONTEND_URL..."
           ISSUE=${{ needs.extract.outputs.issue_number }}
           SERVICE="duotopia-preview-issue-${ISSUE}-backend"
-          FRONTEND_URL="${{ needs.deploy-frontend.outputs.url }}"
+
+          # Construct frontend URL locally to avoid substring-masking on job outputs
+          # (see deploy-frontend step for full explanation).
+          PROJECT_NUMBER=$(gcloud projects describe "${{ env.PROJECT_ID }}" --format='value(projectNumber)')
+          FRONTEND_URL="https://duotopia-preview-issue-${ISSUE}-frontend-${PROJECT_NUMBER}.${{ env.REGION }}.run.app"
           ONE_CAMPUS_REDIRECT_URI="${FRONTEND_URL}/auth/1campus/callback"
 
           echo "📝 Frontend URL: ${FRONTEND_URL}"
@@ -434,16 +446,31 @@ jobs:
         with:
           fetch-depth: 2
 
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve project number for URL construction
+        id: gcp
+        run: |
+          PROJECT_NUMBER=$(gcloud projects describe "${{ env.PROJECT_ID }}" --format='value(projectNumber)')
+          echo "project_number=${PROJECT_NUMBER}" >> $GITHUB_OUTPUT
+
       - uses: actions/github-script@v7
         env:
           ISSUE: ${{ needs.extract.outputs.issue_number }}
-          BACKEND: ${{ needs.deploy-backend.outputs.url }}
-          FRONTEND: ${{ needs.deploy-frontend.outputs.url }}
+          PROJECT_NUMBER: ${{ steps.gcp.outputs.project_number }}
+          REGION: ${{ env.REGION }}
         with:
           script: |
             const issue = process.env.ISSUE;
-            const frontend = process.env.FRONTEND;
-            const backend = process.env.BACKEND;
+            // Construct URLs locally instead of reading from deploy-{backend,frontend}.outputs.url:
+            // if any secret string contains the ISSUE number as a substring, GitHub Actions
+            // strips the URL from job outputs (substring masking applies to outputs, not just logs).
+            const frontend = `https://duotopia-preview-issue-${issue}-frontend-${process.env.PROJECT_NUMBER}.${process.env.REGION}.run.app`;
+            const backend = `https://duotopia-preview-issue-${issue}-backend-${process.env.PROJECT_NUMBER}.${process.env.REGION}.run.app`;
             const sha = context.sha.substring(0, 7);
             const branch = context.ref.replace('refs/heads/', '');
             const now = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
