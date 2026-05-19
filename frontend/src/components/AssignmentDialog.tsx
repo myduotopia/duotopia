@@ -1501,6 +1501,7 @@ export function AssignmentDialog({
         setFormData((prev) => ({
           ...prev,
           practice_mode: "rearrangement",
+          time_limit_per_question: 30,
         }));
       }
     }
@@ -2953,7 +2954,8 @@ export function AssignmentDialog({
                               m.id !== "word_reading" &&
                               m.id !== "word_selection" &&
                               m.id !== "word_spelling" &&
-                              m.id !== "word_cloze",
+                              m.id !== "word_cloze" &&
+                              !m.id.startsWith("word_"),
                           )
                         : PRACTICE_MODES
                       ).map((m) => {
