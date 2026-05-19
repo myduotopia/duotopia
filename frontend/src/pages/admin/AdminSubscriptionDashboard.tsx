@@ -2812,7 +2812,7 @@ export default function AdminSubscriptionDashboard() {
                 disabled={
                   creditPackageSubmitting ||
                   !creditPackageEditForm.reason.trim() ||
-                  !creditPackageEditForm.points_total
+                  creditPackageEditForm.points_total === ""
                 }
               >
                 {creditPackageSubmitting ? (

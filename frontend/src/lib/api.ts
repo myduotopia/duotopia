@@ -134,6 +134,17 @@ export interface RegisterRequest {
   phone?: string;
 }
 
+interface AdminCreditPackageResult {
+  id: number;
+  package_id: string;
+  source: string;
+  points_total: number;
+  points_used: number;
+  points_remaining: number;
+  expires_at: string;
+  status: string;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -1533,35 +1544,23 @@ class ApiClient {
       reason: string;
     },
   ) {
-    return this.request<{
-      id: number;
-      package_id: string;
-      source: string;
-      points_total: number;
-      points_used: number;
-      points_remaining: number;
-      expires_at: string;
-      status: string;
-    }>(`/api/admin/subscription/credit-package/${packageId}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    });
+    return this.request<AdminCreditPackageResult>(
+      `/api/admin/subscription/credit-package/${packageId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      },
+    );
   }
 
   async adminCancelCreditPackage(packageId: number, data: { reason: string }) {
-    return this.request<{
-      id: number;
-      package_id: string;
-      source: string;
-      points_total: number;
-      points_used: number;
-      points_remaining: number;
-      expires_at: string;
-      status: string;
-    }>(`/api/admin/subscription/credit-package/${packageId}/cancel`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
+    return this.request<AdminCreditPackageResult>(
+      `/api/admin/subscription/credit-package/${packageId}/cancel`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    );
   }
 }
 

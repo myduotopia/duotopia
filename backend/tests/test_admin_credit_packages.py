@@ -121,7 +121,7 @@ def test_edit_credit_package_happy_path(
     assert body["expires_at"].startswith(new_expires)
 
     shared_test_session.expire_all()
-    row = shared_test_session.query(CreditPackage).get(active_package.id)
+    row = shared_test_session.get(CreditPackage, active_package.id)
     assert row.points_total == 1800
     assert row.admin_id == admin_teacher.id
     assert row.admin_reason == "Extending expiry per customer request"
@@ -145,7 +145,7 @@ def test_edit_credit_package_partial_points_only(
     assert response.status_code == 200
 
     shared_test_session.expire_all()
-    row = shared_test_session.query(CreditPackage).get(active_package.id)
+    row = shared_test_session.get(CreditPackage, active_package.id)
     assert row.points_total == 1500
     # expires_at untouched
     assert row.expires_at == active_package.expires_at
@@ -214,7 +214,23 @@ def test_edit_credit_package_already_refunded_rejected(
         headers=auth_headers_admin,
         json={"points_total": 500, "reason": "should fail"},
     )
-    assert response.status_code in (409, 422)
+    assert response.status_code == 422
+
+
+def test_edit_credit_package_points_equal_used_accepted(
+    active_package, auth_headers_admin, test_client, shared_test_session
+):
+    """points_total == points_used is the lower bound and must be accepted."""
+    response = test_client.put(
+        f"/api/admin/subscription/credit-package/{active_package.id}",
+        headers=auth_headers_admin,
+        json={"points_total": active_package.points_used, "reason": "exact match"},
+    )
+    assert response.status_code == 200, response.text
+
+    shared_test_session.expire_all()
+    row = shared_test_session.get(CreditPackage, active_package.id)
+    assert row.points_total == active_package.points_used
 
 
 def test_edit_credit_package_non_admin_forbidden(
@@ -252,7 +268,7 @@ def test_edit_credit_package_accumulates_history(
     )
 
     shared_test_session.expire_all()
-    row = shared_test_session.query(CreditPackage).get(active_package.id)
+    row = shared_test_session.get(CreditPackage, active_package.id)
     ops = row.admin_metadata.get("operations", [])
     assert len(ops) == 2
     assert [op["reason"] for op in ops] == ["first edit", "second edit"]
@@ -275,7 +291,7 @@ def test_cancel_credit_package_happy_path(
     assert body["status"] == "refunded"
 
     shared_test_session.expire_all()
-    row = shared_test_session.query(CreditPackage).get(active_package.id)
+    row = shared_test_session.get(CreditPackage, active_package.id)
     assert row.status == "refunded"
     assert row.admin_id == admin_teacher.id
     assert row.admin_reason == "Customer refund request"
@@ -312,7 +328,7 @@ def test_cancel_credit_package_already_refunded_rejected(
         headers=auth_headers_admin,
         json={"reason": "double cancel"},
     )
-    assert response.status_code in (409, 422)
+    assert response.status_code == 422
 
 
 def test_cancel_credit_package_non_admin_forbidden(

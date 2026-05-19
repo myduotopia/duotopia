@@ -96,6 +96,7 @@ class CreditPackageResponse(BaseModel):
     points_total: int
     points_used: int
     points_remaining: int
+    # CreditPackage.expires_at is nullable=False so this is always set.
     expires_at: str
     status: str
 
@@ -424,6 +425,8 @@ async def cancel_subscription(
 
 # ============ Credit Package Instance CRUD ============
 def _credit_package_response(pkg: CreditPackage) -> dict:
+    # `CreditPackage.expires_at` is `nullable=False` in the DB schema, so it
+    # is always set in practice — no None guard needed here.
     return {
         "id": pkg.id,
         "package_id": pkg.package_id,
@@ -431,7 +434,7 @@ def _credit_package_response(pkg: CreditPackage) -> dict:
         "points_total": pkg.points_total,
         "points_used": pkg.points_used,
         "points_remaining": pkg.points_remaining,
-        "expires_at": pkg.expires_at.isoformat() if pkg.expires_at else None,
+        "expires_at": pkg.expires_at.isoformat(),
         "status": pkg.status,
     }
 
@@ -536,7 +539,9 @@ async def edit_credit_package(
     return _credit_package_response(pkg)
 
 
-@router.post("/credit-package/{package_id}/cancel")
+@router.post(
+    "/credit-package/{package_id}/cancel", response_model=CreditPackageResponse
+)
 async def cancel_credit_package(
     package_id: int,
     request: CancelCreditPackageRequest,
