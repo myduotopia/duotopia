@@ -78,8 +78,11 @@ import WordClozeContextPreview from "@/components/activities/WordClozeContextPre
 import RearrangementPreview from "@/components/activities/RearrangementPreview";
 import ReadingPreview from "@/components/activities/ReadingPreview";
 
-// Issue #752 PoC: 預覽固定使用 contact@duotopia.co 的「翰林佳音 第二冊 Unit 1」
-const PREVIEW_VOCAB_CONTENT_ID = 282; // Warm up（單字集）
+// Issue #752 PoC: 預覽固定使用 contact@duotopia.co 的官方公開單字集
+// production 用 id 2212（"RPG" VOCABULARY_SET）；其他環境（staging / develop /
+// per-issue / local）沿用舊預覽教材 id 282（翰林佳音 第二冊 Warm up）
+const PREVIEW_VOCAB_CONTENT_ID =
+  import.meta.env.VITE_ENVIRONMENT === "production" ? 2212 : 282;
 
 interface Student {
   id: number;
@@ -3651,7 +3654,10 @@ export function AssignmentDialog({
                             )}
                           </h4>
                           <WordReadingPreview
-                            contentId={PREVIEW_VOCAB_CONTENT_ID}
+                            contentId={
+                              cartItems[0]?.contentId ??
+                              PREVIEW_VOCAB_CONTENT_ID
+                            }
                             settings={{
                               time_limit_per_question:
                                 formData.time_limit_per_question,
@@ -3669,7 +3675,10 @@ export function AssignmentDialog({
                             )}
                           </h4>
                           <WordSelectionPreview
-                            contentId={PREVIEW_VOCAB_CONTENT_ID}
+                            contentId={
+                              cartItems[0]?.contentId ??
+                              PREVIEW_VOCAB_CONTENT_ID
+                            }
                             settings={{
                               show_image: formData.show_image,
                               show_option_images: formData.show_option_images,
@@ -3689,7 +3698,10 @@ export function AssignmentDialog({
                             )}
                           </h4>
                           <WordSpellingPreview
-                            contentId={PREVIEW_VOCAB_CONTENT_ID}
+                            contentId={
+                              cartItems[0]?.contentId ??
+                              PREVIEW_VOCAB_CONTENT_ID
+                            }
                             settings={{
                               show_translation: formData.show_translation,
                               show_image: formData.show_image,
@@ -3710,7 +3722,10 @@ export function AssignmentDialog({
                             )}
                           </h4>
                           <WordClozeContextPreview
-                            contentId={PREVIEW_VOCAB_CONTENT_ID}
+                            contentId={
+                              cartItems[0]?.contentId ??
+                              PREVIEW_VOCAB_CONTENT_ID
+                            }
                             settings={{
                               show_translation: formData.show_translation,
                               play_audio: formData.play_audio,
