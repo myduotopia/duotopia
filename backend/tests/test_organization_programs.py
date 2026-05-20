@@ -1110,6 +1110,80 @@ class TestCopyToClassroom:
 
 
 # ============================================================================
+# Test Cases: Assignment copies must not appear in org materials (#785)
+# ============================================================================
+
+
+class TestAssignmentCopyExcludedFromOrgMaterials:
+    """Regression for #785: dispatched-assignment Content copies are stored
+    under the same Lesson as the template, but must NOT show up in the
+    organization materials listing or detail response."""
+
+    def _add_assignment_copy(self, test_db: Session, original: Content) -> Content:
+        copy = Content(
+            lesson_id=original.lesson_id,
+            type=original.type,
+            title=original.title,
+            order_index=original.order_index,
+            is_active=True,
+            is_assignment_copy=True,
+            source_content_id=original.id,
+        )
+        test_db.add(copy)
+        test_db.commit()
+        test_db.refresh(copy)
+        return copy
+
+    def test_list_excludes_assignment_copies(
+        self,
+        test_client: TestClient,
+        test_db: Session,
+        test_org: Organization,
+        test_org_with_materials: list,
+        owner_headers: dict,
+    ):
+        for program in test_org_with_materials:
+            for lesson in program.lessons:
+                for content in lesson.contents:
+                    self._add_assignment_copy(test_db, content)
+
+        response = test_client.get(
+            f"/api/organizations/{test_org.id}/programs",
+            headers=owner_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        for program in data:
+            for lesson in program["lessons"]:
+                assert (
+                    len(lesson["contents"]) == 1
+                ), "assignment copies leaked into materials list"
+
+    def test_detail_excludes_assignment_copies(
+        self,
+        test_client: TestClient,
+        test_db: Session,
+        test_org: Organization,
+        test_org_with_materials: list,
+        owner_headers: dict,
+    ):
+        program = test_org_with_materials[0]
+        original_content = program.lessons[0].contents[0]
+        self._add_assignment_copy(test_db, original_content)
+        self._add_assignment_copy(test_db, original_content)
+
+        response = test_client.get(
+            f"/api/organizations/{test_org.id}/programs/{program.id}",
+            headers=owner_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        contents = data["lessons"][0]["contents"]
+        assert len(contents) == 1
+        assert contents[0]["id"] == original_content.id
+
+
+# ============================================================================
 # Summary
 # ============================================================================
 

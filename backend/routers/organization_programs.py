@@ -235,8 +235,12 @@ def deep_copy_program(
         db.flush()  # Get new_lesson.id
 
         # Deep copy contents using canonical helper (includes all Phase 2 fields)
+        # Skip assignment copies: they're created per-assignment and must not be
+        # propagated into classroom copies of the template.
         for content in lesson.contents:
             if hasattr(content, "is_active") and not content.is_active:
+                continue
+            if getattr(content, "is_assignment_copy", False):
                 continue
             _copy_content_with_items(content, new_lesson.id, db)
 
@@ -306,6 +310,8 @@ async def list_organization_materials(
             lesson_data.contents = []
             for content in lesson.contents:
                 if hasattr(content, "is_active") and not content.is_active:
+                    continue
+                if getattr(content, "is_assignment_copy", False):
                     continue
                 content_data = ContentResponse.model_validate(content)
 
@@ -383,6 +389,8 @@ async def get_organization_material_details(
 
         for content in lesson.contents:
             if hasattr(content, "is_active") and not content.is_active:
+                continue
+            if getattr(content, "is_assignment_copy", False):
                 continue
             content_data = ContentResponse.model_validate(content)
             content_data.items = [
@@ -720,6 +728,8 @@ async def copy_material_to_classroom(
 
         for content in lesson.contents:
             if hasattr(content, "is_active") and not content.is_active:
+                continue
+            if getattr(content, "is_assignment_copy", False):
                 continue
             content_data = ContentResponse.model_validate(content)
             content_data.items = [
