@@ -26,7 +26,16 @@ from .dependencies import get_current_teacher
 router = APIRouter()
 
 # Auto-graded practice modes (matching students/assignments.py)
-AUTO_GRADED_MODES = frozenset({"rearrangement", "word_selection"})
+AUTO_GRADED_MODES = frozenset(
+    {"rearrangement", "word_selection", "word_spelling", "word_cloze"}
+)
+
+# Modes that derive interim mastery from calculate_assignment_mastery() —
+# all three accumulate correct/incorrect counts on
+# StudentItemProgress.word_selection_data, which the PG function reads.
+_MASTERY_FUNCTION_MODES = frozenset(
+    {"word_selection", "word_spelling", "word_cloze"}
+)
 
 
 def _get_total_item_count(assignment_id: int, db: Session) -> int:
@@ -57,7 +66,8 @@ def _compute_interim_score(sa, assignment, db: Session, total_items: int | None 
     Compute interim score for IN_PROGRESS auto-graded assignments.
     - GRADED/RETURNED: return sa.score (already finalized)
     - IN_PROGRESS + rearrangement: sum(expected_scores) / total_items
-    - IN_PROGRESS + word_selection: calculate_assignment_mastery DB function
+    - IN_PROGRESS + word_selection / word_spelling / word_cloze:
+      calculate_assignment_mastery DB function
 
     Args:
         total_items: Pre-computed total item count to avoid redundant DB queries.
@@ -90,7 +100,7 @@ def _compute_interim_score(sa, assignment, db: Session, total_items: int | None 
             return None
         return round(sum(valid_scores) / total_items, 1)
 
-    elif practice_mode == "word_selection":
+    elif practice_mode in _MASTERY_FUNCTION_MODES:
         try:
             result = db.execute(
                 text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
