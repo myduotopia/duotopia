@@ -33,9 +33,7 @@ AUTO_GRADED_MODES = frozenset(
 # Modes that derive interim mastery from calculate_assignment_mastery() —
 # all three accumulate correct/incorrect counts on
 # StudentItemProgress.word_selection_data, which the PG function reads.
-_MASTERY_FUNCTION_MODES = frozenset(
-    {"word_selection", "word_spelling", "word_cloze"}
-)
+_MASTERY_FUNCTION_MODES = frozenset({"word_selection", "word_spelling", "word_cloze"})
 
 
 def _get_total_item_count(assignment_id: int, db: Session) -> int:
