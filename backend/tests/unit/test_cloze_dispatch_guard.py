@@ -34,25 +34,39 @@ def _content(title, items, ctype=ContentType.VOCABULARY_SET):
 
 class TestCollectMissingClozeAnswer:
     def test_only_runs_for_word_cloze(self):
-        content = _content("Set A", [_item("swim", "He swam.")])
-        # swim→swam not auto-extractable, but mode is not word_cloze → no guard
+        content = _content("Set A", [_item("cup", "Two cups please.")])
+        # No cloze_answer set, but mode is not word_cloze → guard does not run
         assert _collect_contents_missing_cloze_answer([content], "reading") == []
 
-    def test_flags_item_with_unusable_answer(self):
-        content = _content("Irregulars", [_item("swim", "He swam across.")])
+    def test_flags_item_without_answer_even_if_autoextractable(self):
+        # Regression for the reported bug: a regular word whose form appears in
+        # the sentence used to slip through via auto-extraction. The teacher
+        # never confirmed an answer, so it MUST be blocked.
+        content = _content("Unconfirmed", [_item("cup", "Two cups please.")])
         result = _collect_contents_missing_cloze_answer([content], "word_cloze")
-        assert result == ["Irregulars"]
+        assert result == ["Unconfirmed"]
 
-    def test_persisted_answer_satisfies_guard(self):
+    def test_flags_item_with_empty_answer(self):
+        content = _content("Empty", [_item("swim", "He swam across.")])
+        result = _collect_contents_missing_cloze_answer([content], "word_cloze")
+        assert result == ["Empty"]
+
+    def test_set_answer_satisfies_guard(self):
         content = _content(
             "Fixed",
             [_item("swim", "He swam across.", cloze_answer="swam")],
         )
         assert _collect_contents_missing_cloze_answer([content], "word_cloze") == []
 
-    def test_autoextractable_answer_satisfies_guard(self):
-        content = _content("Regulars", [_item("cup", "Two cups please.")])
-        assert _collect_contents_missing_cloze_answer([content], "word_cloze") == []
+    def test_stale_answer_not_in_sentence_is_flagged(self):
+        # cloze_answer was set but the sentence has since changed and no longer
+        # contains it → the blank can't render, so block until re-confirmed.
+        content = _content(
+            "Stale",
+            [_item("cup", "I drink water.", cloze_answer="cups")],
+        )
+        result = _collect_contents_missing_cloze_answer([content], "word_cloze")
+        assert result == ["Stale"]
 
     def test_item_without_example_skipped(self):
         # No example sentence → owned by EXAMPLE_SENTENCE_REQUIRED, not this guard
@@ -62,14 +76,18 @@ class TestCollectMissingClozeAnswer:
 
 class TestRaiseIfMissingExamples:
     def test_raises_cloze_answer_required(self):
-        content = _content("Irregulars", [_item("swim", "He swam across.")])
+        # Has example + audio but no confirmed cloze answer → CLOZE_ANSWER_REQUIRED
+        content = _content("Unconfirmed", [_item("cup", "Two cups please.")])
         with pytest.raises(HTTPException) as exc:
             _raise_if_missing_examples([content], "word_cloze", play_audio=False)
         assert exc.value.status_code == 422
         assert exc.value.detail["code"] == "CLOZE_ANSWER_REQUIRED"
-        assert exc.value.detail["content_titles"] == ["Irregulars"]
+        assert exc.value.detail["content_titles"] == ["Unconfirmed"]
 
-    def test_no_raise_when_all_answers_usable(self):
-        content = _content("Regulars", [_item("cup", "Two cups please.")])
+    def test_no_raise_when_answer_is_set(self):
+        content = _content(
+            "Confirmed",
+            [_item("cup", "Two cups please.", cloze_answer="cups")],
+        )
         # Should not raise
         _raise_if_missing_examples([content], "word_cloze", play_audio=False)

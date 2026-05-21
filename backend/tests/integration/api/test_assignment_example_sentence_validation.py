@@ -168,6 +168,7 @@ def _add_vocab_content(db, lesson_id: int, title: str, items: list[dict]) -> int
                 example_sentence=it.get("example_sentence"),
                 example_sentence_translation=it.get("example_sentence_translation"),
                 example_sentence_audio_url=it.get("example_sentence_audio_url"),
+                cloze_answer=it.get("cloze_answer"),
             )
         )
     db.commit()
@@ -596,6 +597,9 @@ def _full_text_item(*, audio_url: str | None = "https://cdn/example/cat.mp3") ->
         "example_sentence": "The cat is sleeping.",
         "example_sentence_translation": "貓在睡覺。",
         "example_sentence_audio_url": audio_url,
+        # Issue #632: a complete vocab item carries a confirmed cloze answer so
+        # word_cloze dispatch isn't blocked by the cloze-answer guard.
+        "cloze_answer": "cat",
     }
 
 
@@ -735,6 +739,36 @@ def test_create_allows_word_cloze_without_play_audio_when_audio_missing(fresh_db
         ),
     )
     assert resp.status_code == 200, resp.text
+
+
+def test_create_rejects_word_cloze_when_cloze_answer_not_set(fresh_db):
+    """Issue #632: dispatching word_cloze on a vocab set whose items have no
+    confirmed cloze_answer must be blocked — even when the answer would be
+    auto-extractable — so the teacher sets/reviews it first."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    # Complete item (sentence + translation + audio) but cloze_answer omitted.
+    item = _full_text_item()
+    item.pop("cloze_answer")
+    content_id = _add_vocab_content(db, seed["lesson_id"], "Unconfirmed Cloze", [item])
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_cloze",
+            play_audio=False,
+        ),
+    )
+
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "CLOZE_ANSWER_REQUIRED"
+    assert detail["content_titles"] == ["Unconfirmed Cloze"]
 
 
 def test_create_audio_validation_lists_only_offenders(fresh_db):

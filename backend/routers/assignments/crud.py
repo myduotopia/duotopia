@@ -137,13 +137,17 @@ def _collect_contents_missing_audio(
 def _collect_contents_missing_cloze_answer(
     contents: List[Content], practice_mode: Optional[str]
 ) -> List[str]:
-    """Return titles of contents whose items lack a usable cloze answer.
+    """Return titles of contents whose items lack an explicit cloze answer.
 
-    Issue #632: word_cloze needs a fill-in answer for each item. The answer is
-    either the teacher-confirmed ``cloze_answer`` or auto-extractable from the
-    example sentence. An item that has an example sentence but yields no
-    answer (e.g. irregular form the auto-extractor can't catch) must be fixed
-    by the teacher in the vocab set / assignment copy before dispatch.
+    Issue #632: word_cloze requires the teacher to have *set* (and thereby
+    reviewed) a ``cloze_answer`` for each vocab item — we deliberately do NOT
+    fall back to runtime auto-extraction here. Auto-extraction can be wrong
+    (irregular forms, ambiguous targets), so dispatching a vocab set whose
+    answers were never confirmed must be blocked; the teacher fixes it in the
+    vocab set editor (the AI flow pre-fills the answer for confirmation).
+
+    An item is "missing" when, for word_cloze, its ``cloze_answer`` is empty
+    or no longer appears in the current example sentence (stale after an edit).
 
     Items without an example sentence are skipped — they're already rejected
     by ``_collect_contents_missing_examples`` upstream.
@@ -151,15 +155,16 @@ def _collect_contents_missing_cloze_answer(
     if practice_mode != "word_cloze":
         return []
 
-    from utils.cloze import extract_cloze_for_item
+    from utils.cloze import find_cloze_match
 
     missing_titles: List[str] = []
     for content in contents:
         for item in content.content_items:
-            is_vocab = content.type in _VOCABULARY_CONTENT_TYPES
-            if is_vocab and not (item.example_sentence or "").strip():
+            example = (item.example_sentence or "").strip()
+            if content.type in _VOCABULARY_CONTENT_TYPES and not example:
                 continue  # caller's example check owns this case
-            if extract_cloze_for_item(item) is None:
+            answer = (item.cloze_answer or "").strip()
+            if not answer or find_cloze_match(answer, example) is None:
                 missing_titles.append(content.title)
                 break
     return missing_titles
