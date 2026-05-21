@@ -594,3 +594,68 @@ class TestReorderProgramDirectContents:
         c2_reloaded = test_db.query(Content).filter(Content.id == c2.id).one()
         assert c1_reloaded.order_index == 99
         assert c2_reloaded.order_index == 1
+
+
+# ============================================================================
+# 8. GET /api/teachers/programs serializes program-direct contents
+#    (regression for issue #587 comment: created content vanished on refresh)
+# ============================================================================
+
+
+class TestProgramsListIncludesProgramDirectContents:
+    def test_get_teacher_programs_returns_program_contents(
+        self,
+        authenticated_client: TestClient,
+        test_db: Session,
+        teacher_program: Program,
+    ):
+        """The programs list must expose program-direct contents under
+        program["contents"], otherwise newly-created content disappears
+        after a page refresh."""
+        # A lesson with one content (must appear under lessons[].contents)
+        lesson = Lesson(
+            program_id=teacher_program.id, name="L1", order_index=0, is_active=True
+        )
+        test_db.add(lesson)
+        test_db.commit()
+        test_db.add(
+            Content(
+                lesson_id=lesson.id,
+                type=ContentType.EXAMPLE_SENTENCES,
+                title="In lesson",
+                order_index=0,
+            )
+        )
+        # A program-direct content (must appear under program["contents"])
+        program_direct = Content(
+            lesson_id=None,
+            program_id=teacher_program.id,
+            type=ContentType.EXAMPLE_SENTENCES,
+            title="Direct under program",
+            order_index=1,
+        )
+        test_db.add(program_direct)
+        test_db.commit()
+        test_db.refresh(program_direct)
+        test_db.add(
+            ContentItem(content_id=program_direct.id, order_index=0, text="hello world")
+        )
+        test_db.commit()
+
+        response = authenticated_client.get("/api/teachers/programs")
+        assert response.status_code == 200, response.text
+
+        programs = response.json()
+        program = next(p for p in programs if p["id"] == teacher_program.id)
+
+        assert "contents" in program, "program payload must include 'contents'"
+        direct_titles = {c["title"] for c in program["contents"]}
+        assert "Direct under program" in direct_titles
+        assert "In lesson" not in direct_titles  # lesson content stays under lessons
+
+        direct = next(
+            c for c in program["contents"] if c["title"] == "Direct under program"
+        )
+        assert direct["lesson_id"] is None
+        assert direct["program_id"] == teacher_program.id
+        assert direct["items_count"] == 1

@@ -55,6 +55,8 @@ async def get_teacher_programs(
                 selectinload(Program.lessons)
                 .selectinload(Lesson.contents)
                 .selectinload(Content.content_items),
+                # Issue #587: program-direct contents (lesson_id IS NULL)
+                selectinload(Program.contents).selectinload(Content.content_items),
             )
         )
     # 如果提供 organization_id，返回該組織的共用教材（不限制 teacher_id）
@@ -71,6 +73,8 @@ async def get_teacher_programs(
                 selectinload(Program.lessons)
                 .selectinload(Lesson.contents)
                 .selectinload(Content.content_items),
+                # Issue #587: program-direct contents (lesson_id IS NULL)
+                selectinload(Program.contents).selectinload(Content.content_items),
             )
         )
     # 否則返回教師的個人課程（原有邏輯）
@@ -89,6 +93,8 @@ async def get_teacher_programs(
                 selectinload(Program.lessons)
                 .selectinload(Lesson.contents)
                 .selectinload(Content.content_items),
+                # Issue #587: program-direct contents (lesson_id IS NULL)
+                selectinload(Program.contents).selectinload(Content.content_items),
             )
         )
 
@@ -170,6 +176,39 @@ async def get_teacher_programs(
                     }
                 )
 
+        # Issue #587: program-direct contents (lesson_id IS NULL)
+        program_contents_data = []
+        for content in sorted(program.contents, key=lambda x: x.order_index):
+            if not content.is_active or content.is_assignment_copy:
+                continue
+            pc_items = []
+            if content.content_items:
+                for item in sorted(content.content_items, key=lambda x: x.order_index):
+                    pc_items.append(
+                        {
+                            "id": item.id,
+                            "text": item.text,
+                            "translation": item.translation,
+                            "audio_url": item.audio_url,
+                            "order_index": item.order_index,
+                            "image_url": item.image_url,
+                        }
+                    )
+            program_contents_data.append(
+                {
+                    "id": content.id,
+                    "title": content.title,
+                    "type": content.type,
+                    "lesson_id": None,
+                    "program_id": program.id,
+                    "items": pc_items,
+                    "items_count": len(pc_items),
+                    "order_index": content.order_index,
+                    "level": content.level,
+                    "tags": content.tags or [],
+                }
+            )
+
         result.append(
             {
                 "id": program.id,
@@ -193,6 +232,8 @@ async def get_teacher_programs(
                 "tags": program.tags or [],
                 "visibility": program.visibility,
                 "lessons": lessons_data,
+                # Issue #587: contents directly under the program (no lesson)
+                "contents": program_contents_data,
             }
         )
 

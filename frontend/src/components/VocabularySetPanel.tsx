@@ -2799,18 +2799,25 @@ const VocabularySetPanel = forwardRef<
                 ...saveData,
               });
 
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let savedContent = newContent as any;
           if (programId && saveData.items && saveData.items.length > 0) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const created = newContent as any;
-            await apiClient.updateContent(created.id, {
+            await apiClient.updateContent(savedContent.id, {
               title: saveData.title,
               items: saveData.items,
             });
+            // Issue #587: merge items back so the content card doesn't show
+            // "0 items" until a full page refresh.
+            savedContent = {
+              ...savedContent,
+              items: saveData.items,
+              items_count: saveData.items.length,
+            };
           }
 
           toast.success(t("contentEditor.messages.contentCreatedSuccess"));
           if (onSave) {
-            await onSave(newContent);
+            await onSave(savedContent);
           }
         } catch (error) {
           console.error("Failed to create content:", error);

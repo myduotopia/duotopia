@@ -1398,21 +1398,31 @@ const ReadingAssessmentPanel = forwardRef<
 
         // For program-direct creation we only sent type+title above; if there
         // are items to persist, do an update right after to fill them in.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let savedContent = newContent as any;
         if (programId && saveData.items && saveData.items.length > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const created = newContent as any;
-          await apiClient.updateContent(created.id, {
+          await apiClient.updateContent(savedContent.id, {
             title: saveData.title,
             items: saveData.items,
             target_wpm: saveData.target_wpm,
             target_accuracy: saveData.target_accuracy,
           });
+          // Issue #587: createProgramContent only returns type+title, so merge
+          // items back in before handing to onSave — otherwise the content card
+          // renders "0 items" until a full page refresh.
+          savedContent = {
+            ...savedContent,
+            items: saveData.items,
+            items_count: saveData.items.length,
+          };
         }
 
         toast.success(t("contentEditor.messages.contentCreatedSuccess"));
         if (onSave) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (onSave as (content?: any) => void | Promise<void>)(newContent);
+          await (onSave as (content?: any) => void | Promise<void>)(
+            savedContent,
+          );
         }
       } catch (error: unknown) {
         console.error("Failed to create content:", error);
