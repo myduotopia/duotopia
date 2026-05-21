@@ -134,6 +134,31 @@ export interface RegisterRequest {
   phone?: string;
 }
 
+export interface AdminCreditPackageOperation {
+  action: "edit" | "cancel" | string;
+  timestamp: string;
+  admin_id: number;
+  admin_email?: string;
+  admin_name?: string;
+  reason: string;
+  changes: Record<
+    string,
+    { from: unknown; to: unknown } | string | number | boolean
+  >;
+}
+
+interface AdminCreditPackageResult {
+  id: number;
+  package_id: string;
+  source: string;
+  points_total: number;
+  points_used: number;
+  points_remaining: number;
+  expires_at: string;
+  status: string;
+  admin_operations: AdminCreditPackageOperation[];
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -1522,6 +1547,34 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify(data),
     });
+  }
+
+  // ============ Admin Credit Package Instance Methods ============
+  async adminEditCreditPackage(
+    packageId: number,
+    data: {
+      points_total?: number;
+      expires_at?: string; // YYYY-MM-DD
+      reason: string;
+    },
+  ) {
+    return this.request<AdminCreditPackageResult>(
+      `/api/admin/subscription/credit-package/${packageId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      },
+    );
+  }
+
+  async adminCancelCreditPackage(packageId: number, data: { reason: string }) {
+    return this.request<AdminCreditPackageResult>(
+      `/api/admin/subscription/credit-package/${packageId}/cancel`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    );
   }
 }
 
