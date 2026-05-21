@@ -242,6 +242,11 @@ class ContentItem(Base):
     # 儲存格式: ["干擾項1", "干擾項2", "干擾項3"]
     distractors = Column(JSON, nullable=True)
 
+    # 單字克漏字答案（word_cloze 練習用）— 例句中要被挖空的單字/片語的實際變體形式
+    # 例如：base "cup" + 例句 "I have two cups" → cloze_answer = "cups"
+    # 儲存時自動抽取（見 utils/cloze.py），老師可在單字集 / 作業副本中手動覆寫
+    cloze_answer = Column(Text, nullable=True)
+
     item_metadata = Column(JSON, default={})
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
