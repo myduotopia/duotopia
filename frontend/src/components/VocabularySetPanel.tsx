@@ -271,6 +271,8 @@ interface ContentRow {
   example_sentence_japanese?: string; // 例句日文翻譯
   example_sentence_korean?: string; // 例句韓文翻譯
   example_sentence_audio_url?: string; // 例句音檔 URL
+  // Issue #632: 單字克漏字答案（例句中要被挖空的單字/片語的實際變體）
+  cloze_answer?: string;
   // 干擾項（單字選擇題用）
   // Issue #631 / #729: canonical shape is { text, image_url }. Legacy data may
   // still be string[]; both shapes flow through unchanged so we don't drop
@@ -300,6 +302,7 @@ interface ApiContentItem {
   example_sentence_japanese?: string;
   example_sentence_korean?: string;
   example_sentence_audio_url?: string;
+  cloze_answer?: string;
   selectedSentenceLanguage?: SentenceTranslationLanguage;
 }
 
@@ -367,6 +370,7 @@ function mapApiItemToRow(item: ApiContentItem, index: number): ContentRow {
     example_sentence_japanese,
     example_sentence_korean,
     example_sentence_audio_url: item.example_sentence_audio_url || "",
+    cloze_answer: item.cloze_answer || "",
     partsOfSpeech: item.parts_of_speech || [],
     distractors: item.distractors,
   };
@@ -1117,6 +1121,168 @@ const TTSModal = ({
   );
 };
 
+// Issue #632: 單字克漏字答案編輯器。
+// 顯示例句，老師可「點擊單字」或「框選片語」把它設為克漏字答案；
+// 答案會在例句中以高亮標示。空白時提示老師補齊（派發 word_cloze 作業的前提）。
+interface ClozeAnswerEditorProps {
+  sentence: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}
+
+export function ClozeAnswerEditor({
+  sentence,
+  value,
+  onChange,
+  disabled = false,
+}: ClozeAnswerEditorProps) {
+  const { t } = useTranslation();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const answer = (value || "").trim();
+  const lowerSentence = sentence.toLowerCase();
+  const matchStart = answer ? lowerSentence.indexOf(answer.toLowerCase()) : -1;
+  const matchEnd = matchStart >= 0 ? matchStart + answer.length : -1;
+
+  // 將例句切成「單字 token」與「間隔文字」，保留原始字元位移以判斷高亮範圍。
+  const segments: Array<{
+    text: string;
+    start: number;
+    end: number;
+    isWord: boolean;
+  }> = [];
+  const wordRegex = /[\p{L}\p{N}']+/gu;
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = wordRegex.exec(sentence)) !== null) {
+    if (m.index > lastIndex) {
+      segments.push({
+        text: sentence.slice(lastIndex, m.index),
+        start: lastIndex,
+        end: m.index,
+        isWord: false,
+      });
+    }
+    segments.push({
+      text: m[0],
+      start: m.index,
+      end: m.index + m[0].length,
+      isWord: true,
+    });
+    lastIndex = m.index + m[0].length;
+  }
+  if (lastIndex < sentence.length) {
+    segments.push({
+      text: sentence.slice(lastIndex),
+      start: lastIndex,
+      end: sentence.length,
+      isWord: false,
+    });
+  }
+
+  const handleUseSelection = () => {
+    if (disabled) return;
+    const selected = window.getSelection()?.toString().trim() || "";
+    if (!selected) {
+      toast.error(t("vocabularySet.cloze.noSelection"));
+      return;
+    }
+    // 只接受確實出現在例句中的片語，避免存到例句以外的文字。
+    const idx = lowerSentence.indexOf(selected.toLowerCase());
+    if (idx < 0) {
+      toast.error(t("vocabularySet.cloze.selectionNotInSentence"));
+      return;
+    }
+    onChange(sentence.slice(idx, idx + selected.length));
+  };
+
+  return (
+    <div
+      className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded-lg"
+      data-testid="cloze-editor"
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-medium text-purple-700">
+          {t("vocabularySet.cloze.label")}
+        </span>
+        {answer ? (
+          <span
+            className="text-xs px-2 py-0.5 rounded bg-purple-200 text-purple-800 font-semibold"
+            data-testid="cloze-current"
+          >
+            {answer}
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => onChange("")}
+                className="ml-1 text-purple-600 hover:text-purple-900"
+                title={t("vocabularySet.cloze.clear")}
+                data-testid="cloze-clear"
+              >
+                ×
+              </button>
+            )}
+          </span>
+        ) : (
+          <span
+            className="text-xs text-amber-600"
+            data-testid="cloze-empty-hint"
+          >
+            {t("vocabularySet.cloze.emptyHint")}
+          </span>
+        )}
+      </div>
+
+      <div
+        ref={containerRef}
+        className="text-sm leading-7 select-text"
+        data-testid="cloze-sentence"
+      >
+        {segments.map((seg, i) => {
+          if (!seg.isWord) {
+            return <span key={i}>{seg.text}</span>;
+          }
+          const highlighted =
+            matchStart >= 0 && seg.start >= matchStart && seg.end <= matchEnd;
+          return (
+            <button
+              key={i}
+              type="button"
+              disabled={disabled}
+              onClick={() => !disabled && onChange(seg.text)}
+              className={`rounded px-0.5 ${
+                highlighted
+                  ? "bg-purple-300 text-purple-900 font-semibold"
+                  : "hover:bg-purple-100"
+              } ${disabled ? "cursor-default" : "cursor-pointer"}`}
+              data-testid="cloze-word"
+            >
+              {seg.text}
+            </button>
+          );
+        })}
+      </div>
+
+      {!disabled && (
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleUseSelection}
+            className="text-xs px-2 py-1 rounded border border-purple-300 text-purple-700 hover:bg-purple-100"
+            data-testid="cloze-use-selection"
+          >
+            {t("vocabularySet.cloze.usePhrase")}
+          </button>
+          <span className="text-xs text-gray-500">
+            {t("vocabularySet.cloze.hint")}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // SortableRowInner component with complete functionality
 interface SortableRowInnerProps {
   row: ContentRow;
@@ -1649,6 +1815,16 @@ function SortableRowInner({
         </div>
       </div>
 
+      {/* Issue #632: 單字克漏字答案編輯（有例句時才顯示）
+        老師可點擊單字或框選片語設為克漏字答案；作業副本同樣可調整。 */}
+      {row.example_sentence && row.example_sentence.trim() && (
+        <ClozeAnswerEditor
+          sentence={row.example_sentence}
+          value={row.cloze_answer || ""}
+          onChange={(v) => handleUpdateRow(index, "cloze_answer", v)}
+        />
+      )}
+
       {/* 干擾項編輯區塊（僅在作業副本模式 + 有干擾項時顯示）
         Issue #729: distractors may be legacy string[] or { text, image_url }[].
         When showOptionImages=true the snapshotted images are committed and
@@ -1970,6 +2146,7 @@ const VocabularySetPanel = forwardRef<
       selectedWordLanguage: row.selectedWordLanguage, // 記錄最後選擇的語言
       example_sentence: row.example_sentence,
       example_sentence_translation: row.example_sentence_translation,
+      cloze_answer: row.cloze_answer || "",
       parts_of_speech: row.partsOfSpeech || [],
       ...(row.distractors ? { distractors: row.distractors } : {}),
     }));
@@ -2086,6 +2263,7 @@ const VocabularySetPanel = forwardRef<
       example_sentence_translation: exampleTranslation,
       example_sentence_translation_lang: sentenceLang,
       example_sentence_audio_url: row.example_sentence_audio_url || "",
+      cloze_answer: row.cloze_answer || "",
       parts_of_speech: row.partsOfSpeech || [],
       ...(row.audioSettings ? { audio_settings: row.audioSettings } : {}),
       ...(row.distractors ? { distractors: row.distractors } : {}),
@@ -3246,10 +3424,11 @@ const VocabularySetPanel = forwardRef<
       targetIndices.forEach((idx) => {
         const targetWord = newRows[idx].text;
 
-        // 先清空現有的例句、翻譯與音檔，避免殘留舊資料
+        // 先清空現有的例句、翻譯、音檔與克漏字答案，避免殘留舊資料
         newRows[idx].example_sentence = "";
         newRows[idx].example_sentence_translation = "";
         newRows[idx].example_sentence_audio_url = "";
+        newRows[idx].cloze_answer = "";
 
         // 使用 Map 查找對應的句子（O(1) 複雜度）
         const matchedResult = resultMap.get(targetWord);
@@ -3263,6 +3442,8 @@ const VocabularySetPanel = forwardRef<
           if (matchedResult.audio_url) {
             newRows[idx].example_sentence_audio_url = matchedResult.audio_url;
           }
+          // Issue #632: AI 生成例句後立即帶入抽取的克漏字答案供老師確認
+          newRows[idx].cloze_answer = matchedResult.cloze_answer || "";
         } else {
           console.warn(
             `No sentence found for word: ${targetWord} at index ${idx}`,
@@ -3774,6 +3955,7 @@ const VocabularySetPanel = forwardRef<
               if (!s) return;
               const idx = needsExamples[i];
               currentRows[idx].example_sentence = s.sentence || "";
+              currentRows[idx].cloze_answer = s.cloze_answer || "";
               if (s.translation) {
                 currentRows[idx].example_sentence_translation = s.translation;
               }
@@ -4111,6 +4293,7 @@ const VocabularySetPanel = forwardRef<
             const sentencesData = response.sentences || [];
             if (sentencesData[0]) {
               newItem.example_sentence = sentencesData[0].sentence || "";
+              newItem.cloze_answer = sentencesData[0].cloze_answer || "";
               if (sentencesData[0].translation) {
                 newItem.example_sentence_translation =
                   sentencesData[0].translation;

@@ -1209,6 +1209,7 @@ class ApiClient {
       translation?: string;
       word: string;
       audio_url?: string | null;
+      cloze_answer?: string | null;
     }>;
   }> {
     return this.request("/api/teachers/generate-sentences", {

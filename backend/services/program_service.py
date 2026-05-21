@@ -105,6 +105,10 @@ def _copy_content_with_items(
             distractors=deepcopy(original_item.distractors)
             if hasattr(original_item, "distractors") and original_item.distractors
             else None,
+            # Issue #632: 克漏字答案隨教材複製一併帶過
+            cloze_answer=original_item.cloze_answer
+            if hasattr(original_item, "cloze_answer")
+            else None,
             item_metadata=deepcopy(original_item.item_metadata)
             if hasattr(original_item, "item_metadata") and original_item.item_metadata
             else {},
