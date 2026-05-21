@@ -2746,6 +2746,10 @@
       "updateFailed": "更新失敗，但音檔已生成"
     }
   },
+  "classGradeDownload": {
+    "downloadStarted": "成績單已開始下載",
+    "downloadFailed": "下載失敗，請稍後再試"
+  },
   "classroomDetail": {
     "title": "班級詳情",
     "messages": {
@@ -2803,6 +2807,8 @@
       "backToList": "返回班級列表",
       "backToProgramList": "返回模板課程列表",
       "addStudent": "新增學生",
+      "downloadStudentGrades": "下載學生成績",
+      "downloadClassGrades": "下載成績單",
       "createProgram": "建立課程",
       "assignNewHomework": "指派新作業",
       "batchArchive": "批次封存",
