@@ -4686,8 +4686,8 @@
       "label": "克漏字答案",
       "emptyHint": "尚未設定 — 派發單字克漏字作業前需補齊",
       "clear": "清除答案",
-      "usePhrase": "使用選取片語",
-      "hint": "點擊單字或框選片語即可設為答案",
+      "usePhrase": "新增答案",
+      "hint": "單字點兩下即成為答案；片語請圈選後按「新增答案」",
       "noSelection": "請先在例句中選取文字",
       "selectionNotInSentence": "選取的文字必須來自例句"
     }

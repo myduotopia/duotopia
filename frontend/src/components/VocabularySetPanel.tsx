@@ -1122,7 +1122,9 @@ const TTSModal = ({
 };
 
 // Issue #632: 單字克漏字答案編輯器。
-// 顯示例句，老師可「點擊單字」或「框選片語」把它設為克漏字答案；
+// 例句以「純文字」呈現，可自由圈選（不再把每個字做成按鈕，避免片語圈選卡頓）：
+//   - 單字：點兩下（double-click，瀏覽器會自動選取該字）即成為答案
+//   - 片語：圈選文字後點「新增答案」按鈕即成為答案
 // 答案會在例句中以高亮標示。空白時提示老師補齊（派發 word_cloze 作業的前提）。
 interface ClozeAnswerEditorProps {
   sentence: string;
@@ -1138,63 +1140,34 @@ export function ClozeAnswerEditor({
   disabled = false,
 }: ClozeAnswerEditorProps) {
   const { t } = useTranslation();
-  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const answer = (value || "").trim();
   const lowerSentence = sentence.toLowerCase();
   const matchStart = answer ? lowerSentence.indexOf(answer.toLowerCase()) : -1;
   const matchEnd = matchStart >= 0 ? matchStart + answer.length : -1;
+  const hasHighlight = matchStart >= 0;
 
-  // 將例句切成「單字 token」與「間隔文字」，保留原始字元位移以判斷高亮範圍。
-  const segments: Array<{
-    text: string;
-    start: number;
-    end: number;
-    isWord: boolean;
-  }> = [];
-  const wordRegex = /[\p{L}\p{N}']+/gu;
-  let lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = wordRegex.exec(sentence)) !== null) {
-    if (m.index > lastIndex) {
-      segments.push({
-        text: sentence.slice(lastIndex, m.index),
-        start: lastIndex,
-        end: m.index,
-        isWord: false,
-      });
-    }
-    segments.push({
-      text: m[0],
-      start: m.index,
-      end: m.index + m[0].length,
-      isWord: true,
-    });
-    lastIndex = m.index + m[0].length;
-  }
-  if (lastIndex < sentence.length) {
-    segments.push({
-      text: sentence.slice(lastIndex),
-      start: lastIndex,
-      end: sentence.length,
-      isWord: false,
-    });
-  }
-
-  const handleUseSelection = () => {
-    if (disabled) return;
+  // 取得目前選取的文字，驗證它確實出現在例句中後設為答案（保留例句原始大小寫）。
+  const commitSelection = (showErrors: boolean): boolean => {
+    if (disabled) return false;
     const selected = window.getSelection()?.toString().trim() || "";
     if (!selected) {
-      toast.error(t("vocabularySet.cloze.noSelection"));
-      return;
+      if (showErrors) toast.error(t("vocabularySet.cloze.noSelection"));
+      return false;
     }
-    // 只接受確實出現在例句中的片語，避免存到例句以外的文字。
     const idx = lowerSentence.indexOf(selected.toLowerCase());
     if (idx < 0) {
-      toast.error(t("vocabularySet.cloze.selectionNotInSentence"));
-      return;
+      if (showErrors)
+        toast.error(t("vocabularySet.cloze.selectionNotInSentence"));
+      return false;
     }
     onChange(sentence.slice(idx, idx + selected.length));
+    return true;
+  };
+
+  // 點兩下：瀏覽器會自動選取整個單字，直接採用為答案（不跳錯誤）。
+  const handleDoubleClick = () => {
+    commitSelection(false);
   };
 
   return (
@@ -1235,40 +1208,31 @@ export function ClozeAnswerEditor({
       </div>
 
       <div
-        ref={containerRef}
-        className="text-sm leading-7 select-text"
+        className="text-sm leading-7 select-text cursor-text"
         data-testid="cloze-sentence"
+        onDoubleClick={handleDoubleClick}
       >
-        {segments.map((seg, i) => {
-          if (!seg.isWord) {
-            return <span key={i}>{seg.text}</span>;
-          }
-          const highlighted =
-            matchStart >= 0 && seg.start >= matchStart && seg.end <= matchEnd;
-          return (
-            <button
-              key={i}
-              type="button"
-              disabled={disabled}
-              onClick={() => !disabled && onChange(seg.text)}
-              className={`rounded px-0.5 ${
-                highlighted
-                  ? "bg-purple-300 text-purple-900 font-semibold"
-                  : "hover:bg-purple-100"
-              } ${disabled ? "cursor-default" : "cursor-pointer"}`}
-              data-testid="cloze-word"
+        {hasHighlight ? (
+          <>
+            <span>{sentence.slice(0, matchStart)}</span>
+            <mark
+              className="bg-purple-300 text-purple-900 font-semibold rounded px-0.5"
+              data-testid="cloze-highlight"
             >
-              {seg.text}
-            </button>
-          );
-        })}
+              {sentence.slice(matchStart, matchEnd)}
+            </mark>
+            <span>{sentence.slice(matchEnd)}</span>
+          </>
+        ) : (
+          <span>{sentence}</span>
+        )}
       </div>
 
       {!disabled && (
         <div className="mt-2 flex items-center gap-2">
           <button
             type="button"
-            onClick={handleUseSelection}
+            onClick={() => commitSelection(true)}
             className="text-xs px-2 py-1 rounded border border-purple-300 text-purple-700 hover:bg-purple-100"
             data-testid="cloze-use-selection"
           >

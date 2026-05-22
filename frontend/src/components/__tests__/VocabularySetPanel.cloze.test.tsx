@@ -23,7 +23,7 @@ describe("ClozeAnswerEditor", () => {
     toastError.mockClear();
   });
 
-  it("renders each word in the sentence as a clickable token", () => {
+  it("renders the sentence as plain selectable text (no per-word buttons)", () => {
     render(
       <ClozeAnswerEditor
         sentence="I have two cups."
@@ -31,11 +31,13 @@ describe("ClozeAnswerEditor", () => {
         onChange={vi.fn()}
       />,
     );
-    const words = screen.getAllByTestId("cloze-word").map((b) => b.textContent);
-    expect(words).toEqual(["I", "have", "two", "cups"]);
+    expect(screen.queryAllByTestId("cloze-word")).toHaveLength(0);
+    expect(screen.getByTestId("cloze-sentence").textContent).toBe(
+      "I have two cups.",
+    );
   });
 
-  it("calls onChange with the clicked word", () => {
+  it("sets the double-clicked word as the answer", () => {
     const onChange = vi.fn();
     render(
       <ClozeAnswerEditor
@@ -44,12 +46,29 @@ describe("ClozeAnswerEditor", () => {
         onChange={onChange}
       />,
     );
-    fireEvent.click(
-      screen
-        .getAllByTestId("cloze-word")
-        .find((b) => b.textContent === "cups")!,
-    );
+    // Browser auto-selects the word on double-click; emulate that selection.
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      toString: () => "cups",
+    } as unknown as Selection);
+    fireEvent.doubleClick(screen.getByTestId("cloze-sentence"));
     expect(onChange).toHaveBeenCalledWith("cups");
+  });
+
+  it("does not toast on a double-click with no selection", () => {
+    const onChange = vi.fn();
+    render(
+      <ClozeAnswerEditor
+        sentence="I have two cups."
+        value=""
+        onChange={onChange}
+      />,
+    );
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      toString: () => "",
+    } as unknown as Selection);
+    fireEvent.doubleClick(screen.getByTestId("cloze-sentence"));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("shows an empty hint when no answer is set", () => {
@@ -64,7 +83,7 @@ describe("ClozeAnswerEditor", () => {
     expect(screen.queryByTestId("cloze-current")).toBeNull();
   });
 
-  it("highlights the current answer word", () => {
+  it("highlights the current answer in the sentence", () => {
     render(
       <ClozeAnswerEditor
         sentence="I have two cups."
@@ -74,10 +93,9 @@ describe("ClozeAnswerEditor", () => {
     );
     const current = screen.getByTestId("cloze-current");
     expect(current.textContent).toContain("cups");
-    const cupsBtn = screen
-      .getAllByTestId("cloze-word")
-      .find((b) => b.textContent === "cups")!;
-    expect(cupsBtn.className).toContain("bg-purple-300");
+    const highlight = screen.getByTestId("cloze-highlight");
+    expect(highlight.textContent).toBe("cups");
+    expect(highlight.className).toContain("bg-purple-300");
   });
 
   it("clears the answer when the clear button is clicked", () => {
@@ -123,21 +141,24 @@ describe("ClozeAnswerEditor", () => {
   });
 
   it("renders read-only (no controls) when disabled", () => {
+    const onChange = vi.fn();
     render(
       <ClozeAnswerEditor
         sentence="I have two cups."
         value="cups"
-        onChange={vi.fn()}
+        onChange={onChange}
         disabled
       />,
     );
     expect(screen.queryByTestId("cloze-use-selection")).toBeNull();
     expect(screen.queryByTestId("cloze-clear")).toBeNull();
-    // words still render but are disabled
-    const cupsBtn = screen
-      .getAllByTestId("cloze-word")
-      .find((b) => b.textContent === "cups")! as HTMLButtonElement;
-    expect(cupsBtn.disabled).toBe(true);
+    // sentence still shows with the answer highlighted, but double-click is inert
+    expect(screen.getByTestId("cloze-highlight").textContent).toBe("cups");
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      toString: () => "have",
+    } as unknown as Selection);
+    fireEvent.doubleClick(screen.getByTestId("cloze-sentence"));
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("preserves original casing when matching a lowercased selection", () => {
