@@ -3745,7 +3745,15 @@ export function AssignmentDialog({
                             )}
                           </h4>
                           <RearrangementPreview
+                            contentId={
+                              cartItems[0]?.contentId ??
+                              PREVIEW_VOCAB_CONTENT_ID
+                            }
                             shuffleQuestions={formData.shuffle_questions}
+                            timeLimitPerQuestion={
+                              formData.time_limit_per_question
+                            }
+                            playAudio={formData.play_audio}
                           />
                         </Card>
                       ) : formData.practice_mode === "reading" ? (
@@ -3756,7 +3764,14 @@ export function AssignmentDialog({
                             )}
                           </h4>
                           <ReadingPreview
+                            contentId={
+                              cartItems[0]?.contentId ??
+                              PREVIEW_VOCAB_CONTENT_ID
+                            }
                             shuffleQuestions={formData.shuffle_questions}
+                            timeLimitPerQuestion={
+                              formData.time_limit_per_question
+                            }
                           />
                         </Card>
                       ) : (
