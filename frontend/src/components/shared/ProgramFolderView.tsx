@@ -712,9 +712,7 @@ function ExpandArea({
                   <SortableItem key={content.id} id={content.id}>
                     <ContentCard
                       content={content}
-                      onClick={() =>
-                        onContentClick(content, selectedLesson.id)
-                      }
+                      onClick={() => onContentClick(content, selectedLesson.id)}
                       onDelete={() =>
                         onDeleteContent(
                           selectedLesson.id,
@@ -777,9 +775,7 @@ function ExpandArea({
                 <ContentCard
                   content={content}
                   onClick={() => onContentClick(content, 0)}
-                  onDelete={() =>
-                    onDeleteContent(0, content.id, content.title)
-                  }
+                  onDelete={() => onDeleteContent(0, content.id, content.title)}
                   onCopy={() => onCopyContent(content.id, content.title)}
                   onDownload={
                     onDownloadContent
@@ -799,10 +795,7 @@ function ExpandArea({
             ))}
             {programContents.length === 0 && (
               <p className="text-sm text-gray-400 col-span-full text-center py-8">
-                {t(
-                  "programFolderView.noProgramContents",
-                  "此教材尚無內容",
-                )}
+                {t("programFolderView.noProgramContents", "此教材尚無內容")}
               </p>
             )}
           </div>
