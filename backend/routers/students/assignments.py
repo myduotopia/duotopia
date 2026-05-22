@@ -1499,6 +1499,14 @@ async def start_word_selection_practice(
     # Issue #460: Tell frontend if this is practice-only mode (already submitted)
     is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
 
+    # Issue #800: all_mastered means every word reached T5 and is therefore
+    # excluded from the candidate pool by get_words_for_practice. Frontend
+    # uses this to show the "全部精熟" celebration instead of an empty state.
+    all_mastered = (
+        total_words_in_assignment > 0
+        and words_mastered >= total_words_in_assignment
+    )
+
     return {
         "session_id": practice_session.id,
         "words": words_with_options,
@@ -1508,6 +1516,7 @@ async def start_word_selection_practice(
         "words_mastered": words_mastered,
         **tier_counts,
         "achieved": achieved,
+        "all_mastered": all_mastered,
         "is_practice_mode": is_practice_mode,
         "show_word": assignment.show_word if assignment else True,
         "show_image": assignment.show_image if assignment else True,
@@ -2096,6 +2105,12 @@ async def start_word_spelling_practice(
     tier_counts = _tier_counts(mastery_result)
     is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
 
+    # Issue #800: see selection endpoint for all_mastered rationale.
+    all_mastered = (
+        total_words_in_assignment > 0
+        and words_mastered >= total_words_in_assignment
+    )
+
     return {
         "session_id": practice_session.id,
         "words": words_data,
@@ -2105,6 +2120,7 @@ async def start_word_spelling_practice(
         "words_mastered": words_mastered,
         **tier_counts,
         "achieved": achieved,
+        "all_mastered": all_mastered,
         "is_practice_mode": is_practice_mode,
         "show_translation": (assignment.show_translation if assignment else True),
         "show_image": assignment.show_image if assignment else True,
@@ -2788,6 +2804,15 @@ async def start_word_cloze_practice(
     tier_counts = _tier_counts(mastery_result)
     is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
 
+    # Issue #800: see selection endpoint for all_mastered rationale.
+    # Note: cloze may also return empty `questions` when no example sentence
+    # contains the target word — that's a different empty state, handled by
+    # the existing "no cloze questions available" UI.
+    all_mastered = (
+        total_words_in_assignment > 0
+        and words_mastered >= total_words_in_assignment
+    )
+
     return {
         "session_id": practice_session.id,
         "questions": questions,
@@ -2797,6 +2822,7 @@ async def start_word_cloze_practice(
         "words_mastered": words_mastered,
         **tier_counts,
         "achieved": achieved,
+        "all_mastered": all_mastered,
         "is_practice_mode": is_practice_mode,
         "show_translation": (assignment.show_translation if assignment else True),
         "play_audio": assignment.play_audio if assignment else False,

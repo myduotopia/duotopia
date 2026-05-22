@@ -88,6 +88,10 @@ interface ProficiencyStatus {
   words_unfamiliar?: number;
   words_very_unfamiliar?: number;
   total_words: number;
+  // Issue #800: backend signals every word reached T5 and was therefore
+  // excluded from the candidate pool. Frontend shows the "全部精熟" panel
+  // instead of the generic "no items" empty state.
+  all_mastered?: boolean;
 }
 
 interface WordSelectionActivityProps {
@@ -357,6 +361,7 @@ export default function WordSelectionActivity({
         words_unfamiliar: data.words_unfamiliar ?? 0,
         words_very_unfamiliar: data.words_very_unfamiliar ?? 0,
         total_words: data.total_words || 0,
+        all_mastered: data.all_mastered ?? false,
       });
       setCurrentIndex(0);
       setRoundCompleted(false);
@@ -721,6 +726,41 @@ export default function WordSelectionActivity({
 
   // No words
   if (words.length === 0) {
+    // Issue #800: distinguish "全部精熟" (every word reached T5, none to
+    // practice) from a genuinely empty assignment.
+    if (proficiency.all_mastered) {
+      return (
+        <Card className="p-8">
+          <CardContent className="text-center space-y-4">
+            <div className="flex justify-center">
+              <Trophy className="h-16 w-16 text-yellow-500" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800">
+              {t("wordSelection.allMastered") || "全部精熟！"}
+            </h2>
+            <p className="text-gray-600">
+              {t("wordSelection.allMasteredHint") ||
+                "這份作業的單字你已經全部精熟，不需再練。"}
+            </p>
+            {!isPracticeMode && (
+              <div className="flex justify-center">
+                <Button
+                  onClick={handleSubmitAssignment}
+                  disabled={completing}
+                >
+                  {completing ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  {t("wordSelection.submitAssignment") || "Submit Assignment"}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      );
+    }
     return (
       <Card className="p-8">
         <CardContent className="text-center">
