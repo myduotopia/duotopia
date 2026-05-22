@@ -1,31 +1,60 @@
 /**
  * RearrangementPreview — 派發 sheet 內的 rearrangement 即時預覽
  *
- * 從派發目標教材 (contentId) 抓 /api/teachers/contents/{contentId}，依
- * content.type 自行 tokenize 成 RearrangementQuestion[]，餵給
- * RearrangementActivity 的 previewQuestions 路徑（Issue #752），完全離線渲染，
- * 不打 demo / preview 路徑。
+ * 兩條路徑：
+ * 1. 已知教材（內容卡派發）：傳入 contentId → 走 ByContent 子元件，
+ *    打 /api/teachers/contents/{contentId} 並 tokenize 成 RearrangementQuestion[]，
+ *    餵 RearrangementActivity.previewQuestions（Issue #752）。
+ * 2. 未知教材（Assign New Homework 未選 cart）：contentId 為 undefined →
+ *    走 ByDemo 子元件，沿用 demoApi.getConfig + getPreview 路徑。
  *
- * 取材規則（與 backend / student 端一致）：
- * - VOCABULARY_SET（單字集）→ 取 item.example_sentence + example_sentence_audio_url
- * - EXAMPLE_SENTENCES（例句集）→ 取 item.text + item.audio_url
+ * 取材規則（ByContent，與 backend / student 端一致）：
+ * - VOCABULARY_SET → 取 item.example_sentence + example_sentence_audio_url
+ * - EXAMPLE_SENTENCES → 取 item.text + item.audio_url
  *
  * Tokenize：以空白切詞並 shuffle；單字數 < 2 的句子會被過濾掉。
  *
  * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
 import { useEffect, useMemo, useState } from "react";
+import { demoApi } from "@/lib/demoApi";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import RearrangementActivity, {
   type RearrangementQuestion,
 } from "./RearrangementActivity";
+import StudentActivityPageContent, {
+  type Activity,
+} from "@/pages/student/StudentActivityPageContent";
 
 interface RearrangementPreviewProps {
-  contentId: number;
+  /** 已知教材時傳入；未傳則走 demo 預覽 */
+  contentId?: number;
   shuffleQuestions?: boolean;
   timeLimitPerQuestion?: number;
   playAudio?: boolean;
 }
+
+export default function RearrangementPreview(props: RearrangementPreviewProps) {
+  if (props.contentId == null) {
+    return (
+      <RearrangementPreviewByDemo
+        shuffleQuestions={props.shuffleQuestions}
+      />
+    );
+  }
+  return (
+    <RearrangementPreviewByContent
+      contentId={props.contentId}
+      shuffleQuestions={props.shuffleQuestions}
+      timeLimitPerQuestion={props.timeLimitPerQuestion}
+      playAudio={props.playAudio}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ByContent — 已知教材路徑（Phase 2）
+// ---------------------------------------------------------------------------
 
 interface RawContentItem {
   id: number;
@@ -62,12 +91,17 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
-export default function RearrangementPreview({
+function RearrangementPreviewByContent({
   contentId,
   shuffleQuestions,
   timeLimitPerQuestion,
   playAudio,
-}: RearrangementPreviewProps) {
+}: {
+  contentId: number;
+  shuffleQuestions?: boolean;
+  timeLimitPerQuestion?: number;
+  playAudio?: boolean;
+}) {
   const { token } = useTeacherAuthStore();
   const [data, setData] = useState<ContentResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -168,6 +202,94 @@ export default function RearrangementPreview({
         studentAssignmentId={0}
         isPreviewMode={true}
         previewQuestions={previewQuestions}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ByDemo — 未知教材路徑（Phase 2 之前的程式碼）
+// ---------------------------------------------------------------------------
+
+interface DemoActivityResponse {
+  assignment_id: number;
+  title: string;
+  practice_mode?: string | null;
+  show_answer?: boolean;
+  time_limit_per_question?: number;
+  total_activities: number;
+  activities: Activity[];
+}
+
+function RearrangementPreviewByDemo({
+  shuffleQuestions,
+}: {
+  shuffleQuestions?: boolean;
+}) {
+  const [data, setData] = useState<DemoActivityResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const config = await demoApi.getConfig();
+        const idStr = config.demo_rearrangement_assignment_id;
+        if (!idStr) {
+          throw new Error("Demo rearrangement assignment ID not configured");
+        }
+        const resp = (await demoApi.getPreview(
+          parseInt(idStr, 10),
+        )) as DemoActivityResponse;
+        if (!cancelled) {
+          setData(resp);
+          setLoading(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load preview");
+          setLoading(false);
+        }
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return <div className="p-4 text-sm text-gray-500">Loading preview…</div>;
+  }
+  if (error || !data) {
+    return (
+      <div className="p-4 text-sm text-red-600">
+        Preview error: {error || "no data"}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {shuffleQuestions && (
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
+          🔀 學生實際作答時題目順序會被打亂（預覽固定按原順序顯示）
+        </div>
+      )}
+      <StudentActivityPageContent
+        activities={data.activities}
+        assignmentTitle={data.title}
+        assignmentId={data.assignment_id}
+        practiceMode={data.practice_mode || null}
+        showAnswer={data.show_answer || false}
+        timeLimitPerQuestion={data.time_limit_per_question ?? 0}
+        isDemoMode={true}
+        isPreviewMode={true}
+        onBack={() => {}}
+        onSubmit={async () => {}}
       />
     </div>
   );

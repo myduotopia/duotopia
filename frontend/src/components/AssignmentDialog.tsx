@@ -3745,10 +3745,7 @@ export function AssignmentDialog({
                             )}
                           </h4>
                           <RearrangementPreview
-                            contentId={
-                              cartItems[0]?.contentId ??
-                              PREVIEW_VOCAB_CONTENT_ID
-                            }
+                            contentId={cartItems[0]?.contentId}
                             shuffleQuestions={formData.shuffle_questions}
                             timeLimitPerQuestion={
                               formData.time_limit_per_question
@@ -3764,10 +3761,7 @@ export function AssignmentDialog({
                             )}
                           </h4>
                           <ReadingPreview
-                            contentId={
-                              cartItems[0]?.contentId ??
-                              PREVIEW_VOCAB_CONTENT_ID
-                            }
+                            contentId={cartItems[0]?.contentId}
                             shuffleQuestions={formData.shuffle_questions}
                             timeLimitPerQuestion={
                               formData.time_limit_per_question

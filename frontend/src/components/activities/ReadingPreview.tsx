@@ -1,31 +1,48 @@
 /**
  * ReadingPreview — 派發 sheet 內的 reading 即時預覽
  *
- * 從派發目標教材 (contentId) 抓 /api/teachers/contents/{contentId}，
- * 依 content.type 自行組成單一 Activity (items[]) 餵給 StudentActivityPageContent
- * 走 isDemoMode + isPreviewMode 路徑，內部 GroupedQuestionsTemplate 會用 items
- * 渲染朗讀題目，不會打任何後端 preview 路徑。
+ * 兩條路徑：
+ * 1. 已知教材（內容卡派發）：傳入 contentId → 走 ByContent 子元件，
+ *    打 /api/teachers/contents/{contentId} 並依 content.type 自組 Activity items。
+ * 2. 未知教材（Assign New Homework 未選 cart）：contentId 為 undefined →
+ *    走 ByDemo 子元件，沿用既有 demoApi.getConfig + getPreview 路徑（保證有句子可預覽）。
  *
- * 取材規則（與 backend ensure_example_sentence_audio / student preview 一致）：
- * - VOCABULARY_SET（單字集）→ 取 item.example_sentence + example_sentence_audio_url
- * - EXAMPLE_SENTENCES（例句集）→ 取 item.text + item.audio_url
- *
- * 已知限制：單字集若缺 example_sentence_audio_url，預覽該題暫無音檔，
- * 實際派發時 backend 會 lazy 生成 TTS（issue #797 phase 2 不在此範圍）。
+ * 取材規則（ByContent 分支，與 backend / student 端一致）：
+ * - VOCABULARY_SET → 取 item.example_sentence + example_sentence_audio_url
+ * - EXAMPLE_SENTENCES → 取 item.text + item.audio_url
  *
  * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
 import { useEffect, useMemo, useState } from "react";
+import { demoApi } from "@/lib/demoApi";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import StudentActivityPageContent, {
   type Activity,
 } from "@/pages/student/StudentActivityPageContent";
 
 interface ReadingPreviewProps {
-  contentId: number;
+  /** 已知教材時傳入；未傳則走 demo 預覽 */
+  contentId?: number;
   shuffleQuestions?: boolean;
   timeLimitPerQuestion?: number;
 }
+
+export default function ReadingPreview(props: ReadingPreviewProps) {
+  if (props.contentId == null) {
+    return <ReadingPreviewByDemo shuffleQuestions={props.shuffleQuestions} />;
+  }
+  return (
+    <ReadingPreviewByContent
+      contentId={props.contentId}
+      shuffleQuestions={props.shuffleQuestions}
+      timeLimitPerQuestion={props.timeLimitPerQuestion}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ByContent — 已知教材路徑（Phase 2）
+// ---------------------------------------------------------------------------
 
 interface RawContentItem {
   id: number;
@@ -46,11 +63,15 @@ interface ContentResponse {
 
 const VOCAB_TYPES = new Set(["VOCABULARY_SET", "SENTENCE_MAKING"]);
 
-export default function ReadingPreview({
+function ReadingPreviewByContent({
   contentId,
   shuffleQuestions,
   timeLimitPerQuestion,
-}: ReadingPreviewProps) {
+}: {
+  contentId: number;
+  shuffleQuestions?: boolean;
+  timeLimitPerQuestion?: number;
+}) {
   const { token } = useTeacherAuthStore();
   const [data, setData] = useState<ContentResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -167,6 +188,94 @@ export default function ReadingPreview({
         isDemoMode={true}
         isPreviewMode={true}
         canUseAiAnalysis={false}
+        onBack={() => {}}
+        onSubmit={async () => {}}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ByDemo — 未知教材路徑（Phase 2 之前的程式碼）
+// ---------------------------------------------------------------------------
+
+interface DemoActivityResponse {
+  assignment_id: number;
+  title: string;
+  practice_mode?: string | null;
+  show_answer?: boolean;
+  time_limit_per_question?: number;
+  total_activities: number;
+  activities: Activity[];
+}
+
+function ReadingPreviewByDemo({
+  shuffleQuestions,
+}: {
+  shuffleQuestions?: boolean;
+}) {
+  const [data, setData] = useState<DemoActivityResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const config = await demoApi.getConfig();
+        const idStr = config.demo_reading_assignment_id;
+        if (!idStr) {
+          throw new Error("Demo reading assignment ID not configured");
+        }
+        const resp = (await demoApi.getPreview(
+          parseInt(idStr, 10),
+        )) as DemoActivityResponse;
+        if (!cancelled) {
+          setData(resp);
+          setLoading(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load preview");
+          setLoading(false);
+        }
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return <div className="p-4 text-sm text-gray-500">Loading preview…</div>;
+  }
+  if (error || !data) {
+    return (
+      <div className="p-4 text-sm text-red-600">
+        Preview error: {error || "no data"}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {shuffleQuestions && (
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
+          🔀 學生實際作答時題目順序會被打亂（預覽固定按原順序顯示）
+        </div>
+      )}
+      <StudentActivityPageContent
+        activities={data.activities}
+        assignmentTitle={data.title}
+        assignmentId={data.assignment_id}
+        practiceMode={data.practice_mode || null}
+        showAnswer={data.show_answer || false}
+        timeLimitPerQuestion={data.time_limit_per_question ?? 0}
+        isDemoMode={true}
+        isPreviewMode={true}
         onBack={() => {}}
         onSubmit={async () => {}}
       />
