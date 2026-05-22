@@ -120,9 +120,7 @@ function ReadingPreviewByContent({
           translation: isVocab
             ? item.example_sentence_translation
             : item.translation,
-          audio_url: isVocab
-            ? item.example_sentence_audio_url
-            : item.audio_url,
+          audio_url: isVocab ? item.example_sentence_audio_url : item.audio_url,
         };
       })
       .filter((i): i is NonNullable<typeof i> => i !== null);

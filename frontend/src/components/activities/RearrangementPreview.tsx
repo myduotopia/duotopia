@@ -37,9 +37,7 @@ interface RearrangementPreviewProps {
 export default function RearrangementPreview(props: RearrangementPreviewProps) {
   if (props.contentId == null) {
     return (
-      <RearrangementPreviewByDemo
-        shuffleQuestions={props.shuffleQuestions}
-      />
+      <RearrangementPreviewByDemo shuffleQuestions={props.shuffleQuestions} />
     );
   }
   return (
@@ -154,9 +152,7 @@ function RearrangementPreviewByContent({
         max_errors: Math.max(1, Math.floor(words.length / 2)),
         time_limit: limit,
         play_audio: !!playAudio,
-        audio_url: isVocab
-          ? item.example_sentence_audio_url
-          : item.audio_url,
+        audio_url: isVocab ? item.example_sentence_audio_url : item.audio_url,
         translation: isVocab
           ? item.example_sentence_translation
           : item.translation,
