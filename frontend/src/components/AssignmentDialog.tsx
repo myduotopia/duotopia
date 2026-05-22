@@ -184,6 +184,13 @@ const isVocabularySetType = (type: string): boolean => {
   return ["SENTENCE_MAKING", "VOCABULARY_SET"].includes(normalizedType);
 };
 
+// Issue #800: cap vocabulary sets per assignment so students don't end up
+// with practice pools that feel endless. Two sets is roomy enough for a
+// week-long assignment and aligns with what teachers actually plan. The
+// limit is enforced both in the UI (proactive disable + toast) and in
+// the backend create endpoint as defence-in-depth.
+const MAX_VOCAB_SETS_PER_ASSIGNMENT = 2;
+
 // Issue #757: 聽力派發前置檢查，例句音檔對應的欄位依 content type 不同：
 //   VOCABULARY_SET → example_sentence_audio_url
 //   EXAMPLE_SENTENCES → audio_url（例句集的 audio_url 本身就是例句音檔）
@@ -971,6 +978,16 @@ export function AssignmentDialog({
     return true;
   };
 
+  // Issue #800: count currently-selected vocabulary sets so we can cap at
+  // MAX_VOCAB_SETS_PER_ASSIGNMENT. Computed inline (not memoised) — cart
+  // length is small (<10) so the filter is cheap and avoids stale-closure
+  // bugs in the toggle handler.
+  const selectedVocabSetCount = cartItems.filter((item) =>
+    isVocabularySetType(item.contentType),
+  ).length;
+  const isVocabLimitReached =
+    selectedVocabSetCount >= MAX_VOCAB_SETS_PER_ASSIGNMENT;
+
   // 添加/移除內容到購物車
   const toggleContent = (
     contentId: number,
@@ -986,6 +1003,18 @@ export function AssignmentDialog({
         t("dialogs.assignmentDialog.errors.mixedContentType", {
           type: t("dialogs.assignmentDialog.contentTypes.VOCABULARY_SET"),
         }),
+      );
+      return;
+    }
+    // Issue #800: block adding a 3rd vocab set even if mode allows it.
+    if (
+      !exists &&
+      isVocabularySetType(content.type) &&
+      isVocabLimitReached
+    ) {
+      toast.warning(
+        t("dialogs.assignmentDialog.errors.maxVocabSetsReached") ||
+          `為避免單次練習量過大，最多選 ${MAX_VOCAB_SETS_PER_ASSIGNMENT} 個單字集`,
       );
       return;
     }
@@ -1976,11 +2005,19 @@ export function AssignmentDialog({
                                                         item.contentId ===
                                                         content.id,
                                                     );
+                                                  // Issue #800: also disable
+                                                  // un-selected vocab sets
+                                                  // once the per-assignment
+                                                  // cap is reached.
                                                   const isDisabled =
                                                     !isSelected &&
-                                                    !isContentSelectable(
+                                                    (!isContentSelectable(
                                                       content.type,
-                                                    );
+                                                    ) ||
+                                                      (isVocabLimitReached &&
+                                                        isVocabularySetType(
+                                                          content.type,
+                                                        )));
                                                   return (
                                                     <button
                                                       key={content.id}
@@ -2227,11 +2264,16 @@ export function AssignmentDialog({
                                                           item.contentId ===
                                                           content.id,
                                                       );
+                                                    // Issue #800: cap vocab sets.
                                                     const isDisabled =
                                                       !isSelected &&
-                                                      !isContentSelectable(
+                                                      (!isContentSelectable(
                                                         content.type,
-                                                      );
+                                                      ) ||
+                                                        (isVocabLimitReached &&
+                                                          isVocabularySetType(
+                                                            content.type,
+                                                          )));
                                                     return (
                                                       <button
                                                         key={content.id}
@@ -2480,11 +2522,19 @@ export function AssignmentDialog({
                                                         item.contentId ===
                                                         content.id,
                                                     );
+                                                  // Issue #800: also disable
+                                                  // un-selected vocab sets
+                                                  // once the per-assignment
+                                                  // cap is reached.
                                                   const isDisabled =
                                                     !isSelected &&
-                                                    !isContentSelectable(
+                                                    (!isContentSelectable(
                                                       content.type,
-                                                    );
+                                                    ) ||
+                                                      (isVocabLimitReached &&
+                                                        isVocabularySetType(
+                                                          content.type,
+                                                        )));
                                                   return (
                                                     <button
                                                       key={content.id}
@@ -2565,12 +2615,29 @@ export function AssignmentDialog({
                     <ShoppingCart className="h-5 w-5 text-blue-600" />
                     <h3 className="font-semibold">已選擇的內容</h3>
                   </div>
-                  <Badge
-                    variant="secondary"
-                    className="bg-blue-50 text-blue-700"
-                  >
-                    {cartItems.length}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {/* Issue #800: surface vocab-set count so teachers
+                        understand why the 3rd vocab set was disabled. */}
+                    {selectedVocabSetCount > 0 && (
+                      <Badge
+                        variant="secondary"
+                        className={
+                          isVocabLimitReached
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-gray-100 text-gray-600"
+                        }
+                      >
+                        單字集 {selectedVocabSetCount} /{" "}
+                        {MAX_VOCAB_SETS_PER_ASSIGNMENT}
+                      </Badge>
+                    )}
+                    <Badge
+                      variant="secondary"
+                      className="bg-blue-50 text-blue-700"
+                    >
+                      {cartItems.length}
+                    </Badge>
+                  </div>
                 </div>
 
                 <ScrollArea className="flex-1 p-3 max-h-[50vh] sm:max-h-none">
