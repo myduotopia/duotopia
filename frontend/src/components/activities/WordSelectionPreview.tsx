@@ -52,12 +52,13 @@ function buildOptions(
   pool: ContentItem[],
   showImage: boolean,
 ): OptionEntry[] {
-  // showImage=true 時，題目顯示英文，選項是翻譯；反之亦然
-  const correctText = showImage ? current.translation || "" : current.text;
+  // showImage=true 時題目顯示圖片+翻譯，選項用英文（item.text）；反之題目顯示英文、選項用翻譯。
+  // 此規則必須與 backend/utils/distractors.py `text_field_for_show_image` 保持一致。
+  const correctText = showImage ? current.text : current.translation || "";
   const distractorPool = pool
     .filter((p) => p.id !== current.id)
     .map((p) => ({
-      text: showImage ? p.translation || "" : p.text,
+      text: showImage ? p.text : p.translation || "",
       image_url: p.image_url ?? null,
     }))
     .filter((o) => o.text);
@@ -132,7 +133,7 @@ export default function WordSelectionPreview({
       content_item_id: item.id,
       text: item.text,
       translation: item.translation || "",
-      correct_text: showImage ? item.translation || "" : item.text,
+      correct_text: showImage ? item.text : item.translation || "",
       audio_url: item.audio_url,
       image_url: item.image_url,
       memory_strength: 0,
