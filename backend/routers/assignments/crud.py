@@ -265,8 +265,7 @@ async def create_assignment(
     vocab_count = sum(
         1
         for c in contents
-        if c.type
-        in (ContentType.VOCABULARY_SET, ContentType.SENTENCE_MAKING)
+        if c.type in (ContentType.VOCABULARY_SET, ContentType.SENTENCE_MAKING)
     )
     if vocab_count > 2:
         raise HTTPException(

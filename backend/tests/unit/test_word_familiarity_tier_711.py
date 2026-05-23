@@ -63,9 +63,7 @@ def classify_tier(correct: int, incorrect: int, repetition: int) -> str:
     return "very_unfamiliar"
 
 
-def assignment_mastery(
-    words: List[Tuple[int, int, int]], total_words: int
-) -> dict:
+def assignment_mastery(words: List[Tuple[int, int, int]], total_words: int) -> dict:
     """Replica of ``calculate_assignment_mastery`` aggregation.
 
     ``words`` is a list of (correct_count, incorrect_count, repetition_count)
@@ -75,17 +73,12 @@ def assignment_mastery(
     counts = {tier: 0 for tier in TIER_WEIGHTS}
     for c, i, r in words:
         counts[classify_tier(c, i, r)] += 1
-    accounted = sum(
-        counts[t] for t in ("master", "familiar", "medium", "unfamiliar")
-    )
+    accounted = sum(counts[t] for t in ("master", "familiar", "medium", "unfamiliar"))
     counts["very_unfamiliar"] = max(0, total_words - accounted)
     if total_words == 0:
         current = 0.0
     else:
-        current = (
-            sum(TIER_WEIGHTS[t] * counts[t] for t in TIER_WEIGHTS)
-            / total_words
-        )
+        current = sum(TIER_WEIGHTS[t] * counts[t] for t in TIER_WEIGHTS) / total_words
     return {
         "current_mastery": current,
         **counts,

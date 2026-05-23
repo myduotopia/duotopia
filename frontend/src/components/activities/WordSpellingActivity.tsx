@@ -648,10 +648,7 @@ export default function WordSpellingActivity({
             </p>
             {!isPracticeMode && (
               <div className="flex justify-center">
-                <Button
-                  onClick={handleSubmitAssignment}
-                  disabled={completing}
-                >
+                <Button onClick={handleSubmitAssignment} disabled={completing}>
                   {completing ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (

@@ -1007,11 +1007,7 @@ export function AssignmentDialog({
       return;
     }
     // Issue #800: block adding a 3rd vocab set even if mode allows it.
-    if (
-      !exists &&
-      isVocabularySetType(content.type) &&
-      isVocabLimitReached
-    ) {
+    if (!exists && isVocabularySetType(content.type) && isVocabLimitReached) {
       toast.warning(
         t("dialogs.assignmentDialog.errors.maxVocabSetsReached") ||
           `為避免單次練習量過大，最多選 ${MAX_VOCAB_SETS_PER_ASSIGNMENT} 個單字集`,
