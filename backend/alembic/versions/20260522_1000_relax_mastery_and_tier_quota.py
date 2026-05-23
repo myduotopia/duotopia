@@ -118,6 +118,11 @@ def upgrade() -> None:
                     AND (correct_count - 0.5 * incorrect_count) >= 1
                 ),
                 COUNT(*) FILTER (
+                    -- T2 = practiced but didn't qualify for T3/T4/T5.
+                    -- repetition_count >= 2 is excluded here because it
+                    -- already lifts a word to T4 via the OR rule above —
+                    -- without this exclusion a rep=2/diff=0 word would
+                    -- be double-counted in both T4 and T2.
                     WHERE NOT (
                         (correct_count - 0.5 * incorrect_count) >= 1
                         OR repetition_count >= 2
@@ -337,7 +342,13 @@ def upgrade() -> None:
                 END AS priority_score
             FROM _gwfp_pool p
             JOIN _gwfp_picked pk ON pk.content_item_id = p.content_item_id
-            ORDER BY RANDOM();
+            ORDER BY RANDOM()
+            -- Safety cap: GREATEST(1, ...) floor on per-tier quotas can in
+            -- theory sum to slightly more than p_limit_count for tiny
+            -- limits (e.g. p_limit_count = 2). Known callers pass 10 / 30
+            -- so this never fires in practice, but the explicit LIMIT
+            -- keeps the contract honest for future callers.
+            LIMIT p_limit_count;
 
             DROP TABLE IF EXISTS _gwfp_picked;
             DROP TABLE IF EXISTS _gwfp_pool;

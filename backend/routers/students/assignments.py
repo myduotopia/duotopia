@@ -1503,7 +1503,7 @@ async def start_word_selection_practice(
     # excluded from the candidate pool by get_words_for_practice. Frontend
     # uses this to show the "全部精熟" celebration instead of an empty state.
     all_mastered = (
-        total_words_in_assignment > 0 and words_mastered >= total_words_in_assignment
+        total_words_in_assignment > 0 and words_mastered == total_words_in_assignment
     )
 
     return {
@@ -2106,7 +2106,7 @@ async def start_word_spelling_practice(
 
     # Issue #800: see selection endpoint for all_mastered rationale.
     all_mastered = (
-        total_words_in_assignment > 0 and words_mastered >= total_words_in_assignment
+        total_words_in_assignment > 0 and words_mastered == total_words_in_assignment
     )
 
     return {
@@ -2807,7 +2807,7 @@ async def start_word_cloze_practice(
     # contains the target word — that's a different empty state, handled by
     # the existing "no cloze questions available" UI.
     all_mastered = (
-        total_words_in_assignment > 0 and words_mastered >= total_words_in_assignment
+        total_words_in_assignment > 0 and words_mastered == total_words_in_assignment
     )
 
     return {

@@ -134,6 +134,12 @@ class TestClassifyTierRepetitionPath:
     def test_repetition_two_qualifies_t4(self):
         assert classify_tier(2, 0, 2) == "familiar"
 
+    def test_repetition_two_qualifies_t4_even_with_low_diff(self):
+        # diff = 1 - 0.5 = 0.5 → would be T3 by diff alone.
+        # rep=2 short-circuits the OR rule and lifts to T4.
+        # Isolates the repetition-only path from the diff path.
+        assert classify_tier(1, 1, 2) == "familiar"
+
     def test_repetition_one_does_not_lift_to_t4(self):
         # rep=1 doesn't trigger the OR. Falls through to diff path.
         # 1 correct + 0 wrong + rep=1 → diff=1 → T3.
