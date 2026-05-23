@@ -334,6 +334,7 @@ export default function WordSelectionActivity({
         words_medium?: number;
         words_unfamiliar?: number;
         words_very_unfamiliar?: number;
+        all_mastered?: boolean;
         achieved: boolean;
         is_practice_mode?: boolean;
         show_image: boolean;
