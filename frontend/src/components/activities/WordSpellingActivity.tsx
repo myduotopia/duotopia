@@ -85,6 +85,8 @@ interface ProficiencyStatus {
   words_unfamiliar?: number;
   words_very_unfamiliar?: number;
   total_words: number;
+  // Issue #800: every word reached T5 and was excluded from the pool.
+  all_mastered?: boolean;
 }
 
 interface WordSpellingActivityProps {
@@ -269,6 +271,7 @@ export default function WordSpellingActivity({
         words_medium?: number;
         words_unfamiliar?: number;
         words_very_unfamiliar?: number;
+        all_mastered?: boolean;
         achieved: boolean;
         is_practice_mode?: boolean;
         show_translation: boolean;
@@ -302,6 +305,7 @@ export default function WordSpellingActivity({
         words_medium: data.words_medium ?? 0,
         words_unfamiliar: data.words_unfamiliar ?? 0,
         words_very_unfamiliar: data.words_very_unfamiliar ?? 0,
+        all_mastered: data.all_mastered ?? false,
         total_words: data.total_words || 0,
       });
       setCurrentIndex(0);
@@ -627,6 +631,37 @@ export default function WordSpellingActivity({
   }
 
   if (words.length === 0) {
+    // Issue #800: distinguish "全部精熟" from a genuinely empty assignment.
+    if (proficiency.all_mastered) {
+      return (
+        <Card className="p-8">
+          <CardContent className="text-center space-y-4">
+            <div className="flex justify-center">
+              <Trophy className="h-16 w-16 text-yellow-500" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800">
+              {t("wordSpelling.allMastered") || "全部精熟！"}
+            </h2>
+            <p className="text-gray-600">
+              {t("wordSpelling.allMasteredHint") ||
+                "這份作業的單字你已經全部精熟，不需再練。"}
+            </p>
+            {!isPracticeMode && (
+              <div className="flex justify-center">
+                <Button onClick={handleSubmitAssignment} disabled={completing}>
+                  {completing ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  {t("wordSpelling.submitAssignment") || "Submit Assignment"}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      );
+    }
     return (
       <Card className="p-8">
         <CardContent className="text-center">

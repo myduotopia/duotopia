@@ -305,6 +305,22 @@ async def create_assignment(
     if len(contents) != len(request.content_ids):
         raise HTTPException(status_code=404, detail="Some contents not found")
 
+    # Issue #800: cap vocabulary sets per assignment (defence-in-depth;
+    # the UI already disables further selections once the limit is hit).
+    # Two sets is roomy for a week-long assignment; more makes the
+    # practice pool feel endless. SENTENCE_MAKING is the legacy alias
+    # for VOCABULARY_SET — count both.
+    vocab_count = sum(
+        1
+        for c in contents
+        if c.type in (ContentType.VOCABULARY_SET, ContentType.SENTENCE_MAKING)
+    )
+    if vocab_count > 2:
+        raise HTTPException(
+            status_code=400,
+            detail=f"At most 2 vocabulary sets per assignment (got {vocab_count})",
+        )
+
     # Issue #673 / #757: block reading / rearrangement / word_cloze on vocab
     # contents whose items don't carry example_sentence + translation, and
     # additionally block the listening-flavoured modes when example sentence
