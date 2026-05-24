@@ -2693,6 +2693,10 @@
       "updateFailed": "Update failed, but audio was generated"
     }
   },
+  "classGradeDownload": {
+    "downloadStarted": "Grade report download started",
+    "downloadFailed": "Download failed, please try again"
+  },
   "classroomDetail": {
     "title": "Classroom Detail",
     "messages": {
@@ -2750,6 +2754,8 @@
       "backToList": "Back to Classroom List",
       "backToProgramList": "Back to Program List",
       "addStudent": "Add Student",
+      "downloadStudentGrades": "Download Student Grades",
+      "downloadClassGrades": "Download Grade Report",
       "createProgram": "Create Program",
       "assignNewHomework": "Assign New Homework",
       "batchArchive": "Batch Archive",

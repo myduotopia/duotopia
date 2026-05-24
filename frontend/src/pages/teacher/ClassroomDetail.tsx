@@ -52,11 +52,17 @@ import {
   Search,
   StickyNote,
   Printer,
+  Download,
   ChevronLeft,
   ChevronRight,
   MoreVertical,
   BarChart3,
 } from "lucide-react";
+import {
+  downloadClassGradeReport,
+  downloadStudentGradeReport,
+  GradeReportError,
+} from "@/services/gradeReportService";
 import { getContentTypeIcon } from "@/lib/contentTypeIcon";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
@@ -311,12 +317,17 @@ export default function ClassroomDetail({
     open: false,
     assignmentIndex: 0,
   });
-  // Batch selection (shared by batch print and batch archive)
+  // Batch selection (shared by batch print, batch archive, and the two
+  // grade-report downloads available on the archived view).
   const [selectedAssignments, setSelectedAssignments] = useState<Set<number>>(
     new Set(),
   );
   const [batchPrinting, setBatchPrinting] = useState(false);
   const [batchArchiving, setBatchArchiving] = useState(false);
+  // Grade-report (issue #708) — both downloads gated on selectedAssignments
+  // and only shown on the archived assignments view.
+  const [downloadingClassGrade, setDownloadingClassGrade] = useState(false);
+  const [downloadingStudentGrade, setDownloadingStudentGrade] = useState(false);
 
   // Clear selection when switching between active/archived tabs
   useEffect(() => {
@@ -496,6 +507,52 @@ export default function ClassroomDetail({
       toast.error(t("classroomDetail.messages.batchArchiveFailed"));
     } finally {
       setBatchArchiving(false);
+    }
+  };
+
+  // Issue #708: download class grade report for the currently selected
+  // archived assignments. Selection state is shared with the batch
+  // print/archive buttons (the user already picked them via the same
+  // checkboxes on the archived view).
+  const handleDownloadClassGrades = async () => {
+    if (selectedAssignments.size === 0 || !id) return;
+    setDownloadingClassGrade(true);
+    try {
+      await downloadClassGradeReport(
+        Number(id),
+        Array.from(selectedAssignments),
+      );
+      toast.success(t("classGradeDownload.downloadStarted"));
+    } catch (e) {
+      const msg =
+        e instanceof GradeReportError
+          ? e.detail
+          : t("classGradeDownload.downloadFailed");
+      toast.error(msg);
+    } finally {
+      setDownloadingClassGrade(false);
+    }
+  };
+
+  // Issue #708 follow-up: download a ZIP of per-student grade reports for the
+  // selected archived assignments. One xlsx per enrolled student.
+  const handleDownloadStudentGrades = async () => {
+    if (selectedAssignments.size === 0 || !id) return;
+    setDownloadingStudentGrade(true);
+    try {
+      await downloadStudentGradeReport(
+        Number(id),
+        Array.from(selectedAssignments),
+      );
+      toast.success(t("classGradeDownload.downloadStarted"));
+    } catch (e) {
+      const msg =
+        e instanceof GradeReportError
+          ? e.detail
+          : t("classGradeDownload.downloadFailed");
+      toast.error(msg);
+    } finally {
+      setDownloadingStudentGrade(false);
     }
   };
 
@@ -1902,6 +1959,41 @@ export default function ClassroomDetail({
                             ` (${selectedAssignments.size})`}
                         </Button>
                       )}
+                      {/* Issue #708: grade-report downloads are only
+                          available on the archived view — teachers download
+                          the report once a batch of assignments is sealed. */}
+                      {archivedAssignments.length > 0 && showArchived && (
+                        <Button
+                          variant="outline"
+                          onClick={handleDownloadClassGrades}
+                          disabled={
+                            selectedAssignments.size === 0 ||
+                            downloadingClassGrade
+                          }
+                          className="h-10"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          {t("classroomDetail.buttons.downloadClassGrades")}
+                          {selectedAssignments.size > 0 &&
+                            ` (${selectedAssignments.size})`}
+                        </Button>
+                      )}
+                      {archivedAssignments.length > 0 && showArchived && (
+                        <Button
+                          variant="outline"
+                          onClick={handleDownloadStudentGrades}
+                          disabled={
+                            selectedAssignments.size === 0 ||
+                            downloadingStudentGrade
+                          }
+                          className="h-10"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          {t("classroomDetail.buttons.downloadStudentGrades")}
+                          {selectedAssignments.size > 0 &&
+                            ` (${selectedAssignments.size})`}
+                        </Button>
+                      )}
                       {!canAssignHomework && !showArchived && teacherData && (
                         <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 bg-yellow-50 dark:bg-yellow-900/20 px-3 py-2 rounded-lg border border-yellow-200 dark:border-yellow-800">
                           <span className="font-medium">
@@ -2274,17 +2366,18 @@ export default function ClassroomDetail({
                               >
                                 {/* Title & AI Batch Grade Button */}
                                 <div className="flex items-start justify-between gap-2">
-                                  {!showArchived && (
-                                    <Checkbox
-                                      checked={selectedAssignments.has(
-                                        assignment.id,
-                                      )}
-                                      onCheckedChange={() =>
-                                        toggleAssignmentSelection(assignment.id)
-                                      }
-                                      className="mt-1"
-                                    />
-                                  )}
+                                  {/* Issue #708: archived view also needs
+                                      selection so teachers can pick which
+                                      assignments to download grade reports for. */}
+                                  <Checkbox
+                                    checked={selectedAssignments.has(
+                                      assignment.id,
+                                    )}
+                                    onCheckedChange={() =>
+                                      toggleAssignmentSelection(assignment.id)
+                                    }
+                                    className="mt-1"
+                                  />
                                   <div className="flex-1 min-w-0">
                                     <h4 className="font-medium text-gray-900 dark:text-gray-100 truncate">
                                       {assignment.title}
@@ -2462,18 +2555,16 @@ export default function ClassroomDetail({
                           <table className="w-full">
                             <thead className="bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
                               <tr>
-                                {!showArchived && (
-                                  <th className="w-10 px-4 py-3">
-                                    <Checkbox
-                                      checked={
-                                        filteredAssignments.length > 0 &&
-                                        selectedAssignments.size ===
-                                          filteredAssignments.length
-                                      }
-                                      onCheckedChange={toggleSelectAll}
-                                    />
-                                  </th>
-                                )}
+                                <th className="w-10 px-4 py-3">
+                                  <Checkbox
+                                    checked={
+                                      filteredAssignments.length > 0 &&
+                                      selectedAssignments.size ===
+                                        filteredAssignments.length
+                                    }
+                                    onCheckedChange={toggleSelectAll}
+                                  />
+                                </th>
                                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200">
                                   {t(
                                     "classroomDetail.labels.assignmentInfo",
@@ -2644,20 +2735,18 @@ export default function ClassroomDetail({
                                     key={assignment.id}
                                     className="border-b hover:bg-gray-50 dark:hover:bg-gray-700/50 dark:border-gray-600"
                                   >
-                                    {!showArchived && (
-                                      <td className="w-10 px-4 py-3">
-                                        <Checkbox
-                                          checked={selectedAssignments.has(
+                                    <td className="w-10 px-4 py-3">
+                                      <Checkbox
+                                        checked={selectedAssignments.has(
+                                          assignment.id,
+                                        )}
+                                        onCheckedChange={() =>
+                                          toggleAssignmentSelection(
                                             assignment.id,
-                                          )}
-                                          onCheckedChange={() =>
-                                            toggleAssignmentSelection(
-                                              assignment.id,
-                                            )
-                                          }
-                                        />
-                                      </td>
-                                    )}
+                                          )
+                                        }
+                                      />
+                                    </td>
                                     <td className="px-4 py-3">
                                       <div className="font-medium dark:text-gray-100">
                                         {assignment.title}
