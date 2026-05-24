@@ -22,6 +22,7 @@ from .dependencies import get_current_teacher
 from .validators import ContentCreate, ContentUpdate, ContentCopy
 from .utils import TEST_SUBSCRIPTION_WHITELIST, parse_birthdate
 from models import ContentType
+from utils.cloze import resolve_cloze_answer_on_save
 
 import logging
 
@@ -240,6 +241,14 @@ async def create_content(
                 if parts and isinstance(parts, list) and len(parts) > 0:
                     part_of_speech = parts[0]
 
+            # Issue #632: 自動抽取單字克漏字答案（若客戶端有傳則優先採用）
+            cloze_answer = resolve_cloze_answer_on_save(
+                base_word=item_data.get("text", ""),
+                example_sentence=example_sentence,
+                incoming_answer=item_data.get("cloze_answer"),
+                existing_answer=None,
+            )
+
             content_item = ContentItem(
                 content_id=content.id,
                 order_index=idx,
@@ -261,6 +270,7 @@ async def create_content(
                 image_url=item_data.get("image_url"),
                 part_of_speech=part_of_speech,
                 distractors=item_data.get("distractors"),
+                cloze_answer=cloze_answer,
                 item_metadata=metadata if metadata else None,
             )
             db.add(content_item)
@@ -357,6 +367,7 @@ async def get_content_detail(
                 "example_sentence": item.example_sentence,
                 "example_sentence_translation": item.example_sentence_translation,
                 "example_sentence_audio_url": item.example_sentence_audio_url,
+                "cloze_answer": item.cloze_answer,
                 "image_url": item.image_url,
                 "part_of_speech": item.part_of_speech,
                 # 前端使用 parts_of_speech (plural, array)
@@ -544,6 +555,17 @@ async def update_content(
                     if parts and isinstance(parts, list) and len(parts) > 0:
                         part_of_speech = parts[0]
 
+                # Issue #632: 編輯儲存時重新檢查克漏字答案。
+                # update_content 採「先刪除全部 ContentItem 再重建」策略，
+                # 沒有 existing row 可比對，因此老師的覆寫值需透過 item_data
+                # 的 cloze_answer 帶回（前端會把現有值一併送出）。
+                cloze_answer = resolve_cloze_answer_on_save(
+                    base_word=item_data.get("text", ""),
+                    example_sentence=example_sentence,
+                    incoming_answer=None,
+                    existing_answer=item_data.get("cloze_answer"),
+                )
+
                 content_item = ContentItem(
                     content_id=content.id,
                     order_index=idx,
@@ -567,6 +589,7 @@ async def update_content(
                     image_url=item_data.get("image_url"),
                     part_of_speech=part_of_speech,
                     distractors=item_data.get("distractors"),
+                    cloze_answer=cloze_answer,
                     item_metadata=metadata,
                 )
                 db.add(content_item)

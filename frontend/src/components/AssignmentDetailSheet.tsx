@@ -310,6 +310,17 @@ export function AssignmentDetailSheet({
           });
           return;
         }
+        // Issue #632: 切到 word_cloze 時若副本缺克漏字答案，提示老師回編輯內容補齊
+        if (detail?.code === "CLOZE_ANSWER_REQUIRED") {
+          const titles = detail.content_titles?.join("、") || "";
+          toast.error(t("dialogs.assignmentDialog.errors.missingClozeAnswer"), {
+            description: t(
+              "dialogs.assignmentDialog.errors.missingClozeAnswerDesc",
+              { contents: titles },
+            ),
+          });
+          return;
+        }
       }
       toast.error(t("assignmentDetail.messages.updateError", "儲存失敗"));
     } finally {

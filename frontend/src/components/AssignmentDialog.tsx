@@ -319,7 +319,10 @@ function SortableCartItem({ item, index, onRemove, t }: SortableCartItemProps) {
 const EMPTY_STUDENTS: Student[] = [];
 
 interface ExampleSentenceErrorDetail {
-  code: "EXAMPLE_SENTENCE_REQUIRED" | "EXAMPLE_AUDIO_REQUIRED";
+  code:
+    | "EXAMPLE_SENTENCE_REQUIRED"
+    | "EXAMPLE_AUDIO_REQUIRED"
+    | "CLOZE_ANSWER_REQUIRED";
   practice_mode?: string | null;
   play_audio?: boolean | null;
   content_titles?: string[];
@@ -338,7 +341,8 @@ const getExampleSentenceErrorDetail = (
       : null;
   if (
     code === "EXAMPLE_SENTENCE_REQUIRED" ||
-    code === "EXAMPLE_AUDIO_REQUIRED"
+    code === "EXAMPLE_AUDIO_REQUIRED" ||
+    code === "CLOZE_ANSWER_REQUIRED"
   ) {
     return detail as unknown as ExampleSentenceErrorDetail;
   }
@@ -1317,6 +1321,13 @@ export function AssignmentDialog({
             description: t("dialogs.assignmentDialog.errors.missingAudioDesc", {
               contents: titles,
             }),
+          });
+        } else if (detail?.code === "CLOZE_ANSWER_REQUIRED") {
+          toast.error(t("dialogs.assignmentDialog.errors.missingClozeAnswer"), {
+            description: t(
+              "dialogs.assignmentDialog.errors.missingClozeAnswerDesc",
+              { contents: titles },
+            ),
           });
         } else {
           toast.error(
