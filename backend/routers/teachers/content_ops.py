@@ -739,35 +739,63 @@ async def copy_content(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """複製內容到指定的單元"""
-    from utils.permissions import check_content_access, check_lesson_access
+    """複製內容到指定的單元，或（Issue #587）直接複製到教材包底下（不屬於任何單元）"""
+    from utils.permissions import (
+        check_content_access,
+        check_lesson_access,
+        check_program_access,
+    )
     from services.program_service import _copy_content_with_items
+
+    # Issue #587: exactly one of target_lesson_id / target_program_id is required
+    if not copy_data.target_lesson_id and not copy_data.target_program_id:
+        raise HTTPException(
+            status_code=422,
+            detail="必須指定 target_lesson_id 或 target_program_id",
+        )
 
     # 驗證來源 content 存取權限
     _program, _lesson, content = check_content_access(
         db, content_id, current_teacher, require_owner=False
     )
 
-    # 驗證目標 lesson 存取權限
-    _target_program, target_lesson = check_lesson_access(
-        db, copy_data.target_lesson_id, current_teacher, require_owner=True
-    )
-
-    # 計算目標 lesson 中的最大 order_index
-    max_order = (
-        db.query(func.max(Content.order_index))
-        .filter(
-            Content.lesson_id == copy_data.target_lesson_id,
-            Content.is_active.is_(True),
-        )
-        .scalar()
-    )
-
     # Eager load content_items
     db.refresh(content, ["content_items"])
 
-    # 複製 content 及所有 items
-    new_content = _copy_content_with_items(content, copy_data.target_lesson_id, db)
+    if copy_data.target_lesson_id:
+        # 複製到指定單元（原有行為）
+        check_lesson_access(
+            db, copy_data.target_lesson_id, current_teacher, require_owner=True
+        )
+        max_order = (
+            db.query(func.max(Content.order_index))
+            .filter(
+                Content.lesson_id == copy_data.target_lesson_id,
+                Content.is_active.is_(True),
+            )
+            .scalar()
+        )
+        new_content = _copy_content_with_items(content, copy_data.target_lesson_id, db)
+    else:
+        # Issue #587: 複製到教材包底下（lesson_id IS NULL）
+        check_program_access(
+            db, copy_data.target_program_id, current_teacher, require_owner=True
+        )
+        max_order = (
+            db.query(func.max(Content.order_index))
+            .filter(
+                Content.program_id == copy_data.target_program_id,
+                Content.lesson_id.is_(None),
+                Content.is_active.is_(True),
+            )
+            .scalar()
+        )
+        new_content = _copy_content_with_items(
+            content,
+            new_lesson_id=None,
+            db=db,
+            new_program_id=copy_data.target_program_id,
+        )
 
     # 設定複製後的標題和 order_index
     new_content.title = f"{content.title}(copy)"
@@ -794,6 +822,7 @@ async def copy_content(
         "tags": getattr(new_content, "tags", []),
         "source_content_id": content.id,
         "target_lesson_id": copy_data.target_lesson_id,
+        "target_program_id": copy_data.target_program_id,
     }
 
 

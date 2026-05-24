@@ -1179,6 +1179,16 @@ class ApiClient {
     });
   }
 
+  /**
+   * Issue #587: Copy content directly under a program (no lesson).
+   */
+  async copyContentToProgram(contentId: number, targetProgramId: number) {
+    return this.request(`/api/teachers/contents/${contentId}/copy`, {
+      method: "POST",
+      body: JSON.stringify({ target_program_id: targetProgramId }),
+    });
+  }
+
   // ============ Translation Methods ============
   async translateText(text: string, targetLang: string = "zh-TW") {
     return this.request("/api/teachers/translate", {

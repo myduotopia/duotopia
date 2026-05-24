@@ -659,3 +659,91 @@ class TestProgramsListIncludesProgramDirectContents:
         assert direct["lesson_id"] is None
         assert direct["program_id"] == teacher_program.id
         assert direct["items_count"] == 1
+
+
+# ============================================================================
+# 9. Copy content directly into a program (lesson optional)
+#    Issue #587 comment: 複製內容到指定教材包，選單元不是必填
+# ============================================================================
+
+
+class TestCopyContentToProgram:
+    def test_copy_content_to_program_without_lesson(
+        self,
+        authenticated_client: TestClient,
+        test_db: Session,
+        teacher_program: Program,
+    ):
+        """POST /contents/{id}/copy with target_program_id (no lesson) copies
+        the content directly under the program (lesson_id IS NULL)."""
+        # Source content lives under a lesson
+        lesson = Lesson(
+            program_id=teacher_program.id, name="L1", order_index=0, is_active=True
+        )
+        test_db.add(lesson)
+        test_db.commit()
+        source = Content(
+            lesson_id=lesson.id,
+            type=ContentType.EXAMPLE_SENTENCES,
+            title="Source",
+            order_index=0,
+        )
+        test_db.add(source)
+        test_db.commit()
+        test_db.refresh(source)
+        test_db.add(ContentItem(content_id=source.id, order_index=0, text="hi"))
+        test_db.commit()
+
+        response = authenticated_client.post(
+            f"/api/teachers/contents/{source.id}/copy",
+            json={"target_program_id": teacher_program.id},
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["target_program_id"] == teacher_program.id
+        assert data["target_lesson_id"] is None
+
+        # Verify the copy is program-direct and items came along
+        copy = (
+            test_db.query(Content)
+            .filter(
+                Content.program_id == teacher_program.id,
+                Content.lesson_id.is_(None),
+                Content.id != source.id,
+            )
+            .one()
+        )
+        assert copy.title == "Source(copy)"
+        assert copy.source_content_id == source.id
+        items = (
+            test_db.query(ContentItem).filter(ContentItem.content_id == copy.id).all()
+        )
+        assert len(items) == 1
+
+    def test_copy_content_requires_a_target(
+        self,
+        authenticated_client: TestClient,
+        test_db: Session,
+        teacher_program: Program,
+    ):
+        """Copy with neither target_lesson_id nor target_program_id → 422."""
+        lesson = Lesson(
+            program_id=teacher_program.id, name="L1", order_index=0, is_active=True
+        )
+        test_db.add(lesson)
+        test_db.commit()
+        source = Content(
+            lesson_id=lesson.id,
+            type=ContentType.EXAMPLE_SENTENCES,
+            title="Source",
+            order_index=0,
+        )
+        test_db.add(source)
+        test_db.commit()
+        test_db.refresh(source)
+
+        response = authenticated_client.post(
+            f"/api/teachers/contents/{source.id}/copy",
+            json={},
+        )
+        assert response.status_code == 422
