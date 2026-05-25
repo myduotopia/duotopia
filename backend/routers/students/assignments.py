@@ -50,14 +50,8 @@ AUTO_GRADED_MODES = frozenset(
 )
 
 
-def mastery_row_to_score(result):
-    """Convert a calculate_assignment_mastery() row to a stored score.
-
-    Returns a 0-100 value rounded to 1 decimal (matching the display-side
-    rounding in routers/assignments/detail.py), or None when mastery is
-    unavailable (row missing or current_mastery NULL). Submit leaves score
-    as None in that case so the display fallback can recompute it later.
-    """
+def mastery_row_to_score(result) -> float | None:
+    """mastery row → 0-100 score (1dp, aligned with detail.py), or None if NULL/missing."""
     if result and result.current_mastery is not None:
         return min(100, round(float(result.current_mastery) * 100, 1))
     return None
@@ -815,7 +809,9 @@ async def submit_assignment(
                 )
                 result = None
             score = mastery_row_to_score(result)
-            if score is None:
+            # 只在「DB 有回 row 但 current_mastery 為 NULL」時記第二筆警告；
+            # exception 路徑已用 exc_info=True 記過，避免重複/誤導的 log。
+            if score is None and result is not None:
                 logger.warning(
                     "calculate_assignment_mastery returned NULL for sa_id=%s "
                     "mode=%s; leaving score=None for display fallback",
