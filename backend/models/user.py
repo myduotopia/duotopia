@@ -199,6 +199,22 @@ class Teacher(Base):
         back_populates="teacher",
         cascade="all, delete-orphan",
     )
+    # Promo code / referral (issue #637)
+    promo_codes = relationship(
+        "PromoCode",
+        foreign_keys="PromoCode.teacher_id",
+        back_populates="teacher",
+        cascade="all, delete-orphan",
+    )
+    referrals_made = relationship(
+        "PromoReferral",
+        foreign_keys="PromoReferral.referrer_teacher_id",
+    )
+    referral_received = relationship(
+        "PromoReferral",
+        foreign_keys="PromoReferral.referred_teacher_id",
+        uselist=False,
+    )
 
     @property
     def current_period(self):

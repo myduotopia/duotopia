@@ -282,6 +282,22 @@ async def teacher_register(
         logger.error(f"Onboarding failed for teacher {new_teacher.id}: {e}")
         # User can still complete registration and login, just without default resources
 
+    # 🎯 Issue #637: 為新老師建立個人推銷碼（非致命，失敗不影響註冊）
+    try:
+        from services.promo_code_service import create_personal_code_for_teacher
+        import logging
+
+        logging.getLogger(__name__).info(
+            f"Creating personal promo code for teacher {new_teacher.id}"
+        )
+        create_personal_code_for_teacher(db, new_teacher.id)
+    except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).error(
+            f"Promo code creation failed for teacher {new_teacher.id}: {e}"
+        )
+
     # 🎯 發送驗證 email
     email_sent = email_service.send_teacher_verification_email(db, new_teacher)
 
