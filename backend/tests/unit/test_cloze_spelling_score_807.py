@@ -48,6 +48,19 @@ def _mock_mastery(value):
     return db
 
 
+def _mock_mastery_null_column():
+    """fetchone() 回傳一個 row，但 row.current_mastery 為 None。
+
+    與 _mock_mastery(None) 不同：那個是 fetchone() 直接回 None；
+    這裡是「有 row、但欄位為 NULL」的路徑。
+    """
+    db = MagicMock()
+    db.execute.return_value.fetchone.return_value = SimpleNamespace(
+        current_mastery=None
+    )
+    return db
+
+
 def _sa(status_value: str, score=None, sa_id: int = 1):
     """模擬 StudentAssignment（含 .status.value）。"""
     return SimpleNamespace(
@@ -232,10 +245,20 @@ class TestComputeInterimScoreFallback:
         assert score is None
 
     def test_mastery_returns_none_returns_none(self):
-        """calculate_assignment_mastery 回傳 None 時不可 crash。"""
+        """calculate_assignment_mastery 回傳 None（fetchone 無 row）時不可 crash。"""
         sa = _sa("GRADED", score=None)
         assignment = _assignment("word_cloze")
-        db = _mock_mastery(None)  # row.current_mastery = None 或 row = None
+        db = _mock_mastery(None)  # fetchone() -> None
+
+        score = _compute_interim_score(sa, assignment, db)
+        assert score is None
+
+    def test_mastery_null_column_returns_none(self):
+        """有 row 但 current_mastery 欄位為 NULL 時，_compute_interim_score 回 None
+        （#808 review #2：補上「row 存在但欄位 NULL」這條路徑的覆蓋）。"""
+        sa = _sa("GRADED", score=None)
+        assignment = _assignment("word_cloze")
+        db = _mock_mastery_null_column()
 
         score = _compute_interim_score(sa, assignment, db)
         assert score is None
