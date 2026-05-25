@@ -780,13 +780,17 @@ async def submit_assignment(
                 student_assignment.score = sum(valid_scores) / len(valid_scores)
             else:
                 student_assignment.score = 0
-        elif practice_mode == "word_selection":
-            # 單字選擇：使用 calculate_assignment_mastery 函數計算
+        elif practice_mode in ("word_selection", "word_cloze", "word_spelling"):
+            # Mastery-based 模式（單字選擇 / 克漏字 / 單字拼寫）
+            # 使用 calculate_assignment_mastery 函數計算
+            # Issue #807: word_cloze / word_spelling 過去漏在這條分支裡，
+            # 提交後 status=GRADED 但 score 維持 None，造成老師端二次開
+            # modal 顯示 0.0%。
             result = db.execute(
                 text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
                 {"sa_id": student_assignment.id},
             ).fetchone()
-            if result:
+            if result and result.current_mastery is not None:
                 current_mastery = float(result.current_mastery) * 100
                 student_assignment.score = min(100, round(current_mastery))
             else:
