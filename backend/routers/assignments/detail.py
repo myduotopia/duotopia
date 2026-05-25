@@ -2,6 +2,7 @@
 Assignment detail and progress endpoints
 """
 
+import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
@@ -22,6 +23,8 @@ from models import (
     StudentItemProgress,
 )
 from .dependencies import get_current_teacher
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -88,6 +91,13 @@ def _compute_interim_score(sa, assignment, db: Session, total_items: int | None 
                 {"sa_id": sa.id},
             ).fetchone()
         except Exception:
+            logger.warning(
+                "calculate_assignment_mastery raised while computing display "
+                "score for sa_id=%s mode=%s; returning None",
+                sa.id,
+                practice_mode,
+                exc_info=True,
+            )
             return None
         if result and result.current_mastery is not None:
             return min(100, round(float(result.current_mastery) * 100, 1))

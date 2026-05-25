@@ -49,6 +49,20 @@ AUTO_GRADED_MODES = frozenset(
     {"rearrangement", "word_selection", "word_spelling", "word_cloze"}
 )
 
+
+def mastery_row_to_score(result):
+    """Convert a calculate_assignment_mastery() row to a stored score.
+
+    Returns a 0-100 value rounded to 1 decimal (matching the display-side
+    rounding in routers/assignments/detail.py), or None when mastery is
+    unavailable (row missing or current_mastery NULL). Submit leaves score
+    as None in that case so the display fallback can recompute it later.
+    """
+    if result and result.current_mastery is not None:
+        return min(100, round(float(result.current_mastery) * 100, 1))
+    return None
+
+
 router = APIRouter()
 
 
@@ -786,15 +800,29 @@ async def submit_assignment(
             # Issue #807: word_cloze / word_spelling 過去漏在這條分支裡，
             # 提交後 status=GRADED 但 score 維持 None，造成老師端二次開
             # modal 顯示 0.0%。
-            result = db.execute(
-                text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
-                {"sa_id": student_assignment.id},
-            ).fetchone()
-            if result and result.current_mastery is not None:
-                current_mastery = float(result.current_mastery) * 100
-                student_assignment.score = min(100, round(current_mastery))
-            else:
-                student_assignment.score = 0
+            try:
+                result = db.execute(
+                    text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+                    {"sa_id": student_assignment.id},
+                ).fetchone()
+            except Exception:
+                logger.warning(
+                    "calculate_assignment_mastery raised for sa_id=%s mode=%s; "
+                    "leaving score=None for display fallback",
+                    student_assignment.id,
+                    practice_mode,
+                    exc_info=True,
+                )
+                result = None
+            score = mastery_row_to_score(result)
+            if score is None:
+                logger.warning(
+                    "calculate_assignment_mastery returned NULL for sa_id=%s "
+                    "mode=%s; leaving score=None for display fallback",
+                    student_assignment.id,
+                    practice_mode,
+                )
+            student_assignment.score = score
     else:
         student_assignment.status = AssignmentStatus.SUBMITTED
     student_assignment.submitted_at = datetime.now(timezone.utc)

@@ -17,7 +17,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from routers.students.assignments import AUTO_GRADED_MODES as STUDENT_AUTO_GRADED_MODES
+from routers.students.assignments import (
+    AUTO_GRADED_MODES as STUDENT_AUTO_GRADED_MODES,
+    mastery_row_to_score,
+)
 from routers.assignments.detail import (
     _MASTERY_FUNCTION_MODES,
     _compute_interim_score,
@@ -75,37 +78,46 @@ class TestSubmitEndpointAutoGradedModes:
         assert "word_cloze" in STUDENT_AUTO_GRADED_MODES
         assert "word_spelling" in STUDENT_AUTO_GRADED_MODES
 
+    def test_auto_graded_modes_superset_of_mastery_modes(self):
+        """AUTO_GRADED_MODES 必須涵蓋所有 mastery-based modes（#808 review #4）。
+
+        若 detail.py 新增 mastery mode 卻漏加到 submit 端的 AUTO_GRADED_MODES，
+        提交後 status 不會變 GRADED、score 也不會寫 — 與 #807 同類 bug。
+        """
+        assert _MASTERY_FUNCTION_MODES <= STUDENT_AUTO_GRADED_MODES, (
+            "_MASTERY_FUNCTION_MODES 必須是 AUTO_GRADED_MODES 的子集，"
+            f"漏掉：{_MASTERY_FUNCTION_MODES - STUDENT_AUTO_GRADED_MODES}"
+        )
+
     @pytest.mark.parametrize(
         "practice_mode,mastery,expected_score",
         [
-            ("word_cloze", 0.9333, 93),  # 李小美實際案例
-            ("word_cloze", 0.80, 80),
+            ("word_cloze", 0.9333, 93.3),  # 李小美實際案例
+            ("word_cloze", 0.80, 80.0),
             ("word_cloze", 1.0, 100),
-            ("word_cloze", 0.0, 0),
-            ("word_spelling", 0.95, 95),
-            ("word_spelling", 0.0, 0),
+            ("word_cloze", 0.0, 0.0),
+            ("word_spelling", 0.95, 95.0),
+            ("word_spelling", 0.0, 0.0),
         ],
     )
     def test_cloze_spelling_submit_writes_score(
         self, practice_mode, mastery, expected_score
     ):
-        """模擬提交端點：cloze / spelling 提交後 score 必須是 mastery*100 取整，不可 None。
+        """提交端點：cloze / spelling 提交後 score 必須是 mastery*100 取一位小數，不可 None。
 
-        對應 fix：backend/routers/students/assignments.py:758-793
-        新增 `elif practice_mode in ("word_cloze", "word_spelling"):` 分支。
+        對應 fix：呼叫 mastery_row_to_score（與顯示端 detail.py 對齊精度）。
         """
-        # 模擬實際端點裡寫入 score 的邏輯（fix 後）
         score = _simulate_submit_score(practice_mode, mastery_value=mastery)
-        assert score == expected_score, (
+        assert score == pytest.approx(expected_score, abs=0.05), (
             f"practice_mode={practice_mode} mastery={mastery}: "
             f"expected score={expected_score}, got {score}"
         )
 
-    def test_cloze_submit_with_null_mastery_falls_back_to_zero(self):
-        """calculate_assignment_mastery 回傳 None 或 row.current_mastery=None
-        時，score 不可留 None — 必須 fallback 為 0。"""
+    def test_cloze_submit_with_null_mastery_returns_none(self):
+        """calculate_assignment_mastery 回傳 None 或 row.current_mastery=None 時，
+        score 留 None（不寫死 0），交由顯示端 fallback 後續重算（#808 review #2）。"""
         score = _simulate_submit_score("word_cloze", mastery_value=None)
-        assert score == 0, "mastery=None 時 score 必須 fallback 為 0，不可留 None"
+        assert score is None, "mastery=None 時 score 應留 None，讓顯示端 fallback 重算"
 
     def test_rearrangement_score_branch_unchanged(self):
         """Regression：rearrangement 仍走 expected_score 平均分支。"""
@@ -118,15 +130,16 @@ class TestSubmitEndpointAutoGradedModes:
     def test_word_selection_score_branch_unchanged(self):
         """Regression：word_selection 仍走 mastery 分支。"""
         score = _simulate_submit_score("word_selection", mastery_value=0.85)
-        assert score == 85
+        assert score == pytest.approx(85.0, abs=0.05)
 
 
 def _simulate_submit_score(
     practice_mode: str, mastery_value=None, expected_scores=None
 ):
-    """模擬 backend/routers/students/assignments.py:758-793 修正後的 is_auto_graded 分支。
+    """模擬 submit 端點的 is_auto_graded 分支。
 
-    如果這個 helper 跟真實 endpoint 邏輯漂移，請同步更新真實 endpoint。
+    Mastery-based modes 直接呼叫真實的 mastery_row_to_score（單一真實來源，
+    不再各自鏡像邏輯），避免測試與 endpoint 漂移（#808 review #5）。
     """
     is_auto_graded = practice_mode in STUDENT_AUTO_GRADED_MODES
     if not is_auto_graded:
@@ -135,15 +148,13 @@ def _simulate_submit_score(
     if practice_mode == "rearrangement":
         valid = [float(s) for s in (expected_scores or []) if s is not None]
         return sum(valid) / len(valid) if valid else 0
-    elif practice_mode == "word_selection":
-        if mastery_value is None:
-            return 0
-        return min(100, round(float(mastery_value) * 100))
-    elif practice_mode in ("word_cloze", "word_spelling"):
-        # ← Fix A：缺這段就會留 score=None
-        if mastery_value is None:
-            return 0
-        return min(100, round(float(mastery_value) * 100))
+    elif practice_mode in ("word_selection", "word_cloze", "word_spelling"):
+        row = (
+            None
+            if mastery_value is None
+            else SimpleNamespace(current_mastery=mastery_value)
+        )
+        return mastery_row_to_score(row)
 
     # 任何新增的 AUTO_GRADED mode 沒對應分支 → 視為 bug
     raise AssertionError(
