@@ -109,7 +109,9 @@ class ContentResponse(BaseModel):
     """Content 回應"""
 
     id: int
-    lesson_id: int
+    # Issue #587: lesson_id may be None for program-direct content
+    lesson_id: Optional[int] = None
+    program_id: Optional[int] = None
     title: str
     type: str
     level: Optional[str]

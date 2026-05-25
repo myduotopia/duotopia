@@ -9,6 +9,7 @@ import uuid
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordBearer
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from services import program_service
@@ -49,6 +50,13 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/teacher/login")
 router = APIRouter(prefix="/api/programs", tags=["programs"])
 
 logger = logging.getLogger(__name__)
+
+
+# Issue #587: typed payload for content reorder so malformed requests return
+# 422 (validation error) instead of an unhandled KeyError -> 500.
+class ContentOrderItem(BaseModel):
+    id: int
+    order_index: int
 
 
 # ============ 認證輔助函數 ============
@@ -1681,7 +1689,7 @@ async def create_content_in_program(
 @router.put("/{program_id}/contents/reorder")
 async def reorder_program_direct_contents(
     program_id: int,
-    order_data: List[dict],
+    order_data: List[ContentOrderItem],
     db: Session = Depends(get_db),
     current_teacher: Teacher = Depends(get_current_teacher),
 ):
@@ -1695,7 +1703,7 @@ async def reorder_program_direct_contents(
     if not has_program_permission(db, program_id, current_teacher.id, "write"):
         raise HTTPException(status_code=403, detail="No permission to reorder contents")
 
-    content_ids = [item["id"] for item in order_data]
+    content_ids = [item.id for item in order_data]
     contents_list = (
         db.query(Content)
         .filter(
@@ -1708,9 +1716,9 @@ async def reorder_program_direct_contents(
     contents_dict = {c.id: c for c in contents_list}
 
     for item in order_data:
-        content = contents_dict.get(item["id"])
+        content = contents_dict.get(item.id)
         if content:
-            content.order_index = item["order_index"]
+            content.order_index = item.order_index
 
     db.commit()
     return {"message": "Contents reordered successfully"}

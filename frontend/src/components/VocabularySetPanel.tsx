@@ -2802,10 +2802,25 @@ const VocabularySetPanel = forwardRef<
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           let savedContent = newContent as any;
           if (programId && saveData.items && saveData.items.length > 0) {
-            await apiClient.updateContent(savedContent.id, {
-              title: saveData.title,
-              items: saveData.items,
-            });
+            try {
+              await apiClient.updateContent(savedContent.id, {
+                title: saveData.title,
+                items: saveData.items,
+              });
+            } catch (updateError) {
+              // Issue #587: roll back the empty content created in step 1 if
+              // the items update fails, so a retry doesn't leave an orphaned
+              // 0-item record behind.
+              try {
+                await apiClient.deleteContent(savedContent.id);
+              } catch (rollbackError) {
+                console.error(
+                  "Failed to roll back orphaned content:",
+                  rollbackError,
+                );
+              }
+              throw updateError;
+            }
             // Issue #587: merge items back so the content card doesn't show
             // "0 items" until a full page refresh.
             savedContent = {

@@ -426,6 +426,13 @@ function TeacherTemplateProgramsInner() {
       await apiClient.deleteContent(contentId);
       const updatedPrograms = programs.map((program) => ({
         ...program,
+        // Issue #587: ProgramFolderView passes lessonId=0 for program-direct
+        // content; filter program.contents so the deleted card disappears
+        // without a page refresh.
+        contents:
+          lessonId === 0
+            ? program.contents?.filter((c) => c.id !== contentId)
+            : program.contents,
         lessons: program.lessons?.map((lesson) => {
           if (lesson.id === lessonId) {
             return {

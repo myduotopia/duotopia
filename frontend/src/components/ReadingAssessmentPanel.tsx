@@ -1401,12 +1401,27 @@ const ReadingAssessmentPanel = forwardRef<
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let savedContent = newContent as any;
         if (programId && saveData.items && saveData.items.length > 0) {
-          await apiClient.updateContent(savedContent.id, {
-            title: saveData.title,
-            items: saveData.items,
-            target_wpm: saveData.target_wpm,
-            target_accuracy: saveData.target_accuracy,
-          });
+          try {
+            await apiClient.updateContent(savedContent.id, {
+              title: saveData.title,
+              items: saveData.items,
+              target_wpm: saveData.target_wpm,
+              target_accuracy: saveData.target_accuracy,
+            });
+          } catch (updateError) {
+            // Issue #587: the create+update is two requests. If the items
+            // update fails, roll back the empty content we just created so a
+            // retry doesn't leave an orphaned 0-item record behind.
+            try {
+              await apiClient.deleteContent(savedContent.id);
+            } catch (rollbackError) {
+              console.error(
+                "Failed to roll back orphaned content:",
+                rollbackError,
+              );
+            }
+            throw updateError;
+          }
           // Issue #587: createProgramContent only returns type+title, so merge
           // items back in before handing to onSave — otherwise the content card
           // renders "0 items" until a full page refresh.
