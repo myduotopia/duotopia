@@ -1160,6 +1160,9 @@ interface ReadingAssessmentPanelProps {
   onSave?: () => void | Promise<void>;
   // Alternative props for ClassroomDetail usage
   lessonId?: number;
+  // Issue #587: programId is set (and lessonId is omitted) when creating
+  // content directly under a program (no lesson).
+  programId?: number;
   programLevel?: string; // Program difficulty level for AI generation
   contentId?: number;
   onCancel?: () => void;
@@ -1178,6 +1181,7 @@ const ReadingAssessmentPanel = forwardRef<
     onUpdateContent,
     onSave,
     lessonId,
+    programId,
     // programLevel - reserved for future AI generation features
     isCreating = false,
     isAssignmentCopy = false,
@@ -1378,16 +1382,62 @@ const ReadingAssessmentPanel = forwardRef<
           toast.error(t("contentEditor.messages.savingFailed"));
         }
       }
-    } else if (isCreating && lessonId) {
+    } else if (isCreating && (lessonId || programId)) {
       try {
-        const newContent = await apiClient.createContent(lessonId, {
-          type: "EXAMPLE_SENTENCES",
-          ...saveData,
-        });
+        // Issue #587: when programId is set (and no lessonId), create
+        // content directly under the program; otherwise create under lesson.
+        const newContent = programId
+          ? await apiClient.createProgramContent(programId, {
+              type: "EXAMPLE_SENTENCES",
+              title: saveData.title,
+            })
+          : await apiClient.createContent(lessonId!, {
+              type: "EXAMPLE_SENTENCES",
+              ...saveData,
+            });
+
+        // For program-direct creation we only sent type+title above; if there
+        // are items to persist, do an update right after to fill them in.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let savedContent = newContent as any;
+        if (programId && saveData.items && saveData.items.length > 0) {
+          try {
+            await apiClient.updateContent(savedContent.id, {
+              title: saveData.title,
+              items: saveData.items,
+              target_wpm: saveData.target_wpm,
+              target_accuracy: saveData.target_accuracy,
+            });
+          } catch (updateError) {
+            // Issue #587: the create+update is two requests. If the items
+            // update fails, roll back the empty content we just created so a
+            // retry doesn't leave an orphaned 0-item record behind.
+            try {
+              await apiClient.deleteContent(savedContent.id);
+            } catch (rollbackError) {
+              console.error(
+                "Failed to roll back orphaned content:",
+                rollbackError,
+              );
+            }
+            throw updateError;
+          }
+          // Issue #587: createProgramContent only returns type+title, so merge
+          // items back in before handing to onSave — otherwise the content card
+          // renders "0 items" until a full page refresh.
+          savedContent = {
+            ...savedContent,
+            items: saveData.items,
+            items_count: saveData.items.length,
+          };
+        }
+
         toast.success(t("contentEditor.messages.contentCreatedSuccess"));
         if (onSave) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (onSave as (content?: any) => void | Promise<void>)(newContent);
+          await (onSave as (content?: any) => void | Promise<void>)(
+            savedContent,
+          );
         }
       } catch (error: unknown) {
         console.error("Failed to create content:", error);

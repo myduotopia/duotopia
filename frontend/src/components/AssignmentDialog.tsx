@@ -109,7 +109,9 @@ interface Content {
   id: number;
   title: string;
   type: string;
-  lesson_id: number;
+  // Issue #587: lesson_id may be null when content lives directly under a program
+  lesson_id?: number | null;
+  program_id?: number | null;
   items_count?: number;
   items?: ContentItemData[]; // 包含音檔資訊的項目列表
   level?: string;
@@ -129,6 +131,8 @@ interface Program {
   description?: string;
   level?: string;
   lessons?: Lesson[];
+  // Issue #587: contents directly under a program (no lesson)
+  contents?: Content[];
   teacher_id?: number;
   organization_id?: string;
   school_id?: string;
@@ -235,6 +239,7 @@ interface QuotaInfo {
 export interface CartItem {
   contentId: number;
   programName: string;
+  // Issue #587: lessonName empty when content lives directly under program
   lessonName: string;
   contentTitle: string;
   contentType: string;
@@ -298,7 +303,9 @@ function SortableCartItem({ item, index, onRemove, t }: SortableCartItemProps) {
             </span>
           </div>
           <div className="text-xs text-gray-500 truncate">
-            {item.programName} / {item.lessonName}
+            {item.lessonName
+              ? `${item.programName} / ${item.lessonName}`
+              : item.programName}
           </div>
           <div className="flex items-center gap-1 mt-1">
             <Badge variant="outline" className="px-1 py-0 text-xs">
