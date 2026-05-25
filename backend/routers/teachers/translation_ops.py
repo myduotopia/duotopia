@@ -343,6 +343,14 @@ async def generate_sentences(
         for sentence, url in zip(sentences, audio_urls):
             sentence["audio_url"] = url
 
+        # Issue #632: 生成例句後立即抽取克漏字答案，讓老師在前端即時確認/調整
+        from utils.cloze import compute_cloze_answer
+
+        for sentence in sentences:
+            sentence["cloze_answer"] = compute_cloze_answer(
+                sentence.get("word", ""), sentence.get("sentence", "")
+            )
+
         elapsed = time.monotonic() - t0
         logger.info(
             "[PERF] API generate-sentences DONE | words=%d | %.2fs | avg=%.2fs/word",

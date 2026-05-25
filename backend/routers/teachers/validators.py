@@ -191,7 +191,10 @@ class ContentCreate(BaseModel):
 
 
 class ContentCopy(BaseModel):
-    target_lesson_id: int
+    # Issue #587: lesson is optional — content can be copied directly under a
+    # program (target_program_id) without belonging to any lesson.
+    target_lesson_id: Optional[int] = None
+    target_program_id: Optional[int] = None
 
 
 class ContentUpdate(BaseModel):

@@ -1785,7 +1785,9 @@
         "insufficientWordsDesc": "單字選擇模式需要至少 20 個單字，目前只有 {{count}} 個",
         "mixedContentType": "目前只能選擇{{type}}，請先清除已選擇的內容再選擇其他類型",
         "exampleSentenceRequired": "無法建立{{mode}}作業",
-        "exampleSentenceRequiredDesc": "以下內容缺少例句或例句翻譯，請補齊後再派發：{{contents}}"
+        "exampleSentenceRequiredDesc": "以下內容缺少例句或例句翻譯，請補齊後再派發：{{contents}}",
+        "missingClozeAnswer": "缺少克漏字答案",
+        "missingClozeAnswerDesc": "以下單字集有單字尚未設定克漏字答案：{{contents}}。請先到單字集編輯內容、點擊單字或框選片語設定答案後再派發。"
       },
       "warnings": {
         "quotaLow": "AI 分析額度不足",
@@ -1959,8 +1961,9 @@
       "description": "將「{{title}}」複製到指定的教材單元中",
       "targetProgram": "目標教材",
       "targetLesson": "目標單元",
+      "optional": "（選填）",
       "selectProgram": "請選擇教材",
-      "selectLesson": "請選擇單元",
+      "selectLesson": "請選擇單元（選填）",
       "selectProgramFirst": "請先選擇教材",
       "searchProgram": "搜尋教材...",
       "searchLesson": "搜尋單元...",
@@ -3339,8 +3342,12 @@
     "noDescription": "尚無描述",
     "lessonsSection": "單元",
     "contentsSection": "內容",
+    "lessonContentsSection": "單元內容",
+    "programContentsSection": "教材內容",
     "addLesson": "新增單元",
     "addContent": "新增內容",
+    "addLessonContent": "新增單元內容",
+    "addProgramContent": "新增教材內容",
     "noContents": "此單元尚無內容",
     "noProgramContents": "此教材尚無內容",
     "noLessons": "此教材尚無單元"
@@ -4679,6 +4686,15 @@
       "clickToUpload": "點擊上傳",
       "macScreenshotHint": "截圖提示：請使用 Ctrl+Shift+Cmd+4 截圖才能貼上",
       "windowsScreenshotHint": "截圖提示：請使用 Win+Shift+S 截圖後貼上"
+    },
+    "cloze": {
+      "label": "克漏字答案",
+      "emptyHint": "尚未設定 — 派發單字克漏字作業前需補齊",
+      "clear": "清除答案",
+      "usePhrase": "新增答案",
+      "hint": "單字點兩下即成為答案；片語請圈選後按「新增答案」",
+      "noSelection": "請先在例句中選取文字",
+      "selectionNotInSentence": "選取的文字必須來自例句"
     }
   },
   "wordReading": {

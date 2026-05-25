@@ -24,6 +24,7 @@ from models import (
     Lesson,
     Content,
     ContentItem,
+    ContentType,
     Teacher,
     Organization,
     Classroom,
@@ -41,11 +42,19 @@ logger = logging.getLogger(__name__)
 
 
 def _copy_content_with_items(
-    content: Content, new_lesson_id: int, db: Session
+    content: Content,
+    new_lesson_id: Optional[int],
+    db: Session,
+    new_program_id: Optional[int] = None,
 ) -> Content:
-    """Deep copy a content record with its content items."""
+    """Deep copy a content record with its content items.
+
+    Issue #587: Either new_lesson_id or new_program_id must be provided
+    (mirroring the lesson-OR-program CHECK constraint on the contents table).
+    """
     new_content = Content(
         lesson_id=new_lesson_id,
+        program_id=new_program_id,
         title=content.title,
         type=content.type,
         level=content.level if hasattr(content, "level") else "A1",
@@ -104,6 +113,10 @@ def _copy_content_with_items(
             else None,
             distractors=deepcopy(original_item.distractors)
             if hasattr(original_item, "distractors") and original_item.distractors
+            else None,
+            # Issue #632: 克漏字答案隨教材複製一併帶過
+            cloze_answer=original_item.cloze_answer
+            if hasattr(original_item, "cloze_answer")
             else None,
             item_metadata=deepcopy(original_item.item_metadata)
             if hasattr(original_item, "item_metadata") and original_item.item_metadata
@@ -165,8 +178,52 @@ def copy_program_tree(
 
             _copy_content_with_items(content, new_lesson.id, db)
 
+    # Issue #587: also copy contents that live directly under the program
+    for content in _program_direct_contents(source_program, db):
+        _copy_content_with_items(
+            content, new_lesson_id=None, db=db, new_program_id=new_program.id
+        )
+
     db.flush()
     return new_program
+
+
+def _coerce_content_type(value):
+    """Accept enum, exact-name str, or lowercase API alias and return a ContentType."""
+    if isinstance(value, ContentType):
+        return value
+    if not value:
+        return ContentType.EXAMPLE_SENTENCES
+    upper = str(value).upper()
+    legacy = {
+        "READING_ASSESSMENT": ContentType.EXAMPLE_SENTENCES,
+        "SENTENCE_MAKING": ContentType.VOCABULARY_SET,
+    }
+    if upper in legacy:
+        return legacy[upper]
+    try:
+        return ContentType(upper)
+    except ValueError:
+        return ContentType.EXAMPLE_SENTENCES
+
+
+def _program_direct_contents(program: Program, db: Session) -> List[Content]:
+    """Return active, non-assignment-copy contents directly under a program.
+
+    Issue #587: contents can live directly on a program (lesson_id IS NULL).
+    Falls back to a query rather than relying on Program.contents relationship
+    so this works even when callers pass a detached/just-built Program.
+    """
+    return (
+        db.query(Content)
+        .filter(
+            Content.program_id == program.id,
+            Content.lesson_id.is_(None),
+            Content.is_active.is_(True),
+            Content.is_assignment_copy.is_(False),
+        )
+        .all()
+    )
 
 
 def copy_program_tree_to_template(
@@ -222,6 +279,12 @@ def copy_program_tree_to_template(
                 continue
 
             _copy_content_with_items(content, new_lesson.id, db)
+
+    # Issue #587: also copy contents that live directly under the program
+    for content in _program_direct_contents(source_program, db):
+        _copy_content_with_items(
+            content, new_lesson_id=None, db=db, new_program_id=new_program.id
+        )
 
     db.flush()
     return new_program
@@ -664,6 +727,49 @@ def create_content(
         type=data["type"],
         title=data["title"],
         order_index=max_order + 1,
+        is_active=True,
+    )
+
+    db.add(content)
+    db.commit()
+    db.refresh(content)
+
+    return content
+
+
+def create_content_in_program(
+    program_id: int, teacher_id: int, data: Dict[str, Any], db: Session
+) -> Content:
+    """
+    Issue #587: Create content directly under a program (no lesson).
+
+    Automatically checks program permission.
+    """
+    if not has_program_permission(db, program_id, teacher_id, "write"):
+        raise PermissionError("No permission to create contents in this program")
+
+    program = db.query(Program).filter(Program.id == program_id).first()
+    if not program:
+        raise ValueError("Program not found")
+
+    # Order among the program-direct siblings
+    max_order = (
+        db.query(func.max(Content.order_index))
+        .filter(
+            Content.program_id == program_id,
+            Content.lesson_id.is_(None),
+            Content.is_active.is_(True),
+        )
+        .scalar()
+        or 0
+    )
+
+    content = Content(
+        lesson_id=None,
+        program_id=program_id,
+        type=_coerce_content_type(data["type"]),
+        title=data["title"],
+        order_index=data.get("order_index") or (max_order + 1),
         is_active=True,
     )
 

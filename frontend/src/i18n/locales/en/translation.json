@@ -1713,7 +1713,9 @@
         "insufficientWordsDesc": "Word selection mode requires at least 20 words, currently only {{count}}",
         "mixedContentType": "Only {{type}} can be selected. Please clear selected content before choosing a different type",
         "exampleSentenceRequired": "Cannot create {{mode}} assignment",
-        "exampleSentenceRequiredDesc": "The following content is missing example sentences or translations: {{contents}}"
+        "exampleSentenceRequiredDesc": "The following content is missing example sentences or translations: {{contents}}",
+        "missingClozeAnswer": "Cloze answer required",
+        "missingClozeAnswerDesc": "These vocabulary sets are missing a cloze answer for some words: {{contents}}. Please open the vocabulary set and set an answer (click a word or select a phrase) before assigning."
       },
       "warnings": {
         "quotaLow": "AI analysis quota insufficient",
@@ -1906,8 +1908,9 @@
       "description": "Copy \"{{title}}\" to a target lesson",
       "targetProgram": "Target Program",
       "targetLesson": "Target Lesson",
+      "optional": "(optional)",
       "selectProgram": "Select a program",
-      "selectLesson": "Select a lesson",
+      "selectLesson": "Select a lesson (optional)",
       "selectProgramFirst": "Select a program first",
       "searchProgram": "Search programs...",
       "searchLesson": "Search lessons...",
@@ -3335,8 +3338,12 @@
     "noDescription": "No description",
     "lessonsSection": "Lessons",
     "contentsSection": "Contents",
+    "lessonContentsSection": "Lesson Contents",
+    "programContentsSection": "Program Contents",
     "addLesson": "Add Lesson",
     "addContent": "Add Content",
+    "addLessonContent": "Add Lesson Content",
+    "addProgramContent": "Add Program Content",
     "noContents": "No contents in this lesson",
     "noProgramContents": "No contents in this program",
     "noLessons": "No lessons in this program"
@@ -4661,6 +4668,15 @@
       "speed": "Speed",
       "generating": "Generating...",
       "generate": "Generate"
+    },
+    "cloze": {
+      "label": "Cloze answer",
+      "emptyHint": "Not set — required for word cloze assignments",
+      "clear": "Clear answer",
+      "usePhrase": "Add answer",
+      "hint": "Double-click a word to set it; for a phrase, select it then click Add answer",
+      "noSelection": "Please select some text in the sentence first",
+      "selectionNotInSentence": "The selected text must come from the example sentence"
     }
   },
   "wordReading": {

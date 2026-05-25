@@ -114,6 +114,9 @@ async def create_instant_practice(
     # 複製 Content 和 ContentItem（重用既有邏輯）
     content_copy = Content(
         lesson_id=content.lesson_id,
+        # Issue #587: carry program_id so program-direct content (lesson_id=NULL)
+        # doesn't violate the ck_contents_lesson_or_program CHECK constraint.
+        program_id=content.program_id,
         type=content.type,
         title=content.title,
         order_index=content.order_index,

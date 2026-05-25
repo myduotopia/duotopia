@@ -28,6 +28,7 @@ from models import (
 )
 from services.preview_service import get_sentence_fields, _VOCABULARY_CONTENT_TYPES
 from services.quota_service import QuotaService
+from utils.cloze import extract_cloze_for_item
 from .dependencies import get_current_student
 from .validators import (
     PracticeWord,
@@ -47,6 +48,14 @@ logger = logging.getLogger(__name__)
 AUTO_GRADED_MODES = frozenset(
     {"rearrangement", "word_selection", "word_spelling", "word_cloze"}
 )
+
+
+def mastery_row_to_score(result) -> float | None:
+    """mastery row → 0-100 score (1dp, aligned with detail.py), or None if NULL/missing."""
+    if result and result.current_mastery is not None:
+        return min(100, round(float(result.current_mastery) * 100, 1))
+    return None
+
 
 router = APIRouter()
 
@@ -779,17 +788,37 @@ async def submit_assignment(
                 student_assignment.score = sum(valid_scores) / len(valid_scores)
             else:
                 student_assignment.score = 0
-        elif practice_mode == "word_selection":
-            # 單字選擇：使用 calculate_assignment_mastery 函數計算
-            result = db.execute(
-                text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
-                {"sa_id": student_assignment.id},
-            ).fetchone()
-            if result:
-                current_mastery = float(result.current_mastery) * 100
-                student_assignment.score = min(100, round(current_mastery))
-            else:
-                student_assignment.score = 0
+        elif practice_mode in ("word_selection", "word_cloze", "word_spelling"):
+            # Mastery-based 模式（單字選擇 / 克漏字 / 單字拼寫）
+            # 使用 calculate_assignment_mastery 函數計算
+            # Issue #807: word_cloze / word_spelling 過去漏在這條分支裡，
+            # 提交後 status=GRADED 但 score 維持 None，造成老師端二次開
+            # modal 顯示 0.0%。
+            try:
+                result = db.execute(
+                    text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+                    {"sa_id": student_assignment.id},
+                ).fetchone()
+            except Exception:
+                logger.warning(
+                    "calculate_assignment_mastery raised for sa_id=%s mode=%s; "
+                    "leaving score=None for display fallback",
+                    student_assignment.id,
+                    practice_mode,
+                    exc_info=True,
+                )
+                result = None
+            score = mastery_row_to_score(result)
+            # 只在「DB 有回 row 但 current_mastery 為 NULL」時記第二筆警告；
+            # exception 路徑已用 exc_info=True 記過，避免重複/誤導的 log。
+            if score is None and result is not None:
+                logger.warning(
+                    "calculate_assignment_mastery returned NULL for sa_id=%s "
+                    "mode=%s; leaving score=None for display fallback",
+                    student_assignment.id,
+                    practice_mode,
+                )
+            student_assignment.score = score
     else:
         student_assignment.status = AssignmentStatus.SUBMITTED
     student_assignment.submitted_at = datetime.now(timezone.utc)
@@ -1499,6 +1528,13 @@ async def start_word_selection_practice(
     # Issue #460: Tell frontend if this is practice-only mode (already submitted)
     is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
 
+    # Issue #800: all_mastered means every word reached T5 and is therefore
+    # excluded from the candidate pool by get_words_for_practice. Frontend
+    # uses this to show the "全部精熟" celebration instead of an empty state.
+    all_mastered = (
+        total_words_in_assignment > 0 and words_mastered == total_words_in_assignment
+    )
+
     return {
         "session_id": practice_session.id,
         "words": words_with_options,
@@ -1508,6 +1544,7 @@ async def start_word_selection_practice(
         "words_mastered": words_mastered,
         **tier_counts,
         "achieved": achieved,
+        "all_mastered": all_mastered,
         "is_practice_mode": is_practice_mode,
         "show_word": assignment.show_word if assignment else True,
         "show_image": assignment.show_image if assignment else True,
@@ -2096,6 +2133,11 @@ async def start_word_spelling_practice(
     tier_counts = _tier_counts(mastery_result)
     is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
 
+    # Issue #800: see selection endpoint for all_mastered rationale.
+    all_mastered = (
+        total_words_in_assignment > 0 and words_mastered == total_words_in_assignment
+    )
+
     return {
         "session_id": practice_session.id,
         "words": words_data,
@@ -2105,6 +2147,7 @@ async def start_word_spelling_practice(
         "words_mastered": words_mastered,
         **tier_counts,
         "achieved": achieved,
+        "all_mastered": all_mastered,
         "is_practice_mode": is_practice_mode,
         "show_translation": (assignment.show_translation if assignment else True),
         "show_image": assignment.show_image if assignment else True,
@@ -2412,176 +2455,6 @@ class WordClozeAnswerRequest(BaseModel):
     session_id: Optional[int] = None
 
 
-_CLOZE_STOPWORDS = frozenset(
-    {
-        "the",
-        "a",
-        "an",
-        "is",
-        "are",
-        "was",
-        "were",
-        "be",
-        "been",
-        "being",
-        "have",
-        "has",
-        "had",
-        "do",
-        "does",
-        "did",
-        "will",
-        "would",
-        "can",
-        "could",
-        "should",
-        "may",
-        "might",
-        "must",
-        "and",
-        "or",
-        "but",
-        "if",
-        "of",
-        "in",
-        "on",
-        "at",
-        "to",
-        "for",
-        "with",
-        "by",
-        "from",
-        "as",
-        "it",
-        "its",
-        "this",
-        "that",
-        "these",
-        "those",
-        "he",
-        "she",
-        "we",
-        "they",
-        "you",
-        "my",
-        "your",
-        "his",
-        "their",
-        "our",
-        "her",
-        "him",
-        "me",
-        "us",
-        "them",
-    }
-)
-
-
-def extract_cloze(base_word: str, example_sentence: str) -> Optional[tuple]:
-    """
-    Find the target word in an example sentence and return
-    (blanked_sentence, correct_answer).
-
-    Strategy:
-    1. Exact word match (case-insensitive, word boundary)
-    2. Prefix match (e.g., "apple" → "apples", "watch" → "watching")
-
-    Returns None if no match found (e.g., contractions like "am" in "I'm").
-    """
-    import re as _re
-
-    if not base_word or not example_sentence:
-        return None
-
-    base = base_word.strip().lower()
-    if not base:
-        return None
-
-    escaped = _re.escape(base)
-
-    # Try exact match first
-    exact_pattern = rf"\b{escaped}\b"
-    match = _re.search(exact_pattern, example_sentence, _re.IGNORECASE)
-    if match:
-        actual_word = match.group(0)
-        blanked = (
-            example_sentence[: match.start()]
-            + "_____"
-            + example_sentence[match.end() :]
-        )
-        return blanked, actual_word
-
-    # Fallback: prefix match (word starting with base + more letters)
-    prefix_pattern = rf"\b{escaped}\w*\b"
-    match = _re.search(prefix_pattern, example_sentence, _re.IGNORECASE)
-    if match:
-        actual_word = match.group(0)
-        blanked = (
-            example_sentence[: match.start()]
-            + "_____"
-            + example_sentence[match.end() :]
-        )
-        return blanked, actual_word
-
-    return None
-
-
-def _pick_cloze_target_from_sentence(sentence: str) -> Optional[tuple]:
-    """
-    Pick a target word from a sentence to blank out.
-    Deterministically chooses the longest content word (>= 4 chars,
-    not a stopword). Returns (blanked_sentence, target_word) or None.
-    """
-    import re as _re
-
-    if not sentence:
-        return None
-
-    matches = [
-        (m.start(), m.end(), m.group(0))
-        for m in _re.finditer(r"\b[a-zA-Z][a-zA-Z']*\b", sentence)
-    ]
-    candidates = [
-        (s, e, w)
-        for (s, e, w) in matches
-        if len(w) >= 4 and w.lower() not in _CLOZE_STOPWORDS
-    ]
-    if not candidates:
-        return None
-
-    # Pick longest; tie-break by earliest position
-    best = max(candidates, key=lambda x: (len(x[2]), -x[0]))
-    start, end, word = best
-    blanked = sentence[:start] + "_____" + sentence[end:]
-    return blanked, word
-
-
-def extract_cloze_for_item(content_item) -> Optional[tuple]:
-    """
-    Extract (blanked_sentence, correct_answer) from a ContentItem.
-
-    Supports two content shapes:
-    1. VOCABULARY_SET: ci.text is base word,
-       ci.example_sentence contains the sentence
-    2. EXAMPLE_SENTENCES: ci.text IS the sentence,
-       pick a target word automatically
-    """
-    base = (content_item.text or "").strip()
-    example = content_item.example_sentence or ""
-
-    # Strategy 1: VOCABULARY_SET-style (use base word + example sentence)
-    if example:
-        result = extract_cloze(base, example)
-        if result:
-            return result
-
-    # Strategy 2: EXAMPLE_SENTENCES-style (text itself is a sentence)
-    if base and " " in base:
-        return _pick_cloze_target_from_sentence(base)
-
-    return None
-
-
 @router.get("/assignments/{assignment_id}/vocabulary/cloze/start")
 async def start_word_cloze_practice(
     assignment_id: int,
@@ -2788,6 +2661,14 @@ async def start_word_cloze_practice(
     tier_counts = _tier_counts(mastery_result)
     is_practice_mode = student_assignment.status == AssignmentStatus.GRADED
 
+    # Issue #800: see selection endpoint for all_mastered rationale.
+    # Note: cloze may also return empty `questions` when no example sentence
+    # contains the target word — that's a different empty state, handled by
+    # the existing "no cloze questions available" UI.
+    all_mastered = (
+        total_words_in_assignment > 0 and words_mastered == total_words_in_assignment
+    )
+
     return {
         "session_id": practice_session.id,
         "questions": questions,
@@ -2797,6 +2678,7 @@ async def start_word_cloze_practice(
         "words_mastered": words_mastered,
         **tier_counts,
         "achieved": achieved,
+        "all_mastered": all_mastered,
         "is_practice_mode": is_practice_mode,
         "show_translation": (assignment.show_translation if assignment else True),
         "play_audio": assignment.play_audio if assignment else False,

@@ -22,6 +22,7 @@ from .dependencies import get_current_teacher
 from .validators import ContentCreate, ContentUpdate, ContentCopy
 from .utils import TEST_SUBSCRIPTION_WHITELIST, parse_birthdate
 from models import ContentType
+from utils.cloze import resolve_cloze_answer_on_save
 
 import logging
 
@@ -240,6 +241,14 @@ async def create_content(
                 if parts and isinstance(parts, list) and len(parts) > 0:
                     part_of_speech = parts[0]
 
+            # Issue #632: 自動抽取單字克漏字答案（若客戶端有傳則優先採用）
+            cloze_answer = resolve_cloze_answer_on_save(
+                base_word=item_data.get("text", ""),
+                example_sentence=example_sentence,
+                incoming_answer=item_data.get("cloze_answer"),
+                existing_answer=None,
+            )
+
             content_item = ContentItem(
                 content_id=content.id,
                 order_index=idx,
@@ -261,6 +270,7 @@ async def create_content(
                 image_url=item_data.get("image_url"),
                 part_of_speech=part_of_speech,
                 distractors=item_data.get("distractors"),
+                cloze_answer=cloze_answer,
                 item_metadata=metadata if metadata else None,
             )
             db.add(content_item)
@@ -357,6 +367,7 @@ async def get_content_detail(
                 "example_sentence": item.example_sentence,
                 "example_sentence_translation": item.example_sentence_translation,
                 "example_sentence_audio_url": item.example_sentence_audio_url,
+                "cloze_answer": item.cloze_answer,
                 "image_url": item.image_url,
                 "part_of_speech": item.part_of_speech,
                 # 前端使用 parts_of_speech (plural, array)
@@ -544,6 +555,17 @@ async def update_content(
                     if parts and isinstance(parts, list) and len(parts) > 0:
                         part_of_speech = parts[0]
 
+                # Issue #632: 編輯儲存時重新檢查克漏字答案。
+                # update_content 採「先刪除全部 ContentItem 再重建」策略，
+                # 沒有 existing row 可比對，因此老師的覆寫值需透過 item_data
+                # 的 cloze_answer 帶回（前端會把現有值一併送出）。
+                cloze_answer = resolve_cloze_answer_on_save(
+                    base_word=item_data.get("text", ""),
+                    example_sentence=example_sentence,
+                    incoming_answer=None,
+                    existing_answer=item_data.get("cloze_answer"),
+                )
+
                 content_item = ContentItem(
                     content_id=content.id,
                     order_index=idx,
@@ -567,6 +589,7 @@ async def update_content(
                     image_url=item_data.get("image_url"),
                     part_of_speech=part_of_speech,
                     distractors=item_data.get("distractors"),
+                    cloze_answer=cloze_answer,
                     item_metadata=metadata,
                 )
                 db.add(content_item)
@@ -716,35 +739,63 @@ async def copy_content(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """複製內容到指定的單元"""
-    from utils.permissions import check_content_access, check_lesson_access
+    """複製內容到指定的單元，或（Issue #587）直接複製到教材包底下（不屬於任何單元）"""
+    from utils.permissions import (
+        check_content_access,
+        check_lesson_access,
+        check_program_access,
+    )
     from services.program_service import _copy_content_with_items
+
+    # Issue #587: exactly one of target_lesson_id / target_program_id is required
+    if not copy_data.target_lesson_id and not copy_data.target_program_id:
+        raise HTTPException(
+            status_code=422,
+            detail="必須指定 target_lesson_id 或 target_program_id",
+        )
 
     # 驗證來源 content 存取權限
     _program, _lesson, content = check_content_access(
         db, content_id, current_teacher, require_owner=False
     )
 
-    # 驗證目標 lesson 存取權限
-    _target_program, target_lesson = check_lesson_access(
-        db, copy_data.target_lesson_id, current_teacher, require_owner=True
-    )
-
-    # 計算目標 lesson 中的最大 order_index
-    max_order = (
-        db.query(func.max(Content.order_index))
-        .filter(
-            Content.lesson_id == copy_data.target_lesson_id,
-            Content.is_active.is_(True),
-        )
-        .scalar()
-    )
-
     # Eager load content_items
     db.refresh(content, ["content_items"])
 
-    # 複製 content 及所有 items
-    new_content = _copy_content_with_items(content, copy_data.target_lesson_id, db)
+    if copy_data.target_lesson_id:
+        # 複製到指定單元（原有行為）
+        check_lesson_access(
+            db, copy_data.target_lesson_id, current_teacher, require_owner=True
+        )
+        max_order = (
+            db.query(func.max(Content.order_index))
+            .filter(
+                Content.lesson_id == copy_data.target_lesson_id,
+                Content.is_active.is_(True),
+            )
+            .scalar()
+        )
+        new_content = _copy_content_with_items(content, copy_data.target_lesson_id, db)
+    else:
+        # Issue #587: 複製到教材包底下（lesson_id IS NULL）
+        check_program_access(
+            db, copy_data.target_program_id, current_teacher, require_owner=True
+        )
+        max_order = (
+            db.query(func.max(Content.order_index))
+            .filter(
+                Content.program_id == copy_data.target_program_id,
+                Content.lesson_id.is_(None),
+                Content.is_active.is_(True),
+            )
+            .scalar()
+        )
+        new_content = _copy_content_with_items(
+            content,
+            new_lesson_id=None,
+            db=db,
+            new_program_id=copy_data.target_program_id,
+        )
 
     # 設定複製後的標題和 order_index
     new_content.title = f"{content.title}(copy)"
@@ -771,6 +822,7 @@ async def copy_content(
         "tags": getattr(new_content, "tags", []),
         "source_content_id": content.id,
         "target_lesson_id": copy_data.target_lesson_id,
+        "target_program_id": copy_data.target_program_id,
     }
 
 

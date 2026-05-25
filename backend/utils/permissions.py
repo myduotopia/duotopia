@@ -190,10 +190,17 @@ def has_content_permission(
 ) -> bool:
     """
     Check if teacher can perform action on content.
+
+    Issue #587: Content may live directly under a program (lesson_id IS NULL).
     """
     content = db.query(Content).filter(Content.id == content_id).first()
     if not content:
         return False
+
+    if content.lesson_id is None:
+        if content.program_id is None:
+            return False
+        return has_program_permission(db, content.program_id, teacher_id, action)
 
     return has_lesson_permission(db, content.lesson_id, teacher_id, action)
 
@@ -347,6 +354,18 @@ def check_content_access(
             # Return dummy program/lesson for assignment copies
             # (they don't belong to a program/lesson)
             return None, None, content
+
+    # Issue #587: Content may live directly under a program (no lesson)
+    if content.lesson_id is None:
+        if content.program_id is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Content has neither lesson nor program reference",
+            )
+        program = check_program_access(
+            db, content.program_id, current_teacher, require_owner
+        )
+        return program, None, content
 
     # Check access to parent lesson and program
     program, lesson = check_lesson_access(

@@ -2,6 +2,7 @@
 Assignment detail and progress endpoints
 """
 
+import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
@@ -22,6 +23,8 @@ from models import (
     StudentItemProgress,
 )
 from .dependencies import get_current_teacher
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -61,11 +64,16 @@ def _is_interim_score(sa, assignment) -> bool:
 
 def _compute_interim_score(sa, assignment, db: Session, total_items: int | None = None):
     """
-    Compute interim score for IN_PROGRESS auto-graded assignments.
-    - GRADED/RETURNED: return sa.score (already finalized)
-    - IN_PROGRESS + rearrangement: sum(expected_scores) / total_items
-    - IN_PROGRESS + word_selection / word_spelling / word_cloze:
-      calculate_assignment_mastery DB function
+    Compute display score for /progress endpoint.
+
+    - sa.score 有值 → 直接回傳（fast path）
+    - sa.score 為 None：
+      * mastery-based modes (word_selection / word_spelling / word_cloze)
+        不論 status 都呼叫 calculate_assignment_mastery 現算。
+        Issue #807：歷史壞資料（GRADED 但 score=None，因 submit 端點曾漏寫）
+        靠這條 fallback 仍能顯示正確分數，不需 backfill。
+      * rearrangement：只在 IN_PROGRESS 時用 expected_score 平均（interim）。
+        GRADED+score=None 視為資料異常，回 None（不替它重算）。
 
     Args:
         total_items: Pre-computed total item count to avoid redundant DB queries.
@@ -74,14 +82,33 @@ def _compute_interim_score(sa, assignment, db: Session, total_items: int | None 
         return sa.score
 
     practice_mode = assignment.practice_mode
-    if not (
-        sa.status
-        and sa.status.value == "IN_PROGRESS"
-        and practice_mode in AUTO_GRADED_MODES
-    ):
+
+    # Mastery-based modes：score 為 None 時不論 status 都現算 mastery
+    if practice_mode in _MASTERY_FUNCTION_MODES:
+        try:
+            result = db.execute(
+                text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+                {"sa_id": sa.id},
+            ).fetchone()
+        except Exception:
+            logger.warning(
+                "calculate_assignment_mastery raised while computing display "
+                "score for sa_id=%s mode=%s; returning None",
+                sa.id,
+                practice_mode,
+                exc_info=True,
+            )
+            return None
+        if result and result.current_mastery is not None:
+            return min(100, round(float(result.current_mastery) * 100, 1))
         return None
 
-    if practice_mode == "rearrangement":
+    # Rearrangement：只在 IN_PROGRESS 算 interim
+    if (
+        sa.status
+        and sa.status.value == "IN_PROGRESS"
+        and practice_mode == "rearrangement"
+    ):
         items = (
             db.query(StudentItemProgress)
             .filter(StudentItemProgress.student_assignment_id == sa.id)
@@ -97,17 +124,6 @@ def _compute_interim_score(sa, assignment, db: Session, total_items: int | None 
         if total_items == 0:
             return None
         return round(sum(valid_scores) / total_items, 1)
-
-    elif practice_mode in _MASTERY_FUNCTION_MODES:
-        try:
-            result = db.execute(
-                text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
-                {"sa_id": sa.id},
-            ).fetchone()
-        except Exception:
-            return None
-        if result and result.current_mastery is not None:
-            return min(100, round(float(result.current_mastery) * 100, 1))
 
     return None
 

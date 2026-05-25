@@ -134,17 +134,54 @@ def _collect_contents_missing_audio(
     return missing_titles
 
 
+def _collect_contents_missing_cloze_answer(
+    contents: List[Content], practice_mode: Optional[str]
+) -> List[str]:
+    """Return titles of contents whose items lack an explicit cloze answer.
+
+    Issue #632: word_cloze requires the teacher to have *set* (and thereby
+    reviewed) a ``cloze_answer`` for each vocab item — we deliberately do NOT
+    fall back to runtime auto-extraction here. Auto-extraction can be wrong
+    (irregular forms, ambiguous targets), so dispatching a vocab set whose
+    answers were never confirmed must be blocked; the teacher fixes it in the
+    vocab set editor (the AI flow pre-fills the answer for confirmation).
+
+    An item is "missing" when, for word_cloze, its ``cloze_answer`` is empty
+    or no longer appears in the current example sentence (stale after an edit).
+
+    Items without an example sentence are skipped — they're already rejected
+    by ``_collect_contents_missing_examples`` upstream.
+    """
+    if practice_mode != "word_cloze":
+        return []
+
+    from utils.cloze import find_cloze_match
+
+    missing_titles: List[str] = []
+    for content in contents:
+        for item in content.content_items:
+            example = (item.example_sentence or "").strip()
+            if content.type in _VOCABULARY_CONTENT_TYPES and not example:
+                continue  # caller's example check owns this case
+            answer = (item.cloze_answer or "").strip()
+            if not answer or find_cloze_match(answer, example) is None:
+                missing_titles.append(content.title)
+                break
+    return missing_titles
+
+
 def _raise_if_missing_examples(
     contents: List[Content],
     practice_mode: Optional[str],
     play_audio: bool = False,
 ) -> None:
-    """Raise 422 when vocab contents miss example data (text or audio).
+    """Raise 422 when vocab contents miss example data (text, audio, or cloze).
 
     Sentence-text validation always runs (issue #673). Sentence-audio
     validation only runs for the modes that actually need audio at runtime
     (issue #757); no audio backfill happens at dispatch any more — the
     teacher must regenerate via the AI button in the vocab set editor.
+    Cloze-answer validation runs for word_cloze (issue #632).
     """
     missing = _collect_contents_missing_examples(contents, practice_mode)
     if missing:
@@ -166,6 +203,17 @@ def _raise_if_missing_examples(
                 "practice_mode": practice_mode,
                 "play_audio": play_audio,
                 "content_titles": missing_audio,
+            },
+        )
+
+    missing_cloze = _collect_contents_missing_cloze_answer(contents, practice_mode)
+    if missing_cloze:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "CLOZE_ANSWER_REQUIRED",
+                "practice_mode": practice_mode,
+                "content_titles": missing_cloze,
             },
         )
 
@@ -256,6 +304,22 @@ async def create_assignment(
     )
     if len(contents) != len(request.content_ids):
         raise HTTPException(status_code=404, detail="Some contents not found")
+
+    # Issue #800: cap vocabulary sets per assignment (defence-in-depth;
+    # the UI already disables further selections once the limit is hit).
+    # Two sets is roomy for a week-long assignment; more makes the
+    # practice pool feel endless. SENTENCE_MAKING is the legacy alias
+    # for VOCABULARY_SET — count both.
+    vocab_count = sum(
+        1
+        for c in contents
+        if c.type in (ContentType.VOCABULARY_SET, ContentType.SENTENCE_MAKING)
+    )
+    if vocab_count > 2:
+        raise HTTPException(
+            status_code=400,
+            detail=f"At most 2 vocabulary sets per assignment (got {vocab_count})",
+        )
 
     # Issue #673 / #757: block reading / rearrangement / word_cloze on vocab
     # contents whose items don't carry example_sentence + translation, and
@@ -359,6 +423,8 @@ async def create_assignment(
                 else None,
                 word_count=original_item.word_count,
                 max_errors=original_item.max_errors,
+                # Issue #632: 帶入克漏字答案，老師可在作業副本中再行調整
+                cloze_answer=original_item.cloze_answer,
             )
             db.add(item_copy)
             db.flush()

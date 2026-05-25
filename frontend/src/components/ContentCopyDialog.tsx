@@ -105,12 +105,18 @@ export default function ContentCopyDialog({
   };
 
   const handleCopy = async () => {
-    if (!selectedLessonId || copyingRef.current) return;
+    // Issue #587: lesson is optional — program selection alone is enough.
+    if (!selectedProgramId || copyingRef.current) return;
 
     copyingRef.current = true;
     setCopying(true);
     try {
-      await apiClient.copyContent(contentId, selectedLessonId);
+      if (selectedLessonId) {
+        await apiClient.copyContent(contentId, selectedLessonId);
+      } else {
+        // Copy directly under the program (no lesson)
+        await apiClient.copyContentToProgram(contentId, selectedProgramId);
+      }
       toast.success(
         t("dialogs.contentCopyDialog.success", { title: contentTitle }),
       );
@@ -213,10 +219,13 @@ export default function ContentCopyDialog({
             </div>
           </div>
 
-          {/* Lesson selector */}
+          {/* Lesson selector (Issue #587: optional) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               {t("dialogs.contentCopyDialog.targetLesson")}
+              <span className="text-gray-400 font-normal ml-1">
+                {t("dialogs.contentCopyDialog.optional", "（選填）")}
+              </span>
             </label>
             <div className="relative" ref={lessonDropdownRef}>
               <button
@@ -302,7 +311,7 @@ export default function ContentCopyDialog({
           <Button variant="outline" onClick={onClose} disabled={copying}>
             {t("dialogs.contentCopyDialog.cancel")}
           </Button>
-          <Button onClick={handleCopy} disabled={!selectedLessonId || copying}>
+          <Button onClick={handleCopy} disabled={!selectedProgramId || copying}>
             {copying ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
