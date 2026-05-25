@@ -49,6 +49,14 @@ AUTO_GRADED_MODES = frozenset(
     {"rearrangement", "word_selection", "word_spelling", "word_cloze"}
 )
 
+
+def mastery_row_to_score(result) -> float | None:
+    """mastery row → 0-100 score (1dp, aligned with detail.py), or None if NULL/missing."""
+    if result and result.current_mastery is not None:
+        return min(100, round(float(result.current_mastery) * 100, 1))
+    return None
+
+
 router = APIRouter()
 
 
@@ -780,17 +788,37 @@ async def submit_assignment(
                 student_assignment.score = sum(valid_scores) / len(valid_scores)
             else:
                 student_assignment.score = 0
-        elif practice_mode == "word_selection":
-            # 單字選擇：使用 calculate_assignment_mastery 函數計算
-            result = db.execute(
-                text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
-                {"sa_id": student_assignment.id},
-            ).fetchone()
-            if result:
-                current_mastery = float(result.current_mastery) * 100
-                student_assignment.score = min(100, round(current_mastery))
-            else:
-                student_assignment.score = 0
+        elif practice_mode in ("word_selection", "word_cloze", "word_spelling"):
+            # Mastery-based 模式（單字選擇 / 克漏字 / 單字拼寫）
+            # 使用 calculate_assignment_mastery 函數計算
+            # Issue #807: word_cloze / word_spelling 過去漏在這條分支裡，
+            # 提交後 status=GRADED 但 score 維持 None，造成老師端二次開
+            # modal 顯示 0.0%。
+            try:
+                result = db.execute(
+                    text("SELECT * FROM calculate_assignment_mastery(:sa_id)"),
+                    {"sa_id": student_assignment.id},
+                ).fetchone()
+            except Exception:
+                logger.warning(
+                    "calculate_assignment_mastery raised for sa_id=%s mode=%s; "
+                    "leaving score=None for display fallback",
+                    student_assignment.id,
+                    practice_mode,
+                    exc_info=True,
+                )
+                result = None
+            score = mastery_row_to_score(result)
+            # 只在「DB 有回 row 但 current_mastery 為 NULL」時記第二筆警告；
+            # exception 路徑已用 exc_info=True 記過，避免重複/誤導的 log。
+            if score is None and result is not None:
+                logger.warning(
+                    "calculate_assignment_mastery returned NULL for sa_id=%s "
+                    "mode=%s; leaving score=None for display fallback",
+                    student_assignment.id,
+                    practice_mode,
+                )
+            student_assignment.score = score
     else:
         student_assignment.status = AssignmentStatus.SUBMITTED
     student_assignment.submitted_at = datetime.now(timezone.utc)
