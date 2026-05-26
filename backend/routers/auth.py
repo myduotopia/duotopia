@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional  # noqa: F401
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from database import get_db
 from models import (
     Teacher,
@@ -63,6 +63,10 @@ class TeacherRegisterRequest(BaseModel):
     password: str
     name: str
     phone: Optional[str] = None
+    # Optional referral code (from ?promo= URL param or input field).
+    # max_length bounds the input (DB column is VARCHAR(16)) so an oversized
+    # payload is rejected at parse time rather than hitting the logs / DB.
+    promo_code: Optional[str] = Field(None, max_length=32)
 
     @field_validator("password")
     @classmethod
@@ -282,21 +286,37 @@ async def teacher_register(
         logger.error(f"Onboarding failed for teacher {new_teacher.id}: {e}")
         # User can still complete registration and login, just without default resources
 
-    # 🎯 Issue #637: 為新老師建立個人推銷碼（非致命，失敗不影響註冊）
+    # 建立個人推銷碼（非致命）。獨立 try：即使產碼失敗也不影響後續綁定。
+    # except 內 rollback 避免 session 卡在 PendingRollbackError，後續 email 發送才不會 500。
     try:
         from services.promo_code_service import create_personal_code_for_teacher
-        import logging
 
-        logging.getLogger(__name__).info(
-            f"Creating personal promo code for teacher {new_teacher.id}"
-        )
         create_personal_code_for_teacher(db, new_teacher.id)
     except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).error(
-            f"Promo code creation failed for teacher {new_teacher.id}: {e}"
+        db.rollback()
+        logger.error(
+            f"Personal promo code creation failed for teacher {new_teacher.id}: {e}"
         )
+
+    # 綁定推薦關係（非致命，獨立於個人碼建立）。
+    if register_req.promo_code:
+        try:
+            from services.promo_code_service import bind_referral
+
+            referral = bind_referral(db, register_req.promo_code, new_teacher.id)
+            if referral is None:
+                logger.info(
+                    f"Promo code '{register_req.promo_code}' not bound for "
+                    f"teacher {new_teacher.id} (invalid/expired/self-referral)"
+                )
+            else:
+                logger.info(
+                    f"Referral {referral.id} bound: teacher {new_teacher.id} "
+                    f"referred by {referral.referrer_teacher_id}"
+                )
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Referral binding failed for teacher {new_teacher.id}: {e}")
 
     # 🎯 發送驗證 email
     email_sent = email_service.send_teacher_verification_email(db, new_teacher)
@@ -334,6 +354,20 @@ async def verify_teacher_email(token: str, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired verification token",
+        )
+
+    # 標記推薦關係已驗證（非致命）。實際發點在獎勵引擎處理。
+    try:
+        from services.promo_code_service import mark_referral_verified
+
+        mark_referral_verified(db, teacher.id)
+    except Exception as e:
+        db.rollback()
+        # verified_at not persisted. The reward engine falls back to the
+        # teacher's email_verified flag, so this is recoverable; log loudly.
+        logger.error(
+            f"ALERT: mark_referral_verified failed for teacher {teacher.id} "
+            f"— verified_at not stamped: {e}"
         )
 
     # 不自動登入，只返回驗證成功訊息
