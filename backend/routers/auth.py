@@ -63,7 +63,7 @@ class TeacherRegisterRequest(BaseModel):
     password: str
     name: str
     phone: Optional[str] = None
-    # Issue #637: optional referral code (from ?promo= URL param or input field)
+    # Optional referral code (from ?promo= URL param or input field)
     promo_code: Optional[str] = None
 
     @field_validator("password")
@@ -284,17 +284,13 @@ async def teacher_register(
         logger.error(f"Onboarding failed for teacher {new_teacher.id}: {e}")
         # User can still complete registration and login, just without default resources
 
-    # 🎯 Issue #637: 為新老師建立個人推銷碼，並（若有填）綁定推薦關係。
-    # 全程非致命，失敗不影響註冊。
+    # 建立個人推銷碼，並（若有填）綁定推薦關係。全程非致命，失敗不影響註冊。
     try:
         from services.promo_code_service import (
             create_personal_code_for_teacher,
             bind_referral,
         )
-        import logging
 
-        logger = logging.getLogger(__name__)
-        logger.info(f"Creating personal promo code for teacher {new_teacher.id}")
         create_personal_code_for_teacher(db, new_teacher.id)
 
         if register_req.promo_code:
@@ -304,12 +300,13 @@ async def teacher_register(
                     f"Promo code '{register_req.promo_code}' not bound for "
                     f"teacher {new_teacher.id} (invalid/expired/self-referral)"
                 )
+            else:
+                logger.info(
+                    f"Referral {referral.id} bound: teacher {new_teacher.id} "
+                    f"referred by {referral.referrer_teacher_id}"
+                )
     except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).error(
-            f"Promo code handling failed for teacher {new_teacher.id}: {e}"
-        )
+        logger.error(f"Promo code handling failed for teacher {new_teacher.id}: {e}")
 
     # 🎯 發送驗證 email
     email_sent = email_service.send_teacher_verification_email(db, new_teacher)
@@ -349,17 +346,13 @@ async def verify_teacher_email(token: str, db: Session = Depends(get_db)):
             detail="Invalid or expired verification token",
         )
 
-    # 🎯 Issue #637: 標記推薦關係已驗證（非致命）。實際發點留待 PR 3。
+    # 標記推薦關係已驗證（非致命）。實際發點在獎勵引擎處理。
     try:
         from services.promo_code_service import mark_referral_verified
 
         mark_referral_verified(db, teacher.id)
     except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).error(
-            f"Marking referral verified failed for teacher {teacher.id}: {e}"
-        )
+        logger.error(f"Marking referral verified failed for teacher {teacher.id}: {e}")
 
     # 不自動登入，只返回驗證成功訊息
     return {
