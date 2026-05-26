@@ -416,6 +416,20 @@ async def process_payment(
             )
             # Continue execution - the important part (subscription update) is done
 
+        # Issue #637: reward the referrer on the referred teacher's first paid
+        # subscription (non-fatal — never block payment).
+        try:
+            from services.promo_reward_service import dispatch_subscription_reward
+
+            dispatch_subscription_reward(
+                db, current_teacher.id, payment_request.plan_name
+            )
+        except Exception as e:
+            logger.error(
+                f"Referral subscription reward failed for teacher "
+                f"{current_teacher.id}: {e}"
+            )
+
         return PaymentResponse(
             success=True,
             transaction_id=external_transaction_id,

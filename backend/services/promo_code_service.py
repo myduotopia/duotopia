@@ -9,6 +9,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models import PromoCode, PromoReferral
@@ -140,7 +141,17 @@ def bind_referral(
         promo_code_id=pc.id,
     )
     db.add(referral)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Concurrent registration won the unique(referred_teacher_id) race.
+        # Harmless: return the row the other request committed.
+        db.rollback()
+        return (
+            db.query(PromoReferral)
+            .filter(PromoReferral.referred_teacher_id == referred_teacher_id)
+            .first()
+        )
     db.refresh(referral)
     return referral
 
@@ -161,5 +172,11 @@ def mark_referral_verified(
     if referral.verified_at is None:
         referral.verified_at = datetime.now(timezone.utc)
         db.commit()
-        db.refresh(referral)
+        # A refresh failure must NOT look like a commit failure to the caller:
+        # verified_at is already durably written, so swallow refresh errors and
+        # return the (correct) in-memory row.
+        try:
+            db.refresh(referral)
+        except Exception:
+            pass
     return referral

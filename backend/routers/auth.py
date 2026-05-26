@@ -64,9 +64,9 @@ class TeacherRegisterRequest(BaseModel):
     name: str
     phone: Optional[str] = None
     # Optional referral code (from ?promo= URL param or input field).
-    # max_length bounds the input (DB column is VARCHAR(16)) so an oversized
-    # payload is rejected at parse time rather than hitting the logs / DB.
-    promo_code: Optional[str] = Field(None, max_length=32)
+    # max_length matches the DB column (VARCHAR(16)); oversized input is
+    # rejected at parse time rather than hitting the logs / DB.
+    promo_code: Optional[str] = Field(None, max_length=16)
 
     @field_validator("password")
     @classmethod
@@ -294,6 +294,7 @@ async def teacher_register(
         create_personal_code_for_teacher(db, new_teacher.id)
     except Exception as e:
         db.rollback()
+        db.refresh(new_teacher)  # rollback expired the object; make state explicit
         logger.error(
             f"Personal promo code creation failed for teacher {new_teacher.id}: {e}"
         )
@@ -305,8 +306,10 @@ async def teacher_register(
 
             referral = bind_referral(db, register_req.promo_code, new_teacher.id)
             if referral is None:
+                # repr() neutralizes newline/control chars in user input so a
+                # crafted promo_code can't forge log lines.
                 logger.info(
-                    f"Promo code '{register_req.promo_code}' not bound for "
+                    f"Promo code {register_req.promo_code!r} not bound for "
                     f"teacher {new_teacher.id} (invalid/expired/self-referral)"
                 )
             else:
@@ -316,6 +319,7 @@ async def teacher_register(
                 )
         except Exception as e:
             db.rollback()
+            db.refresh(new_teacher)
             logger.error(f"Referral binding failed for teacher {new_teacher.id}: {e}")
 
     # 🎯 發送驗證 email
@@ -356,19 +360,26 @@ async def verify_teacher_email(token: str, db: Session = Depends(get_db)):
             detail="Invalid or expired verification token",
         )
 
-    # 標記推薦關係已驗證（非致命）。實際發點在獎勵引擎處理。
+    # 標記推薦關係已驗證並發放註冊獎勵（非致命）。
     try:
         from services.promo_code_service import mark_referral_verified
 
         mark_referral_verified(db, teacher.id)
     except Exception as e:
         db.rollback()
-        # verified_at not persisted. The reward engine falls back to the
-        # teacher's email_verified flag, so this is recoverable; log loudly.
+        # verified_at not persisted. dispatch_signup_rewards below still keys
+        # off the referral row, so the reward is not lost; log loudly.
         logger.error(
             f"ALERT: mark_referral_verified failed for teacher {teacher.id} "
             f"— verified_at not stamped: {e}"
         )
+
+    try:
+        from services.promo_reward_service import dispatch_signup_rewards
+
+        dispatch_signup_rewards(db, teacher.id)
+    except Exception as e:
+        logger.error(f"dispatch_signup_rewards failed for teacher {teacher.id}: {e}")
 
     # 不自動登入，只返回驗證成功訊息
     return {

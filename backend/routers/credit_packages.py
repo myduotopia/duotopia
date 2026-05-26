@@ -329,6 +329,18 @@ async def purchase_credit_package(
             f"pkg={package_id} points={points_total} expires={expires_at.date()}"
         )
 
+        # Issue #637: reward the referrer on the referred teacher's first paid
+        # credit-package purchase (non-fatal — never block the purchase).
+        try:
+            from services.promo_reward_service import dispatch_credit_package_reward
+
+            dispatch_credit_package_reward(db, current_teacher.id, package_id)
+        except Exception as e:
+            logger.error(
+                f"Referral credit-package reward failed for teacher "
+                f"{current_teacher.id}: {e}"
+            )
+
         return CreditPackagePurchaseResponse(
             success=True,
             transaction_id=external_transaction_id,
