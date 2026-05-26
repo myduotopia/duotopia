@@ -38,6 +38,7 @@ from routers import (
     admin_monitoring,
     admin_billing,
     admin_audio_errors,
+    admin_promo_codes,
     teacher_review,
     subscription,
     payment,
@@ -282,6 +283,7 @@ app.include_router(admin_plans.router)  # Admin 方案 CRUD 路由
 app.include_router(admin_monitoring.router)  # 監控路由（無需認證）
 app.include_router(admin_billing.router)  # Admin 帳單監控路由（Admin only）
 app.include_router(admin_audio_errors.router)  # Admin 錄音錯誤監控路由（Admin only）
+app.include_router(admin_promo_codes.router)  # Admin 推銷碼管理路由（Admin only）
 app.include_router(blog.router)  # Blog 管理路由（Admin only）
 app.include_router(cron.router)  # Cron Job 路由
 app.include_router(debug.router)  # Debug 路由
