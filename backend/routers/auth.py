@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional  # noqa: F401
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from database import get_db
 from models import (
     Teacher,
@@ -63,8 +63,10 @@ class TeacherRegisterRequest(BaseModel):
     password: str
     name: str
     phone: Optional[str] = None
-    # Optional referral code (from ?promo= URL param or input field)
-    promo_code: Optional[str] = None
+    # Optional referral code (from ?promo= URL param or input field).
+    # max_length bounds the input (DB column is VARCHAR(16)) so an oversized
+    # payload is rejected at parse time rather than hitting the logs / DB.
+    promo_code: Optional[str] = Field(None, max_length=32)
 
     @field_validator("password")
     @classmethod
@@ -361,7 +363,12 @@ async def verify_teacher_email(token: str, db: Session = Depends(get_db)):
         mark_referral_verified(db, teacher.id)
     except Exception as e:
         db.rollback()
-        logger.error(f"Marking referral verified failed for teacher {teacher.id}: {e}")
+        # verified_at not persisted. The reward engine falls back to the
+        # teacher's email_verified flag, so this is recoverable; log loudly.
+        logger.error(
+            f"ALERT: mark_referral_verified failed for teacher {teacher.id} "
+            f"— verified_at not stamped: {e}"
+        )
 
     # 不自動登入，只返回驗證成功訊息
     return {
