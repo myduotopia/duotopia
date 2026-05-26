@@ -94,6 +94,9 @@ def test_signup_rewards_grant_both_sides(test_db_session):
 
     test_db_session.refresh(referral)
     assert referral.referred_bonus_granted is True
+    # dispatch stamps verified_at so the admin report's verified_count stays
+    # consistent with granted rewards.
+    assert referral.verified_at is not None
 
 
 def test_signup_rewards_idempotent(test_db_session):

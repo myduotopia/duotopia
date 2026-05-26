@@ -32,6 +32,17 @@ from core.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_refresh(db, obj) -> None:
+    """Best-effort refresh after a rollback. The object was committed earlier,
+    so its PK is still valid; if the DB is momentarily unreachable, swallow the
+    error rather than 500 a request whose primary work already succeeded."""
+    try:
+        db.refresh(obj)
+    except Exception:
+        pass
+
+
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/teacher/login")
@@ -294,7 +305,7 @@ async def teacher_register(
         create_personal_code_for_teacher(db, new_teacher.id)
     except Exception as e:
         db.rollback()
-        db.refresh(new_teacher)  # rollback expired the object; make state explicit
+        _safe_refresh(db, new_teacher)
         logger.error(
             f"Personal promo code creation failed for teacher {new_teacher.id}: {e}"
         )
@@ -319,7 +330,7 @@ async def teacher_register(
                 )
         except Exception as e:
             db.rollback()
-            db.refresh(new_teacher)
+            _safe_refresh(db, new_teacher)
             logger.error(f"Referral binding failed for teacher {new_teacher.id}: {e}")
 
     # 🎯 發送驗證 email
@@ -360,20 +371,8 @@ async def verify_teacher_email(token: str, db: Session = Depends(get_db)):
             detail="Invalid or expired verification token",
         )
 
-    # 標記推薦關係已驗證並發放註冊獎勵（非致命）。
-    try:
-        from services.promo_code_service import mark_referral_verified
-
-        mark_referral_verified(db, teacher.id)
-    except Exception as e:
-        db.rollback()
-        # verified_at not persisted. dispatch_signup_rewards below still keys
-        # off the referral row, so the reward is not lost; log loudly.
-        logger.error(
-            f"ALERT: mark_referral_verified failed for teacher {teacher.id} "
-            f"— verified_at not stamped: {e}"
-        )
-
+    # 標記推薦關係已驗證並發放註冊獎勵（非致命）。dispatch_signup_rewards 內部會
+    # 在發點同一交易先 stamp verified_at，避免 report 的 verified_count 與發放結果不一致。
     try:
         from services.promo_reward_service import dispatch_signup_rewards
 

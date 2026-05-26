@@ -174,18 +174,33 @@ def _grant_reward(
 
 
 def dispatch_signup_rewards(db: Session, referred_teacher_id: int) -> None:
-    """On email verification: reward the referrer (signup_verified) and the
-    referred teacher (referred_signup_bonus). Non-fatal."""
+    """On email verification: stamp verified_at, then reward the referrer
+    (signup_verified) and the referred teacher (referred_signup_bonus).
+
+    verified_at is stamped and committed BEFORE granting so it can never end up
+    NULL while a reward exists (which would understate the admin report's
+    verified_count). Non-fatal."""
     try:
         referral = _get_referral(db, referred_teacher_id)
         if referral is None:
             return
 
+        # Stamp verified_at first so verified_count stays consistent with grants.
+        if referral.verified_at is None:
+            referral.verified_at = datetime.now(timezone.utc)
+            db.commit()
+
         _grant_reward(db, referral, "signup_verified", "signup")
 
         bonus = _grant_reward(db, referral, "referred_signup_bonus", "signup")
-        if bonus is not None and not referral.referred_bonus_granted:
-            referral.referred_bonus_granted = True
+        if bonus is not None:
+            # Atomic flag set: concurrent double-verify can't double-write.
+            db.execute(
+                update(PromoReferral)
+                .where(PromoReferral.referred_teacher_id == referred_teacher_id)
+                .where(PromoReferral.referred_bonus_granted.is_(False))
+                .values(referred_bonus_granted=True)
+            )
             db.commit()
     except Exception as e:
         db.rollback()
