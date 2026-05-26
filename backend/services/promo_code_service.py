@@ -6,9 +6,12 @@ teacher's personal promo code. Reward dispatch lives in a later PR.
 """
 
 import secrets
+from datetime import datetime, timezone
+from typing import Optional
+
 from sqlalchemy.orm import Session
 
-from models import PromoCode
+from models import PromoCode, PromoReferral
 
 # Alphabet excludes ambiguous glyphs (0/O, 1/I/L) so codes read cleanly
 # off a screen or printed page.
@@ -74,3 +77,89 @@ def create_personal_code_for_teacher(db: Session, teacher_id: int) -> PromoCode:
     db.commit()
     db.refresh(code)
     return code
+
+
+def _is_expired(expires_at) -> bool:
+    """NULL expiry means permanent. Tolerate naive datetimes (SQLite) by
+    assuming UTC."""
+    if expires_at is None:
+        return False
+    exp = expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    return exp < datetime.now(timezone.utc)
+
+
+def validate_promo_code(db: Session, code: Optional[str]) -> Optional[PromoCode]:
+    """Return an active, non-expired ``PromoCode`` matching ``code`` (case-
+    insensitive), or None. Codes are stored uppercase."""
+    if not code:
+        return None
+    normalized = code.strip().upper()
+    if not normalized:
+        return None
+    pc = (
+        db.query(PromoCode)
+        .filter(PromoCode.code == normalized, PromoCode.is_active.is_(True))
+        .first()
+    )
+    if pc is None or _is_expired(pc.expires_at):
+        return None
+    return pc
+
+
+def bind_referral(
+    db: Session, code: Optional[str], referred_teacher_id: int
+) -> Optional[PromoReferral]:
+    """Bind a newly registered teacher to the owner of ``code``.
+
+    Returns the referral, or None when the binding is disqualified — invalid /
+    expired code, self-referral, or the teacher is already bound (a teacher can
+    only ever be referred once). Idempotent: a second call for an
+    already-bound teacher returns the existing referral. Non-fatal by design
+    so registration never fails because of a bad promo code.
+    """
+    pc = validate_promo_code(db, code)
+    if pc is None:
+        return None
+    if pc.teacher_id == referred_teacher_id:
+        return None  # cannot refer yourself
+
+    existing = (
+        db.query(PromoReferral)
+        .filter(PromoReferral.referred_teacher_id == referred_teacher_id)
+        .first()
+    )
+    if existing is not None:
+        return existing
+
+    referral = PromoReferral(
+        referrer_teacher_id=pc.teacher_id,
+        referred_teacher_id=referred_teacher_id,
+        promo_code=pc.code,
+        promo_code_id=pc.id,
+    )
+    db.add(referral)
+    db.commit()
+    db.refresh(referral)
+    return referral
+
+
+def mark_referral_verified(
+    db: Session, referred_teacher_id: int
+) -> Optional[PromoReferral]:
+    """Stamp ``verified_at`` on the teacher's referral once their email is
+    verified. Idempotent: only sets the timestamp the first time. Returns the
+    referral, or None if the teacher has no referral."""
+    referral = (
+        db.query(PromoReferral)
+        .filter(PromoReferral.referred_teacher_id == referred_teacher_id)
+        .first()
+    )
+    if referral is None:
+        return None
+    if referral.verified_at is None:
+        referral.verified_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(referral)
+    return referral
