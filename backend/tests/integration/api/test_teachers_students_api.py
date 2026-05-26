@@ -323,3 +323,74 @@ class TestTeachersStudentsAPI:
 
         # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_update_student_with_empty_birthdate_does_not_500(
+        self, test_client, demo_teacher, demo_student, test_db_session
+    ):
+        """
+        Regression for Issue #787.
+
+        Given: A student being edited with an empty birthdate string ("")
+        When: Teacher updates the student (e.g. to fix the name)
+        Then: Request succeeds (200), birthdate is left unchanged, not a 500
+              (which surfaced to the browser as "Failed to fetch")
+        """
+        access_token = create_access_token(
+            data={"sub": str(demo_teacher.id), "type": "teacher"}
+        )
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        response = test_client.put(
+            f"/api/teachers/students/{demo_student.id}",
+            json={"name": "Duncan", "birthdate": ""},
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["name"] == "Duncan"
+
+    def test_update_student_with_invalid_birthdate_returns_400(
+        self, test_client, demo_teacher, demo_student, test_db_session
+    ):
+        """
+        Issue #787: an unparseable birthdate should be a clean 400, not a 500.
+        """
+        access_token = create_access_token(
+            data={"sub": str(demo_teacher.id), "type": "teacher"}
+        )
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        response = test_client.put(
+            f"/api/teachers/students/{demo_student.id}",
+            json={"birthdate": "not-a-date"},
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_update_student_with_valid_birthdate_succeeds(
+        self, test_client, demo_teacher, demo_student, test_db_session
+    ):
+        """
+        Issue #787: a valid birthdate is still parsed and persisted.
+        """
+        access_token = create_access_token(
+            data={"sub": str(demo_teacher.id), "type": "teacher"}
+        )
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        response = test_client.put(
+            f"/api/teachers/students/{demo_student.id}",
+            json={"birthdate": "2015-03-01"},
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify it persisted (PUT response doesn't echo birthdate)
+        verify = test_client.get(
+            f"/api/teachers/students/{demo_student.id}",
+            headers=headers,
+        )
+        assert verify.status_code == status.HTTP_200_OK
+        assert verify.json()["birthdate"] == "2015-03-01"
