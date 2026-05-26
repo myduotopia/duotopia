@@ -26,7 +26,12 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from config.plans import PLAN_TUTOR, PLAN_SCHOOL, CREDIT_PACKAGE_VALIDITY_DAYS
+from config.plans import (
+    PLAN_TUTOR,
+    PLAN_SCHOOL,
+    PLAN_FREE_TRIAL,
+    CREDIT_PACKAGE_VALIDITY_DAYS,
+)
 from models import (
     PromoReferral,
     PromoRewardConfig,
@@ -59,20 +64,8 @@ def _recipient_teacher_id(referral: PromoReferral, recipient: str) -> int:
     return referral.referrer_teacher_id
 
 
-def _grant_reward(
-    db: Session,
-    referral: PromoReferral,
-    reward_key: str,
-    trigger_type: str,
-    event_payload: Optional[dict] = None,
-) -> Optional[PromoRewardEvent]:
-    """Grant the points configured for ``reward_key`` to the right teacher.
-
-    Idempotent on ``{referral.id}:{reward_key}``: a prior grant (or a
-    concurrent one losing the unique race) returns the existing event without
-    awarding again. Returns None when the reward is unconfigured or inactive.
-    """
-    config = (
+def _get_active_config(db: Session, reward_key: str) -> Optional[PromoRewardConfig]:
+    return (
         db.query(PromoRewardConfig)
         .filter(
             PromoRewardConfig.reward_key == reward_key,
@@ -80,18 +73,21 @@ def _grant_reward(
         )
         .first()
     )
-    if config is None:
-        return None
 
+
+def _build_reward_rows(
+    db: Session,
+    referral: PromoReferral,
+    reward_key: str,
+    trigger_type: str,
+    config: PromoRewardConfig,
+    event_payload: Optional[dict] = None,
+) -> PromoRewardEvent:
+    """Create the CreditPackage + PromoRewardEvent in the CURRENT (uncommitted)
+    transaction and return the event. The caller owns the commit, so the grant
+    can be made atomic with other writes (e.g. the first-paid slot claim).
+    Assumes no prior grant for this key exists (idempotency checked by caller)."""
     idempotency_key = f"{referral.id}:{reward_key}"
-    existing = (
-        db.query(PromoRewardEvent)
-        .filter(PromoRewardEvent.idempotency_key == idempotency_key)
-        .first()
-    )
-    if existing is not None:
-        return existing
-
     recipient_id = _recipient_teacher_id(referral, config.recipient)
     now = datetime.now(timezone.utc)
 
@@ -126,6 +122,39 @@ def _grant_reward(
         event_payload=event_payload,
     )
     db.add(event)
+    return event
+
+
+def _grant_reward(
+    db: Session,
+    referral: PromoReferral,
+    reward_key: str,
+    trigger_type: str,
+    event_payload: Optional[dict] = None,
+) -> Optional[PromoRewardEvent]:
+    """Grant the points configured for ``reward_key`` to the right teacher,
+    committing on its own.
+
+    Idempotent on ``{referral.id}:{reward_key}``: a prior grant (or a
+    concurrent one losing the unique race) returns the existing event without
+    awarding again. Returns None when the reward is unconfigured or inactive.
+    """
+    config = _get_active_config(db, reward_key)
+    if config is None:
+        return None
+
+    idempotency_key = f"{referral.id}:{reward_key}"
+    existing = (
+        db.query(PromoRewardEvent)
+        .filter(PromoRewardEvent.idempotency_key == idempotency_key)
+        .first()
+    )
+    if existing is not None:
+        return existing
+
+    event = _build_reward_rows(
+        db, referral, reward_key, trigger_type, config, event_payload
+    )
     try:
         db.commit()
     except IntegrityError:
@@ -139,7 +168,7 @@ def _grant_reward(
     db.refresh(event)
     logger.info(
         f"Referral reward granted: {reward_key} ({config.points} pts) "
-        f"to teacher {recipient_id} (referral {referral.id})"
+        f"to teacher {event.granted_to_teacher_id} (referral {referral.id})"
     )
     return event
 
@@ -171,7 +200,14 @@ def dispatch_subscription_reward(db: Session, teacher_id: int, plan_name: str) -
     try:
         reward_key = _PLAN_REWARD_KEYS.get(plan_name)
         if reward_key is None:
-            return  # free trial / unknown plan: nothing to reward
+            # Free Trial has no reward (expected). Any OTHER unmapped name is a
+            # surprise (i18n rename / client bug) — log so it's observable.
+            if plan_name not in (PLAN_FREE_TRIAL,):
+                logger.warning(
+                    f"No referral reward mapping for plan_name {plan_name!r} "
+                    f"(teacher {teacher_id})"
+                )
+            return
         _dispatch_first_paid(
             db, teacher_id, reward_key, "subscription", {"plan_name": plan_name}
         )
@@ -212,36 +248,56 @@ def _dispatch_first_paid(
 ) -> None:
     """Shared body for paid-event rewards. Consumes the one-time
     ``first_paid_event_consumed`` slot so subscription and package rewards are
-    mutually exclusive and fire only once."""
+    mutually exclusive and fire only once.
+
+    The slot claim and the reward grant share ONE transaction: if the grant
+    fails the claim is rolled back too (no consume-without-grant), while the
+    conditional UPDATE's row lock serializes concurrent paid events so only one
+    ever grants.
+    """
     referral = _get_referral(db, teacher_id)
     if referral is None or referral.first_paid_event_consumed:
         return
 
     # Skip packages with no active reward (e.g. pkg-1000/2000) BEFORE claiming
-    # the slot, so a later qualifying purchase can still reward.
-    config = (
-        db.query(PromoRewardConfig)
-        .filter(
-            PromoRewardConfig.reward_key == reward_key,
-            PromoRewardConfig.is_active.is_(True),
-        )
-        .first()
-    )
+    # the slot, so a later qualifying purchase can still reward. Pass this
+    # config straight to _build_reward_rows so an admin deactivating it mid-flight
+    # cannot leave the slot consumed with nothing granted.
+    config = _get_active_config(db, reward_key)
     if config is None:
         return
 
-    # Atomically claim the one-time slot. Two concurrent paid events with
-    # different reward keys (subscription + package) would both pass the
-    # in-memory check above; this conditional UPDATE lets only one win, keeping
-    # the rewards mutually exclusive.
-    rows_updated = db.execute(
-        update(PromoReferral)
-        .where(PromoReferral.referred_teacher_id == teacher_id)
-        .where(PromoReferral.first_paid_event_consumed.is_(False))
-        .values(first_paid_event_consumed=True)
-    ).rowcount
-    db.commit()
-    if rows_updated == 0:
-        return  # another paid event already consumed the slot
+    idempotency_key = f"{referral.id}:{reward_key}"
+    if (
+        db.query(PromoRewardEvent)
+        .filter(PromoRewardEvent.idempotency_key == idempotency_key)
+        .first()
+        is not None
+    ):
+        return  # already granted
 
-    _grant_reward(db, referral, reward_key, trigger_type, payload)
+    try:
+        # Atomically claim the one-time slot. Two concurrent paid events with
+        # different reward keys would both pass the in-memory check above; this
+        # conditional UPDATE (row lock) lets only one win.
+        rows_updated = db.execute(
+            update(PromoReferral)
+            .where(PromoReferral.referred_teacher_id == teacher_id)
+            .where(PromoReferral.first_paid_event_consumed.is_(False))
+            .values(first_paid_event_consumed=True)
+        ).rowcount
+        if rows_updated == 0:
+            db.rollback()
+            return  # another paid event already consumed the slot
+
+        # Grant in the SAME transaction so commit persists claim + reward together.
+        _build_reward_rows(db, referral, reward_key, trigger_type, config, payload)
+        db.commit()
+    except IntegrityError:
+        # Lost the idempotency race; rollback reverts the claim too.
+        db.rollback()
+        return
+    logger.info(
+        f"Referral reward granted: {reward_key} ({config.points} pts) "
+        f"(referral {referral.id}, first paid action)"
+    )

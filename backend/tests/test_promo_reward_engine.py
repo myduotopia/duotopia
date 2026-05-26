@@ -248,6 +248,34 @@ def test_reward_credit_package_has_one_year_expiry(test_db_session):
     assert 364 <= delta_days <= 366
 
 
+def test_grant_failure_does_not_consume_first_paid_slot(test_db_session, monkeypatch):
+    """If the grant raises, the slot claim must roll back so a retry can still
+    reward (no consume-without-grant)."""
+    _seed_reward_configs(test_db_session)
+    referrer, referred, referral = _referral(
+        test_db_session, "gf_ref@test.com", "gf_new@test.com"
+    )
+
+    import services.promo_reward_service as svc
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("simulated grant failure")
+
+    monkeypatch.setattr(svc, "_build_reward_rows", _boom)
+    dispatch_subscription_reward(test_db_session, referred.id, PLAN_TUTOR)
+
+    test_db_session.refresh(referral)
+    assert referral.first_paid_event_consumed is False  # slot rolled back
+    assert len(_points_to(test_db_session, referrer.id)) == 0
+
+    # Retry after the transient failure clears: reward is granted, slot consumed.
+    monkeypatch.undo()
+    dispatch_subscription_reward(test_db_session, referred.id, PLAN_TUTOR)
+    test_db_session.refresh(referral)
+    assert referral.first_paid_event_consumed is True
+    assert len(_points_to(test_db_session, referrer.id)) == 1
+
+
 # ---------------------------------------------------------------- admin report
 
 
