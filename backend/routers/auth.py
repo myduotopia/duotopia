@@ -284,16 +284,23 @@ async def teacher_register(
         logger.error(f"Onboarding failed for teacher {new_teacher.id}: {e}")
         # User can still complete registration and login, just without default resources
 
-    # 建立個人推銷碼，並（若有填）綁定推薦關係。全程非致命，失敗不影響註冊。
+    # 建立個人推銷碼（非致命）。獨立 try：即使產碼失敗也不影響後續綁定。
+    # except 內 rollback 避免 session 卡在 PendingRollbackError，後續 email 發送才不會 500。
     try:
-        from services.promo_code_service import (
-            create_personal_code_for_teacher,
-            bind_referral,
-        )
+        from services.promo_code_service import create_personal_code_for_teacher
 
         create_personal_code_for_teacher(db, new_teacher.id)
+    except Exception as e:
+        db.rollback()
+        logger.error(
+            f"Personal promo code creation failed for teacher {new_teacher.id}: {e}"
+        )
 
-        if register_req.promo_code:
+    # 綁定推薦關係（非致命，獨立於個人碼建立）。
+    if register_req.promo_code:
+        try:
+            from services.promo_code_service import bind_referral
+
             referral = bind_referral(db, register_req.promo_code, new_teacher.id)
             if referral is None:
                 logger.info(
@@ -305,8 +312,9 @@ async def teacher_register(
                     f"Referral {referral.id} bound: teacher {new_teacher.id} "
                     f"referred by {referral.referrer_teacher_id}"
                 )
-    except Exception as e:
-        logger.error(f"Promo code handling failed for teacher {new_teacher.id}: {e}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Referral binding failed for teacher {new_teacher.id}: {e}")
 
     # 🎯 發送驗證 email
     email_sent = email_service.send_teacher_verification_email(db, new_teacher)
@@ -352,6 +360,7 @@ async def verify_teacher_email(token: str, db: Session = Depends(get_db)):
 
         mark_referral_verified(db, teacher.id)
     except Exception as e:
+        db.rollback()
         logger.error(f"Marking referral verified failed for teacher {teacher.id}: {e}")
 
     # 不自動登入，只返回驗證成功訊息
