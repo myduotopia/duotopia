@@ -22,6 +22,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -216,11 +217,31 @@ def _dispatch_first_paid(
     if referral is None or referral.first_paid_event_consumed:
         return
 
-    event = _grant_reward(db, referral, reward_key, trigger_type, payload)
-    if event is None:
-        # Reward unconfigured (e.g. pkg-1000/2000) — leave the first-paid slot
-        # unconsumed so a later qualifying purchase can still reward.
+    # Skip packages with no active reward (e.g. pkg-1000/2000) BEFORE claiming
+    # the slot, so a later qualifying purchase can still reward.
+    config = (
+        db.query(PromoRewardConfig)
+        .filter(
+            PromoRewardConfig.reward_key == reward_key,
+            PromoRewardConfig.is_active.is_(True),
+        )
+        .first()
+    )
+    if config is None:
         return
 
-    referral.first_paid_event_consumed = True
+    # Atomically claim the one-time slot. Two concurrent paid events with
+    # different reward keys (subscription + package) would both pass the
+    # in-memory check above; this conditional UPDATE lets only one win, keeping
+    # the rewards mutually exclusive.
+    rows_updated = db.execute(
+        update(PromoReferral)
+        .where(PromoReferral.referred_teacher_id == teacher_id)
+        .where(PromoReferral.first_paid_event_consumed.is_(False))
+        .values(first_paid_event_consumed=True)
+    ).rowcount
     db.commit()
+    if rows_updated == 0:
+        return  # another paid event already consumed the slot
+
+    _grant_reward(db, referral, reward_key, trigger_type, payload)
