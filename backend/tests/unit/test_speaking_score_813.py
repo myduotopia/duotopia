@@ -187,6 +187,36 @@ class TestComputeSpeakingTotalScore:
     def test_empty_canonical_returns_none(self):
         assert compute_speaking_total_score([], {}) is None
 
+    def test_uses_real_model_has_ai_assessment_property(self):
+        """Anchor against a real StudentItemProgress so the _item() helper's plain
+        has_ai_assessment attribute can't hide a regression in the model @property
+        (it is backed by `ai_assessed_at is not None`). Review feedback on PR #815.
+        """
+        from datetime import datetime, timezone
+
+        assessed = StudentItemProgress(
+            content_item_id=1,
+            recording_url="https://gcs/a.wav",
+            ai_assessed_at=datetime(2026, 4, 23, tzinfo=timezone.utc),
+            pronunciation_score=Decimal("80"),
+            accuracy_score=Decimal("80"),
+            fluency_score=Decimal("80"),
+            completeness_score=Decimal("80"),
+        )
+        not_assessed = StudentItemProgress(
+            content_item_id=2,
+            recording_url="https://gcs/b.wav",
+            ai_assessed_at=None,
+        )
+        # Property contract: driven purely by ai_assessed_at.
+        assert assessed.has_ai_assessment is True
+        assert not_assessed.has_ai_assessment is False
+
+        canonical = _canonical(1, 2)
+        progress = {1: assessed, 2: not_assessed}
+        # item 2 recorded but un-assessed → missing (0); (80 + 0) / 2 = 40.0
+        assert compute_speaking_total_score(canonical, progress) == pytest.approx(40.0)
+
 
 # ---------------------------------------------------------------------------
 # 顯示端：_compute_interim_score 的 speaking fallback 分支

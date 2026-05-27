@@ -59,6 +59,21 @@ def _get_total_item_count(assignment_id: int, db: Session) -> int:
     )
 
 
+def _get_canonical_items(assignment_id: int, db: Session):
+    """The assignment's canonical ContentItem rows (AssignmentContent → Content → ContentItem).
+
+    Invariant per assignment — callers hoist this out of per-student loops and
+    pass it into _compute_interim_score to avoid an N+1 in the speaking fallback.
+    """
+    return (
+        db.query(ContentItem)
+        .join(Content, ContentItem.content_id == Content.id)
+        .join(AssignmentContent, AssignmentContent.content_id == Content.id)
+        .filter(AssignmentContent.assignment_id == assignment_id)
+        .all()
+    )
+
+
 def _is_interim_score(sa, assignment) -> bool:
     """Check if a student assignment should show an interim (provisional) score."""
     return (
@@ -70,7 +85,9 @@ def _is_interim_score(sa, assignment) -> bool:
     )
 
 
-def _compute_interim_score(sa, assignment, db: Session, total_items: int | None = None):
+def _compute_interim_score(
+    sa, assignment, db: Session, total_items: int | None = None, canonical_items=None
+):
     """
     Compute display score for /progress endpoint.
 
@@ -137,13 +154,10 @@ def _compute_interim_score(sa, assignment, db: Session, total_items: int | None 
     # item-level AI scores. Issue #813 — some GRADED rows never got that roll-up
     # (item scores exist, sa.score=NULL) and surfaced as 0. Recompute from items.
     if practice_mode in _SPEAKING_SCORE_MODES:
-        canonical_items = (
-            db.query(ContentItem)
-            .join(Content, ContentItem.content_id == Content.id)
-            .join(AssignmentContent, AssignmentContent.content_id == Content.id)
-            .filter(AssignmentContent.assignment_id == assignment.id)
-            .all()
-        )
+        # canonical_items is invariant per assignment — callers pass it pre-fetched
+        # to avoid re-querying once per student (this runs in per-student loops).
+        if canonical_items is None:
+            canonical_items = _get_canonical_items(assignment.id, db)
         if not canonical_items:
             return None
         progress_by_item = {
@@ -243,6 +257,15 @@ async def get_assignment_detail(
     # Pre-compute total item count once (avoids O(N) redundant queries in the loop)
     total_items = _get_total_item_count(assignment.id, db)
 
+    # Speaking-mode fallback needs the assignment's canonical items; fetch once
+    # here (invariant per assignment) and pass into _compute_interim_score so we
+    # don't re-query per student.
+    speaking_canonical_items = (
+        _get_canonical_items(assignment.id, db)
+        if assignment.practice_mode in _SPEAKING_SCORE_MODES
+        else None
+    )
+
     students_progress = []
     for student in all_students:
         # 檢查這個學生是否已被指派
@@ -299,7 +322,13 @@ async def get_assignment_detail(
                 ),
                 "content_progress": content_progress,
                 "score": (
-                    _compute_interim_score(sa, assignment, db, total_items=total_items)
+                    _compute_interim_score(
+                        sa,
+                        assignment,
+                        db,
+                        total_items=total_items,
+                        canonical_items=speaking_canonical_items,
+                    )
                     if sa
                     else None
                 ),
@@ -396,6 +425,15 @@ async def get_assignment_progress(
     # Pre-compute total item count once (avoids O(N) redundant queries in the loop)
     total_items = _get_total_item_count(assignment.id, db)
 
+    # Speaking-mode fallback needs the assignment's canonical items; fetch once
+    # here (invariant per assignment) and pass into _compute_interim_score so we
+    # don't re-query per student.
+    speaking_canonical_items = (
+        _get_canonical_items(assignment.id, db)
+        if assignment.practice_mode in _SPEAKING_SCORE_MODES
+        else None
+    )
+
     progress_list = []
     for student in all_students:
         # 使用字典快速查找，O(1) 時間複雜度
@@ -417,7 +455,13 @@ async def get_assignment_progress(
                     sa.submitted_at.isoformat() if sa and sa.submitted_at else None
                 ),
                 "score": (
-                    _compute_interim_score(sa, assignment, db, total_items=total_items)
+                    _compute_interim_score(
+                        sa,
+                        assignment,
+                        db,
+                        total_items=total_items,
+                        canonical_items=speaking_canonical_items,
+                    )
                     if sa
                     else None
                 ),
