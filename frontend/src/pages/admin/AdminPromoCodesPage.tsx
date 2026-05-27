@@ -43,6 +43,8 @@ export default function AdminPromoCodesPage() {
 
   // Local edit buffer for reward-config points, keyed by reward_key.
   const [pointDrafts, setPointDrafts] = useState<Record<string, string>>({});
+  // In-flight guard so rapid clicks can't fire racing PATCH/fetch calls.
+  const [busy, setBusy] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -76,20 +78,27 @@ export default function AdminPromoCodesPage() {
   }, [fetchAll]);
 
   const toggleCodeActive = async (row: PromoCodeRow) => {
+    if (busy) return;
+    setBusy(true);
     try {
       await apiClient.updatePromoCode(row.id, { is_active: !row.is_active });
       toast.success(`已${row.is_active ? "停用" : "啟用"}推薦碼 ${row.code}`);
       await fetchAll();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "更新失敗");
+    } finally {
+      setBusy(false);
     }
   };
 
   const saveRewardPoints = async (cfg: RewardConfigRow) => {
+    if (busy) return;
     const draft = pointDrafts[cfg.reward_key];
     if (draft === undefined) return; // row not yet loaded into drafts
-    const n = Number(draft);
-    if (draft === "" || Number.isNaN(n) || n < 0 || !Number.isInteger(n)) {
+    // Number("   ") is 0, so trim before parsing to reject whitespace-only.
+    const trimmed = draft.trim();
+    const n = Number(trimmed);
+    if (trimmed === "" || Number.isNaN(n) || n < 0 || !Number.isInteger(n)) {
       toast.error("點數必須是 0 或正整數");
       return;
     }
@@ -97,16 +106,28 @@ export default function AdminPromoCodesPage() {
       toast.info("沒有變更");
       return;
     }
+    setBusy(true);
     try {
       await apiClient.updateRewardConfig(cfg.reward_key, { points: n });
       toast.success(`已更新 ${cfg.reward_key} 為 ${n} 點`);
+      // Drop the saved draft so the next fetchAll re-seeds it from the server
+      // (otherwise a stale draft could later overwrite a concurrent change).
+      setPointDrafts((prev) => {
+        const next = { ...prev };
+        delete next[cfg.reward_key];
+        return next;
+      });
       await fetchAll();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "更新失敗");
+    } finally {
+      setBusy(false);
     }
   };
 
   const toggleRewardActive = async (cfg: RewardConfigRow) => {
+    if (busy) return;
+    setBusy(true);
     try {
       await apiClient.updateRewardConfig(cfg.reward_key, {
         is_active: !cfg.is_active,
@@ -115,6 +136,8 @@ export default function AdminPromoCodesPage() {
       await fetchAll();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "更新失敗");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -179,6 +202,7 @@ export default function AdminPromoCodesPage() {
                   <TableCell>
                     <Switch
                       checked={cfg.is_active}
+                      disabled={busy}
                       onCheckedChange={() => toggleRewardActive(cfg)}
                     />
                   </TableCell>
@@ -186,6 +210,7 @@ export default function AdminPromoCodesPage() {
                     <Button
                       size="sm"
                       variant="outline"
+                      disabled={busy}
                       onClick={() => saveRewardPoints(cfg)}
                     >
                       儲存
@@ -255,6 +280,7 @@ export default function AdminPromoCodesPage() {
                       <Button
                         size="sm"
                         variant="outline"
+                        disabled={busy}
                         onClick={() => toggleCodeActive(row)}
                       >
                         {row.is_active ? "停用" : "啟用"}

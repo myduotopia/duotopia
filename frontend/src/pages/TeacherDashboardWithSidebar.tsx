@@ -372,18 +372,20 @@ export default function TeacherDashboardWithSidebar() {
             <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
               <span>點數使用量</span>
               <span>
-                {pointsStatus.quota_used.toLocaleString()} /{" "}
-                {pointsStatus.quota_total.toLocaleString()}
+                {(pointsStatus.quota_used ?? 0).toLocaleString()} /{" "}
+                {(pointsStatus.quota_total ?? 0).toLocaleString()}
               </span>
             </div>
             <Progress
               value={Math.min(
                 100,
-                (pointsStatus.quota_used / pointsStatus.quota_total) * 100,
+                ((pointsStatus.quota_used ?? 0) /
+                  (pointsStatus.quota_total ?? 1)) *
+                  100,
               )}
             />
             <p className="text-xs text-gray-500 mt-1">
-              剩餘 {pointsStatus.quota_remaining.toLocaleString()} 點
+              剩餘 {(pointsStatus.quota_remaining ?? 0).toLocaleString()} 點
             </p>
           </div>
         )}
