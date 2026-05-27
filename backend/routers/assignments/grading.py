@@ -37,7 +37,11 @@ from .validators import (
     BatchGradeFinalizeResponse,
 )
 from .dependencies import get_current_teacher
-from .detail import _compute_interim_score
+from .detail import (
+    _compute_interim_score,
+    _get_canonical_items,
+    _SPEAKING_SCORE_MODES,
+)
 from services.analysis_quota import (
     reset_analysis_count_for_assignment,
     reset_analysis_count_for_assignments,
@@ -567,6 +571,15 @@ async def get_student_submission(
             actual_assignment_id,
         )
 
+    # Pre-fetch canonical items for speaking-mode fallback so _compute_interim_score
+    # doesn't re-query them inline (mirrors get_assignment_detail / grade reports).
+    speaking_canonical = (
+        _get_canonical_items(parent_assignment.id, db)
+        if parent_assignment
+        and parent_assignment.practice_mode in _SPEAKING_SCORE_MODES
+        else None
+    )
+
     return {
         "student_id": student.id,
         "student_name": student.name,
@@ -586,7 +599,12 @@ async def get_student_submission(
         # parent_assignment may be None for orphaned StudentAssignment rows;
         # the helper would AttributeError on `assignment.practice_mode`.
         "current_score": (
-            _compute_interim_score(assignment, parent_assignment, db)
+            _compute_interim_score(
+                assignment,
+                parent_assignment,
+                db,
+                canonical_items=speaking_canonical,
+            )
             if parent_assignment
             else assignment.score
         ),
