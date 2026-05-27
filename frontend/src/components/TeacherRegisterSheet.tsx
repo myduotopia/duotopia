@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Sheet,
@@ -53,13 +53,18 @@ export default function TeacherRegisterSheet({
     promoCode: "",
   });
 
+  // Tracks an intentional clear so reopening the sheet (with ?promo= still in
+  // the URL) doesn't silently re-inject a code the user removed.
+  const userClearedPromo = useRef(false);
+
   // Prefill the promo code from a ?promo= URL param (referral links). Re-checks
-  // when the sheet opens (it may stay mounted across opens) and only fills when
-  // empty, so it never overwrites a code the user manually cleared.
+  // when the sheet opens (it may stay mounted across opens), only fills when
+  // empty, and skips once the user has intentionally cleared it. Clamped to the
+  // DB column length so an oversized URL code can't 422 on submit.
   useEffect(() => {
     if (!isOpen) return;
-    const promo = searchParams.get("promo");
-    if (promo) {
+    const promo = searchParams.get("promo")?.trim().slice(0, 16);
+    if (promo && !userClearedPromo.current) {
       setFormData((prev) =>
         prev.promoCode ? prev : { ...prev, promoCode: promo },
       );
@@ -244,9 +249,12 @@ export default function TeacherRegisterSheet({
                     "輸入推薦碼",
                   )}
                   value={formData.promoCode}
-                  onChange={(e) =>
-                    setFormData({ ...formData, promoCode: e.target.value })
-                  }
+                  onChange={(e) => {
+                    // Empty after editing = intentional clear; don't re-inject
+                    // the URL code on the next open.
+                    userClearedPromo.current = e.target.value.trim() === "";
+                    setFormData({ ...formData, promoCode: e.target.value });
+                  }}
                   className="pl-10"
                   maxLength={16}
                   disabled={isLoading}

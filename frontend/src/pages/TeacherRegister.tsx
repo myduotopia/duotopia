@@ -63,7 +63,9 @@ export default function TeacherRegister() {
   // on mount and only when empty, so a later navigation can't re-inject a code
   // the user manually cleared.
   useEffect(() => {
-    const promo = searchParams.get("promo");
+    // Clamp to the DB column length; a value set programmatically bypasses the
+    // input's maxLength, so an oversized URL code would otherwise 422 on submit.
+    const promo = searchParams.get("promo")?.trim().slice(0, 16);
     if (promo) {
       setFormData((prev) =>
         prev.promoCode ? prev : { ...prev, promoCode: promo },

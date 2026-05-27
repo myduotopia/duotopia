@@ -1657,7 +1657,7 @@ class ApiClient {
       quota_used: number;
       quota_total: number;
       quota_remaining: number;
-    }>("/api/payment/subscription/status", { method: "GET" });
+    }>("/api/subscription/status", { method: "GET" });
   }
 
   // ============ Admin Promo Code Methods ============

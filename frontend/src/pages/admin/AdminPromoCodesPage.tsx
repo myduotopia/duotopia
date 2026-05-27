@@ -24,9 +24,15 @@ import { toast } from "sonner";
 
 const formatDate = (s: string | null) => {
   if (!s) return "永久";
-  // A bare "YYYY-MM-DD" parses as UTC midnight, rendering one day early in
-  // UTC+8; pin it to local midnight so the displayed date matches the input.
-  const normalized = s.includes("T") ? s : `${s}T00:00:00`;
+  // Normalize so the date renders correctly in UTC+8: a bare "YYYY-MM-DD" is
+  // pinned to local midnight; a datetime without an explicit zone is treated
+  // as UTC (the backend stores tz-aware UTC).
+  const hasZone = s.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(s);
+  const normalized = s.includes("T")
+    ? hasZone
+      ? s
+      : `${s}Z`
+    : `${s}T00:00:00`;
   return new Date(normalized).toLocaleDateString("zh-TW", {
     year: "numeric",
     month: "2-digit",
@@ -46,8 +52,10 @@ export default function AdminPromoCodesPage() {
   // In-flight guard so rapid clicks can't fire racing PATCH/fetch calls.
   const [busy, setBusy] = useState(false);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  // `silent` skips the full-page loading state so post-mutation refetches
+  // don't blank the page to "載入中...".
+  const fetchAll = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [c, rc, rep] = await Promise.all([
@@ -83,7 +91,7 @@ export default function AdminPromoCodesPage() {
     try {
       await apiClient.updatePromoCode(row.id, { is_active: !row.is_active });
       toast.success(`已${row.is_active ? "停用" : "啟用"}推薦碼 ${row.code}`);
-      await fetchAll();
+      await fetchAll(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "更新失敗");
     } finally {
@@ -117,7 +125,7 @@ export default function AdminPromoCodesPage() {
         delete next[cfg.reward_key];
         return next;
       });
-      await fetchAll();
+      await fetchAll(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "更新失敗");
     } finally {
@@ -133,7 +141,7 @@ export default function AdminPromoCodesPage() {
         is_active: !cfg.is_active,
       });
       toast.success(`已${cfg.is_active ? "停用" : "啟用"} ${cfg.reward_key}`);
-      await fetchAll();
+      await fetchAll(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "更新失敗");
     } finally {
@@ -201,6 +209,7 @@ export default function AdminPromoCodesPage() {
                       type="number"
                       min={0}
                       className="w-28"
+                      disabled={busy}
                       value={pointDrafts[cfg.reward_key] ?? ""}
                       onChange={(e) =>
                         setPointDrafts({
