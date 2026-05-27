@@ -2,6 +2,7 @@
 Utility functions for assignment processing
 """
 
+import json
 from typing import List, Dict, Any
 
 
@@ -187,8 +188,6 @@ def compute_speaking_total_score(canonical_items, progress_by_item) -> float | N
     Returns the rounded total, or None when there is no assessed work to score
     (so callers can leave sa.score-less, not-yet-attempted rows blank).
     """
-    import json
-
     item_scores: list[float] = []
     any_assessed = False
     for ci in canonical_items:
@@ -225,8 +224,9 @@ def compute_speaking_total_score(canonical_items, progress_by_item) -> float | N
         # ai_assessed_at can be stamped on a corrupt/partial row (all four score
         # columns NULL, no ai_feedback). Such a row carries no real score and must
         # not flip a whole assignment's None into 0.0 — only count it as assessed
-        # when it actually has score data (a legit zero column counts; all-NULL
-        # does not). See #813 PR review.
+        # when it actually has score data. `available` holds only >0 values, so a
+        # legitimate zero column (Decimal("0")) drops out of it but is still real
+        # data — the getattr check below catches it; all-NULL does not. (#813 review)
         has_score_data = (
             bool(available)
             or bool(ai_feedback_data)

@@ -25,6 +25,11 @@ from models import (
 from .dependencies import get_current_teacher
 from .utils import compute_speaking_total_score
 
+# Single source of truth for speaking-scored modes (Azure pronunciation assessment,
+# score_category=speaking). Imported — not re-declared — so a new speaking mode added
+# in score_category.py can't silently miss the #813 display fallback here.
+from utils.score_category import _SPEAKING_MODES as _SPEAKING_SCORE_MODES
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -38,13 +43,6 @@ AUTO_GRADED_MODES = frozenset(
 # all three accumulate correct/incorrect counts on
 # StudentItemProgress.word_selection_data, which the PG function reads.
 _MASTERY_FUNCTION_MODES = frozenset({"word_selection", "word_spelling", "word_cloze"})
-
-# Speaking modes scored by Azure pronunciation assessment (score_category=speaking).
-# These get their total from batch-grade rolling up item-level scores into
-# StudentAssignment.score. When that roll-up is missing (issue #813: item scores
-# present + status GRADED, but sa.score=NULL), we recompute on read — same pattern
-# as the mastery-mode fallback above. See utils.compute_speaking_total_score.
-_SPEAKING_SCORE_MODES = frozenset({"reading", "word_reading"})
 
 
 def _get_total_item_count(assignment_id: int, db: Session) -> int:

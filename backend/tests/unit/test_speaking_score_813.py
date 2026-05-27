@@ -247,12 +247,13 @@ class TestComputeInterimScoreSpeakingFallback:
         assert "reading" in _SPEAKING_SCORE_MODES
         assert "word_reading" in _SPEAKING_SCORE_MODES
 
-    def test_speaking_modes_match_score_category_source(self):
-        """detail._SPEAKING_SCORE_MODES 必須與 score_category 的 speaking 模式一致，
-        否則未來新增 speaking 模式只改一邊會對新模式重演 #813。#813 PR review finding 4。"""
+    def test_speaking_modes_use_score_category_single_source(self):
+        """detail._SPEAKING_SCORE_MODES 直接 import 自 score_category（同一物件），
+        不再維護第二份常數，避免新增 speaking 模式漂移、對新模式重演 #813。
+        #813 PR review finding 4。"""
         from utils.score_category import _SPEAKING_MODES
 
-        assert _SPEAKING_SCORE_MODES == _SPEAKING_MODES
+        assert _SPEAKING_SCORE_MODES is _SPEAKING_MODES
 
     @pytest.mark.parametrize("mode", ["reading", "word_reading"])
     def test_in_progress_returns_none_not_partial_score(self, mode):
