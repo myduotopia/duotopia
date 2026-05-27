@@ -197,7 +197,6 @@ def compute_speaking_total_score(canonical_items, progress_by_item) -> float | N
             item_scores.append(0.0)
             continue
 
-        any_assessed = True
         ai_feedback_data = {}
         if item.ai_feedback:
             try:
@@ -222,6 +221,28 @@ def compute_speaking_total_score(canonical_items, progress_by_item) -> float | N
             )
             if v > 0
         ]
+
+        # ai_assessed_at can be stamped on a corrupt/partial row (all four score
+        # columns NULL, no ai_feedback). Such a row carries no real score and must
+        # not flip a whole assignment's None into 0.0 — only count it as assessed
+        # when it actually has score data (a legit zero column counts; all-NULL
+        # does not). See #813 PR review.
+        has_score_data = (
+            bool(available)
+            or bool(ai_feedback_data)
+            or any(
+                getattr(item, field) is not None
+                for field in (
+                    "pronunciation_score",
+                    "accuracy_score",
+                    "fluency_score",
+                    "completeness_score",
+                )
+            )
+        )
+        if has_score_data:
+            any_assessed = True
+
         item_scores.append(sum(available) / len(available) if available else 0.0)
 
     if not item_scores or not any_assessed:

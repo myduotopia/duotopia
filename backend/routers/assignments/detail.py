@@ -154,6 +154,11 @@ def _compute_interim_score(
     # item-level AI scores. Issue #813 — some GRADED rows never got that roll-up
     # (item scores exist, sa.score=NULL) and surfaced as 0. Recompute from items.
     if practice_mode in _SPEAKING_SCORE_MODES:
+        # Don't surface a partial score for a student still working: _is_interim_score
+        # returns False for speaking modes, so the UI would render it as a final score
+        # (misleading). Keep prior behavior — only fall back once past IN_PROGRESS.
+        if sa.status and sa.status.value == "IN_PROGRESS":
+            return None
         # canonical_items is invariant per assignment — callers pass it pre-fetched
         # to avoid re-querying once per student (this runs in per-student loops).
         if canonical_items is None:

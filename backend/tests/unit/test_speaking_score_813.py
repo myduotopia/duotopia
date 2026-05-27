@@ -217,6 +217,25 @@ class TestComputeSpeakingTotalScore:
         # item 2 recorded but un-assessed → missing (0); (80 + 0) / 2 = 40.0
         assert compute_speaking_total_score(canonical, progress) == pytest.approx(40.0)
 
+    def test_corrupt_item_assessed_flag_but_all_null_returns_none(self):
+        """ai_assessed_at 有值但 4 個分數欄全 NULL、無 ai_feedback（半寫入/壞資料）
+        → 不算 assessed，整份回 None（不顯示 0）。#813 PR review finding 3。"""
+        canonical = _canonical(1)
+        corrupt = _item(
+            1, ai=True, feedback=None, pron=None, acc=None, flu=None, comp=None
+        )
+        assert compute_speaking_total_score(canonical, {1: corrupt}) is None
+
+    def test_legit_zero_scored_item_counts_as_assessed(self):
+        """欄位為實際 0（非 NULL）代表「有評分但得 0」→ 算 assessed，回 0.0（非 None）。"""
+        canonical = _canonical(1)
+        zeroed = _item(
+            1, pron=Decimal("0"), acc=Decimal("0"), flu=Decimal("0"), comp=Decimal("0")
+        )
+        assert compute_speaking_total_score(canonical, {1: zeroed}) == pytest.approx(
+            0.0
+        )
+
 
 # ---------------------------------------------------------------------------
 # 顯示端：_compute_interim_score 的 speaking fallback 分支
@@ -227,6 +246,33 @@ class TestComputeInterimScoreSpeakingFallback:
     def test_speaking_modes_set(self):
         assert "reading" in _SPEAKING_SCORE_MODES
         assert "word_reading" in _SPEAKING_SCORE_MODES
+
+    def test_speaking_modes_match_score_category_source(self):
+        """detail._SPEAKING_SCORE_MODES 必須與 score_category 的 speaking 模式一致，
+        否則未來新增 speaking 模式只改一邊會對新模式重演 #813。#813 PR review finding 4。"""
+        from utils.score_category import _SPEAKING_MODES
+
+        assert _SPEAKING_SCORE_MODES == _SPEAKING_MODES
+
+    @pytest.mark.parametrize("mode", ["reading", "word_reading"])
+    def test_in_progress_returns_none_not_partial_score(self, mode):
+        """IN_PROGRESS 學生即便有部分 item 評分，也不回部分分數（會被當成最終分顯示）。
+        #813 PR review finding 2。"""
+        sa = _sa("IN_PROGRESS", score=None)
+        assignment = _assignment(mode)
+        canonical = _canonical(1, 2)
+        progress = [
+            _item(
+                1,
+                pron=Decimal("80"),
+                acc=Decimal("80"),
+                flu=Decimal("80"),
+                comp=Decimal("80"),
+            ),
+            _item(2, rec=None, ai=False, pron=None, acc=None, flu=None, comp=None),
+        ]
+        db = _mock_db_speaking(canonical, progress)
+        assert _compute_interim_score(sa, assignment, db) is None
 
     @pytest.mark.parametrize("mode", ["reading", "word_reading"])
     def test_graded_null_score_recomputes_from_items(self, mode):

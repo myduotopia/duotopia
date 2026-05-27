@@ -48,7 +48,11 @@ from models import (
     StudentAssignment,
     Teacher,
 )
-from routers.assignments.detail import _compute_interim_score
+from routers.assignments.detail import (
+    _compute_interim_score,
+    _get_canonical_items,
+    _SPEAKING_SCORE_MODES,
+)
 from .dependencies import get_current_teacher
 
 logger = logging.getLogger(__name__)
@@ -146,7 +150,26 @@ def _category_key(assignment: Assignment) -> str:
     return key if key in _CATEGORY_ZH else "writing"
 
 
-def _final_score(sa: Optional[StudentAssignment], assignment: Assignment, db: Session):
+def _speaking_canonical_cache(assignments: List[Assignment], db: Session) -> dict:
+    """Pre-fetch canonical items per speaking-mode assignment.
+
+    _compute_interim_score's speaking fallback would otherwise re-query canonical
+    items for every (student, assignment) cell in the report grid (N+1). Build the
+    per-assignment cache once and thread it through _final_score.
+    """
+    return {
+        a.id: _get_canonical_items(a.id, db)
+        for a in assignments
+        if a.practice_mode in _SPEAKING_SCORE_MODES
+    }
+
+
+def _final_score(
+    sa: Optional[StudentAssignment],
+    assignment: Assignment,
+    db: Session,
+    canonical_items=None,
+):
     """Return a numeric score (or ``None``) for one (student, assignment) cell.
 
     Sample reports show integer scores, so we round to the nearest integer.
@@ -155,7 +178,9 @@ def _final_score(sa: Optional[StudentAssignment], assignment: Assignment, db: Se
         return None
     if sa.score is not None:
         return int(round(float(sa.score)))
-    interim = _compute_interim_score(sa, assignment, db)
+    interim = _compute_interim_score(
+        sa, assignment, db, canonical_items=canonical_items
+    )
     return int(round(float(interim))) if interim is not None else None
 
 
@@ -310,6 +335,7 @@ def _build_class_workbook(
     # --- Data rows ---
     all_scores: List[float] = []
     per_assignment_scores: dict[int, List[float]] = {a.id: [] for a in assignments}
+    canonical_cache = _speaking_canonical_cache(assignments, db)
 
     first_data_row = 6
     for student_idx, student in enumerate(students):
@@ -320,7 +346,7 @@ def _build_class_workbook(
 
         for col_idx, (_, a) in enumerate(ordered):
             sa = sa_by_pair.get((student.id, a.id))
-            score = _final_score(sa, a, db)
+            score = _final_score(sa, a, db, canonical_items=canonical_cache.get(a.id))
             if score is not None:
                 student_scores.append(float(score))
                 per_assignment_scores[a.id].append(float(score))
@@ -429,6 +455,7 @@ def _build_single_student_workbook(
     assignments: List[Assignment],
     sa_by_assignment: dict,
     db: Session,
+    canonical_cache: Optional[dict] = None,
 ) -> Workbook:
     """Build a one-sheet workbook for a single student.
 
@@ -485,6 +512,11 @@ def _build_single_student_workbook(
         cell.alignment = Alignment(horizontal="center")
         cell.border = border
 
+    # Built once by the caller across all students; fall back to building it here
+    # so the builder stays correct when called standalone.
+    if canonical_cache is None:
+        canonical_cache = _speaking_canonical_cache(assignments, db)
+
     # Bucket assignments by category, preserving insertion order within bucket.
     groups: dict[str, List[Assignment]] = {k: [] for k in _CATEGORY_ORDER}
     for a in assignments:
@@ -508,7 +540,7 @@ def _build_single_student_workbook(
 
         for a in items:
             sa = sa_by_assignment.get(a.id)
-            score = _final_score(sa, a, db)
+            score = _final_score(sa, a, db, canonical_items=canonical_cache.get(a.id))
             d = a.created_at.date().isoformat() if a.created_at else ""
             ws.cell(row=cur_row, column=1, value=_CATEGORY_ZH[cat])
             ws.cell(row=cur_row, column=2, value=a.title)
@@ -626,11 +658,15 @@ async def student_grade_report(
     sa_by_pair = {(sa.student_id, sa.assignment_id): sa for sa in sa_rows}
 
     today = _today_yyyymmdd()
+    # Build the speaking canonical-items cache once for all students (invariant
+    # per assignment) rather than re-fetching inside each per-student workbook.
+    canonical_cache = _speaking_canonical_cache(assignments, db)
+
     files: List[Tuple[str, bytes]] = []
     for student in students:
         sa_for_student = {a.id: sa_by_pair.get((student.id, a.id)) for a in assignments}
         wb = _build_single_student_workbook(
-            classroom, student, assignments, sa_for_student, db
+            classroom, student, assignments, sa_for_student, db, canonical_cache
         )
         buf = io.BytesIO()
         wb.save(buf)
