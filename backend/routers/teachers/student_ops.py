@@ -456,9 +456,18 @@ async def update_student(
             )
 
     # Update birthdate (no longer syncs password since default password is join date)
-    if update_data.birthdate is not None:
-        new_birthdate = datetime.strptime(update_data.birthdate, "%Y-%m-%d").date()
-        student.birthdate = new_birthdate
+    # An empty string means "no birthdate provided" — skip it instead of crashing
+    # on strptime("") (Issue #787: surfaced to the browser as "Failed to fetch").
+    if update_data.birthdate:
+        try:
+            student.birthdate = datetime.strptime(
+                update_data.birthdate, "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid birthdate format. Please use YYYY-MM-DD format",
+            )
 
     # Update other fields
     if update_data.name is not None:
