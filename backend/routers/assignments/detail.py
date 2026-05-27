@@ -152,10 +152,13 @@ def _compute_interim_score(
     # item-level AI scores. Issue #813 — some GRADED rows never got that roll-up
     # (item scores exist, sa.score=NULL) and surfaced as 0. Recompute from items.
     if practice_mode in _SPEAKING_SCORE_MODES:
-        # Don't surface a partial score for a student still working: _is_interim_score
-        # returns False for speaking modes, so the UI would render it as a final score
-        # (misleading). Keep prior behavior — only fall back once past IN_PROGRESS.
-        if sa.status and sa.status.value == "IN_PROGRESS":
+        # Only recompute for a GRADED assignment — that's the #813 state (batch-grade
+        # finalized status=GRADED but never wrote sa.score). For any other status
+        # (SUBMITTED/RESUBMITTED/RETURNED/IN_PROGRESS) a NULL score is expected because
+        # grading hasn't completed; computing a partial item-level average there would
+        # render as a misleading FINAL score (speaking modes aren't in AUTO_GRADED_MODES,
+        # so _is_interim_score is False and the UI shows no "~" marker).
+        if not (sa.status and sa.status.value == "GRADED"):
             return None
         # canonical_items is invariant per assignment — callers pass it pre-fetched
         # to avoid re-querying once per student (this runs in per-student loops).

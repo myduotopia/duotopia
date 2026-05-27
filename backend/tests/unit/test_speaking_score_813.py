@@ -269,12 +269,14 @@ class TestComputeInterimScoreSpeakingFallback:
 
         assert _SPEAKING_SCORE_MODES is _SPEAKING_MODES
 
-    @pytest.mark.parametrize("mode", ["reading", "word_reading"])
-    def test_in_progress_returns_none_not_partial_score(self, mode):
-        """IN_PROGRESS 學生即便有部分 item 評分，也不回部分分數（會被當成最終分顯示）。
-        #813 PR review finding 2。"""
-        sa = _sa("IN_PROGRESS", score=None)
-        assignment = _assignment(mode)
+    @pytest.mark.parametrize(
+        "status", ["IN_PROGRESS", "SUBMITTED", "RESUBMITTED", "RETURNED", "NOT_STARTED"]
+    )
+    def test_non_graded_status_returns_none_not_partial_score(self, status):
+        """只有 GRADED 才現算。其他狀態（含 SUBMITTED — 尚未批改，NULL 分數屬正常）
+        即便有部分 item 評分也回 None，避免部分分數被當最終分顯示。#813 PR review finding 2。"""
+        sa = _sa(status, score=None)
+        assignment = _assignment("reading")
         canonical = _canonical(1, 2)
         progress = [
             _item(
