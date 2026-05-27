@@ -23,6 +23,7 @@ from models import (
     StudentItemProgress,
 )
 from .dependencies import get_current_teacher
+from .utils import compute_speaking_total_score
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,13 @@ AUTO_GRADED_MODES = frozenset(
 # all three accumulate correct/incorrect counts on
 # StudentItemProgress.word_selection_data, which the PG function reads.
 _MASTERY_FUNCTION_MODES = frozenset({"word_selection", "word_spelling", "word_cloze"})
+
+# Speaking modes scored by Azure pronunciation assessment (score_category=speaking).
+# These get their total from batch-grade rolling up item-level scores into
+# StudentAssignment.score. When that roll-up is missing (issue #813: item scores
+# present + status GRADED, but sa.score=NULL), we recompute on read — same pattern
+# as the mastery-mode fallback above. See utils.compute_speaking_total_score.
+_SPEAKING_SCORE_MODES = frozenset({"reading", "word_reading"})
 
 
 def _get_total_item_count(assignment_id: int, db: Session) -> int:
@@ -124,6 +132,27 @@ def _compute_interim_score(sa, assignment, db: Session, total_items: int | None 
         if total_items == 0:
             return None
         return round(sum(valid_scores) / total_items, 1)
+
+    # Speaking modes (例句朗讀 / 單字朗讀): sa.score is the batch-grade roll-up of
+    # item-level AI scores. Issue #813 — some GRADED rows never got that roll-up
+    # (item scores exist, sa.score=NULL) and surfaced as 0. Recompute from items.
+    if practice_mode in _SPEAKING_SCORE_MODES:
+        canonical_items = (
+            db.query(ContentItem)
+            .join(Content, ContentItem.content_id == Content.id)
+            .join(AssignmentContent, AssignmentContent.content_id == Content.id)
+            .filter(AssignmentContent.assignment_id == assignment.id)
+            .all()
+        )
+        if not canonical_items:
+            return None
+        progress_by_item = {
+            p.content_item_id: p
+            for p in db.query(StudentItemProgress)
+            .filter(StudentItemProgress.student_assignment_id == sa.id)
+            .all()
+        }
+        return compute_speaking_total_score(canonical_items, progress_by_item)
 
     return None
 

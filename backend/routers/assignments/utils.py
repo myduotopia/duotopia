@@ -151,6 +151,84 @@ def get_score_with_fallback(
         return float(json_score)
 
 
+def _read_component_score(
+    item_progress, field_name: str, ai_feedback_data: dict
+) -> float:
+    """Read one component score read-only (column first, then ai_feedback JSON).
+
+    Mirrors get_score_with_fallback's value resolution but never writes/backfills
+    — safe to call from GET endpoints. Used by compute_speaking_total_score.
+    """
+    score = getattr(item_progress, field_name)
+    if score is not None:
+        return float(score)
+    if ai_feedback_data:
+        json_score = ai_feedback_data.get(field_name)
+        if json_score is not None:
+            try:
+                return float(json_score)
+            except (TypeError, ValueError):
+                return 0.0
+    return 0.0
+
+
+def compute_speaking_total_score(canonical_items, progress_by_item) -> float | None:
+    """Roll up a speaking/reading assignment's total score from item-level AI scores.
+
+    Mirrors batch_grade_assignment's averaging so a displayed fallback equals what a
+    re-grade would produce: per item, average the >0 components
+    (pronunciation/accuracy/fluency/completeness); a missing/un-assessed item scores 0;
+    the total is the mean across all canonical items.
+
+    Args:
+        canonical_items: the assignment's canonical ContentItem rows (the denominator).
+        progress_by_item: dict[content_item_id -> StudentItemProgress].
+
+    Returns the rounded total, or None when there is no assessed work to score
+    (so callers can leave sa.score-less, not-yet-attempted rows blank).
+    """
+    import json
+
+    item_scores: list[float] = []
+    any_assessed = False
+    for ci in canonical_items:
+        item = progress_by_item.get(ci.id)
+        if item is None or not item.recording_url or not item.has_ai_assessment:
+            item_scores.append(0.0)
+            continue
+
+        any_assessed = True
+        ai_feedback_data = {}
+        if item.ai_feedback:
+            try:
+                ai_feedback_data = (
+                    json.loads(item.ai_feedback)
+                    if isinstance(item.ai_feedback, str)
+                    else item.ai_feedback
+                )
+            except (json.JSONDecodeError, TypeError):
+                ai_feedback_data = {}
+
+        available = [
+            v
+            for v in (
+                _read_component_score(item, field, ai_feedback_data)
+                for field in (
+                    "pronunciation_score",
+                    "accuracy_score",
+                    "fluency_score",
+                    "completeness_score",
+                )
+            )
+            if v > 0
+        ]
+        item_scores.append(sum(available) / len(available) if available else 0.0)
+
+    if not item_scores or not any_assessed:
+        return None
+    return round(sum(item_scores) / len(item_scores), 1)
+
+
 def generate_item_comment(
     pronunciation: float,
     accuracy: float,
