@@ -24,7 +24,10 @@ import { toast } from "sonner";
 
 const formatDate = (s: string | null) => {
   if (!s) return "永久";
-  return new Date(s).toLocaleDateString("zh-TW", {
+  // A bare "YYYY-MM-DD" parses as UTC midnight, rendering one day early in
+  // UTC+8; pin it to local midnight so the displayed date matches the input.
+  const normalized = s.includes("T") ? s : `${s}T00:00:00`;
+  return new Date(normalized).toLocaleDateString("zh-TW", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -53,8 +56,12 @@ export default function AdminPromoCodesPage() {
       setCodes(c);
       setConfigs(rc);
       setReport(rep);
-      setPointDrafts(
-        Object.fromEntries(rc.map((r) => [r.reward_key, String(r.points)])),
+      // Preserve any unsaved point edits across refetch (a toggle elsewhere
+      // triggers fetchAll); only seed keys we don't already have a draft for.
+      setPointDrafts((prev) =>
+        Object.fromEntries(
+          rc.map((r) => [r.reward_key, prev[r.reward_key] ?? String(r.points)]),
+        ),
       );
     } catch (err) {
       console.error("Failed to load promo data:", err);
@@ -71,7 +78,7 @@ export default function AdminPromoCodesPage() {
   const toggleCodeActive = async (row: PromoCodeRow) => {
     try {
       await apiClient.updatePromoCode(row.id, { is_active: !row.is_active });
-      toast.success(`已${row.is_active ? "停用" : "啟用"}推銷碼 ${row.code}`);
+      toast.success(`已${row.is_active ? "停用" : "啟用"}推薦碼 ${row.code}`);
       await fetchAll();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "更新失敗");
@@ -80,6 +87,7 @@ export default function AdminPromoCodesPage() {
 
   const saveRewardPoints = async (cfg: RewardConfigRow) => {
     const draft = pointDrafts[cfg.reward_key];
+    if (draft === undefined) return; // row not yet loaded into drafts
     const n = Number(draft);
     if (draft === "" || Number.isNaN(n) || n < 0 || !Number.isInteger(n)) {
       toast.error("點數必須是 0 或正整數");
@@ -103,6 +111,7 @@ export default function AdminPromoCodesPage() {
       await apiClient.updateRewardConfig(cfg.reward_key, {
         is_active: !cfg.is_active,
       });
+      toast.success(`已${cfg.is_active ? "停用" : "啟用"} ${cfg.reward_key}`);
       await fetchAll();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "更新失敗");
@@ -194,7 +203,7 @@ export default function AdminPromoCodesPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Ticket className="h-5 w-5 text-blue-600" />
-            推銷碼
+            推薦碼
           </CardTitle>
           <p className="text-sm text-gray-500 mt-1">
             每位老師註冊時自動取得個人碼；可在此停用／啟用。
@@ -204,7 +213,7 @@ export default function AdminPromoCodesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>推銷碼</TableHead>
+                <TableHead>推薦碼</TableHead>
                 <TableHead>老師 ID</TableHead>
                 <TableHead>類型</TableHead>
                 <TableHead>到期</TableHead>
@@ -219,7 +228,7 @@ export default function AdminPromoCodesPage() {
                     colSpan={6}
                     className="text-center text-gray-500 py-6"
                   >
-                    尚無推銷碼
+                    尚無推薦碼
                   </TableCell>
                 </TableRow>
               ) : (

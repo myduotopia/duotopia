@@ -53,13 +53,18 @@ export default function TeacherRegisterSheet({
     promoCode: "",
   });
 
-  // Prefill the promo code from a ?promo= URL param (referral links).
+  // Prefill the promo code from a ?promo= URL param (referral links). Run once
+  // on mount and only when empty, so a later navigation can't re-inject a code
+  // the user manually cleared.
   useEffect(() => {
     const promo = searchParams.get("promo");
     if (promo) {
-      setFormData((prev) => ({ ...prev, promoCode: promo }));
+      setFormData((prev) =>
+        prev.promoCode ? prev : { ...prev, promoCode: promo },
+      );
     }
-  }, [searchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

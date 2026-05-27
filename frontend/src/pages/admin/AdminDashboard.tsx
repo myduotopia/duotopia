@@ -76,8 +76,8 @@ export default function AdminDashboard() {
             className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
           >
             <Ticket className="h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
-            <span className="hidden sm:inline">推銷碼</span>
-            <span className="sm:hidden">推銷</span>
+            <span className="hidden sm:inline">推薦碼</span>
+            <span className="sm:hidden">推薦</span>
           </TabsTrigger>
         </TabsList>
 
