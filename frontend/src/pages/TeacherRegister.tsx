@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, User, Lock, Mail, Phone, Eye, EyeOff } from "lucide-react";
+import {
+  Loader2,
+  User,
+  Lock,
+  Mail,
+  Phone,
+  Eye,
+  EyeOff,
+  Ticket,
+} from "lucide-react";
 import { apiClient } from "../lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -25,6 +34,7 @@ import { sendEvent as gaSendEvent } from "@/services/gaService";
 export default function TeacherRegister() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isAuthenticated = useTeacherAuthStore((state) => state.isAuthenticated);
   const user = useTeacherAuthStore((state) => state.user);
   const [isLoading, setIsLoading] = useState(false);
@@ -46,7 +56,16 @@ export default function TeacherRegister() {
     confirmPassword: "",
     name: "",
     phone: "",
+    promoCode: "",
   });
+
+  // Prefill the promo code from a ?promo= URL param (referral links).
+  useEffect(() => {
+    const promo = searchParams.get("promo");
+    if (promo) {
+      setFormData((prev) => ({ ...prev, promoCode: promo }));
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +101,7 @@ export default function TeacherRegister() {
         password: trimmedPassword,
         name: formData.name,
         phone: formData.phone || undefined,
+        promo_code: formData.promoCode.trim() || undefined,
       })) as RegisterResponse;
 
       // 🔴 不要自動登入！顯示驗證提示
@@ -198,6 +218,30 @@ export default function TeacherRegister() {
                       setFormData({ ...formData, phone: e.target.value })
                     }
                     className="pl-10"
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="promoCode">
+                  {t("teacherRegister.form.promoCode", "推薦碼（選填）")}
+                </Label>
+                <div className="relative">
+                  <Ticket className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="promoCode"
+                    type="text"
+                    placeholder={t(
+                      "teacherRegister.form.promoCodePlaceholder",
+                      "輸入推薦碼",
+                    )}
+                    value={formData.promoCode}
+                    onChange={(e) =>
+                      setFormData({ ...formData, promoCode: e.target.value })
+                    }
+                    className="pl-10"
+                    maxLength={16}
                     disabled={isLoading}
                   />
                 </div>

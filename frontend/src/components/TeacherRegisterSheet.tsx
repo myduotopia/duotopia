@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Sheet,
   SheetContent,
@@ -20,6 +20,7 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
+  Ticket,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { useTranslation } from "react-i18next";
@@ -38,6 +39,7 @@ export default function TeacherRegisterSheet({
 }: TeacherRegisterSheetProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -48,7 +50,16 @@ export default function TeacherRegisterSheet({
     confirmPassword: "",
     name: "",
     phone: "",
+    promoCode: "",
   });
+
+  // Prefill the promo code from a ?promo= URL param (referral links).
+  useEffect(() => {
+    const promo = searchParams.get("promo");
+    if (promo) {
+      setFormData((prev) => ({ ...prev, promoCode: promo }));
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +93,7 @@ export default function TeacherRegisterSheet({
         password: trimmedPassword,
         name: formData.name,
         phone: formData.phone || undefined,
+        promo_code: formData.promoCode.trim() || undefined,
       })) as RegisterResponse;
 
       onClose();
@@ -112,6 +124,7 @@ export default function TeacherRegisterSheet({
       confirmPassword: "",
       name: "",
       phone: "",
+      promoCode: "",
     });
     onClose();
   };
@@ -207,6 +220,30 @@ export default function TeacherRegisterSheet({
                     setFormData({ ...formData, phone: e.target.value })
                   }
                   className="pl-10"
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="sheet-reg-promo">
+                {t("teacherRegister.form.promoCode", "推薦碼（選填）")}
+              </Label>
+              <div className="relative">
+                <Ticket className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="sheet-reg-promo"
+                  type="text"
+                  placeholder={t(
+                    "teacherRegister.form.promoCodePlaceholder",
+                    "輸入推薦碼",
+                  )}
+                  value={formData.promoCode}
+                  onChange={(e) =>
+                    setFormData({ ...formData, promoCode: e.target.value })
+                  }
+                  className="pl-10"
+                  maxLength={16}
                   disabled={isLoading}
                 />
               </div>
