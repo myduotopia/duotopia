@@ -152,6 +152,15 @@ def get_score_with_fallback(
         return float(json_score)
 
 
+# The four Azure pronunciation-assessment component columns / ai_feedback keys.
+_SCORE_FIELDS = (
+    "pronunciation_score",
+    "accuracy_score",
+    "fluency_score",
+    "completeness_score",
+)
+
+
 def _read_component_score(
     item_progress, field_name: str, ai_feedback_data: dict
 ) -> float:
@@ -211,34 +220,23 @@ def compute_speaking_total_score(canonical_items, progress_by_item) -> float | N
             v
             for v in (
                 _read_component_score(item, field, ai_feedback_data)
-                for field in (
-                    "pronunciation_score",
-                    "accuracy_score",
-                    "fluency_score",
-                    "completeness_score",
-                )
+                for field in _SCORE_FIELDS
             )
             if v > 0
         ]
 
         # ai_assessed_at can be stamped on a corrupt/partial row (all four score
-        # columns NULL, no ai_feedback). Such a row carries no real score and must
-        # not flip a whole assignment's None into 0.0 — only count it as assessed
-        # when it actually has score data. `available` holds only >0 values, so a
-        # legitimate zero column (Decimal("0")) drops out of it but is still real
-        # data — the getattr check below catches it; all-NULL does not. (#813 review)
+        # columns NULL, ai_feedback holding only non-score JSON like {"error": ...}).
+        # Such a row carries no real score and must not flip a whole assignment's
+        # None into 0.0 — only count it as assessed when an actual score value
+        # exists. `available` holds only >0 values, so a legitimate zero (column or
+        # JSON == 0) drops out of it but is still real data — the per-field
+        # None-checks below catch that; all-NULL / non-score JSON does not.
+        # (#813 review) — note we check the score keys specifically, NOT bool(json).
         has_score_data = (
             bool(available)
-            or bool(ai_feedback_data)
-            or any(
-                getattr(item, field) is not None
-                for field in (
-                    "pronunciation_score",
-                    "accuracy_score",
-                    "fluency_score",
-                    "completeness_score",
-                )
-            )
+            or any(ai_feedback_data.get(field) is not None for field in _SCORE_FIELDS)
+            or any(getattr(item, field) is not None for field in _SCORE_FIELDS)
         )
         if has_score_data:
             any_assessed = True

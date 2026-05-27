@@ -226,6 +226,20 @@ class TestComputeSpeakingTotalScore:
         )
         assert compute_speaking_total_score(canonical, {1: corrupt}) is None
 
+    def test_non_score_ai_feedback_does_not_count_as_assessed(self):
+        """ai_feedback 只有非分數欄位（如 {"error": "timeout"}）、分數欄全 NULL
+        → 不算 assessed，回 None（不被 bool(json) 誤判）。#813 PR review。"""
+        canonical = _canonical(1)
+        item = _item(
+            1,
+            feedback='{"error": "timeout", "attempt": 2}',
+            pron=None,
+            acc=None,
+            flu=None,
+            comp=None,
+        )
+        assert compute_speaking_total_score(canonical, {1: item}) is None
+
     def test_legit_zero_scored_item_counts_as_assessed(self):
         """欄位為實際 0（非 NULL）代表「有評分但得 0」→ 算 assessed，回 0.0（非 None）。"""
         canonical = _canonical(1)
