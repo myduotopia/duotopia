@@ -132,7 +132,6 @@ export interface RegisterRequest {
   password: string;
   name: string;
   phone?: string;
-  // Issue #637: optional referral promo code (from ?promo= or input field)
   promo_code?: string;
 }
 
@@ -161,7 +160,7 @@ interface AdminCreditPackageResult {
   admin_operations: AdminCreditPackageOperation[];
 }
 
-// ============ Promo Code types (issue #637) ============
+// ============ Promo Code types ============
 export interface PromoCodeRow {
   id: number;
   code: string;
@@ -1649,7 +1648,6 @@ class ApiClient {
     );
   }
 
-  // Teacher's own subscription + aggregated points/quota status.
   async getSubscriptionStatus() {
     return this.request<{
       status: string;
@@ -1662,7 +1660,7 @@ class ApiClient {
     }>("/api/payment/subscription/status", { method: "GET" });
   }
 
-  // ============ Admin Promo Code Methods (issue #637) ============
+  // ============ Admin Promo Code Methods ============
   async listPromoCodes(params?: { teacher_id?: number; kind?: string }) {
     const qs = new URLSearchParams();
     if (params?.teacher_id !== undefined)
@@ -1713,10 +1711,9 @@ class ApiClient {
   }
 
   async getReferralReport() {
-    return this.request<ReferralReportRow[]>(
-      "/api/admin/promo-codes/report",
-      { method: "GET" },
-    );
+    return this.request<ReferralReportRow[]>("/api/admin/promo-codes/report", {
+      method: "GET",
+    });
   }
 }
 

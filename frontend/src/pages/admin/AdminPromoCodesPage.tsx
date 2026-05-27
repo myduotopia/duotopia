@@ -145,15 +145,24 @@ export default function AdminPromoCodesPage() {
     return <div className="py-8 text-center text-gray-500">載入中...</div>;
   }
 
-  return (
-    <div className="space-y-6">
-      {error && (
+  // On load failure show only the error + retry, not empty-state cards that
+  // would look like the admin genuinely has no data.
+  if (error) {
+    return (
+      <div className="space-y-4">
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-      )}
+        <Button variant="outline" onClick={() => fetchAll()}>
+          重新載入
+        </Button>
+      </div>
+    );
+  }
 
+  return (
+    <div className="space-y-6">
       {/* Reward config editor */}
       <Card>
         <CardHeader>
@@ -179,7 +188,9 @@ export default function AdminPromoCodesPage() {
             <TableBody>
               {configs.map((cfg) => (
                 <TableRow key={cfg.reward_key}>
-                  <TableCell className="font-medium">{cfg.reward_key}</TableCell>
+                  <TableCell className="font-medium">
+                    {cfg.reward_key}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline">
                       {cfg.recipient === "referred" ? "被推薦人" : "推薦人"}
