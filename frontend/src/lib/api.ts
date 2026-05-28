@@ -1669,6 +1669,21 @@ class ApiClient {
       quota_used: number;
       quota_total: number;
       quota_remaining: number;
+      subscription_total?: number;
+      subscription_used?: number;
+      subscription_remaining?: number;
+      credit_packages_total?: number;
+      credit_packages_remaining?: number;
+      credit_packages?: Array<{
+        id: number;
+        package_id: string;
+        points_total: number;
+        points_used: number;
+        points_remaining: number;
+        source: string;
+        status: string;
+        is_expired: boolean;
+      }>;
     }>("/api/subscription/status", { method: "GET" });
   }
 

@@ -20,10 +20,14 @@ import {
   Gauge,
   Eye,
   EyeOff,
+  Share2,
+  ArrowRight,
+  Zap,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { validatePasswordStrength } from "@/utils/passwordValidation";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { buildQuotaSources, type QuotaSourceItem } from "@/lib/quotaSources";
 
 interface TeacherInfo {
   id: number;
@@ -41,6 +45,7 @@ interface QuotaInfo {
   quota_remaining: number;
   plan_name: string;
   source: "personal" | "organization";
+  sources: QuotaSourceItem[];
 }
 
 // 配額卡片獨立元件（必須在 TeacherLayout/WorkspaceProvider 內才能使用 useWorkspace）
@@ -73,6 +78,7 @@ function QuotaCard() {
             ),
             plan_name: selectedOrganization.name,
             source: "organization",
+            sources: [], // org mode has no per-source breakdown
           });
         } else {
           setQuotaInfo(null);
@@ -91,6 +97,7 @@ function QuotaCard() {
           ),
           plan_name: res.plan ?? "",
           source: "personal",
+          sources: buildQuotaSources(res),
         });
       } else {
         setQuotaInfo(null);
@@ -112,7 +119,7 @@ function QuotaCard() {
       </CardHeader>
       <CardContent>
         {quotaInfo ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <p className="text-sm text-gray-500">
               目前工作區：
               <span className="font-medium text-gray-700">
@@ -122,41 +129,162 @@ function QuotaCard() {
               </span>
             </p>
 
-            <div className="flex items-baseline gap-2">
-              <span
-                className={`text-2xl font-bold ${
-                  quotaInfo.quota_remaining > quotaInfo.quota_total * 0.3
-                    ? "text-green-600"
-                    : quotaInfo.quota_remaining > quotaInfo.quota_total * 0.1
-                      ? "text-orange-600"
-                      : "text-red-600"
-                }`}
+            <div className="flex items-end justify-between gap-2">
+              <div className="flex items-baseline gap-2">
+                <span
+                  className={`text-3xl font-bold ${
+                    quotaInfo.quota_remaining > quotaInfo.quota_total * 0.3
+                      ? "text-green-600"
+                      : quotaInfo.quota_remaining > quotaInfo.quota_total * 0.1
+                        ? "text-orange-600"
+                        : "text-red-600"
+                  }`}
+                >
+                  {quotaInfo.quota_remaining.toLocaleString()}
+                </span>
+                <span className="text-gray-500">
+                  / {quotaInfo.quota_total.toLocaleString()} 秒
+                </span>
+              </div>
+              <span className="text-xs text-gray-500">
+                已用 {quotaInfo.quota_used.toLocaleString()} 秒
+              </span>
+            </div>
+
+            {/* Stacked-by-source bar (personal mode only) */}
+            {quotaInfo.sources.length > 0 ? (
+              <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-gray-200 bg-white">
+                {quotaInfo.sources.map((s) => {
+                  const segPct =
+                    (s.total / Math.max(1, quotaInfo.quota_total)) * 100;
+                  const innerPct = (s.used / Math.max(1, s.total)) * 100;
+                  return (
+                    <div
+                      key={s.kind}
+                      style={{
+                        width: `${segPct}%`,
+                        backgroundColor: s.bg,
+                      }}
+                    >
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${innerPct}%`,
+                          backgroundColor: s.fill,
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div
+                  className="h-2.5 rounded-full bg-green-500"
+                  style={{
+                    width: `${Math.max(0, Math.min(100, (quotaInfo.quota_used / quotaInfo.quota_total) * 100))}%`,
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Per-source rows (personal mode only) */}
+            {quotaInfo.sources.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <div className="text-sm font-semibold text-gray-900">
+                  點數來源
+                </div>
+                <ul className="space-y-2">
+                  {quotaInfo.sources.map((s) => {
+                    const pct =
+                      s.total > 0 ? Math.round((s.used / s.total) * 100) : 0;
+                    const isReferral = s.kind === "referral";
+                    return (
+                      <li
+                        key={s.kind}
+                        className="rounded-md border bg-gray-50 px-3 py-2"
+                        style={
+                          isReferral
+                            ? {
+                                borderColor: s.fill,
+                                backgroundColor: s.bg + "55",
+                              }
+                            : { borderColor: "#E5E7EB" }
+                        }
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block h-3 w-3 rounded-sm"
+                              style={{ backgroundColor: s.fill }}
+                            />
+                            <span className="text-sm font-medium text-gray-900">
+                              {s.label}
+                            </span>
+                            {isReferral && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[10px] font-semibold"
+                                style={{
+                                  color: s.fill,
+                                  border: `1px solid ${s.fill}`,
+                                }}
+                              >
+                                <Zap className="h-2.5 w-2.5" /> 本次使用來自這裡
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span
+                              className="text-sm font-bold"
+                              style={{ color: s.fill }}
+                            >
+                              {Math.max(0, s.total - s.used).toLocaleString()} /{" "}
+                              {s.total.toLocaleString()}
+                            </span>
+                            <span className="text-[10px] text-gray-500">
+                              已用 {s.used.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white border border-gray-200">
+                          <div
+                            className="h-full"
+                            style={{
+                              width: `${pct}%`,
+                              backgroundColor: s.fill,
+                            }}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {/* CTA to the promo-code card on the same page */}
+            {quotaInfo.source === "personal" && (
+              <a
+                href="#my-promo-code"
+                className="flex items-center justify-between gap-2 rounded-md border border-violet-200 bg-violet-50 px-4 py-3 transition hover:bg-violet-100"
               >
-                {quotaInfo.quota_remaining.toLocaleString()}
-              </span>
-              <span className="text-gray-500">
-                / {quotaInfo.quota_total.toLocaleString()} 秒
-              </span>
-            </div>
-
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div
-                className={`h-2.5 rounded-full transition-all ${
-                  quotaInfo.quota_remaining > quotaInfo.quota_total * 0.3
-                    ? "bg-green-500"
-                    : quotaInfo.quota_remaining > quotaInfo.quota_total * 0.1
-                      ? "bg-orange-500"
-                      : "bg-red-500"
-                }`}
-                style={{
-                  width: `${Math.max(0, Math.min(100, (quotaInfo.quota_remaining / quotaInfo.quota_total) * 100))}%`,
-                }}
-              />
-            </div>
-
-            <p className="text-xs text-gray-400">
-              已使用 {quotaInfo.quota_used.toLocaleString()} 秒
-            </p>
+                <div className="flex items-center gap-3">
+                  <Share2 className="h-4 w-4 text-violet-600" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-violet-800">
+                      想要更多點數？
+                    </span>
+                    <span className="text-xs text-violet-700">
+                      分享你的推薦碼，每邀請一人最高拿 2,000 點。
+                    </span>
+                  </div>
+                </div>
+                <span className="flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white">
+                  前往推薦碼
+                  <ArrowRight className="h-3 w-3" />
+                </span>
+              </a>
+            )}
           </div>
         ) : (
           <p className="text-sm text-gray-500">
@@ -481,7 +609,9 @@ export default function TeacherProfile() {
       <QuotaCard />
 
       {/* Promo Code Card (issue #637) */}
-      <PromoCodeCard />
+      <div id="my-promo-code" className="scroll-mt-20">
+        <PromoCodeCard />
+      </div>
 
       {/* Password Settings Card */}
       <Card className="mb-6">

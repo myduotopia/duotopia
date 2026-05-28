@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { apiClient } from "@/lib/api";
+import { buildQuotaSources, type QuotaSourceItem } from "@/lib/quotaSources";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useTranslation } from "react-i18next";
@@ -139,9 +140,12 @@ function TeacherLayoutInner({
   // (/api/teachers/subscription only returns the current subscription_period
   // and is intentionally NOT used here — it would understate the teacher's
   // available points by ignoring credit packages.)
+  // sources is non-empty only in personal mode (where we have a breakdown);
+  // org mode just shows total/used without colour-coded segments.
   const [tokenInfo, setTokenInfo] = useState<{
     used: number;
     total: number;
+    sources: QuotaSourceItem[];
   } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +161,7 @@ function TeacherLayoutInner({
             setTokenInfo({
               used: res.used_points ?? 0,
               total: res.total_points,
+              sources: [],
             });
           } else {
             setTokenInfo(null);
@@ -168,6 +173,7 @@ function TeacherLayoutInner({
             setTokenInfo({
               used: res.quota_used ?? 0,
               total: res.quota_total,
+              sources: buildQuotaSources(res),
             });
           } else {
             setTokenInfo(null);
@@ -364,18 +370,74 @@ function TeacherLayoutInner({
                       / {tokenInfo.total.toLocaleString()}
                     </span>
                   </div>
-                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800">
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          Math.round((tokenInfo.used / tokenInfo.total) * 100),
-                        )}%`,
-                        backgroundColor: workspaceColor.bar,
-                      }}
-                    />
-                  </div>
+                  {tokenInfo.sources.length > 0 ? (
+                    <>
+                      {/* Stacked-by-source bar: each segment width ∝ that
+                          source's total; inner fill ∝ that source's used. */}
+                      <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                        {tokenInfo.sources.map((s) => {
+                          const segPct =
+                            (s.total / Math.max(1, tokenInfo.total)) * 100;
+                          const innerPct =
+                            (s.used / Math.max(1, s.total)) * 100;
+                          return (
+                            <div
+                              key={s.kind}
+                              className="h-full"
+                              style={{
+                                width: `${segPct}%`,
+                                backgroundColor: s.bg,
+                              }}
+                            >
+                              <div
+                                className="h-full"
+                                style={{
+                                  width: `${innerPct}%`,
+                                  backgroundColor: s.fill,
+                                }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <ul className="mt-2 space-y-1">
+                        {tokenInfo.sources.map((s) => (
+                          <li
+                            key={s.kind}
+                            className="flex items-center gap-1.5 text-[10px]"
+                          >
+                            <span
+                              className="inline-block h-2 w-2 rounded-sm"
+                              style={{ backgroundColor: s.fill }}
+                            />
+                            <span className="text-gray-700 dark:text-gray-300">
+                              {s.label}
+                            </span>
+                            <span className="ml-auto font-semibold text-gray-700 dark:text-gray-300">
+                              {s.used.toLocaleString()} /{" "}
+                              {s.total.toLocaleString()}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : (
+                    // Org mode: single solid bar in the workspace colour.
+                    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.round(
+                              (tokenInfo.used / tokenInfo.total) * 100,
+                            ),
+                          )}%`,
+                          backgroundColor: workspaceColor.bar,
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
