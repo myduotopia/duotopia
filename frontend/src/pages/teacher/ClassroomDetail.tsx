@@ -1129,6 +1129,19 @@ export default function ClassroomDetail({
     ]);
   };
 
+  const handleDeleteStudentRow = async (student: Student) => {
+    try {
+      await apiClient.deleteStudent(student.id);
+      toast.success(
+        t("teacherStudents.messages.studentDeleted", { name: student.name }),
+      );
+      await Promise.all([fetchStudents(), fetchClassroomDetail(false)]);
+    } catch (error) {
+      console.error("Failed to delete student:", error);
+      toast.error(t("teacherStudents.messages.deleteStudentFailed"));
+    }
+  };
+
   const handleCloseDialog = () => {
     setSelectedStudent(null);
     setDialogType(null);
@@ -1756,6 +1769,7 @@ export default function ClassroomDetail({
                     onViewStudent={handleViewStudent}
                     onEditStudent={handleEditStudent}
                     onResetPassword={handleResetPassword}
+                    onDeleteStudent={handleDeleteStudentRow}
                     emptyMessage={t("classroomDetail.messages.noStudents")}
                     disableActions={isOrgMode}
                     disableReason={t(

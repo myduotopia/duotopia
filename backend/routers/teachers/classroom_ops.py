@@ -154,7 +154,13 @@ async def get_teacher_classrooms(
                 "name": classroom.name,
                 "description": classroom.description,
                 "level": classroom.level.value if classroom.level else "A1",
-                "student_count": len([s for s in classroom.students if s.is_active]),
+                "student_count": len(
+                    [
+                        cs
+                        for cs in classroom.students
+                        if cs.is_active and cs.student.is_active
+                    ]
+                ),
                 "program_count": program_count_map.get(
                     classroom.id, 0
                 ),  # Efficient lookup
@@ -197,7 +203,7 @@ async def get_teacher_classrooms(
                         ),
                     }
                     for cs in classroom.students
-                    if cs.is_active
+                    if cs.is_active and cs.student.is_active
                 ],
             }
         )
@@ -306,7 +312,7 @@ async def get_classroom_students(
             ),
         }
         for cs in classroom.students
-        if cs.is_active
+        if cs.is_active and cs.student.is_active
     ]
 
 
