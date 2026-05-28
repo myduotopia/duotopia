@@ -400,12 +400,19 @@ function TeacherLayoutInner({
                   {tokenInfo.sources.length > 0 ? (
                     <>
                       {/* Stacked-by-source bar: each segment width ∝ that
-                          source's total; dark inner fill ∝ REMAINING (matches
-                          the "剩餘 X / Y" headline above). */}
+                          source's share of the visible sources (not of the
+                          headline total — those can disagree if a package
+                          expired between QuotaService's two queries, which
+                          would otherwise leave a white gap at the right).
+                          Dark inner fill ∝ REMAINING (matches the "剩餘 X / Y"
+                          headline above). */}
                       <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
                         {tokenInfo.sources.map((s) => {
-                          const segPct =
-                            (s.total / Math.max(1, tokenInfo.total)) * 100;
+                          const barTotal = Math.max(
+                            1,
+                            tokenInfo.sources.reduce((a, x) => a + x.total, 0),
+                          );
+                          const segPct = (s.total / barTotal) * 100;
                           const remainingPct =
                             (Math.max(0, s.total - s.used) /
                               Math.max(1, s.total)) *

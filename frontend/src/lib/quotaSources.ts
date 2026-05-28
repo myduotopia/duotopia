@@ -17,8 +17,8 @@ export type QuotaSourceKind =
 export interface QuotaSourceItem {
   kind: QuotaSourceKind;
   label: string;
-  fill: string; // strong colour for the "used" portion / accent
-  bg: string; // light colour for the "remaining" portion
+  fill: string; // strong colour for the REMAINING portion (inner bar / legend dot)
+  bg: string; // light colour for the USED/background portion
   total: number;
   used: number;
 }

@@ -155,14 +155,19 @@ function QuotaCard() {
               </span>
             </div>
 
-            {/* Stacked-by-source bar (personal). Each segment's dark inner
-                fill = REMAINING of that source (matches "remaining" headline);
-                light outer = used. */}
+            {/* Stacked-by-source bar (personal). Each segment's width is its
+                share of the visible sources (using sum-of-sources, not
+                quota_total, so a package that expired between the aggregator's
+                two queries can't leave a white gap at the right). Inner dark
+                fill = REMAINING of that source. */}
             {quotaInfo.sources.length > 0 ? (
               <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-gray-200 bg-white">
                 {quotaInfo.sources.map((s) => {
-                  const segPct =
-                    (s.total / Math.max(1, quotaInfo.quota_total)) * 100;
+                  const barTotal = Math.max(
+                    1,
+                    quotaInfo.sources.reduce((a, x) => a + x.total, 0),
+                  );
+                  const segPct = (s.total / barTotal) * 100;
                   const remainingPct =
                     (Math.max(0, s.total - s.used) / Math.max(1, s.total)) *
                     100;
