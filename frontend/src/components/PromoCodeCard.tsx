@@ -122,8 +122,11 @@ export default function PromoCodeCard() {
           url: referralLink,
         });
         return;
-      } catch {
-        // user cancelled or share unavailable; fall through to copy.
+      } catch (err) {
+        // The user explicitly dismissing the native share sheet throws
+        // AbortError — don't surface a "copied" success toast they didn't
+        // ask for. Only fall back to copy on a genuine failure.
+        if (err instanceof Error && err.name === "AbortError") return;
       }
     }
     copy(referralLink, "推薦連結");

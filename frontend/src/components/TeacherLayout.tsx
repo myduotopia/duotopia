@@ -50,6 +50,125 @@ interface TeacherProfile {
   is_admin?: boolean;
 }
 
+interface WorkspaceColor {
+  surface: string;
+  accent: string;
+  text: string;
+  bar: string;
+}
+
+interface TokenInfo {
+  used: number;
+  total: number;
+  sources: QuotaSourceItem[];
+}
+
+/**
+ * Sidebar token-balance bar, extracted as a leaf so a token refetch only
+ * re-renders this subtree — the surrounding memoized SidebarContent (which
+ * includes nav, WorkspaceSwitcher, account menu) stays untouched.
+ */
+function SidebarTokenBar({
+  tokenInfo,
+  workspaceColor,
+}: {
+  tokenInfo: TokenInfo | null;
+  workspaceColor: WorkspaceColor;
+}) {
+  if (!tokenInfo || tokenInfo.total <= 0) return null;
+  const barTotal = Math.max(
+    1,
+    tokenInfo.sources.reduce((a, x) => a + x.total, 0),
+  );
+  return (
+    <div className="mt-3 rounded-md px-3 py-2 bg-white/70 dark:bg-gray-900/40">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-gray-700 dark:text-gray-300">
+          剩餘點數
+        </span>
+        <span className="font-semibold" style={{ color: workspaceColor.text }}>
+          {Math.max(0, tokenInfo.total - tokenInfo.used).toLocaleString()} /{" "}
+          {tokenInfo.total.toLocaleString()}
+        </span>
+      </div>
+      {tokenInfo.sources.length > 0 ? (
+        <>
+          {/* Stacked-by-source bar (personal). Each segment width is its
+              share of sum-of-sources (avoids white gap if a package expires
+              between QuotaService's two queries). Dark inner fill ∝
+              REMAINING (matches the "剩餘 X / Y" headline above). */}
+          <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+            {tokenInfo.sources.map((s) => {
+              const segPct = (s.total / barTotal) * 100;
+              const remainingPct =
+                (Math.max(0, s.total - s.used) / Math.max(1, s.total)) * 100;
+              return (
+                <div
+                  key={s.kind}
+                  className="h-full"
+                  style={{
+                    width: `${segPct}%`,
+                    backgroundColor: s.bg,
+                  }}
+                >
+                  <div
+                    className="h-full"
+                    style={{
+                      width: `${remainingPct}%`,
+                      backgroundColor: s.fill,
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <ul className="mt-2 space-y-1">
+            {tokenInfo.sources.map((s) => (
+              <li
+                key={s.kind}
+                className="flex items-center gap-1.5 text-[10px]"
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-sm"
+                  style={{ backgroundColor: s.fill }}
+                />
+                <span className="text-gray-700 dark:text-gray-300">
+                  {s.label}
+                </span>
+                <span className="ml-auto font-semibold text-gray-700 dark:text-gray-300">
+                  {s.used.toLocaleString()} / {s.total.toLocaleString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        // Org mode: single solid bar; width = REMAINING / total so a
+        // depleted balance reads as an almost-empty bar.
+        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800">
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: `${Math.max(
+                0,
+                Math.min(
+                  100,
+                  Math.round(
+                    (Math.max(0, tokenInfo.total - tokenInfo.used) /
+                      Math.max(1, tokenInfo.total)) *
+                      100,
+                  ),
+                ),
+              )}%`,
+              backgroundColor: workspaceColor.bar,
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface SystemConfig {
   enablePayment: boolean;
   environment: string;
@@ -380,109 +499,13 @@ function TeacherLayoutInner({
               }
             >
               <WorkspaceSwitcher />
-              {tokenInfo && tokenInfo.total > 0 && (
-                <div className="mt-3 rounded-md px-3 py-2 bg-white/70 dark:bg-gray-900/40">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-gray-700 dark:text-gray-300">
-                      剩餘點數
-                    </span>
-                    <span
-                      className="font-semibold"
-                      style={{ color: workspaceColor.text }}
-                    >
-                      {Math.max(
-                        0,
-                        tokenInfo.total - tokenInfo.used,
-                      ).toLocaleString()}{" "}
-                      / {tokenInfo.total.toLocaleString()}
-                    </span>
-                  </div>
-                  {tokenInfo.sources.length > 0 ? (
-                    <>
-                      {/* Stacked-by-source bar: each segment width ∝ that
-                          source's share of the visible sources (not of the
-                          headline total — those can disagree if a package
-                          expired between QuotaService's two queries, which
-                          would otherwise leave a white gap at the right).
-                          Dark inner fill ∝ REMAINING (matches the "剩餘 X / Y"
-                          headline above). */}
-                      <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                        {tokenInfo.sources.map((s) => {
-                          const barTotal = Math.max(
-                            1,
-                            tokenInfo.sources.reduce((a, x) => a + x.total, 0),
-                          );
-                          const segPct = (s.total / barTotal) * 100;
-                          const remainingPct =
-                            (Math.max(0, s.total - s.used) /
-                              Math.max(1, s.total)) *
-                            100;
-                          return (
-                            <div
-                              key={s.kind}
-                              className="h-full"
-                              style={{
-                                width: `${segPct}%`,
-                                backgroundColor: s.bg,
-                              }}
-                            >
-                              <div
-                                className="h-full"
-                                style={{
-                                  width: `${remainingPct}%`,
-                                  backgroundColor: s.fill,
-                                }}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <ul className="mt-2 space-y-1">
-                        {tokenInfo.sources.map((s) => (
-                          <li
-                            key={s.kind}
-                            className="flex items-center gap-1.5 text-[10px]"
-                          >
-                            <span
-                              className="inline-block h-2 w-2 rounded-sm"
-                              style={{ backgroundColor: s.fill }}
-                            />
-                            <span className="text-gray-700 dark:text-gray-300">
-                              {s.label}
-                            </span>
-                            <span className="ml-auto font-semibold text-gray-700 dark:text-gray-300">
-                              {s.used.toLocaleString()} /{" "}
-                              {s.total.toLocaleString()}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  ) : (
-                    // Org mode: single solid bar; width = REMAINING / total so
-                    // a depleted balance reads as an almost-empty bar.
-                    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${Math.max(
-                            0,
-                            Math.min(
-                              100,
-                              Math.round(
-                                (Math.max(0, tokenInfo.total - tokenInfo.used) /
-                                  Math.max(1, tokenInfo.total)) *
-                                  100,
-                              ),
-                            ),
-                          )}%`,
-                          backgroundColor: workspaceColor.bar,
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Render the bar as a child component so that setTokenInfo()
+                  doesn't force the whole memoized SidebarContent to rebuild
+                  — React reconciles this subtree on its own. */}
+              <SidebarTokenBar
+                tokenInfo={tokenInfo}
+                workspaceColor={workspaceColor}
+              />
             </div>
           )}
 
@@ -632,8 +655,10 @@ function TeacherLayoutInner({
       config,
       hasOrgRole,
       handleLogout,
-      tokenInfo,
+      // tokenInfo intentionally omitted: SidebarTokenBar is a child component,
+      // so React reconciles it on its own when tokenInfo changes.
       workspaceColor,
+      isDarkMode,
     ],
   );
 

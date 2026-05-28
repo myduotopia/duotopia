@@ -106,9 +106,11 @@ export function buildQuotaSources(
 
   for (const pkg of res.credit_packages ?? []) {
     // Skip refunded / expired / migrated packages — they don't contribute
-    // to the visible balance.
+    // to the visible balance. The DB column has no CHECK constraint, so guard
+    // against an empty / falsy status by treating anything other than the
+    // literal "active" as inactive (not just "non-empty and not active").
     if (pkg.is_expired) continue;
-    if (pkg.status && pkg.status !== "active") continue;
+    if (pkg.status !== "active") continue;
     const kind = mapPackageSource(pkg.source);
     const existing = acc.get(kind);
     if (existing) {

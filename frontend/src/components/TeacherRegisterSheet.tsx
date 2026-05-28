@@ -22,7 +22,7 @@ import {
   EyeOff,
   Ticket,
 } from "lucide-react";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { validatePasswordStrength } from "@/utils/passwordValidation";
 
@@ -120,7 +120,18 @@ export default function TeacherRegisterSheet({
       }
     } catch (err) {
       console.error("Registration error:", err);
-      setError(t("teacherRegister.errors.registerFailed"));
+      // 422 with a promo code most likely means the code is invalid / revoked.
+      if (err instanceof ApiError && err.status === 422 && formData.promoCode) {
+        setError(
+          t(
+            "teacherRegister.errors.invalidPromoCode",
+            "推薦碼無效或已停用，已自動清除欄位，請重試。",
+          ),
+        );
+        setFormData((prev) => ({ ...prev, promoCode: "" }));
+      } else {
+        setError(t("teacherRegister.errors.registerFailed"));
+      }
     } finally {
       setIsLoading(false);
     }

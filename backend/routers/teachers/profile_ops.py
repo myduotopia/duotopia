@@ -176,6 +176,9 @@ async def get_my_promo_code(
     # loading every row just to count them. The verified count uses explicit
     # CASE so the intent ("count rows where verified_at IS NOT NULL") survives
     # any future migration that changes the column's nullability or default.
+    # Stats are scoped to THIS personal code's referrals — a teacher who also
+    # holds affiliate codes shouldn't see those folded into the personal-code
+    # card. Same scoping applies to the points sum via the referral join.
     stats = (
         db.query(
             func.count(PromoReferral.id).label("total"),
@@ -192,13 +195,20 @@ async def get_my_promo_code(
                 0,
             ).label("paid"),
         )
-        .filter(PromoReferral.referrer_teacher_id == current_teacher.id)
+        .filter(
+            PromoReferral.referrer_teacher_id == current_teacher.id,
+            PromoReferral.promo_code_id == code.id,
+        )
         .one()
     )
 
     total_points = (
         db.query(func.coalesce(func.sum(PromoRewardEvent.points), 0))
-        .filter(PromoRewardEvent.granted_to_teacher_id == current_teacher.id)
+        .join(PromoReferral, PromoReferral.id == PromoRewardEvent.referral_id)
+        .filter(
+            PromoRewardEvent.granted_to_teacher_id == current_teacher.id,
+            PromoReferral.promo_code_id == code.id,
+        )
         .scalar()
     )
 
