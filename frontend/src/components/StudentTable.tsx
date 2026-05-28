@@ -421,7 +421,7 @@ export default function StudentTable({
                           </span>
                         ) : (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                            {t("studentTable.unassigned")}
+                            {t("studentTable.classroom.unassigned")}
                           </span>
                         )}
                       </div>
@@ -536,7 +536,7 @@ export default function StudentTable({
                       <Button
                         variant="ghost"
                         size="sm"
-                        title={t("studentTable.view")}
+                        title={t("studentTable.actions.view")}
                         onClick={() => onViewStudent(student)}
                       >
                         <Eye className="h-4 w-4" />
@@ -549,7 +549,7 @@ export default function StudentTable({
                         title={
                           disableActions
                             ? disableReason
-                            : t("studentTable.edit")
+                            : t("studentTable.actions.edit")
                         }
                         onClick={() => onEditStudent(student)}
                         disabled={disableActions}
@@ -564,12 +564,12 @@ export default function StudentTable({
                         title={
                           disableActions
                             ? disableReason
-                            : t("studentTable.delete")
+                            : t("studentTable.actions.delete")
                         }
                         onClick={() => {
                           if (
                             confirm(
-                              t("studentTable.confirmDelete", {
+                              t("studentTable.actions.deleteConfirm", {
                                 name: student.name,
                               }),
                             )
