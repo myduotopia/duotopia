@@ -81,39 +81,58 @@ function TeacherLayoutInner({
   // Get workspace context
   const { mode, selectedSchool, selectedOrganization } = useWorkspace();
 
-  // Workspace-aware token / quota for the sidebar bar (issue #637).
+  // Workspace-aware token / quota for the sidebar bar.
+  // Personal mode  → /api/teachers/subscription (personal subscription_period)
+  // Org mode       → /api/organizations/{id}/points (org-level points balance)
+  // /api/teachers/subscription doesn't honour an organization_id query param
+  // (it always returns the teacher's own current_period), so switching modes
+  // must switch the endpoint, not just the param.
   const [tokenInfo, setTokenInfo] = useState<{
     used: number;
     total: number;
   } | null>(null);
   useEffect(() => {
     let cancelled = false;
-    const params = new URLSearchParams();
-    if (mode === "organization" && selectedOrganization) {
-      params.append("organization_id", selectedOrganization.id);
-    }
-    const url = `/api/teachers/subscription${
-      params.toString() ? `?${params.toString()}` : ""
-    }`;
-    apiClient
-      .get<{
-        subscription_period: { quota_total: number; quota_used: number } | null;
-      }>(url)
-      .then((res) => {
-        if (cancelled) return;
-        if (res.subscription_period) {
-          setTokenInfo({
-            used: res.subscription_period.quota_used,
-            total: res.subscription_period.quota_total,
-          });
+    const fetchToken = async () => {
+      try {
+        if (mode === "organization" && selectedOrganization) {
+          const res = await apiClient.get<{
+            total_points: number;
+            used_points: number;
+          }>(`/api/organizations/${selectedOrganization.id}/points`);
+          if (cancelled) return;
+          if (res && typeof res.total_points === "number") {
+            setTokenInfo({
+              used: res.used_points ?? 0,
+              total: res.total_points,
+            });
+          } else {
+            setTokenInfo(null);
+          }
         } else {
-          setTokenInfo(null);
+          const res = await apiClient.get<{
+            subscription_period: {
+              quota_total: number;
+              quota_used: number;
+            } | null;
+          }>("/api/teachers/subscription");
+          if (cancelled) return;
+          if (res.subscription_period) {
+            setTokenInfo({
+              used: res.subscription_period.quota_used,
+              total: res.subscription_period.quota_total,
+            });
+          } else {
+            setTokenInfo(null);
+          }
         }
-      })
-      .catch(() => {
-        // Non-fatal — the sidebar must keep working without the bar.
+      } catch {
+        // Non-fatal — hide the bar rather than break the sidebar (e.g. a
+        // non-admin teacher in an org may not have permission to read points).
         if (!cancelled) setTokenInfo(null);
-      });
+      }
+    };
+    fetchToken();
     return () => {
       cancelled = true;
     };

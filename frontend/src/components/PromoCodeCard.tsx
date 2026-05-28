@@ -36,16 +36,22 @@ export default function PromoCodeCard() {
   const [data, setData] = useState<MyPromoCode | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
     apiClient
       .getMyPromoCode()
       .then((res) => {
-        if (mounted) setData(res);
+        if (mounted) {
+          setData(res);
+          setError(null);
+        }
       })
       .catch((err) => {
         console.error("Failed to load promo code:", err);
+        if (mounted)
+          setError(err instanceof Error ? err.message : "無法載入推薦碼");
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -55,8 +61,39 @@ export default function PromoCodeCard() {
     };
   }, []);
 
-  if (loading || !data) {
-    return null; // Non-fatal — skip the section if it can't load.
+  // Always render the card frame so the section is visible. Show a skeleton
+  // while loading and a friendly message on error rather than disappearing.
+  if (loading) {
+    return (
+      <Card className="mb-6 border-indigo-200 dark:border-indigo-800">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Ticket className="h-5 w-5 text-indigo-600" />
+            我的推薦碼
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-16 animate-pulse rounded-lg bg-indigo-50 dark:bg-indigo-950" />
+        </CardContent>
+      </Card>
+    );
+  }
+  if (error || !data) {
+    return (
+      <Card className="mb-6 border-indigo-200 dark:border-indigo-800">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Ticket className="h-5 w-5 text-indigo-600" />
+            我的推薦碼
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-gray-500">
+            {error ? `無法載入推薦碼：${error}` : "尚未產生推薦碼，稍後再試。"}
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
 
   const referralLink = `${window.location.origin}/teacher/register?promo=${data.code}`;
