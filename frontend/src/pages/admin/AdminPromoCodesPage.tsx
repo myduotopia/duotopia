@@ -77,7 +77,10 @@ export default function AdminPromoCodesPage() {
       console.error("Failed to load promo data:", err);
       setError(err instanceof Error ? err.message : "載入失敗");
     } finally {
-      setLoading(false);
+      // Symmetric with the top: silent refetches must not flip loading off,
+      // otherwise a post-mutation refetch racing with the initial load could
+      // collapse the spinner before the first response actually lands.
+      if (!silent) setLoading(false);
     }
   }, []);
 

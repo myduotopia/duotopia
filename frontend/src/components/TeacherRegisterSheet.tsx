@@ -128,6 +128,9 @@ export default function TeacherRegisterSheet({
             "推薦碼無效或已停用，已自動清除欄位，請重試。",
           ),
         );
+        // Also mark as intentionally cleared, so the URL ?promo= effect
+        // doesn't immediately re-inject the same bad code on the next render.
+        userClearedPromo.current = true;
         setFormData((prev) => ({ ...prev, promoCode: "" }));
       } else {
         setError(t("teacherRegister.errors.registerFailed"));

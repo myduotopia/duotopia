@@ -745,6 +745,10 @@ export function AssignmentDialog({
             ),
             plan_name: "",
           });
+        } else {
+          // Reset so a previous workspace's value doesn't linger and let a
+          // teacher act on quota they no longer have here.
+          setQuotaInfo(null);
         }
         return;
       }
@@ -760,6 +764,8 @@ export function AssignmentDialog({
           ),
           plan_name: res.plan ?? "",
         });
+      } else {
+        setQuotaInfo(null);
       }
     } catch (error) {
       console.error("Failed to load quota info:", error);
