@@ -984,7 +984,13 @@ async def get_subscription_status(
                 "expires_at": pkg.expires_at.isoformat() if pkg.expires_at else None,
                 "status": pkg.status,
                 "source": pkg.source,
-                "is_expired": pkg.expires_at <= now if pkg.expires_at else True,
+                # NULL expires_at = no expiry (permanent), not expired.
+                # expires_at is nullable=False at the DB level so a NULL would
+                # be an invariant violation. The defensive `is not None` keeps
+                # the expression total — and if a NULL ever sneaked in via raw
+                # SQL, both this endpoint and QuotaService (which filters
+                # `expires_at > now`) would exclude the row identically.
+                "is_expired": (pkg.expires_at is not None and pkg.expires_at <= now),
             }
             for pkg in credit_packages
         ]

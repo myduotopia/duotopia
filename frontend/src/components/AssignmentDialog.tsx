@@ -726,30 +726,46 @@ export function AssignmentDialog({
 
   const loadQuotaInfo = async () => {
     try {
-      // 根據工作區 context 決定查哪個配額
-      const params = new URLSearchParams();
+      // Aggregated balance: subscription period + every active credit package
+      // (trial / referral bonus / purchased pack). Using the old
+      // /api/teachers/subscription endpoint here would silently understate the
+      // teacher's available quota and could block legitimate assignments.
       if (effectiveOrganizationId) {
-        params.append("organization_id", effectiveOrganizationId);
+        const res = await apiClient.get<{
+          total_points: number;
+          used_points: number;
+        }>(`/api/organizations/${effectiveOrganizationId}/points`);
+        if (typeof res.total_points === "number" && res.total_points > 0) {
+          setQuotaInfo({
+            quota_total: res.total_points,
+            quota_used: res.used_points ?? 0,
+            quota_remaining: Math.max(
+              0,
+              res.total_points - (res.used_points ?? 0),
+            ),
+            plan_name: "",
+          });
+        } else {
+          // Reset so a previous workspace's value doesn't linger and let a
+          // teacher act on quota they no longer have here.
+          setQuotaInfo(null);
+        }
+        return;
       }
-      const url = `/api/teachers/subscription${params.toString() ? `?${params.toString()}` : ""}`;
 
-      const response = await apiClient.get<{
-        subscription_period: {
-          quota_total: number;
-          quota_used: number;
-          plan_name: string;
-        };
-      }>(url);
-
-      if (response.subscription_period) {
+      const res = await apiClient.getSubscriptionStatus();
+      if (typeof res.quota_total === "number" && res.quota_total > 0) {
         setQuotaInfo({
-          quota_total: response.subscription_period.quota_total,
-          quota_used: response.subscription_period.quota_used,
-          quota_remaining:
-            response.subscription_period.quota_total -
-            response.subscription_period.quota_used,
-          plan_name: response.subscription_period.plan_name,
+          quota_total: res.quota_total,
+          quota_used: res.quota_used ?? 0,
+          quota_remaining: Math.max(
+            0,
+            (res.quota_total ?? 0) - (res.quota_used ?? 0),
+          ),
+          plan_name: res.plan ?? "",
         });
+      } else {
+        setQuotaInfo(null);
       }
     } catch (error) {
       console.error("Failed to load quota info:", error);

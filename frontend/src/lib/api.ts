@@ -132,6 +132,7 @@ export interface RegisterRequest {
   password: string;
   name: string;
   phone?: string;
+  promo_code?: string;
 }
 
 export interface AdminCreditPackageOperation {
@@ -157,6 +158,34 @@ interface AdminCreditPackageResult {
   expires_at: string;
   status: string;
   admin_operations: AdminCreditPackageOperation[];
+}
+
+// ============ Promo Code types ============
+export interface PromoCodeRow {
+  id: number;
+  code: string;
+  teacher_id: number;
+  kind: string;
+  expires_at: string | null;
+  is_active: boolean;
+  note: string | null;
+  created_at: string | null;
+}
+
+export interface RewardConfigRow {
+  id: number;
+  reward_key: string;
+  points: number;
+  recipient: string;
+  is_active: boolean;
+}
+
+export interface ReferralReportRow {
+  referrer_teacher_id: number;
+  referral_count: number;
+  verified_count: number;
+  paid_count: number;
+  total_points_awarded: number;
 }
 
 class ApiClient {
@@ -1617,6 +1646,101 @@ class ApiClient {
         body: JSON.stringify(data),
       },
     );
+  }
+
+  async getMyPromoCode() {
+    return this.request<{
+      code: string;
+      expires_at: string | null;
+      is_active: boolean;
+      referral_count: number;
+      verified_count: number;
+      paid_count: number;
+      total_points_awarded: number;
+    }>("/api/teachers/me/promo-code", { method: "GET" });
+  }
+
+  async getSubscriptionStatus() {
+    return this.request<{
+      status: string;
+      plan: string | null;
+      days_remaining: number | null;
+      is_active: boolean;
+      quota_used: number;
+      quota_total: number;
+      quota_remaining: number;
+      subscription_total?: number;
+      subscription_used?: number;
+      subscription_remaining?: number;
+      credit_packages_total?: number;
+      credit_packages_remaining?: number;
+      credit_packages?: Array<{
+        id: number;
+        package_id: string;
+        points_total: number;
+        points_used: number;
+        points_remaining: number;
+        source: string;
+        status: string;
+        is_expired: boolean;
+      }>;
+    }>("/api/subscription/status", { method: "GET" });
+  }
+
+  // ============ Admin Promo Code Methods ============
+  async listPromoCodes(params?: { teacher_id?: number; kind?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.teacher_id !== undefined)
+      qs.append("teacher_id", params.teacher_id.toString());
+    if (params?.kind) qs.append("kind", params.kind);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<PromoCodeRow[]>(`/api/admin/promo-codes${suffix}`, {
+      method: "GET",
+    });
+  }
+
+  async createAffiliateCode(data: {
+    teacher_id: number;
+    expires_at?: string | null;
+    note?: string;
+  }) {
+    return this.request<PromoCodeRow>("/api/admin/promo-codes", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updatePromoCode(
+    codeId: number,
+    data: { is_active?: boolean; expires_at?: string | null; note?: string },
+  ) {
+    return this.request<PromoCodeRow>(`/api/admin/promo-codes/${codeId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async listRewardConfigs() {
+    return this.request<RewardConfigRow[]>(
+      "/api/admin/promo-codes/reward-configs",
+      { method: "GET" },
+    );
+  }
+
+  async updateRewardConfig(
+    rewardKey: string,
+    data: { points?: number; is_active?: boolean },
+  ) {
+    return this.request<RewardConfigRow>(
+      `/api/admin/promo-codes/reward-configs/${encodeURIComponent(rewardKey)}`,
+      { method: "PATCH", body: JSON.stringify(data) },
+    );
+  }
+
+  async getReferralReport() {
+    return this.request<ReferralReportRow[]>("/api/admin/promo-codes/report", {
+      method: "GET",
+    });
   }
 }
 

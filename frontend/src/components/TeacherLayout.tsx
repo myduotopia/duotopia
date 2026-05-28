@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { apiClient } from "@/lib/api";
+import { buildQuotaSources, type QuotaSourceItem } from "@/lib/quotaSources";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useTranslation } from "react-i18next";
@@ -47,6 +48,125 @@ interface TeacherProfile {
   is_demo: boolean;
   is_active: boolean;
   is_admin?: boolean;
+}
+
+interface WorkspaceColor {
+  surface: string;
+  accent: string;
+  text: string;
+  bar: string;
+}
+
+interface TokenInfo {
+  used: number;
+  total: number;
+  sources: QuotaSourceItem[];
+}
+
+/**
+ * Sidebar token-balance bar, extracted as a leaf so a token refetch only
+ * re-renders this subtree — the surrounding memoized SidebarContent (which
+ * includes nav, WorkspaceSwitcher, account menu) stays untouched.
+ */
+function SidebarTokenBar({
+  tokenInfo,
+  workspaceColor,
+}: {
+  tokenInfo: TokenInfo | null;
+  workspaceColor: WorkspaceColor;
+}) {
+  if (!tokenInfo || tokenInfo.total <= 0) return null;
+  const barTotal = Math.max(
+    1,
+    tokenInfo.sources.reduce((a, x) => a + x.total, 0),
+  );
+  return (
+    <div className="mt-3 rounded-md px-3 py-2 bg-white/70 dark:bg-gray-900/40">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-gray-700 dark:text-gray-300">
+          剩餘點數
+        </span>
+        <span className="font-semibold" style={{ color: workspaceColor.text }}>
+          {Math.max(0, tokenInfo.total - tokenInfo.used).toLocaleString()} /{" "}
+          {tokenInfo.total.toLocaleString()}
+        </span>
+      </div>
+      {tokenInfo.sources.length > 0 ? (
+        <>
+          {/* Stacked-by-source bar (personal). Each segment width is its
+              share of sum-of-sources (avoids white gap if a package expires
+              between QuotaService's two queries). Dark inner fill ∝
+              REMAINING (matches the "剩餘 X / Y" headline above). */}
+          <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+            {tokenInfo.sources.map((s) => {
+              const segPct = (s.total / barTotal) * 100;
+              const remainingPct =
+                (Math.max(0, s.total - s.used) / Math.max(1, s.total)) * 100;
+              return (
+                <div
+                  key={s.kind}
+                  className="h-full"
+                  style={{
+                    width: `${segPct}%`,
+                    backgroundColor: s.bg,
+                  }}
+                >
+                  <div
+                    className="h-full"
+                    style={{
+                      width: `${remainingPct}%`,
+                      backgroundColor: s.fill,
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <ul className="mt-2 space-y-1">
+            {tokenInfo.sources.map((s) => (
+              <li
+                key={s.kind}
+                className="flex items-center gap-1.5 text-[10px]"
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-sm"
+                  style={{ backgroundColor: s.fill }}
+                />
+                <span className="text-gray-700 dark:text-gray-300">
+                  {s.label}
+                </span>
+                <span className="ml-auto font-semibold text-gray-700 dark:text-gray-300">
+                  {s.used.toLocaleString()} / {s.total.toLocaleString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        // Org mode: single solid bar; width = REMAINING / total so a
+        // depleted balance reads as an almost-empty bar.
+        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800">
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: `${Math.max(
+                0,
+                Math.min(
+                  100,
+                  Math.round(
+                    (Math.max(0, tokenInfo.total - tokenInfo.used) /
+                      Math.max(1, tokenInfo.total)) *
+                      100,
+                  ),
+                ),
+              )}%`,
+              backgroundColor: workspaceColor.bar,
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface SystemConfig {
@@ -79,7 +199,140 @@ function TeacherLayoutInner({
   const userRoles = useTeacherAuthStore((state) => state.userRoles);
 
   // Get workspace context
-  const { mode, selectedSchool } = useWorkspace();
+  const { mode, selectedSchool, selectedOrganization } = useWorkspace();
+
+  // Watch for dark-mode class changes on <html> so we can skip the workspace
+  // tint when dark mode is active (the tinted surface colours are all light
+  // and would read poorly against dark-mode text).
+  const [isDarkMode, setIsDarkMode] = useState(
+    () =>
+      typeof document !== "undefined" &&
+      document.documentElement.classList.contains("dark"),
+  );
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    const obs = new MutationObserver(() => {
+      setIsDarkMode(root.classList.contains("dark"));
+    });
+    obs.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+
+  // Workspace color palette: Personal = indigo (default), Orgs cycle the next
+  // four colors deterministically by org id so the same org always gets the
+  // same tint. The whole workspace+token block at the bottom of the sidebar
+  // tints to match the active workspace. Memoized so the SidebarContent
+  // useMemo below doesn't recompute on every render.
+  const workspaceColor = useMemo(() => {
+    // `surface` is the whole-sidebar wash (color-100 level — readable but
+    // distinct); `accent` is the inner workspace+token block; `bar` is the
+    // progress fill / strong text.
+    const PALETTE = [
+      {
+        surface: "#E0E7FF",
+        accent: "#C7D2FE",
+        text: "#3730A3",
+        bar: "#4F46E5",
+      }, // indigo (personal)
+      {
+        surface: "#D1FAE5",
+        accent: "#A7F3D0",
+        text: "#065F46",
+        bar: "#059669",
+      }, // emerald
+      {
+        surface: "#FEF3C7",
+        accent: "#FDE68A",
+        text: "#92400E",
+        bar: "#D97706",
+      }, // amber
+      {
+        surface: "#FFE4E6",
+        accent: "#FECDD3",
+        text: "#9F1239",
+        bar: "#E11D48",
+      }, // rose
+      {
+        surface: "#EDE9FE",
+        accent: "#DDD6FE",
+        text: "#5B21B6",
+        bar: "#7C3AED",
+      }, // violet
+    ];
+    if (mode === "personal" || !selectedOrganization) return PALETTE[0];
+    const hash = Array.from(selectedOrganization.id).reduce(
+      (a, c) => a + c.charCodeAt(0),
+      0,
+    );
+    return PALETTE[1 + (hash % 4)];
+    // Key on the .id primitive (not the object reference) so the colour only
+    // recomputes when the org actually changes — matches the token-fetch effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, selectedOrganization?.id]);
+
+  // Workspace-aware token / quota for the sidebar bar.
+  // Personal mode  → /api/subscription/status (AGGREGATED across the active
+  //                  subscription period + every active credit package, e.g.
+  //                  trial + referral bonus + purchased packs — matches what
+  //                  admins see in the per-teacher list)
+  // Org mode       → /api/organizations/{id}/points (org-level points balance)
+  // (/api/teachers/subscription only returns the current subscription_period
+  // and is intentionally NOT used here — it would understate the teacher's
+  // available points by ignoring credit packages.)
+  // sources is non-empty only in personal mode (where we have a breakdown);
+  // org mode just shows total/used without colour-coded segments.
+  const [tokenInfo, setTokenInfo] = useState<{
+    used: number;
+    total: number;
+    sources: QuotaSourceItem[];
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const fetchToken = async () => {
+      try {
+        if (mode === "organization" && selectedOrganization) {
+          const res = await apiClient.get<{
+            total_points: number;
+            used_points: number;
+          }>(`/api/organizations/${selectedOrganization.id}/points`);
+          if (cancelled) return;
+          if (res && typeof res.total_points === "number") {
+            setTokenInfo({
+              used: res.used_points ?? 0,
+              total: res.total_points,
+              sources: [],
+            });
+          } else {
+            setTokenInfo(null);
+          }
+        } else {
+          const res = await apiClient.getSubscriptionStatus();
+          if (cancelled) return;
+          if (typeof res.quota_total === "number" && res.quota_total > 0) {
+            setTokenInfo({
+              used: res.quota_used ?? 0,
+              total: res.quota_total,
+              sources: buildQuotaSources(res),
+            });
+          } else {
+            setTokenInfo(null);
+          }
+        }
+      } catch {
+        // Non-fatal — hide the bar rather than break the sidebar (e.g. a
+        // non-admin teacher in an org may not have permission to read points).
+        if (!cancelled) setTokenInfo(null);
+      }
+    };
+    fetchToken();
+    return () => {
+      cancelled = true;
+    };
+    // We intentionally key on .id (a primitive) instead of the whole object so
+    // re-renders with the same org don't refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, selectedOrganization?.id]);
 
   // ✅ 切換 workspace mode 時，自動導向 dashboard（避免殘留前一模式的頁面）
   const prevModeRef = useRef(mode);
@@ -215,13 +468,6 @@ function TeacherLayoutInner({
             </div>
           </div>
 
-          {/* Workspace Switcher - Personal / Organization Tabs */}
-          {!sidebarCollapsed && teacherProfile && (
-            <div className="px-3 pt-4">
-              <WorkspaceSwitcher />
-            </div>
-          )}
-
           {/* Navigation */}
           <nav
             className={`flex-1 overflow-y-auto ${sidebarCollapsed ? "p-2" : "p-4"}`}
@@ -239,6 +485,29 @@ function TeacherLayoutInner({
               ))}
             </ul>
           </nav>
+
+          {/* Workspace + token (Variant B: switcher moved to bottom near
+              user). Accent tint is light-mode only — same reason as the
+              parent sidebar background. */}
+          {!sidebarCollapsed && teacherProfile && (
+            <div
+              className="px-3 pt-3 pb-2 border-t dark:border-gray-700"
+              style={
+                isDarkMode
+                  ? undefined
+                  : { backgroundColor: workspaceColor.accent }
+              }
+            >
+              <WorkspaceSwitcher />
+              {/* Render the bar as a child component so that setTokenInfo()
+                  doesn't force the whole memoized SidebarContent to rebuild
+                  — React reconciles this subtree on its own. */}
+              <SidebarTokenBar
+                tokenInfo={tokenInfo}
+                workspaceColor={workspaceColor}
+              />
+            </div>
+          )}
 
           {/* Account Menu */}
           <div className="p-2 border-t dark:border-gray-700">
@@ -386,6 +655,10 @@ function TeacherLayoutInner({
       config,
       hasOrgRole,
       handleLogout,
+      // tokenInfo intentionally omitted: SidebarTokenBar is a child component,
+      // so React reconciles it on its own when tokenInfo changes.
+      workspaceColor,
+      isDarkMode,
     ],
   );
 
@@ -414,7 +687,14 @@ function TeacherLayoutInner({
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0">
-                <div className="flex flex-col h-full bg-white dark:bg-gray-800">
+                <div
+                  className="flex flex-col h-full bg-white dark:bg-gray-800"
+                  style={
+                    isDarkMode
+                      ? undefined
+                      : { backgroundColor: workspaceColor.surface }
+                  }
+                >
                   <SidebarContent onNavigate={() => {}} />
                 </div>
               </SheetContent>
@@ -424,9 +704,13 @@ function TeacherLayoutInner({
       </div>
 
       <div className="flex">
-        {/* Desktop Sidebar */}
+        {/* Desktop Sidebar — tinted by active workspace color (light mode
+            only; in dark mode we let dark:bg-gray-800 win). */}
         <div
           className={`hidden md:flex bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 ${sidebarCollapsed ? "w-16" : "w-64"} flex-col h-screen sticky top-0 ${sidebarDisabled ? "pointer-events-none opacity-50" : ""}`}
+          style={
+            isDarkMode ? undefined : { backgroundColor: workspaceColor.surface }
+          }
         >
           <SidebarContent />
         </div>
