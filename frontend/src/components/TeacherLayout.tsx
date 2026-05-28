@@ -129,7 +129,10 @@ function TeacherLayoutInner({
       0,
     );
     return PALETTE[1 + (hash % 4)];
-  }, [mode, selectedOrganization]);
+    // Key on the .id primitive (not the object reference) so the colour only
+    // recomputes when the org actually changes — matches the token-fetch effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, selectedOrganization?.id]);
 
   // Workspace-aware token / quota for the sidebar bar.
   // Personal mode  → /api/subscription/status (AGGREGATED across the active

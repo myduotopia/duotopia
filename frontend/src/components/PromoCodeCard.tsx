@@ -23,6 +23,10 @@ interface MyPromoCode {
   total_points_awarded: number;
 }
 
+// Display-only summary of the seeded defaults from
+// `backend/services/promo_code_service.py::DEFAULT_REWARD_CONFIGS`. Admin can
+// edit the live values via /admin/promo-codes — those changes won't appear
+// here, so keep this list in sync if you change the seed defaults.
 const REWARD_TIERS: { label: string; points: string }[] = [
   { label: "驗證 Email", points: "+10" },
   { label: "訂閱 Tutor Teachers", points: "+1,000" },
@@ -96,7 +100,9 @@ export default function PromoCodeCard() {
     );
   }
 
-  const referralLink = `${window.location.origin}/teacher/register?promo=${data.code}`;
+  // encodeURIComponent so a code that ever contains a special char (`+`, `&`,
+  // `%`, …) doesn't silently corrupt the URL.
+  const referralLink = `${window.location.origin}/teacher/register?promo=${encodeURIComponent(data.code)}`;
 
   const copy = async (text: string, label: string) => {
     try {

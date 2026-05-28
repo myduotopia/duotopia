@@ -3,7 +3,7 @@ Profile Ops operations for teachers.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, case
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 
@@ -16,7 +16,11 @@ from models import (
     TeacherSchool,
     Organization,
     School,
+    PromoCode,
+    PromoReferral,
+    PromoRewardEvent,
 )
+from services.promo_code_service import create_personal_code_for_teacher
 from .dependencies import get_current_teacher
 from .validators import *
 from .utils import TEST_SUBSCRIPTION_WHITELIST, parse_birthdate
@@ -133,9 +137,6 @@ async def get_my_promo_code(
     Auto-creates the personal code if it's missing (older accounts predate the
     auto-create-on-register flow), so this endpoint is safe to call eagerly.
     """
-    from services.promo_code_service import create_personal_code_for_teacher
-    from models import PromoCode, PromoReferral, PromoRewardEvent
-
     code = (
         db.query(PromoCode)
         .filter(
@@ -147,29 +148,38 @@ async def get_my_promo_code(
     if code is None:
         code = create_personal_code_for_teacher(db, current_teacher.id)
 
-    referrals = (
-        db.query(PromoReferral)
+    # SQL-side aggregation so a teacher with many referrals doesn't pay for
+    # loading every row just to count them.
+    stats = (
+        db.query(
+            func.count(PromoReferral.id).label("total"),
+            func.count(PromoReferral.verified_at).label("verified"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (PromoReferral.first_paid_event_consumed.is_(True), 1), else_=0
+                    )
+                ),
+                0,
+            ).label("paid"),
+        )
         .filter(PromoReferral.referrer_teacher_id == current_teacher.id)
-        .all()
+        .one()
     )
-    referral_count = len(referrals)
-    verified_count = sum(1 for r in referrals if r.verified_at is not None)
-    paid_count = sum(1 for r in referrals if r.first_paid_event_consumed)
 
     total_points = (
         db.query(func.coalesce(func.sum(PromoRewardEvent.points), 0))
         .filter(PromoRewardEvent.granted_to_teacher_id == current_teacher.id)
         .scalar()
-        or 0
     )
 
     return MyPromoCodeResponse(
         code=code.code,
         expires_at=code.expires_at.isoformat() if code.expires_at else None,
         is_active=code.is_active,
-        referral_count=referral_count,
-        verified_count=verified_count,
-        paid_count=paid_count,
+        referral_count=int(stats.total),
+        verified_count=int(stats.verified),
+        paid_count=int(stats.paid),
         total_points_awarded=int(total_points),
     )
 

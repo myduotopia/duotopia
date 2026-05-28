@@ -42,6 +42,21 @@ const ORDER: QuotaSourceKind[] = [
   "admin",
 ];
 
+/**
+ * Convert a #RRGGBB hex string to a CSS `rgba(...)` with the given alpha.
+ * Falls back to the original colour if the input isn't a 6-digit hex (safer
+ * than string-concatenating "55" onto an unknown format).
+ */
+export function hexAlpha(hex: string, alpha: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export function mapPackageSource(source: string): QuotaSourceKind {
   switch (source) {
     case "trial_bonus":

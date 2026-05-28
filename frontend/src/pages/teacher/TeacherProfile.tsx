@@ -27,7 +27,11 @@ import {
 import { useTranslation } from "react-i18next";
 import { validatePasswordStrength } from "@/utils/passwordValidation";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { buildQuotaSources, type QuotaSourceItem } from "@/lib/quotaSources";
+import {
+  buildQuotaSources,
+  hexAlpha,
+  type QuotaSourceItem,
+} from "@/lib/quotaSources";
 
 interface TeacherInfo {
   id: number;
@@ -207,7 +211,7 @@ function QuotaCard() {
                           isReferral
                             ? {
                                 borderColor: s.fill,
-                                backgroundColor: s.bg + "55",
+                                backgroundColor: hexAlpha(s.bg, 0.33),
                               }
                             : { borderColor: "#E5E7EB" }
                         }
@@ -229,7 +233,7 @@ function QuotaCard() {
                                   border: `1px solid ${s.fill}`,
                                 }}
                               >
-                                <Zap className="h-2.5 w-2.5" /> 本次使用來自這裡
+                                <Zap className="h-2.5 w-2.5" /> 推薦獎勵點數
                               </span>
                             )}
                           </div>
