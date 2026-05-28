@@ -87,12 +87,40 @@ function TeacherLayoutInner({
   // tints to match the active workspace. Memoized so the SidebarContent
   // useMemo below doesn't recompute on every render.
   const workspaceColor = useMemo(() => {
+    // `surface` is the whole-sidebar wash (color-100 level — readable but
+    // distinct); `accent` is the inner workspace+token block; `bar` is the
+    // progress fill / strong text.
     const PALETTE = [
-      { bg: "#EEF2FF", text: "#4338CA", bar: "#4F46E5" }, // indigo (personal)
-      { bg: "#ECFDF5", text: "#047857", bar: "#059669" }, // emerald
-      { bg: "#FFFBEB", text: "#B45309", bar: "#D97706" }, // amber
-      { bg: "#FFF1F2", text: "#BE123C", bar: "#E11D48" }, // rose
-      { bg: "#F5F3FF", text: "#6D28D9", bar: "#7C3AED" }, // violet
+      {
+        surface: "#E0E7FF",
+        accent: "#C7D2FE",
+        text: "#3730A3",
+        bar: "#4F46E5",
+      }, // indigo (personal)
+      {
+        surface: "#D1FAE5",
+        accent: "#A7F3D0",
+        text: "#065F46",
+        bar: "#059669",
+      }, // emerald
+      {
+        surface: "#FEF3C7",
+        accent: "#FDE68A",
+        text: "#92400E",
+        bar: "#D97706",
+      }, // amber
+      {
+        surface: "#FFE4E6",
+        accent: "#FECDD3",
+        text: "#9F1239",
+        bar: "#E11D48",
+      }, // rose
+      {
+        surface: "#EDE9FE",
+        accent: "#DDD6FE",
+        text: "#5B21B6",
+        bar: "#7C3AED",
+      }, // violet
     ];
     if (mode === "personal" || !selectedOrganization) return PALETTE[0];
     const hash = Array.from(selectedOrganization.id).reduce(
@@ -318,14 +346,11 @@ function TeacherLayoutInner({
           {!sidebarCollapsed && teacherProfile && (
             <div
               className="px-3 pt-3 pb-2 border-t dark:border-gray-700"
-              style={{ backgroundColor: `${workspaceColor.bg}55` }}
+              style={{ backgroundColor: workspaceColor.accent }}
             >
               <WorkspaceSwitcher />
               {tokenInfo && tokenInfo.total > 0 && (
-                <div
-                  className="mt-3 rounded-md px-3 py-2"
-                  style={{ backgroundColor: workspaceColor.bg }}
-                >
+                <div className="mt-3 rounded-md px-3 py-2 bg-white/70 dark:bg-gray-900/40">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium text-gray-700 dark:text-gray-300">
                       剩餘點數
@@ -534,7 +559,10 @@ function TeacherLayoutInner({
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0">
-                <div className="flex flex-col h-full bg-white dark:bg-gray-800">
+                <div
+                  className="flex flex-col h-full dark:bg-gray-800"
+                  style={{ backgroundColor: workspaceColor.surface }}
+                >
                   <SidebarContent onNavigate={() => {}} />
                 </div>
               </SheetContent>
@@ -544,9 +572,10 @@ function TeacherLayoutInner({
       </div>
 
       <div className="flex">
-        {/* Desktop Sidebar */}
+        {/* Desktop Sidebar — tinted by active workspace color */}
         <div
-          className={`hidden md:flex bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 ${sidebarCollapsed ? "w-16" : "w-64"} flex-col h-screen sticky top-0 ${sidebarDisabled ? "pointer-events-none opacity-50" : ""}`}
+          className={`hidden md:flex dark:bg-gray-800 shadow-lg transition-all duration-300 ${sidebarCollapsed ? "w-16" : "w-64"} flex-col h-screen sticky top-0 ${sidebarDisabled ? "pointer-events-none opacity-50" : ""}`}
+          style={{ backgroundColor: workspaceColor.surface }}
         >
           <SidebarContent />
         </div>

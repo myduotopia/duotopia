@@ -179,30 +179,28 @@ export default function PromoCodeCard() {
           </p>
         ) : (
           <>
-            {/* Referral link + QR */}
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-center">
-              <div>
-                <label className="text-xs text-gray-500">推薦連結</label>
-                <div className="mt-1 flex items-center gap-2 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2">
-                  <code className="flex-1 truncate text-xs text-gray-700 dark:text-gray-200">
-                    {referralLink}
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => copy(referralLink, "推薦連結")}
-                    className="h-7 px-2"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <p className="mt-2 text-xs text-gray-500">
-                  朋友點開時會自動帶入你的推薦碼。
-                </p>
+            {/* Referral link + QR (stacked: link first, QR below) */}
+            <div>
+              <label className="text-xs text-gray-500">推薦連結</label>
+              <div className="mt-1 flex items-center gap-2 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2">
+                <code className="flex-1 truncate text-xs text-gray-700 dark:text-gray-200">
+                  {referralLink}
+                </code>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => copy(referralLink, "推薦連結")}
+                  className="h-7 px-2"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
               </div>
-              <div className="flex flex-col items-center gap-1">
+              <p className="mt-2 text-xs text-gray-500">
+                朋友點開時會自動帶入你的推薦碼。
+              </p>
+              <div className="mt-3 flex flex-col items-center gap-1">
                 <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-white p-2">
-                  <QRCodeSVG value={referralLink} size={112} level="M" />
+                  <QRCodeSVG value={referralLink} size={128} level="M" />
                 </div>
                 <span className="text-xs text-gray-500">掃 QR 直接註冊</span>
               </div>
