@@ -54,32 +54,43 @@ function QuotaCard() {
 
   const loadQuotaInfo = async () => {
     try {
-      const params = new URLSearchParams();
+      // Aggregated view: subscription period + every active credit package
+      // (trial, referral bonus, purchased packs). Mirrors what admins see in
+      // the per-teacher list, so the user sees their FULL available balance.
+      // Org mode is read from the org's points balance instead.
       if (mode === "organization" && selectedOrganization) {
-        params.append("organization_id", selectedOrganization.id);
+        const res = await apiClient.get<{
+          total_points: number;
+          used_points: number;
+        }>(`/api/organizations/${selectedOrganization.id}/points`);
+        if (typeof res.total_points === "number" && res.total_points > 0) {
+          setQuotaInfo({
+            quota_total: res.total_points,
+            quota_used: res.used_points ?? 0,
+            quota_remaining: Math.max(
+              0,
+              res.total_points - (res.used_points ?? 0),
+            ),
+            plan_name: selectedOrganization.name,
+            source: "organization",
+          });
+        } else {
+          setQuotaInfo(null);
+        }
+        return;
       }
-      const url = `/api/teachers/subscription${params.toString() ? `?${params.toString()}` : ""}`;
 
-      const response = await apiClient.get<{
-        subscription_period: {
-          quota_total: number;
-          quota_used: number;
-          plan_name: string;
-        } | null;
-        source?: string;
-      }>(url);
-
-      if (response.subscription_period) {
-        const remaining =
-          response.subscription_period.quota_total -
-          response.subscription_period.quota_used;
+      const res = await apiClient.getSubscriptionStatus();
+      if (typeof res.quota_total === "number" && res.quota_total > 0) {
         setQuotaInfo({
-          quota_total: response.subscription_period.quota_total,
-          quota_used: response.subscription_period.quota_used,
-          quota_remaining: Math.max(0, remaining),
-          plan_name: response.subscription_period.plan_name,
-          source:
-            (response.source as "personal" | "organization") || "personal",
+          quota_total: res.quota_total,
+          quota_used: res.quota_used ?? 0,
+          quota_remaining: Math.max(
+            0,
+            (res.quota_total ?? 0) - (res.quota_used ?? 0),
+          ),
+          plan_name: res.plan ?? "",
+          source: "personal",
         });
       } else {
         setQuotaInfo(null);

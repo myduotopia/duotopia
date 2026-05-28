@@ -131,11 +131,14 @@ function TeacherLayoutInner({
   }, [mode, selectedOrganization]);
 
   // Workspace-aware token / quota for the sidebar bar.
-  // Personal mode  → /api/teachers/subscription (personal subscription_period)
+  // Personal mode  → /api/subscription/status (AGGREGATED across the active
+  //                  subscription period + every active credit package, e.g.
+  //                  trial + referral bonus + purchased packs — matches what
+  //                  admins see in the per-teacher list)
   // Org mode       → /api/organizations/{id}/points (org-level points balance)
-  // /api/teachers/subscription doesn't honour an organization_id query param
-  // (it always returns the teacher's own current_period), so switching modes
-  // must switch the endpoint, not just the param.
+  // (/api/teachers/subscription only returns the current subscription_period
+  // and is intentionally NOT used here — it would understate the teacher's
+  // available points by ignoring credit packages.)
   const [tokenInfo, setTokenInfo] = useState<{
     used: number;
     total: number;
@@ -159,17 +162,12 @@ function TeacherLayoutInner({
             setTokenInfo(null);
           }
         } else {
-          const res = await apiClient.get<{
-            subscription_period: {
-              quota_total: number;
-              quota_used: number;
-            } | null;
-          }>("/api/teachers/subscription");
+          const res = await apiClient.getSubscriptionStatus();
           if (cancelled) return;
-          if (res.subscription_period) {
+          if (typeof res.quota_total === "number" && res.quota_total > 0) {
             setTokenInfo({
-              used: res.subscription_period.quota_used,
-              total: res.subscription_period.quota_total,
+              used: res.quota_used ?? 0,
+              total: res.quota_total,
             });
           } else {
             setTokenInfo(null);
