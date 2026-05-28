@@ -288,67 +288,6 @@ async def get_teacher_roles(
     )
 
 
-class MyPromoCodeResponse(BaseModel):
-    code: str
-    expires_at: Optional[str] = None  # ISO string; null = permanent
-    is_active: bool
-    referral_count: int
-    verified_count: int
-    paid_count: int
-    total_points_awarded: int
-
-
-@router.get("/me/promo-code", response_model=MyPromoCodeResponse)
-async def get_my_promo_code(
-    current_teacher: Teacher = Depends(get_current_teacher),
-    db: Session = Depends(get_db),
-):
-    """Teacher's own personal promo code plus their referral stats.
-
-    Auto-creates the personal code if it's missing (older accounts predate the
-    auto-create-on-register flow), so this endpoint is safe to call eagerly.
-    """
-    from services.promo_code_service import create_personal_code_for_teacher
-    from models import PromoCode, PromoReferral, PromoRewardEvent
-
-    code = (
-        db.query(PromoCode)
-        .filter(
-            PromoCode.teacher_id == current_teacher.id,
-            PromoCode.kind == "personal",
-        )
-        .first()
-    )
-    if code is None:
-        code = create_personal_code_for_teacher(db, current_teacher.id)
-
-    referrals = (
-        db.query(PromoReferral)
-        .filter(PromoReferral.referrer_teacher_id == current_teacher.id)
-        .all()
-    )
-    referral_count = len(referrals)
-    verified_count = sum(1 for r in referrals if r.verified_at is not None)
-    paid_count = sum(1 for r in referrals if r.first_paid_event_consumed)
-
-    total_points = (
-        db.query(func.coalesce(func.sum(PromoRewardEvent.points), 0))
-        .filter(PromoRewardEvent.granted_to_teacher_id == current_teacher.id)
-        .scalar()
-        or 0
-    )
-
-    return MyPromoCodeResponse(
-        code=code.code,
-        expires_at=code.expires_at.isoformat() if code.expires_at else None,
-        is_active=code.is_active,
-        referral_count=referral_count,
-        verified_count=verified_count,
-        paid_count=paid_count,
-        total_points_awarded=int(total_points),
-    )
-
-
 @router.put("/me", response_model=TeacherProfile)
 async def update_teacher_profile(
     request: UpdateTeacherProfileRequest,

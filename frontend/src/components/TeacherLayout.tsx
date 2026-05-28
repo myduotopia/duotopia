@@ -81,6 +81,27 @@ function TeacherLayoutInner({
   // Get workspace context
   const { mode, selectedSchool, selectedOrganization } = useWorkspace();
 
+  // Workspace color palette: Personal = indigo (default), Orgs cycle the next
+  // four colors deterministically by org id so the same org always gets the
+  // same tint. The whole workspace+token block at the bottom of the sidebar
+  // tints to match the active workspace. Memoized so the SidebarContent
+  // useMemo below doesn't recompute on every render.
+  const workspaceColor = useMemo(() => {
+    const PALETTE = [
+      { bg: "#EEF2FF", text: "#4338CA", bar: "#4F46E5" }, // indigo (personal)
+      { bg: "#ECFDF5", text: "#047857", bar: "#059669" }, // emerald
+      { bg: "#FFFBEB", text: "#B45309", bar: "#D97706" }, // amber
+      { bg: "#FFF1F2", text: "#BE123C", bar: "#E11D48" }, // rose
+      { bg: "#F5F3FF", text: "#6D28D9", bar: "#7C3AED" }, // violet
+    ];
+    if (mode === "personal" || !selectedOrganization) return PALETTE[0];
+    const hash = Array.from(selectedOrganization.id).reduce(
+      (a, c) => a + c.charCodeAt(0),
+      0,
+    );
+    return PALETTE[1 + (hash % 4)];
+  }, [mode, selectedOrganization]);
+
   // Workspace-aware token / quota for the sidebar bar.
   // Personal mode  → /api/teachers/subscription (personal subscription_period)
   // Org mode       → /api/organizations/{id}/points (org-level points balance)
@@ -136,6 +157,9 @@ function TeacherLayoutInner({
     return () => {
       cancelled = true;
     };
+    // We intentionally key on .id (a primitive) instead of the whole object so
+    // re-renders with the same org don't refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, selectedOrganization?.id]);
 
   // ✅ 切換 workspace mode 時，自動導向 dashboard（避免殘留前一模式的頁面）
@@ -292,15 +316,24 @@ function TeacherLayoutInner({
 
           {/* Workspace + token (Variant B: switcher moved to bottom near user) */}
           {!sidebarCollapsed && teacherProfile && (
-            <div className="px-3 pt-3 pb-2 border-t dark:border-gray-700">
+            <div
+              className="px-3 pt-3 pb-2 border-t dark:border-gray-700"
+              style={{ backgroundColor: `${workspaceColor.bg}55` }}
+            >
               <WorkspaceSwitcher />
               {tokenInfo && tokenInfo.total > 0 && (
-                <div className="mt-3 rounded-md bg-indigo-50/70 dark:bg-indigo-950/40 px-3 py-2">
+                <div
+                  className="mt-3 rounded-md px-3 py-2"
+                  style={{ backgroundColor: workspaceColor.bg }}
+                >
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium text-gray-700 dark:text-gray-300">
                       剩餘點數
                     </span>
-                    <span className="font-semibold text-indigo-700 dark:text-indigo-300">
+                    <span
+                      className="font-semibold"
+                      style={{ color: workspaceColor.text }}
+                    >
                       {Math.max(
                         0,
                         tokenInfo.total - tokenInfo.used,
@@ -310,12 +343,13 @@ function TeacherLayoutInner({
                   </div>
                   <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800">
                     <div
-                      className="h-full rounded-full bg-indigo-600"
+                      className="h-full rounded-full"
                       style={{
                         width: `${Math.min(
                           100,
                           Math.round((tokenInfo.used / tokenInfo.total) * 100),
                         )}%`,
+                        backgroundColor: workspaceColor.bar,
                       }}
                     />
                   </div>
@@ -470,6 +504,8 @@ function TeacherLayoutInner({
       config,
       hasOrgRole,
       handleLogout,
+      tokenInfo,
+      workspaceColor,
     ],
   );
 
