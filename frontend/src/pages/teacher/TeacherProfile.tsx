@@ -155,13 +155,17 @@ function QuotaCard() {
               </span>
             </div>
 
-            {/* Stacked-by-source bar (personal mode only) */}
+            {/* Stacked-by-source bar (personal). Each segment's dark inner
+                fill = REMAINING of that source (matches "remaining" headline);
+                light outer = used. */}
             {quotaInfo.sources.length > 0 ? (
               <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-gray-200 bg-white">
                 {quotaInfo.sources.map((s) => {
                   const segPct =
                     (s.total / Math.max(1, quotaInfo.quota_total)) * 100;
-                  const innerPct = (s.used / Math.max(1, s.total)) * 100;
+                  const remainingPct =
+                    (Math.max(0, s.total - s.used) / Math.max(1, s.total)) *
+                    100;
                   return (
                     <div
                       key={s.kind}
@@ -173,7 +177,7 @@ function QuotaCard() {
                       <div
                         className="h-full"
                         style={{
-                          width: `${innerPct}%`,
+                          width: `${remainingPct}%`,
                           backgroundColor: s.fill,
                         }}
                       />
@@ -182,11 +186,19 @@ function QuotaCard() {
                 })}
               </div>
             ) : (
+              // Fallback single bar: width = REMAINING / total, colour by
+              // remaining ratio so the visual matches the headline number.
               <div className="w-full bg-gray-200 rounded-full h-2.5">
                 <div
-                  className="h-2.5 rounded-full bg-green-500"
+                  className={`h-2.5 rounded-full ${
+                    quotaInfo.quota_remaining > quotaInfo.quota_total * 0.3
+                      ? "bg-green-500"
+                      : quotaInfo.quota_remaining > quotaInfo.quota_total * 0.1
+                        ? "bg-orange-500"
+                        : "bg-red-500"
+                  }`}
                   style={{
-                    width: `${Math.max(0, Math.min(100, (quotaInfo.quota_used / quotaInfo.quota_total) * 100))}%`,
+                    width: `${Math.max(0, Math.min(100, (quotaInfo.quota_remaining / Math.max(1, quotaInfo.quota_total)) * 100))}%`,
                   }}
                 />
               </div>
@@ -200,8 +212,14 @@ function QuotaCard() {
                 </div>
                 <ul className="space-y-2">
                   {quotaInfo.sources.map((s) => {
-                    const pct =
-                      s.total > 0 ? Math.round((s.used / s.total) * 100) : 0;
+                    // Fill = REMAINING share, so a near-empty source draws as
+                    // an almost-empty bar (matches the headline metaphor).
+                    const remainingPct =
+                      s.total > 0
+                        ? Math.round(
+                            (Math.max(0, s.total - s.used) / s.total) * 100,
+                          )
+                        : 0;
                     const isReferral = s.kind === "referral";
                     return (
                       <li
@@ -254,7 +272,7 @@ function QuotaCard() {
                           <div
                             className="h-full"
                             style={{
-                              width: `${pct}%`,
+                              width: `${remainingPct}%`,
                               backgroundColor: s.fill,
                             }}
                           />

@@ -984,7 +984,8 @@ async def get_subscription_status(
                 "expires_at": pkg.expires_at.isoformat() if pkg.expires_at else None,
                 "status": pkg.status,
                 "source": pkg.source,
-                "is_expired": pkg.expires_at <= now if pkg.expires_at else True,
+                # NULL expires_at = no expiry (permanent), not expired.
+                "is_expired": (pkg.expires_at is not None and pkg.expires_at <= now),
             }
             for pkg in credit_packages
         ]

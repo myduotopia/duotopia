@@ -128,6 +128,9 @@ export default function TeacherRegisterSheet({
 
   const handleClose = () => {
     setError("");
+    // Closing the sheet means the form is wiped; clearing the ref lets a fresh
+    // ?promo= URL parameter populate the field on the next open.
+    userClearedPromo.current = false;
     setFormData({
       email: "",
       password: "",

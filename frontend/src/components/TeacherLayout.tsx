@@ -376,13 +376,16 @@ function TeacherLayoutInner({
                   {tokenInfo.sources.length > 0 ? (
                     <>
                       {/* Stacked-by-source bar: each segment width ∝ that
-                          source's total; inner fill ∝ that source's used. */}
+                          source's total; dark inner fill ∝ REMAINING (matches
+                          the "剩餘 X / Y" headline above). */}
                       <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
                         {tokenInfo.sources.map((s) => {
                           const segPct =
                             (s.total / Math.max(1, tokenInfo.total)) * 100;
-                          const innerPct =
-                            (s.used / Math.max(1, s.total)) * 100;
+                          const remainingPct =
+                            (Math.max(0, s.total - s.used) /
+                              Math.max(1, s.total)) *
+                            100;
                           return (
                             <div
                               key={s.kind}
@@ -395,7 +398,7 @@ function TeacherLayoutInner({
                               <div
                                 className="h-full"
                                 style={{
-                                  width: `${innerPct}%`,
+                                  width: `${remainingPct}%`,
                                   backgroundColor: s.fill,
                                 }}
                               />
@@ -425,15 +428,21 @@ function TeacherLayoutInner({
                       </ul>
                     </>
                   ) : (
-                    // Org mode: single solid bar in the workspace colour.
+                    // Org mode: single solid bar; width = REMAINING / total so
+                    // a depleted balance reads as an almost-empty bar.
                     <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800">
                       <div
                         className="h-full rounded-full"
                         style={{
-                          width: `${Math.min(
-                            100,
-                            Math.round(
-                              (tokenInfo.used / tokenInfo.total) * 100,
+                          width: `${Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              Math.round(
+                                (Math.max(0, tokenInfo.total - tokenInfo.used) /
+                                  Math.max(1, tokenInfo.total)) *
+                                  100,
+                              ),
                             ),
                           )}%`,
                           backgroundColor: workspaceColor.bar,

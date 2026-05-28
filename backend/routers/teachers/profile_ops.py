@@ -4,6 +4,7 @@ Profile Ops operations for teachers.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy import func, case
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 
@@ -146,14 +147,34 @@ async def get_my_promo_code(
         .first()
     )
     if code is None:
-        code = create_personal_code_for_teacher(db, current_teacher.id)
+        # Two concurrent first-time requests (e.g. two tabs) both reach this
+        # branch; the second one's INSERT hits the (teacher_id, kind=personal)
+        # unique index. Catch + re-query so the loser gets the row the winner
+        # just committed instead of a 500.
+        try:
+            code = create_personal_code_for_teacher(db, current_teacher.id)
+        except IntegrityError:
+            db.rollback()
+            code = (
+                db.query(PromoCode)
+                .filter(
+                    PromoCode.teacher_id == current_teacher.id,
+                    PromoCode.kind == "personal",
+                )
+                .first()
+            )
 
     # SQL-side aggregation so a teacher with many referrals doesn't pay for
-    # loading every row just to count them.
+    # loading every row just to count them. The verified count uses explicit
+    # CASE so the intent ("count rows where verified_at IS NOT NULL") survives
+    # any future migration that changes the column's nullability or default.
     stats = (
         db.query(
             func.count(PromoReferral.id).label("total"),
-            func.count(PromoReferral.verified_at).label("verified"),
+            func.coalesce(
+                func.sum(case((PromoReferral.verified_at.is_not(None), 1), else_=0)),
+                0,
+            ).label("verified"),
             func.coalesce(
                 func.sum(
                     case(
