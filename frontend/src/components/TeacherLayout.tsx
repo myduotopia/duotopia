@@ -79,7 +79,45 @@ function TeacherLayoutInner({
   const userRoles = useTeacherAuthStore((state) => state.userRoles);
 
   // Get workspace context
-  const { mode, selectedSchool } = useWorkspace();
+  const { mode, selectedSchool, selectedOrganization } = useWorkspace();
+
+  // Workspace-aware token / quota for the sidebar bar (issue #637).
+  const [tokenInfo, setTokenInfo] = useState<{
+    used: number;
+    total: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams();
+    if (mode === "organization" && selectedOrganization) {
+      params.append("organization_id", selectedOrganization.id);
+    }
+    const url = `/api/teachers/subscription${
+      params.toString() ? `?${params.toString()}` : ""
+    }`;
+    apiClient
+      .get<{
+        subscription_period: { quota_total: number; quota_used: number } | null;
+      }>(url)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.subscription_period) {
+          setTokenInfo({
+            used: res.subscription_period.quota_used,
+            total: res.subscription_period.quota_total,
+          });
+        } else {
+          setTokenInfo(null);
+        }
+      })
+      .catch(() => {
+        // Non-fatal — the sidebar must keep working without the bar.
+        if (!cancelled) setTokenInfo(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, selectedOrganization?.id]);
 
   // ✅ 切換 workspace mode 時，自動導向 dashboard（避免殘留前一模式的頁面）
   const prevModeRef = useRef(mode);
@@ -215,13 +253,6 @@ function TeacherLayoutInner({
             </div>
           </div>
 
-          {/* Workspace Switcher - Personal / Organization Tabs */}
-          {!sidebarCollapsed && teacherProfile && (
-            <div className="px-3 pt-4">
-              <WorkspaceSwitcher />
-            </div>
-          )}
-
           {/* Navigation */}
           <nav
             className={`flex-1 overflow-y-auto ${sidebarCollapsed ? "p-2" : "p-4"}`}
@@ -239,6 +270,40 @@ function TeacherLayoutInner({
               ))}
             </ul>
           </nav>
+
+          {/* Workspace + token (Variant B: switcher moved to bottom near user) */}
+          {!sidebarCollapsed && teacherProfile && (
+            <div className="px-3 pt-3 pb-2 border-t dark:border-gray-700">
+              <WorkspaceSwitcher />
+              {tokenInfo && tokenInfo.total > 0 && (
+                <div className="mt-3 rounded-md bg-indigo-50/70 dark:bg-indigo-950/40 px-3 py-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                      剩餘點數
+                    </span>
+                    <span className="font-semibold text-indigo-700 dark:text-indigo-300">
+                      {Math.max(
+                        0,
+                        tokenInfo.total - tokenInfo.used,
+                      ).toLocaleString()}{" "}
+                      / {tokenInfo.total.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800">
+                    <div
+                      className="h-full rounded-full bg-indigo-600"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.round((tokenInfo.used / tokenInfo.total) * 100),
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Account Menu */}
           <div className="p-2 border-t dark:border-gray-700">

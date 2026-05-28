@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import OneCampusBindSection from "@/components/settings/OneCampusBindSection";
+import PromoCodeCard from "@/components/PromoCodeCard";
 import {
   User,
   Mail,
@@ -467,6 +468,9 @@ export default function TeacherProfile() {
 
       {/* Quota Info Card */}
       <QuotaCard />
+
+      {/* Promo Code Card (issue #637) */}
+      <PromoCodeCard />
 
       {/* Password Settings Card */}
       <Card className="mb-6">

@@ -33,14 +33,7 @@ import {
   Check,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { Progress } from "@/components/ui/progress";
 import { apiClient } from "../lib/api";
-
-interface PointsStatus {
-  quota_used: number;
-  quota_total: number;
-  quota_remaining: number;
-}
 
 interface TeacherProfile {
   id: number;
@@ -116,7 +109,6 @@ export default function TeacherDashboardWithSidebar() {
   // Sidebar state
   const [currentView, setCurrentView] = useState<SidebarView>("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [pointsStatus, setPointsStatus] = useState<PointsStatus | null>(null);
 
   // Share dialog state
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -133,22 +125,7 @@ export default function TeacherDashboardWithSidebar() {
 
   useEffect(() => {
     fetchDashboardData();
-    fetchPointsStatus();
   }, []);
-
-  const fetchPointsStatus = async () => {
-    try {
-      const data = await apiClient.getSubscriptionStatus();
-      setPointsStatus({
-        quota_used: data.quota_used,
-        quota_total: data.quota_total,
-        quota_remaining: data.quota_remaining,
-      });
-    } catch (err) {
-      // Non-fatal: the points bar is supplementary, don't break the dashboard.
-      console.error("Points status fetch error:", err);
-    }
-  };
 
   const fetchDashboardData = async () => {
     try {
@@ -365,30 +342,6 @@ export default function TeacherDashboardWithSidebar() {
             })}
           </ul>
         </nav>
-
-        {/* Points usage bar */}
-        {!sidebarCollapsed && pointsStatus && pointsStatus.quota_total > 0 && (
-          <div className="px-4 pt-4">
-            <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-              <span>點數使用量</span>
-              <span>
-                {(pointsStatus.quota_used ?? 0).toLocaleString()} /{" "}
-                {(pointsStatus.quota_total ?? 0).toLocaleString()}
-              </span>
-            </div>
-            <Progress
-              value={Math.min(
-                100,
-                ((pointsStatus.quota_used ?? 0) /
-                  (pointsStatus.quota_total ?? 1)) *
-                  100,
-              )}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              剩餘 {(pointsStatus.quota_remaining ?? 0).toLocaleString()} 點
-            </p>
-          </div>
-        )}
 
         {/* User Info & Logout */}
         <div className="p-4 border-t">

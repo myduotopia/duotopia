@@ -1648,6 +1648,18 @@ class ApiClient {
     );
   }
 
+  async getMyPromoCode() {
+    return this.request<{
+      code: string;
+      expires_at: string | null;
+      is_active: boolean;
+      referral_count: number;
+      verified_count: number;
+      paid_count: number;
+      total_points_awarded: number;
+    }>("/api/teachers/me/promo-code", { method: "GET" });
+  }
+
   async getSubscriptionStatus() {
     return this.request<{
       status: string;
