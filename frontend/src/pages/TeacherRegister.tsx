@@ -71,8 +71,7 @@ export default function TeacherRegister() {
         prev.promoCode ? prev : { ...prev, promoCode: promo },
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

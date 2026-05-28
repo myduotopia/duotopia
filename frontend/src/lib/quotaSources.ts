@@ -81,8 +81,8 @@ interface SubscriptionStatusLike {
     source: string;
     points_total: number;
     points_used: number;
-    is_expired?: boolean;
-    status?: string;
+    is_expired: boolean;
+    status: string;
   }>;
 }
 

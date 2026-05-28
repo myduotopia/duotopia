@@ -163,6 +163,14 @@ async def get_my_promo_code(
                 )
                 .first()
             )
+    if code is None:
+        # Defensive: both insert and re-query failed (e.g. transient DB
+        # availability between the two queries). 503 lets the caller retry
+        # without dropping the request.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Promo code temporarily unavailable, please retry.",
+        )
 
     # SQL-side aggregation so a teacher with many referrals doesn't pay for
     # loading every row just to count them. The verified count uses explicit

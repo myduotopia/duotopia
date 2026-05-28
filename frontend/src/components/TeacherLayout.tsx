@@ -82,6 +82,24 @@ function TeacherLayoutInner({
   // Get workspace context
   const { mode, selectedSchool, selectedOrganization } = useWorkspace();
 
+  // Watch for dark-mode class changes on <html> so we can skip the workspace
+  // tint when dark mode is active (the tinted surface colours are all light
+  // and would read poorly against dark-mode text).
+  const [isDarkMode, setIsDarkMode] = useState(
+    () =>
+      typeof document !== "undefined" &&
+      document.documentElement.classList.contains("dark"),
+  );
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    const obs = new MutationObserver(() => {
+      setIsDarkMode(root.classList.contains("dark"));
+    });
+    obs.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+
   // Workspace color palette: Personal = indigo (default), Orgs cycle the next
   // four colors deterministically by org id so the same org always gets the
   // same tint. The whole workspace+token block at the bottom of the sidebar
@@ -349,11 +367,17 @@ function TeacherLayoutInner({
             </ul>
           </nav>
 
-          {/* Workspace + token (Variant B: switcher moved to bottom near user) */}
+          {/* Workspace + token (Variant B: switcher moved to bottom near
+              user). Accent tint is light-mode only — same reason as the
+              parent sidebar background. */}
           {!sidebarCollapsed && teacherProfile && (
             <div
               className="px-3 pt-3 pb-2 border-t dark:border-gray-700"
-              style={{ backgroundColor: workspaceColor.accent }}
+              style={
+                isDarkMode
+                  ? undefined
+                  : { backgroundColor: workspaceColor.accent }
+              }
             >
               <WorkspaceSwitcher />
               {tokenInfo && tokenInfo.total > 0 && (
@@ -632,8 +656,12 @@ function TeacherLayoutInner({
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0">
                 <div
-                  className="flex flex-col h-full dark:bg-gray-800"
-                  style={{ backgroundColor: workspaceColor.surface }}
+                  className="flex flex-col h-full bg-white dark:bg-gray-800"
+                  style={
+                    isDarkMode
+                      ? undefined
+                      : { backgroundColor: workspaceColor.surface }
+                  }
                 >
                   <SidebarContent onNavigate={() => {}} />
                 </div>
@@ -644,10 +672,13 @@ function TeacherLayoutInner({
       </div>
 
       <div className="flex">
-        {/* Desktop Sidebar — tinted by active workspace color */}
+        {/* Desktop Sidebar — tinted by active workspace color (light mode
+            only; in dark mode we let dark:bg-gray-800 win). */}
         <div
-          className={`hidden md:flex dark:bg-gray-800 shadow-lg transition-all duration-300 ${sidebarCollapsed ? "w-16" : "w-64"} flex-col h-screen sticky top-0 ${sidebarDisabled ? "pointer-events-none opacity-50" : ""}`}
-          style={{ backgroundColor: workspaceColor.surface }}
+          className={`hidden md:flex bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 ${sidebarCollapsed ? "w-16" : "w-64"} flex-col h-screen sticky top-0 ${sidebarDisabled ? "pointer-events-none opacity-50" : ""}`}
+          style={
+            isDarkMode ? undefined : { backgroundColor: workspaceColor.surface }
+          }
         >
           <SidebarContent />
         </div>
