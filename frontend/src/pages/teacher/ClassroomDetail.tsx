@@ -1135,10 +1135,7 @@ export default function ClassroomDetail({
       toast.success(
         t("teacherStudents.messages.studentDeleted", { name: student.name }),
       );
-      await Promise.all([
-        fetchStudents(),
-        fetchClassroomDetail(false),
-      ]);
+      await Promise.all([fetchStudents(), fetchClassroomDetail(false)]);
     } catch (error) {
       console.error("Failed to delete student:", error);
       toast.error(t("teacherStudents.messages.deleteStudentFailed"));
