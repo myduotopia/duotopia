@@ -15,7 +15,9 @@ Backend logic (topup discount recompute, group-buy open API, monthly billing
 query) and the institution per-student-price frontend page are out of scope
 here and land in follow-up PRs.
 
-Migration is idempotent: safe to re-run.
+Migration is idempotent: safe to re-run. All information_schema lookups are
+scoped to schema 'public' so columns in other Supabase schemas (auth, storage,
+extensions, ...) cannot mask the existence guard.
 """
 
 from typing import Sequence, Union
@@ -38,10 +40,13 @@ def upgrade() -> None:
         DO $$ BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'organizations' AND column_name = 'org_type'
+                WHERE table_schema = 'public'
+                  AND table_name = 'organizations'
+                  AND column_name = 'org_type'
             ) THEN
                 ALTER TABLE organizations
-                ADD COLUMN org_type VARCHAR(20) NOT NULL DEFAULT 'institution';
+                ADD COLUMN org_type VARCHAR(20) NOT NULL DEFAULT 'institution'
+                CHECK (org_type IN ('institution', 'group_buy'));
             END IF;
         END $$;
         """
@@ -51,17 +56,18 @@ def upgrade() -> None:
         DO $$ BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'organizations'
+                WHERE table_schema = 'public'
+                  AND table_name = 'organizations'
                   AND column_name = 'per_student_price'
             ) THEN
-                ALTER TABLE organizations ADD COLUMN per_student_price INTEGER;
+                ALTER TABLE organizations
+                ADD COLUMN per_student_price INTEGER
+                CHECK (per_student_price > 0);
+                COMMENT ON COLUMN organizations.per_student_price IS
+                    'Institution-only: monthly fee (NT$) charged per active student.';
             END IF;
         END $$;
         """
-    )
-    op.execute(
-        "COMMENT ON COLUMN organizations.per_student_price IS "
-        "'Institution-only: monthly fee (NT$) charged per active student.'"
     )
 
     # ------------------------------------------------------------------
@@ -72,7 +78,9 @@ def upgrade() -> None:
         DO $$ BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'schools' AND column_name = 'plan_id'
+                WHERE table_schema = 'public'
+                  AND table_name = 'schools'
+                  AND column_name = 'plan_id'
             ) THEN
                 ALTER TABLE schools ADD COLUMN plan_id INTEGER;
             END IF;
@@ -84,7 +92,8 @@ def upgrade() -> None:
         DO $$ BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'schools'
+                WHERE table_schema = 'public'
+                  AND table_name = 'schools'
                   AND column_name = 'teacher_seat_limit'
             ) THEN
                 ALTER TABLE schools ADD COLUMN teacher_seat_limit INTEGER;
@@ -116,9 +125,13 @@ def upgrade() -> None:
         DO $$ BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'plans' AND column_name = 'teacher_seats'
+                WHERE table_schema = 'public'
+                  AND table_name = 'plans'
+                  AND column_name = 'teacher_seats'
             ) THEN
-                ALTER TABLE plans ADD COLUMN teacher_seats INTEGER;
+                ALTER TABLE plans
+                ADD COLUMN teacher_seats INTEGER
+                CHECK (teacher_seats > 0);
             END IF;
         END $$;
         """
@@ -128,26 +141,32 @@ def upgrade() -> None:
         DO $$ BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'plans' AND column_name = 'annual_fee'
+                WHERE table_schema = 'public'
+                  AND table_name = 'plans'
+                  AND column_name = 'annual_fee'
             ) THEN
-                ALTER TABLE plans ADD COLUMN annual_fee INTEGER;
+                ALTER TABLE plans
+                ADD COLUMN annual_fee INTEGER
+                CHECK (annual_fee > 0);
+                COMMENT ON COLUMN plans.annual_fee IS
+                    'Group-buy plans: annual fee PER TEACHER (NT$), not the team total. '
+                    'Team total = annual_fee * teacher_seats, computed at checkout.';
             END IF;
         END $$;
         """
-    )
-    op.execute(
-        "COMMENT ON COLUMN plans.annual_fee IS "
-        "'Group-buy plans: annual fee PER TEACHER (NT$), not the team total. "
-        "Team total = annual_fee * teacher_seats, computed at checkout.'"
     )
     op.execute(
         """
         DO $$ BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'plans' AND column_name = 'topup_discount'
+                WHERE table_schema = 'public'
+                  AND table_name = 'plans'
+                  AND column_name = 'topup_discount'
             ) THEN
-                ALTER TABLE plans ADD COLUMN topup_discount NUMERIC(3,2);
+                ALTER TABLE plans
+                ADD COLUMN topup_discount NUMERIC(3,2)
+                CHECK (topup_discount BETWEEN 0 AND 1);
             END IF;
         END $$;
         """
@@ -169,6 +188,10 @@ def upgrade() -> None:
 
     # ------------------------------------------------------------------
     # 4. student_status_history: per-head monthly billing trail
+    #
+    # FK on school_id uses ON DELETE SET NULL (NOT CASCADE) so a school
+    # delete cannot wipe billing-audit rows. student_id stays NOT NULL
+    # so the per-student trail survives — only the school context is lost.
     # ------------------------------------------------------------------
     op.execute(
         """
@@ -176,7 +199,8 @@ def upgrade() -> None:
             id SERIAL PRIMARY KEY,
             student_id INTEGER NOT NULL,
             school_id UUID,
-            status VARCHAR(20) NOT NULL,
+            status VARCHAR(20) NOT NULL
+                CHECK (status IN ('active', 'inactive')),
             changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             changed_by INTEGER,
             note TEXT
@@ -208,7 +232,7 @@ def upgrade() -> None:
                 ALTER TABLE student_status_history
                 ADD CONSTRAINT fk_student_status_history_school
                 FOREIGN KEY (school_id)
-                REFERENCES schools(id) ON DELETE CASCADE;
+                REFERENCES schools(id) ON DELETE SET NULL;
             END IF;
         END $$;
         """

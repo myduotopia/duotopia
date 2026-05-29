@@ -60,6 +60,10 @@ class Plan(Base):
     )
 
     updated_by = relationship("Teacher", foreign_keys=[updated_by_admin_id])
+    # Group-buy: schools bound to this plan (empty for individual plans).
+    schools = relationship(
+        "School", foreign_keys="School.plan_id", back_populates="plan"
+    )
 
     def __repr__(self):
         return (

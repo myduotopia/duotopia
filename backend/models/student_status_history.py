@@ -23,9 +23,10 @@ class StudentStatusHistory(Base):
         nullable=False,
         index=True,
     )
+    # SET NULL (not CASCADE): a school delete must not wipe billing-audit rows.
     school_id = Column(
         UUID,
-        ForeignKey("schools.id", ondelete="CASCADE"),
+        ForeignKey("schools.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

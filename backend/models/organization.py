@@ -146,7 +146,7 @@ class School(Base):
 
     # Relationships
     organization = relationship("Organization", back_populates="schools")
-    plan = relationship("Plan", foreign_keys=[plan_id])
+    plan = relationship("Plan", foreign_keys=[plan_id], back_populates="schools")
     teacher_schools = relationship(
         "TeacherSchool", back_populates="school", cascade="all, delete-orphan"
     )
