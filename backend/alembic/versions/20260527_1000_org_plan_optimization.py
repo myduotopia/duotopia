@@ -106,9 +106,7 @@ def upgrade() -> None:
         END $$;
         """
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_schools_plan_id ON schools (plan_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_schools_plan_id ON schools (plan_id)")
 
     # ------------------------------------------------------------------
     # 3. plans: teacher_seats + annual_fee (PER-TEACHER) + topup_discount

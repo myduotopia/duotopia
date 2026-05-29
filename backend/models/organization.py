@@ -53,9 +53,7 @@ class Organization(Base):
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 
     # 機構類型：'institution'（機構，依學生人數計費）/ 'group_buy'（團購）
-    org_type = Column(
-        String(20), nullable=False, server_default="institution"
-    )
+    org_type = Column(String(20), nullable=False, server_default="institution")
     # 機構專用：單位學生月費（NT$）。團購機構為 NULL。
     per_student_price = Column(Integer, nullable=True)
 
