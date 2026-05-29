@@ -1007,8 +1007,16 @@ function SortableRowInner({
           <textarea
             value={row.text}
             onChange={(e) => {
-              const words = e.target.value.trim().split(/\s+/).filter(Boolean);
-              if (words.length > MAX_WORDS_PER_ITEM) return;
+              const newCount = e.target.value
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean).length;
+              const prevCount =
+                row.text?.trim().split(/\s+/).filter(Boolean).length ?? 0;
+              // Allow edits that reduce or keep word count; only block when
+              // user is adding words beyond the cap. This lets users shrink a
+              // row that was duplicated while still over the limit.
+              if (newCount > MAX_WORDS_PER_ITEM && newCount > prevCount) return;
               handleUpdateRow(index, "text", e.target.value);
               e.target.style.height = "auto";
               e.target.style.height = e.target.scrollHeight + "px";
@@ -2189,11 +2197,18 @@ const ReadingAssessmentPanel = forwardRef<
   };
 
   const handleBatchPaste = async (autoTTS: boolean, autoTranslate: boolean) => {
-    // 分割文字，每行一個項目
-    const rawLines = batchPasteText
+    // 預處理：把破折號（— 或連續 ——）替換為單一空白，避免黏字
+    const normalized = batchPasteText.replace(/—+/g, " ");
+    // 分割文字：先依換行，再依句末標點 . ? !（含全形）切成獨立 item
+    // 句末標點會保留在前一句尾端
+    const rawLines = normalized
       .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+      .flatMap((line) =>
+        line
+          .split(/(?<=[.?!。？！])\s+/)
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0),
+      );
 
     // 1. 貼上框內部去重（忽略大小寫）
     const seen = new Set<string>();

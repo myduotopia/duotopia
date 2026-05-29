@@ -120,7 +120,7 @@ export function BatchPasteArea({
             value={text}
             onChange={(e) => handleChange(e.target.value)}
             placeholder={placeholder}
-            className="flex-1 px-3 py-2 font-mono text-sm resize-none outline-none leading-[1.625rem] overflow-hidden"
+            className="flex-1 px-3 py-2 font-mono text-sm resize-none outline-none leading-[1.625rem] overflow-y-auto"
             style={{
               height: `${Math.max(lines.length, 8) * 1.625 + 1}rem`,
             }}
