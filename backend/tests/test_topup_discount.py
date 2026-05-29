@@ -128,6 +128,16 @@ def test_ignores_inactive_school(shared_test_session, teacher, org):
     assert get_teacher_topup_discount(teacher, shared_test_session) is None
 
 
+def test_ignores_inactive_plan(shared_test_session, teacher, org):
+    # Deactivated group-buy plan (contract ended) should not produce a discount
+    plan = _make_group_buy_plan(shared_test_session, "團購-30席", 0.90)
+    plan.is_active = False
+    shared_test_session.commit()
+    _bind(shared_test_session, teacher, org, plan)
+
+    assert get_teacher_topup_discount(teacher, shared_test_session) is None
+
+
 def test_ignores_school_with_no_plan_id(shared_test_session, teacher, org):
     # School without plan_id (institution school, not group-buy)
     s = School(

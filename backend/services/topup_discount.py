@@ -25,6 +25,7 @@ def get_teacher_topup_discount(teacher: Teacher, db: Session) -> Optional[Decima
             TeacherSchool.teacher_id == teacher.id,
             TeacherSchool.is_active.is_(True),
             School.is_active.is_(True),
+            Plan.is_active.is_(True),
             Plan.topup_discount.isnot(None),
         )
         .scalar()

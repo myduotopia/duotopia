@@ -5,6 +5,7 @@ Credit Packages API - Purchase and manage credit packages (point bundles)
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import logging
@@ -157,9 +158,14 @@ async def purchase_credit_package(
     # to one or more active group-buy schools, charge the best discounted
     # amount instead of the package list price. Frontend price is never
     # trusted — amount is server-side from CREDIT_PACKAGES, then discounted.
+    # Stay in Decimal end-to-end (no float conversion) for financial precision.
     topup_discount = get_teacher_topup_discount(current_teacher, db)
     if topup_discount is not None:
-        amount = int(round(amount * float(topup_discount)))
+        amount = int(
+            (Decimal(amount) * topup_discount).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        )
 
     # Audit trail
     start_time = time.time()
