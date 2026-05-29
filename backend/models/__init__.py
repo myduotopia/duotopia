@@ -57,6 +57,9 @@ from .organization import (
     StudentSchool,
 )
 
+# Student status history (issue #768 — per-head billing trail)
+from .student_status_history import StudentStatusHistory
+
 # Classroom models
 from .classroom import Classroom, ClassroomStudent
 
@@ -130,6 +133,8 @@ __all__ = [
     "TeacherSchool",
     "ClassroomSchool",
     "StudentSchool",
+    # Student status history
+    "StudentStatusHistory",
     # Classrooms
     "Classroom",
     "ClassroomStudent",
