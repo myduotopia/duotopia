@@ -101,11 +101,17 @@ def upgrade() -> None:
         END $$;
         """
     )
+    # pg_constraint is global — scope by table OID so a same-named constraint
+    # on another table can't silently skip this FK. See incident in
+    # 20260422_1200_fix_students_identity_fk.py.
     op.execute(
         """
         DO $$ BEGIN
             IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = 'fk_schools_plan_id'
+                SELECT 1 FROM pg_constraint c
+                JOIN pg_class cls ON c.conrelid = cls.oid
+                WHERE c.conname = 'fk_schools_plan_id'
+                  AND cls.relname = 'schools'
             ) THEN
                 ALTER TABLE schools
                 ADD CONSTRAINT fk_schools_plan_id
@@ -207,12 +213,16 @@ def upgrade() -> None:
         )
         """
     )
+    # All three FK guards scope by table OID (see note above on
+    # fk_schools_plan_id).
     op.execute(
         """
         DO $$ BEGIN
             IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint
-                WHERE conname = 'fk_student_status_history_student'
+                SELECT 1 FROM pg_constraint c
+                JOIN pg_class cls ON c.conrelid = cls.oid
+                WHERE c.conname = 'fk_student_status_history_student'
+                  AND cls.relname = 'student_status_history'
             ) THEN
                 ALTER TABLE student_status_history
                 ADD CONSTRAINT fk_student_status_history_student
@@ -226,8 +236,10 @@ def upgrade() -> None:
         """
         DO $$ BEGIN
             IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint
-                WHERE conname = 'fk_student_status_history_school'
+                SELECT 1 FROM pg_constraint c
+                JOIN pg_class cls ON c.conrelid = cls.oid
+                WHERE c.conname = 'fk_student_status_history_school'
+                  AND cls.relname = 'student_status_history'
             ) THEN
                 ALTER TABLE student_status_history
                 ADD CONSTRAINT fk_student_status_history_school
@@ -241,8 +253,10 @@ def upgrade() -> None:
         """
         DO $$ BEGIN
             IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint
-                WHERE conname = 'fk_student_status_history_changed_by'
+                SELECT 1 FROM pg_constraint c
+                JOIN pg_class cls ON c.conrelid = cls.oid
+                WHERE c.conname = 'fk_student_status_history_changed_by'
+                  AND cls.relname = 'student_status_history'
             ) THEN
                 ALTER TABLE student_status_history
                 ADD CONSTRAINT fk_student_status_history_changed_by
