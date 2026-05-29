@@ -24,6 +24,7 @@ from models import (
 )
 from routers.teachers import get_current_teacher
 from services.tappay_service import TapPayService
+from services.topup_discount import get_teacher_topup_discount
 from config.plans import (
     CREDIT_PACKAGES,
     ORG_ALLOWED_PACKAGES,
@@ -151,6 +152,14 @@ async def purchase_credit_package(
     pkg_config = CREDIT_PACKAGES[package_id]
     amount = pkg_config["price"]
     points_total = pkg_config["points"] + pkg_config["bonus"]
+
+    # Group-buy topup discount (issue #768 Phase 2): if the teacher belongs
+    # to one or more active group-buy schools, charge the best discounted
+    # amount instead of the package list price. Frontend price is never
+    # trusted — amount is server-side from CREDIT_PACKAGES, then discounted.
+    topup_discount = get_teacher_topup_discount(current_teacher, db)
+    if topup_discount is not None:
+        amount = int(round(amount * float(topup_discount)))
 
     # Audit trail
     start_time = time.time()

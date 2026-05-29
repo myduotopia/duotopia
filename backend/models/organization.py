@@ -3,15 +3,16 @@ Organization hierarchy models
 """
 
 from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
     Column,
-    Integer,
-    String,
     DateTime,
     ForeignKey,
-    Boolean,
+    Index,
+    Integer,
+    String,
     Text,
     UniqueConstraint,
-    Index,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -94,6 +95,17 @@ class Organization(Base):
         order_by="CreditPackage.expires_at.asc()",
     )
 
+    __table_args__ = (
+        CheckConstraint(
+            "org_type IN ('institution', 'group_buy')",
+            name="ck_organizations_org_type_valid",
+        ),
+        CheckConstraint(
+            "per_student_price IS NULL OR per_student_price > 0",
+            name="ck_organizations_per_student_price_positive",
+        ),
+    )
+
     def __repr__(self):
         return f"<Organization(id={self.id}, name={self.name})>"
 
@@ -155,6 +167,13 @@ class School(Base):
     )
     student_enrollments = relationship(
         "StudentSchool", back_populates="school", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "teacher_seat_limit IS NULL OR teacher_seat_limit > 0",
+            name="ck_schools_teacher_seat_limit_positive",
+        ),
     )
 
     def __repr__(self):
