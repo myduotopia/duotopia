@@ -7,7 +7,7 @@ Create Date: 2026-05-28 10:00:00
 Adds:
   1. CHECK on schools.teacher_seat_limit (missing in Phase 1 — sibling
      plans.teacher_seats had it inline, this one didn't).
-  2. NAMED CHECK constraints for 5 fields that had inline (auto-named)
+  2. NAMED CHECK constraints for 6 fields that had inline (auto-named)
      CHECKs in Phase 1. The auto-named ones (e.g. organizations_org_type_check)
      stay in place; these add named ck_<table>_<col>_<rule> versions that
      match the ORM CheckConstraint names in the model layer. Redundant in
@@ -60,7 +60,7 @@ def upgrade() -> None:
             ) THEN
                 ALTER TABLE schools
                 ADD CONSTRAINT ck_schools_teacher_seat_limit_positive
-                CHECK (teacher_seat_limit > 0);
+                CHECK (teacher_seat_limit IS NULL OR teacher_seat_limit > 0);
             END IF;
         END $$;
         """
@@ -103,7 +103,8 @@ def upgrade() -> None:
             "plans",
             "topup_discount",
             "ck_plans_topup_discount_range",
-            "topup_discount IS NULL OR (topup_discount >= 0 AND topup_discount <= 1)",
+            # Reject 0: 100% off → NT$0 charge → TapPay rejects.
+            "topup_discount IS NULL OR (topup_discount > 0 AND topup_discount <= 1)",
         ),
         (
             "student_status_history",
@@ -112,6 +113,12 @@ def upgrade() -> None:
             "status IN ('active', 'inactive')",
         ),
     ]
+    # NOTE: f-string interpolation here is safe because every value in
+    # _NAMED_CHECKS is a hardcoded constant defined in this file. Do NOT
+    # adapt this loop to read table/column/predicate from a config file,
+    # request body, or any user-controllable source — that would become
+    # SQL injection. Prefer separate op.execute() calls if values become
+    # dynamic.
     for table, column, constraint, predicate in _NAMED_CHECKS:
         op.execute(
             f"""

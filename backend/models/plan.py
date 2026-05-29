@@ -83,8 +83,12 @@ class Plan(Base):
             "annual_fee IS NULL OR annual_fee > 0",
             name="ck_plans_annual_fee_positive",
         ),
+        # Reject 0 (= 100% off → NT$0 charge → TapPay rejects). Real
+        # group-buy discounts are 0.85–0.95; if a "free" plan is ever
+        # needed, that's a separate comped-subscription flow, not a
+        # discounted purchase.
         CheckConstraint(
-            "topup_discount IS NULL OR (topup_discount >= 0 AND topup_discount <= 1)",
+            "topup_discount IS NULL OR (topup_discount > 0 AND topup_discount <= 1)",
             name="ck_plans_topup_discount_range",
         ),
     )
