@@ -52,6 +52,13 @@ class Organization(Base):
     # 狀態
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 
+    # 機構類型：'institution'（機構，依學生人數計費）/ 'group_buy'（團購）
+    org_type = Column(
+        String(20), nullable=False, server_default="institution"
+    )
+    # 機構專用：單位學生月費（NT$）。團購機構為 NULL。
+    per_student_price = Column(Integer, nullable=True)
+
     # 授權限制
     teacher_limit = Column(Integer, nullable=True)  # 教師授權數上限（NULL = 無限制）
 
@@ -123,6 +130,13 @@ class School(Base):
     # 狀態
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 
+    # 團購方案專用：綁定的方案（10/30/50 席）。機構底下 schools 為 NULL。
+    plan_id = Column(
+        Integer, ForeignKey("plans.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # 團購方案專用：該團教師上限。機構底下 schools 為 NULL。
+    teacher_seat_limit = Column(Integer, nullable=True)
+
     # 設定
     settings = Column(JSONType, nullable=True)  # 學校層級設定
 
@@ -134,6 +148,7 @@ class School(Base):
 
     # Relationships
     organization = relationship("Organization", back_populates="schools")
+    plan = relationship("Plan", foreign_keys=[plan_id])
     teacher_schools = relationship(
         "TeacherSchool", back_populates="school", cascade="all, delete-orphan"
     )
