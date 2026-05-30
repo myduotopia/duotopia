@@ -7,7 +7,16 @@ per-student monthly billing can compute headcount over a billing period
 Append-only audit trail — never mutated in place.
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Index
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.sql import func
 from database import Base
 from .base import UUID
@@ -47,6 +56,10 @@ class StudentStatusHistory(Base):
             "ix_student_status_history_student_changed",
             "student_id",
             "changed_at",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'inactive')",
+            name="ck_student_status_history_status_valid",
         ),
     )
 

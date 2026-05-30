@@ -10,7 +10,16 @@ Use `config.plans.get_plan_price(name)` and `get_plan_quota(name)` to read —
 those helpers prefer the DB row and fall back to the config constants.
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -63,6 +72,25 @@ class Plan(Base):
     # Group-buy: schools bound to this plan (empty for individual plans).
     schools = relationship(
         "School", foreign_keys="School.plan_id", back_populates="plan"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "teacher_seats IS NULL OR teacher_seats > 0",
+            name="ck_plans_teacher_seats_positive",
+        ),
+        CheckConstraint(
+            "annual_fee IS NULL OR annual_fee > 0",
+            name="ck_plans_annual_fee_positive",
+        ),
+        # Reject 0 (= 100% off → NT$0 charge → TapPay rejects). Real
+        # group-buy discounts are 0.85–0.95; if a "free" plan is ever
+        # needed, that's a separate comped-subscription flow, not a
+        # discounted purchase.
+        CheckConstraint(
+            "topup_discount IS NULL OR (topup_discount > 0 AND topup_discount <= 1)",
+            name="ck_plans_topup_discount_range",
+        ),
     )
 
     def __repr__(self):
