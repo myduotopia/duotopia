@@ -325,6 +325,7 @@ export interface RegisterRequest {
   password: string;
   name: string;
   phone?: string;
+  promo_code?: string;
 }
 
 // ============ Form Types ============

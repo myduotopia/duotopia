@@ -301,6 +301,10 @@ jobs:
               'oauth_identities',
               'blog_posts', 'blog_categories', 'blog_post_categories',
               'assignment_analysis_reports',
+              -- Promo code 推薦獎勵系統
+              'promo_codes', 'promo_referrals', 'promo_reward_configs', 'promo_reward_events',
+              -- 組織方案：學生狀態歷史
+              'student_status_history',
               -- n8n 系統表（外部服務，不適用 RLS）
               'annotation_tag_entity', 'auth_identity', 'auth_provider_sync_history', 'binary_data',
               'chat_hub_agents', 'chat_hub_messages', 'chat_hub_sessions', 'credentials_entity',

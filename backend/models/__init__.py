@@ -38,6 +38,14 @@ from .credit_package_definition import CreditPackageDefinition
 # Plan models (admin-editable price/quota overrides)
 from .plan import Plan
 
+# Promo code / referral models (issue #637)
+from .promo_code import (
+    PromoCode,
+    PromoReferral,
+    PromoRewardConfig,
+    PromoRewardEvent,
+)
+
 # Organization models
 from .organization import (
     Organization,
@@ -48,6 +56,9 @@ from .organization import (
     ClassroomSchool,
     StudentSchool,
 )
+
+# Student status history (issue #768 — per-head billing trail)
+from .student_status_history import StudentStatusHistory
 
 # Classroom models
 from .classroom import Classroom, ClassroomStudent
@@ -110,6 +121,11 @@ __all__ = [
     "CreditPackageDefinition",
     # Plans
     "Plan",
+    # Promo codes / referrals
+    "PromoCode",
+    "PromoReferral",
+    "PromoRewardConfig",
+    "PromoRewardEvent",
     # Organizations
     "Organization",
     "School",
@@ -117,6 +133,8 @@ __all__ = [
     "TeacherSchool",
     "ClassroomSchool",
     "StudentSchool",
+    # Student status history
+    "StudentStatusHistory",
     # Classrooms
     "Classroom",
     "ClassroomStudent",

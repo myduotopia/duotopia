@@ -77,10 +77,26 @@ def _get_plan_override(plan_name: str, db=None):
         return None
 
 
+def _guard_group_buy(row, plan_name: str) -> None:
+    """Reject group-buy plans for the individual-plan price/quota helpers.
+
+    Group-buy billing is `annual_fee × teacher_seats` (see issue #768);
+    silently returning DEFAULT_PRICE (=299) for these names would invoice
+    NT$299/month instead. Detection is by `row.teacher_seats is not None`,
+    not by name pattern, so it stays correct if seed names change.
+    """
+    if row is not None and row.teacher_seats is not None:
+        raise ValueError(
+            f"get_plan_price/quota does not apply to group-buy plan {plan_name!r}; "
+            "use the checkout flow with annual_fee × teacher_seats instead."
+        )
+
+
 def get_plan_price(plan_name: str, db=None) -> int:
     """Return the price for ``plan_name``. Prefer DB override; fall back to
-    PLAN_PRICES; finally DEFAULT_PRICE."""
+    PLAN_PRICES; finally DEFAULT_PRICE. Raises ValueError for group-buy plans."""
     row = _get_plan_override(plan_name, db=db)
+    _guard_group_buy(row, plan_name)
     if row is not None and row.price is not None:
         return row.price
     return PLAN_PRICES.get(plan_name, DEFAULT_PRICE)
@@ -88,8 +104,9 @@ def get_plan_price(plan_name: str, db=None) -> int:
 
 def get_plan_quota(plan_name: str, db=None) -> int:
     """Return the monthly quota for ``plan_name``. Prefer DB override; fall
-    back to PLAN_QUOTAS; finally 0."""
+    back to PLAN_QUOTAS; finally 0. Raises ValueError for group-buy plans."""
     row = _get_plan_override(plan_name, db=db)
+    _guard_group_buy(row, plan_name)
     if row is not None and row.quota is not None:
         return row.quota
     return PLAN_QUOTAS.get(plan_name, 0)

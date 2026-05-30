@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Sheet,
   SheetContent,
@@ -20,8 +20,9 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
+  Ticket,
 } from "lucide-react";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { validatePasswordStrength } from "@/utils/passwordValidation";
 
@@ -38,6 +39,7 @@ export default function TeacherRegisterSheet({
 }: TeacherRegisterSheetProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -48,7 +50,26 @@ export default function TeacherRegisterSheet({
     confirmPassword: "",
     name: "",
     phone: "",
+    promoCode: "",
   });
+
+  // Tracks an intentional clear so reopening the sheet (with ?promo= still in
+  // the URL) doesn't silently re-inject a code the user removed.
+  const userClearedPromo = useRef(false);
+
+  // Prefill the promo code from a ?promo= URL param (referral links). Re-checks
+  // when the sheet opens (it may stay mounted across opens), only fills when
+  // empty, and skips once the user has intentionally cleared it. Clamped to the
+  // DB column length so an oversized URL code can't 422 on submit.
+  useEffect(() => {
+    if (!isOpen) return;
+    const promo = searchParams.get("promo")?.trim().slice(0, 16);
+    if (promo && !userClearedPromo.current) {
+      setFormData((prev) =>
+        prev.promoCode ? prev : { ...prev, promoCode: promo },
+      );
+    }
+  }, [isOpen, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +103,7 @@ export default function TeacherRegisterSheet({
         password: trimmedPassword,
         name: formData.name,
         phone: formData.phone || undefined,
+        promo_code: formData.promoCode.trim() || undefined,
       })) as RegisterResponse;
 
       onClose();
@@ -98,7 +120,21 @@ export default function TeacherRegisterSheet({
       }
     } catch (err) {
       console.error("Registration error:", err);
-      setError(t("teacherRegister.errors.registerFailed"));
+      // 422 with a promo code most likely means the code is invalid / revoked.
+      if (err instanceof ApiError && err.status === 422 && formData.promoCode) {
+        setError(
+          t(
+            "teacherRegister.errors.invalidPromoCode",
+            "推薦碼無效或已停用，已自動清除欄位，請重試。",
+          ),
+        );
+        // Also mark as intentionally cleared, so the URL ?promo= effect
+        // doesn't immediately re-inject the same bad code on the next render.
+        userClearedPromo.current = true;
+        setFormData((prev) => ({ ...prev, promoCode: "" }));
+      } else {
+        setError(t("teacherRegister.errors.registerFailed"));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -106,12 +142,16 @@ export default function TeacherRegisterSheet({
 
   const handleClose = () => {
     setError("");
+    // Closing the sheet means the form is wiped; clearing the ref lets a fresh
+    // ?promo= URL parameter populate the field on the next open.
+    userClearedPromo.current = false;
     setFormData({
       email: "",
       password: "",
       confirmPassword: "",
       name: "",
       phone: "",
+      promoCode: "",
     });
     onClose();
   };
@@ -207,6 +247,33 @@ export default function TeacherRegisterSheet({
                     setFormData({ ...formData, phone: e.target.value })
                   }
                   className="pl-10"
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="sheet-reg-promo">
+                {t("teacherRegister.form.promoCode", "推薦碼（選填）")}
+              </Label>
+              <div className="relative">
+                <Ticket className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="sheet-reg-promo"
+                  type="text"
+                  placeholder={t(
+                    "teacherRegister.form.promoCodePlaceholder",
+                    "輸入推薦碼",
+                  )}
+                  value={formData.promoCode}
+                  onChange={(e) => {
+                    // Empty after editing = intentional clear; don't re-inject
+                    // the URL code on the next open.
+                    userClearedPromo.current = e.target.value.trim() === "";
+                    setFormData({ ...formData, promoCode: e.target.value });
+                  }}
+                  className="pl-10"
+                  maxLength={16}
                   disabled={isLoading}
                 />
               </div>

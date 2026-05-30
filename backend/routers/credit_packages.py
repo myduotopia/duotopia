@@ -5,6 +5,7 @@ Credit Packages API - Purchase and manage credit packages (point bundles)
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import logging
@@ -24,6 +25,7 @@ from models import (
 )
 from routers.teachers import get_current_teacher
 from services.tappay_service import TapPayService
+from services.topup_discount import get_teacher_topup_discount
 from config.plans import (
     CREDIT_PACKAGES,
     ORG_ALLOWED_PACKAGES,
@@ -151,6 +153,19 @@ async def purchase_credit_package(
     pkg_config = CREDIT_PACKAGES[package_id]
     amount = pkg_config["price"]
     points_total = pkg_config["points"] + pkg_config["bonus"]
+
+    # Group-buy topup discount (issue #768 Phase 2): if the teacher belongs
+    # to one or more active group-buy schools, charge the best discounted
+    # amount instead of the package list price. Frontend price is never
+    # trusted — amount is server-side from CREDIT_PACKAGES, then discounted.
+    # Stay in Decimal end-to-end (no float conversion) for financial precision.
+    topup_discount = get_teacher_topup_discount(current_teacher, db)
+    if topup_discount is not None:
+        amount = int(
+            (Decimal(amount) * topup_discount).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        )
 
     # Audit trail
     start_time = time.time()
@@ -328,6 +343,18 @@ async def purchase_credit_package(
             f"Credit package purchased: teacher={current_teacher.id} "
             f"pkg={package_id} points={points_total} expires={expires_at.date()}"
         )
+
+        # Issue #637: reward the referrer on the referred teacher's first paid
+        # credit-package purchase (non-fatal — never block the purchase).
+        try:
+            from services.promo_reward_service import dispatch_credit_package_reward
+
+            dispatch_credit_package_reward(db, current_teacher.id, package_id)
+        except Exception as e:
+            logger.error(
+                f"Referral credit-package reward failed for teacher "
+                f"{current_teacher.id}: {e}"
+            )
 
         return CreditPackagePurchaseResponse(
             success=True,

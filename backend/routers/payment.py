@@ -416,6 +416,20 @@ async def process_payment(
             )
             # Continue execution - the important part (subscription update) is done
 
+        # Issue #637: reward the referrer on the referred teacher's first paid
+        # subscription (non-fatal — never block payment).
+        try:
+            from services.promo_reward_service import dispatch_subscription_reward
+
+            dispatch_subscription_reward(
+                db, current_teacher.id, payment_request.plan_name
+            )
+        except Exception as e:
+            logger.error(
+                f"Referral subscription reward failed for teacher "
+                f"{current_teacher.id}: {e}"
+            )
+
         return PaymentResponse(
             success=True,
             transaction_id=external_transaction_id,
@@ -970,7 +984,13 @@ async def get_subscription_status(
                 "expires_at": pkg.expires_at.isoformat() if pkg.expires_at else None,
                 "status": pkg.status,
                 "source": pkg.source,
-                "is_expired": pkg.expires_at <= now if pkg.expires_at else True,
+                # NULL expires_at = no expiry (permanent), not expired.
+                # expires_at is nullable=False at the DB level so a NULL would
+                # be an invariant violation. The defensive `is not None` keeps
+                # the expression total — and if a NULL ever sneaked in via raw
+                # SQL, both this endpoint and QuotaService (which filters
+                # `expires_at > now`) would exclude the row identically.
+                "is_expired": (pkg.expires_at is not None and pkg.expires_at <= now),
             }
             for pkg in credit_packages
         ]

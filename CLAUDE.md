@@ -123,10 +123,14 @@ op.execute("""
 """)
 
 # 新增欄位 - 使用 IF NOT EXISTS + nullable 或 DEFAULT
+# 重要：information_schema 必須加 table_schema = 'public'，
+# 否則 Supabase 其他 schema（auth, storage, ...）同名欄位會讓守衛誤判
 op.execute("""
     DO $$ BEGIN
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                      WHERE table_name = 'users' AND column_name = 'new_field') THEN
+                      WHERE table_schema = 'public'
+                        AND table_name = 'users'
+                        AND column_name = 'new_field') THEN
             ALTER TABLE users ADD COLUMN new_field VARCHAR(50) DEFAULT 'default_value';
         END IF;
     END $$;
@@ -136,10 +140,42 @@ op.execute("""
 op.execute("CREATE INDEX IF NOT EXISTS idx_name ON table_name (column)")
 
 # 新增 Constraint - 檢查後再建立
+# 重要：pg_constraint 是全域 catalog，constraint 名稱只在「同一個 table 內」唯一。
+# 必須 JOIN pg_class 用 conrelid + relname 鎖定 table，否則其他 table 的同名
+# constraint 會讓守衛誤判（已發生 prod 事故：20260422_1200_fix_students_identity_fk.py）
 op.execute("""
     DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_table_column') THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint c
+            JOIN pg_class cls ON c.conrelid = cls.oid
+            WHERE c.conname = 'uq_table_column'
+              AND cls.relname = 'table_name'
+        ) THEN
             ALTER TABLE table_name ADD CONSTRAINT uq_table_column UNIQUE (column);
+        END IF;
+    END $$;
+""")
+
+# 對既有欄位加 CHECK 約束 — 拆兩段守衛
+# 1) 欄位存在守衛 (information_schema, scoped to public)
+# 2) 約束存在守衛 (pg_constraint, scoped by table OID + 命名 constraint)
+# 這樣即使欄位曾被手動加入但漏了 CHECK，再跑 migration 也能補上
+op.execute("""
+    DO $$ BEGIN
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'schools'
+              AND column_name = 'teacher_seat_limit'
+        ) AND NOT EXISTS (
+            SELECT 1 FROM pg_constraint c
+            JOIN pg_class cls ON c.conrelid = cls.oid
+            WHERE c.conname = 'ck_schools_teacher_seat_limit_positive'
+              AND cls.relname = 'schools'
+        ) THEN
+            ALTER TABLE schools
+            ADD CONSTRAINT ck_schools_teacher_seat_limit_positive
+            CHECK (teacher_seat_limit > 0);
         END IF;
     END $$;
 """)

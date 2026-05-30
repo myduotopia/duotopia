@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import OneCampusBindSection from "@/components/settings/OneCampusBindSection";
+import PromoCodeCard from "@/components/PromoCodeCard";
 import {
   User,
   Mail,
@@ -19,10 +20,18 @@ import {
   Gauge,
   Eye,
   EyeOff,
+  Share2,
+  ArrowRight,
+  Zap,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { validatePasswordStrength } from "@/utils/passwordValidation";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import {
+  buildQuotaSources,
+  hexAlpha,
+  type QuotaSourceItem,
+} from "@/lib/quotaSources";
 
 interface TeacherInfo {
   id: number;
@@ -40,6 +49,7 @@ interface QuotaInfo {
   quota_remaining: number;
   plan_name: string;
   source: "personal" | "organization";
+  sources: QuotaSourceItem[];
 }
 
 // 配額卡片獨立元件（必須在 TeacherLayout/WorkspaceProvider 內才能使用 useWorkspace）
@@ -53,32 +63,45 @@ function QuotaCard() {
 
   const loadQuotaInfo = async () => {
     try {
-      const params = new URLSearchParams();
+      // Aggregated view: subscription period + every active credit package
+      // (trial, referral bonus, purchased packs). Mirrors what admins see in
+      // the per-teacher list, so the user sees their FULL available balance.
+      // Org mode is read from the org's points balance instead.
       if (mode === "organization" && selectedOrganization) {
-        params.append("organization_id", selectedOrganization.id);
+        const res = await apiClient.get<{
+          total_points: number;
+          used_points: number;
+        }>(`/api/organizations/${selectedOrganization.id}/points`);
+        if (typeof res.total_points === "number" && res.total_points > 0) {
+          setQuotaInfo({
+            quota_total: res.total_points,
+            quota_used: res.used_points ?? 0,
+            quota_remaining: Math.max(
+              0,
+              res.total_points - (res.used_points ?? 0),
+            ),
+            plan_name: selectedOrganization.name,
+            source: "organization",
+            sources: [], // org mode has no per-source breakdown
+          });
+        } else {
+          setQuotaInfo(null);
+        }
+        return;
       }
-      const url = `/api/teachers/subscription${params.toString() ? `?${params.toString()}` : ""}`;
 
-      const response = await apiClient.get<{
-        subscription_period: {
-          quota_total: number;
-          quota_used: number;
-          plan_name: string;
-        } | null;
-        source?: string;
-      }>(url);
-
-      if (response.subscription_period) {
-        const remaining =
-          response.subscription_period.quota_total -
-          response.subscription_period.quota_used;
+      const res = await apiClient.getSubscriptionStatus();
+      if (typeof res.quota_total === "number" && res.quota_total > 0) {
         setQuotaInfo({
-          quota_total: response.subscription_period.quota_total,
-          quota_used: response.subscription_period.quota_used,
-          quota_remaining: Math.max(0, remaining),
-          plan_name: response.subscription_period.plan_name,
-          source:
-            (response.source as "personal" | "organization") || "personal",
+          quota_total: res.quota_total,
+          quota_used: res.quota_used ?? 0,
+          quota_remaining: Math.max(
+            0,
+            (res.quota_total ?? 0) - (res.quota_used ?? 0),
+          ),
+          plan_name: res.plan ?? "",
+          source: "personal",
+          sources: buildQuotaSources(res),
         });
       } else {
         setQuotaInfo(null);
@@ -100,7 +123,7 @@ function QuotaCard() {
       </CardHeader>
       <CardContent>
         {quotaInfo ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <p className="text-sm text-gray-500">
               目前工作區：
               <span className="font-medium text-gray-700">
@@ -110,41 +133,185 @@ function QuotaCard() {
               </span>
             </p>
 
-            <div className="flex items-baseline gap-2">
-              <span
-                className={`text-2xl font-bold ${
-                  quotaInfo.quota_remaining > quotaInfo.quota_total * 0.3
-                    ? "text-green-600"
-                    : quotaInfo.quota_remaining > quotaInfo.quota_total * 0.1
-                      ? "text-orange-600"
-                      : "text-red-600"
-                }`}
+            <div className="flex items-end justify-between gap-2">
+              <div className="flex items-baseline gap-2">
+                <span
+                  className={`text-3xl font-bold ${
+                    quotaInfo.quota_remaining > quotaInfo.quota_total * 0.3
+                      ? "text-green-600"
+                      : quotaInfo.quota_remaining > quotaInfo.quota_total * 0.1
+                        ? "text-orange-600"
+                        : "text-red-600"
+                  }`}
+                >
+                  {quotaInfo.quota_remaining.toLocaleString()}
+                </span>
+                <span className="text-gray-500">
+                  / {quotaInfo.quota_total.toLocaleString()} 秒
+                </span>
+              </div>
+              <span className="text-xs text-gray-500">
+                已用 {quotaInfo.quota_used.toLocaleString()} 秒
+              </span>
+            </div>
+
+            {/* Stacked-by-source bar (personal). Each segment's width is its
+                share of the visible sources (using sum-of-sources, not
+                quota_total, so a package that expired between the aggregator's
+                two queries can't leave a white gap at the right). Inner dark
+                fill = REMAINING of that source. */}
+            {quotaInfo.sources.length > 0 ? (
+              <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-gray-200 bg-white">
+                {quotaInfo.sources.map((s) => {
+                  const barTotal = Math.max(
+                    1,
+                    quotaInfo.sources.reduce((a, x) => a + x.total, 0),
+                  );
+                  const segPct = (s.total / barTotal) * 100;
+                  const remainingPct =
+                    (Math.max(0, s.total - s.used) / Math.max(1, s.total)) *
+                    100;
+                  return (
+                    <div
+                      key={s.kind}
+                      style={{
+                        width: `${segPct}%`,
+                        backgroundColor: s.bg,
+                      }}
+                    >
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${remainingPct}%`,
+                          backgroundColor: s.fill,
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              // Fallback single bar: width = REMAINING / total, colour by
+              // remaining ratio so the visual matches the headline number.
+              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div
+                  className={`h-2.5 rounded-full ${
+                    quotaInfo.quota_remaining > quotaInfo.quota_total * 0.3
+                      ? "bg-green-500"
+                      : quotaInfo.quota_remaining > quotaInfo.quota_total * 0.1
+                        ? "bg-orange-500"
+                        : "bg-red-500"
+                  }`}
+                  style={{
+                    width: `${Math.max(0, Math.min(100, (quotaInfo.quota_remaining / Math.max(1, quotaInfo.quota_total)) * 100))}%`,
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Per-source rows (personal mode only) */}
+            {quotaInfo.sources.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <div className="text-sm font-semibold text-gray-900">
+                  點數來源
+                </div>
+                <ul className="space-y-2">
+                  {quotaInfo.sources.map((s) => {
+                    // Fill = REMAINING share, so a near-empty source draws as
+                    // an almost-empty bar (matches the headline metaphor).
+                    const remainingPct =
+                      s.total > 0
+                        ? Math.round(
+                            (Math.max(0, s.total - s.used) / s.total) * 100,
+                          )
+                        : 0;
+                    const isReferral = s.kind === "referral";
+                    return (
+                      <li
+                        key={s.kind}
+                        className="rounded-md border bg-gray-50 px-3 py-2"
+                        style={
+                          isReferral
+                            ? {
+                                borderColor: s.fill,
+                                backgroundColor: hexAlpha(s.bg, 0.33),
+                              }
+                            : { borderColor: "#E5E7EB" }
+                        }
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block h-3 w-3 rounded-sm"
+                              style={{ backgroundColor: s.fill }}
+                            />
+                            <span className="text-sm font-medium text-gray-900">
+                              {s.label}
+                            </span>
+                            {isReferral && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[10px] font-semibold"
+                                style={{
+                                  color: s.fill,
+                                  border: `1px solid ${s.fill}`,
+                                }}
+                              >
+                                <Zap className="h-2.5 w-2.5" /> 推薦獎勵點數
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span
+                              className="text-sm font-bold"
+                              style={{ color: s.fill }}
+                            >
+                              {Math.max(0, s.total - s.used).toLocaleString()} /{" "}
+                              {s.total.toLocaleString()}
+                            </span>
+                            <span className="text-[10px] text-gray-500">
+                              已用 {s.used.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white border border-gray-200">
+                          <div
+                            className="h-full"
+                            style={{
+                              width: `${remainingPct}%`,
+                              backgroundColor: s.fill,
+                            }}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {/* CTA to the promo-code card on the same page */}
+            {quotaInfo.source === "personal" && (
+              <a
+                href="#my-promo-code"
+                className="flex items-center justify-between gap-2 rounded-md border border-violet-200 bg-violet-50 px-4 py-3 transition hover:bg-violet-100"
               >
-                {quotaInfo.quota_remaining.toLocaleString()}
-              </span>
-              <span className="text-gray-500">
-                / {quotaInfo.quota_total.toLocaleString()} 秒
-              </span>
-            </div>
-
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div
-                className={`h-2.5 rounded-full transition-all ${
-                  quotaInfo.quota_remaining > quotaInfo.quota_total * 0.3
-                    ? "bg-green-500"
-                    : quotaInfo.quota_remaining > quotaInfo.quota_total * 0.1
-                      ? "bg-orange-500"
-                      : "bg-red-500"
-                }`}
-                style={{
-                  width: `${Math.max(0, Math.min(100, (quotaInfo.quota_remaining / quotaInfo.quota_total) * 100))}%`,
-                }}
-              />
-            </div>
-
-            <p className="text-xs text-gray-400">
-              已使用 {quotaInfo.quota_used.toLocaleString()} 秒
-            </p>
+                <div className="flex items-center gap-3">
+                  <Share2 className="h-4 w-4 text-violet-600" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-violet-800">
+                      想要更多點數？
+                    </span>
+                    <span className="text-xs text-violet-700">
+                      分享你的推薦碼，每邀請一人最高拿 2,000 點。
+                    </span>
+                  </div>
+                </div>
+                <span className="flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white">
+                  前往推薦碼
+                  <ArrowRight className="h-3 w-3" />
+                </span>
+              </a>
+            )}
           </div>
         ) : (
           <p className="text-sm text-gray-500">
@@ -467,6 +634,11 @@ export default function TeacherProfile() {
 
       {/* Quota Info Card */}
       <QuotaCard />
+
+      {/* Promo Code Card (issue #637) */}
+      <div id="my-promo-code" className="scroll-mt-20">
+        <PromoCodeCard />
+      </div>
 
       {/* Password Settings Card */}
       <Card className="mb-6">

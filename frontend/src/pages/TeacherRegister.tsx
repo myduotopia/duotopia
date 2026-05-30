@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, User, Lock, Mail, Phone, Eye, EyeOff } from "lucide-react";
-import { apiClient } from "../lib/api";
+import {
+  Loader2,
+  User,
+  Lock,
+  Mail,
+  Phone,
+  Eye,
+  EyeOff,
+  Ticket,
+} from "lucide-react";
+import { apiClient, ApiError } from "../lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { validatePasswordStrength } from "@/utils/passwordValidation";
@@ -25,6 +34,7 @@ import { sendEvent as gaSendEvent } from "@/services/gaService";
 export default function TeacherRegister() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isAuthenticated = useTeacherAuthStore((state) => state.isAuthenticated);
   const user = useTeacherAuthStore((state) => state.user);
   const [isLoading, setIsLoading] = useState(false);
@@ -46,7 +56,22 @@ export default function TeacherRegister() {
     confirmPassword: "",
     name: "",
     phone: "",
+    promoCode: "",
   });
+
+  // Prefill the promo code from a ?promo= URL param (referral links). Run once
+  // on mount and only when empty, so a later navigation can't re-inject a code
+  // the user manually cleared.
+  useEffect(() => {
+    // Clamp to the DB column length; a value set programmatically bypasses the
+    // input's maxLength, so an oversized URL code would otherwise 422 on submit.
+    const promo = searchParams.get("promo")?.trim().slice(0, 16);
+    if (promo) {
+      setFormData((prev) =>
+        prev.promoCode ? prev : { ...prev, promoCode: promo },
+      );
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +107,7 @@ export default function TeacherRegister() {
         password: trimmedPassword,
         name: formData.name,
         phone: formData.phone || undefined,
+        promo_code: formData.promoCode.trim() || undefined,
       })) as RegisterResponse;
 
       // 🔴 不要自動登入！顯示驗證提示
@@ -107,8 +133,20 @@ export default function TeacherRegister() {
       }
     } catch (err) {
       console.error("Registration error:", err);
-      // Bug1 Fix: Always use i18n translation, don't show backend error message directly
-      setError(t("teacherRegister.errors.registerFailed"));
+      // 422 with a promo code most likely means the code is invalid / revoked.
+      // Tell the user specifically and wipe the field so a retry isn't blocked
+      // by the same bad value — the rest of the form stays as the user typed.
+      if (err instanceof ApiError && err.status === 422 && formData.promoCode) {
+        setError(
+          t(
+            "teacherRegister.errors.invalidPromoCode",
+            "推薦碼無效或已停用，已自動清除欄位，請重試。",
+          ),
+        );
+        setFormData((prev) => ({ ...prev, promoCode: "" }));
+      } else {
+        setError(t("teacherRegister.errors.registerFailed"));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -198,6 +236,30 @@ export default function TeacherRegister() {
                       setFormData({ ...formData, phone: e.target.value })
                     }
                     className="pl-10"
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="promoCode">
+                  {t("teacherRegister.form.promoCode", "推薦碼（選填）")}
+                </Label>
+                <div className="relative">
+                  <Ticket className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="promoCode"
+                    type="text"
+                    placeholder={t(
+                      "teacherRegister.form.promoCodePlaceholder",
+                      "輸入推薦碼",
+                    )}
+                    value={formData.promoCode}
+                    onChange={(e) =>
+                      setFormData({ ...formData, promoCode: e.target.value })
+                    }
+                    className="pl-10"
+                    maxLength={16}
                     disabled={isLoading}
                   />
                 </div>
