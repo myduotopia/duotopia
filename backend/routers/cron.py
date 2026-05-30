@@ -133,6 +133,9 @@ async def monthly_renewal_cron(
         "renewal_failed": 0,
         "auto_renew_disabled": 0,
         "skipped": 0,
+        # Group-buy monthly grants (issue #768 Phase 3, 五.2)
+        "group_buy_grants_created": 0,
+        "group_buy_grants_skipped_duplicate": 0,
         "errors": [],
     }
 
@@ -367,13 +370,37 @@ async def monthly_renewal_cron(
             results["renewal_failed"] += 1
             results["errors"].append({"teacher": teacher.email, "error": str(e)})
 
+    # ========================================
+    # Phase 3 (issue #768 五.2): 團購月配發 1000 點
+    # ========================================
+    # For every active group-buy school where the org's annual subscription
+    # is still in date, create a fresh 1000-quota SubscriptionPeriod for
+    # every bound teacher. Old periods get marked expired by Phase 1 above.
+    logger.info("🎁 Phase 3: Group-buy monthly grants")
+    try:
+        from services.group_buy import grant_monthly_for_group_buy
+
+        gb_result = grant_monthly_for_group_buy(now_taipei, db)
+        results["group_buy_grants_created"] = gb_result["grants_created"]
+        results["group_buy_grants_skipped_duplicate"] = gb_result[
+            "grants_skipped_duplicate"
+        ]
+        logger.info(
+            f"✅ Group-buy grants: created={gb_result['grants_created']} "
+            f"skipped_duplicate={gb_result['grants_skipped_duplicate']}"
+        )
+    except Exception as e:
+        logger.error(f"❌ Group-buy grant phase failed: {e}")
+        results["errors"].append({"phase": "group_buy_grant", "error": str(e)})
+
     logger.info(
         f"🔄 Monthly renewal completed: "
         f"Marked expired: {results['marked_expired']}, "
         f"Auto-renewed: {results['auto_renewed']}, "
         f"Failed: {results['renewal_failed']}, "
         f"Auto-renew disabled: {results['auto_renew_disabled']}, "
-        f"Skipped: {results['skipped']}"
+        f"Skipped: {results['skipped']}, "
+        f"Group-buy grants: {results['group_buy_grants_created']}"
     )
 
     return results
