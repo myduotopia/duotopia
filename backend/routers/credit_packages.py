@@ -3,6 +3,7 @@ Credit Packages API - Purchase and manage credit packages (point bundles)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -22,6 +23,7 @@ from models import (
     TransactionType,
     Organization,
     TeacherOrganization,
+    School,
 )
 from routers.teachers import get_current_teacher
 from services.tappay_service import TapPayService
@@ -87,6 +89,22 @@ class OrgRenewRequest(BaseModel):
     prime: str
     organization_id: str  # UUID as string
     cardholder: Optional[Dict[str, Any]] = None
+
+
+class GroupBuyOpenRequest(BaseModel):
+    prime: str
+    plan_name: str  # group-buy plan name e.g. "團購-30席"
+    cardholder: Optional[Dict[str, Any]] = None
+
+
+class GroupBuyOpenResponse(BaseModel):
+    success: bool
+    message: str
+    transaction_id: Optional[str] = None
+    organization_id: Optional[str] = None
+    school_id: Optional[str] = None
+    subscription_end_date: Optional[str] = None
+    teacher_seat_limit: Optional[int] = None
 
 
 # === Endpoints ===
@@ -728,3 +746,383 @@ async def org_renew_credit_package(
     except Exception as e:
         logger.error(f"Org credit package renewal error: {e}")
         raise HTTPException(status_code=500, detail="Renewal processing failed")
+
+
+@router.post("/group-buy-open", response_model=GroupBuyOpenResponse)
+async def open_group_buy(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """Open a new group-buy team (issue #768 Phase 3, 五.3).
+
+    Charges `teacher_seats × annual_fee` (server-authoritative — frontend
+    plan_name is the only input from the client, total is derived from the
+    Plan row) via TapPay, then atomically creates a new Organization,
+    School, owner TeacherSchool binding, and first month's SubscriptionPeriod
+    for the team leader. Subsequent monthly grants are issued by
+    /api/cron/monthly-renewal Phase 3.
+    """
+    if not ENABLE_PAYMENT:
+        return GroupBuyOpenResponse(success=False, message="付款功能尚未開放，敬請期待！")
+
+    # Parse request
+    try:
+        body = await request.body()
+        body_json = json.loads(body)
+        open_request = GroupBuyOpenRequest(**body_json)
+    except Exception as e:
+        logger.error(f"Failed to parse group-buy open request: {e}")
+        raise HTTPException(status_code=400, detail="Invalid request format")
+
+    # Server-side plan validation and amount computation
+    from services.group_buy import (
+        compute_group_buy_total,
+        create_group_buy_org_and_school,
+        create_group_buy_period,
+        validate_group_buy_plan,
+    )
+
+    try:
+        plan = validate_group_buy_plan(open_request.plan_name, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    amount = compute_group_buy_total(plan)
+    now = datetime.now(timezone.utc)
+
+    # Audit trail
+    start_time = time.time()
+    idempotency_key = str(uuid.uuid4())
+    order_number = f"GBOPEN_{now.strftime('%Y%m%d%H%M%S%f')}_{current_teacher.id}"
+    client_host = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent", "")
+    request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
+
+    log_payment_attempt(
+        transaction_id=order_number,
+        user_id=current_teacher.id,
+        user_email=current_teacher.email,
+        amount=amount,
+        plan_name=plan.name,
+        prime_token=open_request.prime,
+        request_data=body_json,
+        user_agent=user_agent,
+        client_ip=client_host,
+    )
+
+    # F2 — Race-safe concurrent-request guard: acquire a Postgres advisory
+    # xact-lock keyed on (teacher_id, plan_name) BEFORE the recent-transaction
+    # lookup so two concurrent requests (mobile retry, double-tap) can't both
+    # pass the check and double-charge. Lock auto-releases at request end.
+    # SQLite tests are single-threaded; the dialect guard is a no-op there.
+    # Use db.get_bind() (SQLAlchemy 2.x idiom) instead of db.bind.
+    if db.get_bind().dialect.name == "postgresql":
+        lock_key = f"group_buy_open:{current_teacher.id}:{plan.name}"
+        locked = db.execute(
+            text("SELECT pg_try_advisory_xact_lock(hashtext(:k))"),
+            {"k": lock_key},
+        ).scalar()
+        if not locked:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Another open-group request is in progress for this "
+                    "teacher; please retry in a moment."
+                ),
+            )
+
+    # R2-F2 — Long-term guard: a teacher already owning an active group-buy
+    # org (role='org_owner') cannot open another. Filtered to orgs created
+    # more than 60 seconds ago so a same-submission retry (network timeout,
+    # mobile re-send) falls through to the idempotency-shortcut block below
+    # and returns the original transaction id, instead of getting 409.
+    existing_owned = (
+        db.query(TeacherOrganization)
+        .join(Organization, Organization.id == TeacherOrganization.organization_id)
+        .filter(
+            TeacherOrganization.teacher_id == current_teacher.id,
+            TeacherOrganization.role == "org_owner",
+            TeacherOrganization.is_active.is_(True),
+            Organization.org_type == "group_buy",
+            Organization.is_active.is_(True),
+            Organization.created_at < now - timedelta(seconds=60),
+        )
+        .first()
+    )
+    if existing_owned is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="您已開設一個團購方案，不可重複開設。",
+        )
+
+    # Idempotency (post-lock): a recent SUCCESS transaction for this
+    # (teacher, plan) within 60s means the previous request already opened
+    # the group — return its transaction id without re-charging.
+    recent = (
+        db.query(TeacherSubscriptionTransaction)
+        .filter(
+            TeacherSubscriptionTransaction.teacher_id == current_teacher.id,
+            TeacherSubscriptionTransaction.subscription_type == plan.name,
+            TeacherSubscriptionTransaction.status == "SUCCESS",
+            TeacherSubscriptionTransaction.processed_at > now - timedelta(seconds=60),
+        )
+        .first()
+    )
+    if recent is not None:
+        logger.warning(
+            f"Duplicate group-buy open detected: teacher={current_teacher.id} "
+            f"plan={plan.name}"
+        )
+        # R2-F5 — Frontend uses org_id / school_id / subscription_end_date to
+        # redirect the user to their new team page. On a 60s retry we must
+        # populate the same fields, not return null.
+        owned_org = (
+            db.query(Organization)
+            .join(
+                TeacherOrganization,
+                TeacherOrganization.organization_id == Organization.id,
+            )
+            .filter(
+                TeacherOrganization.teacher_id == current_teacher.id,
+                TeacherOrganization.role == "org_owner",
+                TeacherOrganization.is_active.is_(True),
+                Organization.org_type == "group_buy",
+            )
+            .order_by(Organization.created_at.desc())
+            .first()
+        )
+        owned_school = (
+            db.query(School)
+            .filter(
+                School.organization_id == owned_org.id,
+                School.plan_id == plan.id,
+            )
+            .order_by(School.created_at.desc())
+            .first()
+            if owned_org is not None
+            else None
+        )
+        return GroupBuyOpenResponse(
+            success=True,
+            message="此筆開團已完成",
+            transaction_id=recent.external_transaction_id,
+            organization_id=str(owned_org.id) if owned_org else None,
+            school_id=str(owned_school.id) if owned_school else None,
+            subscription_end_date=(
+                owned_org.subscription_end_date.isoformat()
+                if owned_org and owned_org.subscription_end_date
+                else None
+            ),
+            teacher_seat_limit=(
+                owned_school.teacher_seat_limit if owned_school else None
+            ),
+        )
+
+    try:
+        tappay_service = TapPayService()
+        gateway_response = tappay_service.process_payment(
+            prime=open_request.prime,
+            amount=amount,
+            details={
+                "item_name": f"Group Buy: {plan.name}",
+                "type": "group_buy_open",
+            },
+            cardholder=open_request.cardholder
+            or {"name": current_teacher.name, "email": current_teacher.email},
+            order_number=order_number,
+            remember=False,
+        )
+
+        if gateway_response.get("status") != 0:
+            error_msg = TapPayService.parse_error_code(
+                gateway_response.get("status"), gateway_response.get("msg")
+            )
+            execution_time = int((time.time() - start_time) * 1000)
+            log_payment_failure(
+                transaction_id=order_number,
+                user_id=current_teacher.id,
+                user_email=current_teacher.email,
+                amount=amount,
+                plan_name=plan.name,
+                error_stage="tappay_api",
+                error_code=str(gateway_response.get("status")),
+                error_message=error_msg,
+                request_data=body_json,
+                response_status=400,
+                response_body=gateway_response,
+                execution_time_ms=execution_time,
+            )
+            failed_txn = TeacherSubscriptionTransaction(
+                teacher_id=current_teacher.id,
+                teacher_email=current_teacher.email,
+                transaction_type=TransactionType.RECHARGE,
+                subscription_type=plan.name,
+                amount=amount,
+                currency="TWD",
+                status="FAILED",
+                months=12,
+                period_start=now,
+                period_end=now + timedelta(days=365),
+                new_end_date=now,
+                idempotency_key=idempotency_key,
+                ip_address=client_host,
+                user_agent=user_agent,
+                request_id=request_id,
+                payment_provider="tappay",
+                payment_method="credit_card",
+                external_transaction_id=gateway_response.get("rec_trade_id"),
+                failure_reason=error_msg,
+                error_code=str(gateway_response.get("status")),
+                gateway_response=gateway_response,
+                processed_at=now,
+            )
+            db.add(failed_txn)
+            db.commit()
+            raise HTTPException(status_code=400, detail=error_msg)
+
+        # F1 — Payment captured. Card is already charged. Any DB failure
+        # past this line means the user paid but did not receive their team,
+        # so we MUST surface a compensation record (manual refund or hand-
+        # provision) — we cannot silently 500 and swallow the rec_trade_id.
+        external_transaction_id = gateway_response.get("rec_trade_id")
+        try:
+            org, school, _, _ = create_group_buy_org_and_school(
+                current_teacher, plan, db, now=now
+            )
+            create_group_buy_period(
+                current_teacher,
+                plan,
+                db,
+                start=now,
+                payment_id=external_transaction_id,
+            )
+
+            success_txn = TeacherSubscriptionTransaction(
+                teacher_id=current_teacher.id,
+                teacher_email=current_teacher.email,
+                transaction_type=TransactionType.RECHARGE,
+                subscription_type=plan.name,
+                amount=amount,
+                currency="TWD",
+                status="SUCCESS",
+                months=12,
+                period_start=now,
+                period_end=org.subscription_end_date,
+                new_end_date=org.subscription_end_date,
+                idempotency_key=idempotency_key,
+                ip_address=client_host,
+                user_agent=user_agent,
+                request_id=request_id,
+                payment_provider="tappay",
+                payment_method="credit_card",
+                external_transaction_id=external_transaction_id,
+                gateway_response=gateway_response,
+                processed_at=now,
+            )
+            db.add(success_txn)
+            db.commit()
+        except Exception as provisioning_err:
+            db.rollback()
+            logger.error(
+                "🚨 GROUP-BUY OPEN COMPENSATION REQUIRED — card was charged "
+                "but DB provisioning failed. Refund or hand-provision needed. "
+                f"teacher={current_teacher.id} email={current_teacher.email} "
+                f"plan={plan.name} amount={amount} "
+                f"rec_trade_id={external_transaction_id} "
+                f"error={provisioning_err!r}"
+            )
+            execution_time = int((time.time() - start_time) * 1000)
+            log_payment_failure(
+                transaction_id=order_number,
+                user_id=current_teacher.id,
+                user_email=current_teacher.email,
+                amount=amount,
+                plan_name=plan.name,
+                error_stage="provisioning_after_payment",
+                error_code="DB_PROVISIONING_FAILED",
+                error_message=(
+                    f"REFUND REQUIRED rec_trade_id={external_transaction_id}: "
+                    f"{provisioning_err}"
+                ),
+                request_data=body_json,
+                response_status=500,
+                response_body={
+                    "rec_trade_id": external_transaction_id,
+                    "error": str(provisioning_err),
+                },
+                execution_time_ms=execution_time,
+            )
+            # Best-effort: persist a FAILED transaction record carrying the
+            # rec_trade_id so finance/audit queries can find the orphaned charge.
+            try:
+                comp_txn = TeacherSubscriptionTransaction(
+                    teacher_id=current_teacher.id,
+                    teacher_email=current_teacher.email,
+                    transaction_type=TransactionType.RECHARGE,
+                    subscription_type=plan.name,
+                    amount=amount,
+                    currency="TWD",
+                    status="FAILED",
+                    months=12,
+                    period_start=now,
+                    period_end=now + timedelta(days=365),
+                    new_end_date=now,
+                    idempotency_key=idempotency_key,
+                    ip_address=client_host,
+                    user_agent=user_agent,
+                    request_id=request_id,
+                    payment_provider="tappay",
+                    payment_method="credit_card",
+                    external_transaction_id=external_transaction_id,
+                    failure_reason=(
+                        "REFUND REQUIRED — provisioning failed after charge: "
+                        f"{provisioning_err!r}"
+                    ),
+                    error_code="PROVISIONING_AFTER_PAYMENT",
+                    gateway_response=gateway_response,
+                    processed_at=now,
+                )
+                db.add(comp_txn)
+                db.commit()
+            except Exception:
+                logger.exception(
+                    "Failed to persist compensation FAILED transaction record"
+                )
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Payment captured (rec_trade_id={external_transaction_id})"
+                    " but team provisioning failed. Our team has been alerted"
+                    " and will refund or complete setup manually."
+                ),
+            )
+
+        execution_time = int((time.time() - start_time) * 1000)
+        log_payment_success(
+            transaction_id=order_number,
+            user_id=current_teacher.id,
+            user_email=current_teacher.email,
+            amount=amount,
+            plan_name=plan.name,
+            tappay_response=gateway_response,
+            tappay_rec_trade_id=external_transaction_id,
+            execution_time_ms=execution_time,
+        )
+
+        return GroupBuyOpenResponse(
+            success=True,
+            message="開團成功",
+            transaction_id=external_transaction_id,
+            organization_id=str(org.id),
+            school_id=str(school.id),
+            subscription_end_date=org.subscription_end_date.isoformat(),
+            teacher_seat_limit=school.teacher_seat_limit,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Group-buy open error: {e}")
+        raise HTTPException(status_code=500, detail="Group-buy open failed")
