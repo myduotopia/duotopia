@@ -22,6 +22,7 @@ from models import (
     School,
     SubscriptionPeriod,
     Teacher,
+    TeacherOrganization,
     TeacherSchool,
 )
 from services.group_buy import (
@@ -158,7 +159,7 @@ def test_month_end_february_leap_year():
 def test_open_creates_org_school_and_owner_binding(shared_test_session, owner):
     plan = _make_group_buy_plan(shared_test_session)
     now = datetime.now(timezone.utc)
-    org, school, ts = create_group_buy_org_and_school(
+    org, school, ts, t_org = create_group_buy_org_and_school(
         owner, plan, shared_test_session, now=now
     )
     shared_test_session.commit()
@@ -173,6 +174,12 @@ def test_open_creates_org_school_and_owner_binding(shared_test_session, owner):
     assert ts.teacher_id == owner.id
     assert ts.school_id == school.id
     assert ts.roles == ["school_admin"]
+    # F3 — TeacherOrganization with role='org_owner' so the opener can
+    # use /org-purchase and /org-renew, both of which gate on this row.
+    assert t_org.teacher_id == owner.id
+    assert t_org.organization_id == org.id
+    assert t_org.role == "org_owner"
+    assert t_org.is_active is True
 
 
 # ---------- create_group_buy_period ----------
@@ -242,7 +249,7 @@ def test_grant_skips_when_teacher_already_granted_this_month(
 def test_grant_skips_inactive_organization(shared_test_session, owner):
     plan = _make_group_buy_plan(shared_test_session)
     today = datetime(2026, 6, 1, 2, 0, 0, tzinfo=TAIPEI)
-    org, _, _ = _bootstrap_active_group_buy(
+    org, _, _, _ = _bootstrap_active_group_buy(
         shared_test_session, owner, plan, now=today - timedelta(days=10)
     )
     org.is_active = False
@@ -255,7 +262,7 @@ def test_grant_skips_inactive_organization(shared_test_session, owner):
 def test_grant_skips_expired_subscription(shared_test_session, owner):
     plan = _make_group_buy_plan(shared_test_session)
     today = datetime(2026, 6, 1, 2, 0, 0, tzinfo=TAIPEI)
-    org, _, _ = _bootstrap_active_group_buy(
+    org, _, _, _ = _bootstrap_active_group_buy(
         shared_test_session, owner, plan, now=today - timedelta(days=400)
     )
     # Force expired
@@ -269,7 +276,7 @@ def test_grant_skips_expired_subscription(shared_test_session, owner):
 def test_grant_skips_inactive_school(shared_test_session, owner):
     plan = _make_group_buy_plan(shared_test_session)
     today = datetime(2026, 6, 1, 2, 0, 0, tzinfo=TAIPEI)
-    _, school, _ = _bootstrap_active_group_buy(
+    _, school, _, _ = _bootstrap_active_group_buy(
         shared_test_session, owner, plan, now=today - timedelta(days=10)
     )
     school.is_active = False
@@ -282,7 +289,7 @@ def test_grant_skips_inactive_school(shared_test_session, owner):
 def test_grant_skips_inactive_teacher_school_binding(shared_test_session, owner):
     plan = _make_group_buy_plan(shared_test_session)
     today = datetime(2026, 6, 1, 2, 0, 0, tzinfo=TAIPEI)
-    _, _, ts = _bootstrap_active_group_buy(
+    _, _, ts, _ = _bootstrap_active_group_buy(
         shared_test_session, owner, plan, now=today - timedelta(days=10)
     )
     ts.is_active = False
@@ -329,3 +336,34 @@ def test_grant_stacks_alongside_individual_subscription(shared_test_session, own
     assert len(periods) == 2
     names = sorted(p.plan_name for p in periods)
     assert names == ["Tutor Teachers", plan.name]
+
+
+def test_grant_duplicate_check_filters_by_payment_method(shared_test_session, owner):
+    """F5 — If a teacher has an active SubscriptionPeriod whose plan_name
+    matches the group-buy plan but whose payment_method is NOT 'group_buy'
+    (e.g. an individual subscription that happens to share the name), the
+    cron must still create the group-buy grant for them."""
+    plan = _make_group_buy_plan(shared_test_session)
+    today = datetime(2026, 6, 1, 2, 0, 0, tzinfo=TAIPEI)
+    _bootstrap_active_group_buy(
+        shared_test_session, owner, plan, now=today - timedelta(days=10)
+    )
+
+    # Decoy active period with the same plan_name but auto_renew (not group_buy)
+    decoy = SubscriptionPeriod(
+        teacher_id=owner.id,
+        plan_name=plan.name,
+        amount_paid=299,
+        quota_total=2000,
+        quota_used=0,
+        start_date=today,
+        end_date=today + timedelta(days=30),
+        payment_method="auto_renew",
+        payment_status="paid",
+        status="active",
+    )
+    shared_test_session.add(decoy)
+    shared_test_session.commit()
+
+    result = grant_monthly_for_group_buy(today, shared_test_session)
+    assert result["grants_created"] == 1  # NOT skipped despite matching name

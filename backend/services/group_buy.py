@@ -19,6 +19,7 @@ from models import (
     School,
     SubscriptionPeriod,
     Teacher,
+    TeacherOrganization,
     TeacherSchool,
 )
 
@@ -90,10 +91,15 @@ def create_group_buy_org_and_school(
     db: Session,
     *,
     now: datetime,
-) -> Tuple[Organization, School, TeacherSchool]:
-    """Atomically create the Organization, School, and owner TeacherSchool
-    for a new group-buy purchase. Subscription dates set on the Organization
-    (1 year from `now`)."""
+) -> Tuple[Organization, School, TeacherSchool, TeacherOrganization]:
+    """Atomically create the Organization, School, owner TeacherSchool, AND
+    owner TeacherOrganization (role='org_owner') for a new group-buy
+    purchase. Subscription dates set on the Organization (1 year from `now`).
+
+    TeacherOrganization is required so the opener can use the existing
+    /org-purchase and /org-renew endpoints, both of which gate on
+    `TeacherOrganization.role == 'org_owner'`.
+    """
     org = Organization(
         name=f"{owner.name or owner.email}'s 團購",
         org_type="group_buy",
@@ -121,9 +127,17 @@ def create_group_buy_org_and_school(
         is_active=True,
     )
     db.add(teacher_school)
+
+    teacher_org = TeacherOrganization(
+        teacher_id=owner.id,
+        organization_id=org.id,
+        role="org_owner",
+        is_active=True,
+    )
+    db.add(teacher_org)
     db.flush()
 
-    return org, school, teacher_school
+    return org, school, teacher_school, teacher_org
 
 
 def create_group_buy_period(
@@ -136,17 +150,24 @@ def create_group_buy_period(
 ) -> SubscriptionPeriod:
     """Insert a fresh group-buy SubscriptionPeriod for a teacher.
 
+    Both start_date and end_date are normalised to Taipei time so they
+    represent the same calendar reference (avoids the late-UTC-evening
+    open-purchase that would otherwise mix UTC start with Taipei end).
     end_date = month_end_taipei(start) so next month's cron Phase 1 expires
     it and Phase 3 grants the next month's points.
     """
+    taipei = ZoneInfo("Asia/Taipei")
+    start_taipei = (
+        start.astimezone(taipei) if start.tzinfo else start.replace(tzinfo=taipei)
+    )
     period = SubscriptionPeriod(
         teacher_id=teacher.id,
         plan_name=plan.name,
         amount_paid=0,  # group-buy quota is bundled in the annual school fee
         quota_total=GROUP_BUY_MONTHLY_QUOTA,
         quota_used=0,
-        start_date=start,
-        end_date=month_end_taipei(start),
+        start_date=start_taipei,
+        end_date=month_end_taipei(start_taipei),
         payment_method="group_buy",
         payment_id=payment_id,
         payment_status="paid",
@@ -195,22 +216,32 @@ def grant_monthly_for_group_buy(today: datetime, db: Session) -> dict:
         .all()
     )
 
+    # Bulk-load existing group-buy periods for the affected teachers in a
+    # single round-trip (kills N+1). The duplicate check filters on
+    # payment_method='group_buy' so an individual SubscriptionPeriod that
+    # happens to share a plan_name can't mask the grant.
     counters = {"grants_created": 0, "grants_skipped_duplicate": 0}
-    for teacher, plan in rows:
-        existing = (
-            db.query(SubscriptionPeriod)
+    teacher_ids = {t.id for t, _ in rows}
+    existing_keys: set[tuple[int, str]] = set()
+    if teacher_ids:
+        existing_keys = {
+            (p.teacher_id, p.plan_name)
+            for p in db.query(
+                SubscriptionPeriod.teacher_id, SubscriptionPeriod.plan_name
+            )
             .filter(
-                SubscriptionPeriod.teacher_id == teacher.id,
-                SubscriptionPeriod.plan_name == plan.name,
+                SubscriptionPeriod.teacher_id.in_(teacher_ids),
                 SubscriptionPeriod.status == "active",
+                SubscriptionPeriod.payment_method == "group_buy",
                 SubscriptionPeriod.start_date >= month_start,
             )
-            .first()
-        )
-        if existing is not None:
+            .all()
+        }
+
+    for teacher, plan in rows:
+        if (teacher.id, plan.name) in existing_keys:
             counters["grants_skipped_duplicate"] += 1
             continue
-
         create_group_buy_period(teacher, plan, db, start=today_local)
         counters["grants_created"] += 1
 

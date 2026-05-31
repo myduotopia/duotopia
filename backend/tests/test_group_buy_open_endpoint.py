@@ -17,6 +17,7 @@ from models import (
     School,
     SubscriptionPeriod,
     Teacher,
+    TeacherOrganization,
     TeacherSchool,
     TeacherSubscriptionTransaction,
 )
@@ -162,6 +163,18 @@ def test_happy_path_creates_org_school_binding_period(
         .one()
     )
     assert ts.roles == ["school_admin"]
+    # F3 — TeacherOrganization with role='org_owner' must also be created so
+    # the opener can use /org-purchase and /org-renew.
+    t_org = (
+        shared_test_session.query(TeacherOrganization)
+        .filter(
+            TeacherOrganization.teacher_id == teacher.id,
+            TeacherOrganization.organization_id == org.id,
+        )
+        .one()
+    )
+    assert t_org.role == "org_owner"
+    assert t_org.is_active is True
     period = (
         shared_test_session.query(SubscriptionPeriod)
         .filter(

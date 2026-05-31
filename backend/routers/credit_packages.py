@@ -3,6 +3,7 @@ Credit Packages API - Purchase and manage credit packages (point bundles)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -809,7 +810,29 @@ async def open_group_buy(
         client_ip=client_host,
     )
 
-    # Idempotency: same teacher charging same group-buy plan within 60s
+    # F2 — Race-safe idempotency: acquire a Postgres advisory xact-lock
+    # keyed on (teacher_id, plan_name) BEFORE the recent-transaction lookup
+    # so two concurrent requests (mobile retry, double-tap) can't both pass
+    # the check and double-charge. Lock auto-releases at request end.
+    # SQLite tests are single-threaded; the dialect guard is a no-op there.
+    if db.bind and db.bind.dialect.name == "postgresql":
+        lock_key = f"group_buy_open:{current_teacher.id}:{plan.name}"
+        locked = db.execute(
+            text("SELECT pg_try_advisory_xact_lock(hashtext(:k))"),
+            {"k": lock_key},
+        ).scalar()
+        if not locked:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Another open-group request is in progress for this "
+                    "teacher; please retry in a moment."
+                ),
+            )
+
+    # Idempotency (post-lock): a recent SUCCESS transaction for this
+    # (teacher, plan) within 60s means the previous request already opened
+    # the group — return its transaction id without re-charging.
     recent = (
         db.query(TeacherSubscriptionTransaction)
         .filter(
@@ -893,43 +916,122 @@ async def open_group_buy(
             db.commit()
             raise HTTPException(status_code=400, detail=error_msg)
 
-        # Payment success — atomically create org/school/binding/period
+        # F1 — Payment captured. Card is already charged. Any DB failure
+        # past this line means the user paid but did not receive their team,
+        # so we MUST surface a compensation record (manual refund or hand-
+        # provision) — we cannot silently 500 and swallow the rec_trade_id.
         external_transaction_id = gateway_response.get("rec_trade_id")
-        org, school, _ = create_group_buy_org_and_school(
-            current_teacher, plan, db, now=now
-        )
-        create_group_buy_period(
-            current_teacher,
-            plan,
-            db,
-            start=now,
-            payment_id=external_transaction_id,
-        )
+        try:
+            org, school, _, _ = create_group_buy_org_and_school(
+                current_teacher, plan, db, now=now
+            )
+            create_group_buy_period(
+                current_teacher,
+                plan,
+                db,
+                start=now,
+                payment_id=external_transaction_id,
+            )
 
-        success_txn = TeacherSubscriptionTransaction(
-            teacher_id=current_teacher.id,
-            teacher_email=current_teacher.email,
-            transaction_type=TransactionType.RECHARGE,
-            subscription_type=plan.name,
-            amount=amount,
-            currency="TWD",
-            status="SUCCESS",
-            months=12,
-            period_start=now,
-            period_end=org.subscription_end_date,
-            new_end_date=org.subscription_end_date,
-            idempotency_key=idempotency_key,
-            ip_address=client_host,
-            user_agent=user_agent,
-            request_id=request_id,
-            payment_provider="tappay",
-            payment_method="credit_card",
-            external_transaction_id=external_transaction_id,
-            gateway_response=gateway_response,
-            processed_at=now,
-        )
-        db.add(success_txn)
-        db.commit()
+            success_txn = TeacherSubscriptionTransaction(
+                teacher_id=current_teacher.id,
+                teacher_email=current_teacher.email,
+                transaction_type=TransactionType.RECHARGE,
+                subscription_type=plan.name,
+                amount=amount,
+                currency="TWD",
+                status="SUCCESS",
+                months=12,
+                period_start=now,
+                period_end=org.subscription_end_date,
+                new_end_date=org.subscription_end_date,
+                idempotency_key=idempotency_key,
+                ip_address=client_host,
+                user_agent=user_agent,
+                request_id=request_id,
+                payment_provider="tappay",
+                payment_method="credit_card",
+                external_transaction_id=external_transaction_id,
+                gateway_response=gateway_response,
+                processed_at=now,
+            )
+            db.add(success_txn)
+            db.commit()
+        except Exception as provisioning_err:
+            db.rollback()
+            logger.error(
+                "🚨 GROUP-BUY OPEN COMPENSATION REQUIRED — card was charged "
+                "but DB provisioning failed. Refund or hand-provision needed. "
+                f"teacher={current_teacher.id} email={current_teacher.email} "
+                f"plan={plan.name} amount={amount} "
+                f"rec_trade_id={external_transaction_id} "
+                f"error={provisioning_err!r}"
+            )
+            execution_time = int((time.time() - start_time) * 1000)
+            log_payment_failure(
+                transaction_id=order_number,
+                user_id=current_teacher.id,
+                user_email=current_teacher.email,
+                amount=amount,
+                plan_name=plan.name,
+                error_stage="provisioning_after_payment",
+                error_code="DB_PROVISIONING_FAILED",
+                error_message=(
+                    f"REFUND REQUIRED rec_trade_id={external_transaction_id}: "
+                    f"{provisioning_err}"
+                ),
+                request_data=body_json,
+                response_status=500,
+                response_body={
+                    "rec_trade_id": external_transaction_id,
+                    "error": str(provisioning_err),
+                },
+                execution_time_ms=execution_time,
+            )
+            # Best-effort: persist a FAILED transaction record carrying the
+            # rec_trade_id so finance/audit queries can find the orphaned charge.
+            try:
+                comp_txn = TeacherSubscriptionTransaction(
+                    teacher_id=current_teacher.id,
+                    teacher_email=current_teacher.email,
+                    transaction_type=TransactionType.RECHARGE,
+                    subscription_type=plan.name,
+                    amount=amount,
+                    currency="TWD",
+                    status="FAILED",
+                    months=12,
+                    period_start=now,
+                    period_end=now + timedelta(days=365),
+                    new_end_date=now,
+                    idempotency_key=idempotency_key,
+                    ip_address=client_host,
+                    user_agent=user_agent,
+                    request_id=request_id,
+                    payment_provider="tappay",
+                    payment_method="credit_card",
+                    external_transaction_id=external_transaction_id,
+                    failure_reason=(
+                        "REFUND REQUIRED — provisioning failed after charge: "
+                        f"{provisioning_err!r}"
+                    ),
+                    error_code="PROVISIONING_AFTER_PAYMENT",
+                    gateway_response=gateway_response,
+                    processed_at=now,
+                )
+                db.add(comp_txn)
+                db.commit()
+            except Exception:
+                logger.exception(
+                    "Failed to persist compensation FAILED transaction record"
+                )
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Payment captured (rec_trade_id={external_transaction_id})"
+                    " but team provisioning failed. Our team has been alerted"
+                    " and will refund or complete setup manually."
+                ),
+            )
 
         execution_time = int((time.time() - start_time) * 1000)
         log_payment_success(
