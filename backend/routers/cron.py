@@ -405,6 +405,10 @@ async def monthly_renewal_cron(
             f"skipped_duplicate={gb_result['grants_skipped_duplicate']}"
         )
     except Exception as e:
+        # R2-F4 — Explicit rollback to clear any dirty/pending state from a
+        # partial Phase 3 commit attempt, so subsequent DB access in this
+        # request (e.g. logging) interacts with a clean session.
+        db.rollback()
         logger.error(f"❌ Group-buy grant phase failed: {e}")
         results["errors"].append({"phase": "group_buy_grant", "error": str(e)})
         group_buy_failed = True

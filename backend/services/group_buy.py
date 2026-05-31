@@ -243,6 +243,10 @@ def grant_monthly_for_group_buy(today: datetime, db: Session) -> dict:
             counters["grants_skipped_duplicate"] += 1
             continue
         create_group_buy_period(teacher, plan, db, start=today_local)
+        # R2-F3 — Update the dedup set inside the loop so a teacher bound to
+        # multiple group-buy schools sharing the same plan_name doesn't
+        # receive 2× grants in the same cron run.
+        existing_keys.add((teacher.id, plan.name))
         counters["grants_created"] += 1
 
     db.commit()

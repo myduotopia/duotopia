@@ -23,6 +23,7 @@ from models import (
     TransactionType,
     Organization,
     TeacherOrganization,
+    School,
 )
 from routers.teachers import get_current_teacher
 from services.tappay_service import TapPayService
@@ -810,12 +811,13 @@ async def open_group_buy(
         client_ip=client_host,
     )
 
-    # F2 — Race-safe idempotency: acquire a Postgres advisory xact-lock
-    # keyed on (teacher_id, plan_name) BEFORE the recent-transaction lookup
-    # so two concurrent requests (mobile retry, double-tap) can't both pass
-    # the check and double-charge. Lock auto-releases at request end.
+    # F2 — Race-safe concurrent-request guard: acquire a Postgres advisory
+    # xact-lock keyed on (teacher_id, plan_name) BEFORE the recent-transaction
+    # lookup so two concurrent requests (mobile retry, double-tap) can't both
+    # pass the check and double-charge. Lock auto-releases at request end.
     # SQLite tests are single-threaded; the dialect guard is a no-op there.
-    if db.bind and db.bind.dialect.name == "postgresql":
+    # Use db.get_bind() (SQLAlchemy 2.x idiom) instead of db.bind.
+    if db.get_bind().dialect.name == "postgresql":
         lock_key = f"group_buy_open:{current_teacher.id}:{plan.name}"
         locked = db.execute(
             text("SELECT pg_try_advisory_xact_lock(hashtext(:k))"),
@@ -829,6 +831,28 @@ async def open_group_buy(
                     "teacher; please retry in a moment."
                 ),
             )
+
+    # R2-F2 — Long-term guard: a teacher already owning an active group-buy
+    # org (role='org_owner') cannot open another. The 60-second idempotency
+    # window only catches retries; this prevents a deliberate re-open the
+    # next day from double-charging the user and creating 2× monthly grants.
+    existing_owned = (
+        db.query(TeacherOrganization)
+        .join(Organization, Organization.id == TeacherOrganization.organization_id)
+        .filter(
+            TeacherOrganization.teacher_id == current_teacher.id,
+            TeacherOrganization.role == "org_owner",
+            TeacherOrganization.is_active.is_(True),
+            Organization.org_type == "group_buy",
+            Organization.is_active.is_(True),
+        )
+        .first()
+    )
+    if existing_owned is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="您已開設一個團購方案，不可重複開設。",
+        )
 
     # Idempotency (post-lock): a recent SUCCESS transaction for this
     # (teacher, plan) within 60s means the previous request already opened
@@ -848,10 +872,49 @@ async def open_group_buy(
             f"Duplicate group-buy open detected: teacher={current_teacher.id} "
             f"plan={plan.name}"
         )
+        # R2-F5 — Frontend uses org_id / school_id / subscription_end_date to
+        # redirect the user to their new team page. On a 60s retry we must
+        # populate the same fields, not return null.
+        owned_org = (
+            db.query(Organization)
+            .join(
+                TeacherOrganization,
+                TeacherOrganization.organization_id == Organization.id,
+            )
+            .filter(
+                TeacherOrganization.teacher_id == current_teacher.id,
+                TeacherOrganization.role == "org_owner",
+                TeacherOrganization.is_active.is_(True),
+                Organization.org_type == "group_buy",
+            )
+            .order_by(Organization.created_at.desc())
+            .first()
+        )
+        owned_school = (
+            db.query(School)
+            .filter(
+                School.organization_id == owned_org.id,
+                School.plan_id == plan.id,
+            )
+            .order_by(School.created_at.desc())
+            .first()
+            if owned_org is not None
+            else None
+        )
         return GroupBuyOpenResponse(
             success=True,
             message="此筆開團已完成",
             transaction_id=recent.external_transaction_id,
+            organization_id=str(owned_org.id) if owned_org else None,
+            school_id=str(owned_school.id) if owned_school else None,
+            subscription_end_date=(
+                owned_org.subscription_end_date.isoformat()
+                if owned_org and owned_org.subscription_end_date
+                else None
+            ),
+            teacher_seat_limit=(
+                owned_school.teacher_seat_limit if owned_school else None
+            ),
         )
 
     try:

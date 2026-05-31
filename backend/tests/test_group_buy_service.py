@@ -338,6 +338,73 @@ def test_grant_stacks_alongside_individual_subscription(shared_test_session, own
     assert names == ["Tutor Teachers", plan.name]
 
 
+def test_grant_does_not_double_grant_teacher_in_two_schools_same_plan(
+    shared_test_session, owner
+):
+    """R2-F3 — A teacher bound to two active group-buy schools that share
+    the same plan_name must receive ONE grant, not two. The dedup set must
+    be updated inside the loop so the second iteration sees the first one."""
+    plan = _make_group_buy_plan(shared_test_session)
+    today = datetime(2026, 6, 1, 2, 0, 0, tzinfo=TAIPEI)
+
+    # First active group-buy school the teacher owns
+    _bootstrap_active_group_buy(
+        shared_test_session, owner, plan, now=today - timedelta(days=10)
+    )
+
+    # Second active group-buy school the teacher is bound to (e.g. joined a
+    # second team), same plan_name. Create org/school/binding manually to
+    # avoid duplicating the helper's TeacherOrganization unique-key collision.
+    from models import Organization, School, TeacherSchool
+
+    org2 = Organization(
+        name="Second 團",
+        org_type="group_buy",
+        subscription_start_date=today - timedelta(days=5),
+        subscription_end_date=today + timedelta(days=360),
+        is_active=True,
+    )
+    shared_test_session.add(org2)
+    shared_test_session.flush()
+    school2 = School(
+        organization_id=org2.id,
+        name="Second 團 School",
+        plan_id=plan.id,
+        teacher_seat_limit=plan.teacher_seats,
+        is_active=True,
+    )
+    shared_test_session.add(school2)
+    shared_test_session.flush()
+    shared_test_session.add(
+        TeacherSchool(
+            teacher_id=owner.id,
+            school_id=school2.id,
+            roles=["teacher"],
+            is_active=True,
+        )
+    )
+    shared_test_session.commit()
+
+    result = grant_monthly_for_group_buy(today, shared_test_session)
+    # Critical safety property: even if the join returns >1 row for this
+    # teacher (one per TeacherSchool), exactly ONE SubscriptionPeriod must
+    # be created. grants_created + grants_skipped_duplicate accounts for
+    # every row the join returned.
+    assert result["grants_created"] == 1
+    assert result["grants_created"] + result["grants_skipped_duplicate"] >= 1
+
+    periods = (
+        shared_test_session.query(SubscriptionPeriod)
+        .filter(
+            SubscriptionPeriod.teacher_id == owner.id,
+            SubscriptionPeriod.plan_name == plan.name,
+            SubscriptionPeriod.payment_method == "group_buy",
+        )
+        .all()
+    )
+    assert len(periods) == 1
+
+
 def test_grant_duplicate_check_filters_by_payment_method(shared_test_session, owner):
     """F5 — If a teacher has an active SubscriptionPeriod whose plan_name
     matches the group-buy plan but whose payment_method is NOT 'group_buy'

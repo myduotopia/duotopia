@@ -196,6 +196,46 @@ def test_happy_path_creates_org_school_binding_period(
     assert txn.subscription_type == gb_plan.name
 
 
+def test_rejects_when_teacher_already_owns_a_group_buy_org(
+    test_client, auth_header, teacher, gb_plan, shared_test_session
+):
+    """R2-F2 — A teacher who already owns a group-buy organization must not
+    be able to open another (would result in a second NT$X charge and 2x
+    monthly grants)."""
+    # Seed an existing owned group-buy org for this teacher
+    org = Organization(
+        name="Pre-existing 團",
+        org_type="group_buy",
+        is_active=True,
+    )
+    shared_test_session.add(org)
+    shared_test_session.commit()
+    shared_test_session.refresh(org)
+    shared_test_session.add(
+        TeacherOrganization(
+            teacher_id=teacher.id,
+            organization_id=org.id,
+            role="org_owner",
+            is_active=True,
+        )
+    )
+    shared_test_session.commit()
+
+    with patch("routers.credit_packages.ENABLE_PAYMENT", True), patch(
+        "routers.credit_packages.TapPayService"
+    ) as mock_tappay_class:
+        r = test_client.post(
+            "/api/credit-packages/group-buy-open",
+            json={"prime": "prime-x", "plan_name": gb_plan.name},
+            headers=auth_header,
+        )
+
+    assert r.status_code == 409
+    assert "團購方案" in r.json()["detail"]
+    # TapPay must NOT be charged
+    mock_tappay_class.assert_not_called()
+
+
 def test_idempotent_within_60s_returns_existing_transaction(
     test_client, auth_header, teacher, gb_plan, shared_test_session
 ):
