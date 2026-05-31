@@ -833,9 +833,10 @@ async def open_group_buy(
             )
 
     # R2-F2 — Long-term guard: a teacher already owning an active group-buy
-    # org (role='org_owner') cannot open another. The 60-second idempotency
-    # window only catches retries; this prevents a deliberate re-open the
-    # next day from double-charging the user and creating 2× monthly grants.
+    # org (role='org_owner') cannot open another. Filtered to orgs created
+    # more than 60 seconds ago so a same-submission retry (network timeout,
+    # mobile re-send) falls through to the idempotency-shortcut block below
+    # and returns the original transaction id, instead of getting 409.
     existing_owned = (
         db.query(TeacherOrganization)
         .join(Organization, Organization.id == TeacherOrganization.organization_id)
@@ -845,6 +846,7 @@ async def open_group_buy(
             TeacherOrganization.is_active.is_(True),
             Organization.org_type == "group_buy",
             Organization.is_active.is_(True),
+            Organization.created_at < now - timedelta(seconds=60),
         )
         .first()
     )

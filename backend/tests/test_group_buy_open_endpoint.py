@@ -199,14 +199,18 @@ def test_happy_path_creates_org_school_binding_period(
 def test_rejects_when_teacher_already_owns_a_group_buy_org(
     test_client, auth_header, teacher, gb_plan, shared_test_session
 ):
-    """R2-F2 — A teacher who already owns a group-buy organization must not
-    be able to open another (would result in a second NT$X charge and 2x
-    monthly grants)."""
-    # Seed an existing owned group-buy org for this teacher
+    """R2-F2 — A teacher who already owns a group-buy organization (older
+    than the 60s retry window) must not be able to open another (would
+    result in a second NT$X charge and 2x monthly grants)."""
+    from datetime import datetime, timedelta, timezone
+
+    # Seed an existing owned group-buy org for this teacher, created
+    # well outside the 60s same-submission window.
     org = Organization(
         name="Pre-existing 團",
         org_type="group_buy",
         is_active=True,
+        created_at=datetime.now(timezone.utc) - timedelta(hours=1),
     )
     shared_test_session.add(org)
     shared_test_session.commit()
@@ -239,10 +243,43 @@ def test_rejects_when_teacher_already_owns_a_group_buy_org(
 def test_idempotent_within_60s_returns_existing_transaction(
     test_client, auth_header, teacher, gb_plan, shared_test_session
 ):
-    # Seed a recent successful transaction for this teacher + plan
-    from datetime import datetime, timezone
+    """R2-F5 — A retry within 60s (network timeout, mobile re-send) must
+    return the original transaction AND populate org_id / school_id /
+    subscription_end_date / teacher_seat_limit so the frontend can still
+    redirect the user to their new team page."""
+    from datetime import datetime, timedelta, timezone
 
     now = datetime.now(timezone.utc)
+    # Seed the full production-shape state the original (just-succeeded)
+    # request would have left: Org + School + TeacherOrganization + recent
+    # SUCCESS transaction. The R2-F2 guard skips orgs younger than 60s, so
+    # this lands in the idempotency-shortcut block.
+    org = Organization(
+        name="Existing 團",
+        org_type="group_buy",
+        subscription_start_date=now,
+        subscription_end_date=now + timedelta(days=365),
+        is_active=True,
+    )
+    shared_test_session.add(org)
+    shared_test_session.flush()
+    school = School(
+        organization_id=org.id,
+        name="Existing 團 School",
+        plan_id=gb_plan.id,
+        teacher_seat_limit=gb_plan.teacher_seats,
+        is_active=True,
+    )
+    shared_test_session.add(school)
+    shared_test_session.flush()
+    shared_test_session.add(
+        TeacherOrganization(
+            teacher_id=teacher.id,
+            organization_id=org.id,
+            role="org_owner",
+            is_active=True,
+        )
+    )
     existing = TeacherSubscriptionTransaction(
         teacher_id=teacher.id,
         teacher_email=teacher.email,
@@ -253,8 +290,8 @@ def test_idempotent_within_60s_returns_existing_transaction(
         status="SUCCESS",
         months=12,
         period_start=now,
-        period_end=now,
-        new_end_date=now,
+        period_end=now + timedelta(days=365),
+        new_end_date=now + timedelta(days=365),
         payment_provider="tappay",
         payment_method="credit_card",
         external_transaction_id="REC-PREVIOUS",
@@ -276,5 +313,10 @@ def test_idempotent_within_60s_returns_existing_transaction(
     body = r.json()
     assert body["success"] is True
     assert body["transaction_id"] == "REC-PREVIOUS"
+    # R2-F5 assertions: redirect fields must be populated, not null
+    assert body["organization_id"] == str(org.id)
+    assert body["school_id"] == str(school.id)
+    assert body["subscription_end_date"] is not None
+    assert body["teacher_seat_limit"] == gb_plan.teacher_seats
     # TapPay should NOT be called again
     mock_tappay_class.assert_not_called()
