@@ -20,6 +20,8 @@ import {
   Copy,
   CheckSquare,
   Square,
+  Power,
+  PowerOff,
 } from "lucide-react";
 
 export interface Student {
@@ -41,6 +43,10 @@ export interface Student {
   organization_id?: string;
   created_at?: string;
   classroom_created_at?: string;
+  // Phase 5-2 (#768): drives the activate/deactivate toggle. Writing this
+  // via POST /api/teachers/students/{id}/status also appends to
+  // student_status_history, which Phase 4 monthly billing reads.
+  is_active?: boolean;
 }
 
 interface StudentTableProps {
@@ -51,6 +57,9 @@ interface StudentTableProps {
   onViewStudent?: (student: Student) => void;
   onResetPassword?: (student: Student) => void;
   onDeleteStudent?: (student: Student) => void;
+  // Phase 5-2 (#768): activate/deactivate. Receives `nextStatus` so the
+  // caller can write the appropriate value to /students/{id}/status.
+  onToggleStatus?: (student: Student, nextStatus: "active" | "inactive") => void;
   onBulkAction?: (action: string, studentIds: number[]) => void;
   emptyMessage?: string;
   emptyDescription?: string;
@@ -68,6 +77,7 @@ export default function StudentTable({
   onViewStudent,
   onResetPassword,
   onDeleteStudent,
+  onToggleStatus,
   onBulkAction,
   emptyMessage,
   emptyDescription,
@@ -555,6 +565,41 @@ export default function StudentTable({
                         disabled={disableActions}
                       >
                         <Edit className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {/* Phase 5-2 (#768): activate/deactivate toggle.
+                        Writes to student_status_history (Phase 4 billing). */}
+                    {onToggleStatus && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title={
+                          disableActions
+                            ? disableReason
+                            : student.is_active === false
+                              ? "啟用學生"
+                              : "停用學生（保留資料）"
+                        }
+                        onClick={() => {
+                          const nextStatus =
+                            student.is_active === false
+                              ? "active"
+                              : "inactive";
+                          const confirmMsg =
+                            nextStatus === "inactive"
+                              ? `確定停用 ${student.name}？學生資料保留，但下個月起不會計入機構月結計費。`
+                              : `重新啟用 ${student.name}？`;
+                          if (confirm(confirmMsg)) {
+                            onToggleStatus(student, nextStatus);
+                          }
+                        }}
+                        disabled={disableActions}
+                      >
+                        {student.is_active === false ? (
+                          <Power className="h-4 w-4" />
+                        ) : (
+                          <PowerOff className="h-4 w-4" />
+                        )}
                       </Button>
                     )}
                     {onDeleteStudent && (

@@ -1622,6 +1622,21 @@ class ApiClient {
     );
   }
 
+  // ===== Phase 5-2 (issue #768): group-buy plans listing =====
+  async listGroupBuyPlans() {
+    return this.request<
+      Array<{
+        name: string;
+        teacher_seats: number;
+        annual_fee: number;
+        total_amount: number;
+        topup_discount: number;
+        monthly_quota: number;
+        display_order: number;
+      }>
+    >("/api/credit-packages/group-buy-plans", { method: "GET" });
+  }
+
   // ===== Phase 5-2 (issue #768): group-buy open =====
   async openGroupBuy(body: {
     prime: string;

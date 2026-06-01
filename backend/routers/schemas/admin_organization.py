@@ -147,6 +147,11 @@ class OrganizationListItem(BaseModel):
     created_at: str
     subscription_start_date: Optional[str] = None
     subscription_end_date: Optional[str] = None
+    # Phase 5-2 (issue #768): expose institution monthly price + org_type so
+    # the admin edit dialog can prefill values and the UI can show org-type
+    # context (institution vs group_buy).
+    org_type: Optional[str] = None
+    per_student_price: Optional[int] = None
 
 
 class OrganizationListResponse(BaseModel):

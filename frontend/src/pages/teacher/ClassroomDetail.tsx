@@ -1113,6 +1113,29 @@ export default function ClassroomDetail({
     }
   };
 
+  // Phase 5-2 (#768): activate/deactivate a student. The endpoint writes
+  // to student_status_history (driving Phase 4 monthly billing) AND syncs
+  // Student.is_active so existing UI flows keep working.
+  const handleToggleStudentStatus = async (
+    student: Student,
+    nextStatus: "active" | "inactive",
+  ) => {
+    try {
+      await apiClient.updateStudentStatus(student.id, { status: nextStatus });
+      toast.success(
+        nextStatus === "inactive"
+          ? `已停用 ${student.name}`
+          : `已啟用 ${student.name}`,
+      );
+      fetchClassroomDetail();
+    } catch (error) {
+      console.error("Failed to update student status:", error);
+      const message =
+        error instanceof ApiError ? error.message : "更新學生狀態失敗";
+      toast.error(message);
+    }
+  };
+
   const handleSaveStudent = async () => {
     // Refresh data after save (parallel requests, no loading spinner)
     await Promise.all([
@@ -1769,6 +1792,7 @@ export default function ClassroomDetail({
                     onViewStudent={handleViewStudent}
                     onEditStudent={handleEditStudent}
                     onResetPassword={handleResetPassword}
+                    onToggleStatus={handleToggleStudentStatus}
                     onDeleteStudent={handleDeleteStudentRow}
                     emptyMessage={t("classroomDetail.messages.noStudents")}
                     disableActions={isOrgMode}

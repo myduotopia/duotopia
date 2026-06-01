@@ -64,6 +64,10 @@ export interface OrganizationListItem {
   created_at: string;
   subscription_start_date: string | null;
   subscription_end_date: string | null;
+  // Phase 5-2 (issue #768): institution monthly per-student price (NT$).
+  // Only meaningful for org_type='institution'; null otherwise.
+  per_student_price?: number | null;
+  org_type?: "institution" | "group_buy" | null;
 }
 
 // Organization list response with pagination

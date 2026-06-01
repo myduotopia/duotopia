@@ -99,6 +99,16 @@ class OrgRenewRequest(BaseModel):
     cardholder: Optional[Dict[str, Any]] = None
 
 
+class GroupBuyPlanInfo(BaseModel):
+    name: str
+    teacher_seats: int
+    annual_fee: int  # per teacher
+    total_amount: int  # annual_fee × teacher_seats
+    topup_discount: float  # 0.85 / 0.90 / 0.95 — for "加購折扣" display
+    monthly_quota: int  # quota_total granted per teacher per month
+    display_order: int
+
+
 class GroupBuyOpenRequest(BaseModel):
     prime: str
     plan_name: str  # group-buy plan name e.g. "團購-30席"
@@ -754,6 +764,43 @@ async def org_renew_credit_package(
     except Exception as e:
         logger.error(f"Org credit package renewal error: {e}")
         raise HTTPException(status_code=500, detail="Renewal processing failed")
+
+
+@router.get("/group-buy-plans", response_model=List[GroupBuyPlanInfo])
+async def list_group_buy_plans(
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """List active group-buy plans for the open-group page (issue #768 Phase 5-2).
+
+    Auth: any authenticated teacher. Pricing is canonical from the DB; the
+    frontend MUST NOT compute or trust its own totals.
+    """
+    from models import Plan
+
+    rows = (
+        db.query(Plan)
+        .filter(
+            Plan.is_active.is_(True),
+            Plan.teacher_seats.isnot(None),
+            Plan.annual_fee.isnot(None),
+            Plan.topup_discount.isnot(None),
+        )
+        .order_by(Plan.display_order.asc(), Plan.teacher_seats.asc())
+        .all()
+    )
+    return [
+        GroupBuyPlanInfo(
+            name=p.name,
+            teacher_seats=p.teacher_seats,
+            annual_fee=p.annual_fee,
+            total_amount=p.annual_fee * p.teacher_seats,
+            topup_discount=float(p.topup_discount),
+            monthly_quota=p.quota or 0,
+            display_order=p.display_order,
+        )
+        for p in rows
+    ]
 
 
 @router.post("/group-buy-open", response_model=GroupBuyOpenResponse)
