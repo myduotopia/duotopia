@@ -6,7 +6,7 @@ CRUD operations for organizations with Casbin permission checks.
 Note: Per-issue deploy now includes database migrations (2026-01-11 v4 - upgrade heads)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import func, distinct, union, select
 from sqlalchemy.orm import Session, joinedload, selectinload, load_only
@@ -28,6 +28,7 @@ from models import (
 from auth import verify_token, get_password_hash
 from services.casbin_service import get_casbin_service
 from services.email_service import email_service
+from services.institution_billing import compute_monthly_billing
 import secrets
 
 
@@ -1494,3 +1495,83 @@ async def get_teacher_permissions(
         )
 
     return {"teacher_id": teacher_id, "schools": result}
+
+
+# ============ Phase 4 (issue #768 五.5) — Institution monthly billing ============
+
+
+class StudentBillingBreakdown(BaseModel):
+    student_id: int
+    name: str
+    billable: bool
+
+
+class MonthlyBillingResponse(BaseModel):
+    org_id: str
+    year: int
+    month: int
+    per_student_price: int
+    billable_student_count: int
+    total_amount: int
+    currency: str
+    students: List[StudentBillingBreakdown]
+
+
+@router.get("/{org_id}/billing/monthly", response_model=MonthlyBillingResponse)
+async def get_monthly_billing(
+    org_id: uuid.UUID,
+    year: int = Query(..., ge=1, le=9998, description="Calendar year (Taipei)"),
+    month: int = Query(..., ge=1, le=12, description="Calendar month (1-12)"),
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """Compute the institution's monthly invoice for a given (year, month).
+
+    Auth: platform admin OR an org_owner of this org.
+    Validation: org must be `org_type='institution'` with `per_student_price`
+    set. 400 otherwise.
+
+    Billing rule (issue #768 五.5): a student is billable for the month iff
+    they were 'active' at any moment during the Taipei month window. See
+    `services.institution_billing` for the detailed derivation.
+    """
+    # Auth: admin bypasses org-membership check; otherwise must be the
+    # org's `org_owner` specifically (NOT just any member). `check_org_permission`
+    # only verifies membership, not role — so billing requires its own
+    # explicit role check to keep PII (student names + billable status) out
+    # of org_admin / teacher hands.
+    if current_teacher.is_admin:
+        org = (
+            db.query(Organization)
+            .filter(Organization.id == org_id, Organization.is_active.is_(True))
+            .first()
+        )
+        if org is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
+            )
+    else:
+        org = check_org_permission(current_teacher.id, org_id, db)
+        is_owner = (
+            db.query(TeacherOrganization)
+            .filter(
+                TeacherOrganization.teacher_id == current_teacher.id,
+                TeacherOrganization.organization_id == org_id,
+                TeacherOrganization.role == "org_owner",
+                TeacherOrganization.is_active.is_(True),
+            )
+            .first()
+            is not None
+        )
+        if not is_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only org_owner can query monthly billing.",
+            )
+
+    try:
+        result = compute_monthly_billing(org, year, month, db)
+    except (ValueError, OverflowError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return result
