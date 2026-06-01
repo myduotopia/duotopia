@@ -1569,6 +1569,10 @@ async def get_monthly_billing(
 
     try:
         result = compute_monthly_billing(org, year, month, db)
+    # `_month_window` (and the Query(ge=1, le=9998) decorator) converts every
+    # year/month range error into a ValueError before any datetime arithmetic,
+    # so raw OverflowError cannot reach this layer. See
+    # test_month_window_rejects_year_9999_to_prevent_overflow for the invariant.
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

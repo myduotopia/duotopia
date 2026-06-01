@@ -124,6 +124,39 @@ def test_outsider_teacher_gets_403(
     assert r.status_code == 403
 
 
+def test_deactivated_org_owner_gets_403(
+    test_client, shared_test_session, institution_org_with_one_active_student
+):
+    """5-1 R2-F1 lock-in: a TeacherOrganization row with role='org_owner'
+    but `is_active=False` must NOT pass the role check (revoked-owner case).
+    Locks in the `is_active.is_(True)` filter against future refactor."""
+    org, _, _ = institution_org_with_one_active_student
+    revoked = Teacher(
+        email="bill-revoked-owner@duotopia.com",
+        password_hash=get_password_hash("x"),
+        name="RevokedOwner",
+        is_active=True,
+        email_verified=True,
+    )
+    shared_test_session.add(revoked)
+    shared_test_session.flush()
+    shared_test_session.add(
+        TeacherOrganization(
+            teacher_id=revoked.id,
+            organization_id=org.id,
+            role="org_owner",
+            is_active=False,  # revoked
+        )
+    )
+    shared_test_session.commit()
+
+    r = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly?year=2026&month=6",
+        headers=_bearer(revoked.id),
+    )
+    assert r.status_code == 403
+
+
 def test_org_member_non_owner_gets_403(
     test_client, shared_test_session, institution_org_with_one_active_student
 ):

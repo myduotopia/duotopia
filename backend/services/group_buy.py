@@ -203,11 +203,15 @@ def grant_monthly_for_group_buy(today: datetime, db: Session) -> dict:
     test path is a no-op.
     """
     if db.get_bind().dialect.name == "postgresql":
+        # Fixed int64 advisory-lock key — replaces hashtext() which returns
+        # int32 (~1-in-4-billion collision risk with other advisory locks).
+        # Value is a hand-picked random int64 dedicated to this cron job;
+        # never reuse across other lock sites in this codebase.
+        # Mnemonic: "GBMG" (Group-Buy Monthly Grant) encoded.
+        GRANT_MONTHLY_LOCK_KEY = 7386349847423521791
         locked = db.execute(
-            text(
-                "SELECT pg_try_advisory_xact_lock(hashtext("
-                "'grant_monthly_for_group_buy'))"
-            )
+            text("SELECT pg_try_advisory_xact_lock(:k)"),
+            {"k": GRANT_MONTHLY_LOCK_KEY},
         ).scalar()
         if not locked:
             # Another invocation holds the lock — bail out cleanly. The
