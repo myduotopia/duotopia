@@ -2201,14 +2201,12 @@ const ReadingAssessmentPanel = forwardRef<
     const normalized = batchPasteText.replace(/—+/g, " ");
     // 分割文字：先依換行，再依句末標點 . ? !（含全形）切成獨立 item
     // 句末標點會保留在前一句尾端
-    const rawLines = normalized
-      .split("\n")
-      .flatMap((line) =>
-        line
-          .split(/(?<=[.?!。？！])\s+/)
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0),
-      );
+    const rawLines = normalized.split("\n").flatMap((line) =>
+      line
+        .split(/(?<=[.?!。？！])\s+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+    );
 
     // 1. 貼上框內部去重（忽略大小寫）
     const seen = new Set<string>();
