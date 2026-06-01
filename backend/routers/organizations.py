@@ -28,6 +28,7 @@ from models import (
 from auth import verify_token, get_password_hash
 from services.casbin_service import get_casbin_service
 from services.email_service import email_service
+from services.institution_billing import compute_monthly_billing
 import secrets
 
 
@@ -1534,7 +1535,11 @@ async def get_monthly_billing(
     they were 'active' at any moment during the Taipei month window. See
     `services.institution_billing` for the detailed derivation.
     """
-    # Auth: admin bypasses org-membership check; otherwise must be org_owner.
+    # Auth: admin bypasses org-membership check; otherwise must be the
+    # org's `org_owner` specifically (NOT just any member). `check_org_permission`
+    # only verifies membership, not role — so billing requires its own
+    # explicit role check to keep PII (student names + billable status) out
+    # of org_admin / teacher hands.
     if current_teacher.is_admin:
         org = (
             db.query(Organization)
@@ -1547,12 +1552,26 @@ async def get_monthly_billing(
             )
     else:
         org = check_org_permission(current_teacher.id, org_id, db)
-
-    from services.institution_billing import compute_monthly_billing
+        is_owner = (
+            db.query(TeacherOrganization)
+            .filter(
+                TeacherOrganization.teacher_id == current_teacher.id,
+                TeacherOrganization.organization_id == org_id,
+                TeacherOrganization.role == "org_owner",
+                TeacherOrganization.is_active.is_(True),
+            )
+            .first()
+            is not None
+        )
+        if not is_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only org_owner can query monthly billing.",
+            )
 
     try:
         result = compute_monthly_billing(org, year, month, db)
-    except ValueError as e:
+    except (ValueError, OverflowError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     return result

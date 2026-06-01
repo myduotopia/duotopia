@@ -124,6 +124,39 @@ def test_outsider_teacher_gets_403(
     assert r.status_code == 403
 
 
+def test_org_member_non_owner_gets_403(
+    test_client, shared_test_session, institution_org_with_one_active_student
+):
+    """Auth bypass guard: an active org_admin (member but not org_owner)
+    must NOT receive billing PII (student names + billable status).
+    Locks in the role check added after PR #823 round 0 review F1."""
+    org, _, _ = institution_org_with_one_active_student
+    member = Teacher(
+        email="bill-org-admin@duotopia.com",
+        password_hash=get_password_hash("x"),
+        name="OrgAdminMember",
+        is_active=True,
+        email_verified=True,
+    )
+    shared_test_session.add(member)
+    shared_test_session.flush()
+    shared_test_session.add(
+        TeacherOrganization(
+            teacher_id=member.id,
+            organization_id=org.id,
+            role="org_admin",  # member, but NOT org_owner
+            is_active=True,
+        )
+    )
+    shared_test_session.commit()
+    r = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly?year=2026&month=6",
+        headers=_bearer(member.id),
+    )
+    assert r.status_code == 403
+    assert "org_owner" in r.json()["detail"]
+
+
 def test_admin_can_query_any_org(
     test_client, admin, institution_org_with_one_active_student
 ):

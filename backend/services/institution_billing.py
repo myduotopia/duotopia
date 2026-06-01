@@ -39,7 +39,14 @@ def _month_window(year: int, month: int) -> tuple[datetime, datetime]:
 
     end_exclusive = midnight of the first day of the NEXT month, so the
     queried range is half-open [start, end_exclusive).
+
+    Year must be 1..9998 (9999 + month=12 would overflow Python's
+    datetime.MAXYEAR=9999 when computing end_exclusive). Both bounds raise
+    a friendly ValueError so the router can return a clean 400 instead of
+    a raw OverflowError → 500.
     """
+    if not 1 <= year <= 9998:
+        raise ValueError(f"year must be 1..9998, got {year}")
     if not 1 <= month <= 12:
         raise ValueError(f"month must be 1..12, got {month}")
     start = datetime(year, month, 1, 0, 0, 0, tzinfo=TAIPEI)
@@ -110,8 +117,12 @@ def compute_monthly_billing(
         raise ValueError(
             f"Organization {org.id} is not an institution (org_type={org.org_type!r})"
         )
-    if org.per_student_price is None:
-        raise ValueError(f"Organization {org.id} has no per_student_price set.")
+    # Catches both None and 0: a 0 price would silently zero every invoice
+    # which is indistinguishable from a real bug.
+    if not org.per_student_price:
+        raise ValueError(
+            f"Organization {org.id} has no per_student_price set or it is zero."
+        )
 
     month_start, month_end_exclusive = _month_window(year, month)
 
@@ -155,8 +166,13 @@ def compute_monthly_billing(
             StudentStatusHistory.student_id.in_(student_ids),
             StudentStatusHistory.changed_at < month_end_exclusive,
         )
+        # `id` tiebreaker: when two rows for the same student share an
+        # identical changed_at, fall back to insertion order so the
+        # status-at-T derivation is deterministic.
         .order_by(
-            StudentStatusHistory.student_id, StudentStatusHistory.changed_at.asc()
+            StudentStatusHistory.student_id,
+            StudentStatusHistory.changed_at.asc(),
+            StudentStatusHistory.id.asc(),
         )
         .all()
     )
