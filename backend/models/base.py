@@ -137,6 +137,10 @@ class PracticeMode(str, enum.Enum):
     # 單字集 (VOCABULARY_SET) - Phase 2
     WORD_READING = "word_reading"  # 單字朗讀 -> 口說分類
     WORD_SELECTION = "word_selection"  # 單字選擇 -> 艾賓浩斯記憶曲線
+    WORD_SPELLING = "word_spelling"  # 單字拼寫 -> 艾賓浩斯
+    WORD_CLOZE = "word_cloze"  # 單字克漏字 -> 艾賓浩斯
+    WORD_SPELLING_QUIZ = "word_spelling_quiz"  # 單字拼寫 -> 小考
+    WORD_CLOZE_QUIZ = "word_cloze_quiz"  # 單字克漏字 -> 小考
 
 
 class ScoreCategory(str, enum.Enum):

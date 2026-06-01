@@ -21,9 +21,9 @@ class CreateAssignmentRequest(BaseModel):
     organization_id: Optional[str] = None
     school_id: Optional[str] = None
     # 作答模式設定
-    practice_mode: Optional[
-        str
-    ] = None  # reading, rearrangement, word_reading, word_selection, word_spelling, word_cloze
+    # reading, rearrangement, word_reading, word_selection,
+    # word_spelling, word_cloze, word_spelling_quiz, word_cloze_quiz
+    practice_mode: Optional[str] = None
     answer_mode: Optional[
         str
     ] = None  # DEPRECATED: only 'listening'/'writing' allowed by DB
