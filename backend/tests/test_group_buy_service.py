@@ -14,6 +14,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 import pytest
+from dateutil.relativedelta import relativedelta
 
 from auth import get_password_hash
 from models import (
@@ -167,7 +168,9 @@ def test_open_creates_org_school_and_owner_binding(shared_test_session, owner):
     assert org.org_type == "group_buy"
     # SQLite strips tzinfo on TIMESTAMPTZ store; compare naive values.
     assert _naive(org.subscription_start_date) == _naive(now)
-    assert _naive(org.subscription_end_date) == _naive(now + timedelta(days=365))
+    # W3 — Production uses relativedelta(years=1), NOT timedelta(days=365).
+    # The two diverge on leap-year boundaries (Feb 29 + 1y → Feb 28 vs Mar 1).
+    assert _naive(org.subscription_end_date) == _naive(now + relativedelta(years=1))
     assert school.organization_id == org.id
     assert school.plan_id == plan.id
     assert school.teacher_seat_limit == plan.teacher_seats
