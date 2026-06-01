@@ -238,6 +238,44 @@ def test_flipped_active_inactive_active_is_billable(
     assert result["billable_student_count"] == 1
 
 
+def test_first_ever_history_is_inactivation_within_window_still_billable(
+    shared_test_session, institution_org, institution_school
+):
+    """R2-F1 regression: a student whose FIRST EVER history row is an
+    inactivation inside the queried window was active before — even if
+    Student.is_active is currently False (set by that very inactivation).
+
+    Pre-fix bug: status_at_start fell back to student.is_active=False,
+    masked the active days at the start of the month, and the student
+    was not billed despite being active June 1-9.
+    """
+    s = _student(shared_test_session, "Justin", is_active=True)
+    _enrol(shared_test_session, s, institution_school)
+    # First and only history row: deactivated mid-June. is_active updated
+    # in lock-step (typical app behaviour on a deactivation event).
+    _status(shared_test_session, s, datetime(2026, 6, 10, tzinfo=TAIPEI), "inactive")
+    s.is_active = False
+    shared_test_session.commit()
+
+    result = compute_monthly_billing(institution_org, 2026, 6, shared_test_session)
+    # Was active June 1–9 → MUST be billable, despite current is_active=False
+    assert result["billable_student_count"] == 1
+
+
+def test_first_ever_history_is_activation_within_window_is_billable(
+    shared_test_session, institution_org, institution_school
+):
+    """Companion to F1 regression: a student whose FIRST EVER history row is
+    an activation inside the window was inactive before — billable because
+    they became active during the month (joined mid-month case)."""
+    s = _student(shared_test_session, "Kara", is_active=True)
+    _enrol(shared_test_session, s, institution_school)
+    _status(shared_test_session, s, datetime(2026, 6, 15, tzinfo=TAIPEI), "active")
+
+    result = compute_monthly_billing(institution_org, 2026, 6, shared_test_session)
+    assert result["billable_student_count"] == 1
+
+
 def test_future_history_row_does_not_affect_current_month(
     shared_test_session, institution_org, institution_school
 ):

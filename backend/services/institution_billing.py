@@ -78,12 +78,21 @@ def _is_billable(
     changed_at ASC. We pass it in (rather than querying) so the caller can
     bulk-load history for the whole org in one round-trip.
     """
+    # R2-F4: cheap invariant guard — fail loud in tests if a future caller
+    # passes unsorted rows. ORDER BY in compute_monthly_billing enforces it.
+    assert all(
+        _ensure_taipei(history_rows[i].changed_at)
+        <= _ensure_taipei(history_rows[i + 1].changed_at)
+        for i in range(len(history_rows) - 1)
+    ), "history_rows must be sorted ASC by changed_at"
+
     if not history_rows:
-        # No history → fall back to Student.is_active treated as steady-state.
+        # No history at all → student pre-dates the mechanism; fall back to
+        # Student.is_active treated as the steady-state for the whole month.
         return bool(student.is_active)
 
     # Status at month_start = the most recent history row with
-    # changed_at ≤ month_start. If none precede, default to Student.is_active.
+    # changed_at ≤ month_start.
     status_at_start: Optional[str] = None
     for row in history_rows:
         if _ensure_taipei(row.changed_at) <= month_start:
@@ -92,7 +101,17 @@ def _is_billable(
             break
 
     if status_at_start is None:
-        status_at_start = "active" if student.is_active else "inactive"
+        # R2-F1: history exists but ALL rows postdate month_start (i.e. the
+        # student's first ever recorded transition is in or after this
+        # window). The pre-window state cannot be inferred from the
+        # CURRENT Student.is_active (which reflects today, not the past),
+        # so derive it from the first row: each history row represents a
+        # state CHANGE, so the prior state is the opposite of what the
+        # first row records.
+        #   first row → 'inactive'  ⇒ was 'active' before  ⇒ billable
+        #   first row → 'active'    ⇒ was 'inactive' before
+        first = history_rows[0]
+        status_at_start = "inactive" if first.status == "active" else "active"
 
     if status_at_start == "active":
         return True
@@ -127,10 +146,13 @@ def compute_monthly_billing(
     month_start, month_end_exclusive = _month_window(year, month)
 
     # All distinct students enrolled in any school under this org. We
-    # include enrollments regardless of student_schools.is_active because the
-    # billing question is "was the STUDENT active in this org during M",
-    # which lives on student_status_history (canonical), not on the
-    # per-school enrollment row.
+    # include enrollments regardless of student_schools.is_active AND
+    # School.is_active — the billing question is "was the STUDENT active in
+    # this org during M", which lives on student_status_history (the
+    # canonical source for billing). A school decommissioned mid-month
+    # doesn't change whether the org received service for its students
+    # during their active days. Status history filtering below ensures
+    # only truly-active students get charged.
     students = (
         db.query(Student)
         .join(StudentSchool, StudentSchool.student_id == Student.id)

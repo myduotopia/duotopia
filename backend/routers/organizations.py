@@ -6,7 +6,7 @@ CRUD operations for organizations with Casbin permission checks.
 Note: Per-issue deploy now includes database migrations (2026-01-11 v4 - upgrade heads)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import func, distinct, union, select
 from sqlalchemy.orm import Session, joinedload, selectinload, load_only
@@ -1520,8 +1520,8 @@ class MonthlyBillingResponse(BaseModel):
 @router.get("/{org_id}/billing/monthly", response_model=MonthlyBillingResponse)
 async def get_monthly_billing(
     org_id: uuid.UUID,
-    year: int,
-    month: int,
+    year: int = Query(..., ge=1, le=9998, description="Calendar year (Taipei)"),
+    month: int = Query(..., ge=1, le=12, description="Calendar month (1-12)"),
     db: Session = Depends(get_db),
     current_teacher: Teacher = Depends(get_current_teacher),
 ):
