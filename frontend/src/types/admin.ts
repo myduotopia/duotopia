@@ -86,6 +86,9 @@ export interface AdminOrganizationUpdateRequest {
   total_points?: number;
   subscription_start_date?: string;
   subscription_end_date?: string;
+  // Phase 5-2 (issue #768): institution monthly per-student price (NT$).
+  // Only meaningful for org_type='institution'. Must be > 0.
+  per_student_price?: number;
 }
 
 // Admin organization update response

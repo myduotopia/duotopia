@@ -876,6 +876,22 @@ class ApiClient {
     });
   }
 
+  // ===== Phase 5-2 (issue #768): student activate / deactivate =====
+  async updateStudentStatus(
+    studentId: number,
+    body: { status: "active" | "inactive"; note?: string },
+  ) {
+    return this.request<{
+      student_id: number;
+      status: "active" | "inactive";
+      history_id: number;
+      changed_at: string;
+    }>(`/api/teachers/students/${studentId}/status`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
   // ============ Program CRUD Methods ============
   async createProgram(data: {
     name: string;
@@ -1572,11 +1588,57 @@ class ApiClient {
       contact_phone?: string;
       address?: string;
       total_points?: number;
+      per_student_price?: number | null;
     },
   ) {
     return this.request(`/api/admin/organizations/${orgId}`, {
       method: "PUT",
       body: JSON.stringify(data),
+    });
+  }
+
+  // ===== Phase 5-2 (issue #768): institution monthly billing query =====
+  async getOrganizationMonthlyBilling(
+    orgId: string,
+    year: number,
+    month: number,
+  ) {
+    return this.request<{
+      org_id: string;
+      year: number;
+      month: number;
+      per_student_price: number;
+      billable_student_count: number;
+      total_amount: number;
+      currency: string;
+      students: Array<{
+        student_id: number;
+        name: string;
+        billable: boolean;
+      }>;
+    }>(
+      `/api/organizations/${orgId}/billing/monthly?year=${year}&month=${month}`,
+      { method: "GET" },
+    );
+  }
+
+  // ===== Phase 5-2 (issue #768): group-buy open =====
+  async openGroupBuy(body: {
+    prime: string;
+    plan_name: string;
+    cardholder?: { name?: string; email?: string; phone_number?: string };
+  }) {
+    return this.request<{
+      success: boolean;
+      message: string;
+      transaction_id?: string;
+      organization_id?: string;
+      school_id?: string;
+      subscription_end_date?: string;
+      teacher_seat_limit?: number;
+    }>("/api/credit-packages/group-buy-open", {
+      method: "POST",
+      body: JSON.stringify(body),
     });
   }
 

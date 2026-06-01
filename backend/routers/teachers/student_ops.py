@@ -19,7 +19,9 @@ from models import (
     Organization,
     School,
     ClassroomSchool,
+    StudentStatusHistory,
 )
+from pydantic import BaseModel, Field
 from .dependencies import get_current_teacher
 from .validators import *
 from .utils import TEST_SUBSCRIPTION_WHITELIST  # parse_birthdate is defined locally
@@ -1080,3 +1082,126 @@ async def batch_import_students(
         "errors": errors,
         "created_students": created_students,
     }
+
+
+# ====== Phase 5-2 (issue #768): student activate / deactivate ======
+
+
+class StudentStatusUpdateRequest(BaseModel):
+    """Request body for POST /students/{id}/status."""
+
+    status: str = Field(..., description="'active' or 'inactive'")
+    note: Optional[str] = Field(None, description="Optional audit note")
+
+
+class StudentStatusUpdateResponse(BaseModel):
+    student_id: int
+    status: str
+    history_id: int
+    changed_at: datetime
+
+
+@router.post(
+    "/students/{student_id}/status", response_model=StudentStatusUpdateResponse
+)
+async def update_student_status(
+    student_id: int,
+    body: StudentStatusUpdateRequest,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """Activate or deactivate a student (issue #768 Phase 5-2).
+
+    Writes a row to `student_status_history` so the institution monthly
+    billing query (Phase 4) can determine active days per month, and syncs
+    `Student.is_active` in lock-step so existing UI/auth flows that read
+    that boolean still work.
+
+    Auth: caller must own the classroom the student is enrolled in (matches
+    the existing `DELETE /students/{id}` ownership check).
+    """
+    if body.status not in ("active", "inactive"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="status must be 'active' or 'inactive'",
+        )
+
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if student is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
+        )
+
+    # Ownership: the student must be in a classroom owned by current_teacher.
+    classroom_student = (
+        db.query(ClassroomStudent)
+        .filter(ClassroomStudent.student_id == student_id)
+        .first()
+    )
+    if classroom_student is not None:
+        owns = (
+            db.query(Classroom)
+            .filter(
+                Classroom.id == classroom_student.classroom_id,
+                Classroom.teacher_id == current_teacher.id,
+            )
+            .first()
+        )
+        if owns is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to change this student's status",
+            )
+
+    target_is_active = body.status == "active"
+
+    # No-op short-circuit: same status, no history row, no flush.
+    if student.is_active == target_is_active:
+        # Still return the most recent history row id (or 0 if none) so the
+        # frontend has a deterministic shape.
+        last = (
+            db.query(StudentStatusHistory)
+            .filter(StudentStatusHistory.student_id == student_id)
+            .order_by(StudentStatusHistory.changed_at.desc())
+            .first()
+        )
+        return StudentStatusUpdateResponse(
+            student_id=student_id,
+            status=body.status,
+            history_id=last.id if last else 0,
+            changed_at=last.changed_at if last else datetime.utcnow(),
+        )
+
+    # Lookup the student's primary school (for school_id on the history row).
+    # If the student is enrolled in multiple schools we record the most-recent
+    # active enrollment; if none, school_id stays NULL (SET NULL FK).
+    from models import StudentSchool
+
+    school_enrol = (
+        db.query(StudentSchool)
+        .filter(
+            StudentSchool.student_id == student_id,
+            StudentSchool.is_active.is_(True),
+        )
+        .order_by(StudentSchool.enrolled_at.desc())
+        .first()
+    )
+
+    history = StudentStatusHistory(
+        student_id=student_id,
+        school_id=school_enrol.school_id if school_enrol else None,
+        status=body.status,
+        changed_by=current_teacher.id,
+        note=body.note,
+    )
+    student.is_active = target_is_active
+    db.add(history)
+    db.commit()
+    db.refresh(history)
+
+    return StudentStatusUpdateResponse(
+        student_id=student_id,
+        status=body.status,
+        history_id=history.id,
+        changed_at=history.changed_at,
+    )

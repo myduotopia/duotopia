@@ -171,6 +171,8 @@ class AdminOrganizationUpdate(BaseModel):
     total_points: Optional[int] = None  # Can adjust points allocation
     subscription_start_date: Optional[datetime] = None
     subscription_end_date: Optional[datetime] = None
+    # Phase 5-2 (issue #768): institution monthly per-student price (NT$)
+    per_student_price: Optional[int] = Field(None, gt=0)
 
 
 class AdminOrganizationUpdateResponse(BaseModel):
