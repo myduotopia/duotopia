@@ -119,6 +119,24 @@ def test_month_window_rejects_invalid_month():
         _month_window(2026, 13)
 
 
+def test_month_window_rejects_year_zero():
+    with pytest.raises(ValueError, match="year"):
+        _month_window(0, 1)
+
+
+def test_month_window_rejects_year_negative():
+    with pytest.raises(ValueError, match="year"):
+        _month_window(-1, 6)
+
+
+def test_month_window_rejects_year_9999_to_prevent_overflow():
+    """9999 + month=12 would compute datetime(10000, ...) and OverflowError.
+    The guard rejects 9999 with a friendly ValueError so the router returns
+    a clean 400 / 422 instead."""
+    with pytest.raises(ValueError, match="year"):
+        _month_window(9999, 12)
+
+
 # ---------- compute_monthly_billing ----------
 
 

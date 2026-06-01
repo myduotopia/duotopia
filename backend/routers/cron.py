@@ -24,6 +24,7 @@ from models import (
 )
 from services.email_service import email_service
 from services.tappay_service import TapPayService
+from services.group_buy import grant_monthly_for_group_buy
 from google.cloud import bigquery
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
@@ -393,8 +394,6 @@ async def monthly_renewal_cron(
     logger.info("🎁 Phase 3: Group-buy monthly grants")
     group_buy_failed = False
     try:
-        from services.group_buy import grant_monthly_for_group_buy
-
         gb_result = grant_monthly_for_group_buy(now_taipei, db)
         results["group_buy_grants_created"] = gb_result["grants_created"]
         results["group_buy_grants_skipped_duplicate"] = gb_result[

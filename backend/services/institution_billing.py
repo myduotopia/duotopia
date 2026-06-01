@@ -15,8 +15,7 @@ when the mechanism was introduced), the fallback is Student.is_active,
 treated as the status held throughout the queried month.
 """
 
-from calendar import monthrange
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
@@ -75,19 +74,10 @@ def _is_billable(
     """Decide if a single student is billable for the queried month.
 
     `history_rows` MUST be already filtered to this student and ordered by
-    changed_at ASC. We pass it in (rather than querying) so the caller can
-    bulk-load history for the whole org in one round-trip.
+    changed_at ASC. The sort-order invariant is enforced once by
+    `compute_monthly_billing` immediately after the bulk query (so the
+    O(n) check fires once per request, not once per student).
     """
-    # R3-F1: sort-order invariant. Use an explicit raise instead of assert
-    # so Python's -O flag (which strips asserts) cannot silently disable
-    # this guard in production — a sort-order violation produces wrong
-    # billing totals with no error surfaced otherwise.
-    for i in range(len(history_rows) - 1):
-        if _ensure_taipei(history_rows[i].changed_at) > _ensure_taipei(
-            history_rows[i + 1].changed_at
-        ):
-            raise ValueError("history_rows must be sorted ASC by changed_at")
-
     if not history_rows:
         # No history at all → student pre-dates the mechanism; fall back to
         # Student.is_active treated as the steady-state for the whole month.
@@ -138,11 +128,12 @@ def compute_monthly_billing(
         raise ValueError(
             f"Organization {org.id} is not an institution (org_type={org.org_type!r})"
         )
-    # Catches None, 0, AND negative values. The DB CHECK constraint added
-    # in Phase 2 already rejects ≤0 on write, but the service layer guards
-    # explicitly so a stale ORM object or a future caller can't slip in a
-    # negative that would produce a negative total_amount.
-    if not org.per_student_price or org.per_student_price < 0:
+    # Explicit `is None or <= 0` is clearer than the truthiness shorthand
+    # for billing-critical preconditions. The DB CHECK constraint added in
+    # Phase 2 already rejects ≤0 on write; the service layer guards
+    # explicitly so a stale ORM object or future caller cannot slip a
+    # non-positive through and produce a zero/negative total_amount.
+    if org.per_student_price is None or org.per_student_price <= 0:
         raise ValueError(
             f"Organization {org.id} per_student_price is not a positive integer."
         )
@@ -204,6 +195,22 @@ def compute_monthly_billing(
     )
     for row in rows:
         history_by_student[row.student_id].append(row)
+
+    # W2: sort-order invariant for all per-student row lists. Runs ONCE
+    # here (after the bulk fetch is partitioned), not per-student inside
+    # `_is_billable`. Use explicit raise instead of `assert` so Python's
+    # -O flag cannot silently disable the guard in production — a
+    # sort-order violation otherwise produces wrong billing with no error
+    # surfaced. The SQL `ORDER BY changed_at ASC, id ASC` enforces this on
+    # the happy path; the guard catches a future refactor that breaks it.
+    for sid, rows_for_student in history_by_student.items():
+        for i in range(len(rows_for_student) - 1):
+            if _ensure_taipei(rows_for_student[i].changed_at) > _ensure_taipei(
+                rows_for_student[i + 1].changed_at
+            ):
+                raise ValueError(
+                    f"history_rows for student {sid} must be sorted ASC by changed_at"
+                )
 
     breakdown = []
     billable_count = 0

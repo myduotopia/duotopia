@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from typing import Tuple
 from zoneinfo import ZoneInfo
 
+from dateutil.relativedelta import relativedelta
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from models import (
@@ -104,7 +106,9 @@ def create_group_buy_org_and_school(
         name=f"{owner.name or owner.email}'s 團購",
         org_type="group_buy",
         subscription_start_date=now,
-        subscription_end_date=now + timedelta(days=365),
+        # relativedelta(years=1) handles Feb 29 → Feb 28 edge correctly;
+        # `timedelta(days=365)` would produce an off-by-one in leap years.
+        subscription_end_date=now + relativedelta(years=1),
         is_active=True,
     )
     db.add(org)
@@ -190,7 +194,31 @@ def grant_monthly_for_group_buy(today: datetime, db: Session) -> dict:
     this plan whose start_date is on/after the current month-start, skip —
     that handles the edge case where the cron runs after the open endpoint
     has already created the period for day 1.
+
+    Race-safety (Phase 5-1 R3.1): a Postgres advisory xact-lock on a fixed
+    cron-job key prevents two concurrent invocations (Cloud Scheduler
+    at-least-once retries, or `?force=true` ops re-run while the scheduled
+    fire is still in flight) from both reading an empty existing_keys set
+    and double-granting. Lock auto-releases on commit/rollback. SQLite
+    test path is a no-op.
     """
+    if db.get_bind().dialect.name == "postgresql":
+        # Fixed int64 advisory-lock key — replaces hashtext() which returns
+        # int32 (~1-in-4-billion collision risk with other advisory locks).
+        # Value is a hand-picked random int64 dedicated to this cron job;
+        # never reuse across other lock sites in this codebase.
+        # Mnemonic: "GBMG" (Group-Buy Monthly Grant) encoded.
+        GRANT_MONTHLY_LOCK_KEY = 7386349847423521791
+        locked = db.execute(
+            text("SELECT pg_try_advisory_xact_lock(:k)"),
+            {"k": GRANT_MONTHLY_LOCK_KEY},
+        ).scalar()
+        if not locked:
+            # Another invocation holds the lock — bail out cleanly. The
+            # other run will grant the points; this caller returns zero
+            # counters so its summary reflects "did nothing".
+            return {"grants_created": 0, "grants_skipped_duplicate": 0}
+
     taipei = ZoneInfo("Asia/Taipei")
     today_local = (
         today.astimezone(taipei) if today.tzinfo else today.replace(tzinfo=taipei)

@@ -39,7 +39,7 @@ def test_cron_phase3_invokes_group_buy_helper_and_surfaces_counters(
     with patch("routers.cron.CRON_SECRET", "test-secret"), patch(
         "routers.cron.datetime", _FakeDatetime
     ), patch(
-        "services.group_buy.grant_monthly_for_group_buy",
+        "routers.cron.grant_monthly_for_group_buy",
         return_value={"grants_created": 7, "grants_skipped_duplicate": 2},
     ) as mock_grant:
         r = _post_cron(test_client)
@@ -61,7 +61,7 @@ def test_cron_skips_phase3_when_not_first_of_month(test_client):
 
     with patch("routers.cron.CRON_SECRET", "test-secret"), patch(
         "routers.cron.datetime", _MidMonth
-    ), patch("services.group_buy.grant_monthly_for_group_buy") as mock_grant:
+    ), patch("routers.cron.grant_monthly_for_group_buy") as mock_grant:
         r = _post_cron(test_client)
 
     body = r.json()
@@ -84,7 +84,7 @@ def test_cron_force_true_bypasses_day_1_guard_and_runs_phase3(test_client):
     with patch("routers.cron.CRON_SECRET", "test-secret"), patch(
         "routers.cron.datetime", _MidMonth
     ), patch(
-        "services.group_buy.grant_monthly_for_group_buy",
+        "routers.cron.grant_monthly_for_group_buy",
         return_value={"grants_created": 4, "grants_skipped_duplicate": 1},
     ) as mock_grant:
         r = test_client.post(

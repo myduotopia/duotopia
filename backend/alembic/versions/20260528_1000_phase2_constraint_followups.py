@@ -67,7 +67,7 @@ def upgrade() -> None:
     )
 
     # ------------------------------------------------------------------
-    # Named-CHECK mirrors for 5 fields that got inline (auto-named) CHECKs
+    # Named-CHECK mirrors for 6 fields that got inline (auto-named) CHECKs
     # in Phase 1. Adding the named versions so the ORM model layer's
     # `CheckConstraint(name='ck_...')` claims match reality in Postgres
     # (the auto-named ones — e.g. organizations_org_type_check — also

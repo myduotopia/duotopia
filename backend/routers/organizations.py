@@ -1536,22 +1536,20 @@ async def get_monthly_billing(
     `services.institution_billing` for the detailed derivation.
     """
     # Auth: admin bypasses org-membership check; otherwise must be the
-    # org's `org_owner` specifically (NOT just any member). `check_org_permission`
-    # only verifies membership, not role — so billing requires its own
-    # explicit role check to keep PII (student names + billable status) out
-    # of org_admin / teacher hands.
-    if current_teacher.is_admin:
-        org = (
-            db.query(Organization)
-            .filter(Organization.id == org_id, Organization.is_active.is_(True))
-            .first()
+    # org's `org_owner` specifically (NOT just any member). Billing exposes
+    # PII (student names + billable status) so org_admin / teacher roles
+    # are explicitly excluded.
+    org = (
+        db.query(Organization)
+        .filter(Organization.id == org_id, Organization.is_active.is_(True))
+        .first()
+    )
+    if org is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
         )
-        if org is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
-            )
-    else:
-        org = check_org_permission(current_teacher.id, org_id, db)
+
+    if not current_teacher.is_admin:
         is_owner = (
             db.query(TeacherOrganization)
             .filter(
@@ -1571,7 +1569,11 @@ async def get_monthly_billing(
 
     try:
         result = compute_monthly_billing(org, year, month, db)
-    except (ValueError, OverflowError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    # `_month_window` (and the Query(ge=1, le=9998) decorator) converts every
+    # year/month range error into a ValueError before any datetime arithmetic,
+    # so raw OverflowError cannot reach this layer. See
+    # test_month_window_rejects_year_9999_to_prevent_overflow for the invariant.
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return result
