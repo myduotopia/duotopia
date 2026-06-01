@@ -78,13 +78,15 @@ def _is_billable(
     changed_at ASC. We pass it in (rather than querying) so the caller can
     bulk-load history for the whole org in one round-trip.
     """
-    # R2-F4: cheap invariant guard — fail loud in tests if a future caller
-    # passes unsorted rows. ORDER BY in compute_monthly_billing enforces it.
-    assert all(
-        _ensure_taipei(history_rows[i].changed_at)
-        <= _ensure_taipei(history_rows[i + 1].changed_at)
-        for i in range(len(history_rows) - 1)
-    ), "history_rows must be sorted ASC by changed_at"
+    # R3-F1: sort-order invariant. Use an explicit raise instead of assert
+    # so Python's -O flag (which strips asserts) cannot silently disable
+    # this guard in production — a sort-order violation produces wrong
+    # billing totals with no error surfaced otherwise.
+    for i in range(len(history_rows) - 1):
+        if _ensure_taipei(history_rows[i].changed_at) > _ensure_taipei(
+            history_rows[i + 1].changed_at
+        ):
+            raise ValueError("history_rows must be sorted ASC by changed_at")
 
     if not history_rows:
         # No history at all → student pre-dates the mechanism; fall back to
@@ -136,11 +138,13 @@ def compute_monthly_billing(
         raise ValueError(
             f"Organization {org.id} is not an institution (org_type={org.org_type!r})"
         )
-    # Catches both None and 0: a 0 price would silently zero every invoice
-    # which is indistinguishable from a real bug.
-    if not org.per_student_price:
+    # Catches None, 0, AND negative values. The DB CHECK constraint added
+    # in Phase 2 already rejects ≤0 on write, but the service layer guards
+    # explicitly so a stale ORM object or a future caller can't slip in a
+    # negative that would produce a negative total_amount.
+    if not org.per_student_price or org.per_student_price < 0:
         raise ValueError(
-            f"Organization {org.id} has no per_student_price set or it is zero."
+            f"Organization {org.id} per_student_price is not a positive integer."
         )
 
     month_start, month_end_exclusive = _month_window(year, month)

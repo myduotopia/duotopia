@@ -130,6 +130,36 @@ def test_rejects_non_institution_org(shared_test_session, teacher):
         compute_monthly_billing(org, 2026, 6, shared_test_session)
 
 
+def test_rejects_zero_per_student_price(shared_test_session):
+    """R3-F2 regression: per_student_price=0 must NOT silently produce a
+    zero invoice. Service-layer guard is defense-in-depth — the DB CHECK
+    constraint from Phase 2 also rejects ≤0, so we construct the org
+    without persisting to exercise the service guard in isolation."""
+    org = Organization(
+        name="ZeroPrice",
+        org_type="institution",
+        per_student_price=0,
+        is_active=True,
+    )
+    # Do NOT add/commit — the DB CHECK constraint would reject first.
+    with pytest.raises(ValueError, match="per_student_price"):
+        compute_monthly_billing(org, 2026, 6, shared_test_session)
+
+
+def test_rejects_negative_per_student_price(shared_test_session):
+    """R3-F2 regression: a negative per_student_price must NOT pass the
+    `not org.per_student_price` check and produce a negative invoice.
+    Defense-in-depth alongside the DB CHECK."""
+    org = Organization(
+        name="NegPrice",
+        org_type="institution",
+        per_student_price=-50,
+        is_active=True,
+    )
+    with pytest.raises(ValueError, match="per_student_price"):
+        compute_monthly_billing(org, 2026, 6, shared_test_session)
+
+
 def test_rejects_org_with_no_per_student_price(shared_test_session):
     org = Organization(
         name="Acme",
