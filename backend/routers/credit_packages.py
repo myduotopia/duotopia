@@ -7,6 +7,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
+
+from dateutil.relativedelta import relativedelta
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import logging
@@ -28,6 +30,12 @@ from models import (
 from routers.teachers import get_current_teacher
 from services.tappay_service import TapPayService
 from services.topup_discount import get_teacher_topup_discount
+from services.group_buy import (
+    compute_group_buy_total,
+    create_group_buy_org_and_school,
+    create_group_buy_period,
+    validate_group_buy_plan,
+)
 from config.plans import (
     CREDIT_PACKAGES,
     ORG_ALLOWED_PACKAGES,
@@ -751,6 +759,7 @@ async def org_renew_credit_package(
 @router.post("/group-buy-open", response_model=GroupBuyOpenResponse)
 async def open_group_buy(
     request: Request,
+    open_request: GroupBuyOpenRequest,
     db: Session = Depends(get_db),
     current_teacher: Teacher = Depends(get_current_teacher),
 ):
@@ -766,23 +775,11 @@ async def open_group_buy(
     if not ENABLE_PAYMENT:
         return GroupBuyOpenResponse(success=False, message="付款功能尚未開放，敬請期待！")
 
-    # Parse request
-    try:
-        body = await request.body()
-        body_json = json.loads(body)
-        open_request = GroupBuyOpenRequest(**body_json)
-    except Exception as e:
-        logger.error(f"Failed to parse group-buy open request: {e}")
-        raise HTTPException(status_code=400, detail="Invalid request format")
+    # Reconstruct the raw body dict for audit logging (FastAPI already
+    # validated `open_request` and would return 422 on bad input).
+    body_json = open_request.model_dump()
 
     # Server-side plan validation and amount computation
-    from services.group_buy import (
-        compute_group_buy_total,
-        create_group_buy_org_and_school,
-        create_group_buy_period,
-        validate_group_buy_plan,
-    )
-
     try:
         plan = validate_group_buy_plan(open_request.plan_name, db)
     except ValueError as e:
@@ -817,6 +814,13 @@ async def open_group_buy(
     # pass the check and double-charge. Lock auto-releases at request end.
     # SQLite tests are single-threaded; the dialect guard is a no-op there.
     # Use db.get_bind() (SQLAlchemy 2.x idiom) instead of db.bind.
+    #
+    # NOTE: lock key intentionally scopes by (teacher_id, plan_name) only.
+    # Two concurrent requests for DIFFERENT plans from the same teacher
+    # would not serialise on this lock. That edge is covered by the
+    # R2-F2 single-org-per-teacher guard below: the first request to
+    # commit creates the TeacherOrganization, and the second request's
+    # R2-F2 check finds it and returns 409.
     if db.get_bind().dialect.name == "postgresql":
         lock_key = f"group_buy_open:{current_teacher.id}:{plan.name}"
         locked = db.execute(
@@ -892,6 +896,11 @@ async def open_group_buy(
             .order_by(Organization.created_at.desc())
             .first()
         )
+        # 5-1 R3.2 — If a SUCCESS transaction exists but the org/school
+        # records don't, the data is inconsistent (soft-delete race, manual
+        # deactivation, or a partial provisioning failure that wasn't
+        # caught). Returning success with null IDs would silently break
+        # the frontend redirect — fail loud instead so ops can investigate.
         owned_school = (
             db.query(School)
             .filter(
@@ -903,20 +912,34 @@ async def open_group_buy(
             if owned_org is not None
             else None
         )
+        if owned_org is None or owned_school is None:
+            logger.error(
+                "Idempotency-shortcut data inconsistency: SUCCESS txn "
+                f"id={recent.id} rec_trade_id={recent.external_transaction_id} "
+                f"for teacher={current_teacher.id} plan={plan.name} but "
+                f"owned_org={owned_org!r} owned_school={owned_school!r}. "
+                "Manual investigation required."
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Team setup is incomplete despite a prior successful "
+                    "charge. Our team has been alerted — please contact "
+                    "support."
+                ),
+            )
         return GroupBuyOpenResponse(
             success=True,
             message="此筆開團已完成",
             transaction_id=recent.external_transaction_id,
-            organization_id=str(owned_org.id) if owned_org else None,
-            school_id=str(owned_school.id) if owned_school else None,
+            organization_id=str(owned_org.id),
+            school_id=str(owned_school.id),
             subscription_end_date=(
                 owned_org.subscription_end_date.isoformat()
-                if owned_org and owned_org.subscription_end_date
+                if owned_org.subscription_end_date
                 else None
             ),
-            teacher_seat_limit=(
-                owned_school.teacher_seat_limit if owned_school else None
-            ),
+            teacher_seat_limit=owned_school.teacher_seat_limit,
         )
 
     try:
@@ -963,7 +986,7 @@ async def open_group_buy(
                 status="FAILED",
                 months=12,
                 period_start=now,
-                period_end=now + timedelta(days=365),
+                period_end=now + relativedelta(years=1),
                 new_end_date=now,
                 idempotency_key=idempotency_key,
                 ip_address=client_host,
@@ -1066,7 +1089,7 @@ async def open_group_buy(
                     status="FAILED",
                     months=12,
                     period_start=now,
-                    period_end=now + timedelta(days=365),
+                    period_end=now + relativedelta(years=1),
                     new_end_date=now,
                     idempotency_key=idempotency_key,
                     ip_address=client_host,
@@ -1085,10 +1108,57 @@ async def open_group_buy(
                 )
                 db.add(comp_txn)
                 db.commit()
-            except Exception:
-                logger.exception(
-                    "Failed to persist compensation FAILED transaction record"
+            except Exception as comp_persist_err:
+                # 5-1 R3.3 — If even the FAILED-record insert fails (DB
+                # connection dropped mid-handler, network partition), emit
+                # a structured ERROR-level log line carrying ALL fields ops
+                # needs to refund manually. Log scrapers / alert rules
+                # should match on the "GROUP_BUY_COMPENSATION_DB_LOST"
+                # token. Also re-issue the original log_payment_failure
+                # with a distinct error_code so BigQuery's payment_log table
+                # picks it up via the independent client (not affected by
+                # the broken DB session).
+                logger.error(
+                    "🚨 GROUP_BUY_COMPENSATION_DB_LOST — "
+                    f"teacher_id={current_teacher.id} "
+                    f"teacher_email={current_teacher.email} "
+                    f"plan={plan.name} amount={amount} currency=TWD "
+                    f"rec_trade_id={external_transaction_id} "
+                    f"order_number={order_number} "
+                    f"provisioning_err={provisioning_err!r} "
+                    f"compensation_persist_err={comp_persist_err!r}",
+                    exc_info=comp_persist_err,
                 )
+                try:
+                    log_payment_failure(
+                        transaction_id=order_number,
+                        user_id=current_teacher.id,
+                        user_email=current_teacher.email,
+                        amount=amount,
+                        plan_name=plan.name,
+                        error_stage="compensation_record_lost",
+                        error_code="GROUP_BUY_COMPENSATION_DB_LOST",
+                        error_message=(
+                            f"REFUND REQUIRED rec_trade_id="
+                            f"{external_transaction_id}: provisioning failed "
+                            f"({provisioning_err!r}) AND compensation insert "
+                            f"failed ({comp_persist_err!r})"
+                        ),
+                        request_data=body_json,
+                        response_status=500,
+                        response_body={
+                            "rec_trade_id": external_transaction_id,
+                            "order_number": order_number,
+                            "provisioning_err": str(provisioning_err),
+                            "compensation_persist_err": str(comp_persist_err),
+                        },
+                        execution_time_ms=execution_time,
+                    )
+                except Exception:
+                    logger.exception(
+                        "BigQuery log_payment_failure also failed during "
+                        "compensation-loss path"
+                    )
             raise HTTPException(
                 status_code=500,
                 detail=(

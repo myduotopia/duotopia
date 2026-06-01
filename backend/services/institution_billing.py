@@ -138,11 +138,12 @@ def compute_monthly_billing(
         raise ValueError(
             f"Organization {org.id} is not an institution (org_type={org.org_type!r})"
         )
-    # Catches None, 0, AND negative values. The DB CHECK constraint added
-    # in Phase 2 already rejects ≤0 on write, but the service layer guards
-    # explicitly so a stale ORM object or a future caller can't slip in a
-    # negative that would produce a negative total_amount.
-    if not org.per_student_price or org.per_student_price < 0:
+    # Explicit `is None or <= 0` is clearer than the truthiness shorthand
+    # for billing-critical preconditions. The DB CHECK constraint added in
+    # Phase 2 already rejects ≤0 on write; the service layer guards
+    # explicitly so a stale ORM object or future caller cannot slip a
+    # non-positive through and produce a zero/negative total_amount.
+    if org.per_student_price is None or org.per_student_price <= 0:
         raise ValueError(
             f"Organization {org.id} per_student_price is not a positive integer."
         )
