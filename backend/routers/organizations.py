@@ -1494,3 +1494,65 @@ async def get_teacher_permissions(
         )
 
     return {"teacher_id": teacher_id, "schools": result}
+
+
+# ============ Phase 4 (issue #768 五.5) — Institution monthly billing ============
+
+
+class StudentBillingBreakdown(BaseModel):
+    student_id: int
+    name: str
+    billable: bool
+
+
+class MonthlyBillingResponse(BaseModel):
+    org_id: str
+    year: int
+    month: int
+    per_student_price: int
+    billable_student_count: int
+    total_amount: int
+    currency: str
+    students: List[StudentBillingBreakdown]
+
+
+@router.get("/{org_id}/billing/monthly", response_model=MonthlyBillingResponse)
+async def get_monthly_billing(
+    org_id: uuid.UUID,
+    year: int,
+    month: int,
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """Compute the institution's monthly invoice for a given (year, month).
+
+    Auth: platform admin OR an org_owner of this org.
+    Validation: org must be `org_type='institution'` with `per_student_price`
+    set. 400 otherwise.
+
+    Billing rule (issue #768 五.5): a student is billable for the month iff
+    they were 'active' at any moment during the Taipei month window. See
+    `services.institution_billing` for the detailed derivation.
+    """
+    # Auth: admin bypasses org-membership check; otherwise must be org_owner.
+    if current_teacher.is_admin:
+        org = (
+            db.query(Organization)
+            .filter(Organization.id == org_id, Organization.is_active.is_(True))
+            .first()
+        )
+        if org is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
+            )
+    else:
+        org = check_org_permission(current_teacher.id, org_id, db)
+
+    from services.institution_billing import compute_monthly_billing
+
+    try:
+        result = compute_monthly_billing(org, year, month, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return result
