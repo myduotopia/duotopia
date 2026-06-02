@@ -219,10 +219,7 @@ export default function AdminOrganizations() {
     ) {
       errors.per_student_price = "單位學生月費必須是數字";
     }
-    if (
-      formData.per_student_price &&
-      Number(formData.per_student_price) <= 0
-    ) {
+    if (formData.per_student_price && Number(formData.per_student_price) <= 0) {
       errors.per_student_price = "單位學生月費必須大於 0";
     }
 
@@ -296,13 +293,19 @@ export default function AdminOrganizations() {
       ) {
         updateData.total_points = Number(formData.total_points);
       }
-      // Phase 5-2 (#768): only send when value actually changed
-      if (
-        formData.per_student_price &&
-        Number(formData.per_student_price) !==
-          (selectedOrg.per_student_price ?? 0)
-      ) {
-        updateData.per_student_price = Number(formData.per_student_price);
+      // Phase 5-2 (#768): explicit clear path. Truthy/falsy on a string
+      // would treat "" as "skip", making the field unclearable once set.
+      // Distinguish: empty input → send null to clear; non-empty → send
+      // parsed value if it differs from current.
+      if (formData.per_student_price === "") {
+        if (selectedOrg.per_student_price != null) {
+          updateData.per_student_price = null;
+        }
+      } else {
+        const parsed = Number(formData.per_student_price);
+        if (parsed !== (selectedOrg.per_student_price ?? 0)) {
+          updateData.per_student_price = parsed;
+        }
       }
 
       const response = (await apiClient.updateOrganization(

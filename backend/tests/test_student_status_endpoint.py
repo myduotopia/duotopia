@@ -69,9 +69,7 @@ def student_in_owner_classroom(shared_test_session, owner_teacher):
     return s
 
 
-def test_rejects_invalid_status(
-    test_client, owner_teacher, student_in_owner_classroom
-):
+def test_rejects_invalid_status(test_client, owner_teacher, student_in_owner_classroom):
     r = test_client.post(
         f"/api/teachers/students/{student_in_owner_classroom.id}/status",
         json={"status": "deleted"},
@@ -158,6 +156,89 @@ def test_reactivate_writes_separate_history_row(
     assert len(rows) == 2
     assert rows[0].status == "inactive"
     assert rows[1].status == "active"
+
+
+def test_student_with_no_active_classroom_enrollment_gets_403(
+    test_client, owner_teacher, shared_test_session
+):
+    """C1 lock-in: a student with NO active classroom enrollment must not
+    be writeable by an arbitrary teacher (previously the auth check was
+    skipped entirely when classroom_student was None)."""
+    orphan = Student(
+        name="Orphan",
+        email="orphan@example.com",
+        password_hash=get_password_hash("x"),
+        is_active=True,
+    )
+    shared_test_session.add(orphan)
+    shared_test_session.commit()
+
+    r = test_client.post(
+        f"/api/teachers/students/{orphan.id}/status",
+        json={"status": "inactive"},
+        headers=_bearer(owner_teacher.id),
+    )
+    assert r.status_code == 403
+
+
+def test_stale_inactive_enrollment_does_not_grant_ownership(
+    test_client,
+    owner_teacher,
+    other_teacher,
+    student_in_owner_classroom,
+    shared_test_session,
+):
+    """C2 lock-in: an inactive ClassroomStudent row (left over after a
+    student transfer) must not satisfy the ownership check for the old
+    teacher. Owner teacher's enrollment is set inactive; current owner is
+    other_teacher via a new active enrollment."""
+    # Deactivate the original enrollment
+    cs = (
+        shared_test_session.query(ClassroomStudent)
+        .filter(ClassroomStudent.student_id == student_in_owner_classroom.id)
+        .first()
+    )
+    cs.is_active = False
+    # Create new active enrollment under other_teacher's classroom
+    other_classroom = Classroom(
+        name="Class B", teacher_id=other_teacher.id, is_active=True
+    )
+    shared_test_session.add(other_classroom)
+    shared_test_session.flush()
+    shared_test_session.add(
+        ClassroomStudent(
+            student_id=student_in_owner_classroom.id,
+            classroom_id=other_classroom.id,
+            is_active=True,
+        )
+    )
+    shared_test_session.commit()
+
+    # Original owner_teacher must NOT be able to change status anymore
+    r = test_client.post(
+        f"/api/teachers/students/{student_in_owner_classroom.id}/status",
+        json={"status": "inactive"},
+        headers=_bearer(owner_teacher.id),
+    )
+    assert r.status_code == 403
+
+
+def test_soft_deleted_student_cannot_be_reactivated_via_status(
+    test_client, owner_teacher, student_in_owner_classroom, shared_test_session
+):
+    """M6 lock-in: a student deleted via DELETE /students/{id} (which sets
+    is_active=False but writes NO status_history row) must not be silently
+    'un-deleted' by POSTing status='active' here."""
+    # Simulate the DELETE flow: flip is_active without writing history
+    student_in_owner_classroom.is_active = False
+    shared_test_session.commit()
+
+    r = test_client.post(
+        f"/api/teachers/students/{student_in_owner_classroom.id}/status",
+        json={"status": "active"},
+        headers=_bearer(owner_teacher.id),
+    )
+    assert r.status_code == 404
 
 
 def test_same_status_is_noop_no_new_history_row(

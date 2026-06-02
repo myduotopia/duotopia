@@ -43,7 +43,8 @@ export default function AdminOrgMonthlyBilling() {
         </Button>
       </div>
       <p className="text-sm text-gray-600">
-        Org ID: <code className="rounded bg-gray-100 px-1.5 py-0.5">{orgId}</code>
+        Org ID:{" "}
+        <code className="rounded bg-gray-100 px-1.5 py-0.5">{orgId}</code>
       </p>
       <OrgMonthlyBillingPanel orgId={orgId} />
     </div>

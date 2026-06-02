@@ -59,7 +59,10 @@ interface StudentTableProps {
   onDeleteStudent?: (student: Student) => void;
   // Phase 5-2 (#768): activate/deactivate. Receives `nextStatus` so the
   // caller can write the appropriate value to /students/{id}/status.
-  onToggleStatus?: (student: Student, nextStatus: "active" | "inactive") => void;
+  onToggleStatus?: (
+    student: Student,
+    nextStatus: "active" | "inactive",
+  ) => void;
   onBulkAction?: (action: string, studentIds: number[]) => void;
   emptyMessage?: string;
   emptyDescription?: string;
@@ -568,40 +571,46 @@ export default function StudentTable({
                       </Button>
                     )}
                     {/* Phase 5-2 (#768): activate/deactivate toggle.
-                        Writes to student_status_history (Phase 4 billing). */}
-                    {onToggleStatus && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title={
-                          disableActions
-                            ? disableReason
-                            : student.is_active === false
-                              ? "啟用學生"
-                              : "停用學生（保留資料）"
-                        }
-                        onClick={() => {
-                          const nextStatus =
-                            student.is_active === false
-                              ? "active"
-                              : "inactive";
-                          const confirmMsg =
-                            nextStatus === "inactive"
-                              ? `確定停用 ${student.name}？學生資料保留，但下個月起不會計入機構月結計費。`
-                              : `重新啟用 ${student.name}？`;
-                          if (confirm(confirmMsg)) {
-                            onToggleStatus(student, nextStatus);
-                          }
-                        }}
-                        disabled={disableActions}
-                      >
-                        {student.is_active === false ? (
-                          <Power className="h-4 w-4" />
-                        ) : (
-                          <PowerOff className="h-4 w-4" />
-                        )}
-                      </Button>
-                    )}
+                        Writes to student_status_history (Phase 4 billing).
+                        Backend serializes inactive students as
+                        `status: 'inactive'`; treat any value other than
+                        'inactive' (incl. undefined / 'active') as active. */}
+                    {onToggleStatus &&
+                      (() => {
+                        const isInactive = student.status === "inactive";
+                        const nextStatus: "active" | "inactive" = isInactive
+                          ? "active"
+                          : "inactive";
+                        return (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title={
+                              disableActions
+                                ? disableReason
+                                : isInactive
+                                  ? "啟用學生"
+                                  : "停用學生（保留資料）"
+                            }
+                            onClick={() => {
+                              const confirmMsg =
+                                nextStatus === "inactive"
+                                  ? `確定停用 ${student.name}？學生資料保留，但下個月起不會計入機構月結計費。`
+                                  : `重新啟用 ${student.name}？`;
+                              if (confirm(confirmMsg)) {
+                                onToggleStatus(student, nextStatus);
+                              }
+                            }}
+                            disabled={disableActions}
+                          >
+                            {isInactive ? (
+                              <Power className="h-4 w-4" />
+                            ) : (
+                              <PowerOff className="h-4 w-4" />
+                            )}
+                          </Button>
+                        );
+                      })()}
                     {onDeleteStudent && (
                       <Button
                         variant="ghost"

@@ -91,8 +91,9 @@ export interface AdminOrganizationUpdateRequest {
   subscription_start_date?: string;
   subscription_end_date?: string;
   // Phase 5-2 (issue #768): institution monthly per-student price (NT$).
-  // Only meaningful for org_type='institution'. Must be > 0.
-  per_student_price?: number;
+  // Only meaningful for org_type='institution'. Must be > 0 if set; null
+  // explicitly clears the field from the admin edit UI.
+  per_student_price?: number | null;
 }
 
 // Admin organization update response

@@ -96,9 +96,7 @@ export default function GroupBuyOpenPage() {
   }
   if (plans.length === 0) {
     return (
-      <div className="p-6">
-        目前沒有可用的團購方案。請聯絡 Duotopia 客服。
-      </div>
+      <div className="p-6">目前沒有可用的團購方案。請聯絡 Duotopia 客服。</div>
     );
   }
 
@@ -116,9 +114,7 @@ export default function GroupBuyOpenPage() {
             <Card key={p.name} className="flex flex-col">
               <CardHeader>
                 <CardTitle className="text-xl">{p.name}</CardTitle>
-                <CardDescription>
-                  {p.teacher_seats} 位教師席次
-                </CardDescription>
+                <CardDescription>{p.teacher_seats} 位教師席次</CardDescription>
               </CardHeader>
               <CardContent className="flex-1 space-y-2 text-sm">
                 <div>

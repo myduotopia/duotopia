@@ -1127,7 +1127,9 @@ export default function ClassroomDetail({
           ? `已停用 ${student.name}`
           : `已啟用 ${student.name}`,
       );
-      fetchClassroomDetail();
+      // Refresh BOTH the student list (toggle UI state) AND classroom
+      // metadata. fetchClassroomDetail alone leaves the student array stale.
+      await Promise.all([fetchStudents(), fetchClassroomDetail(false)]);
     } catch (error) {
       console.error("Failed to update student status:", error);
       const message =

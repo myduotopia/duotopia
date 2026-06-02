@@ -1132,26 +1132,56 @@ async def update_student_status(
             status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
         )
 
-    # Ownership: the student must be in a classroom owned by current_teacher.
-    classroom_student = (
-        db.query(ClassroomStudent)
-        .filter(ClassroomStudent.student_id == student_id)
-        .first()
-    )
-    if classroom_student is not None:
-        owns = (
-            db.query(Classroom)
-            .filter(
-                Classroom.id == classroom_student.classroom_id,
-                Classroom.teacher_id == current_teacher.id,
-            )
+    # M6 — Distinguish soft-deleted (DELETE /students/{id}, no history row)
+    # from /status-deactivated (this endpoint, leaves a 'inactive' history
+    # row). The former must NOT be reactivatable here — re-creating a
+    # deleted student is a separate flow. The latter is normal toggle.
+    if not student.is_active:
+        last_history = (
+            db.query(StudentStatusHistory)
+            .filter(StudentStatusHistory.student_id == student_id)
+            .order_by(StudentStatusHistory.changed_at.desc())
             .first()
         )
-        if owns is None:
+        if last_history is None or last_history.status != "inactive":
+            # No history (or last change wasn't 'inactive') → student was
+            # soft-deleted via DELETE; refuse to silently un-delete.
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to change this student's status",
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
             )
+
+    # Ownership: the student must be in an ACTIVE classroom enrollment
+    # owned by current_teacher. C1 — invert to fail-closed: a student with
+    # no active classroom enrollment is NOT manageable by an arbitrary
+    # teacher (would have allowed any teacher to flip any unassigned
+    # student's status). C2 — filter ClassroomStudent.is_active so a stale
+    # enrollment left over after a transfer cannot grant ownership.
+    classroom_student = (
+        db.query(ClassroomStudent)
+        .filter(
+            ClassroomStudent.student_id == student_id,
+            ClassroomStudent.is_active.is_(True),
+        )
+        .first()
+    )
+    if classroom_student is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to change this student's status",
+        )
+    owns = (
+        db.query(Classroom)
+        .filter(
+            Classroom.id == classroom_student.classroom_id,
+            Classroom.teacher_id == current_teacher.id,
+        )
+        .first()
+    )
+    if owns is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to change this student's status",
+        )
 
     target_is_active = body.status == "active"
 
