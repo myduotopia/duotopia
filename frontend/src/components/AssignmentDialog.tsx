@@ -75,6 +75,9 @@ import WordReadingPreview from "@/components/activities/WordReadingPreview";
 import WordSelectionPreview from "@/components/activities/WordSelectionPreview";
 import WordSpellingPreview from "@/components/activities/WordSpellingPreview";
 import WordClozeContextPreview from "@/components/activities/WordClozeContextPreview";
+import WordSelectionQuizPreview from "@/components/activities/WordSelectionQuizPreview";
+import WordSpellingQuizPreview from "@/components/activities/WordSpellingQuizPreview";
+import WordClozeQuizPreview from "@/components/activities/WordClozeQuizPreview";
 import RearrangementPreview from "@/components/activities/RearrangementPreview";
 import ReadingPreview from "@/components/activities/ReadingPreview";
 
@@ -3848,7 +3851,31 @@ export function AssignmentDialog({
                             }}
                           />
                         </Card>
-                      ) : isSelectionFamily ? (
+                      ) : formData.practice_mode === "word_selection_quiz" ? (
+                        <Card className="p-3 border-gray-200">
+                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.studentPreview",
+                            )}
+                          </h4>
+                          <WordSelectionQuizPreview
+                            contentId={
+                              cartItems[0]?.contentId ??
+                              PREVIEW_VOCAB_CONTENT_ID
+                            }
+                            settings={{
+                              show_word: formData.show_word,
+                              show_image: formData.show_image,
+                              show_option_images: formData.show_option_images,
+                              play_audio: formData.play_audio,
+                              show_answer: formData.show_answer,
+                              time_limit_per_question:
+                                formData.time_limit_per_question,
+                              shuffle_questions: formData.shuffle_questions,
+                            }}
+                          />
+                        </Card>
+                      ) : formData.practice_mode === "word_selection" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
                             {t(
@@ -3871,8 +3898,30 @@ export function AssignmentDialog({
                             }}
                           />
                         </Card>
-                      ) : formData.practice_mode === "word_spelling" ||
-                        formData.practice_mode === "word_spelling_quiz" ? (
+                      ) : formData.practice_mode === "word_spelling_quiz" ? (
+                        <Card className="p-3 border-gray-200">
+                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.studentPreview",
+                            )}
+                          </h4>
+                          <WordSpellingQuizPreview
+                            contentId={
+                              cartItems[0]?.contentId ??
+                              PREVIEW_VOCAB_CONTENT_ID
+                            }
+                            settings={{
+                              show_translation: formData.show_translation,
+                              show_image: formData.show_image,
+                              play_audio: formData.play_audio,
+                              show_answer: formData.show_answer,
+                              time_limit_per_question:
+                                formData.time_limit_per_question,
+                              shuffle_questions: formData.shuffle_questions,
+                            }}
+                          />
+                        </Card>
+                      ) : formData.practice_mode === "word_spelling" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
                             {t(
@@ -3896,8 +3945,29 @@ export function AssignmentDialog({
                             }}
                           />
                         </Card>
-                      ) : formData.practice_mode === "word_cloze" ||
-                        formData.practice_mode === "word_cloze_quiz" ? (
+                      ) : formData.practice_mode === "word_cloze_quiz" ? (
+                        <Card className="p-3 border-gray-200">
+                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.studentPreview",
+                            )}
+                          </h4>
+                          <WordClozeQuizPreview
+                            contentId={
+                              cartItems[0]?.contentId ??
+                              PREVIEW_VOCAB_CONTENT_ID
+                            }
+                            settings={{
+                              show_translation: formData.show_translation,
+                              play_audio: formData.play_audio,
+                              show_answer: formData.show_answer,
+                              time_limit_per_question:
+                                formData.time_limit_per_question,
+                              shuffle_questions: formData.shuffle_questions,
+                            }}
+                          />
+                        </Card>
+                      ) : formData.practice_mode === "word_cloze" ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
                             {t(
