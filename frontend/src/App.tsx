@@ -42,6 +42,8 @@ import DatabaseAdminPage from "./pages/admin/DatabaseAdminPage";
 import AdminMonitoringPage from "./pages/admin/AdminMonitoringPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import CreateOrganization from "./pages/admin/CreateOrganization";
+import AdminOrgMonthlyBilling from "./pages/admin/AdminOrgMonthlyBilling";
+import GroupBuyOpenPage from "./pages/teacher/GroupBuyOpenPage";
 import BlogListPage from "./pages/BlogListPage";
 import BlogPostPage from "./pages/BlogPostPage";
 import AdminBlogPage from "./pages/admin/AdminBlogPage";
@@ -354,6 +356,26 @@ function App() {
           element={
             <ProtectedRoute requireAdmin>
               <CreateOrganization />
+            </ProtectedRoute>
+          }
+        />
+        {/* Phase 5-2 (#768): institution monthly billing query */}
+        <Route
+          path="/admin/organizations/:orgId/billing"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminOrgMonthlyBilling />
+            </ProtectedRoute>
+          }
+        />
+        {/* Phase 5-2 (#768): teacher group-buy open page */}
+        <Route
+          path="/teacher/group-buy/open"
+          element={
+            <ProtectedRoute>
+              <TeacherLayout>
+                <GroupBuyOpenPage />
+              </TeacherLayout>
             </ProtectedRoute>
           }
         />

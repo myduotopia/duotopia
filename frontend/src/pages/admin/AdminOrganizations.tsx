@@ -85,6 +85,7 @@ export default function AdminOrganizations() {
     total_points: "",
     subscription_start_date: "",
     subscription_end_date: "",
+    per_student_price: "", // Phase 5-2 (#768): institution monthly per-student fee
   });
 
   // Validation errors
@@ -178,6 +179,7 @@ export default function AdminOrganizations() {
       subscription_end_date: org.subscription_end_date
         ? org.subscription_end_date.split("T")[0]
         : "",
+      per_student_price: org.per_student_price?.toString() || "",
     });
     setFormErrors({});
     setIsEditDialogOpen(true);
@@ -208,6 +210,17 @@ export default function AdminOrganizations() {
     }
     if (formData.total_points && Number(formData.total_points) < 0) {
       errors.total_points = "總點數不能為負數";
+    }
+
+    // Phase 5-2 (#768): per_student_price validation
+    if (
+      formData.per_student_price &&
+      isNaN(Number(formData.per_student_price))
+    ) {
+      errors.per_student_price = "單位學生月費必須是數字";
+    }
+    if (formData.per_student_price && Number(formData.per_student_price) <= 0) {
+      errors.per_student_price = "單位學生月費必須大於 0";
     }
 
     setFormErrors(errors);
@@ -279,6 +292,20 @@ export default function AdminOrganizations() {
         Number(formData.total_points) !== selectedOrg.total_points
       ) {
         updateData.total_points = Number(formData.total_points);
+      }
+      // Phase 5-2 (#768): explicit clear path. Truthy/falsy on a string
+      // would treat "" as "skip", making the field unclearable once set.
+      // Distinguish: empty input → send null to clear; non-empty → send
+      // parsed value if it differs from current.
+      if (formData.per_student_price === "") {
+        if (selectedOrg.per_student_price != null) {
+          updateData.per_student_price = null;
+        }
+      } else {
+        const parsed = Number(formData.per_student_price);
+        if (parsed !== (selectedOrg.per_student_price ?? 0)) {
+          updateData.per_student_price = parsed;
+        }
       }
 
       const response = (await apiClient.updateOrganization(
@@ -549,15 +576,33 @@ export default function AdminOrganizations() {
 
                           {/* Actions */}
                           <TableCell className="text-center">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(org.id)}
-                              className="flex items-center gap-1"
-                            >
-                              <Pencil className="h-4 w-4" />
-                              編輯
-                            </Button>
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEdit(org.id)}
+                                className="flex items-center gap-1"
+                              >
+                                <Pencil className="h-4 w-4" />
+                                編輯
+                              </Button>
+                              {/* Phase 5-2 (#768): institution monthly billing */}
+                              {org.org_type === "institution" && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    navigate(
+                                      `/admin/organizations/${org.id}/billing`,
+                                    )
+                                  }
+                                  className="flex items-center gap-1"
+                                  title="查看機構月度計費"
+                                >
+                                  月結
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
@@ -703,6 +748,34 @@ export default function AdminOrganizations() {
                         目前有 {selectedOrg.teacher_count} 位教師
                       </p>
                     )}
+                  </div>
+
+                  {/* Phase 5-2 (#768): per-student monthly price (institution only) */}
+                  <div className="space-y-2">
+                    <Label htmlFor="per_student_price">
+                      單位學生月費（NT$，機構月結用）
+                    </Label>
+                    <Input
+                      id="per_student_price"
+                      type="number"
+                      min="1"
+                      value={formData.per_student_price}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          per_student_price: e.target.value,
+                        })
+                      }
+                      placeholder="僅機構方案需要填寫"
+                    />
+                    {formErrors.per_student_price && (
+                      <p className="text-sm text-red-600">
+                        {formErrors.per_student_price}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-500">
+                      每月應收 = 當月活躍學生人數 × 單位學生月費
+                    </p>
                   </div>
                 </div>
               </div>

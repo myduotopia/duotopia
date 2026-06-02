@@ -19,7 +19,10 @@ from models import (
     Organization,
     School,
     ClassroomSchool,
+    StudentSchool,
+    StudentStatusHistory,
 )
+from pydantic import BaseModel, Field
 from .dependencies import get_current_teacher
 from .validators import *
 from .utils import TEST_SUBSCRIPTION_WHITELIST  # parse_birthdate is defined locally
@@ -1080,3 +1083,154 @@ async def batch_import_students(
         "errors": errors,
         "created_students": created_students,
     }
+
+
+# ====== Phase 5-2 (issue #768): student activate / deactivate ======
+
+
+class StudentStatusUpdateRequest(BaseModel):
+    """Request body for POST /students/{id}/status."""
+
+    status: str = Field(..., description="'active' or 'inactive'")
+    # 500-char cap matches typical audit-note conventions and prevents an
+    # unbounded write to student_status_history.note.
+    note: Optional[str] = Field(
+        None, max_length=500, description="Optional audit note (max 500 chars)"
+    )
+
+
+class StudentStatusUpdateResponse(BaseModel):
+    student_id: int
+    status: str
+    # R2-B2 — Optional: None when the request was a no-op (target status
+    # already equals current). A real write produces a positive integer.
+    history_id: Optional[int] = None
+    changed_at: Optional[datetime] = None
+
+
+@router.post(
+    "/students/{student_id}/status", response_model=StudentStatusUpdateResponse
+)
+async def update_student_status(
+    student_id: int,
+    body: StudentStatusUpdateRequest,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """Activate or deactivate a student (issue #768 Phase 5-2).
+
+    Writes a row to `student_status_history` so the institution monthly
+    billing query (Phase 4) can determine active days per month, and syncs
+    `Student.is_active` in lock-step so existing UI/auth flows that read
+    that boolean still work.
+
+    Auth: caller must own the classroom the student is enrolled in (matches
+    the existing `DELETE /students/{id}` ownership check).
+    """
+    if body.status not in ("active", "inactive"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="status must be 'active' or 'inactive'",
+        )
+
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if student is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
+        )
+
+    # M6 — Distinguish soft-deleted (DELETE /students/{id}, no history row)
+    # from /status-deactivated (this endpoint, leaves a 'inactive' history
+    # row). The former must NOT be reactivatable here — re-creating a
+    # deleted student is a separate flow. The latter is normal toggle.
+    if not student.is_active:
+        last_history = (
+            db.query(StudentStatusHistory)
+            .filter(StudentStatusHistory.student_id == student_id)
+            .order_by(StudentStatusHistory.changed_at.desc())
+            .first()
+        )
+        if last_history is None or last_history.status != "inactive":
+            # No history (or last change wasn't 'inactive') → student was
+            # soft-deleted via DELETE; refuse to silently un-delete.
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
+            )
+
+    # Ownership: the student must be in an ACTIVE classroom enrollment
+    # owned by current_teacher. C1 — invert to fail-closed: a student with
+    # no active classroom enrollment is NOT manageable by an arbitrary
+    # teacher (would have allowed any teacher to flip any unassigned
+    # student's status). C2 — filter ClassroomStudent.is_active so a stale
+    # enrollment left over after a transfer cannot grant ownership.
+    classroom_student = (
+        db.query(ClassroomStudent)
+        .filter(
+            ClassroomStudent.student_id == student_id,
+            ClassroomStudent.is_active.is_(True),
+        )
+        .first()
+    )
+    if classroom_student is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to change this student's status",
+        )
+    owns = (
+        db.query(Classroom)
+        .filter(
+            Classroom.id == classroom_student.classroom_id,
+            Classroom.teacher_id == current_teacher.id,
+        )
+        .first()
+    )
+    if owns is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to change this student's status",
+        )
+
+    target_is_active = body.status == "active"
+
+    # No-op short-circuit: same status → don't write a duplicate history
+    # row. history_id/changed_at left None so the caller can distinguish
+    # this from a real write (where both are populated).
+    if student.is_active == target_is_active:
+        return StudentStatusUpdateResponse(
+            student_id=student_id,
+            status=body.status,
+            history_id=None,
+            changed_at=None,
+        )
+
+    # Lookup the student's primary school (for school_id on the history row).
+    # If the student is enrolled in multiple schools we record the most-recent
+    # active enrollment; if none, school_id stays NULL (SET NULL FK).
+    school_enrol = (
+        db.query(StudentSchool)
+        .filter(
+            StudentSchool.student_id == student_id,
+            StudentSchool.is_active.is_(True),
+        )
+        .order_by(StudentSchool.enrolled_at.desc())
+        .first()
+    )
+
+    history = StudentStatusHistory(
+        student_id=student_id,
+        school_id=school_enrol.school_id if school_enrol else None,
+        status=body.status,
+        changed_by=current_teacher.id,
+        note=body.note,
+    )
+    student.is_active = target_is_active
+    db.add(history)
+    db.commit()
+    db.refresh(history)
+
+    return StudentStatusUpdateResponse(
+        student_id=student_id,
+        status=body.status,
+        history_id=history.id,
+        changed_at=history.changed_at,
+    )
