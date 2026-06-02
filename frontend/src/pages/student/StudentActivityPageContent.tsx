@@ -39,6 +39,9 @@ import {
 import { getItemPassFailStatus } from "@/utils/itemPassFailStatus";
 import WordSpellingActivity from "@/components/activities/WordSpellingActivity";
 import WordClozeActivity from "@/components/activities/WordClozeActivity";
+import WordSpellingQuizActivity from "@/components/activities/WordSpellingQuizActivity";
+import WordClozeQuizActivity from "@/components/activities/WordClozeQuizActivity";
+import WordSelectionQuizActivity from "@/components/activities/WordSelectionQuizActivity";
 import {
   ChevronLeft,
   ChevronRight,
@@ -1835,6 +1838,48 @@ export default function StudentActivityPageContent({
 
   const renderActivityContent = (activity: Activity) => {
     const answer = answers.get(activity.id);
+
+    // Issue #828: 小考變體（_quiz）使用獨立 Activity 元件 — 走 quiz 端點、
+    // 內建題號 bar / 跳題 / 提交鎖定，與艾賓浩斯版本資料完全隔離。
+    if (practiceMode === "word_spelling_quiz") {
+      return (
+        <WordSpellingQuizActivity
+          assignmentId={assignmentId}
+          isPreviewMode={isPreviewMode}
+          isDemoMode={isDemoMode}
+          onComplete={() => {
+            toast.success(t("wordSpelling.toast.completed") || "作業已完成！");
+            onBack?.();
+          }}
+        />
+      );
+    }
+    if (practiceMode === "word_cloze_quiz") {
+      return (
+        <WordClozeQuizActivity
+          assignmentId={assignmentId}
+          isPreviewMode={isPreviewMode}
+          isDemoMode={isDemoMode}
+          onComplete={() => {
+            toast.success(t("wordCloze.toast.completed") || "作業已完成！");
+            onBack?.();
+          }}
+        />
+      );
+    }
+    if (practiceMode === "word_selection_quiz") {
+      return (
+        <WordSelectionQuizActivity
+          assignmentId={assignmentId}
+          isPreviewMode={isPreviewMode}
+          isDemoMode={isDemoMode}
+          onComplete={() => {
+            toast.success(t("wordSelection.toast.completed") || "作業已完成！");
+            onBack?.();
+          }}
+        />
+      );
+    }
 
     // 🎯 克漏字 / 單字拼寫：根據 practiceMode 直接路由（與內容類型無關，
     // 因克漏字可選例句集或單字集；拼寫雖只接單字集，但邏輯一致）。

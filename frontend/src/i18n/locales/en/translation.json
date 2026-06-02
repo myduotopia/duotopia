@@ -4782,6 +4782,20 @@
       "completeFailed": "Failed to complete assignment"
     }
   },
+  "wordQuiz": {
+    "questionNav": "Q",
+    "questionLabel": "Question {{current}} / {{total}}",
+    "typeHere": "Type your answer…",
+    "playAudio": "Play audio",
+    "prev": "Previous",
+    "next": "Next",
+    "submit": "Submit",
+    "empty": "No questions available.",
+    "locked": {
+      "title": "Quiz already submitted",
+      "desc": "Submission is one-shot; wait for the teacher to return the assignment to fix wrong answers."
+    }
+  },
   "wordSpelling": {
     "loading": "Loading vocabulary...",
     "noItems": "No vocabulary items found",

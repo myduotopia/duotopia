@@ -4815,6 +4815,20 @@
       "completeFailed": "提交作業失敗"
     }
   },
+  "wordQuiz": {
+    "questionNav": "題號",
+    "questionLabel": "第 {{current}} / {{total}} 題",
+    "typeHere": "輸入答案…",
+    "playAudio": "播放音檔",
+    "prev": "上一題",
+    "next": "下一題",
+    "submit": "提交",
+    "empty": "尚無題目可作答。",
+    "locked": {
+      "title": "本次小考已提交",
+      "desc": "提交後不可重做；等待老師退回後才能訂正錯題。"
+    }
+  },
   "wordSpelling": {
     "loading": "正在載入單字...",
     "noItems": "找不到單字項目",
