@@ -884,8 +884,12 @@ class ApiClient {
     return this.request<{
       student_id: number;
       status: "active" | "inactive";
-      history_id: number;
-      changed_at: string;
+      // null on the no-op branch (target status already equals current).
+      // Backend StudentStatusUpdateResponse: history_id / changed_at are
+      // Optional. Callers can treat a non-null history_id as confirmation
+      // of a real write.
+      history_id: number | null;
+      changed_at: string | null;
     }>(`/api/teachers/students/${studentId}/status`, {
       method: "POST",
       body: JSON.stringify(body),

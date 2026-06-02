@@ -373,7 +373,9 @@ function App() {
           path="/teacher/group-buy/open"
           element={
             <ProtectedRoute>
-              <GroupBuyOpenPage />
+              <TeacherLayout>
+                <GroupBuyOpenPage />
+              </TeacherLayout>
             </ProtectedRoute>
           }
         />
