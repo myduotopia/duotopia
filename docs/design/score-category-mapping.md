@@ -28,7 +28,7 @@
 | 5 | 其他 practice_mode | `false` | `writing` | 寫作 |
 | 6 | 其他 practice_mode | `true` | `listening` | 聽力 |
 
-> Issue #828：小考變體（`word_spelling_quiz` / `word_cloze_quiz`）與其艾賓浩斯版本共用同一個分類規則。
+> Issue #828：小考變體（`word_selection_quiz` / `word_spelling_quiz` / `word_cloze_quiz`）與其艾賓浩斯版本共用同一個分類規則。
 
 ### 規則邏輯（白話）
 
@@ -49,6 +49,7 @@
 | `word_cloze_quiz` | reading | reading |
 | `rearrangement` | reading | listening |
 | `word_selection` | writing | listening |
+| `word_selection_quiz` | writing | listening |
 | `word_spelling` | writing | listening |
 | `word_spelling_quiz` | writing | listening |
 | `tug_of_war` | writing | listening |

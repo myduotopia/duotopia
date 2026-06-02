@@ -487,6 +487,7 @@ export function AssignmentDialog({
       | "word_selection"
       | "word_spelling"
       | "word_cloze"
+      | "word_selection_quiz"
       | "word_spelling_quiz"
       | "word_cloze_quiz", // 作答模式（預設單字選擇）
     time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40, // 每題時間限制 (0 = 不限時)
@@ -716,6 +717,7 @@ export function AssignmentDialog({
       formData.practice_mode === "word_selection" ||
       formData.practice_mode === "word_spelling" ||
       formData.practice_mode === "word_cloze" ||
+      formData.practice_mode === "word_selection_quiz" ||
       formData.practice_mode === "word_spelling_quiz" ||
       formData.practice_mode === "word_cloze_quiz"
     ) {
@@ -997,12 +999,15 @@ export function AssignmentDialog({
     if (mode === "reading" || mode === "rearrangement") {
       return true;
     }
-    // 單字模式（含克漏字）：只能選單字集
+    // 單字模式（含克漏字、小考變體）：只能選單字集
     if (
       mode === "word_reading" ||
       mode === "word_selection" ||
       mode === "word_spelling" ||
-      mode === "word_cloze"
+      mode === "word_cloze" ||
+      mode === "word_selection_quiz" ||
+      mode === "word_spelling_quiz" ||
+      mode === "word_cloze_quiz"
     ) {
       return isVocabularySetType(contentType);
     }
@@ -2887,6 +2892,7 @@ export function AssignmentDialog({
                   | "word_selection"
                   | "word_spelling"
                   | "word_cloze"
+                  | "word_selection_quiz"
                   | "word_spelling_quiz"
                   | "word_cloze_quiz";
                 Icon: LucideIcon;
@@ -2963,6 +2969,23 @@ export function AssignmentDialog({
                     setFormData((prev) => ({
                       ...prev,
                       practice_mode: "word_selection",
+                      time_limit_per_question: 30,
+                    })),
+                },
+                {
+                  id: "word_selection_quiz",
+                  Icon: MousePointerClick,
+                  titleKey:
+                    "dialogs.assignmentDialog.practiceMode.wordSelectionQuiz",
+                  descKey:
+                    "dialogs.assignmentDialog.practiceMode.wordSelectionQuizDesc",
+                  chipSelected:
+                    "border-emerald-500 bg-emerald-50 text-emerald-700",
+                  iconColor: "text-emerald-600",
+                  onClick: () =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      practice_mode: "word_selection_quiz",
                       time_limit_per_question: 30,
                     })),
                 },
@@ -3053,6 +3076,10 @@ export function AssignmentDialog({
               const currentMode = PRACTICE_MODES.find(
                 (m) => m.id === formData.practice_mode,
               );
+              // word_selection 與其小考變體共用「顯示單字 vs 播放音檔」二選一切換器
+              const isSelectionFamily =
+                formData.practice_mode === "word_selection" ||
+                formData.practice_mode === "word_selection_quiz";
               const currentCategory: ScoreCategory = getScoreCategory(
                 formData.practice_mode,
                 formData.play_audio,
@@ -3353,6 +3380,7 @@ export function AssignmentDialog({
                         formData.practice_mode === "word_selection" ||
                         formData.practice_mode === "word_spelling" ||
                         formData.practice_mode === "word_cloze" ||
+                        formData.practice_mode === "word_selection_quiz" ||
                         formData.practice_mode === "word_spelling_quiz" ||
                         formData.practice_mode === "word_cloze_quiz") && (
                         <Card className="p-3 border-gray-200">
@@ -3403,6 +3431,7 @@ export function AssignmentDialog({
                           {(formData.practice_mode === "word_selection" ||
                             formData.practice_mode === "word_spelling" ||
                             formData.practice_mode === "word_cloze" ||
+                            formData.practice_mode === "word_selection_quiz" ||
                             formData.practice_mode === "word_spelling_quiz" ||
                             formData.practice_mode === "word_cloze_quiz") && (
                             <div className="mb-3 pb-3 border-b">
@@ -3415,10 +3444,7 @@ export function AssignmentDialog({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    if (
-                                      formData.practice_mode ===
-                                      "word_selection"
-                                    ) {
+                                    if (isSelectionFamily) {
                                       setFormData((prev) => ({
                                         ...prev,
                                         show_word: true,
@@ -3435,8 +3461,7 @@ export function AssignmentDialog({
                                   }}
                                   className={`flex-1 p-3 rounded-lg border text-sm ${
                                     (
-                                      formData.practice_mode ===
-                                      "word_selection"
+                                      isSelectionFamily
                                         ? formData.show_word &&
                                           !formData.play_audio
                                         : formData.show_translation &&
@@ -3447,7 +3472,7 @@ export function AssignmentDialog({
                                   }`}
                                 >
                                   👁️{" "}
-                                  {formData.practice_mode === "word_selection"
+                                  {isSelectionFamily
                                     ? t(
                                         "dialogs.assignmentDialog.practiceMode.displayWord",
                                       )
@@ -3455,7 +3480,7 @@ export function AssignmentDialog({
                                         "dialogs.assignmentDialog.practiceMode.displayTranslation",
                                       )}
                                   <span className="block text-xs text-gray-500 mt-0.5">
-                                    {formData.practice_mode === "word_selection"
+                                    {isSelectionFamily
                                       ? t(
                                           "dialogs.assignmentDialog.practiceMode.displayWordDesc",
                                         )
@@ -3467,10 +3492,7 @@ export function AssignmentDialog({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    if (
-                                      formData.practice_mode ===
-                                      "word_selection"
-                                    ) {
+                                    if (isSelectionFamily) {
                                       setFormData((prev) => ({
                                         ...prev,
                                         show_word: false,
@@ -3488,8 +3510,7 @@ export function AssignmentDialog({
                                   }}
                                   className={`flex-1 p-3 rounded-lg border text-sm ${
                                     (
-                                      formData.practice_mode ===
-                                      "word_selection"
+                                      isSelectionFamily
                                         ? !formData.show_word &&
                                           formData.play_audio
                                         : !formData.show_translation &&
@@ -3504,7 +3525,7 @@ export function AssignmentDialog({
                                     "dialogs.assignmentDialog.practiceMode.playAudioWord",
                                   )}
                                   <span className="block text-xs text-gray-500 mt-0.5">
-                                    {formData.practice_mode === "word_selection"
+                                    {isSelectionFamily
                                       ? t(
                                           "dialogs.assignmentDialog.practiceMode.playAudioWordDesc",
                                         )
@@ -3614,6 +3635,8 @@ export function AssignmentDialog({
                             {(formData.practice_mode === "word_selection" ||
                               formData.practice_mode === "word_spelling" ||
                               formData.practice_mode === "word_cloze" ||
+                              formData.practice_mode ===
+                                "word_selection_quiz" ||
                               formData.practice_mode === "word_spelling_quiz" ||
                               formData.practice_mode === "word_cloze_quiz") && (
                               <div className="space-y-1.5">
@@ -3727,8 +3750,8 @@ export function AssignmentDialog({
                               </div>
                             </div>
 
-                            {/* 顯示選項圖片（單字選擇專用，與顯示題目圖片互斥）Issue #631 */}
-                            {formData.practice_mode === "word_selection" &&
+                            {/* 顯示選項圖片（單字選擇與小考變體專用，與顯示題目圖片互斥）Issue #631 */}
+                            {isSelectionFamily &&
                               (() => {
                                 const hasMissingImage = cartItems.some(
                                   (i) => i.hasMissingImage,
@@ -3825,7 +3848,7 @@ export function AssignmentDialog({
                             }}
                           />
                         </Card>
-                      ) : formData.practice_mode === "word_selection" ? (
+                      ) : isSelectionFamily ? (
                         <Card className="p-3 border-gray-200">
                           <h4 className="text-xs font-semibold mb-2 text-gray-700">
                             {t(

@@ -21,8 +21,8 @@ class CreateAssignmentRequest(BaseModel):
     organization_id: Optional[str] = None
     school_id: Optional[str] = None
     # 作答模式設定
-    # reading, rearrangement, word_reading, word_selection,
-    # word_spelling, word_cloze, word_spelling_quiz, word_cloze_quiz
+    # reading, rearrangement, word_reading, word_selection, word_spelling,
+    # word_cloze, word_selection_quiz, word_spelling_quiz, word_cloze_quiz
     practice_mode: Optional[str] = None
     answer_mode: Optional[
         str
