@@ -20,6 +20,7 @@ from . import (
     auth,
     profile,
     assignments,
+    quiz_assignments,
     recordings,
     email_verification,
     account_management,
@@ -32,6 +33,7 @@ router = APIRouter(prefix="/api/students", tags=["students"])
 router.include_router(auth.router, tags=["students-auth"])
 router.include_router(profile.router, tags=["students-profile"])
 router.include_router(assignments.router, tags=["students-assignments"])
+router.include_router(quiz_assignments.router, tags=["students-quiz"])
 router.include_router(recordings.router, tags=["students-recordings"])
 router.include_router(email_verification.router, tags=["students-email"])
 router.include_router(account_management.router, tags=["students-accounts"])
