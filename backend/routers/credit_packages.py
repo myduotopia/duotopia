@@ -26,6 +26,7 @@ from models import (
     Organization,
     TeacherOrganization,
     School,
+    Plan,
 )
 from routers.teachers import get_current_teacher
 from services.tappay_service import TapPayService
@@ -776,8 +777,6 @@ async def list_group_buy_plans(
     Auth: any authenticated teacher. Pricing is canonical from the DB; the
     frontend MUST NOT compute or trust its own totals.
     """
-    from models import Plan
-
     rows = (
         db.query(Plan)
         .filter(

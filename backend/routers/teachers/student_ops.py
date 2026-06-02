@@ -19,6 +19,7 @@ from models import (
     Organization,
     School,
     ClassroomSchool,
+    StudentSchool,
     StudentStatusHistory,
 )
 from pydantic import BaseModel, Field
@@ -1091,14 +1092,20 @@ class StudentStatusUpdateRequest(BaseModel):
     """Request body for POST /students/{id}/status."""
 
     status: str = Field(..., description="'active' or 'inactive'")
-    note: Optional[str] = Field(None, description="Optional audit note")
+    # 500-char cap matches typical audit-note conventions and prevents an
+    # unbounded write to student_status_history.note.
+    note: Optional[str] = Field(
+        None, max_length=500, description="Optional audit note (max 500 chars)"
+    )
 
 
 class StudentStatusUpdateResponse(BaseModel):
     student_id: int
     status: str
-    history_id: int
-    changed_at: datetime
+    # R2-B2 — Optional: None when the request was a no-op (target status
+    # already equals current). A real write produces a positive integer.
+    history_id: Optional[int] = None
+    changed_at: Optional[datetime] = None
 
 
 @router.post(
@@ -1185,28 +1192,20 @@ async def update_student_status(
 
     target_is_active = body.status == "active"
 
-    # No-op short-circuit: same status, no history row, no flush.
+    # No-op short-circuit: same status → don't write a duplicate history
+    # row. history_id/changed_at left None so the caller can distinguish
+    # this from a real write (where both are populated).
     if student.is_active == target_is_active:
-        # Still return the most recent history row id (or 0 if none) so the
-        # frontend has a deterministic shape.
-        last = (
-            db.query(StudentStatusHistory)
-            .filter(StudentStatusHistory.student_id == student_id)
-            .order_by(StudentStatusHistory.changed_at.desc())
-            .first()
-        )
         return StudentStatusUpdateResponse(
             student_id=student_id,
             status=body.status,
-            history_id=last.id if last else 0,
-            changed_at=last.changed_at if last else datetime.utcnow(),
+            history_id=None,
+            changed_at=None,
         )
 
     # Lookup the student's primary school (for school_id on the history row).
     # If the student is enrolled in multiple schools we record the most-recent
     # active enrollment; if none, school_id stays NULL (SET NULL FK).
-    from models import StudentSchool
-
     school_enrol = (
         db.query(StudentSchool)
         .filter(

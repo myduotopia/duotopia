@@ -110,7 +110,7 @@ def test_deactivate_writes_history_and_flips_is_active(
     assert r.status_code == 200, r.json()
     body = r.json()
     assert body["status"] == "inactive"
-    assert body["history_id"] > 0
+    assert body["history_id"] is not None and body["history_id"] > 0
 
     shared_test_session.expire_all()
     s = (
@@ -252,6 +252,11 @@ def test_same_status_is_noop_no_new_history_row(
         headers=_bearer(owner_teacher.id),
     )
     assert r.status_code == 200
+    body = r.json()
+    # R2-B2 — no-op response uses None as the sentinel so callers can
+    # distinguish from a real write (where history_id is a positive int)
+    assert body["history_id"] is None
+    assert body["changed_at"] is None
 
     count = (
         shared_test_session.query(StudentStatusHistory)

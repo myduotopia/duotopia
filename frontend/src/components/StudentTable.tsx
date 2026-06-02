@@ -43,10 +43,6 @@ export interface Student {
   organization_id?: string;
   created_at?: string;
   classroom_created_at?: string;
-  // Phase 5-2 (#768): drives the activate/deactivate toggle. Writing this
-  // via POST /api/teachers/students/{id}/status also appends to
-  // student_status_history, which Phase 4 monthly billing reads.
-  is_active?: boolean;
 }
 
 interface StudentTableProps {
