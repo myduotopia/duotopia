@@ -14,6 +14,7 @@ import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
@@ -24,6 +25,7 @@ interface QuizWord {
   content_item_id: number;
   text: string;
   translation: string;
+  part_of_speech?: string | null;
   example_sentence: string;
   example_sentence_translation: string;
   example_sentence_audio_url?: string | null;
@@ -325,32 +327,43 @@ export default function WordClozeQuizActivity({
             }) || `第 ${currentWord.question_number} / ${words.length} 題`}
           </div>
 
+          {/* 樣式對齊 WordClozeActivity (艾賓浩斯版) */}
           {settings.play_audio && currentWord.example_sentence_audio_url && (
             <div className="flex justify-center">
-              <Button
+              <button
                 type="button"
-                size="lg"
-                variant="outline"
                 onClick={() =>
                   playAudio(currentWord.example_sentence_audio_url)
                 }
+                aria-label={t("wordQuiz.playAudio") || "Play"}
+                className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-12 w-12 text-blue-500 hover:text-blue-600"
               >
-                <Volume2 className="h-5 w-5 mr-2" />
-                {t("wordQuiz.playAudio") || "Play"}
-              </Button>
+                <Volume2 className="h-7 w-7" />
+              </button>
             </div>
           )}
 
-          <div className="text-center text-lg font-medium text-gray-800 leading-relaxed">
-            {blanked}
-          </div>
-
-          {settings.show_translation &&
-            currentWord.example_sentence_translation && (
-              <div className="text-center text-sm text-gray-500">
-                {currentWord.example_sentence_translation}
+          <div className="max-w-2xl mx-auto text-center py-2 space-y-2">
+            {currentWord.part_of_speech && (
+              <div className="flex justify-center">
+                <Badge
+                  variant="secondary"
+                  className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
+                >
+                  {currentWord.part_of_speech}
+                </Badge>
               </div>
             )}
+            <p className="text-lg md:text-xl leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
+              {blanked}
+            </p>
+            {settings.show_translation &&
+              currentWord.example_sentence_translation && (
+                <p className="text-sm text-gray-500">
+                  {currentWord.example_sentence_translation}
+                </p>
+              )}
+          </div>
 
           <QuizAnswerInput
             value={typedByItem[currentWord.content_item_id] || ""}

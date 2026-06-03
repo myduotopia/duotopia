@@ -16,6 +16,7 @@ import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
@@ -26,6 +27,7 @@ interface QuizWord {
   content_item_id: number;
   text: string;
   translation: string;
+  part_of_speech?: string | null;
   audio_url?: string | null;
   image_url?: string | null;
   question_number: number;
@@ -331,23 +333,35 @@ export default function WordSpellingQuizActivity({
             />
           )}
 
+          {/* 樣式對齊 WordSpellingActivity (艾賓浩斯版) */}
           {settings.play_audio && currentWord.audio_url && (
             <div className="flex justify-center">
-              <Button
+              <button
                 type="button"
-                size="lg"
-                variant="outline"
                 onClick={() => playAudio(currentWord.audio_url)}
+                aria-label={t("wordQuiz.playAudio") || "Play"}
+                className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-12 w-12 text-blue-500 hover:text-blue-600"
               >
-                <Volume2 className="h-5 w-5 mr-2" />
-                {t("wordQuiz.playAudio") || "Play"}
-              </Button>
+                <Volume2 className="h-7 w-7" />
+              </button>
             </div>
           )}
 
-          {settings.show_translation && (
-            <div className="text-center text-lg font-medium text-gray-800">
-              {currentWord.translation}
+          {settings.show_translation && currentWord.translation && (
+            <div className="text-center py-3 space-y-1">
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-800 tracking-wide">
+                {currentWord.translation}
+              </h2>
+              {currentWord.part_of_speech && (
+                <div className="flex justify-center">
+                  <Badge
+                    variant="secondary"
+                    className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
+                  >
+                    {currentWord.part_of_speech}
+                  </Badge>
+                </div>
+              )}
             </div>
           )}
 

@@ -567,6 +567,7 @@ async def start_word_cloze_quiz(
             "content_item_id": item.id,
             "text": item.text,
             "translation": item.translation or "",
+            "part_of_speech": item.part_of_speech,
             "example_sentence": item.example_sentence or "",
             "example_sentence_translation": item.example_sentence_translation or "",
             "example_sentence_audio_url": item.example_sentence_audio_url,
