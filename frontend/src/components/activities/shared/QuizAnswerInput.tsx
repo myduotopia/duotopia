@@ -199,12 +199,7 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
 
     return (
       <div className="max-w-md mx-auto">
-        <div
-          className={cn(
-            "flex items-center gap-2 sm:gap-3",
-            multi ? "justify-center" : "",
-          )}
-        >
+        <div className="flex items-center justify-center gap-2 sm:gap-3">
           {slotWords.map((slotExpected, idx) => (
             <Input
               key={idx}
