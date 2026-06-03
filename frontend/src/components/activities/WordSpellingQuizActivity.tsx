@@ -515,7 +515,11 @@ export default function WordSpellingQuizActivity({
                 [currentWord.content_item_id]: next,
               }))
             }
-            onSubmit={isLast ? handleSubmitAll : () => goTo(currentIndex + 1)}
+            // 最後一題的 inline Send 只暫存答案，不送出整卷；整卷送出統一由
+            // 下方「提交」鈕觸發，避免學生按 Enter 不小心收卷。
+            onSubmit={
+              isLast ? () => persistAnswer() : () => goTo(currentIndex + 1)
+            }
             submitting={submittingAnswer}
             state={
               settings.show_answer &&
