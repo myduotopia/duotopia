@@ -158,10 +158,30 @@ def _start_quiz_session(
     student_assignment: StudentAssignment,
     practice_mode: str,
 ) -> PracticeSession:
-    """Create a new PracticeSession for the quiz attempt and bump status."""
+    """Get the in-flight PracticeSession for this quiz, or create one.
+
+    Quiz is one-attempt; resuming preserves the same session so prior
+    answers carry over and the integral countdown timer (Issue #828)
+    doesn't reset every time the student re-enters.
+    """
     if student_assignment.status == AssignmentStatus.NOT_STARTED:
         student_assignment.status = AssignmentStatus.IN_PROGRESS
         student_assignment.started_at = datetime.now(timezone.utc)
+
+    existing = (
+        db.query(PracticeSession)
+        .filter(
+            PracticeSession.student_assignment_id == student_assignment.id,
+            PracticeSession.practice_mode == practice_mode,
+            PracticeSession.completed_at.is_(None),
+        )
+        .order_by(PracticeSession.id.desc())
+        .first()
+    )
+    if existing:
+        db.commit()
+        return existing
+
     session = PracticeSession(
         student_id=student_id,
         student_assignment_id=student_assignment.id,
@@ -259,6 +279,25 @@ def _get_quiz_session(
     return session
 
 
+def _time_remaining(assignment: Assignment, session: PracticeSession) -> Optional[int]:
+    """Compute seconds left for a quiz session.
+
+    None ⇒ no whole-paper limit. Negative results clamp to 0 so the
+    frontend can immediately auto-submit on next user interaction.
+    """
+    total = assignment.quiz_time_limit_seconds
+    if not total:
+        return None
+    started = session.started_at
+    if started is None:
+        return total
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+    remaining = total - int(elapsed)
+    return max(0, remaining)
+
+
 def _common_settings(assignment: Assignment) -> Dict[str, Any]:
     return {
         "shuffle_questions": bool(assignment.shuffle_questions),
@@ -276,6 +315,8 @@ def _common_settings(assignment: Assignment) -> Dict[str, Any]:
         "play_audio": bool(assignment.play_audio),
         "show_answer": bool(assignment.show_answer),
         "time_limit_per_question": assignment.time_limit_per_question,
+        # Issue #828: 整卷限時（秒）— null 不限時
+        "quiz_time_limit_seconds": assignment.quiz_time_limit_seconds,
     }
 
 
@@ -381,6 +422,7 @@ async def start_word_selection_quiz(
         "words": words,
         "total_questions": len(words),
         **_common_settings(assignment),
+        "time_remaining_seconds": _time_remaining(assignment, session),
         "show_option_images": bool(assignment.show_option_images),
     }
 
@@ -476,6 +518,7 @@ async def start_word_spelling_quiz(
         "words": words,
         "total_questions": len(words),
         **_common_settings(assignment),
+        "time_remaining_seconds": _time_remaining(assignment, session),
     }
 
 
@@ -590,6 +633,7 @@ async def start_word_cloze_quiz(
         "words": words,
         "total_questions": len(words),
         **_common_settings(assignment),
+        "time_remaining_seconds": _time_remaining(assignment, session),
     }
 
 

@@ -494,6 +494,8 @@ export function AssignmentDialog({
       | "word_spelling_quiz"
       | "word_cloze_quiz", // 作答模式（預設單字選擇）
     time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40, // 每題時間限制 (0 = 不限時)
+    // Issue #828: 小考整卷限時（秒）；null/0 不限時，預設 0
+    quiz_time_limit_seconds: 0 as 0 | 180 | 300 | 600 | 900 | 1200 | 1800,
     shuffle_questions: false, // 是否打亂順序
     show_answer: false, // 答題結束後是否顯示正確答案（例句重組專用）
     play_audio: false, // 是否播放音檔（例句重組/單字集專用）
@@ -696,6 +698,7 @@ export function AssignmentDialog({
         start_date: new Date(),
         practice_mode: "word_selection",
         time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40,
+        quiz_time_limit_seconds: 0 as 0 | 180 | 300 | 600 | 900 | 1200 | 1800,
         shuffle_questions: false,
         show_answer: false,
         play_audio: false,
@@ -1263,6 +1266,7 @@ export function AssignmentDialog({
         answer_mode: answerMode,
         practice_mode: formData.practice_mode,
         time_limit_per_question: formData.time_limit_per_question,
+        quiz_time_limit_seconds: formData.quiz_time_limit_seconds || null,
         shuffle_questions: formData.shuffle_questions,
         show_answer: formData.show_answer,
         play_audio: formData.play_audio,
@@ -1449,6 +1453,7 @@ export function AssignmentDialog({
       start_date: undefined,
       practice_mode: "word_selection",
       time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40,
+      quiz_time_limit_seconds: 0 as 0 | 180 | 300 | 600 | 900 | 1200 | 1800,
       shuffle_questions: false,
       show_answer: false,
       play_audio: false,
@@ -3542,9 +3547,47 @@ export function AssignmentDialog({
                           )}
 
                           <div className="grid grid-cols-1 gap-y-2">
-                            {/* 時間限制 */}
-                            {/* 時間限制 — word_reading 固定 10 秒，不顯示選擇器 */}
-                            {formData.practice_mode !== "word_reading" && (
+                            {/* Issue #828: 小考模式改用整卷分鐘限時，到時自動提交 */}
+                            {formData.practice_mode?.endsWith("_quiz") ? (
+                              <div className="space-y-1.5">
+                                <Label className="text-xs text-gray-600">
+                                  {t(
+                                    "dialogs.assignmentDialog.practiceMode.quizTimeLimit",
+                                  ) || "整卷時間限制（時間到自動提交）"}
+                                </Label>
+                                <select
+                                  value={formData.quiz_time_limit_seconds}
+                                  onChange={(e) =>
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      quiz_time_limit_seconds: Number(
+                                        e.target.value,
+                                      ) as
+                                        | 0
+                                        | 180
+                                        | 300
+                                        | 600
+                                        | 900
+                                        | 1200
+                                        | 1800,
+                                    }))
+                                  }
+                                  className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm"
+                                >
+                                  <option value={0}>
+                                    {t(
+                                      "dialogs.assignmentDialog.practiceMode.unlimited",
+                                    )}
+                                  </option>
+                                  <option value={180}>3 分鐘</option>
+                                  <option value={300}>5 分鐘</option>
+                                  <option value={600}>10 分鐘</option>
+                                  <option value={900}>15 分鐘</option>
+                                  <option value={1200}>20 分鐘</option>
+                                  <option value={1800}>30 分鐘</option>
+                                </select>
+                              </div>
+                            ) : formData.practice_mode !== "word_reading" ? (
                               <div className="space-y-1.5">
                                 <Label className="text-xs text-gray-600">
                                   {t(
@@ -3602,6 +3645,8 @@ export function AssignmentDialog({
                                   </option>
                                 </select>
                               </div>
+                            ) : (
+                              <></>
                             )}
 
                             {/* 打亂順序 — word_reading 保留；word_selection/spelling/cloze 移除（艾賓浩斯每輪自選） */}

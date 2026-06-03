@@ -1799,6 +1799,7 @@
         "wordSelectionDesc": "View words or listen to audio, select the correct translation (Ebbinghaus item selection)",
         "wordSelectionQuiz": "Word Selection · Quiz",
         "wordSelectionQuizDesc": "Answer all items in order with question numbers; locks on submit",
+        "quizTimeLimit": "Whole-quiz time limit (auto-submits when reached)",
         "wordSpelling": "Word Spelling · Ebbinghaus",
         "wordSpellingDesc": "View translation or listen to audio, type the correct spelling (Ebbinghaus item selection)",
         "wordCloze": "Word Cloze · Ebbinghaus",

@@ -48,6 +48,8 @@ interface StartResponse {
   show_answer: boolean;
   time_limit_per_question?: number | null;
   shuffle_questions: boolean;
+  quiz_time_limit_seconds?: number | null;
+  time_remaining_seconds?: number | null;
 }
 
 interface Props {
@@ -102,6 +104,7 @@ export default function WordClozeQuizActivity({
     play_audio: false,
     show_answer: false,
   });
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
 
   useEffect(() => {
     if (isLivePreview) {
@@ -139,6 +142,11 @@ export default function WordClozeQuizActivity({
           play_audio: data.play_audio,
           show_answer: data.show_answer,
         });
+        setTimeRemaining(
+          data.time_remaining_seconds == null
+            ? null
+            : Math.max(0, data.time_remaining_seconds),
+        );
       } catch (err: unknown) {
         const code = (err as { detail?: { code?: string } })?.detail?.code;
         if (code === "QUIZ_ALREADY_SUBMITTED") {
@@ -244,6 +252,19 @@ export default function WordClozeQuizActivity({
     [typedByItem],
   );
 
+  useEffect(() => {
+    if (timeRemaining === null || alreadySubmitted) return;
+    if (timeRemaining <= 0) {
+      handleSubmitAll();
+      return;
+    }
+    const t = setTimeout(
+      () => setTimeRemaining((s) => (s == null ? null : s - 1)),
+      1000,
+    );
+    return () => clearTimeout(t);
+  }, [timeRemaining, alreadySubmitted, handleSubmitAll]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -316,6 +337,19 @@ export default function WordClozeQuizActivity({
         <span className="text-xs text-gray-400 ml-auto">
           {answeredCount} / {words.length}
         </span>
+        {timeRemaining !== null && (
+          <span
+            className={cn(
+              "text-xs font-medium tabular-nums px-2 py-0.5 rounded border",
+              timeRemaining <= 60
+                ? "bg-rose-50 text-rose-700 border-rose-300"
+                : "bg-amber-50 text-amber-700 border-amber-300",
+            )}
+          >
+            {Math.floor(timeRemaining / 60)}:
+            {String(timeRemaining % 60).padStart(2, "0")}
+          </span>
+        )}
       </div>
 
       <Card className="p-4">

@@ -355,6 +355,7 @@ async def create_assignment(
         practice_mode=request.practice_mode,
         answer_mode=sanitized_answer_mode,
         time_limit_per_question=request.time_limit_per_question,
+        quiz_time_limit_seconds=request.quiz_time_limit_seconds,
         shuffle_questions=request.shuffle_questions or False,
         show_answer=request.show_answer or False,
         play_audio=request.play_audio or False,
@@ -946,6 +947,7 @@ async def patch_assignment(
     # 進階設定更新
     advanced_fields = [
         "time_limit_per_question",
+        "quiz_time_limit_seconds",  # Issue #828
         "shuffle_questions",
         "show_answer",
         "play_audio",
