@@ -9,22 +9,16 @@
  *   - 題目以 example_sentence 將 cloze_answer 挖空，學生填入正確變形
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-const ALLOWED_CHAR = /[a-zA-Z\-' .,?!]/;
-const sanitize = (raw: string) =>
-  Array.from(raw)
-    .filter((c) => ALLOWED_CHAR.test(c))
-    .join("");
+import QuizAnswerInput from "./shared/QuizAnswerInput";
 
 interface QuizWord {
   content_item_id: number;
@@ -106,7 +100,6 @@ export default function WordClozeQuizActivity({
     play_audio: false,
     show_answer: false,
   });
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isLivePreview) {
@@ -359,17 +352,27 @@ export default function WordClozeQuizActivity({
               </div>
             )}
 
-          <Input
-            ref={inputRef}
+          <QuizAnswerInput
             value={typedByItem[currentWord.content_item_id] || ""}
-            onChange={(e) =>
+            expectedAnswer={currentWord.cloze_answer}
+            onChange={(next) =>
               setTypedByItem((m) => ({
                 ...m,
-                [currentWord.content_item_id]: sanitize(e.target.value),
+                [currentWord.content_item_id]: next,
               }))
             }
+            onSubmit={isLast ? handleSubmitAll : () => goTo(currentIndex + 1)}
             placeholder={t("wordQuiz.typeHere") || "Type your answer…"}
-            className="text-lg"
+            submitting={submittingAnswer}
+            state={
+              settings.show_answer &&
+              correctByItem[currentWord.content_item_id] === true
+                ? "correct"
+                : settings.show_answer &&
+                    correctByItem[currentWord.content_item_id] === false
+                  ? "wrong"
+                  : "neutral"
+            }
             autoFocus
           />
         </CardContent>
