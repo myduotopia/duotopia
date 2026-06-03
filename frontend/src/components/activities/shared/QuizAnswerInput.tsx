@@ -195,13 +195,14 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
           ? "border-red-500 text-red-600"
           : "border-gray-300 focus:border-indigo-500";
 
+    const showSubmit = !hideSubmitButton && !!onSubmit;
+
     return (
-      <div className="max-w-md mx-auto relative">
+      <div className="max-w-md mx-auto">
         <div
           className={cn(
-            "flex items-center gap-2 sm:gap-3 pl-2",
-            hideSubmitButton ? "pr-2" : "pr-10",
-            multi ? "justify-center" : "block",
+            "flex items-center gap-2 sm:gap-3",
+            multi ? "justify-center" : "",
           )}
         >
           {slotWords.map((slotExpected, idx) => (
@@ -229,41 +230,41 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
               autoCapitalize="off"
               autoCorrect="off"
               spellCheck={false}
+              // Issue #828: 寬度依答案長度自適應，+4 ch 預留 padding + 較寬字元
               style={
                 multi
-                  ? { width: `${Math.max(slotExpected.length, 3) + 1}ch` }
-                  : undefined
+                  ? { width: `${Math.max(slotExpected.length + 4, 6)}ch` }
+                  : { width: `${Math.max(slotExpected.length + 4, 8)}ch` }
               }
               className={cn(
                 "text-center text-2xl h-14 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
                 "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
-                !multi && "w-full",
                 stateBorder,
               )}
             />
           ))}
+          {showSubmit && (
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={
+                disabled || submitting || (value || "").trim().length === 0
+              }
+              aria-label="Submit answer"
+              className={cn(
+                "ml-1 sm:ml-2 p-2 rounded-full transition-colors shrink-0",
+                "text-indigo-600 hover:bg-indigo-50",
+                "disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed",
+              )}
+            >
+              {submitting ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
+            </button>
+          )}
         </div>
-        {!hideSubmitButton && onSubmit && (
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={
-              disabled || submitting || (value || "").trim().length === 0
-            }
-            aria-label="Submit answer"
-            className={cn(
-              "absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors",
-              "text-indigo-600 hover:bg-indigo-50",
-              "disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed",
-            )}
-          >
-            {submitting ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
-          </button>
-        )}
       </div>
     );
   },

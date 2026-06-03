@@ -375,9 +375,15 @@ export default function WordSelectionQuizActivity({
             </div>
           )}
 
-          {settings.show_word && (
-            <div className="text-center text-lg font-medium text-gray-800">
-              {currentWord.text}
+          {/* 樣式對齊 WordSelectionActivity (艾賓浩斯版)：text-3xl font-bold
+              show_image=true → 顯示翻譯（題目為圖+翻譯，避免英文選項秒解）；否則顯示英文題 */}
+          {!settings.play_audio && (
+            <div className="text-center">
+              <h2 className="text-3xl font-bold text-gray-800 select-none">
+                {settings.show_image
+                  ? currentWord.translation
+                  : currentWord.text}
+              </h2>
             </div>
           )}
 
