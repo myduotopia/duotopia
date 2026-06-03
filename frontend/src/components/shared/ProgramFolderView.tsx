@@ -564,7 +564,11 @@ function ExpandArea({
   onDownloadContent?: (content: Content) => void;
   onInstantPractice?: (content: Content) => void;
   onCreateContent: (programId: number, lessonId: number) => void;
-  onAssignContent?: (content: Content, lessonId: number) => void;
+  onAssignContent?: (
+    content: Content,
+    lessonId: number,
+    programId?: number,
+  ) => void;
   onReorderLessons?: (
     programId: number,
     fromIndex: number,
@@ -787,9 +791,11 @@ function ExpandArea({
                       ? () => onInstantPractice(content)
                       : undefined
                   }
-                  /* Assigning program-direct content directly isn't supported
-                     in the existing AssignmentDialog tree yet — omit the
-                     assign action here until that follow-up lands. */
+                  onAssign={
+                    onAssignContent
+                      ? () => onAssignContent(content, 0, program.id)
+                      : undefined
+                  }
                 />
               </SortableItem>
             ))}
@@ -820,7 +826,11 @@ export interface ProgramFolderViewProps {
   onDownloadContent?: (content: Content) => void;
   onInstantPractice?: (content: Content) => void;
   onCreateContent: (programId: number, lessonId: number) => void;
-  onAssignContent?: (content: Content, lessonId: number) => void;
+  onAssignContent?: (
+    content: Content,
+    lessonId: number,
+    programId?: number,
+  ) => void;
   onReorderPrograms?: (fromIndex: number, toIndex: number) => void;
   onReorderLessons?: (
     programId: number,
