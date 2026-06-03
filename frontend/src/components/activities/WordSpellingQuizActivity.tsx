@@ -11,7 +11,7 @@
  * 此元件同被學生作答頁與派發 sheet preview 共用（透過 previewWords 注入）。
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -21,7 +21,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import CountdownRing from "./shared/CountdownRing";
 import QuizAnswerInput from "./shared/QuizAnswerInput";
+import { useQuizTimer } from "./shared/useQuizTimer";
 
 interface QuizWord {
   content_item_id: number;
@@ -90,8 +92,11 @@ export default function WordSpellingQuizActivity({
     play_audio: false,
     show_answer: false,
   });
-  // Issue #828: 整卷限時倒數（秒）；null 不限時
-  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  // Issue #828: 整卷限時 — initialRemaining 給 useQuizTimer，timerTotal 給 CountdownRing 動畫
+  const [initialRemaining, setInitialRemaining] = useState<number | null>(null);
+  const [timerTotal, setTimerTotal] = useState<number | null>(null);
+  // 防止 handleSubmitAll 因 useEffect 重觸 / timer expire 重複進入後端 complete
+  const completingRef = useRef(false);
 
   // --------------------------------------------------------------------
   // Load quiz (or preview)
@@ -134,11 +139,12 @@ export default function WordSpellingQuizActivity({
           play_audio: data.play_audio,
           show_answer: data.show_answer,
         });
-        setTimeRemaining(
+        const remaining =
           data.time_remaining_seconds == null
             ? null
-            : Math.max(0, data.time_remaining_seconds),
-        );
+            : Math.max(0, data.time_remaining_seconds);
+        setInitialRemaining(remaining);
+        setTimerTotal(data.quiz_time_limit_seconds ?? remaining);
       } catch (err: unknown) {
         const code = (err as { detail?: { code?: string } })?.detail?.code;
         if (code === "QUIZ_ALREADY_SUBMITTED") {
@@ -169,42 +175,47 @@ export default function WordSpellingQuizActivity({
   // --------------------------------------------------------------------
   // Submit / persist answer per question
   // --------------------------------------------------------------------
-  const persistAnswer = useCallback(async () => {
-    if (!currentWord || isLivePreview || isDemoMode || sessionId == null)
-      return;
-    const typed = (typedByItem[currentWord.content_item_id] || "").trim();
-    if (!typed) return; // nothing to persist
+  // Persist a specific item's answer. Returns true on success / no-op,
+  // false if the backend POST failed — caller decides whether to retry.
+  const persistItemAnswer = useCallback(
+    async (itemId: number, typed: string): Promise<boolean> => {
+      if (isLivePreview || isDemoMode || sessionId == null) return true;
+      const trimmed = typed.trim();
+      if (!trimmed) return true;
+      try {
+        const data = (await apiClient.post(
+          `/api/students/assignments/${assignmentId}/vocabulary/spelling_quiz/answer`,
+          {
+            content_item_id: itemId,
+            typed_answer: trimmed,
+            time_spent_seconds: 0,
+            session_id: sessionId,
+          },
+        )) as { is_correct: boolean };
+        setCorrectByItem((m) => ({ ...m, [itemId]: data.is_correct }));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [assignmentId, isDemoMode, isLivePreview, sessionId],
+  );
+
+  // 學生切題 / 提交時用。失敗會 toast，並回傳 false 讓 caller 決定重試。
+  const persistAnswer = useCallback(async (): Promise<boolean> => {
+    if (!currentWord) return true;
+    const typed = typedByItem[currentWord.content_item_id] || "";
+    if (!typed.trim()) return true;
     setSubmittingAnswer(true);
-    try {
-      const data = (await apiClient.post(
-        `/api/students/assignments/${assignmentId}/vocabulary/spelling_quiz/answer`,
-        {
-          content_item_id: currentWord.content_item_id,
-          typed_answer: typed,
-          time_spent_seconds: 0,
-          session_id: sessionId,
-        },
-      )) as { is_correct: boolean };
-      setCorrectByItem((m) => ({
-        ...m,
-        [currentWord.content_item_id]: data.is_correct,
-      }));
-    } catch {
+    const ok = await persistItemAnswer(currentWord.content_item_id, typed);
+    setSubmittingAnswer(false);
+    if (!ok) {
       toast.error(
         t("wordSpelling.toast.saveFailed") || "Failed to save answer",
       );
-    } finally {
-      setSubmittingAnswer(false);
     }
-  }, [
-    assignmentId,
-    currentWord,
-    isDemoMode,
-    isLivePreview,
-    sessionId,
-    t,
-    typedByItem,
-  ]);
+    return ok;
+  }, [currentWord, persistItemAnswer, t, typedByItem]);
 
   const goTo = useCallback(
     async (idx: number) => {
@@ -221,9 +232,20 @@ export default function WordSpellingQuizActivity({
       return;
     }
     if (sessionId == null) return;
+    if (completingRef.current) return; // 避免 timer 重複觸發
+    completingRef.current = true;
     setCompleting(true);
     try {
-      await persistAnswer();
+      // 確保最後一題答案進 DB：先試一次，失敗 retry 一次；都失敗仍照常 complete
+      // 但提示學生（避免靜默失敗）。已答對的題目早已 persist，不會被影響。
+      let persisted = await persistAnswer();
+      if (!persisted) persisted = await persistAnswer();
+      if (!persisted) {
+        toast.warning(
+          t("wordQuiz.toast.lastAnswerNotSaved") ||
+            "最後一題答案儲存失敗，仍以已答題目計分提交",
+        );
+      }
       await apiClient.post(
         `/api/students/assignments/${assignmentId}/vocabulary/spelling_quiz/complete`,
         { session_id: sessionId },
@@ -232,6 +254,7 @@ export default function WordSpellingQuizActivity({
       onComplete?.();
     } catch {
       toast.error(t("wordSpelling.toast.submitFailed") || "Submit failed");
+      completingRef.current = false; // 讓使用者再點一次「提交」
     } finally {
       setCompleting(false);
     }
@@ -251,19 +274,36 @@ export default function WordSpellingQuizActivity({
     [typedByItem],
   );
 
-  // Issue #828: 整卷倒數 — 每秒 -1；到 0 自動提交
+  // Issue #828: 整卷倒數 — 透過 useQuizTimer 把 onExpire 收進 ref，
+  // 避免 typedByItem 連續變動把 setTimeout 一直 reset 導致倒數凍結。
+  const timeRemaining = useQuizTimer(
+    initialRemaining,
+    handleSubmitAll,
+    alreadySubmitted,
+  );
+
+  // Issue #828: 學生只打字、未送出、未切題時自動 persist，避免
+  // 「時間到才提交但網路抖一下答案沒進 DB」的場景。
+  const lastPersistedRef = useRef<Record<number, string>>({});
   useEffect(() => {
-    if (timeRemaining === null || alreadySubmitted) return;
-    if (timeRemaining <= 0) {
-      handleSubmitAll();
-      return;
-    }
-    const t = setTimeout(
-      () => setTimeRemaining((s) => (s == null ? null : s - 1)),
-      1000,
-    );
-    return () => clearTimeout(t);
-  }, [timeRemaining, alreadySubmitted, handleSubmitAll]);
+    if (!currentWord || isLivePreview || isDemoMode || alreadySubmitted) return;
+    const itemId = currentWord.content_item_id;
+    const val = (typedByItem[itemId] || "").trim();
+    if (!val) return;
+    if (lastPersistedRef.current[itemId] === val) return;
+    const handle = setTimeout(() => {
+      lastPersistedRef.current[itemId] = val;
+      persistItemAnswer(itemId, val);
+    }, 1000);
+    return () => clearTimeout(handle);
+  }, [
+    currentWord,
+    typedByItem,
+    isLivePreview,
+    isDemoMode,
+    alreadySubmitted,
+    persistItemAnswer,
+  ]);
 
   // --------------------------------------------------------------------
   // Render
@@ -337,18 +377,13 @@ export default function WordSpellingQuizActivity({
         <span className="text-xs text-gray-400 ml-auto">
           {answeredCount} / {words.length}
         </span>
-        {timeRemaining !== null && (
-          <span
-            className={cn(
-              "text-xs font-medium tabular-nums px-2 py-0.5 rounded border",
-              timeRemaining <= 60
-                ? "bg-rose-50 text-rose-700 border-rose-300"
-                : "bg-amber-50 text-amber-700 border-amber-300",
-            )}
-          >
-            {Math.floor(timeRemaining / 60)}:
-            {String(timeRemaining % 60).padStart(2, "0")}
-          </span>
+        {timeRemaining !== null && timerTotal !== null && (
+          <CountdownRing
+            seconds={timeRemaining}
+            total={timerTotal}
+            size={56}
+            longForm
+          />
         )}
       </div>
 

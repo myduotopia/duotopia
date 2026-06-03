@@ -9,7 +9,7 @@
  *   - 題目以 example_sentence 將 cloze_answer 挖空，學生填入正確變形
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -19,7 +19,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import CountdownRing from "./shared/CountdownRing";
 import QuizAnswerInput from "./shared/QuizAnswerInput";
+import { useQuizTimer } from "./shared/useQuizTimer";
 
 interface QuizWord {
   content_item_id: number;
@@ -104,7 +106,9 @@ export default function WordClozeQuizActivity({
     play_audio: false,
     show_answer: false,
   });
-  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [initialRemaining, setInitialRemaining] = useState<number | null>(null);
+  const [timerTotal, setTimerTotal] = useState<number | null>(null);
+  const completingRef = useRef(false);
 
   useEffect(() => {
     if (isLivePreview) {
@@ -142,11 +146,12 @@ export default function WordClozeQuizActivity({
           play_audio: data.play_audio,
           show_answer: data.show_answer,
         });
-        setTimeRemaining(
+        const remaining =
           data.time_remaining_seconds == null
             ? null
-            : Math.max(0, data.time_remaining_seconds),
-        );
+            : Math.max(0, data.time_remaining_seconds);
+        setInitialRemaining(remaining);
+        setTimerTotal(data.quiz_time_limit_seconds ?? remaining);
       } catch (err: unknown) {
         const code = (err as { detail?: { code?: string } })?.detail?.code;
         if (code === "QUIZ_ALREADY_SUBMITTED") {
@@ -172,40 +177,42 @@ export default function WordClozeQuizActivity({
     audio.play().catch(() => {});
   }, []);
 
-  const persistAnswer = useCallback(async () => {
-    if (!currentWord || isLivePreview || isDemoMode || sessionId == null)
-      return;
-    const typed = (typedByItem[currentWord.content_item_id] || "").trim();
-    if (!typed) return;
+  const persistItemAnswer = useCallback(
+    async (itemId: number, typed: string): Promise<boolean> => {
+      if (isLivePreview || isDemoMode || sessionId == null) return true;
+      const trimmed = typed.trim();
+      if (!trimmed) return true;
+      try {
+        const data = (await apiClient.post(
+          `/api/students/assignments/${assignmentId}/vocabulary/cloze_quiz/answer`,
+          {
+            content_item_id: itemId,
+            typed_answer: trimmed,
+            time_spent_seconds: 0,
+            session_id: sessionId,
+          },
+        )) as { is_correct: boolean };
+        setCorrectByItem((m) => ({ ...m, [itemId]: data.is_correct }));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [assignmentId, isDemoMode, isLivePreview, sessionId],
+  );
+
+  const persistAnswer = useCallback(async (): Promise<boolean> => {
+    if (!currentWord) return true;
+    const typed = typedByItem[currentWord.content_item_id] || "";
+    if (!typed.trim()) return true;
     setSubmittingAnswer(true);
-    try {
-      const data = (await apiClient.post(
-        `/api/students/assignments/${assignmentId}/vocabulary/cloze_quiz/answer`,
-        {
-          content_item_id: currentWord.content_item_id,
-          typed_answer: typed,
-          time_spent_seconds: 0,
-          session_id: sessionId,
-        },
-      )) as { is_correct: boolean };
-      setCorrectByItem((m) => ({
-        ...m,
-        [currentWord.content_item_id]: data.is_correct,
-      }));
-    } catch {
+    const ok = await persistItemAnswer(currentWord.content_item_id, typed);
+    setSubmittingAnswer(false);
+    if (!ok) {
       toast.error(t("wordCloze.toast.saveFailed") || "Failed to save answer");
-    } finally {
-      setSubmittingAnswer(false);
     }
-  }, [
-    assignmentId,
-    currentWord,
-    isDemoMode,
-    isLivePreview,
-    sessionId,
-    t,
-    typedByItem,
-  ]);
+    return ok;
+  }, [currentWord, persistItemAnswer, t, typedByItem]);
 
   const goTo = useCallback(
     async (idx: number) => {
@@ -222,9 +229,18 @@ export default function WordClozeQuizActivity({
       return;
     }
     if (sessionId == null) return;
+    if (completingRef.current) return;
+    completingRef.current = true;
     setCompleting(true);
     try {
-      await persistAnswer();
+      let persisted = await persistAnswer();
+      if (!persisted) persisted = await persistAnswer();
+      if (!persisted) {
+        toast.warning(
+          t("wordQuiz.toast.lastAnswerNotSaved") ||
+            "最後一題答案儲存失敗，仍以已答題目計分提交",
+        );
+      }
       await apiClient.post(
         `/api/students/assignments/${assignmentId}/vocabulary/cloze_quiz/complete`,
         { session_id: sessionId },
@@ -233,6 +249,7 @@ export default function WordClozeQuizActivity({
       onComplete?.();
     } catch {
       toast.error(t("wordCloze.toast.submitFailed") || "Submit failed");
+      completingRef.current = false;
     } finally {
       setCompleting(false);
     }
@@ -252,18 +269,33 @@ export default function WordClozeQuizActivity({
     [typedByItem],
   );
 
+  const timeRemaining = useQuizTimer(
+    initialRemaining,
+    handleSubmitAll,
+    alreadySubmitted,
+  );
+
+  // Auto-persist on typing pause (1s) — see WordSpellingQuizActivity for rationale.
+  const lastPersistedRef = useRef<Record<number, string>>({});
   useEffect(() => {
-    if (timeRemaining === null || alreadySubmitted) return;
-    if (timeRemaining <= 0) {
-      handleSubmitAll();
-      return;
-    }
-    const t = setTimeout(
-      () => setTimeRemaining((s) => (s == null ? null : s - 1)),
-      1000,
-    );
-    return () => clearTimeout(t);
-  }, [timeRemaining, alreadySubmitted, handleSubmitAll]);
+    if (!currentWord || isLivePreview || isDemoMode || alreadySubmitted) return;
+    const itemId = currentWord.content_item_id;
+    const val = (typedByItem[itemId] || "").trim();
+    if (!val) return;
+    if (lastPersistedRef.current[itemId] === val) return;
+    const handle = setTimeout(() => {
+      lastPersistedRef.current[itemId] = val;
+      persistItemAnswer(itemId, val);
+    }, 1000);
+    return () => clearTimeout(handle);
+  }, [
+    currentWord,
+    typedByItem,
+    isLivePreview,
+    isDemoMode,
+    alreadySubmitted,
+    persistItemAnswer,
+  ]);
 
   if (loading) {
     return (
@@ -337,18 +369,13 @@ export default function WordClozeQuizActivity({
         <span className="text-xs text-gray-400 ml-auto">
           {answeredCount} / {words.length}
         </span>
-        {timeRemaining !== null && (
-          <span
-            className={cn(
-              "text-xs font-medium tabular-nums px-2 py-0.5 rounded border",
-              timeRemaining <= 60
-                ? "bg-rose-50 text-rose-700 border-rose-300"
-                : "bg-amber-50 text-amber-700 border-amber-300",
-            )}
-          >
-            {Math.floor(timeRemaining / 60)}:
-            {String(timeRemaining % 60).padStart(2, "0")}
-          </span>
+        {timeRemaining !== null && timerTotal !== null && (
+          <CountdownRing
+            seconds={timeRemaining}
+            total={timerTotal}
+            size={56}
+            longForm
+          />
         )}
       </div>
 

@@ -8,7 +8,7 @@
  *   - 不更新 memory_strength；答案寫進 practice_answers (type=word_selection_quiz)
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import CountdownRing from "./shared/CountdownRing";
+import { useQuizTimer } from "./shared/useQuizTimer";
 
 interface QuizOption {
   text: string;
@@ -92,7 +94,9 @@ export default function WordSelectionQuizActivity({
     show_option_images: false,
     play_audio: false,
   });
-  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [initialRemaining, setInitialRemaining] = useState<number | null>(null);
+  const [timerTotal, setTimerTotal] = useState<number | null>(null);
+  const completingRef = useRef(false);
 
   useEffect(() => {
     if (isLivePreview) {
@@ -132,11 +136,12 @@ export default function WordSelectionQuizActivity({
           show_option_images: data.show_option_images,
           play_audio: data.play_audio,
         });
-        setTimeRemaining(
+        const remaining =
           data.time_remaining_seconds == null
             ? null
-            : Math.max(0, data.time_remaining_seconds),
-        );
+            : Math.max(0, data.time_remaining_seconds);
+        setInitialRemaining(remaining);
+        setTimerTotal(data.quiz_time_limit_seconds ?? remaining);
       } catch (err: unknown) {
         const code = (err as { detail?: { code?: string } })?.detail?.code;
         if (code === "QUIZ_ALREADY_SUBMITTED") {
@@ -224,6 +229,8 @@ export default function WordSelectionQuizActivity({
       return;
     }
     if (sessionId == null) return;
+    if (completingRef.current) return;
+    completingRef.current = true;
     setCompleting(true);
     try {
       await apiClient.post(
@@ -234,6 +241,7 @@ export default function WordSelectionQuizActivity({
       onComplete?.();
     } catch {
       toast.error(t("wordSelection.toast.submitFailed") || "Submit failed");
+      completingRef.current = false;
     } finally {
       setCompleting(false);
     }
@@ -246,18 +254,11 @@ export default function WordSelectionQuizActivity({
     [selectedByItem],
   );
 
-  useEffect(() => {
-    if (timeRemaining === null || alreadySubmitted) return;
-    if (timeRemaining <= 0) {
-      handleSubmitAll();
-      return;
-    }
-    const t = setTimeout(
-      () => setTimeRemaining((s) => (s == null ? null : s - 1)),
-      1000,
-    );
-    return () => clearTimeout(t);
-  }, [timeRemaining, alreadySubmitted, handleSubmitAll]);
+  const timeRemaining = useQuizTimer(
+    initialRemaining,
+    handleSubmitAll,
+    alreadySubmitted,
+  );
 
   if (loading) {
     return (
@@ -329,18 +330,13 @@ export default function WordSelectionQuizActivity({
         <span className="text-xs text-gray-400 ml-auto">
           {answeredCount} / {words.length}
         </span>
-        {timeRemaining !== null && (
-          <span
-            className={cn(
-              "text-xs font-medium tabular-nums px-2 py-0.5 rounded border",
-              timeRemaining <= 60
-                ? "bg-rose-50 text-rose-700 border-rose-300"
-                : "bg-amber-50 text-amber-700 border-amber-300",
-            )}
-          >
-            {Math.floor(timeRemaining / 60)}:
-            {String(timeRemaining % 60).padStart(2, "0")}
-          </span>
+        {timeRemaining !== null && timerTotal !== null && (
+          <CountdownRing
+            seconds={timeRemaining}
+            total={timerTotal}
+            size={56}
+            longForm
+          />
         )}
       </div>
 

@@ -4795,6 +4795,9 @@
     "locked": {
       "title": "Quiz already submitted",
       "desc": "Submission is one-shot; wait for the teacher to return the assignment to fix wrong answers."
+    },
+    "toast": {
+      "lastAnswerNotSaved": "Could not save the last answer; submitting with previously-saved answers."
     }
   },
   "wordSpelling": {

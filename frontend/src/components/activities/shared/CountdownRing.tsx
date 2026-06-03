@@ -14,23 +14,37 @@ import { cn } from "@/lib/utils";
 interface CountdownRingProps {
   /** Current seconds remaining (drives the centre label + colour). */
   seconds: number;
-  /** Original time budget for this question (drives animation length). */
+  /** Original time budget (drives animation length). */
   total: number;
   className?: string;
+  /** Ring diameter in px (default 36 fits per-question; quiz uses 56). */
+  size?: number;
+  /**
+   * When true, danger/warn thresholds switch to 60s/180s for whole-quiz
+   * timers (default false → 5s/10s for per-question timers).
+   */
+  longForm?: boolean;
 }
 
-const SIZE = 36;
 const STROKE = 3;
-const RADIUS = (SIZE - STROKE) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 export default function CountdownRing({
   seconds,
   total,
   className,
+  size = 36,
+  longForm = false,
 }: CountdownRingProps) {
-  const danger = seconds <= 5;
-  const warn = !danger && seconds <= 10;
+  const radius = (size - STROKE) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const dangerLimit = longForm ? 60 : 5;
+  const warnLimit = longForm ? 180 : 10;
+  const danger = seconds <= dangerLimit;
+  const warn = !danger && seconds <= warnLimit;
+  const display =
+    seconds >= 60
+      ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+      : String(seconds);
 
   const stroke = danger
     ? "stroke-red-500"
@@ -50,41 +64,47 @@ export default function CountdownRing({
         danger && "animate-pulse",
         className,
       )}
-      style={{ width: SIZE, height: SIZE }}
-      aria-label={`${seconds} seconds remaining`}
+      style={{ width: size, height: size }}
+      aria-label={`${display} remaining`}
       role="timer"
     >
       <svg
-        width={SIZE}
-        height={SIZE}
+        width={size}
+        height={size}
         className="-rotate-90"
-        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        viewBox={`0 0 ${size} ${size}`}
       >
         <circle
-          cx={SIZE / 2}
-          cy={SIZE / 2}
-          r={RADIUS}
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
           strokeWidth={STROKE}
           className="stroke-gray-200 fill-none"
         />
         <circle
-          cx={SIZE / 2}
-          cy={SIZE / 2}
-          r={RADIUS}
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
           strokeWidth={STROKE}
           strokeLinecap="round"
-          strokeDasharray={CIRCUMFERENCE}
+          strokeDasharray={circumference}
           className={cn("fill-none countdown-drain", stroke)}
           style={
             {
-              "--countdown-circ": `${CIRCUMFERENCE}px`,
+              "--countdown-circ": `${circumference}px`,
               animationDuration: `${total}s`,
             } as React.CSSProperties
           }
         />
       </svg>
-      <span className={cn("absolute text-xs font-semibold tabular-nums", text)}>
-        {seconds}
+      <span
+        className={cn(
+          "absolute font-semibold tabular-nums",
+          size >= 56 ? "text-sm" : "text-xs",
+          text,
+        )}
+      >
+        {display}
       </span>
     </div>
   );

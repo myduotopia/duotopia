@@ -4828,6 +4828,9 @@
     "locked": {
       "title": "本次小考已提交",
       "desc": "提交後不可重做；等待老師退回後才能訂正錯題。"
+    },
+    "toast": {
+      "lastAnswerNotSaved": "最後一題答案儲存失敗，仍以已答題目計分提交"
     }
   },
   "wordSpelling": {
