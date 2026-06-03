@@ -42,6 +42,9 @@ import WordClozeActivity from "@/components/activities/WordClozeActivity";
 import WordSpellingQuizActivity from "@/components/activities/WordSpellingQuizActivity";
 import WordClozeQuizActivity from "@/components/activities/WordClozeQuizActivity";
 import WordSelectionQuizActivity from "@/components/activities/WordSelectionQuizActivity";
+import WordSpellingQuizPreview from "@/components/activities/WordSpellingQuizPreview";
+import WordClozeQuizPreview from "@/components/activities/WordClozeQuizPreview";
+import WordSelectionQuizPreview from "@/components/activities/WordSelectionQuizPreview";
 import {
   ChevronLeft,
   ChevronRight,
@@ -1841,7 +1844,24 @@ export default function StudentActivityPageContent({
 
     // Issue #828: 小考變體（_quiz）使用獨立 Activity 元件 — 走 quiz 端點、
     // 內建題號 bar / 跳題 / 提交鎖定，與艾賓浩斯版本資料完全隔離。
+    //
+    // Preview 模式（老師端）：QuizActivity 會打學生端 /start endpoint，老師
+    // 沒有對應 StudentAssignment → 404。改走 QuizPreview wrapper（拿 teacher
+    // API 抓 content 後以 previewWords 注入 QuizActivity），跳過學生端 API。
     if (practiceMode === "word_spelling_quiz") {
+      if (isPreviewMode) {
+        return (
+          <WordSpellingQuizPreview
+            contentId={activity.content_id}
+            settings={{
+              show_translation: true,
+              show_image: true,
+              play_audio: false,
+              show_answer: showAnswer,
+            }}
+          />
+        );
+      }
       return (
         <WordSpellingQuizActivity
           assignmentId={assignmentId}
@@ -1855,6 +1875,18 @@ export default function StudentActivityPageContent({
       );
     }
     if (practiceMode === "word_cloze_quiz") {
+      if (isPreviewMode) {
+        return (
+          <WordClozeQuizPreview
+            contentId={activity.content_id}
+            settings={{
+              show_translation: true,
+              play_audio: false,
+              show_answer: showAnswer,
+            }}
+          />
+        );
+      }
       return (
         <WordClozeQuizActivity
           assignmentId={assignmentId}
@@ -1868,6 +1900,20 @@ export default function StudentActivityPageContent({
       );
     }
     if (practiceMode === "word_selection_quiz") {
+      if (isPreviewMode) {
+        return (
+          <WordSelectionQuizPreview
+            contentId={activity.content_id}
+            settings={{
+              show_word: true,
+              show_image: true,
+              show_option_images: false,
+              play_audio: false,
+              show_answer: showAnswer,
+            }}
+          />
+        );
+      }
       return (
         <WordSelectionQuizActivity
           assignmentId={assignmentId}
