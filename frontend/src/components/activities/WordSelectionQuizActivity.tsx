@@ -273,9 +273,12 @@ export default function WordSelectionQuizActivity({
     alreadySubmitted,
   );
 
+  // 同 spelling：用 ref guard 避免 setReviewLoading 觸發 useEffect 重跑造成 cancel 自己
+  const reviewFetchedRef = useRef(false);
   useEffect(() => {
     if (!alreadySubmitted || isLivePreview || isDemoMode) return;
-    if (reviewData || reviewLoading) return;
+    if (reviewFetchedRef.current) return;
+    reviewFetchedRef.current = true;
     let cancelled = false;
     const run = async () => {
       setReviewLoading(true);
@@ -289,6 +292,7 @@ export default function WordSelectionQuizActivity({
           toast.error(
             t("wordQuiz.toast.reviewLoadFailed") || "載入複盤資料失敗",
           );
+          reviewFetchedRef.current = false;
         }
       } finally {
         if (!cancelled) setReviewLoading(false);
@@ -298,15 +302,7 @@ export default function WordSelectionQuizActivity({
     return () => {
       cancelled = true;
     };
-  }, [
-    alreadySubmitted,
-    assignmentId,
-    isDemoMode,
-    isLivePreview,
-    reviewData,
-    reviewLoading,
-    t,
-  ]);
+  }, [alreadySubmitted, assignmentId, isDemoMode, isLivePreview, t]);
 
   if (loading) {
     return (

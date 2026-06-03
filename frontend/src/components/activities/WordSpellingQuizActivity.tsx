@@ -298,9 +298,14 @@ export default function WordSpellingQuizActivity({
   );
 
   // Issue #828 polish: SUBMITTED 時 fetch 複盤資料
+  // ⚠️ 用 ref 做 fetched guard：若把 reviewLoading 放進 deps，setReviewLoading(true)
+  // 會觸發 useEffect 重跑、cleanup 把 cancelled 設 true → in-flight fetch 回來時
+  // setReviewData 被跳過 → 永遠卡 loading。
+  const reviewFetchedRef = useRef(false);
   useEffect(() => {
     if (!alreadySubmitted || isLivePreview || isDemoMode) return;
-    if (reviewData || reviewLoading) return;
+    if (reviewFetchedRef.current) return;
+    reviewFetchedRef.current = true;
     let cancelled = false;
     const run = async () => {
       setReviewLoading(true);
@@ -314,6 +319,7 @@ export default function WordSpellingQuizActivity({
           toast.error(
             t("wordQuiz.toast.reviewLoadFailed") || "載入複盤資料失敗",
           );
+          reviewFetchedRef.current = false; // 允許重試（若 useEffect 再次觸發）
         }
       } finally {
         if (!cancelled) setReviewLoading(false);
@@ -323,15 +329,7 @@ export default function WordSpellingQuizActivity({
     return () => {
       cancelled = true;
     };
-  }, [
-    alreadySubmitted,
-    assignmentId,
-    isDemoMode,
-    isLivePreview,
-    reviewData,
-    reviewLoading,
-    t,
-  ]);
+  }, [alreadySubmitted, assignmentId, isDemoMode, isLivePreview, t]);
 
   // Issue #828: 學生只打字、未送出、未切題時自動 persist，避免
   // 「時間到才提交但網路抖一下答案沒進 DB」的場景。
