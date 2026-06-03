@@ -4797,7 +4797,16 @@
       "desc": "Submission is one-shot; wait for the teacher to return the assignment to fix wrong answers."
     },
     "toast": {
-      "lastAnswerNotSaved": "Could not save the last answer; submitting with previously-saved answers."
+      "lastAnswerNotSaved": "Could not save the last answer; submitting with previously-saved answers.",
+      "reviewLoadFailed": "Failed to load quiz review"
+    },
+    "review": {
+      "yourAnswer": "Your answer",
+      "correctAnswer": "Correct answer",
+      "unanswered": "Not answered",
+      "correct": "Correct",
+      "wrong": "Wrong",
+      "scoreSummary": "{{correct}} / {{total}} correct"
     }
   },
   "wordSpelling": {

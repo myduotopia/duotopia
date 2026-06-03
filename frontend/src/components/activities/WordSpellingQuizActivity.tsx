@@ -23,6 +23,10 @@ import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import QuizAnswerInput from "./shared/QuizAnswerInput";
+import QuizReviewView, {
+  type QuizReviewPayload,
+  type QuizReviewWord,
+} from "./shared/QuizReviewView";
 import { useQuizTimer } from "./shared/useQuizTimer";
 
 interface QuizWord {
@@ -86,6 +90,17 @@ export default function WordSpellingQuizActivity({
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+  // Issue #828 polish: 提交後改顯示題目+答案複盤，而非鎖卡
+  interface SpellingReviewWord extends QuizReviewWord {
+    text: string;
+    translation: string;
+    part_of_speech?: string | null;
+    audio_url?: string | null;
+    image_url?: string | null;
+  }
+  const [reviewData, setReviewData] =
+    useState<QuizReviewPayload<SpellingReviewWord> | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
   const [settings, setSettings] = useState({
     show_translation: true,
     show_image: true,
@@ -282,6 +297,42 @@ export default function WordSpellingQuizActivity({
     alreadySubmitted,
   );
 
+  // Issue #828 polish: SUBMITTED 時 fetch 複盤資料
+  useEffect(() => {
+    if (!alreadySubmitted || isLivePreview || isDemoMode) return;
+    if (reviewData || reviewLoading) return;
+    let cancelled = false;
+    const run = async () => {
+      setReviewLoading(true);
+      try {
+        const data = (await apiClient.get(
+          `/api/students/assignments/${assignmentId}/vocabulary/spelling_quiz/review`,
+        )) as QuizReviewPayload<SpellingReviewWord>;
+        if (!cancelled) setReviewData(data);
+      } catch {
+        if (!cancelled) {
+          toast.error(
+            t("wordQuiz.toast.reviewLoadFailed") || "載入複盤資料失敗",
+          );
+        }
+      } finally {
+        if (!cancelled) setReviewLoading(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    alreadySubmitted,
+    assignmentId,
+    isDemoMode,
+    isLivePreview,
+    reviewData,
+    reviewLoading,
+    t,
+  ]);
+
   // Issue #828: 學生只打字、未送出、未切題時自動 persist，避免
   // 「時間到才提交但網路抖一下答案沒進 DB」的場景。
   const lastPersistedRef = useRef<Record<number, string>>({});
@@ -317,17 +368,36 @@ export default function WordSpellingQuizActivity({
   }
 
   if (alreadySubmitted) {
+    if (reviewLoading || !reviewData) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        </div>
+      );
+    }
     return (
-      <Card className="p-6">
-        <CardContent className="text-center text-gray-700 space-y-2">
-          <p className="text-lg font-semibold">
-            {t("wordQuiz.locked.title") || "本次小考已提交"}
-          </p>
-          <p className="text-sm text-gray-500">
-            {t("wordQuiz.locked.desc") || "等待老師退回後才能訂正。"}
-          </p>
-        </CardContent>
-      </Card>
+      <QuizReviewView
+        data={reviewData}
+        renderQuestion={(w) => (
+          <div className="text-center py-2 space-y-1">
+            {w.image_url && (
+              <img
+                src={w.image_url}
+                alt=""
+                className="mx-auto max-h-32 object-contain"
+              />
+            )}
+            <h3 className="text-2xl font-bold text-gray-800 tracking-wide">
+              {w.translation || w.text}
+            </h3>
+            {w.part_of_speech && (
+              <span className="inline-block text-xs text-gray-500">
+                ({w.part_of_speech})
+              </span>
+            )}
+          </div>
+        )}
+      />
     );
   }
 

@@ -4830,7 +4830,16 @@
       "desc": "提交後不可重做；等待老師退回後才能訂正錯題。"
     },
     "toast": {
-      "lastAnswerNotSaved": "最後一題答案儲存失敗，仍以已答題目計分提交"
+      "lastAnswerNotSaved": "最後一題答案儲存失敗，仍以已答題目計分提交",
+      "reviewLoadFailed": "載入複盤資料失敗"
+    },
+    "review": {
+      "yourAnswer": "你的答案",
+      "correctAnswer": "正確答案",
+      "unanswered": "未作答",
+      "correct": "答對",
+      "wrong": "答錯",
+      "scoreSummary": "{{correct}} / {{total}} 答對"
     }
   },
   "wordSpelling": {

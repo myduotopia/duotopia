@@ -814,3 +814,174 @@ async def complete_word_cloze_quiz(
         "correct_count": correct,
         "answered_count": answered,
     }
+
+
+# ---------------------------------------------------------------------------
+# Review endpoints — 提交後讓學生看自己答案 + 正解 + 對錯
+# ---------------------------------------------------------------------------
+
+
+def _latest_completed_session(
+    db: Session, assignment_id: int, expected_mode: str
+) -> Optional[PracticeSession]:
+    return (
+        db.query(PracticeSession)
+        .filter(
+            PracticeSession.student_assignment_id == assignment_id,
+            PracticeSession.practice_mode == expected_mode,
+        )
+        .order_by(PracticeSession.id.desc())
+        .first()
+    )
+
+
+def _build_review_response(
+    db: Session,
+    student_id: int,
+    assignment_id: int,
+    expected_mode: str,
+    build_item,
+) -> Dict[str, Any]:
+    """Shared review skeleton — 各模式只差 build_item 怎麼組每題的內容。"""
+    sa = _get_student_assignment_or_404(db, assignment_id, student_id)
+    assignment = _get_assignment_or_400(db, sa, expected_mode)
+    if sa.status not in (AssignmentStatus.SUBMITTED, AssignmentStatus.GRADED):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "QUIZ_NOT_SUBMITTED",
+                "status": sa.status.value if sa.status else None,
+            },
+        )
+    # 不洗牌：複盤頁固定按 order_index 顯示，方便師生對照
+    items = _load_quiz_items(db, assignment, shuffle=False)
+    session = _latest_completed_session(db, assignment_id, expected_mode)
+    answers_map: Dict[int, PracticeAnswer] = {}
+    if session:
+        answers_map = _existing_answers_for_session(db, session.id)
+
+    words = []
+    correct_count = 0
+    for idx, item in enumerate(items, start=1):
+        prior = answers_map.get(item.id)
+        word = build_item(item, prior)
+        word["question_number"] = idx
+        word["is_correct"] = bool(prior.is_correct) if prior else False
+        if word["is_correct"]:
+            correct_count += 1
+        words.append(word)
+
+    return {
+        "practice_mode": expected_mode,
+        "words": words,
+        "total_questions": len(items),
+        "correct_count": correct_count,
+        "score": sa.score if sa.score is not None else 0,
+        "status": sa.status.value if sa.status else None,
+        "submitted_at": sa.submitted_at.isoformat() if sa.submitted_at else None,
+    }
+
+
+@router.get("/assignments/{assignment_id}/vocabulary/selection_quiz/review")
+async def review_word_selection_quiz(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    student_id = int(current_student.get("sub"))
+    sa = _get_student_assignment_or_404(db, assignment_id, student_id)
+    assignment = _get_assignment_or_400(db, sa, "word_selection_quiz")
+    # 為了顯示選項，先建一份 options_by_item（與 start 同邏輯）
+    items = _load_quiz_items(db, assignment, shuffle=False)
+    options_by_item = _build_selection_options(items, assignment)
+    show_image = assignment.show_image if assignment.show_image is not None else True
+    answer_key = text_field_for_show_image(show_image)
+
+    def build_item(
+        item: ContentItem, prior: Optional[PracticeAnswer]
+    ) -> Dict[str, Any]:
+        correct = getattr(item, answer_key) or ""
+        return {
+            "content_item_id": item.id,
+            "text": item.text,
+            "translation": item.translation or "",
+            "correct_answer": correct,
+            "student_answer": (
+                prior.answer_data.get("selected_answer")
+                if prior and prior.answer_data
+                else None
+            ),
+            "audio_url": item.audio_url,
+            "image_url": item.image_url,
+            "options": options_by_item.get(item.id, []),
+        }
+
+    return _build_review_response(
+        db, student_id, assignment_id, "word_selection_quiz", build_item
+    )
+
+
+@router.get("/assignments/{assignment_id}/vocabulary/spelling_quiz/review")
+async def review_word_spelling_quiz(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    student_id = int(current_student.get("sub"))
+
+    def build_item(
+        item: ContentItem, prior: Optional[PracticeAnswer]
+    ) -> Dict[str, Any]:
+        return {
+            "content_item_id": item.id,
+            "text": item.text,
+            "translation": item.translation or "",
+            "part_of_speech": item.part_of_speech,
+            "audio_url": item.audio_url,
+            "image_url": item.image_url,
+            "correct_answer": item.text or "",
+            "student_answer": (
+                prior.answer_data.get("typed_answer")
+                if prior and prior.answer_data
+                else None
+            ),
+        }
+
+    return _build_review_response(
+        db, student_id, assignment_id, "word_spelling_quiz", build_item
+    )
+
+
+@router.get("/assignments/{assignment_id}/vocabulary/cloze_quiz/review")
+async def review_word_cloze_quiz(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    student_id = int(current_student.get("sub"))
+
+    def build_item(
+        item: ContentItem, prior: Optional[PracticeAnswer]
+    ) -> Dict[str, Any]:
+        cloze_answer = _resolve_cloze_answer(item)
+        return {
+            "content_item_id": item.id,
+            "text": item.text,
+            "translation": item.translation or "",
+            "part_of_speech": item.part_of_speech,
+            "example_sentence": item.example_sentence or "",
+            "example_sentence_translation": item.example_sentence_translation or "",
+            "example_sentence_audio_url": item.example_sentence_audio_url,
+            "audio_url": item.audio_url,
+            "image_url": item.image_url,
+            "correct_answer": cloze_answer,
+            "student_answer": (
+                prior.answer_data.get("typed_answer")
+                if prior and prior.answer_data
+                else None
+            ),
+        }
+
+    return _build_review_response(
+        db, student_id, assignment_id, "word_cloze_quiz", build_item
+    )

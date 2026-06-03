@@ -21,6 +21,10 @@ import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import QuizAnswerInput from "./shared/QuizAnswerInput";
+import QuizReviewView, {
+  type QuizReviewPayload,
+  type QuizReviewWord,
+} from "./shared/QuizReviewView";
 import { useQuizTimer } from "./shared/useQuizTimer";
 
 interface QuizWord {
@@ -101,6 +105,14 @@ export default function WordClozeQuizActivity({
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+  interface ClozeReviewWord extends QuizReviewWord {
+    example_sentence: string;
+    example_sentence_translation: string;
+    part_of_speech?: string | null;
+  }
+  const [reviewData, setReviewData] =
+    useState<QuizReviewPayload<ClozeReviewWord> | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
   const [settings, setSettings] = useState({
     show_translation: true,
     play_audio: false,
@@ -275,6 +287,41 @@ export default function WordClozeQuizActivity({
     alreadySubmitted,
   );
 
+  useEffect(() => {
+    if (!alreadySubmitted || isLivePreview || isDemoMode) return;
+    if (reviewData || reviewLoading) return;
+    let cancelled = false;
+    const run = async () => {
+      setReviewLoading(true);
+      try {
+        const data = (await apiClient.get(
+          `/api/students/assignments/${assignmentId}/vocabulary/cloze_quiz/review`,
+        )) as QuizReviewPayload<ClozeReviewWord>;
+        if (!cancelled) setReviewData(data);
+      } catch {
+        if (!cancelled) {
+          toast.error(
+            t("wordQuiz.toast.reviewLoadFailed") || "載入複盤資料失敗",
+          );
+        }
+      } finally {
+        if (!cancelled) setReviewLoading(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    alreadySubmitted,
+    assignmentId,
+    isDemoMode,
+    isLivePreview,
+    reviewData,
+    reviewLoading,
+    t,
+  ]);
+
   // Auto-persist on typing pause (1s) — see WordSpellingQuizActivity for rationale.
   const lastPersistedRef = useRef<Record<number, string>>({});
   useEffect(() => {
@@ -306,17 +353,37 @@ export default function WordClozeQuizActivity({
   }
 
   if (alreadySubmitted) {
+    if (reviewLoading || !reviewData) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        </div>
+      );
+    }
     return (
-      <Card className="p-6">
-        <CardContent className="text-center text-gray-700 space-y-2">
-          <p className="text-lg font-semibold">
-            {t("wordQuiz.locked.title") || "本次小考已提交"}
-          </p>
-          <p className="text-sm text-gray-500">
-            {t("wordQuiz.locked.desc") || "等待老師退回後才能訂正。"}
-          </p>
-        </CardContent>
-      </Card>
+      <QuizReviewView
+        data={reviewData}
+        renderQuestion={(w) => {
+          const blanked = buildBlanked(w.example_sentence, w.correct_answer);
+          return (
+            <div className="text-center py-1 space-y-1">
+              {w.part_of_speech && (
+                <span className="inline-block text-xs text-gray-500">
+                  ({w.part_of_speech})
+                </span>
+              )}
+              <p className="text-lg leading-relaxed text-gray-800 font-semibold tracking-wide">
+                {blanked}
+              </p>
+              {w.example_sentence_translation && (
+                <p className="text-sm text-gray-500">
+                  {w.example_sentence_translation}
+                </p>
+              )}
+            </div>
+          );
+        }}
+      />
     );
   }
 
