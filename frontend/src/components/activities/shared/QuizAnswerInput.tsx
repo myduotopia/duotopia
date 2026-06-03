@@ -107,7 +107,6 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
         refs.current[0]?.focus();
         setFocusedIdx(0);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoFocus, slotWords.length]);
 
     const writeSlot = useCallback(
