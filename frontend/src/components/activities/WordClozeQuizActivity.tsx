@@ -362,7 +362,6 @@ export default function WordClozeQuizActivity({
               }))
             }
             onSubmit={isLast ? handleSubmitAll : () => goTo(currentIndex + 1)}
-            placeholder={t("wordQuiz.typeHere") || "Type your answer…"}
             submitting={submittingAnswer}
             state={
               settings.show_answer &&
