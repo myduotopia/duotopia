@@ -428,7 +428,7 @@ export default function PricingPage() {
         {/* Tabs: Monthly Subscription | Point Packages */}
         <div className="max-w-5xl mx-auto">
           {activeTab === "subscription" && (
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-4xl mx-auto space-y-12">
               <div className="grid md:grid-cols-2 gap-8">
                 {subscriptionPlans.map((plan) => (
                   <SubscriptionPlanCard
@@ -442,6 +442,94 @@ export default function PricingPage() {
                     ctaText={t("pricing.actions.subscribe")}
                   />
                 ))}
+              </div>
+
+              {/* Phase 5-2 follow-up (#768): group-buy discovery surface.
+                  Three hard-coded cards matching the DB seed; admin tunes
+                  the live values via /admin/plans dialog (PR #837). */}
+              <div className="space-y-4">
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    👥 教師團購方案
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-2 max-w-2xl mx-auto">
+                    為您的教師團隊一次採購年費方案，享更低的每席費用 +
+                    加購點數包折扣。團主刷卡一次即可開團，月配點自動發放給團內每位教師。
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    {
+                      name: "團購-10席",
+                      seats: 10,
+                      annualFee: 1500,
+                      discount: 0.95,
+                    },
+                    {
+                      name: "團購-30席",
+                      seats: 30,
+                      annualFee: 1300,
+                      discount: 0.9,
+                    },
+                    {
+                      name: "團購-50席",
+                      seats: 50,
+                      annualFee: 1000,
+                      discount: 0.85,
+                    },
+                  ].map((p) => (
+                    <div
+                      key={p.name}
+                      className="rounded-xl border border-gray-200 bg-white p-6 flex flex-col"
+                    >
+                      <div className="text-lg font-bold text-gray-900">
+                        {p.name}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {p.seats} 位教師席次
+                      </div>
+                      <div className="my-4 space-y-1 text-sm">
+                        <div>
+                          每席年費{" "}
+                          <span className="font-semibold">
+                            NT$ {p.annualFee.toLocaleString()}
+                          </span>
+                        </div>
+                        <div>
+                          月配點{" "}
+                          <span className="font-semibold">1,000 點 / 教師</span>
+                        </div>
+                        <div>
+                          加購折扣{" "}
+                          <span className="font-semibold">
+                            {Math.round((1 - p.discount) * 100)}% off
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-auto pt-3 border-t border-gray-200">
+                        <div className="text-xs text-gray-500">團隊總價</div>
+                        <div className="text-xl font-bold text-blue-600">
+                          NT$ {(p.annualFee * p.seats).toLocaleString()} / 年
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/teacher/group-buy/open")}
+                    disabled={isStudent}
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    立即開設團購方案 →
+                  </button>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {isStudent
+                      ? "請先登出學生帳號"
+                      : "需教師帳號登入；尚未登入會引導至教師登入頁。"}
+                  </p>
+                </div>
               </div>
             </div>
           )}
