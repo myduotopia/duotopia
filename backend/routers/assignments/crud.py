@@ -55,6 +55,11 @@ router = APIRouter()
 # and routers.students.assignments.extract_cloze_for_item. We block creation
 # at the API boundary rather than letting the broken UX surface to students
 # (issue #673).
+# Modes whose UX depends on a complete example sentence (+ translation).
+# Note (#828): word_spelling_quiz / word_selection_quiz are intentionally
+# EXCLUDED — they quiz the word itself (typing / multiple-choice) and never
+# render an example sentence, so requiring one would block valid dispatches.
+# Only the cloze variant blanks a word out of the example, hence word_cloze_quiz.
 _PRACTICE_MODES_REQUIRING_EXAMPLES = {
     "reading",
     "rearrangement",

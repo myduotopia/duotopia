@@ -14,10 +14,11 @@ _MAX_QUIZ_TIME_LIMIT_SECONDS = 36000
 def _validate_quiz_time_limit(value: Optional[int]) -> Optional[int]:
     if value is None:
         return value
+    # null = 不限時（前端把 0 也視為不限時並送 null）；其餘需在合理範圍內
     if value < 0 or value > _MAX_QUIZ_TIME_LIMIT_SECONDS:
         raise ValueError(
-            "quiz_time_limit_seconds must be between 0 and "
-            f"{_MAX_QUIZ_TIME_LIMIT_SECONDS}"
+            "quiz_time_limit_seconds must be null (no limit) or between "
+            f"0 and {_MAX_QUIZ_TIME_LIMIT_SECONDS}"
         )
     return value
 

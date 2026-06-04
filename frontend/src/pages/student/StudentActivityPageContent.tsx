@@ -181,6 +181,14 @@ interface StudentActivityPageContentProps {
   showAnswer?: boolean; // 例句重組：答題結束後是否顯示正確答案
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
   timeLimitPerQuestion?: number; // 每題錄音時間限制（秒）
+  // Issue #828: 老師實際的顯示設定，預覽小考時用（取代前端寫死的預設值）
+  previewSettings?: {
+    play_audio?: boolean;
+    show_translation?: boolean;
+    show_word?: boolean;
+    show_image?: boolean;
+    show_option_images?: boolean;
+  };
 }
 
 // =============================================================================
@@ -286,6 +294,7 @@ export default function StudentActivityPageContent({
   showAnswer = false,
   canUseAiAnalysis = true,
   timeLimitPerQuestion = 0,
+  previewSettings,
 }: StudentActivityPageContentProps) {
   const { t } = useTranslation();
 
@@ -1854,9 +1863,9 @@ export default function StudentActivityPageContent({
           <WordSpellingQuizPreview
             contentId={activity.content_id}
             settings={{
-              show_translation: true,
-              show_image: true,
-              play_audio: false,
+              show_translation: previewSettings?.show_translation ?? true,
+              show_image: previewSettings?.show_image ?? true,
+              play_audio: previewSettings?.play_audio ?? false,
               show_answer: showAnswer,
             }}
           />
@@ -1880,8 +1889,8 @@ export default function StudentActivityPageContent({
           <WordClozeQuizPreview
             contentId={activity.content_id}
             settings={{
-              show_translation: true,
-              play_audio: false,
+              show_translation: previewSettings?.show_translation ?? true,
+              play_audio: previewSettings?.play_audio ?? false,
               show_answer: showAnswer,
             }}
           />
@@ -1905,10 +1914,10 @@ export default function StudentActivityPageContent({
           <WordSelectionQuizPreview
             contentId={activity.content_id}
             settings={{
-              show_word: true,
-              show_image: true,
-              show_option_images: false,
-              play_audio: false,
+              show_word: previewSettings?.show_word ?? true,
+              show_image: previewSettings?.show_image ?? true,
+              show_option_images: previewSettings?.show_option_images ?? false,
+              play_audio: previewSettings?.play_audio ?? false,
               show_answer: showAnswer,
             }}
           />

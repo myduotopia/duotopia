@@ -28,6 +28,27 @@ interface ApiItem {
   image_url?: string;
 }
 
+// Deterministic PRNG seeded per item, mirroring the backend's
+// random.Random(item.id) — keeps preview options stable across re-renders
+// instead of reshuffling on every render with Math.random() (#828 review).
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  let state = (seed || 1) >>> 0;
+  const next = () => {
+    // mulberry32
+    state |= 0;
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(next() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 function buildOptions(
   current: ApiItem,
   pool: ApiItem[],
@@ -43,21 +64,12 @@ function buildOptions(
       image_url: p.image_url ?? null,
     }))
     .filter((o) => o.text);
-  const shuffled = [...distractorPool];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  const distractors = shuffled.slice(0, 3);
+  const distractors = seededShuffle(distractorPool, current.id).slice(0, 3);
   const all: QuizOption[] = [
     { text: correctText, image_url: current.image_url ?? null },
     ...distractors,
   ];
-  for (let i = all.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [all[i], all[j]] = [all[j], all[i]];
-  }
-  return all;
+  return seededShuffle(all, current.id + 1);
 }
 
 interface QuizOption {
