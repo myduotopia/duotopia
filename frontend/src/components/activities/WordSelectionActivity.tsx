@@ -119,9 +119,6 @@ const OPTION_COLORS = [
   "bg-teal-50 border-teal-200 hover:bg-teal-100 hover:border-teal-400",
 ];
 
-// 選項網格寬度門檻：≥ 4 × ~140px 圖片 + 3 × 16px gap ⇒ 4 欄；否則 2 欄
-const FOUR_COL_MIN_WIDTH = 600;
-
 export default function WordSelectionActivity({
   assignmentId,
   isPreviewMode = false,
@@ -277,26 +274,7 @@ export default function WordSelectionActivity({
     return () => mql.removeEventListener("change", onChange);
   }, []);
 
-  // 量測選項 grid 實際容器寬度，決定 4×1 / 2×2
-  // 寬度足夠（4 個選項 + gap 都裝得下）→ 4×1；不夠 → 2×2
-  // 用 callback ref，避免 loading=true 早退出時 useRef 抓不到 DOM 的時序 bug
-  const [optionsGridWidth, setOptionsGridWidth] = useState(0);
-  const optionsObserverRef = useRef<ResizeObserver | null>(null);
-  const setOptionsGridRef = useCallback((node: HTMLDivElement | null) => {
-    if (optionsObserverRef.current) {
-      optionsObserverRef.current.disconnect();
-      optionsObserverRef.current = null;
-    }
-    if (node && typeof ResizeObserver !== "undefined") {
-      const ro = new ResizeObserver(([entry]) => {
-        setOptionsGridWidth(entry.contentRect.width);
-      });
-      ro.observe(node);
-      optionsObserverRef.current = ro;
-    }
-  }, []);
-
-  // show_image 模式下正解為英文 (word.text)，否則為翻譯。優先信任後端傳的
+// show_image 模式下正解為英文 (word.text)，否則為翻譯。優先信任後端傳的
   // correct_text；舊版後端未回傳時依 showImage flag fallback。
   const getExpectedAnswer = useCallback(
     (word: WordOption) =>
@@ -921,10 +899,6 @@ export default function WordSelectionActivity({
   // 寬螢幕 + 有題目圖片 → 橫式排版（圖左、選項右）
   const useHorizontal = showImage && !!currentWord?.image_url && isWideViewport;
 
-  // 選項有圖時，若容器寬度足夠就排成 4×1（節省垂直空間）；不夠則 2×2
-  const useFourColOptions =
-    showOptionImages && optionsGridWidth >= FOUR_COL_MIN_WIDTH;
-
   return (
     <div className="space-y-6">
       {/* Practice mode banner */}
@@ -1032,10 +1006,10 @@ export default function WordSelectionActivity({
 
           {/* Answer Options */}
           <div
-            ref={setOptionsGridRef}
             className={cn(
               "grid gap-3 sm:gap-4",
-              useFourColOptions ? "grid-cols-4" : "grid-cols-2",
+              // 寬螢幕（lg ≥ 1024px，平板橫放/桌機）→ 1×4；窄螢幕（手機直立/平板直立）→ 2×2
+              "grid-cols-2 lg:grid-cols-4",
             )}
             style={{ gridAutoRows: "1fr" }}
           >
@@ -1059,7 +1033,8 @@ export default function WordSelectionActivity({
                 <button
                   key={index}
                   className={cn(
-                    "h-full min-h-[8rem] max-h-[18vh] py-5 px-4 text-base sm:text-lg font-medium",
+                    "h-full min-h-[6rem] max-h-[28vh] py-3 px-3 sm:py-4 sm:px-4 text-base sm:text-lg font-medium",
+                    "flex flex-col items-center justify-center gap-1 overflow-hidden",
                     "rounded-2xl border-2 shadow-md select-none relative",
                     "transition-all duration-200",
                     "whitespace-normal text-center break-words",
@@ -1098,13 +1073,15 @@ export default function WordSelectionActivity({
                     </span>
                   )}
                   {renderAsImage ? (
-                    <div className="flex flex-col items-center gap-2">
+                    <div className="flex flex-col items-center justify-center gap-1 w-full min-h-0 flex-1">
                       <img
                         src={optionImage as string}
                         alt={optionText}
-                        className="max-h-28 sm:max-h-36 w-full object-contain rounded-md"
+                        className="flex-1 min-h-0 w-full object-contain rounded-md"
                       />
-                      <span>{optionText}</span>
+                      <span className="shrink-0 text-sm sm:text-base leading-tight">
+                        {optionText}
+                      </span>
                     </div>
                   ) : (
                     <span>{optionText}</span>

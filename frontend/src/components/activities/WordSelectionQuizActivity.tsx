@@ -476,11 +476,14 @@ export default function WordSelectionQuizActivity({
           )}
 
           <div
-            className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            // 寬螢幕（lg ≥ 1024px，平板橫放/桌機）→ 1×4；窄螢幕（手機直立/平板直立）→ 2×2
+            className="grid grid-cols-2 lg:grid-cols-4 gap-3"
             style={{ gridAutoRows: "1fr" }}
           >
             {currentWord.options.map((opt) => {
               const isSelected = selectedForCurrent === opt.text;
+              const renderAsImage =
+                settings.show_option_images && !!opt.image_url;
               return (
                 <button
                   key={opt.text}
@@ -488,20 +491,21 @@ export default function WordSelectionQuizActivity({
                   disabled={submittingAnswer}
                   onClick={() => choose(opt.text)}
                   className={cn(
-                    "h-full min-h-[8rem] max-h-[18vh] py-5 px-4 rounded-lg border text-base transition",
+                    "h-full min-h-[6rem] max-h-[28vh] py-3 px-3 sm:py-4 sm:px-4 rounded-lg border text-base transition",
+                    "flex flex-col items-center justify-center gap-1 overflow-hidden",
                     isSelected
                       ? "border-emerald-500 bg-emerald-50 text-emerald-700"
                       : "border-gray-200 hover:border-emerald-400",
                   )}
                 >
-                  {settings.show_option_images && opt.image_url ? (
+                  {renderAsImage && opt.image_url ? (
                     <img
                       src={opt.image_url}
                       alt={opt.text}
-                      className="mx-auto max-h-24 object-contain"
+                      className="flex-1 min-h-0 w-full object-contain"
                     />
                   ) : (
-                    opt.text
+                    <span>{opt.text}</span>
                   )}
                 </button>
               );
