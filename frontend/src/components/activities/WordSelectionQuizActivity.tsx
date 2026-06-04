@@ -106,6 +106,7 @@ export default function WordSelectionQuizActivity({
     show_image: true,
     show_option_images: false,
     play_audio: false,
+    show_answer: false,
   });
   const [initialRemaining, setInitialRemaining] = useState<number | null>(null);
   const [timerTotal, setTimerTotal] = useState<number | null>(null);
@@ -119,6 +120,7 @@ export default function WordSelectionQuizActivity({
         show_image: previewSettings?.show_image ?? true,
         show_option_images: previewSettings?.show_option_images ?? false,
         play_audio: previewSettings?.play_audio ?? false,
+        show_answer: previewSettings?.show_answer ?? false,
       });
       setLoading(false);
       return;
@@ -148,6 +150,7 @@ export default function WordSelectionQuizActivity({
           show_image: data.show_image,
           show_option_images: data.show_option_images,
           play_audio: data.play_audio,
+          show_answer: data.show_answer,
         });
         const remaining =
           data.time_remaining_seconds == null
@@ -186,24 +189,22 @@ export default function WordSelectionQuizActivity({
     async (selected: string) => {
       if (!currentWord || isLivePreview || isDemoMode || sessionId == null)
         return;
-      const isCorrect =
-        selected.trim().toLowerCase() ===
-        currentWord.correct_text.trim().toLowerCase();
       setSubmittingAnswer(true);
       try {
-        await apiClient.post(
+        // correctness is decided server-side; trust the response, never compute
+        // & send is_correct from the client (would let a student fake 100%).
+        const resp = (await apiClient.post(
           `/api/students/assignments/${assignmentId}/vocabulary/selection_quiz/answer`,
           {
             content_item_id: currentWord.content_item_id,
             selected_answer: selected,
-            is_correct: isCorrect,
             time_spent_seconds: 0,
             session_id: sessionId,
           },
-        );
+        )) as { is_correct?: boolean };
         setCorrectByItem((m) => ({
           ...m,
-          [currentWord.content_item_id]: isCorrect,
+          [currentWord.content_item_id]: resp?.is_correct ?? null,
         }));
       } catch {
         toast.error(
@@ -407,9 +408,9 @@ export default function WordSelectionQuizActivity({
                   ? "bg-emerald-500 text-white border-emerald-500"
                   : !answered
                     ? "bg-white text-gray-500 border-gray-300 hover:border-emerald-400"
-                    : priorCorrect === true
+                    : settings.show_answer && priorCorrect === true
                       ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                      : priorCorrect === false
+                      : settings.show_answer && priorCorrect === false
                         ? "bg-rose-50 text-rose-700 border-rose-300"
                         : "bg-emerald-50 text-emerald-700 border-emerald-300",
               )}

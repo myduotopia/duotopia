@@ -4,7 +4,22 @@ Pydantic models and validators for assignments
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, field_validator
+
+# Issue #828: 整卷限時上限守衛（10 小時），擋掉負數/超大值；
+# 不用精確 allow-list 以免日後 UI 新增選項就壞掉
+_MAX_QUIZ_TIME_LIMIT_SECONDS = 36000
+
+
+def _validate_quiz_time_limit(value: Optional[int]) -> Optional[int]:
+    if value is None:
+        return value
+    if value < 0 or value > _MAX_QUIZ_TIME_LIMIT_SECONDS:
+        raise ValueError(
+            "quiz_time_limit_seconds must be between 0 and "
+            f"{_MAX_QUIZ_TIME_LIMIT_SECONDS}"
+        )
+    return value
 
 
 class CreateAssignmentRequest(BaseModel):
@@ -41,6 +56,11 @@ class CreateAssignmentRequest(BaseModel):
     show_option_images: Optional[bool] = None  # Issue #631
     score_category: Optional[str] = None
 
+    @field_validator("quiz_time_limit_seconds")
+    @classmethod
+    def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
+        return _validate_quiz_time_limit(v)
+
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "CreateAssignmentRequest":
         # Issue #631: show_image 與 show_option_images 互斥，避免題目圖片直接洩漏答案
@@ -69,6 +89,11 @@ class UpdateAssignmentRequest(BaseModel):
     show_image: Optional[bool] = None
     show_translation: Optional[bool] = None
     show_option_images: Optional[bool] = None  # Issue #631
+
+    @field_validator("quiz_time_limit_seconds")
+    @classmethod
+    def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
+        return _validate_quiz_time_limit(v)
 
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "UpdateAssignmentRequest":

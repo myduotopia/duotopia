@@ -28,6 +28,7 @@ interface ApiItem {
   translation?: string;
   audio_url?: string;
   image_url?: string;
+  part_of_speech?: string | null;
 }
 
 interface QuizWord {
@@ -36,6 +37,7 @@ interface QuizWord {
   translation: string;
   audio_url?: string | null;
   image_url?: string | null;
+  part_of_speech?: string | null;
   question_number: number;
 }
 
@@ -88,6 +90,7 @@ export default function WordSpellingQuizPreview({
         translation: item.translation || "",
         audio_url: item.audio_url,
         image_url: item.image_url,
+        part_of_speech: item.part_of_speech,
         question_number: idx + 1,
       })),
     [items],

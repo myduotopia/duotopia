@@ -51,7 +51,10 @@ class _QuizAnswerBase(BaseModel):
 
 class WordSelectionQuizAnswerRequest(_QuizAnswerBase):
     selected_answer: str = Field(max_length=200)
-    is_correct: bool
+    # NOTE: correctness is ALWAYS recomputed server-side from the content item;
+    # this client-sent value is accepted for backward-compat but ignored, so a
+    # student cannot post is_correct=true to fake a 100% score (#828 review).
+    is_correct: Optional[bool] = None
 
 
 class WordSpellingQuizAnswerRequest(_QuizAnswerBase):
@@ -126,9 +129,18 @@ def _block_if_submitted(student_assignment: StudentAssignment) -> None:
 
 
 def _load_quiz_items(
-    db: Session, assignment: Assignment, shuffle: bool
+    db: Session,
+    assignment: Assignment,
+    shuffle: bool,
+    seed: Optional[int] = None,
 ) -> List[ContentItem]:
-    """Load ALL ContentItems for the assignment, ordered for quiz delivery."""
+    """Load ALL ContentItems for the assignment, ordered for quiz delivery.
+
+    When ``shuffle`` is on, pass ``seed`` (e.g. the PracticeSession id) so the
+    same student gets the SAME order every time they re-enter the quiz —
+    otherwise ``question_number`` would change on each refresh and the progress
+    bar ("3/5") becomes meaningless (Issue #828 review feedback).
+    """
     content_ids = [
         ac.content_id
         for ac in db.query(AssignmentContent)
@@ -148,7 +160,8 @@ def _load_quiz_items(
         )
     if shuffle:
         items = list(items)
-        random.shuffle(items)
+        rng = random.Random(seed) if seed is not None else random
+        rng.shuffle(items)
     return items
 
 
@@ -351,6 +364,11 @@ def _build_selection_options(
 
     options_by_item: Dict[int, List[Dict[str, Any]]] = {}
     for item in items:
+        # Seed per-item so the SAME options are produced every call — start and
+        # review must agree, otherwise the review page's "你選的" highlight can
+        # silently miss the option the student actually picked, and the options
+        # would reshuffle on every refresh (Issue #828 review feedback).
+        rng = random.Random(item.id)
         correct_text = getattr(item, answer_key) or ""
         stored = normalize_distractors(item.distractors)
         if len(stored) >= 3:
@@ -360,7 +378,7 @@ def _build_selection_options(
             others = [
                 p for p in pool if p["text"] and p["text"].lower().strip() != target
             ]
-            random.shuffle(others)
+            rng.shuffle(others)
             distractors = others[:3]
 
         while len(distractors) < 3:
@@ -370,7 +388,7 @@ def _build_selection_options(
 
         correct_option = {"text": correct_text, "image_url": item.image_url}
         opts = [correct_option] + distractors
-        random.shuffle(opts)
+        rng.shuffle(opts)
         options_by_item[item.id] = opts
     return options_by_item
 
@@ -386,8 +404,10 @@ async def start_word_selection_quiz(
     assignment = _get_assignment_or_400(db, sa, "word_selection_quiz")
     _block_if_submitted(sa)
 
-    items = _load_quiz_items(db, assignment, assignment.shuffle_questions)
     session = _start_quiz_session(db, student_id, sa, "word_selection_quiz")
+    items = _load_quiz_items(
+        db, assignment, assignment.shuffle_questions, seed=session.id
+    )
     options_by_item = _build_selection_options(items, assignment)
 
     show_image = assignment.show_image if assignment.show_image is not None else True
@@ -436,7 +456,7 @@ async def submit_word_selection_quiz_answer(
 ):
     student_id = int(current_student.get("sub"))
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
-    _get_assignment_or_400(db, sa, "word_selection_quiz")
+    assignment = _get_assignment_or_400(db, sa, "word_selection_quiz")
     _block_if_submitted(sa)
 
     if request.session_id is None:
@@ -454,20 +474,28 @@ async def submit_word_selection_quiz_answer(
             status_code=status.HTTP_404_NOT_FOUND, detail="Content item not found"
         )
 
+    # Correctness is computed server-side (never trust the client) — compare the
+    # selected option against the item's answer text, same field/normalisation as
+    # _build_selection_options uses to build the correct option.
+    show_image = assignment.show_image if assignment.show_image is not None else True
+    answer_key = text_field_for_show_image(show_image)
+    correct_text = getattr(item, answer_key) or ""
+    is_correct = request.selected_answer.strip().lower() == correct_text.strip().lower()
+
     _upsert_quiz_answer(
         db,
         session,
         content_item_id=item.id,
-        is_correct=bool(request.is_correct),
+        is_correct=is_correct,
         time_spent_seconds=request.time_spent_seconds,
         answer_data={
             "type": "word_selection_quiz",
             "selected_answer": request.selected_answer,
-            "correct_text": item.text,
+            "correct_text": correct_text,
         },
     )
     db.commit()
-    return {"success": True, "is_correct": bool(request.is_correct)}
+    return {"success": True, "is_correct": is_correct}
 
 
 # ---------------------------------------------------------------------------
@@ -486,8 +514,10 @@ async def start_word_spelling_quiz(
     assignment = _get_assignment_or_400(db, sa, "word_spelling_quiz")
     _block_if_submitted(sa)
 
-    items = _load_quiz_items(db, assignment, assignment.shuffle_questions)
     session = _start_quiz_session(db, student_id, sa, "word_spelling_quiz")
+    items = _load_quiz_items(
+        db, assignment, assignment.shuffle_questions, seed=session.id
+    )
     existing = _existing_answers_for_session(db, session.id)
 
     def builder(item: ContentItem) -> Dict[str, Any]:
@@ -550,7 +580,8 @@ async def submit_word_spelling_quiz_answer(
         )
 
     correct_answer = item.text or ""
-    is_correct = request.typed_answer.strip() == correct_answer.strip()
+    # Case-insensitive, consistent with cloze quiz (#828 review): apple == Apple.
+    is_correct = request.typed_answer.strip().lower() == correct_answer.strip().lower()
 
     _upsert_quiz_answer(
         db,
@@ -599,8 +630,10 @@ async def start_word_cloze_quiz(
     assignment = _get_assignment_or_400(db, sa, "word_cloze_quiz")
     _block_if_submitted(sa)
 
-    items = _load_quiz_items(db, assignment, assignment.shuffle_questions)
     session = _start_quiz_session(db, student_id, sa, "word_cloze_quiz")
+    items = _load_quiz_items(
+        db, assignment, assignment.shuffle_questions, seed=session.id
+    )
     existing = _existing_answers_for_session(db, session.id)
 
     def builder(item: ContentItem) -> Dict[str, Any]:
@@ -841,8 +874,15 @@ def _build_review_response(
     assignment_id: int,
     expected_mode: str,
     build_item,
+    build_context=None,
 ) -> Dict[str, Any]:
-    """Shared review skeleton — 各模式只差 build_item 怎麼組每題的內容。"""
+    """Shared review skeleton — 各模式只差 build_item 怎麼組每題的內容。
+
+    ``build_context(assignment, items)`` runs once and its result is passed to
+    every ``build_item(item, prior, context)`` call, so per-mode setup (e.g.
+    selection's option lists) can reuse the already-loaded sa/assignment/items
+    instead of re-querying them (#828 review: duplicate-query fix).
+    """
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
     assignment = _get_assignment_or_400(db, sa, expected_mode)
     if sa.status not in (AssignmentStatus.SUBMITTED, AssignmentStatus.GRADED):
@@ -855,6 +895,7 @@ def _build_review_response(
         )
     # 不洗牌：複盤頁固定按 order_index 顯示，方便師生對照
     items = _load_quiz_items(db, assignment, shuffle=False)
+    context = build_context(assignment, items) if build_context else None
     session = _latest_completed_session(db, assignment_id, expected_mode)
     answers_map: Dict[int, PracticeAnswer] = {}
     if session:
@@ -864,7 +905,7 @@ def _build_review_response(
     correct_count = 0
     for idx, item in enumerate(items, start=1):
         prior = answers_map.get(item.id)
-        word = build_item(item, prior)
+        word = build_item(item, prior, context)
         word["question_number"] = idx
         word["is_correct"] = bool(prior.is_correct) if prior else False
         if word["is_correct"]:
@@ -889,35 +930,66 @@ async def review_word_selection_quiz(
     db: Session = Depends(get_db),
 ):
     student_id = int(current_student.get("sub"))
-    sa = _get_student_assignment_or_404(db, assignment_id, student_id)
-    assignment = _get_assignment_or_400(db, sa, "word_selection_quiz")
-    # 為了顯示選項，先建一份 options_by_item（與 start 同邏輯）
-    items = _load_quiz_items(db, assignment, shuffle=False)
-    options_by_item = _build_selection_options(items, assignment)
-    show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(show_image)
+
+    # options/answer_key built once via build_context — reuses the sa/assignment/
+    # items loaded inside _build_review_response (no duplicate queries, #828).
+    def build_context(
+        assignment: Assignment, items: List[ContentItem]
+    ) -> Dict[str, Any]:
+        show_image = (
+            assignment.show_image if assignment.show_image is not None else True
+        )
+        return {
+            "options_by_item": _build_selection_options(items, assignment),
+            "answer_key": text_field_for_show_image(show_image),
+        }
 
     def build_item(
-        item: ContentItem, prior: Optional[PracticeAnswer]
+        item: ContentItem,
+        prior: Optional[PracticeAnswer],
+        context: Dict[str, Any],
     ) -> Dict[str, Any]:
-        correct = getattr(item, answer_key) or ""
+        correct = getattr(item, context["answer_key"]) or ""
+        student_answer = (
+            prior.answer_data.get("selected_answer")
+            if prior and prior.answer_data
+            else None
+        )
+        options = list(context["options_by_item"].get(item.id, []))
+        # Safety net: options are deterministic now, but a session answered
+        # before that fix (or with edited distractors) might have a pick not in
+        # the list — inject it so the frontend "你選的" highlight never misses.
+        if student_answer is not None and not any(
+            (o.get("text") or "").strip().lower() == student_answer.strip().lower()
+            for o in options
+        ):
+            target = correct.strip().lower()
+            replaced = False
+            for i, o in enumerate(options):
+                if (o.get("text") or "").strip().lower() != target:
+                    options[i] = {"text": student_answer, "image_url": None}
+                    replaced = True
+                    break
+            if not replaced:
+                options.append({"text": student_answer, "image_url": None})
         return {
             "content_item_id": item.id,
             "text": item.text,
             "translation": item.translation or "",
             "correct_answer": correct,
-            "student_answer": (
-                prior.answer_data.get("selected_answer")
-                if prior and prior.answer_data
-                else None
-            ),
+            "student_answer": student_answer,
             "audio_url": item.audio_url,
             "image_url": item.image_url,
-            "options": options_by_item.get(item.id, []),
+            "options": options,
         }
 
     return _build_review_response(
-        db, student_id, assignment_id, "word_selection_quiz", build_item
+        db,
+        student_id,
+        assignment_id,
+        "word_selection_quiz",
+        build_item,
+        build_context,
     )
 
 
@@ -930,7 +1002,9 @@ async def review_word_spelling_quiz(
     student_id = int(current_student.get("sub"))
 
     def build_item(
-        item: ContentItem, prior: Optional[PracticeAnswer]
+        item: ContentItem,
+        prior: Optional[PracticeAnswer],
+        context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         return {
             "content_item_id": item.id,
@@ -961,7 +1035,9 @@ async def review_word_cloze_quiz(
     student_id = int(current_student.get("sub"))
 
     def build_item(
-        item: ContentItem, prior: Optional[PracticeAnswer]
+        item: ContentItem,
+        prior: Optional[PracticeAnswer],
+        context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         cloze_answer = _resolve_cloze_answer(item)
         return {
