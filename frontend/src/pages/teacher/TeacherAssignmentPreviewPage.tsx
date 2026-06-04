@@ -27,6 +27,12 @@ interface ActivityResponse {
   score_category?: string | null;
   show_answer?: boolean; // 例句重組：答題結束後是否顯示正確答案
   time_limit_per_question?: number;
+  // Issue #828: 老師的顯示設定，預覽小考時透傳給 QuizPreview
+  play_audio?: boolean;
+  show_translation?: boolean;
+  show_word?: boolean;
+  show_image?: boolean;
+  show_option_images?: boolean;
   total_activities: number;
   activities: Activity[];
 }
@@ -145,6 +151,13 @@ export default function TeacherAssignmentPreviewPage() {
         practiceMode={activityData.practice_mode || null}
         showAnswer={activityData.show_answer || false}
         timeLimitPerQuestion={activityData.time_limit_per_question ?? 0}
+        previewSettings={{
+          play_audio: activityData.play_audio,
+          show_translation: activityData.show_translation,
+          show_word: activityData.show_word,
+          show_image: activityData.show_image,
+          show_option_images: activityData.show_option_images,
+        }}
         isPreviewMode={true}
         authToken={token || undefined}
         onBack={goBack}

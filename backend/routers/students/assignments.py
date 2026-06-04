@@ -46,7 +46,15 @@ logger = logging.getLogger(__name__)
 # - rearrangement: 例句重組
 # - word_selection: 單字選擇
 AUTO_GRADED_MODES = frozenset(
-    {"rearrangement", "word_selection", "word_spelling", "word_cloze"}
+    {
+        "rearrangement",
+        "word_selection",
+        "word_spelling",
+        "word_cloze",
+        "word_selection_quiz",
+        "word_spelling_quiz",
+        "word_cloze_quiz",
+    }
 )
 
 

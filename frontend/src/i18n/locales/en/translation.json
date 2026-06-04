@@ -1795,12 +1795,19 @@
         "scoreSpeaking": "Score Category: Speaking",
         "wordReading": "Word Reading",
         "wordReadingDesc": "Students read words aloud, system scores pronunciation",
-        "wordSelection": "Word Selection",
-        "wordSelectionDesc": "View words or listen to audio, select the correct translation",
-        "wordSpelling": "Word Spelling",
-        "wordSpellingDesc": "View translation or listen to audio, type the correct spelling",
-        "wordCloze": "Word Cloze",
-        "wordClozeDesc": "Fill in the blank in the example sentence with the correct word form",
+        "wordSelection": "Word Selection · Ebbinghaus",
+        "wordSelectionDesc": "View words or listen to audio, select the correct translation (Ebbinghaus item selection)",
+        "wordSelectionQuiz": "Word Selection · Quiz",
+        "wordSelectionQuizDesc": "Answer all items in order with question numbers; locks on submit",
+        "quizTimeLimit": "Whole-quiz time limit (auto-submits when reached)",
+        "wordSpelling": "Word Spelling · Ebbinghaus",
+        "wordSpellingDesc": "View translation or listen to audio, type the correct spelling (Ebbinghaus item selection)",
+        "wordCloze": "Word Cloze · Ebbinghaus",
+        "wordClozeDesc": "Fill in the blank in the example sentence with the correct word form (Ebbinghaus item selection)",
+        "wordSpellingQuiz": "Word Spelling · Quiz",
+        "wordSpellingQuizDesc": "Answer all items in order with question numbers; locks on submit",
+        "wordClozeQuiz": "Word Cloze · Quiz",
+        "wordClozeQuizDesc": "Answer all items in order with question numbers; locks on submit",
         "targetProficiency": "Target Proficiency",
         "targetProficiencyDesc": "Students must reach this proficiency to complete the assignment",
         "showTranslation": "Show Translation",
@@ -4774,6 +4781,32 @@
       "submitFailed": "Failed to submit answer",
       "completed": "Assignment completed!",
       "completeFailed": "Failed to complete assignment"
+    }
+  },
+  "wordQuiz": {
+    "questionNav": "Q",
+    "questionLabel": "Question {{current}} / {{total}}",
+    "typeHere": "Type your answer…",
+    "playAudio": "Play audio",
+    "prev": "Previous",
+    "next": "Next",
+    "submit": "Submit",
+    "empty": "No questions available.",
+    "locked": {
+      "title": "Quiz already submitted",
+      "desc": "Submission is one-shot; wait for the teacher to return the assignment to fix wrong answers."
+    },
+    "toast": {
+      "lastAnswerNotSaved": "Could not save the last answer; submitting with previously-saved answers.",
+      "reviewLoadFailed": "Failed to load quiz review"
+    },
+    "review": {
+      "yourAnswer": "Your answer",
+      "correctAnswer": "Correct answer",
+      "unanswered": "Not answered",
+      "correct": "Correct",
+      "wrong": "Wrong",
+      "scoreSummary": "{{correct}} / {{total}} correct"
     }
   },
   "wordSpelling": {

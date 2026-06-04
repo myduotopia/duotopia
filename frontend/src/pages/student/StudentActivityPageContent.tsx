@@ -39,6 +39,12 @@ import {
 import { getItemPassFailStatus } from "@/utils/itemPassFailStatus";
 import WordSpellingActivity from "@/components/activities/WordSpellingActivity";
 import WordClozeActivity from "@/components/activities/WordClozeActivity";
+import WordSpellingQuizActivity from "@/components/activities/WordSpellingQuizActivity";
+import WordClozeQuizActivity from "@/components/activities/WordClozeQuizActivity";
+import WordSelectionQuizActivity from "@/components/activities/WordSelectionQuizActivity";
+import WordSpellingQuizPreview from "@/components/activities/WordSpellingQuizPreview";
+import WordClozeQuizPreview from "@/components/activities/WordClozeQuizPreview";
+import WordSelectionQuizPreview from "@/components/activities/WordSelectionQuizPreview";
 import {
   ChevronLeft,
   ChevronRight,
@@ -175,6 +181,14 @@ interface StudentActivityPageContentProps {
   showAnswer?: boolean; // 例句重組：答題結束後是否顯示正確答案
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
   timeLimitPerQuestion?: number; // 每題錄音時間限制（秒）
+  // Issue #828: 老師實際的顯示設定，預覽小考時用（取代前端寫死的預設值）
+  previewSettings?: {
+    play_audio?: boolean;
+    show_translation?: boolean;
+    show_word?: boolean;
+    show_image?: boolean;
+    show_option_images?: boolean;
+  };
 }
 
 // =============================================================================
@@ -280,6 +294,7 @@ export default function StudentActivityPageContent({
   showAnswer = false,
   canUseAiAnalysis = true,
   timeLimitPerQuestion = 0,
+  previewSettings,
 }: StudentActivityPageContentProps) {
   const { t } = useTranslation();
 
@@ -1835,6 +1850,91 @@ export default function StudentActivityPageContent({
 
   const renderActivityContent = (activity: Activity) => {
     const answer = answers.get(activity.id);
+
+    // Issue #828: 小考變體（_quiz）使用獨立 Activity 元件 — 走 quiz 端點、
+    // 內建題號 bar / 跳題 / 提交鎖定，與艾賓浩斯版本資料完全隔離。
+    //
+    // Preview 模式（老師端）：QuizActivity 會打學生端 /start endpoint，老師
+    // 沒有對應 StudentAssignment → 404。改走 QuizPreview wrapper（拿 teacher
+    // API 抓 content 後以 previewWords 注入 QuizActivity），跳過學生端 API。
+    if (practiceMode === "word_spelling_quiz") {
+      if (isPreviewMode) {
+        return (
+          <WordSpellingQuizPreview
+            contentId={activity.content_id}
+            settings={{
+              show_translation: previewSettings?.show_translation ?? true,
+              show_image: previewSettings?.show_image ?? true,
+              play_audio: previewSettings?.play_audio ?? false,
+              show_answer: showAnswer,
+            }}
+          />
+        );
+      }
+      return (
+        <WordSpellingQuizActivity
+          assignmentId={assignmentId}
+          isPreviewMode={isPreviewMode}
+          isDemoMode={isDemoMode}
+          onComplete={() => {
+            toast.success(t("wordSpelling.toast.completed") || "作業已完成！");
+            onBack?.();
+          }}
+        />
+      );
+    }
+    if (practiceMode === "word_cloze_quiz") {
+      if (isPreviewMode) {
+        return (
+          <WordClozeQuizPreview
+            contentId={activity.content_id}
+            settings={{
+              show_translation: previewSettings?.show_translation ?? true,
+              play_audio: previewSettings?.play_audio ?? false,
+              show_answer: showAnswer,
+            }}
+          />
+        );
+      }
+      return (
+        <WordClozeQuizActivity
+          assignmentId={assignmentId}
+          isPreviewMode={isPreviewMode}
+          isDemoMode={isDemoMode}
+          onComplete={() => {
+            toast.success(t("wordCloze.toast.completed") || "作業已完成！");
+            onBack?.();
+          }}
+        />
+      );
+    }
+    if (practiceMode === "word_selection_quiz") {
+      if (isPreviewMode) {
+        return (
+          <WordSelectionQuizPreview
+            contentId={activity.content_id}
+            settings={{
+              show_word: previewSettings?.show_word ?? true,
+              show_image: previewSettings?.show_image ?? true,
+              show_option_images: previewSettings?.show_option_images ?? false,
+              play_audio: previewSettings?.play_audio ?? false,
+              show_answer: showAnswer,
+            }}
+          />
+        );
+      }
+      return (
+        <WordSelectionQuizActivity
+          assignmentId={assignmentId}
+          isPreviewMode={isPreviewMode}
+          isDemoMode={isDemoMode}
+          onComplete={() => {
+            toast.success(t("wordSelection.toast.completed") || "作業已完成！");
+            onBack?.();
+          }}
+        />
+      );
+    }
 
     // 🎯 克漏字 / 單字拼寫：根據 practiceMode 直接路由（與內容類型無關，
     // 因克漏字可選例句集或單字集；拼寫雖只接單字集，但邏輯一致）。

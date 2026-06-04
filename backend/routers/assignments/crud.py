@@ -55,7 +55,17 @@ router = APIRouter()
 # and routers.students.assignments.extract_cloze_for_item. We block creation
 # at the API boundary rather than letting the broken UX surface to students
 # (issue #673).
-_PRACTICE_MODES_REQUIRING_EXAMPLES = {"reading", "rearrangement", "word_cloze"}
+# Modes whose UX depends on a complete example sentence (+ translation).
+# Note (#828): word_spelling_quiz / word_selection_quiz are intentionally
+# EXCLUDED — they quiz the word itself (typing / multiple-choice) and never
+# render an example sentence, so requiring one would block valid dispatches.
+# Only the cloze variant blanks a word out of the example, hence word_cloze_quiz.
+_PRACTICE_MODES_REQUIRING_EXAMPLES = {
+    "reading",
+    "rearrangement",
+    "word_cloze",
+    "word_cloze_quiz",
+}
 
 
 def _collect_contents_missing_examples(
@@ -95,7 +105,7 @@ def _requires_sentence_audio(practice_mode: Optional[str], play_audio: bool) -> 
     """
     if practice_mode == "reading":
         return True
-    if practice_mode in ("rearrangement", "word_cloze"):
+    if practice_mode in ("rearrangement", "word_cloze", "word_cloze_quiz"):
         return bool(play_audio)
     return False
 
@@ -152,7 +162,7 @@ def _collect_contents_missing_cloze_answer(
     Items without an example sentence are skipped — they're already rejected
     by ``_collect_contents_missing_examples`` upstream.
     """
-    if practice_mode != "word_cloze":
+    if practice_mode not in ("word_cloze", "word_cloze_quiz"):
         return []
 
     from utils.cloze import find_cloze_match
@@ -350,6 +360,7 @@ async def create_assignment(
         practice_mode=request.practice_mode,
         answer_mode=sanitized_answer_mode,
         time_limit_per_question=request.time_limit_per_question,
+        quiz_time_limit_seconds=request.quiz_time_limit_seconds,
         shuffle_questions=request.shuffle_questions or False,
         show_answer=request.show_answer or False,
         play_audio=request.play_audio or False,
@@ -807,9 +818,23 @@ async def update_assignment(
     )
     if len(new_contents) != len(request.content_ids):
         raise HTTPException(status_code=404, detail="Some contents not found")
-    # Use the request's practice_mode if provided, otherwise the existing one
-    # on the assignment (PUT replaces the resource so practice_mode may be
-    # unchanged from the request side).
+    # Issue #828: practice_mode is immutable after dispatch. Changing it mid-flight
+    # would cause grade-record semantic conflicts (e.g. switching between Ebbinghaus
+    # and quiz variants leaves stale memory_strength / SUBMITTED state). Frontend
+    # disables the mode chip in edit view; backend enforces it as the last line of
+    # defense.
+    if (
+        request.practice_mode is not None
+        and request.practice_mode != assignment.practice_mode
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "PRACTICE_MODE_IMMUTABLE",
+                "current": assignment.practice_mode,
+                "attempted": request.practice_mode,
+            },
+        )
     effective_mode = request.practice_mode or assignment.practice_mode
     effective_play_audio = (
         request.play_audio if request.play_audio is not None else assignment.play_audio
@@ -927,6 +952,7 @@ async def patch_assignment(
     # 進階設定更新
     advanced_fields = [
         "time_limit_per_question",
+        "quiz_time_limit_seconds",  # Issue #828
         "shuffle_questions",
         "show_answer",
         "play_audio",

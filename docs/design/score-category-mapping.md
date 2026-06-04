@@ -23,10 +23,12 @@
 |---|--------------|---------------------|----------|------|
 | 1 | `word_reading`（單字朗讀） | 任意 | `speaking` | 口說 |
 | 2 | `reading`（例句朗讀） | 任意 | `speaking` | 口說 |
-| 3 | `word_cloze`（單字克漏字） | 任意 | `reading` | 閱讀 |
+| 3 | `word_cloze` / `word_cloze_quiz`（單字克漏字） | 任意 | `reading` | 閱讀 |
 | 4 | `rearrangement`（例句重組） | `false` | `reading` | 閱讀 |
 | 5 | 其他 practice_mode | `false` | `writing` | 寫作 |
 | 6 | 其他 practice_mode | `true` | `listening` | 聽力 |
+
+> Issue #828：小考變體（`word_selection_quiz` / `word_spelling_quiz` / `word_cloze_quiz`）與其艾賓浩斯版本共用同一個分類規則。
 
 ### 規則邏輯（白話）
 
@@ -44,9 +46,12 @@
 | `word_reading` | speaking | speaking |
 | `reading` | speaking | speaking |
 | `word_cloze` | reading | reading |
+| `word_cloze_quiz` | reading | reading |
 | `rearrangement` | reading | listening |
 | `word_selection` | writing | listening |
+| `word_selection_quiz` | writing | listening |
 | `word_spelling` | writing | listening |
+| `word_spelling_quiz` | writing | listening |
 | `tug_of_war` | writing | listening |
 | 未來新模式 | writing | listening |
 

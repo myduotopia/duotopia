@@ -18,7 +18,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -45,17 +44,15 @@ import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
 import VirtualKeyboard from "./shared/VirtualKeyboard";
+import QuizAnswerInput, {
+  type QuizAnswerInputHandle,
+} from "./shared/QuizAnswerInput";
 import { WordCard } from "./shared/WordCard";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
 // Issue #716: 答案允許英文字母、連字號、空格；過濾掉建議選字、注音、Emoji。
-// Issue #763: 放行 ' . , ? !（虛擬鍵盤新增標點排，don't / Mr. / 整句填空需要）。
-const ALLOWED_CHAR = /[a-zA-Z\-' .,?!]/;
-const sanitizeAnswer = (raw: string) =>
-  Array.from(raw)
-    .filter((c) => ALLOWED_CHAR.test(c))
-    .join("");
+// Issue #828: 字元過濾/拼接邏輯移到 shared/QuizAnswerInput（多 slot 支援）。
 
 interface ClozeQuestion {
   content_item_id: number;
@@ -139,12 +136,14 @@ export default function WordClozeActivity({
   // Issue #715: 答對後翻面顯示完整單字卡；學生用左右箭頭手動翻頁
   const [cardFace, setCardFace] = useState<"front" | "back">("back");
   const inputRef = useRef<HTMLInputElement>(null);
+  const quizInputRef = useRef<QuizAnswerInputHandle>(null);
 
   const [showTranslation, setShowTranslation] = useState(true);
   const [audioOnlyMode, setAudioOnlyMode] = useState(false);
-  const [showAnswerOnWrong, setShowAnswerOnWrong] = useState(false);
+  // Issue #828: placeholder 提示移除；setter 保留以維持載入時 effect 相容。
+  const [, setShowAnswerOnWrong] = useState(false);
   // Issue #716: 答錯後改用 placeholder 顯示正解，需要記錄上一次是否答錯
-  const [lastAttemptWrong, setLastAttemptWrong] = useState(false);
+  const [, setLastAttemptWrong] = useState(false);
 
   const [proficiency, setProficiency] = useState<ProficiencyStatus>({
     current_mastery: 0,
@@ -540,19 +539,17 @@ export default function WordClozeActivity({
 
   // Issue #716: 移除「上一題」— 艾賓浩斯算法鼓勵把 10 題跑完。
 
-  // Issue #716: VirtualKeyboard 輸入回調
+  // Issue #716 / #828: VirtualKeyboard 經 QuizAnswerInput ref 操作 focused slot
   const vkAppend = useCallback(
     (ch: string) => {
-      const sanitized = sanitizeAnswer(ch);
-      if (!sanitized) return;
       if (showResult && !isCorrect) setShowResult(false);
-      setTypedAnswer((prev) => prev + sanitized);
+      quizInputRef.current?.appendChar(ch);
     },
     [showResult, isCorrect],
   );
   const vkBackspace = useCallback(() => {
     if (showResult && !isCorrect) setShowResult(false);
-    setTypedAnswer((prev) => prev.slice(0, -1));
+    quizInputRef.current?.backspace();
   }, [showResult, isCorrect]);
   const vkEnter = useCallback(() => {
     // Issue #716: 虛擬鍵盤 Enter 只負責送出；看正面時改用右箭頭手動切下一題。
@@ -572,11 +569,7 @@ export default function WordClozeActivity({
     setScoreOverlayOpen(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !showResult && !submitting && typedAnswer.trim()) {
-      handleSubmitAnswer();
-    }
-  };
+  // Issue #828: Enter 提交改由 QuizAnswerInput 內部處理。
 
   const handleStartNextRound = () => {
     startPractice();
@@ -918,72 +911,27 @@ export default function WordClozeActivity({
                   )}
                 </div>
 
-                <div className="max-w-md mx-auto relative">
-                  <Input
-                    ref={inputRef}
-                    type="text"
-                    value={typedAnswer}
-                    inputMode={useVirtualKeyboard ? "none" : "text"}
-                    onChange={(e) => {
-                      setTypedAnswer(sanitizeAnswer(e.target.value));
-                      if (showResult && !isCorrect) setShowResult(false);
-                    }}
-                    onBeforeInput={(e) => {
-                      const ev = e.nativeEvent as InputEvent;
-                      if (ev.inputType === "insertReplacementText") {
-                        e.preventDefault();
-                      }
-                    }}
-                    onKeyDown={handleKeyDown}
-                    onPaste={(e) => e.preventDefault()}
-                    onDrop={(e) => e.preventDefault()}
-                    placeholder={
-                      showAnswerOnWrong &&
-                      lastAttemptWrong &&
-                      currentQ.correct_answer
-                        ? currentQ.correct_answer
-                        : t("wordCloze.inputPlaceholder") ||
-                          "Fill in the blank..."
-                    }
-                    disabled={(showResult && isCorrect) || submitting}
-                    className={cn(
-                      "text-center text-2xl h-14 pl-10 pr-10 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
-                      "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
-                      showResult &&
-                        isCorrect &&
-                        "border-green-500 text-green-700",
-                      showResult &&
-                        !isCorrect &&
-                        "border-red-500 text-red-600 placeholder:text-red-400",
-                      !(showResult && !isCorrect) &&
-                        !(showResult && isCorrect) &&
-                        "border-gray-300 focus:border-indigo-500",
-                    )}
-                    autoComplete="off"
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                  />
-                  {!(showResult && isCorrect) && (
-                    <button
-                      type="button"
-                      onClick={() => handleSubmitAnswer()}
-                      disabled={!typedAnswer.trim() || submitting}
-                      aria-label={t("wordCloze.checkAnswer") || "Check"}
-                      className={cn(
-                        "absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors",
-                        "text-indigo-600 hover:bg-indigo-50",
-                        "disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed",
-                      )}
-                    >
-                      {submitting ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        <Send className="h-5 w-5" />
-                      )}
-                    </button>
-                  )}
-                </div>
+                <QuizAnswerInput
+                  ref={quizInputRef}
+                  value={typedAnswer}
+                  expectedAnswer={currentQ.correct_answer || ""}
+                  onChange={(next) => {
+                    setTypedAnswer(next);
+                    if (showResult && !isCorrect) setShowResult(false);
+                  }}
+                  onSubmit={() => handleSubmitAnswer()}
+                  submitting={submitting}
+                  disabled={showResult && isCorrect}
+                  useVirtualKeyboard={useVirtualKeyboard}
+                  hideSubmitButton={showResult && isCorrect}
+                  state={
+                    showResult && isCorrect
+                      ? "correct"
+                      : showResult && !isCorrect
+                        ? "wrong"
+                        : "neutral"
+                  }
+                />
               </div>
             }
           />

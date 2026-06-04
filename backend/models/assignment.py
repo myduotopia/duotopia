@@ -55,6 +55,10 @@ class Assignment(Base):
     # 每題時間限制（秒）：0（不限時）/10/20/30/40
     time_limit_per_question = Column(Integer, default=30)
 
+    # Issue #828: 小考模式整卷限時（秒）— null 代表不限時。教師端選 3/5/10/15/20/30
+    # 分鐘，前端換算成秒寫入；時間到由前端自動呼叫 complete endpoint。
+    quiz_time_limit_seconds = Column(Integer, nullable=True)
+
     # 是否打亂題目順序
     shuffle_questions = Column(Boolean, default=False)
 

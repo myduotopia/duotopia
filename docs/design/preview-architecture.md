@@ -51,8 +51,11 @@
 |---|---|---|---|
 | word_reading | WordReadingActivity | WordReadingPreview | `/api/teachers/contents/282` |
 | word_selection | WordSelectionActivity | WordSelectionPreview | `/api/teachers/contents/282` + 前端組 4 選項 |
+| word_selection_quiz | WordSelectionQuizActivity | WordSelectionQuizPreview | `/api/teachers/contents/282` + 前端組 4 選項（issue #828） |
 | word_spelling | WordSpellingActivity | WordSpellingPreview | `/api/teachers/contents/282` |
+| word_spelling_quiz | WordSpellingQuizActivity | WordSpellingQuizPreview | `/api/teachers/contents/282`（issue #828） |
 | word_cloze | WordClozeActivity | WordClozeContextPreview | `/api/teachers/contents/282` + 前端把單字替換為 _____ |
+| word_cloze_quiz | WordClozeQuizActivity | WordClozeQuizPreview | `/api/teachers/contents/282` + 前端把單字替換為 _____（issue #828） |
 
 #### B. demo 路徑
 

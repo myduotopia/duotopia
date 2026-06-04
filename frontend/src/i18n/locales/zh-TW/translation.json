@@ -1848,12 +1848,19 @@
         "scoreSpeaking": "計分類別：口說",
         "wordReading": "單字朗讀",
         "wordReadingDesc": "學生朗讀單字，系統評分發音",
-        "wordSelection": "單字選擇",
-        "wordSelectionDesc": "看單字或聽音檔，選擇正確的翻譯",
-        "wordSpelling": "單字拼寫",
-        "wordSpellingDesc": "看翻譯或聽音檔，拼寫正確的單字",
-        "wordCloze": "克漏字",
-        "wordClozeDesc": "看例句填空，輸入正確的單字變形",
+        "wordSelection": "單字選擇·艾賓浩斯",
+        "wordSelectionDesc": "看單字或聽音檔，選擇正確的翻譯（艾賓浩斯記憶曲線選題）",
+        "wordSelectionQuiz": "單字選擇·小考",
+        "wordSelectionQuizDesc": "依教材題目順序作答，有題號，提交即鎖定",
+        "quizTimeLimit": "整卷時間限制（時間到自動提交）",
+        "wordSpelling": "單字拼寫·艾賓浩斯",
+        "wordSpellingDesc": "看翻譯或聽音檔，拼寫正確的單字（艾賓浩斯記憶曲線選題）",
+        "wordCloze": "單字克漏字·艾賓浩斯",
+        "wordClozeDesc": "看例句填空，輸入正確的單字變形（艾賓浩斯記憶曲線選題）",
+        "wordSpellingQuiz": "單字拼寫·小考",
+        "wordSpellingQuizDesc": "依教材題目順序作答，有題號，提交即鎖定",
+        "wordClozeQuiz": "單字克漏字·小考",
+        "wordClozeQuizDesc": "依教材題目順序作答，有題號，提交即鎖定",
         "targetProficiency": "達標熟悉度",
         "targetProficiencyDesc": "學生需達到此熟悉度才算完成作業",
         "showTranslation": "顯示翻譯",
@@ -4807,6 +4814,32 @@
       "completed": "作業已完成！",
       "submitted": "作業已提交！",
       "completeFailed": "提交作業失敗"
+    }
+  },
+  "wordQuiz": {
+    "questionNav": "題號",
+    "questionLabel": "第 {{current}} / {{total}} 題",
+    "typeHere": "輸入答案…",
+    "playAudio": "播放音檔",
+    "prev": "上一題",
+    "next": "下一題",
+    "submit": "提交",
+    "empty": "尚無題目可作答。",
+    "locked": {
+      "title": "本次小考已提交",
+      "desc": "提交後不可重做；等待老師退回後才能訂正錯題。"
+    },
+    "toast": {
+      "lastAnswerNotSaved": "最後一題答案儲存失敗，仍以已答題目計分提交",
+      "reviewLoadFailed": "載入複盤資料失敗"
+    },
+    "review": {
+      "yourAnswer": "你的答案",
+      "correctAnswer": "正確答案",
+      "unanswered": "未作答",
+      "correct": "答對",
+      "wrong": "答錯",
+      "scoreSummary": "{{correct}} / {{total}} 答對"
     }
   },
   "wordSpelling": {
