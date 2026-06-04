@@ -1004,7 +1004,7 @@ export default function WordSelectionActivity({
         )}
 
         {/* 右側欄（橫式時把文字/音檔/題目/選項都放這裡） */}
-        <div className={cn("space-y-6", useHorizontal && "flex-1 min-w-0")}>
+        <div className={cn("space-y-8", useHorizontal && "flex-1 min-w-0")}>
           {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
               即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
           {!playAudio && (
@@ -1059,7 +1059,7 @@ export default function WordSelectionActivity({
                 <button
                   key={index}
                   className={cn(
-                    "h-full min-h-16 py-3 px-4 text-base sm:text-lg font-medium",
+                    "h-full min-h-[8rem] max-h-[18vh] py-5 px-4 text-base sm:text-lg font-medium",
                     "rounded-2xl border-2 shadow-md select-none relative",
                     "transition-all duration-200",
                     "whitespace-normal text-center break-words",

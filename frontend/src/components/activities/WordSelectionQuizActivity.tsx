@@ -433,7 +433,7 @@ export default function WordSelectionQuizActivity({
       </div>
 
       <Card className="p-4">
-        <CardContent className="space-y-4 p-0">
+        <CardContent className="space-y-8 p-0">
           <div className="text-sm text-gray-500">
             {t("wordQuiz.questionLabel", {
               current: currentWord.question_number,
@@ -475,7 +475,10 @@ export default function WordSelectionQuizActivity({
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            style={{ gridAutoRows: "1fr" }}
+          >
             {currentWord.options.map((opt) => {
               const isSelected = selectedForCurrent === opt.text;
               return (
@@ -485,7 +488,7 @@ export default function WordSelectionQuizActivity({
                   disabled={submittingAnswer}
                   onClick={() => choose(opt.text)}
                   className={cn(
-                    "flex-1 p-3 rounded-lg border text-sm transition",
+                    "h-full min-h-[8rem] max-h-[18vh] py-5 px-4 rounded-lg border text-base transition",
                     isSelected
                       ? "border-emerald-500 bg-emerald-50 text-emerald-700"
                       : "border-gray-200 hover:border-emerald-400",
