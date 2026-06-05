@@ -387,7 +387,7 @@ export default function WordSelectionQuizActivity({
   const selectedForCurrent = selectedByItem[currentWord.content_item_id];
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4 min-h-[calc(100dvh-8rem)]">
       <div className="flex flex-wrap gap-1 sm:gap-1.5 items-center">
         <span className="text-xs text-gray-500 mr-1">
           {t("wordQuiz.questionNav") || "題號"}
@@ -432,8 +432,8 @@ export default function WordSelectionQuizActivity({
         )}
       </div>
 
-      <Card className="p-4">
-        <CardContent className="space-y-8 p-0">
+      <Card className="p-4 flex-1 min-h-0 flex flex-col">
+        <CardContent className="flex-1 min-h-0 flex flex-col gap-6 p-0">
           <div className="text-sm text-gray-500">
             {t("wordQuiz.questionLabel", {
               current: currentWord.question_number,
@@ -445,7 +445,7 @@ export default function WordSelectionQuizActivity({
             <img
               src={currentWord.image_url}
               alt=""
-              className="mx-auto max-h-40 object-contain"
+              className="mx-auto max-h-[35vh] w-auto object-contain shrink-0"
             />
           )}
 
@@ -477,7 +477,7 @@ export default function WordSelectionQuizActivity({
 
           <div
             // 寬螢幕（lg ≥ 1024px，平板橫放/桌機）→ 1×4；窄螢幕（手機直立/平板直立）→ 2×2
-            className="grid grid-cols-2 lg:grid-cols-4 gap-3"
+            className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-1 min-h-0"
             style={{ gridAutoRows: "1fr" }}
           >
             {currentWord.options.map((opt) => {
@@ -491,7 +491,7 @@ export default function WordSelectionQuizActivity({
                   disabled={submittingAnswer}
                   onClick={() => choose(opt.text)}
                   className={cn(
-                    "h-full min-h-[6rem] max-h-[28vh] py-3 px-3 sm:py-4 sm:px-4 rounded-lg border text-base transition",
+                    "h-full min-h-[5rem] py-3 px-3 sm:py-4 sm:px-4 rounded-lg border text-base transition",
                     "flex flex-col items-center justify-center gap-1 overflow-hidden",
                     isSelected
                       ? "border-emerald-500 bg-emerald-50 text-emerald-700"

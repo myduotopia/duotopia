@@ -258,18 +258,23 @@ export default function WordSelectionActivity({
   // Audio ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // 寬螢幕 + 有題目圖片 → 橫式（圖左、選項右）
-  // 用 640px (Tailwind sm) 而非 768px，讓平板（含橫置）和手機橫置都保持橫式
-  const [isWideViewport, setIsWideViewport] = useState(() =>
+  // 直式優先：圖在上、選項在下，整張卡片填滿瀏覽器高度，垂直空間優先利用。
+  // 只在「橫向 + 視窗高度不足」(如手機橫放) 才退回橫式（圖左、選項右），
+  // 避免內容堆不下。桌機/平板橫放高度通常足夠，仍走直式。
+  const [isShortLandscape, setIsShortLandscape] = useState(() =>
     typeof window !== "undefined"
-      ? window.matchMedia("(min-width: 640px)").matches
+      ? window.matchMedia("(orientation: landscape) and (max-height: 600px)")
+          .matches
       : false,
   );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const mql = window.matchMedia("(min-width: 640px)");
-    const onChange = (e: MediaQueryListEvent) => setIsWideViewport(e.matches);
+    const mql = window.matchMedia(
+      "(orientation: landscape) and (max-height: 600px)",
+    );
+    const onChange = (e: MediaQueryListEvent) =>
+      setIsShortLandscape(e.matches);
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
   }, []);
@@ -896,11 +901,12 @@ export default function WordSelectionActivity({
 
   const currentWord = words[currentIndex];
 
-  // 寬螢幕 + 有題目圖片 → 橫式排版（圖左、選項右）
-  const useHorizontal = showImage && !!currentWord?.image_url && isWideViewport;
+  // 直式優先：題目有圖且視窗矮（橫向手機）才退回橫式（圖左、選項右）
+  const useHorizontal =
+    showImage && !!currentWord?.image_url && isShortLandscape;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6 min-h-[calc(100dvh-8rem)]">
       {/* Practice mode banner */}
       {isPracticeMode && (
         <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
@@ -940,10 +946,12 @@ export default function WordSelectionActivity({
       {/* Question content */}
       <div
         className={cn(
-          "relative space-y-6",
-          // 橫式（圖左、右欄文字+選項）— 不加 items-start，
-          // 用預設 items-stretch 讓兩欄等高，圖片高度由右欄決定
-          useHorizontal && "flex flex-row gap-6 space-y-0",
+          "relative flex-1 min-h-0",
+          // 直式：內容垂直分配（圖→文字→選項），選項區拿剩餘高度
+          // 橫式：圖左、右欄文字+選項，items-stretch 讓兩欄等高
+          useHorizontal
+            ? "flex flex-row gap-6"
+            : "flex flex-col gap-6",
         )}
       >
         {/* Issue #716: countdown ring anchored top-right of the question card */}
@@ -959,11 +967,10 @@ export default function WordSelectionActivity({
         {showImage && currentWord.image_url && (
           <div
             className={cn(
-              "flex justify-center",
-              // relative 配合 img absolute，讓圖片父層自然高度為 0、不貢獻 flex 高度
-              // min-h-48 防呆：若右欄內容極少（如沒有 Timer、題目單字短），
-              // 仍保留與直式 max-h-48 一致的最小可視高度，避免圖片塌成零高度
-              useHorizontal && "w-1/2 shrink-0 relative min-h-48",
+              "flex justify-center shrink-0",
+              // 橫式：圖佔左半欄；relative 配合 img absolute、min-h-48 防塌
+              // 直式：圖跟視窗高度連動，max-h-[40vh] 讓選項區拿到剩下的空間
+              useHorizontal && "w-1/2 relative min-h-48",
             )}
           >
             <img
@@ -971,14 +978,21 @@ export default function WordSelectionActivity({
               alt={currentWord.text}
               className={cn(
                 "object-contain rounded-lg",
-                useHorizontal ? "absolute inset-0 w-full h-full" : "max-h-48",
+                useHorizontal
+                  ? "absolute inset-0 w-full h-full"
+                  : "max-h-[40vh] w-auto",
               )}
             />
           </div>
         )}
 
-        {/* 右側欄（橫式時把文字/音檔/題目/選項都放這裡） */}
-        <div className={cn("space-y-8", useHorizontal && "flex-1 min-w-0")}>
+        {/* 內容欄（橫式時是右側欄；直式時直接展開文字/音檔/選項） */}
+        <div
+          className={cn(
+            "flex-1 min-h-0 flex flex-col gap-6",
+            useHorizontal && "min-w-0",
+          )}
+        >
           {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
               即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
           {!playAudio && (
@@ -1007,7 +1021,7 @@ export default function WordSelectionActivity({
           {/* Answer Options */}
           <div
             className={cn(
-              "grid gap-3 sm:gap-4",
+              "grid gap-3 sm:gap-4 flex-1 min-h-0",
               // 直式：寬螢幕（lg ≥ 1024px）→ 1×4；窄螢幕 → 2×2
               // 橫式（題目圖左、內容右半欄）：強制 2×2，避免右欄 ~50% 寬塞 4 格被擠爆
               useHorizontal ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4",
@@ -1034,7 +1048,7 @@ export default function WordSelectionActivity({
                 <button
                   key={index}
                   className={cn(
-                    "h-full min-h-[6rem] max-h-[28vh] py-3 px-3 sm:py-4 sm:px-4 text-base sm:text-lg font-medium",
+                    "h-full min-h-[5rem] py-3 px-3 sm:py-4 sm:px-4 text-base sm:text-lg font-medium",
                     "flex flex-col items-center justify-center gap-1 overflow-hidden",
                     "rounded-2xl border-2 shadow-md select-none relative",
                     "transition-all duration-200",
