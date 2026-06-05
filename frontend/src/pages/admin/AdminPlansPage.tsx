@@ -264,7 +264,7 @@ export default function AdminPlansPage() {
       </CardContent>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>編輯方案：{selectedPlan?.name}</DialogTitle>
             <DialogDescription>
@@ -274,168 +274,173 @@ export default function AdminPlansPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Group-buy context banner — read-only summary */}
-          {selectedPlan && isGroupBuyPlan(selectedPlan) && (
-            <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs space-y-1">
-              <div className="font-semibold text-blue-900">團購方案計算</div>
-              <div className="text-blue-800">
-                席次：
-                <span className="font-semibold">
-                  {selectedPlan.teacher_seats}
-                </span>{" "}
-                位教師
-              </div>
-              <div className="text-blue-800">
-                每席年費（編輯下方）× 席次 ={" "}
-                <span className="font-semibold">
-                  NT$
-                  {(
-                    Number(
-                      formData.annual_fee || selectedPlan.annual_fee || 0,
-                    ) * (selectedPlan.teacher_seats || 0)
-                  ).toLocaleString()}
-                </span>{" "}
-                / 年（團隊總價）
-              </div>
-              <div className="text-blue-800">
-                月配點 = 下方「每月配額」×
-                席次（系統每月為每位教師個別建立週期）
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="plan-price">
-                {selectedPlan && isGroupBuyPlan(selectedPlan)
-                  ? "訂閱月費（個人方案才使用，團購方案請留空）"
-                  : "訂閱月費（NT$/教師/月）"}
-              </Label>
-              <Input
-                id="plan-price"
-                type="number"
-                min={0}
-                value={formData.price}
-                disabled={selectedPlan ? isGroupBuyPlan(selectedPlan) : false}
-                onChange={(e) =>
-                  setFormData({ ...formData, price: e.target.value })
-                }
-                placeholder={
-                  selectedPlan && isGroupBuyPlan(selectedPlan)
-                    ? "不適用 — 團購用每席年費計價"
-                    : "例：299"
-                }
-              />
-              {formErrors.price && (
-                <p className="text-xs text-red-600">{formErrors.price}</p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="plan-quota">
-                {selectedPlan && isGroupBuyPlan(selectedPlan)
-                  ? "每月配額（點數 / 每位教師）"
-                  : "每月配額（點數 / 教師）"}
-              </Label>
-              <Input
-                id="plan-quota"
-                type="number"
-                min={0}
-                value={formData.quota}
-                onChange={(e) =>
-                  setFormData({ ...formData, quota: e.target.value })
-                }
-              />
-              <p className="text-xs text-gray-500">
-                {selectedPlan && isGroupBuyPlan(selectedPlan)
-                  ? `每月 1 號 cron 會為團隊中每位教師建立一筆「${formData.quota || selectedPlan.quota || 0} 點」的週期。團隊總配點 = ${formData.quota || selectedPlan.quota || 0} × ${selectedPlan.teacher_seats || 0} = ${(Number(formData.quota || selectedPlan.quota || 0) * (selectedPlan.teacher_seats || 0)).toLocaleString()} 點 / 月`
-                  : "個人方案：每月為訂閱教師建立一筆此數量的週期"}
-              </p>
-              {formErrors.quota && (
-                <p className="text-xs text-red-600">{formErrors.quota}</p>
-              )}
-            </div>
-
-            {/* Group-buy-only economic levers */}
+          {/* Scrollable middle so DialogHeader + DialogFooter stay pinned
+              when the dialog hits viewport height on small screens. */}
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
+            {/* Group-buy context banner — read-only summary */}
             {selectedPlan && isGroupBuyPlan(selectedPlan) && (
-              <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="plan-annual-fee">
-                    每席年費（NT$ / 教師 / 年）
-                  </Label>
-                  <Input
-                    id="plan-annual-fee"
-                    type="number"
-                    min={1}
-                    value={formData.annual_fee}
-                    onChange={(e) =>
-                      setFormData({ ...formData, annual_fee: e.target.value })
-                    }
-                  />
-                  <p className="text-xs text-gray-500">
-                    這是「每一席」的價格，不是團隊總價。團隊總價 = 此值 ×{" "}
-                    {selectedPlan.teacher_seats} 席。
-                  </p>
-                  {formErrors.annual_fee && (
-                    <p className="text-xs text-red-600">
-                      {formErrors.annual_fee}
-                    </p>
-                  )}
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs space-y-1">
+                <div className="font-semibold text-blue-900">團購方案計算</div>
+                <div className="text-blue-800">
+                  席次：
+                  <span className="font-semibold">
+                    {selectedPlan.teacher_seats}
+                  </span>{" "}
+                  位教師
                 </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="plan-topup-discount">
-                    加購點數包折扣（0~1，例：0.90 = 9 折）
-                  </Label>
-                  <Input
-                    id="plan-topup-discount"
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    max={1}
-                    value={formData.topup_discount}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        topup_discount: e.target.value,
-                      })
-                    }
-                  />
-                  <p className="text-xs text-gray-500">
-                    團內教師加購點數時的價格倍率（例：0.85 = 85 折，0.90 = 9
-                    折，0.95 = 95 折）。
-                  </p>
-                  {formErrors.topup_discount && (
-                    <p className="text-xs text-red-600">
-                      {formErrors.topup_discount}
-                    </p>
-                  )}
+                <div className="text-blue-800">
+                  每席年費（編輯下方）× 席次 ={" "}
+                  <span className="font-semibold">
+                    NT$
+                    {(
+                      Number(
+                        formData.annual_fee || selectedPlan.annual_fee || 0,
+                      ) * (selectedPlan.teacher_seats || 0)
+                    ).toLocaleString()}
+                  </span>{" "}
+                  / 年（團隊總價）
                 </div>
-
-                <p className="text-xs text-gray-500 italic">
-                  席次（teacher_seats）在此處不可改 —
-                  變更席次會與既有團隊綁定衝突；如需新席次方案，請在 DB 直接新增
-                  plans row。
-                </p>
-              </>
+                <div className="text-blue-800">
+                  月配點 = 下方「每月配額」×
+                  席次（系統每月為每位教師個別建立週期）
+                </div>
+              </div>
             )}
 
-            <div className="flex items-center justify-between border-t pt-3">
-              <div>
-                <Label htmlFor="plan-active">啟用此方案</Label>
-                <p className="text-xs text-gray-500">
-                  停用後不影響既有訂閱，僅控制是否能新訂。
-                </p>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="plan-price">
+                  {selectedPlan && isGroupBuyPlan(selectedPlan)
+                    ? "訂閱月費（個人方案才使用，團購方案請留空）"
+                    : "訂閱月費（NT$/教師/月）"}
+                </Label>
+                <Input
+                  id="plan-price"
+                  type="number"
+                  min={0}
+                  value={formData.price}
+                  disabled={selectedPlan ? isGroupBuyPlan(selectedPlan) : false}
+                  onChange={(e) =>
+                    setFormData({ ...formData, price: e.target.value })
+                  }
+                  placeholder={
+                    selectedPlan && isGroupBuyPlan(selectedPlan)
+                      ? "不適用 — 團購用每席年費計價"
+                      : "例：299"
+                  }
+                />
+                {formErrors.price && (
+                  <p className="text-xs text-red-600">{formErrors.price}</p>
+                )}
               </div>
-              <Switch
-                id="plan-active"
-                checked={formData.is_active}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, is_active: checked })
-                }
-              />
+
+              <div className="space-y-1.5">
+                <Label htmlFor="plan-quota">
+                  {selectedPlan && isGroupBuyPlan(selectedPlan)
+                    ? "每月配額（點數 / 每位教師）"
+                    : "每月配額（點數 / 教師）"}
+                </Label>
+                <Input
+                  id="plan-quota"
+                  type="number"
+                  min={0}
+                  value={formData.quota}
+                  onChange={(e) =>
+                    setFormData({ ...formData, quota: e.target.value })
+                  }
+                />
+                <p className="text-xs text-gray-500">
+                  {selectedPlan && isGroupBuyPlan(selectedPlan)
+                    ? `每月 1 號 cron 會為團隊中每位教師建立一筆「${formData.quota || selectedPlan.quota || 0} 點」的週期。團隊總配點 = ${formData.quota || selectedPlan.quota || 0} × ${selectedPlan.teacher_seats || 0} = ${(Number(formData.quota || selectedPlan.quota || 0) * (selectedPlan.teacher_seats || 0)).toLocaleString()} 點 / 月`
+                    : "個人方案：每月為訂閱教師建立一筆此數量的週期"}
+                </p>
+                {formErrors.quota && (
+                  <p className="text-xs text-red-600">{formErrors.quota}</p>
+                )}
+              </div>
+
+              {/* Group-buy-only economic levers */}
+              {selectedPlan && isGroupBuyPlan(selectedPlan) && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="plan-annual-fee">
+                      每席年費（NT$ / 教師 / 年）
+                    </Label>
+                    <Input
+                      id="plan-annual-fee"
+                      type="number"
+                      min={1}
+                      value={formData.annual_fee}
+                      onChange={(e) =>
+                        setFormData({ ...formData, annual_fee: e.target.value })
+                      }
+                    />
+                    <p className="text-xs text-gray-500">
+                      這是「每一席」的價格，不是團隊總價。團隊總價 = 此值 ×{" "}
+                      {selectedPlan.teacher_seats} 席。
+                    </p>
+                    {formErrors.annual_fee && (
+                      <p className="text-xs text-red-600">
+                        {formErrors.annual_fee}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="plan-topup-discount">
+                      加購點數包折扣（0~1，例：0.90 = 9 折）
+                    </Label>
+                    <Input
+                      id="plan-topup-discount"
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      max={1}
+                      value={formData.topup_discount}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          topup_discount: e.target.value,
+                        })
+                      }
+                    />
+                    <p className="text-xs text-gray-500">
+                      團內教師加購點數時的價格倍率（例：0.85 = 85 折，0.90 = 9
+                      折，0.95 = 95 折）。
+                    </p>
+                    {formErrors.topup_discount && (
+                      <p className="text-xs text-red-600">
+                        {formErrors.topup_discount}
+                      </p>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-gray-500 italic">
+                    席次（teacher_seats）在此處不可改 —
+                    變更席次會與既有團隊綁定衝突；如需新席次方案，請在 DB
+                    直接新增 plans row。
+                  </p>
+                </>
+              )}
+
+              <div className="flex items-center justify-between border-t pt-3">
+                <div>
+                  <Label htmlFor="plan-active">啟用此方案</Label>
+                  <p className="text-xs text-gray-500">
+                    停用後不影響既有訂閱，僅控制是否能新訂。
+                  </p>
+                </div>
+                <Switch
+                  id="plan-active"
+                  checked={formData.is_active}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, is_active: checked })
+                  }
+                />
+              </div>
             </div>
           </div>
+          {/* /flex-1 overflow-y-auto */}
 
           <DialogFooter>
             <Button
