@@ -219,3 +219,100 @@ def test_get_plan_price_falls_back_when_no_row(shared_test_session):
     from config.plans import get_plan_price
 
     assert get_plan_price("Tutor Teachers", db=shared_test_session) == 299
+
+
+# ============ PR #837 (issue #768): group-buy lever guards ============
+
+
+@pytest.fixture
+def seed_group_buy_plan(shared_test_session):
+    """A group-buy plan (teacher_seats not-NULL) for the new lever tests."""
+    from decimal import Decimal
+
+    p = Plan(
+        name="團購-30席",
+        price=None,
+        quota=1000,
+        teacher_seats=30,
+        annual_fee=1300,
+        topup_discount=Decimal("0.90"),
+        display_order=11,
+        is_active=True,
+    )
+    shared_test_session.add(p)
+    shared_test_session.commit()
+    shared_test_session.refresh(p)
+    return p
+
+
+def test_update_plan_annual_fee_on_non_group_buy_returns_400(
+    seed_plans, auth_headers_admin, test_client
+):
+    """PR #837: annual_fee is a group-buy-only lever. Setting it on an
+    individual plan (teacher_seats IS NULL) must be rejected with 400 so
+    an accidental admin edit can't silently land on a plan that won't
+    actually read the field."""
+    r = test_client.put(
+        "/api/admin/plans/Tutor%20Teachers",
+        headers=auth_headers_admin,
+        json={"annual_fee": 1500},
+    )
+    assert r.status_code == 400
+    assert "annual_fee" in r.json()["detail"]
+    assert "teacher_seats" in r.json()["detail"]
+
+
+def test_update_plan_topup_discount_on_non_group_buy_returns_400(
+    seed_plans, auth_headers_admin, test_client
+):
+    """Same guard as above for the topup_discount lever."""
+    r = test_client.put(
+        "/api/admin/plans/Tutor%20Teachers",
+        headers=auth_headers_admin,
+        json={"topup_discount": 0.9},
+    )
+    assert r.status_code == 400
+    assert "topup_discount" in r.json()["detail"]
+
+
+def test_update_plan_topup_discount_out_of_range_returns_422(
+    seed_group_buy_plan, auth_headers_admin, test_client
+):
+    """Pydantic validation: topup_discount must be 0 < x ≤ 1.
+    Sending 1.5 → 422 (request validation), 0 → 422 (gt=0)."""
+    r = test_client.put(
+        "/api/admin/plans/%E5%9C%98%E8%B3%BC-30%E5%B8%AD",  # 團購-30席 URL-encoded
+        headers=auth_headers_admin,
+        json={"topup_discount": 1.5},
+    )
+    assert r.status_code == 422
+
+    r = test_client.put(
+        "/api/admin/plans/%E5%9C%98%E8%B3%BC-30%E5%B8%AD",
+        headers=auth_headers_admin,
+        json={"topup_discount": 0},
+    )
+    assert r.status_code == 422
+
+
+def test_update_plan_annual_fee_on_group_buy_persists(
+    seed_group_buy_plan, auth_headers_admin, test_client, shared_test_session
+):
+    """Happy path: setting annual_fee on a group-buy plan returns the
+    updated row and the value is persisted to the DB."""
+    r = test_client.put(
+        "/api/admin/plans/%E5%9C%98%E8%B3%BC-30%E5%B8%AD",
+        headers=auth_headers_admin,
+        json={"annual_fee": 1400, "topup_discount": 0.88},
+    )
+    assert r.status_code == 200, r.json()
+    body = r.json()
+    assert body["annual_fee"] == 1400
+    assert float(body["topup_discount"]) == 0.88
+
+    shared_test_session.expire_all()
+    row = shared_test_session.query(Plan).filter(Plan.name == "團購-30席").one()
+    assert row.annual_fee == 1400
+    assert float(row.topup_discount) == 0.88
+    # teacher_seats stays as-seeded (not editable via this endpoint)
+    assert row.teacher_seats == 30

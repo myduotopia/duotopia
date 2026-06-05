@@ -292,15 +292,19 @@ export default function AdminPlansPage() {
                   每席年費（編輯下方）× 席次 ={" "}
                   <span className="font-semibold">
                     NT$
-                    {(
-                      Number(
-                        // `||` on string "0" falls through (0 is falsy);
-                        // use empty-string check so the typed value wins.
+                    {(() => {
+                      // Empty-string check (not `||`) so admin typing 0
+                      // is preserved; NaN fallback so mid-typing invalid
+                      // input (letters, "-") doesn't render "NT$NaN".
+                      const feeNum =
                         formData.annual_fee !== ""
-                          ? formData.annual_fee
-                          : (selectedPlan.annual_fee ?? 0),
-                      ) * (selectedPlan.teacher_seats ?? 0)
-                    ).toLocaleString()}
+                          ? Number(formData.annual_fee)
+                          : (selectedPlan.annual_fee ?? 0);
+                      const seats = selectedPlan.teacher_seats ?? 0;
+                      return (
+                        (Number.isFinite(feeNum) ? feeNum : 0) * seats
+                      ).toLocaleString();
+                    })()}
                   </span>{" "}
                   / 年（團隊總價）
                 </div>
@@ -357,15 +361,19 @@ export default function AdminPlansPage() {
                   {selectedPlan &&
                     isGroupBuyPlan(selectedPlan) &&
                     (() => {
-                      // `||` on string "0" would fall through; use
-                      // empty-string check so admin typing 0 reflects.
-                      const quotaStr =
+                      // Empty-string check (not `||`) so admin typing 0
+                      // is preserved; NaN fallback so mid-typing invalid
+                      // input doesn't render "NaN 點" in the help text.
+                      const quotaNum =
                         formData.quota !== ""
-                          ? formData.quota
-                          : String(selectedPlan.quota ?? 0);
+                          ? Number(formData.quota)
+                          : (selectedPlan.quota ?? 0);
+                      const safeQuota = Number.isFinite(quotaNum)
+                        ? quotaNum
+                        : 0;
                       const seats = selectedPlan.teacher_seats ?? 0;
-                      const total = Number(quotaStr) * seats;
-                      return `每月 1 號 cron 會為團隊中每位教師建立一筆「${quotaStr} 點」的週期。團隊總配點 = ${quotaStr} × ${seats} = ${total.toLocaleString()} 點 / 月`;
+                      const total = safeQuota * seats;
+                      return `每月 1 號 cron 會為團隊中每位教師建立一筆「${safeQuota} 點」的週期。團隊總配點 = ${safeQuota} × ${seats} = ${total.toLocaleString()} 點 / 月`;
                     })()}
                   {selectedPlan &&
                     !isGroupBuyPlan(selectedPlan) &&
