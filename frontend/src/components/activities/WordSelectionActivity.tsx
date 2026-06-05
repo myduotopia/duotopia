@@ -263,7 +263,7 @@ export default function WordSelectionActivity({
   // 避免內容堆不下。桌機/平板橫放高度通常足夠，仍走直式。
   const [isShortLandscape, setIsShortLandscape] = useState(() =>
     typeof window !== "undefined"
-      ? window.matchMedia("(orientation: landscape) and (max-height: 600px)")
+      ? window.matchMedia("(orientation: landscape) and (max-height: 700px)")
           .matches
       : false,
   );
@@ -271,7 +271,7 @@ export default function WordSelectionActivity({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mql = window.matchMedia(
-      "(orientation: landscape) and (max-height: 600px)",
+      "(orientation: landscape) and (max-height: 700px)",
     );
     const onChange = (e: MediaQueryListEvent) =>
       setIsShortLandscape(e.matches);
@@ -980,7 +980,7 @@ export default function WordSelectionActivity({
                 "object-contain rounded-lg",
                 useHorizontal
                   ? "absolute inset-0 w-full h-full"
-                  : "max-h-[40vh] w-auto",
+                  : "max-h-[clamp(8rem,38vh,22rem)] w-auto",
               )}
             />
           </div>
@@ -997,7 +997,7 @@ export default function WordSelectionActivity({
               即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
           {!playAudio && (
             <div className="text-center">
-              <h2 className="text-3xl font-bold text-gray-800 select-none">
+              <h2 className="text-[clamp(1.5rem,4vh,2.5rem)] font-bold text-gray-800 select-none">
                 {showImage ? currentWord.translation : currentWord.text}
               </h2>
             </div>
@@ -1048,8 +1048,9 @@ export default function WordSelectionActivity({
                 <button
                   key={index}
                   className={cn(
-                    "h-full min-h-[5rem] py-3 px-3 sm:py-4 sm:px-4 text-base sm:text-lg font-medium",
-                    "flex flex-col items-center justify-center gap-1 overflow-hidden",
+                    "h-full min-h-[5rem] py-3 px-3 sm:py-4 sm:px-4 font-medium",
+                    "text-[clamp(0.875rem,2.2vh,1.25rem)]",
+                    "flex flex-col items-center justify-center gap-2 overflow-hidden",
                     "rounded-2xl border-2 shadow-md select-none relative",
                     "transition-all duration-200",
                     "whitespace-normal text-center break-words",
@@ -1088,18 +1089,18 @@ export default function WordSelectionActivity({
                     </span>
                   )}
                   {renderAsImage ? (
-                    <div className="flex flex-col items-center justify-center gap-1 w-full min-h-0 flex-1">
+                    <div className="flex flex-col items-center justify-center gap-2 w-full min-h-0 flex-1">
                       <img
                         src={optionImage as string}
                         alt={optionText}
                         className="flex-1 min-h-0 w-full object-contain rounded-md"
                       />
-                      <span className="shrink-0 text-sm leading-tight break-words line-clamp-2">
+                      <span className="shrink-0 leading-tight break-words line-clamp-2">
                         {optionText}
                       </span>
                     </div>
                   ) : (
-                    <span className="text-sm sm:text-base leading-tight break-words line-clamp-3">
+                    <span className="leading-tight break-words line-clamp-4">
                       {optionText}
                     </span>
                   )}
