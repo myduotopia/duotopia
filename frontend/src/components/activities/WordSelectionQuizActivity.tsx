@@ -499,13 +499,20 @@ export default function WordSelectionQuizActivity({
                   )}
                 >
                   {renderAsImage && opt.image_url ? (
-                    <img
-                      src={opt.image_url}
-                      alt={opt.text}
-                      className="flex-1 min-h-0 w-full object-contain"
-                    />
+                    <div className="flex flex-col items-center justify-center gap-1 w-full min-h-0 flex-1">
+                      <img
+                        src={opt.image_url}
+                        alt={opt.text}
+                        className="flex-1 min-h-0 w-full object-contain"
+                      />
+                      <span className="shrink-0 text-sm leading-tight break-words line-clamp-2">
+                        {opt.text}
+                      </span>
+                    </div>
                   ) : (
-                    <span>{opt.text}</span>
+                    <span className="text-sm sm:text-base leading-tight break-words line-clamp-3">
+                      {opt.text}
+                    </span>
                   )}
                 </button>
               );

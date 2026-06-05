@@ -1008,8 +1008,9 @@ export default function WordSelectionActivity({
           <div
             className={cn(
               "grid gap-3 sm:gap-4",
-              // 寬螢幕（lg ≥ 1024px，平板橫放/桌機）→ 1×4；窄螢幕（手機直立/平板直立）→ 2×2
-              "grid-cols-2 lg:grid-cols-4",
+              // 直式：寬螢幕（lg ≥ 1024px）→ 1×4；窄螢幕 → 2×2
+              // 橫式（題目圖左、內容右半欄）：強制 2×2，避免右欄 ~50% 寬塞 4 格被擠爆
+              useHorizontal ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4",
             )}
             style={{ gridAutoRows: "1fr" }}
           >
@@ -1079,12 +1080,14 @@ export default function WordSelectionActivity({
                         alt={optionText}
                         className="flex-1 min-h-0 w-full object-contain rounded-md"
                       />
-                      <span className="shrink-0 text-sm sm:text-base leading-tight">
+                      <span className="shrink-0 text-sm leading-tight break-words line-clamp-2">
                         {optionText}
                       </span>
                     </div>
                   ) : (
-                    <span>{optionText}</span>
+                    <span className="text-sm sm:text-base leading-tight break-words line-clamp-3">
+                      {optionText}
+                    </span>
                   )}
                 </button>
               );
