@@ -294,8 +294,12 @@ export default function AdminPlansPage() {
                     NT$
                     {(
                       Number(
-                        formData.annual_fee || selectedPlan.annual_fee || 0,
-                      ) * (selectedPlan.teacher_seats || 0)
+                        // `||` on string "0" falls through (0 is falsy);
+                        // use empty-string check so the typed value wins.
+                        formData.annual_fee !== ""
+                          ? formData.annual_fee
+                          : (selectedPlan.annual_fee ?? 0),
+                      ) * (selectedPlan.teacher_seats ?? 0)
                     ).toLocaleString()}
                   </span>{" "}
                   / 年（團隊總價）
@@ -311,7 +315,7 @@ export default function AdminPlansPage() {
               <div className="space-y-1.5">
                 <Label htmlFor="plan-price">
                   {selectedPlan && isGroupBuyPlan(selectedPlan)
-                    ? "訂閱月費（個人方案才使用，團購方案請留空）"
+                    ? "訂閱月費（不適用 — 團購方案以每席年費計價）"
                     : "訂閱月費（NT$/教師/月）"}
                 </Label>
                 <Input
@@ -350,9 +354,22 @@ export default function AdminPlansPage() {
                   }
                 />
                 <p className="text-xs text-gray-500">
-                  {selectedPlan && isGroupBuyPlan(selectedPlan)
-                    ? `每月 1 號 cron 會為團隊中每位教師建立一筆「${formData.quota || selectedPlan.quota || 0} 點」的週期。團隊總配點 = ${formData.quota || selectedPlan.quota || 0} × ${selectedPlan.teacher_seats || 0} = ${(Number(formData.quota || selectedPlan.quota || 0) * (selectedPlan.teacher_seats || 0)).toLocaleString()} 點 / 月`
-                    : "個人方案：每月為訂閱教師建立一筆此數量的週期"}
+                  {selectedPlan &&
+                    isGroupBuyPlan(selectedPlan) &&
+                    (() => {
+                      // `||` on string "0" would fall through; use
+                      // empty-string check so admin typing 0 reflects.
+                      const quotaStr =
+                        formData.quota !== ""
+                          ? formData.quota
+                          : String(selectedPlan.quota ?? 0);
+                      const seats = selectedPlan.teacher_seats ?? 0;
+                      const total = Number(quotaStr) * seats;
+                      return `每月 1 號 cron 會為團隊中每位教師建立一筆「${quotaStr} 點」的週期。團隊總配點 = ${quotaStr} × ${seats} = ${total.toLocaleString()} 點 / 月`;
+                    })()}
+                  {selectedPlan &&
+                    !isGroupBuyPlan(selectedPlan) &&
+                    "個人方案：每月為訂閱教師建立一筆此數量的週期"}
                 </p>
                 {formErrors.quota && (
                   <p className="text-xs text-red-600">{formErrors.quota}</p>
