@@ -43,20 +43,22 @@ class AzureSpeechTokenService:
         實施策略：
         - Server-side cache（8分鐘內重用同一 token）
         - 提前2分鐘過期，避免前端使用到期 token
+        - Issue #136: cache 命中時回傳「實際剩餘秒數」而非固定 600，
+          避免前端依固定值 over-cache 一個即將到期的 token 而產生 401
         """
         # Check cache (8分鐘內重用，提前2分鐘過期)
         if self._cached_token and self._token_expires_at:
             if datetime.now() < self._token_expires_at - timedelta(minutes=2):
-                expires_in_seconds = (
+                remaining_seconds = (
                     self._token_expires_at - datetime.now()
                 ).total_seconds()
-                logger.info(
-                    f"Returning cached token (expires in {expires_in_seconds:.0f}s)"
-                )
+                # 回傳真實剩餘壽命（clamp 非負），讓前端據此計算 cache 窗口
+                expires_in = max(0, int(remaining_seconds))
+                logger.info(f"Returning cached token (expires in {expires_in}s)")
                 return {
                     "token": self._cached_token,
                     "region": self.region,
-                    "expires_in": 600,
+                    "expires_in": expires_in,
                 }
 
         # Call Azure issueToken endpoint

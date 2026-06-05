@@ -35,11 +35,11 @@ export class AzureSpeechService {
   private readonly MAX_RETRIES = 2;
 
   /**
-   * 获取 Azure Speech Token（带缓存，提前1分钟过期）
+   * 获取 Azure Speech Token（带缓存，提前2分钟过期）
    * @private
    */
   private async getToken(): Promise<{ token: string; region: string }> {
-    // 检查 cache 是否有效（提前1分钟过期）
+    // 检查 cache 是否有效（提前2分钟过期）
     if (this.tokenCache && new Date() < this.tokenCache.expiresAt) {
       return {
         token: this.tokenCache.token,
@@ -70,11 +70,13 @@ export class AzureSpeechService {
       );
       const { token, region, expires_in } = response.data;
 
-      // Cache token（提前1分钟过期 = 9分钟有效）
+      // 🎯 Issue #136: 提前 120 秒过期，预留时钟误差/网络延迟的安全缓冲。
+      // 后端在 cache 命中时会回传「实际剩余秒数」，故以 Math.max(0, ...) clamp，
+      // 避免 expires_in 偏小时算出一个已过期（落在过去）的 expiresAt。
       this.tokenCache = {
         token,
         region,
-        expiresAt: new Date(Date.now() + (expires_in - 60) * 1000),
+        expiresAt: new Date(Date.now() + Math.max(0, expires_in - 120) * 1000),
       };
 
       return { token, region };
