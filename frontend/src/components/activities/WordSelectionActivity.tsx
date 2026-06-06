@@ -1049,9 +1049,8 @@ export default function WordSelectionActivity({
                   key={index}
                   className={cn(
                     "h-full min-h-[5rem] py-3 px-3 sm:py-4 sm:px-4 font-medium",
-                    // 按鈕當 container query root：內部字體 / 圖片依按鈕實際大小等比縮放
-                    "[container-type:size]",
-                    "flex flex-col items-center justify-center gap-2 overflow-hidden",
+                    // 用 grid 佔滿，內層 div 才是 container query root（button 對 container-type 有 quirk）
+                    "grid overflow-hidden",
                     "rounded-2xl border-2 shadow-md select-none relative",
                     "transition-all duration-200",
                     "whitespace-normal text-center break-words",
@@ -1089,24 +1088,27 @@ export default function WordSelectionActivity({
                       )}
                     </span>
                   )}
-                  {renderAsImage ? (
-                    <div className="flex flex-col items-center justify-center gap-2 w-full min-h-0 flex-1">
-                      <img
-                        src={optionImage as string}
-                        alt={optionText}
-                        className="flex-1 min-h-0 w-full object-contain rounded-md"
-                      />
-                      {/* 圖+標籤：字體跟按鈕高度（cqh）連動 */}
-                      <span className="shrink-0 leading-tight break-words line-clamp-2 text-[clamp(0.75rem,5cqh,1.5rem)]">
+                  {/* 內層 div = container query root，cqh/cqw 依此 div 大小算 */}
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 [container-type:size]">
+                    {renderAsImage ? (
+                      <>
+                        <img
+                          src={optionImage as string}
+                          alt={optionText}
+                          className="flex-1 min-h-0 w-full object-contain rounded-md"
+                        />
+                        {/* 圖+標籤：字體跟容器（按鈕內部）高度連動 */}
+                        <span className="shrink-0 leading-tight break-words line-clamp-2 text-[clamp(0.75rem,5cqh,1.5rem)]">
+                          {optionText}
+                        </span>
+                      </>
+                    ) : (
+                      /* 純文字：cqh 主導；長句靠 line-clamp-4 + break-words 換行 */
+                      <span className="leading-tight break-words line-clamp-4 text-[clamp(0.875rem,6cqh,2.25rem)]">
                         {optionText}
                       </span>
-                    </div>
-                  ) : (
-                    /* 純文字：cqh 主導 — 按鈕高字大；長句靠 line-clamp-4 + break-words 換行 */
-                    <span className="leading-tight break-words line-clamp-4 text-[clamp(0.875rem,6cqh,2.25rem)]">
-                      {optionText}
-                    </span>
-                  )}
+                    )}
+                  </div>
                 </button>
               );
             })}
