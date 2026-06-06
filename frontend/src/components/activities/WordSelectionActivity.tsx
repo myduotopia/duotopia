@@ -997,7 +997,7 @@ export default function WordSelectionActivity({
               即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
           {!playAudio && (
             <div className="text-center">
-              <h2 className="text-[clamp(1.5rem,4vh,2.5rem)] font-bold text-gray-800 select-none">
+              <h2 className="text-[clamp(1.75rem,6vh,4rem)] font-bold text-gray-800 select-none">
                 {showImage ? currentWord.translation : currentWord.text}
               </h2>
             </div>
@@ -1049,7 +1049,8 @@ export default function WordSelectionActivity({
                   key={index}
                   className={cn(
                     "h-full min-h-[5rem] py-3 px-3 sm:py-4 sm:px-4 font-medium",
-                    "text-[clamp(0.875rem,2.2vh,1.25rem)]",
+                    // 按鈕當 container query root：內部字體 / 圖片依按鈕實際大小等比縮放
+                    "[container-type:size]",
                     "flex flex-col items-center justify-center gap-2 overflow-hidden",
                     "rounded-2xl border-2 shadow-md select-none relative",
                     "transition-all duration-200",
@@ -1095,12 +1096,15 @@ export default function WordSelectionActivity({
                         alt={optionText}
                         className="flex-1 min-h-0 w-full object-contain rounded-md"
                       />
-                      <span className="shrink-0 leading-tight break-words line-clamp-2">
+                      {/* 圖+標籤模式：字體跟按鈕大小（cqh/cqw）連動 */}
+                      <span className="shrink-0 leading-tight break-words line-clamp-2 text-[clamp(0.75rem,min(7cqh,5cqw),1.25rem)]">
                         {optionText}
                       </span>
                     </div>
                   ) : (
-                    <span className="leading-tight break-words line-clamp-4">
+                    /* 純文字模式：cqh 主導 — 按鈕高字大，按鈕矮字小；
+                       cqw 副助 — 內容超寬時字體縮回來，配合 line-clamp-4 自然換行 */
+                    <span className="leading-tight break-words line-clamp-4 text-[clamp(0.875rem,min(9cqh,6cqw),2rem)]">
                       {optionText}
                     </span>
                   )}
