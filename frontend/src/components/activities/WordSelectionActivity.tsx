@@ -997,7 +997,7 @@ export default function WordSelectionActivity({
               即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
           {!playAudio && (
             <div className="text-center">
-              <h2 className="text-[clamp(1.75rem,6vh,4rem)] font-bold text-gray-800 select-none">
+              <h2 className="text-[clamp(2rem,9vh,6rem)] font-bold text-gray-800 select-none">
                 {showImage ? currentWord.translation : currentWord.text}
               </h2>
             </div>
@@ -1096,15 +1096,14 @@ export default function WordSelectionActivity({
                         alt={optionText}
                         className="flex-1 min-h-0 w-full object-contain rounded-md"
                       />
-                      {/* 圖+標籤模式：字體跟按鈕大小（cqh/cqw）連動 */}
-                      <span className="shrink-0 leading-tight break-words line-clamp-2 text-[clamp(0.75rem,min(7cqh,5cqw),1.25rem)]">
+                      {/* 圖+標籤：字體跟按鈕高度（cqh）連動 */}
+                      <span className="shrink-0 leading-tight break-words line-clamp-2 text-[clamp(0.75rem,5cqh,1.5rem)]">
                         {optionText}
                       </span>
                     </div>
                   ) : (
-                    /* 純文字模式：cqh 主導 — 按鈕高字大，按鈕矮字小；
-                       cqw 副助 — 內容超寬時字體縮回來，配合 line-clamp-4 自然換行 */
-                    <span className="leading-tight break-words line-clamp-4 text-[clamp(0.875rem,min(9cqh,6cqw),2rem)]">
+                    /* 純文字：cqh 主導 — 按鈕高字大；長句靠 line-clamp-4 + break-words 換行 */
+                    <span className="leading-tight break-words line-clamp-4 text-[clamp(0.875rem,6cqh,2.25rem)]">
                       {optionText}
                     </span>
                   )}
