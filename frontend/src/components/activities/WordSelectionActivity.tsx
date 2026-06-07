@@ -257,7 +257,7 @@ export default function WordSelectionActivity({
   // 直式優先：圖在上、選項在下；只在「橫向 + 視窗高度不足」(手機橫放) 才退回橫式
   const isShortLandscape = useShortLandscape();
 
-// show_image 模式下正解為英文 (word.text)，否則為翻譯。優先信任後端傳的
+  // show_image 模式下正解為英文 (word.text)，否則為翻譯。優先信任後端傳的
   // correct_text；舊版後端未回傳時依 showImage flag fallback。
   const getExpectedAnswer = useCallback(
     (word: WordOption) =>
@@ -927,9 +927,7 @@ export default function WordSelectionActivity({
           "relative flex-1 min-h-0",
           // 直式：內容垂直分配（圖→文字→選項），選項區拿剩餘高度
           // 橫式：圖左、右欄文字+選項，items-stretch 讓兩欄等高
-          useHorizontal
-            ? "flex flex-row gap-6"
-            : "flex flex-col gap-6",
+          useHorizontal ? "flex flex-row gap-6" : "flex flex-col gap-6",
         )}
       >
         {/* Issue #716: countdown ring anchored top-right of the question card */}

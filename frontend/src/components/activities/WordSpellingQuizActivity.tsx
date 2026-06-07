@@ -471,79 +471,79 @@ export default function WordSpellingQuizActivity({
       <Card className="flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
         <CardContent className="flex-1 min-h-0 flex flex-col gap-4 p-0">
           <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto">
-          <div className="text-sm text-gray-500">
-            {t("wordQuiz.questionLabel", {
-              current: currentWord.question_number,
-              total: words.length,
-            }) || `第 ${currentWord.question_number} / ${words.length} 題`}
-          </div>
+            <div className="text-sm text-gray-500">
+              {t("wordQuiz.questionLabel", {
+                current: currentWord.question_number,
+                total: words.length,
+              }) || `第 ${currentWord.question_number} / ${words.length} 題`}
+            </div>
 
-          {settings.show_image && currentWord.image_url && (
-            <img
-              src={currentWord.image_url}
-              alt=""
-              className="mx-auto max-h-40 object-contain"
+            {settings.show_image && currentWord.image_url && (
+              <img
+                src={currentWord.image_url}
+                alt=""
+                className="mx-auto max-h-40 object-contain"
+              />
+            )}
+
+            {/* 樣式對齊 WordSpellingActivity (艾賓浩斯版) */}
+            {settings.play_audio && currentWord.audio_url && (
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => playAudio(currentWord.audio_url)}
+                  aria-label={t("wordQuiz.playAudio") || "Play"}
+                  className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-12 w-12 text-blue-500 hover:text-blue-600"
+                >
+                  <Volume2 className="h-7 w-7" />
+                </button>
+              </div>
+            )}
+
+            {settings.show_translation && currentWord.translation && (
+              <div className="text-center py-3 space-y-1">
+                <h2 className="text-3xl md:text-4xl font-bold text-gray-800 tracking-wide">
+                  {currentWord.translation}
+                </h2>
+                {currentWord.part_of_speech && (
+                  <div className="flex justify-center">
+                    <Badge
+                      variant="secondary"
+                      className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
+                    >
+                      {currentWord.part_of_speech}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <QuizAnswerInput
+              value={typedByItem[currentWord.content_item_id] || ""}
+              expectedAnswer={currentWord.text}
+              onChange={(next) =>
+                setTypedByItem((m) => ({
+                  ...m,
+                  [currentWord.content_item_id]: next,
+                }))
+              }
+              // 最後一題的 inline Send 只暫存答案，不送出整卷；整卷送出統一由
+              // 下方「提交」鈕觸發，避免學生按 Enter 不小心收卷。
+              onSubmit={
+                isLast ? () => persistAnswer() : () => goTo(currentIndex + 1)
+              }
+              submitting={submittingAnswer}
+              state={
+                settings.show_answer &&
+                correctByItem[currentWord.content_item_id] === true
+                  ? "correct"
+                  : settings.show_answer &&
+                      correctByItem[currentWord.content_item_id] === false
+                    ? "wrong"
+                    : "neutral"
+              }
+              autoFocus
             />
-          )}
-
-          {/* 樣式對齊 WordSpellingActivity (艾賓浩斯版) */}
-          {settings.play_audio && currentWord.audio_url && (
-            <div className="flex justify-center">
-              <button
-                type="button"
-                onClick={() => playAudio(currentWord.audio_url)}
-                aria-label={t("wordQuiz.playAudio") || "Play"}
-                className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-12 w-12 text-blue-500 hover:text-blue-600"
-              >
-                <Volume2 className="h-7 w-7" />
-              </button>
-            </div>
-          )}
-
-          {settings.show_translation && currentWord.translation && (
-            <div className="text-center py-3 space-y-1">
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-800 tracking-wide">
-                {currentWord.translation}
-              </h2>
-              {currentWord.part_of_speech && (
-                <div className="flex justify-center">
-                  <Badge
-                    variant="secondary"
-                    className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
-                  >
-                    {currentWord.part_of_speech}
-                  </Badge>
-                </div>
-              )}
-            </div>
-          )}
-
-          <QuizAnswerInput
-            value={typedByItem[currentWord.content_item_id] || ""}
-            expectedAnswer={currentWord.text}
-            onChange={(next) =>
-              setTypedByItem((m) => ({
-                ...m,
-                [currentWord.content_item_id]: next,
-              }))
-            }
-            // 最後一題的 inline Send 只暫存答案，不送出整卷；整卷送出統一由
-            // 下方「提交」鈕觸發，避免學生按 Enter 不小心收卷。
-            onSubmit={
-              isLast ? () => persistAnswer() : () => goTo(currentIndex + 1)
-            }
-            submitting={submittingAnswer}
-            state={
-              settings.show_answer &&
-              correctByItem[currentWord.content_item_id] === true
-                ? "correct"
-                : settings.show_answer &&
-                    correctByItem[currentWord.content_item_id] === false
-                  ? "wrong"
-                  : "neutral"
-            }
-            autoFocus
-          />
           </div>
 
           {/* Card footer: prev/next/submit */}
