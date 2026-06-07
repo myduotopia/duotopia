@@ -42,7 +42,6 @@ import {
   Loader2,
   Volume2,
   CheckCircle,
-  XCircle,
   Trophy,
   RefreshCw,
   Send,
@@ -55,6 +54,8 @@ import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
+import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
+import { useShortLandscape } from "./shared/useShortLandscape";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
 interface OptionEntry {
@@ -112,12 +113,7 @@ interface WordSelectionActivityProps {
   };
 }
 
-const OPTION_COLORS = [
-  "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-400",
-  "bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-400",
-  "bg-amber-50 border-amber-200 hover:bg-amber-100 hover:border-amber-400",
-  "bg-teal-50 border-teal-200 hover:bg-teal-100 hover:border-teal-400",
-];
+// 樣式常數 & 共用 hook 抽到 shared/，與 WordSelectionQuizActivity 共用
 
 export default function WordSelectionActivity({
   assignmentId,
@@ -258,26 +254,8 @@ export default function WordSelectionActivity({
   // Audio ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // 直式優先：圖在上、選項在下，整張卡片填滿瀏覽器高度，垂直空間優先利用。
-  // 只在「橫向 + 視窗高度不足」(如手機橫放) 才退回橫式（圖左、選項右），
-  // 避免內容堆不下。桌機/平板橫放高度通常足夠，仍走直式。
-  const [isShortLandscape, setIsShortLandscape] = useState(() =>
-    typeof window !== "undefined"
-      ? window.matchMedia("(orientation: landscape) and (max-height: 700px)")
-          .matches
-      : false,
-  );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mql = window.matchMedia(
-      "(orientation: landscape) and (max-height: 700px)",
-    );
-    const onChange = (e: MediaQueryListEvent) =>
-      setIsShortLandscape(e.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
+  // 直式優先：圖在上、選項在下；只在「橫向 + 視窗高度不足」(手機橫放) 才退回橫式
+  const isShortLandscape = useShortLandscape();
 
 // show_image 模式下正解為英文 (word.text)，否則為翻譯。優先信任後端傳的
   // correct_text；舊版後端未回傳時依 showImage flag fallback。
@@ -1045,71 +1023,20 @@ export default function WordSelectionActivity({
               const renderAsImage = showOptionImages && !!optionImage;
 
               return (
-                <button
+                <WordSelectionOptionButton
                   key={index}
-                  className={cn(
-                    "h-full min-h-[5rem] py-3 px-3 sm:py-4 sm:px-4 font-medium",
-                    // 用 grid 佔滿，內層 div 才是 container query root（button 對 container-type 有 quirk）
-                    "grid overflow-hidden",
-                    "rounded-2xl border-2 shadow-md select-none relative",
-                    "transition-all duration-200",
-                    "whitespace-normal text-center break-words",
-                    !showResult &&
-                      "hover:shadow-lg hover:-translate-y-0.5 active:scale-95",
-                    !showResult && OPTION_COLORS[index % 4],
-                    showCorrect &&
-                      "bg-green-100 border-green-500 text-green-800 shadow-green-200",
-                    showIncorrect &&
-                      "bg-red-100 border-red-500 text-red-800 shadow-red-200",
-                    isSelected &&
-                      !showResult &&
-                      "ring-2 ring-indigo-400 scale-95",
-                    showResult &&
-                      !showCorrect &&
-                      !showIncorrect &&
-                      "opacity-50",
-                  )}
-                  onClick={() => handleSelectAnswer(optionText)}
+                  text={optionText}
+                  imageUrl={optionImage}
+                  showAsImage={renderAsImage}
+                  colorIndex={index}
+                  isSelected={isSelected}
                   disabled={showResult || submitting}
-                  aria-label={optionText}
-                >
-                  {(showCorrect || showIncorrect) && (
-                    <span
-                      className={cn(
-                        "absolute top-2 left-2 z-10",
-                        animateReveal &&
-                          "animate-in zoom-in-50 fade-in duration-500",
-                      )}
-                    >
-                      {showCorrect ? (
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-red-600" />
-                      )}
-                    </span>
-                  )}
-                  {/* 內層 div = container query root，cqh/cqw 依此 div 大小算 */}
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 [container-type:size]">
-                    {renderAsImage ? (
-                      <>
-                        <img
-                          src={optionImage as string}
-                          alt={optionText}
-                          className="flex-1 min-h-0 w-full object-contain rounded-md"
-                        />
-                        {/* 圖+標籤：字體跟容器（按鈕內部）高度連動 */}
-                        <span className="shrink-0 leading-tight break-words line-clamp-2 text-[clamp(0.75rem,5cqh,1.5rem)]">
-                          {optionText}
-                        </span>
-                      </>
-                    ) : (
-                      /* 純文字：cqh 主導；長句靠 line-clamp-4 + break-words 換行 */
-                      <span className="leading-tight break-words line-clamp-4 text-[clamp(0.875rem,6cqh,2.25rem)]">
-                        {optionText}
-                      </span>
-                    )}
-                  </div>
-                </button>
+                  onClick={() => handleSelectAnswer(optionText)}
+                  showResult={showResult}
+                  showCorrect={showCorrect}
+                  showIncorrect={showIncorrect}
+                  animateReveal={animateReveal}
+                />
               );
             })}
           </div>
