@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -18,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
+import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import QuizAnswerInput from "./shared/QuizAnswerInput";
@@ -121,6 +123,7 @@ export default function WordClozeQuizActivity({
   const [initialRemaining, setInitialRemaining] = useState<number | null>(null);
   const [timerTotal, setTimerTotal] = useState<number | null>(null);
   const completingRef = useRef(false);
+  const navSlot = useQuizNavSlot();
 
   useEffect(() => {
     if (isLivePreview) {
@@ -397,53 +400,65 @@ export default function WordClozeQuizActivity({
     currentWord.cloze_answer,
   );
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-1 sm:gap-1.5 items-center">
-        <span className="text-xs text-gray-500 mr-1">
-          {t("wordQuiz.questionNav") || "題號"}
-        </span>
-        {words.map((w, idx) => {
-          const answered = (typedByItem[w.content_item_id] || "").trim() !== "";
-          const isCurrent = idx === currentIndex;
-          const priorCorrect = correctByItem[w.content_item_id];
-          return (
-            <button
-              key={w.content_item_id}
-              type="button"
-              onClick={() => goTo(idx)}
-              className={cn(
-                "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
-                isCurrent
-                  ? "bg-pink-500 text-white border-pink-500"
-                  : !answered
-                    ? "bg-white text-gray-500 border-gray-300 hover:border-pink-400"
-                    : settings.show_answer && priorCorrect === true
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                      : settings.show_answer && priorCorrect === false
-                        ? "bg-rose-50 text-rose-700 border-rose-300"
-                        : "bg-pink-50 text-pink-700 border-pink-300",
-              )}
-            >
-              {idx + 1}
-            </button>
-          );
-        })}
-        <span className="text-xs text-gray-400 ml-auto">
-          {answeredCount} / {words.length}
-        </span>
-        {timeRemaining !== null && timerTotal !== null && (
-          <CountdownRing
-            seconds={timeRemaining}
-            total={timerTotal}
-            size={56}
-            longForm
-          />
-        )}
-      </div>
+  // 題號 bar — Page 提供 slot 時 portal 上去；否則 inline render（fallback）
+  const navBar = (
+    <>
+      <span className="text-xs text-gray-500 mr-1">
+        {t("wordQuiz.questionNav") || "題號"}
+      </span>
+      {words.map((w, idx) => {
+        const answered = (typedByItem[w.content_item_id] || "").trim() !== "";
+        const isCurrent = idx === currentIndex;
+        const priorCorrect = correctByItem[w.content_item_id];
+        return (
+          <button
+            key={w.content_item_id}
+            type="button"
+            onClick={() => goTo(idx)}
+            className={cn(
+              "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
+              isCurrent
+                ? "bg-pink-500 text-white border-pink-500"
+                : !answered
+                  ? "bg-white text-gray-500 border-gray-300 hover:border-pink-400"
+                  : settings.show_answer && priorCorrect === true
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                    : settings.show_answer && priorCorrect === false
+                      ? "bg-rose-50 text-rose-700 border-rose-300"
+                      : "bg-pink-50 text-pink-700 border-pink-300",
+            )}
+          >
+            {idx + 1}
+          </button>
+        );
+      })}
+      <span className="text-xs text-gray-400 ml-auto">
+        {answeredCount} / {words.length}
+      </span>
+      {timeRemaining !== null && timerTotal !== null && (
+        <CountdownRing
+          seconds={timeRemaining}
+          total={timerTotal}
+          size={56}
+          longForm
+        />
+      )}
+    </>
+  );
 
-      <Card className="p-4">
-        <CardContent className="space-y-4 p-0">
+  return (
+    <div className="flex flex-col gap-4 min-h-[calc(98dvh-14rem)] max-h-[98dvh]">
+      {navSlot ? (
+        createPortal(navBar, navSlot)
+      ) : (
+        <div className="flex flex-wrap gap-1 sm:gap-1.5 items-center">
+          {navBar}
+        </div>
+      )}
+
+      <Card className="flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+        <CardContent className="flex-1 min-h-0 flex flex-col gap-4 p-0">
+          <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto">
           <div className="text-sm text-gray-500">
             {t("wordQuiz.questionLabel", {
               current: currentWord.question_number,
@@ -515,10 +530,10 @@ export default function WordClozeQuizActivity({
             }
             autoFocus
           />
-        </CardContent>
-      </Card>
+          </div>
 
-      <div className="flex gap-2 justify-between">
+          {/* Card footer: prev/next/submit */}
+          <div className="flex gap-2 justify-between border-t pt-3 shrink-0">
         <Button
           type="button"
           variant="outline"
@@ -549,7 +564,9 @@ export default function WordClozeQuizActivity({
             {t("wordQuiz.next") || "下一題"}
           </Button>
         )}
-      </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { QuizNavSlotContext } from "@/contexts/QuizNavSlotContext";
 import ReadingAssessmentTemplate from "@/components/activities/ReadingAssessmentTemplate";
 import ListeningClozeTemplate from "@/components/activities/ListeningClozeTemplate";
 import GroupedQuestionsTemplate from "@/components/activities/GroupedQuestionsTemplate";
@@ -319,6 +320,12 @@ export default function StudentActivityPageContent({
   // State management
   const [activities, setActivities] = useState<Activity[]>(initialActivities);
   const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
+  // Quiz 題號 bar 的 Portal slot — Page 保留 DOM，Activity 投放 nav JSX
+  const [quizNavSlot, setQuizNavSlot] = useState<HTMLDivElement | null>(null);
+  const isQuizMode =
+    practiceMode === "word_selection_quiz" ||
+    practiceMode === "word_spelling_quiz" ||
+    practiceMode === "word_cloze_quiz";
   const [currentSubQuestionIndex, setCurrentSubQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Map<number, Answer>>(new Map());
   const [saving] = useState(false);
@@ -2414,6 +2421,7 @@ export default function StudentActivityPageContent({
   const progress = ((currentActivityIndex + 1) / activities.length) * 100;
 
   return (
+    <QuizNavSlotContext.Provider value={quizNavSlot}>
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Read-only mode banner */}
       {isReadOnly && !isPreviewMode && (
@@ -2541,6 +2549,15 @@ export default function StudentActivityPageContent({
                 )}
             </div>
           </div>
+
+          {/* 小考模式題號 bar slot — 三個 QuizActivity 用 Portal 投放 nav 到這
+              詳見 docs/design 與 frontend/src/contexts/QuizNavSlotContext.tsx */}
+          {isQuizMode && (
+            <div
+              ref={setQuizNavSlot}
+              className="flex flex-wrap gap-1 sm:gap-1.5 items-center pt-2"
+            />
+          )}
 
           {/* Activity navigation - 單字選擇 / 拼寫 / 克漏字模式不顯示此區塊
               （這些模式使用艾賓浩斯記憶曲線，每輪選不熟單字，不允許跳題） */}
@@ -2815,13 +2832,17 @@ export default function StudentActivityPageContent({
 
             {/* Navigation buttons */}
             {(() => {
-              // 🎯 單字選擇/朗讀/拼寫/克漏字模式：自帶導航，不顯示外部導航按鈕
+              // 🎯 單字選擇/朗讀/拼寫/克漏字（艾賓浩斯版）與三個小考模式：
+              //    自帶導航（內建於 Activity 元件的 Card footer），不顯示外部導航按鈕
               if (
                 practiceMode === "word_selection" ||
                 practiceMode === "word_reading" ||
                 practiceMode === "tug_of_war" ||
                 practiceMode === "word_spelling" ||
-                practiceMode === "word_cloze"
+                practiceMode === "word_cloze" ||
+                practiceMode === "word_selection_quiz" ||
+                practiceMode === "word_spelling_quiz" ||
+                practiceMode === "word_cloze_quiz"
               ) {
                 return null;
               }
@@ -3198,5 +3219,6 @@ export default function StudentActivityPageContent({
         />
       )}
     </div>
+    </QuizNavSlotContext.Provider>
   );
 }

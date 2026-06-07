@@ -60,7 +60,7 @@ export default function WordSelectionOptionButton({
       disabled={disabled}
       aria-label={text}
       className={cn(
-        "h-full min-h-[5rem] py-3 px-3 sm:py-4 sm:px-4 font-medium",
+        "h-full min-h-[5rem] py-1 px-3 sm:py-1 sm:px-4 font-medium",
         "grid overflow-hidden",
         "rounded-2xl border-2 shadow-md select-none relative",
         "transition-all duration-200",
@@ -105,7 +105,7 @@ export default function WordSelectionOptionButton({
             </span>
           </>
         ) : (
-          <span className="leading-tight break-words line-clamp-4 text-[clamp(1rem,min(20cqh,14cqw),5rem)]">
+          <span className="leading-tight break-words line-clamp-4 text-[clamp(1rem,min(20cqh,14cqw),8rem)]">
             {text}
           </span>
         )}

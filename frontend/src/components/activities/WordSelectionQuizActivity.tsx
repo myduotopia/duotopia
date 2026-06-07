@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -19,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
+import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
@@ -116,7 +118,9 @@ export default function WordSelectionQuizActivity({
   const [initialRemaining, setInitialRemaining] = useState<number | null>(null);
   const [timerTotal, setTimerTotal] = useState<number | null>(null);
   const completingRef = useRef(false);
+  // 必須放在 early return 之前，否則違反 Rules of Hooks
   const isShortLandscape = useShortLandscape();
+  const navSlot = useQuizNavSlot();
 
   useEffect(() => {
     if (isLivePreview) {
@@ -395,53 +399,64 @@ export default function WordSelectionQuizActivity({
   const useHorizontal =
     settings.show_image && !!currentWord.image_url && isShortLandscape;
 
-  return (
-    <div className="flex flex-col gap-4 min-h-[calc(100dvh-8rem)]">
-      <div className="flex flex-wrap gap-1 sm:gap-1.5 items-center">
-        <span className="text-xs text-gray-500 mr-1">
-          {t("wordQuiz.questionNav") || "題號"}
-        </span>
-        {words.map((w, idx) => {
-          const answered =
-            (selectedByItem[w.content_item_id] || "").trim() !== "";
-          const isCurrent = idx === currentIndex;
-          const priorCorrect = correctByItem[w.content_item_id];
-          return (
-            <button
-              key={w.content_item_id}
-              type="button"
-              onClick={() => goTo(idx)}
-              className={cn(
-                "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
-                isCurrent
-                  ? "bg-emerald-500 text-white border-emerald-500"
-                  : !answered
-                    ? "bg-white text-gray-500 border-gray-300 hover:border-emerald-400"
-                    : settings.show_answer && priorCorrect === true
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                      : settings.show_answer && priorCorrect === false
-                        ? "bg-rose-50 text-rose-700 border-rose-300"
-                        : "bg-emerald-50 text-emerald-700 border-emerald-300",
-              )}
-            >
-              {idx + 1}
-            </button>
-          );
-        })}
-        <span className="text-xs text-gray-400 ml-auto">
-          {answeredCount} / {words.length}
-        </span>
-        {timeRemaining !== null && timerTotal !== null && (
-          <CountdownRing
-            seconds={timeRemaining}
-            total={timerTotal}
-            size={56}
-            longForm
-          />
-        )}
-      </div>
+  // 題號 bar：Page 提供 slot 時 portal 上去；否則 inline render（fallback）
+  const navBar = (
+    <>
+      <span className="text-xs text-gray-500 mr-1">
+        {t("wordQuiz.questionNav") || "題號"}
+      </span>
+      {words.map((w, idx) => {
+        const answered =
+          (selectedByItem[w.content_item_id] || "").trim() !== "";
+        const isCurrent = idx === currentIndex;
+        const priorCorrect = correctByItem[w.content_item_id];
+        return (
+          <button
+            key={w.content_item_id}
+            type="button"
+            onClick={() => goTo(idx)}
+            className={cn(
+              "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
+              isCurrent
+                ? "bg-emerald-500 text-white border-emerald-500"
+                : !answered
+                  ? "bg-white text-gray-500 border-gray-300 hover:border-emerald-400"
+                  : settings.show_answer && priorCorrect === true
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                    : settings.show_answer && priorCorrect === false
+                      ? "bg-rose-50 text-rose-700 border-rose-300"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-300",
+            )}
+          >
+            {idx + 1}
+          </button>
+        );
+      })}
+      <span className="text-xs text-gray-400 ml-auto">
+        {answeredCount} / {words.length}
+      </span>
+      {timeRemaining !== null && timerTotal !== null && (
+        <CountdownRing
+          seconds={timeRemaining}
+          total={timerTotal}
+          size={56}
+          longForm
+        />
+      )}
+    </>
+  );
 
-      <Card className="p-4 flex-1 min-h-0 flex flex-col">
+  return (
+    <div className="flex flex-col gap-4 min-h-[calc(98dvh-14rem)] max-h-[98dvh]">
+      {navSlot ? (
+        createPortal(navBar, navSlot)
+      ) : (
+        <div className="flex flex-wrap gap-1 sm:gap-1.5 items-center">
+          {navBar}
+        </div>
+      )}
+
+      <Card className="flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
         <CardContent className="flex-1 min-h-0 flex flex-col gap-3 p-0">
           <div className="text-sm text-gray-500 shrink-0">
             {t("wordQuiz.questionLabel", {
@@ -536,41 +551,42 @@ export default function WordSelectionQuizActivity({
               </div>
             </div>
           </div>
+
+          {/* Card footer: prev/next/submit — 與題目區共用 Card，不另起 sibling */}
+          <div className="flex gap-2 justify-between border-t pt-3 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={currentIndex === 0 || submittingAnswer}
+              onClick={() => goTo(currentIndex - 1)}
+            >
+              {t("wordQuiz.prev") || "上一題"}
+            </Button>
+            {isLast ? (
+              <Button
+                type="button"
+                onClick={handleSubmitAll}
+                disabled={completing || submittingAnswer}
+              >
+                {completing ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                {t("wordQuiz.submit") || "提交"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => goTo(currentIndex + 1)}
+                disabled={submittingAnswer}
+              >
+                {t("wordQuiz.next") || "下一題"}
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
-
-      <div className="flex gap-2 justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={currentIndex === 0 || submittingAnswer}
-          onClick={() => goTo(currentIndex - 1)}
-        >
-          {t("wordQuiz.prev") || "上一題"}
-        </Button>
-        {isLast ? (
-          <Button
-            type="button"
-            onClick={handleSubmitAll}
-            disabled={completing || submittingAnswer}
-          >
-            {completing ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Send className="h-4 w-4 mr-2" />
-            )}
-            {t("wordQuiz.submit") || "提交"}
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            onClick={() => goTo(currentIndex + 1)}
-            disabled={submittingAnswer}
-          >
-            {t("wordQuiz.next") || "下一題"}
-          </Button>
-        )}
-      </div>
     </div>
   );
 }
