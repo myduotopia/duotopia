@@ -1673,6 +1673,11 @@ class ApiClient {
         is_active: boolean;
         updated_at: string | null;
         updated_by_admin_id: number | null;
+        // issue #768: group-buy economic levers. teacher_seats not-null
+        // is the canonical group-buy signal; price is unused for those.
+        teacher_seats: number | null;
+        annual_fee: number | null; // PER teacher
+        topup_discount: number | null;
       }>
     >("/api/admin/plans", { method: "GET" });
   }
@@ -1684,6 +1689,9 @@ class ApiClient {
       quota?: number;
       is_active?: boolean;
       display_order?: number;
+      // issue #768 group-buy levers; backend rejects these on individual plans
+      annual_fee?: number;
+      topup_discount?: number;
     },
   ) {
     return this.request<{
@@ -1695,6 +1703,9 @@ class ApiClient {
       is_active: boolean;
       updated_at: string | null;
       updated_by_admin_id: number | null;
+      teacher_seats: number | null;
+      annual_fee: number | null;
+      topup_discount: number | null;
     }>(`/api/admin/plans/${encodeURIComponent(planName)}`, {
       method: "PUT",
       body: JSON.stringify(data),

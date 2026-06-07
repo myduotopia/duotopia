@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PLAN_NAMES } from "@/constants/plans";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -209,6 +210,7 @@ const PLAN_RANK: Record<string, number> = { free: 0, tutor: 1, school: 2 };
 
 export default function TeacherSubscription() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(
     null,
@@ -540,6 +542,37 @@ export default function TeacherSubscription() {
 
           {/* Tab 3: Subscription Management */}
           <TabsContent value="management" className="space-y-6">
+            {/* Phase 5-2 follow-up (#768): group-buy upsell CTA for
+                existing individual subscribers. Hide for teachers already
+                on a group-buy plan — clicking through would hit R2-F2
+                single-org guard and 409.
+                TODO: replace prefix check with a backend-supplied flag
+                when SubscriptionInfo exposes teacher_seats or org_type. */}
+            {!subscription?.plan?.startsWith("團購") && (
+              <Card className="mb-6 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+                <CardContent className="py-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="font-semibold text-gray-900">
+                        👥 想為團隊一起採購？
+                      </div>
+                      <div className="text-sm text-gray-600 mt-1">
+                        開設 10 / 30 / 50 席教師團購方案，享更低每席費用 +
+                        加購點數包折扣。團主刷卡一次即可開團。
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100 shrink-0"
+                      onClick={() => navigate("/teacher/group-buy/open")}
+                    >
+                      了解團購方案 →
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
