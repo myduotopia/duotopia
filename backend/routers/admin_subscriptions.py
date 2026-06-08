@@ -223,7 +223,18 @@ async def _create_group_buy_admin_subscription(
         .scalar()
         or 0
     )
-    if school.teacher_seat_limit and seat_taken >= school.teacher_seat_limit:
+    # `is not None` (not truthy): a legacy group-buy school where
+    # `teacher_seat_limit` somehow ended up NULL should NOT silently bypass
+    # the seat check. If we see that data shape, refuse and let ops fix it.
+    if school.teacher_seat_limit is None:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Group-buy school {school.id} has no teacher_seat_limit "
+                "set; data inconsistency — contact ops."
+            ),
+        )
+    if seat_taken >= school.teacher_seat_limit:
         raise HTTPException(
             status_code=400,
             detail=(
@@ -248,7 +259,13 @@ async def _create_group_buy_admin_subscription(
             detail=f"Teacher {teacher.email!r} is already in this team.",
         )
 
-    # Existing active group-buy period this month → don't double-grant
+    # Existing active group-buy period this month → don't double-grant.
+    # `now` here is UTC, so month_start is UTC midnight on day 1. For the
+    # ~8 hours after Taipei month rollover but before UTC rollover, a
+    # period started "today" in Taipei would be in last UTC month and
+    # NOT caught by this guard. Acceptable: admin-driven joins are rare
+    # and the cron's own dedup (services/group_buy.py) is the canonical
+    # protection against double-granting at month boundaries.
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     existing_gb = (
         db.query(SubscriptionPeriod)

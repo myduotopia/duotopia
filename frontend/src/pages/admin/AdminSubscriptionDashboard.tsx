@@ -334,6 +334,18 @@ function CreditPackageHistory({
   );
 }
 
+// Issue #768 follow-up: shape of /api/admin/plans rows we actually
+// care about inside this dashboard. Hoisted above the component so
+// it's not redefined per render.
+type AdminPlanLite = {
+  name: string;
+  price: number | null;
+  quota: number | null;
+  is_active: boolean;
+  teacher_seats: number | null;
+  annual_fee: number | null;
+};
+
 export default function AdminSubscriptionDashboard() {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -380,15 +392,10 @@ export default function AdminSubscriptionDashboard() {
   });
 
   // Dynamic plan list (replaces hardcoded 5 plans so group-buy ones show)
-  type AdminPlanLite = {
-    name: string;
-    price: number | null;
-    quota: number | null;
-    is_active: boolean;
-    teacher_seats: number | null;
-    annual_fee: number | null;
-  };
   const [availablePlans, setAvailablePlans] = useState<AdminPlanLite[]>([]);
+  const [availablePlansError, setAvailablePlansError] = useState<string | null>(
+    null,
+  );
   useEffect(() => {
     (async () => {
       try {
@@ -396,9 +403,17 @@ export default function AdminSubscriptionDashboard() {
         // Only show active plans in the dropdown; admin can still see
         // inactive on the /admin/plans page.
         setAvailablePlans(plans.filter((p) => p.is_active));
+        setAvailablePlansError(null);
       } catch (e) {
         console.error("Failed to load plan list:", e);
-        // Fall back to empty; user sees no options and can refresh.
+        // Without this, admin sees an empty dropdown with no signal —
+        // we now surface a banner inside the edit modal (rendered below
+        // the plan select) so they know to retry.
+        setAvailablePlansError(
+          e instanceof Error
+            ? `無法載入方案清單：${e.message}`
+            : "無法載入方案清單；請重新整理頁面再試",
+        );
       }
     })();
   }, []);
@@ -2640,12 +2655,22 @@ export default function AdminSubscriptionDashboard() {
                     {availablePlans.map((p) => (
                       <SelectItem key={p.name} value={p.name}>
                         {p.teacher_seats != null
-                          ? `${p.name}（${p.teacher_seats} 席 / NT$${p.annual_fee?.toLocaleString()} 每席年費）`
+                          ? `${p.name}（${p.teacher_seats} 席 / NT$${
+                              p.annual_fee?.toLocaleString() ?? "—"
+                            } 每席年費）`
                           : p.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {/* If /api/admin/plans failed at mount, surface it here
+                    so admin knows why the dropdown is empty (don't just
+                    show no options + console.error). */}
+                {availablePlansError && (
+                  <p className="text-xs text-red-600 mt-1">
+                    {availablePlansError}
+                  </p>
+                )}
               </div>
             )}
 

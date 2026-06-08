@@ -276,8 +276,14 @@ def test_seat_full_returns_400(
     """Force the school to a full-seat state and verify next admin join
     is rejected."""
     org, school = opened_team
+    # Fixture invariant: if teacher_seat_limit were NULL we'd loop range(-1),
+    # add zero fillers, and the endpoint would still 200 — masking a real
+    # bug. Fail loud at setup so a future fixture regression is obvious.
+    assert (
+        school.teacher_seat_limit is not None
+    ), "fixture invariant: group-buy school must have teacher_seat_limit set"
     # Fill seats up to the limit (owner already takes 1)
-    seats_to_fill = (school.teacher_seat_limit or 0) - 1  # minus owner
+    seats_to_fill = school.teacher_seat_limit - 1  # minus owner
     for i in range(seats_to_fill):
         t = Teacher(
             email=f"filler-{i}@x.com",
@@ -310,6 +316,69 @@ def test_seat_full_returns_400(
     )
     assert r.status_code == 400
     assert "full" in r.json()["detail"].lower()
+
+
+# ---------- cross-team active-period guard ----------
+
+
+def test_active_period_in_different_team_blocks_join(
+    test_client,
+    admin,
+    owner,
+    target,
+    opened_team,
+    gb_plan_30,
+    shared_test_session,
+):
+    """Target teacher already has an active group-buy period THIS MONTH
+    bound to a DIFFERENT team's school — adding to a new team would
+    cause Phase 3 cron to grant 2000 points instead of 1000.
+
+    Distinct from `test_duplicate_join_returns_400` which covers the
+    same-school case via the binding-uniqueness path.
+    """
+    from services.group_buy import create_group_buy_period
+
+    # Manually create a previous group-buy period for `target` on a
+    # different school (simulating they were in another team last week).
+    other_owner = Teacher(
+        email="other-owner@duotopia.com",
+        password_hash=get_password_hash("x"),
+        name="OtherOwner",
+        is_active=True,
+        email_verified=True,
+    )
+    shared_test_session.add(other_owner)
+    shared_test_session.commit()
+    from services.group_buy import create_group_buy_org_and_school
+
+    create_group_buy_org_and_school(
+        other_owner,
+        gb_plan_30,
+        shared_test_session,
+        now=datetime.now(timezone.utc),
+    )
+    # Give target an active period under the other team
+    create_group_buy_period(
+        target, gb_plan_30, shared_test_session, start=datetime.now(timezone.utc)
+    )
+    shared_test_session.commit()
+
+    # Admin tries to join target to opened_team's team → should be blocked
+    # by the cross-team active-period guard, NOT by the binding-uniqueness
+    # one (target has no TeacherSchool row in opened_team's school yet).
+    r = _post_create(
+        test_client,
+        admin,
+        {
+            "teacher_email": target.email,
+            "plan_name": gb_plan_30.name,
+            "group_owner_email": owner.email,
+            "reason": "cross-team join attempt",
+        },
+    )
+    assert r.status_code == 400
+    assert "this month" in r.json()["detail"].lower()
 
 
 # ---------- regression: individual plan path still works ----------
