@@ -972,7 +972,7 @@ export default function WordSelectionActivity({
           {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
               即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
           {!playAudio && (
-            <div className="text-center">
+            <div className="text-center py-4 sm:py-6">
               <h2 className="text-[clamp(2rem,9vh,6rem)] font-bold text-gray-800 select-none">
                 {showImage ? currentWord.translation : currentWord.text}
               </h2>

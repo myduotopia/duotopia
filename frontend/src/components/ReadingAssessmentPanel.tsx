@@ -2841,7 +2841,7 @@ const ReadingAssessmentPanel = forwardRef<
               items={rows.map((row) => row.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="space-y-3 pr-2">
+              <div className="space-y-3 pr-2 flex-1 min-h-0 overflow-y-auto">
                 {rows.map((row, index) => {
                   // useSortable must be called inside the component that's in SortableContext
                   // so we'll use a nested component
