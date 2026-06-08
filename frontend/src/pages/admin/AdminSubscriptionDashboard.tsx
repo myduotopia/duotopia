@@ -396,6 +396,9 @@ export default function AdminSubscriptionDashboard() {
   const [availablePlansError, setAvailablePlansError] = useState<string | null>(
     null,
   );
+  // Tracks the in-flight fetch so admin doesn't see a confusingly empty
+  // dropdown on slow connections / cold start before plans arrive.
+  const [plansLoading, setPlansLoading] = useState<boolean>(true);
   useEffect(() => {
     (async () => {
       try {
@@ -414,6 +417,8 @@ export default function AdminSubscriptionDashboard() {
             ? `無法載入方案清單：${e.message}`
             : "無法載入方案清單；請重新整理頁面再試",
         );
+      } finally {
+        setPlansLoading(false);
       }
     })();
   }, []);
@@ -2663,9 +2668,11 @@ export default function AdminSubscriptionDashboard() {
                     ))}
                   </SelectContent>
                 </Select>
-                {/* If /api/admin/plans failed at mount, surface it here
-                    so admin knows why the dropdown is empty (don't just
-                    show no options + console.error). */}
+                {/* Loading / error signals so admin doesn't see an
+                    empty dropdown without explanation. */}
+                {plansLoading && (
+                  <p className="text-xs text-gray-500 mt-1">載入方案清單中…</p>
+                )}
                 {availablePlansError && (
                   <p className="text-xs text-red-600 mt-1">
                     {availablePlansError}

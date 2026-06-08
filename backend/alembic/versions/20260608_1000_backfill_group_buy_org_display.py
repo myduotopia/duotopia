@@ -40,7 +40,10 @@ def upgrade() -> None:
         """
         UPDATE organizations
         SET display_name = (
-            SELECT organizations.name || '-' || p.teacher_seats || '位'
+            -- Explicit ::text cast required — PostgreSQL's `||` does not
+            -- implicitly cast integer → text and would error with
+            -- "operator does not exist: text || integer".
+            SELECT organizations.name || '-' || p.teacher_seats::text || '位'
             FROM schools s
             JOIN plans p ON p.id = s.plan_id
             WHERE s.organization_id = organizations.id

@@ -25,9 +25,16 @@ from models import (
     Assignment,
     PointUsageLog,
     ClassroomStudent,
+    # Issue #768 follow-up — group-buy admin-join branch needs these:
+    Plan,
+    Organization,
+    School,
+    TeacherOrganization,
+    TeacherSchool,
 )
 from models.credit_package import CreditPackage
 from routers.admin import get_current_admin
+from services.group_buy import create_group_buy_period
 
 router = APIRouter(prefix="/api/admin/subscription", tags=["admin-subscription"])
 
@@ -164,14 +171,6 @@ async def _create_group_buy_admin_subscription(
         team this month (otherwise the cron would attempt a second 1000-
         pt grant — confusing for billing)
     """
-    from models import (
-        Organization,
-        School,
-        TeacherOrganization,
-        TeacherSchool,
-    )
-    from services.group_buy import create_group_buy_period
-
     if not request.group_owner_email:
         raise HTTPException(
             status_code=400,
@@ -353,8 +352,6 @@ async def create_subscription(
     # admin is manually adding `teacher` to an existing team led by
     # `group_owner_email`. This skips TapPay (the /group-buy-open flow);
     # admin scenarios are comp / customer-support / migration cases.
-    from models import Plan
-
     plan_row = db.query(Plan).filter(Plan.name == request.plan_name).first()
     if plan_row is None:
         raise HTTPException(status_code=400, detail="Unknown plan_name")
