@@ -4498,6 +4498,7 @@
     "labels": {
       "title": "標題",
       "pasteContent": "請貼上單字",
+      "pasteSentences": "請貼上句子",
       "batchOperations": "批次操作",
       "aiGenerateTTS": "AI 生成語音",
       "aiGenerateTranslation": "AI 自動翻譯",

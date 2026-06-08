@@ -4480,6 +4480,7 @@
     "labels": {
       "title": "Title",
       "pasteContent": "Paste vocabulary",
+      "pasteSentences": "Paste sentences",
       "batchOperations": "Batch Operations",
       "aiGenerateTTS": "AI Generate Audio",
       "aiGenerateTranslation": "AI Auto Translate",

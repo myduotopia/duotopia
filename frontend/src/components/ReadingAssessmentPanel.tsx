@@ -2685,7 +2685,7 @@ const ReadingAssessmentPanel = forwardRef<
   }
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-70px)]">
+    <div className="flex flex-col">
       {/* Fixed Header Section */}
       <div className="flex-shrink-0 space-y-4 pb-4">
         {/* Assignment Copy Warning Banner */}
@@ -2790,12 +2790,13 @@ const ReadingAssessmentPanel = forwardRef<
       </div>
 
       {/* Desktop: Side-by-side layout / Mobile: Editor only */}
-      <div className="flex flex-1 gap-4 min-h-0">
+      <div className="flex gap-4">
         {/* Left: Batch Work Area (Desktop only) */}
         <BatchWorkPanel
           text={batchPasteText}
           onTextChange={setBatchPasteText}
           maxItems={MAX_BATCH_ITEMS}
+          pasteLabel={t("contentEditor.labels.pasteSentences")}
           placeholder="put&#10;Put it away.&#10;It's time to put everything away. Right now."
           autoTranslate={batchPasteAutoTranslate}
           onAutoTranslateChange={setBatchPasteAutoTranslate}
@@ -2830,7 +2831,7 @@ const ReadingAssessmentPanel = forwardRef<
         />
 
         {/* Right: Editor Area */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col">
           {/* Scrollable Content Rows with dnd-kit */}
           <DndContext
             sensors={sensors}
@@ -2841,7 +2842,7 @@ const ReadingAssessmentPanel = forwardRef<
               items={rows.map((row) => row.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="space-y-3 pr-2 flex-1 min-h-0 overflow-y-auto">
+              <div className="space-y-3 pr-2">
                 {rows.map((row, index) => {
                   // useSortable must be called inside the component that's in SortableContext
                   // so we'll use a nested component
