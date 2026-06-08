@@ -400,27 +400,31 @@ export default function AdminSubscriptionDashboard() {
   // dropdown on slow connections / cold start before plans arrive.
   const [plansLoading, setPlansLoading] = useState<boolean>(true);
   useEffect(() => {
+    // `cancelled` flag prevents setState after unmount (no AbortController
+    // because apiClient.listAdminPlans doesn't accept one yet; the closure
+    // check is equivalent for this use case).
+    let cancelled = false;
     (async () => {
       try {
         const plans = await apiClient.listAdminPlans();
-        // Only show active plans in the dropdown; admin can still see
-        // inactive on the /admin/plans page.
+        if (cancelled) return;
         setAvailablePlans(plans.filter((p) => p.is_active));
         setAvailablePlansError(null);
       } catch (e) {
+        if (cancelled) return;
         console.error("Failed to load plan list:", e);
-        // Without this, admin sees an empty dropdown with no signal —
-        // we now surface a banner inside the edit modal (rendered below
-        // the plan select) so they know to retry.
         setAvailablePlansError(
           e instanceof Error
             ? `無法載入方案清單：${e.message}`
             : "無法載入方案清單；請重新整理頁面再試",
         );
       } finally {
-        setPlansLoading(false);
+        if (!cancelled) setPlansLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
   const isGroupBuyPlan = (name: string) =>
     availablePlans.some((p) => p.name === name && p.teacher_seats != null);
@@ -2712,34 +2716,38 @@ export default function AdminSubscriptionDashboard() {
                 </div>
               )}
 
-            {/* End Date (for create and edit) */}
-            {(editForm.action === "create" || editForm.action === "edit") && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  {t("adminSubscription.modal.endDate")}{" "}
-                  {editForm.action === "create" ? (
-                    <span className="text-xs text-gray-500">
-                      {t("adminSubscription.modal.endDateOptionalCreate")}
-                    </span>
-                  ) : (
-                    t("adminSubscription.modal.optional")
-                  )}
-                </label>
-                <Input
-                  type="date"
-                  value={editForm.end_date}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, end_date: e.target.value })
-                  }
-                  placeholder="YYYY-MM-DD"
-                />
-                <p className="text-xs text-gray-500">
-                  {editForm.action === "create"
-                    ? t("adminSubscription.modal.endDateHintCreate")
-                    : t("adminSubscription.modal.endDateHintEdit")}
-                </p>
-              </div>
-            )}
+            {/* End Date (for create and edit).
+                Hidden for group-buy plans — backend uses month-end Taipei
+                automatically; letting admin type a date that gets ignored
+                is confusing. */}
+            {(editForm.action === "create" || editForm.action === "edit") &&
+              !isGroupBuyPlan(editForm.plan_name) && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {t("adminSubscription.modal.endDate")}{" "}
+                    {editForm.action === "create" ? (
+                      <span className="text-xs text-gray-500">
+                        {t("adminSubscription.modal.endDateOptionalCreate")}
+                      </span>
+                    ) : (
+                      t("adminSubscription.modal.optional")
+                    )}
+                  </label>
+                  <Input
+                    type="date"
+                    value={editForm.end_date}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, end_date: e.target.value })
+                    }
+                    placeholder="YYYY-MM-DD"
+                  />
+                  <p className="text-xs text-gray-500">
+                    {editForm.action === "create"
+                      ? t("adminSubscription.modal.endDateHintCreate")
+                      : t("adminSubscription.modal.endDateHintEdit")}
+                  </p>
+                </div>
+              )}
 
             {/* Custom Quota (for VIP plan in create and edit) */}
             {(editForm.action === "create" || editForm.action === "edit") &&

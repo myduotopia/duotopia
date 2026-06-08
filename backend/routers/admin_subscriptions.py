@@ -207,12 +207,9 @@ async def _create_group_buy_admin_subscription(
     if school is None:
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Owner {owner.email!r} does not lead an active " f"{plan.name!r} team."
-            ),
+            detail=f"Owner {owner.email!r} does not lead an active {plan.name!r} team.",
         )
 
-    # Seat check
     seat_taken = (
         db.query(func.count(TeacherSchool.id))
         .filter(
@@ -242,7 +239,6 @@ async def _create_group_buy_admin_subscription(
             ),
         )
 
-    # Duplicate binding check
     dup = (
         db.query(TeacherSchool)
         .filter(
@@ -294,19 +290,21 @@ async def _create_group_buy_admin_subscription(
     )
     db.add(ts)
     period = create_group_buy_period(teacher, plan, db, start=now)
-    # Audit fields on the period
     period.admin_id = admin.id
     period.admin_reason = request.reason
+    # All `*_id` fields stringified for uniform JSON shape — school.id is
+    # a UUID that must be cast anyway, and mixing int + str in the same
+    # audit record makes downstream parsers awkward.
     period.admin_metadata = {
         "operations": [
             {
                 "action": "admin_join_group_buy",
                 "timestamp": now.isoformat(),
-                "admin_id": admin.id,
+                "admin_id": str(admin.id),
                 "admin_email": admin.email,
                 "admin_name": admin.name,
                 "reason": request.reason,
-                "group_owner_id": owner.id,
+                "group_owner_id": str(owner.id),
                 "group_owner_email": owner.email,
                 "school_id": str(school.id),
                 "plan_name": plan.name,
@@ -386,8 +384,16 @@ async def create_subscription(
             status_code=400, detail="end_date is required for non-group-buy plans"
         )
 
-    # 計算 quota (VIP 方案可自訂)
-    quota_total = get_plan_quota(request.plan_name, db=db)
+    # 計算 quota (VIP 方案可自訂). Reuses the `plan_row` already fetched
+    # at the top of the handler — avoid a second `get_plan_quota` query.
+    # Fallback to PLAN_QUOTAS matches config.plans.get_plan_quota's logic.
+    from config.plans import PLAN_QUOTAS
+
+    quota_total = (
+        plan_row.quota
+        if plan_row.quota is not None
+        else PLAN_QUOTAS.get(request.plan_name, 0)
+    )
 
     # VIP 方案：使用自訂 quota
     if request.plan_name == "VIP":
