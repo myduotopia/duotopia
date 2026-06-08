@@ -42,7 +42,6 @@ import {
   Loader2,
   Volume2,
   CheckCircle,
-  XCircle,
   Trophy,
   RefreshCw,
   Send,
@@ -55,6 +54,8 @@ import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
+import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
+import { useShortLandscape } from "./shared/useShortLandscape";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
 interface OptionEntry {
@@ -112,15 +113,7 @@ interface WordSelectionActivityProps {
   };
 }
 
-const OPTION_COLORS = [
-  "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-400",
-  "bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-400",
-  "bg-amber-50 border-amber-200 hover:bg-amber-100 hover:border-amber-400",
-  "bg-teal-50 border-teal-200 hover:bg-teal-100 hover:border-teal-400",
-];
-
-// 選項網格寬度門檻：≥ 4 × ~140px 圖片 + 3 × 16px gap ⇒ 4 欄；否則 2 欄
-const FOUR_COL_MIN_WIDTH = 600;
+// 樣式常數 & 共用 hook 抽到 shared/，與 WordSelectionQuizActivity 共用
 
 export default function WordSelectionActivity({
   assignmentId,
@@ -261,40 +254,8 @@ export default function WordSelectionActivity({
   // Audio ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // 寬螢幕 + 有題目圖片 → 橫式（圖左、選項右）
-  // 用 640px (Tailwind sm) 而非 768px，讓平板（含橫置）和手機橫置都保持橫式
-  const [isWideViewport, setIsWideViewport] = useState(() =>
-    typeof window !== "undefined"
-      ? window.matchMedia("(min-width: 640px)").matches
-      : false,
-  );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mql = window.matchMedia("(min-width: 640px)");
-    const onChange = (e: MediaQueryListEvent) => setIsWideViewport(e.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
-
-  // 量測選項 grid 實際容器寬度，決定 4×1 / 2×2
-  // 寬度足夠（4 個選項 + gap 都裝得下）→ 4×1；不夠 → 2×2
-  // 用 callback ref，避免 loading=true 早退出時 useRef 抓不到 DOM 的時序 bug
-  const [optionsGridWidth, setOptionsGridWidth] = useState(0);
-  const optionsObserverRef = useRef<ResizeObserver | null>(null);
-  const setOptionsGridRef = useCallback((node: HTMLDivElement | null) => {
-    if (optionsObserverRef.current) {
-      optionsObserverRef.current.disconnect();
-      optionsObserverRef.current = null;
-    }
-    if (node && typeof ResizeObserver !== "undefined") {
-      const ro = new ResizeObserver(([entry]) => {
-        setOptionsGridWidth(entry.contentRect.width);
-      });
-      ro.observe(node);
-      optionsObserverRef.current = ro;
-    }
-  }, []);
+  // 直式優先：圖在上、選項在下；只在「橫向 + 視窗高度不足」(手機橫放) 才退回橫式
+  const isShortLandscape = useShortLandscape();
 
   // show_image 模式下正解為英文 (word.text)，否則為翻譯。優先信任後端傳的
   // correct_text；舊版後端未回傳時依 showImage flag fallback。
@@ -918,15 +879,12 @@ export default function WordSelectionActivity({
 
   const currentWord = words[currentIndex];
 
-  // 寬螢幕 + 有題目圖片 → 橫式排版（圖左、選項右）
-  const useHorizontal = showImage && !!currentWord?.image_url && isWideViewport;
-
-  // 選項有圖時，若容器寬度足夠就排成 4×1（節省垂直空間）；不夠則 2×2
-  const useFourColOptions =
-    showOptionImages && optionsGridWidth >= FOUR_COL_MIN_WIDTH;
+  // 直式優先：題目有圖且視窗矮（橫向手機）才退回橫式（圖左、選項右）
+  const useHorizontal =
+    showImage && !!currentWord?.image_url && isShortLandscape;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6 min-h-[calc(100dvh-8rem)]">
       {/* Practice mode banner */}
       {isPracticeMode && (
         <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 rounded-lg px-4 py-2">
@@ -966,10 +924,10 @@ export default function WordSelectionActivity({
       {/* Question content */}
       <div
         className={cn(
-          "relative space-y-6",
-          // 橫式（圖左、右欄文字+選項）— 不加 items-start，
-          // 用預設 items-stretch 讓兩欄等高，圖片高度由右欄決定
-          useHorizontal && "flex flex-row gap-6 space-y-0",
+          "relative flex-1 min-h-0",
+          // 直式：內容垂直分配（圖→文字→選項），選項區拿剩餘高度
+          // 橫式：圖左、右欄文字+選項，items-stretch 讓兩欄等高
+          useHorizontal ? "flex flex-row gap-6" : "flex flex-col gap-6",
         )}
       >
         {/* Issue #716: countdown ring anchored top-right of the question card */}
@@ -985,11 +943,10 @@ export default function WordSelectionActivity({
         {showImage && currentWord.image_url && (
           <div
             className={cn(
-              "flex justify-center",
-              // relative 配合 img absolute，讓圖片父層自然高度為 0、不貢獻 flex 高度
-              // min-h-48 防呆：若右欄內容極少（如沒有 Timer、題目單字短），
-              // 仍保留與直式 max-h-48 一致的最小可視高度，避免圖片塌成零高度
-              useHorizontal && "w-1/2 shrink-0 relative min-h-48",
+              "flex justify-center shrink-0",
+              // 橫式：圖佔左半欄；relative 配合 img absolute、min-h-48 防塌
+              // 直式：圖跟視窗高度連動，max-h-[40vh] 讓選項區拿到剩下的空間
+              useHorizontal && "w-1/2 relative min-h-48",
             )}
           >
             <img
@@ -997,19 +954,26 @@ export default function WordSelectionActivity({
               alt={currentWord.text}
               className={cn(
                 "object-contain rounded-lg",
-                useHorizontal ? "absolute inset-0 w-full h-full" : "max-h-48",
+                useHorizontal
+                  ? "absolute inset-0 w-full h-full"
+                  : "max-h-[clamp(8rem,38vh,22rem)] w-auto",
               )}
             />
           </div>
         )}
 
-        {/* 右側欄（橫式時把文字/音檔/題目/選項都放這裡） */}
-        <div className={cn("space-y-6", useHorizontal && "flex-1 min-w-0")}>
+        {/* 內容欄（橫式時是右側欄；直式時直接展開文字/音檔/選項） */}
+        <div
+          className={cn(
+            "flex-1 min-h-0 flex flex-col gap-6",
+            useHorizontal && "min-w-0",
+          )}
+        >
           {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
               即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
           {!playAudio && (
             <div className="text-center">
-              <h2 className="text-3xl font-bold text-gray-800 select-none">
+              <h2 className="text-[clamp(2rem,9vh,6rem)] font-bold text-gray-800 select-none">
                 {showImage ? currentWord.translation : currentWord.text}
               </h2>
             </div>
@@ -1032,10 +996,11 @@ export default function WordSelectionActivity({
 
           {/* Answer Options */}
           <div
-            ref={setOptionsGridRef}
             className={cn(
-              "grid gap-3 sm:gap-4",
-              useFourColOptions ? "grid-cols-4" : "grid-cols-2",
+              "grid gap-3 sm:gap-4 flex-1 min-h-0",
+              // 直式：寬螢幕（lg ≥ 1024px）→ 1×4；窄螢幕 → 2×2
+              // 橫式（題目圖左、內容右半欄）：強制 2×2，避免右欄 ~50% 寬塞 4 格被擠爆
+              useHorizontal ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4",
             )}
             style={{ gridAutoRows: "1fr" }}
           >
@@ -1056,60 +1021,20 @@ export default function WordSelectionActivity({
               const renderAsImage = showOptionImages && !!optionImage;
 
               return (
-                <button
+                <WordSelectionOptionButton
                   key={index}
-                  className={cn(
-                    "h-full min-h-16 py-3 px-4 text-base sm:text-lg font-medium",
-                    "rounded-2xl border-2 shadow-md select-none relative",
-                    "transition-all duration-200",
-                    "whitespace-normal text-center break-words",
-                    !showResult &&
-                      "hover:shadow-lg hover:-translate-y-0.5 active:scale-95",
-                    !showResult && OPTION_COLORS[index % 4],
-                    showCorrect &&
-                      "bg-green-100 border-green-500 text-green-800 shadow-green-200",
-                    showIncorrect &&
-                      "bg-red-100 border-red-500 text-red-800 shadow-red-200",
-                    isSelected &&
-                      !showResult &&
-                      "ring-2 ring-indigo-400 scale-95",
-                    showResult &&
-                      !showCorrect &&
-                      !showIncorrect &&
-                      "opacity-50",
-                  )}
-                  onClick={() => handleSelectAnswer(optionText)}
+                  text={optionText}
+                  imageUrl={optionImage}
+                  showAsImage={renderAsImage}
+                  colorIndex={index}
+                  isSelected={isSelected}
                   disabled={showResult || submitting}
-                  aria-label={optionText}
-                >
-                  {(showCorrect || showIncorrect) && (
-                    <span
-                      className={cn(
-                        "absolute top-2 left-2 z-10",
-                        animateReveal &&
-                          "animate-in zoom-in-50 fade-in duration-500",
-                      )}
-                    >
-                      {showCorrect ? (
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-red-600" />
-                      )}
-                    </span>
-                  )}
-                  {renderAsImage ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <img
-                        src={optionImage as string}
-                        alt={optionText}
-                        className="max-h-28 sm:max-h-36 w-full object-contain rounded-md"
-                      />
-                      <span>{optionText}</span>
-                    </div>
-                  ) : (
-                    <span>{optionText}</span>
-                  )}
-                </button>
+                  onClick={() => handleSelectAnswer(optionText)}
+                  showResult={showResult}
+                  showCorrect={showCorrect}
+                  showIncorrect={showIncorrect}
+                  animateReveal={animateReveal}
+                />
               );
             })}
           </div>

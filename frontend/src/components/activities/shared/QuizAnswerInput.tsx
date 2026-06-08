@@ -197,7 +197,12 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
     const showSubmit = !hideSubmitButton && !!onSubmit;
 
     return (
-      <div className="max-w-md mx-auto">
+      <div
+        className={cn(
+          "relative max-w-md mx-auto",
+          showSubmit && "pr-12 sm:pr-14",
+        )}
+      >
         <div className="flex items-center justify-center gap-2 sm:gap-3">
           {slotWords.map((slotExpected, idx) => (
             <Input
@@ -237,28 +242,28 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
               )}
             />
           ))}
-          {showSubmit && (
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={
-                disabled || submitting || (value || "").trim().length === 0
-              }
-              aria-label="Submit answer"
-              className={cn(
-                "ml-1 sm:ml-2 p-2 rounded-full transition-colors shrink-0",
-                "text-indigo-600 hover:bg-indigo-50",
-                "disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed",
-              )}
-            >
-              {submitting ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Send className="h-5 w-5" />
-              )}
-            </button>
-          )}
         </div>
+        {showSubmit && (
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={
+              disabled || submitting || (value || "").trim().length === 0
+            }
+            aria-label="Submit answer"
+            className={cn(
+              "absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors",
+              "text-indigo-600 hover:bg-indigo-50",
+              "disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed",
+            )}
+          >
+            {submitting ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Send className="h-5 w-5" />
+            )}
+          </button>
+        )}
       </div>
     );
   },

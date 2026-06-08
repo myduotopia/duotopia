@@ -6,9 +6,13 @@
  *   - 上方題號 bar：可任意跳題、改答案
  *   - 末題顯示「提交」鈕；提交後 status=SUBMITTED 鎖定
  *   - 不更新 memory_strength；答案寫進 practice_answers (type=word_selection_quiz)
+ *   - 單字卡樣式對齊艾賓浩斯版：共用 shared/WordSelectionOptionButton
+ *     （4 色循環、border-2/rounded-2xl/shadow、字級用 cqh+cqw min() 自適應、ring 選中態）
+ *     + useShortLandscape 走橫式排版（圖左、選項右 2×2）
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -16,8 +20,11 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
+import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
+import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
+import { useShortLandscape } from "./shared/useShortLandscape";
 import QuizReviewView, {
   type QuizReviewPayload,
   type QuizReviewWord,
@@ -111,6 +118,9 @@ export default function WordSelectionQuizActivity({
   const [initialRemaining, setInitialRemaining] = useState<number | null>(null);
   const [timerTotal, setTimerTotal] = useState<number | null>(null);
   const completingRef = useRef(false);
+  // 必須放在 early return 之前，否則違反 Rules of Hooks
+  const isShortLandscape = useShortLandscape();
+  const navSlot = useQuizNavSlot();
 
   useEffect(() => {
     if (isLivePreview) {
@@ -385,160 +395,198 @@ export default function WordSelectionQuizActivity({
 
   const isLast = currentIndex === words.length - 1;
   const selectedForCurrent = selectedByItem[currentWord.content_item_id];
+  // 直式優先；題目有圖 + 矮橫螢幕（手機橫放）才走橫式（圖左、選項右 2×2）
+  const useHorizontal =
+    settings.show_image && !!currentWord.image_url && isShortLandscape;
+
+  // 題號 bar：Page 提供 slot 時 portal 上去；否則 inline render（fallback）
+  const navBar = (
+    <>
+      <span className="text-xs text-gray-500 mr-1">
+        {t("wordQuiz.questionNav") || "題號"}
+      </span>
+      {words.map((w, idx) => {
+        const answered =
+          (selectedByItem[w.content_item_id] || "").trim() !== "";
+        const isCurrent = idx === currentIndex;
+        const priorCorrect = correctByItem[w.content_item_id];
+        return (
+          <button
+            key={w.content_item_id}
+            type="button"
+            onClick={() => goTo(idx)}
+            className={cn(
+              "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
+              isCurrent
+                ? "bg-emerald-500 text-white border-emerald-500"
+                : !answered
+                  ? "bg-white text-gray-500 border-gray-300 hover:border-emerald-400"
+                  : settings.show_answer && priorCorrect === true
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                    : settings.show_answer && priorCorrect === false
+                      ? "bg-rose-50 text-rose-700 border-rose-300"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-300",
+            )}
+          >
+            {idx + 1}
+          </button>
+        );
+      })}
+      <span className="text-xs text-gray-400 ml-auto">
+        {answeredCount} / {words.length}
+      </span>
+      {timeRemaining !== null && timerTotal !== null && (
+        <CountdownRing
+          seconds={timeRemaining}
+          total={timerTotal}
+          size={56}
+          longForm
+        />
+      )}
+    </>
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-1 sm:gap-1.5 items-center">
-        <span className="text-xs text-gray-500 mr-1">
-          {t("wordQuiz.questionNav") || "題號"}
-        </span>
-        {words.map((w, idx) => {
-          const answered =
-            (selectedByItem[w.content_item_id] || "").trim() !== "";
-          const isCurrent = idx === currentIndex;
-          const priorCorrect = correctByItem[w.content_item_id];
-          return (
-            <button
-              key={w.content_item_id}
-              type="button"
-              onClick={() => goTo(idx)}
-              className={cn(
-                "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
-                isCurrent
-                  ? "bg-emerald-500 text-white border-emerald-500"
-                  : !answered
-                    ? "bg-white text-gray-500 border-gray-300 hover:border-emerald-400"
-                    : settings.show_answer && priorCorrect === true
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                      : settings.show_answer && priorCorrect === false
-                        ? "bg-rose-50 text-rose-700 border-rose-300"
-                        : "bg-emerald-50 text-emerald-700 border-emerald-300",
-              )}
-            >
-              {idx + 1}
-            </button>
-          );
-        })}
-        <span className="text-xs text-gray-400 ml-auto">
-          {answeredCount} / {words.length}
-        </span>
-        {timeRemaining !== null && timerTotal !== null && (
-          <CountdownRing
-            seconds={timeRemaining}
-            total={timerTotal}
-            size={56}
-            longForm
-          />
-        )}
-      </div>
+    <div className="flex flex-col gap-4 min-h-[calc(98dvh-14rem)] max-h-[98dvh]">
+      {navSlot ? (
+        createPortal(navBar, navSlot)
+      ) : (
+        <div className="flex flex-wrap gap-1 sm:gap-1.5 items-center">
+          {navBar}
+        </div>
+      )}
 
-      <Card className="p-4">
-        <CardContent className="space-y-4 p-0">
-          <div className="text-sm text-gray-500">
+      <Card className="flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+        <CardContent className="flex-1 min-h-0 flex flex-col gap-3 p-0">
+          <div className="text-sm text-gray-500 shrink-0">
             {t("wordQuiz.questionLabel", {
               current: currentWord.question_number,
               total: words.length,
             }) || `第 ${currentWord.question_number} / ${words.length} 題`}
           </div>
 
-          {settings.show_image && currentWord.image_url && (
-            <img
-              src={currentWord.image_url}
-              alt=""
-              className="mx-auto max-h-40 object-contain"
-            />
-          )}
+          {/* 內容區：直式（圖→文→選項垂直）或橫式（圖左、文字+選項右）— 對齊艾賓浩斯版 */}
+          <div
+            className={cn(
+              "flex-1 min-h-0",
+              useHorizontal ? "flex flex-row gap-6" : "flex flex-col gap-6",
+            )}
+          >
+            {settings.show_image && currentWord.image_url && (
+              <div
+                className={cn(
+                  "flex justify-center shrink-0",
+                  useHorizontal && "w-1/2 relative min-h-48",
+                )}
+              >
+                <img
+                  src={currentWord.image_url}
+                  alt=""
+                  className={cn(
+                    "object-contain rounded-lg",
+                    useHorizontal
+                      ? "absolute inset-0 w-full h-full"
+                      : "max-h-[clamp(8rem,38vh,22rem)] w-auto",
+                  )}
+                />
+              </div>
+            )}
 
-          {settings.play_audio && currentWord.audio_url && (
-            <div className="flex justify-center">
+            <div
+              className={cn(
+                "flex-1 min-h-0 flex flex-col gap-6",
+                useHorizontal && "min-w-0",
+              )}
+            >
+              {settings.play_audio && currentWord.audio_url && (
+                <div className="flex justify-center">
+                  <Button
+                    type="button"
+                    size="lg"
+                    variant="outline"
+                    onClick={() => playAudio(currentWord.audio_url)}
+                  >
+                    <Volume2 className="h-5 w-5 mr-2" />
+                    {t("wordQuiz.playAudio") || "Play"}
+                  </Button>
+                </div>
+              )}
+
+              {/* show_image=true → 顯示翻譯（圖+翻譯，避免英文選項秒解）；否則顯示英文題 */}
+              {!settings.play_audio && (
+                <div className="text-center">
+                  <h2 className="text-[clamp(2rem,9vh,6rem)] font-bold text-gray-800 select-none">
+                    {settings.show_image
+                      ? currentWord.translation
+                      : currentWord.text}
+                  </h2>
+                </div>
+              )}
+
+              <div
+                className={cn(
+                  "grid gap-3 sm:gap-4 flex-1 min-h-0",
+                  // 橫式：強制 2×2；直式：寬螢幕 1×4、窄螢幕 2×2
+                  useHorizontal ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4",
+                )}
+                style={{ gridAutoRows: "1fr" }}
+              >
+                {currentWord.options.map((opt, index) => {
+                  const isSelected = selectedForCurrent === opt.text;
+                  const renderAsImage =
+                    settings.show_option_images && !!opt.image_url;
+                  return (
+                    <WordSelectionOptionButton
+                      key={opt.text}
+                      text={opt.text}
+                      imageUrl={opt.image_url}
+                      showAsImage={renderAsImage}
+                      colorIndex={index}
+                      isSelected={isSelected}
+                      disabled={submittingAnswer}
+                      onClick={() => choose(opt.text)}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Card footer: prev/next/submit — 與題目區共用 Card，不另起 sibling */}
+          <div className="flex gap-2 justify-between border-t pt-3 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={currentIndex === 0 || submittingAnswer}
+              onClick={() => goTo(currentIndex - 1)}
+            >
+              {t("wordQuiz.prev") || "上一題"}
+            </Button>
+            {isLast ? (
               <Button
                 type="button"
-                size="lg"
-                variant="outline"
-                onClick={() => playAudio(currentWord.audio_url)}
+                onClick={handleSubmitAll}
+                disabled={completing || submittingAnswer}
               >
-                <Volume2 className="h-5 w-5 mr-2" />
-                {t("wordQuiz.playAudio") || "Play"}
+                {completing ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                {t("wordQuiz.submit") || "提交"}
               </Button>
-            </div>
-          )}
-
-          {/* 樣式對齊 WordSelectionActivity (艾賓浩斯版)：text-3xl font-bold
-              show_image=true → 顯示翻譯（題目為圖+翻譯，避免英文選項秒解）；否則顯示英文題 */}
-          {!settings.play_audio && (
-            <div className="text-center">
-              <h2 className="text-3xl font-bold text-gray-800 select-none">
-                {settings.show_image
-                  ? currentWord.translation
-                  : currentWord.text}
-              </h2>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {currentWord.options.map((opt) => {
-              const isSelected = selectedForCurrent === opt.text;
-              return (
-                <button
-                  key={opt.text}
-                  type="button"
-                  disabled={submittingAnswer}
-                  onClick={() => choose(opt.text)}
-                  className={cn(
-                    "flex-1 p-3 rounded-lg border text-sm transition",
-                    isSelected
-                      ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                      : "border-gray-200 hover:border-emerald-400",
-                  )}
-                >
-                  {settings.show_option_images && opt.image_url ? (
-                    <img
-                      src={opt.image_url}
-                      alt={opt.text}
-                      className="mx-auto max-h-24 object-contain"
-                    />
-                  ) : (
-                    opt.text
-                  )}
-                </button>
-              );
-            })}
+            ) : (
+              <Button
+                type="button"
+                onClick={() => goTo(currentIndex + 1)}
+                disabled={submittingAnswer}
+              >
+                {t("wordQuiz.next") || "下一題"}
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
-
-      <div className="flex gap-2 justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={currentIndex === 0 || submittingAnswer}
-          onClick={() => goTo(currentIndex - 1)}
-        >
-          {t("wordQuiz.prev") || "上一題"}
-        </Button>
-        {isLast ? (
-          <Button
-            type="button"
-            onClick={handleSubmitAll}
-            disabled={completing || submittingAnswer}
-          >
-            {completing ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Send className="h-4 w-4 mr-2" />
-            )}
-            {t("wordQuiz.submit") || "提交"}
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            onClick={() => goTo(currentIndex + 1)}
-            disabled={submittingAnswer}
-          >
-            {t("wordQuiz.next") || "下一題"}
-          </Button>
-        )}
-      </div>
     </div>
   );
 }
