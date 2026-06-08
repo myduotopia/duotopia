@@ -37,12 +37,18 @@ class CreateSubscriptionRequest(BaseModel):
     """創建訂閱請求"""
 
     teacher_email: EmailStr
-    # "Free Trial" | "Tutor Teachers" | "School Teachers" |
-    # "Demo Unlimited Plan" | "VIP"
+    # Individual: "Free Trial" | "Tutor Teachers" | "School Teachers" |
+    # "Demo Unlimited Plan" | "VIP".
+    # Group-buy (issue #768 follow-up): "團購-10席" | "團購-30席" | "團購-50席"
+    # — admin manually joins an existing team led by `group_owner_email`.
     plan_name: str
-    end_date: str  # YYYY-MM-DD (月底日期)
+    end_date: Optional[str] = None  # YYYY-MM-DD; ignored for group-buy
     quota_total: Optional[int] = None  # VIP 方案可自訂 quota
     reason: str
+    # For group-buy plans only: email of the team owner whose team the
+    # target teacher should be added to. Required when plan_name is a
+    # group-buy plan, ignored otherwise.
+    group_owner_email: Optional[EmailStr] = None
 
 
 class EditSubscriptionRequest(BaseModel):
@@ -134,6 +140,176 @@ def parse_end_date(date_str: str) -> datetime:
     )
 
 
+# ============ Helpers ============
+
+
+async def _create_group_buy_admin_subscription(
+    teacher: Teacher,
+    plan,  # Plan (group-buy)
+    request: "CreateSubscriptionRequest",
+    admin: Teacher,
+    db: Session,
+    now: datetime,
+) -> "SubscriptionResponse":
+    """Admin manually joins `teacher` to the existing group-buy team led
+    by `request.group_owner_email`. Issue #768 comment #1.
+
+    Validations:
+      - group_owner_email is required
+      - team owner exists with active org_owner role on a group-buy org
+      - owner's school must use the SAME plan as requested
+      - seat capacity not exceeded
+      - target teacher not already in this team
+      - target teacher has no active group-buy SubscriptionPeriod for any
+        team this month (otherwise the cron would attempt a second 1000-
+        pt grant — confusing for billing)
+    """
+    from models import (
+        Organization,
+        School,
+        TeacherOrganization,
+        TeacherSchool,
+    )
+    from services.group_buy import create_group_buy_period
+
+    if not request.group_owner_email:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "group_owner_email is required when plan_name is a " "group-buy plan."
+            ),
+        )
+
+    owner = db.query(Teacher).filter_by(email=request.group_owner_email).first()
+    if owner is None:
+        raise HTTPException(
+            status_code=404, detail="Group owner (team leader) not found"
+        )
+
+    # Find the owner's active group-buy school matching this plan
+    school = (
+        db.query(School)
+        .join(
+            TeacherOrganization,
+            TeacherOrganization.organization_id == School.organization_id,
+        )
+        .join(Organization, Organization.id == School.organization_id)
+        .filter(
+            TeacherOrganization.teacher_id == owner.id,
+            TeacherOrganization.role == "org_owner",
+            TeacherOrganization.is_active.is_(True),
+            Organization.org_type == "group_buy",
+            Organization.is_active.is_(True),
+            School.plan_id == plan.id,
+            School.is_active.is_(True),
+        )
+        .first()
+    )
+    if school is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Owner {owner.email!r} does not lead an active " f"{plan.name!r} team."
+            ),
+        )
+
+    # Seat check
+    seat_taken = (
+        db.query(func.count(TeacherSchool.id))
+        .filter(
+            TeacherSchool.school_id == school.id,
+            TeacherSchool.is_active.is_(True),
+        )
+        .scalar()
+        or 0
+    )
+    if school.teacher_seat_limit and seat_taken >= school.teacher_seat_limit:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Team is full ({seat_taken}/{school.teacher_seat_limit} "
+                "seats taken)."
+            ),
+        )
+
+    # Duplicate binding check
+    dup = (
+        db.query(TeacherSchool)
+        .filter(
+            TeacherSchool.teacher_id == teacher.id,
+            TeacherSchool.school_id == school.id,
+            TeacherSchool.is_active.is_(True),
+        )
+        .first()
+    )
+    if dup is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Teacher {teacher.email!r} is already in this team.",
+        )
+
+    # Existing active group-buy period this month → don't double-grant
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    existing_gb = (
+        db.query(SubscriptionPeriod)
+        .filter(
+            SubscriptionPeriod.teacher_id == teacher.id,
+            SubscriptionPeriod.payment_method == "group_buy",
+            SubscriptionPeriod.status == "active",
+            SubscriptionPeriod.start_date >= month_start,
+        )
+        .first()
+    )
+    if existing_gb is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Teacher already has an active group-buy period this "
+                "month; cannot add to another team until next month."
+            ),
+        )
+
+    # All checks passed — bind + create first period
+    ts = TeacherSchool(
+        teacher_id=teacher.id,
+        school_id=school.id,
+        roles=["teacher"],
+        is_active=True,
+    )
+    db.add(ts)
+    period = create_group_buy_period(teacher, plan, db, start=now)
+    # Audit fields on the period
+    period.admin_id = admin.id
+    period.admin_reason = request.reason
+    period.admin_metadata = {
+        "operations": [
+            {
+                "action": "admin_join_group_buy",
+                "timestamp": now.isoformat(),
+                "admin_id": admin.id,
+                "admin_email": admin.email,
+                "admin_name": admin.name,
+                "reason": request.reason,
+                "group_owner_id": owner.id,
+                "group_owner_email": owner.email,
+                "school_id": str(school.id),
+                "plan_name": plan.name,
+            }
+        ]
+    }
+    db.commit()
+    db.refresh(period)
+
+    return SubscriptionResponse(
+        teacher_email=teacher.email,
+        plan_name=period.plan_name,
+        quota_total=period.quota_total,
+        quota_used=period.quota_used,
+        end_date=period.end_date.isoformat(),
+        status=period.status,
+    )
+
+
 # ============ API Endpoints ============
 @router.post("/create", response_model=SubscriptionResponse)
 async def create_subscription(
@@ -153,8 +329,30 @@ async def create_subscription(
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
 
-    # 檢查是否已有活躍訂閱
     now = datetime.now(timezone.utc)
+
+    # ===== Group-buy branch (issue #768 comment #1) =====
+    # If the selected plan is a group-buy plan (teacher_seats not-NULL),
+    # admin is manually adding `teacher` to an existing team led by
+    # `group_owner_email`. This skips TapPay (the /group-buy-open flow);
+    # admin scenarios are comp / customer-support / migration cases.
+    from models import Plan
+
+    plan_row = db.query(Plan).filter(Plan.name == request.plan_name).first()
+    if plan_row is None:
+        raise HTTPException(status_code=400, detail="Unknown plan_name")
+    if plan_row.teacher_seats is not None:
+        return await _create_group_buy_admin_subscription(
+            teacher=teacher,
+            plan=plan_row,
+            request=request,
+            admin=admin,
+            db=db,
+            now=now,
+        )
+
+    # ===== Non-group-buy (existing flow) =====
+    # 檢查是否已有活躍訂閱
     existing = (
         db.query(SubscriptionPeriod)
         .filter_by(teacher_id=teacher.id, status="active")
@@ -166,6 +364,12 @@ async def create_subscription(
             detail=(
                 "Teacher already has an active subscription. " "Use /edit to modify it."
             ),
+        )
+
+    # End_date is required for individual plans
+    if not request.end_date:
+        raise HTTPException(
+            status_code=400, detail="end_date is required for non-group-buy plans"
         )
 
     # 計算 quota (VIP 方案可自訂)

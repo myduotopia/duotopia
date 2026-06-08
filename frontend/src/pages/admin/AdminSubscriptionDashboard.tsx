@@ -374,7 +374,36 @@ export default function AdminSubscriptionDashboard() {
     end_date: "",
     quota_total: undefined as number | undefined,
     reason: "",
+    // issue #768 comment #1: when picking a group-buy plan, admin must
+    // also supply the team owner's email to bind the target teacher.
+    group_owner_email: "",
   });
+
+  // Dynamic plan list (replaces hardcoded 5 plans so group-buy ones show)
+  type AdminPlanLite = {
+    name: string;
+    price: number | null;
+    quota: number | null;
+    is_active: boolean;
+    teacher_seats: number | null;
+    annual_fee: number | null;
+  };
+  const [availablePlans, setAvailablePlans] = useState<AdminPlanLite[]>([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const plans = await apiClient.listAdminPlans();
+        // Only show active plans in the dropdown; admin can still see
+        // inactive on the /admin/plans page.
+        setAvailablePlans(plans.filter((p) => p.is_active));
+      } catch (e) {
+        console.error("Failed to load plan list:", e);
+        // Fall back to empty; user sees no options and can refresh.
+      }
+    })();
+  }, []);
+  const isGroupBuyPlan = (name: string) =>
+    availablePlans.some((p) => p.name === name && p.teacher_seats != null);
 
   // Refund modal state
   const [refundModalOpen, setRefundModalOpen] = useState(false);
@@ -517,6 +546,7 @@ export default function AdminSubscriptionDashboard() {
         : "",
       quota_total: undefined,
       reason: "",
+      group_owner_email: "",
     });
     setEditModalOpen(true);
   };
@@ -773,12 +803,19 @@ export default function AdminSubscriptionDashboard() {
           reason: editForm.reason,
         });
       } else if (editForm.action === "create") {
+        const isGroupBuy = isGroupBuyPlan(editForm.plan_name);
         response = await apiClient.post("/api/admin/subscription/create", {
           teacher_email: selectedTeacher.teacher_email,
           plan_name: editForm.plan_name,
-          end_date: editForm.end_date,
+          // end_date is required for individual plans, ignored by backend
+          // for group-buy (which uses month-end-Taipei automatically).
+          end_date: isGroupBuy ? undefined : editForm.end_date,
           quota_total: editForm.quota_total,
           reason: editForm.reason,
+          // Only send group_owner_email for group-buy plans
+          group_owner_email: isGroupBuy
+            ? editForm.group_owner_email
+            : undefined,
         });
       } else {
         response = await apiClient.post("/api/admin/subscription/edit", {
@@ -813,6 +850,7 @@ export default function AdminSubscriptionDashboard() {
         end_date: "",
         quota_total: undefined,
         reason: "",
+        group_owner_email: "",
       });
     } catch (error: unknown) {
       console.error("Failed to process subscription:", error);
@@ -2595,21 +2633,52 @@ export default function AdminSubscriptionDashboard() {
                         {t("adminSubscription.modal.noChange")}
                       </SelectItem>
                     )}
-                    <SelectItem value="Free Trial">Free Trial</SelectItem>
-                    <SelectItem value="Tutor Teachers">
-                      Tutor Teachers
-                    </SelectItem>
-                    <SelectItem value="School Teachers">
-                      School Teachers
-                    </SelectItem>
-                    <SelectItem value="Demo Unlimited Plan">
-                      Demo Unlimited Plan
-                    </SelectItem>
-                    <SelectItem value="VIP">VIP</SelectItem>
+                    {/* issue #768 comment #1: dynamic plans from
+                        /api/admin/plans so group-buy plans are
+                        actually selectable here. Annotated with
+                        seats/annual_fee for group-buy clarity. */}
+                    {availablePlans.map((p) => (
+                      <SelectItem key={p.name} value={p.name}>
+                        {p.teacher_seats != null
+                          ? `${p.name}（${p.teacher_seats} 席 / NT$${p.annual_fee?.toLocaleString()} 每席年費）`
+                          : p.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             )}
+
+            {/* issue #768 comment #1: when admin picks a group-buy plan
+                under create action, must also specify which team owner
+                to bind the target teacher to. Skipped for edit because
+                /admin/subscription/edit doesn't accept group_owner_email. */}
+            {editForm.action === "create" &&
+              isGroupBuyPlan(editForm.plan_name) && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    團主 Email <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    placeholder="輸入團主帳號 Email（例：alice@example.com）"
+                    value={editForm.group_owner_email}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        group_owner_email: e.target.value,
+                      })
+                    }
+                  />
+                  <p className="text-xs text-gray-500">
+                    系統會將此教師加入該團主已開設的{" "}
+                    <span className="font-semibold">{editForm.plan_name}</span>{" "}
+                    團隊，並建立本月份的 1000 點訂閱週期。團主必須是 org_owner
+                    且該團方案需相符；席次已滿 / 該教師已在團 內會回 400。
+                  </p>
+                </div>
+              )}
 
             {/* End Date (for create and edit) */}
             {(editForm.action === "create" || editForm.action === "edit") && (

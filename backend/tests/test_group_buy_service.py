@@ -183,6 +183,12 @@ def test_open_creates_org_school_and_owner_binding(shared_test_session, owner):
     assert t_org.organization_id == org.id
     assert t_org.role == "org_owner"
     assert t_org.is_active is True
+    # Issue #768 comment #2: admin org edit modal shows display_name and
+    # teacher_limit, both of which must be populated by the create flow
+    # (not just `name`) so admin sees meaningful values.
+    owner_label = owner.name or owner.email
+    assert org.display_name == f"{owner_label}'s 團購-{plan.teacher_seats}位"
+    assert org.teacher_limit == plan.teacher_seats
 
 
 # ---------- create_group_buy_period ----------

@@ -102,9 +102,15 @@ def create_group_buy_org_and_school(
     /org-purchase and /org-renew endpoints, both of which gate on
     `TeacherOrganization.role == 'org_owner'`.
     """
+    owner_label = owner.name or owner.email
     org = Organization(
-        name=f"{owner.name or owner.email}'s 團購",
+        name=f"{owner_label}'s 團購",
+        # issue #768 comment #2: populate display_name + teacher_limit so the
+        # admin org edit modal shows meaningful values instead of blanks.
+        # display_name includes seat count for at-a-glance identification.
+        display_name=f"{owner_label}'s 團購-{plan.teacher_seats}位",
         org_type="group_buy",
+        teacher_limit=plan.teacher_seats,
         subscription_start_date=now,
         # relativedelta(years=1) handles Feb 29 → Feb 28 edge correctly;
         # `timedelta(days=365)` would produce an off-by-one in leap years.
