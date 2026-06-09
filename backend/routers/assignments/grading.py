@@ -25,6 +25,8 @@ from models import (
     StudentContentProgress,
     StudentItemProgress,
     AssignmentStatus,
+    PracticeSession,
+    PracticeAnswer,
 )
 from .validators import (
     AIGradingRequest,
@@ -339,6 +341,106 @@ async def get_assignment_submissions(
     return result
 
 
+def _build_quiz_submission(
+    db: Session,
+    student_assignment: StudentAssignment,
+    student: Student,
+    practice_mode: str,
+) -> Dict[str, Any]:
+    """小考批改視圖（Issue #830）。
+
+    成績紀錄＝第一次作答（最早 completed PracticeSession），與凍結的 sa.score 一致。
+    逐題回傳學生答案 / 正解 / 對錯，供老師端 QuizGradingPanel 顯示錯題清單與答對率。
+    """
+    source = (
+        db.query(PracticeSession)
+        .filter(
+            PracticeSession.student_assignment_id == student_assignment.id,
+            PracticeSession.practice_mode == practice_mode,
+            PracticeSession.completed_at.isnot(None),
+        )
+        .order_by(PracticeSession.id.asc())
+        .first()
+    )
+    answers_by_item: Dict[int, PracticeAnswer] = {}
+    if source:
+        for ans in (
+            db.query(PracticeAnswer)
+            .filter(PracticeAnswer.practice_session_id == source.id)
+            .all()
+        ):
+            answers_by_item[ans.content_item_id] = ans
+
+    items = (
+        db.query(ContentItem)
+        .join(AssignmentContent, AssignmentContent.content_id == ContentItem.content_id)
+        .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
+        .order_by(ContentItem.order_index.asc(), ContentItem.id.asc())
+        .all()
+    )
+
+    def _fallback_correct(item: ContentItem) -> str:
+        # 學生若漏答某題（無 PracticeAnswer），仍從題目本身推導正解讓老師看得到
+        if practice_mode == "word_cloze_quiz":
+            return item.cloze_answer or item.text or ""
+        return item.text or ""
+
+    questions = []
+    correct_count = 0
+    for idx, item in enumerate(items, start=1):
+        ans = answers_by_item.get(item.id)
+        data = (ans.answer_data if ans and ans.answer_data else {}) or {}
+        student_answer = data.get("typed_answer") or data.get("selected_answer") or ""
+        correct_answer = (
+            data.get("correct_answer")
+            or data.get("correct_text")
+            or _fallback_correct(item)
+        )
+        is_correct = bool(ans.is_correct) if ans else False
+        if is_correct:
+            correct_count += 1
+        questions.append(
+            {
+                "content_item_id": item.id,
+                "question_number": idx,
+                "item_index": idx - 1,
+                "question_text": item.text or "",
+                "question_translation": item.translation or "",
+                "student_answer": student_answer,
+                "correct_answer": correct_answer,
+                "is_correct": is_correct,
+                "passed": is_correct,  # 沿用右欄逐題燈號（pass/fail）
+                "time_spent_seconds": ans.time_spent_seconds if ans else 0,
+            }
+        )
+
+    total = len(items)
+    accuracy = round(correct_count / total * 100, 1) if total else 0.0
+    return {
+        "student_id": student.id,
+        "student_name": student.name,
+        "student_email": student.email,
+        "status": student_assignment.status.value
+        if student_assignment.status
+        else None,
+        "submitted_at": (
+            student_assignment.submitted_at.isoformat()
+            if student_assignment.submitted_at
+            else None
+        ),
+        "content_type": "QUIZ",
+        "practice_mode": practice_mode,
+        "submissions": questions,
+        "content_groups": [],
+        "score": student_assignment.score,
+        "correct_count": correct_count,
+        "total": total,
+        "accuracy": accuracy,
+        "current_score": student_assignment.score,
+        "current_feedback": student_assignment.feedback,
+    }
+
+
 @router.get("/{assignment_id}/submissions/{student_id}")
 async def get_student_submission(
     assignment_id: int,
@@ -379,6 +481,11 @@ async def get_student_submission(
         if parent_assignment and parent_assignment.practice_mode
         else "reading"
     )
+
+    # 小考（Issue #830）：資料在 practice_answers 而非 StudentItemProgress，
+    # 走獨立的逐題視圖，不進入下方 speaking/rearrangement 流程。
+    if practice_mode.endswith("_quiz"):
+        return _build_quiz_submission(db, assignment, student, practice_mode)
 
     # 查詢作業關聯的 contents (按 order_index 排序)
     assignment_contents = (
@@ -892,6 +999,65 @@ async def set_assignment_in_progress(
     }
 
 
+def _return_quiz_for_revision(
+    student_assignment: StudentAssignment, practice_mode: str, db: Session
+) -> None:
+    """退回小考作業讓學生訂正錯題（Issue #830）。
+
+    與艾賓浩斯退回不同 — 小考要把第一次作答的成績「凍結」（成績以舊的為準），
+    所以不覆寫 ``sa.score``、不動第一次作答的 PracticeSession（那是成績紀錄）。
+    訂正存成獨立一筆：新建一個訂正用 PracticeSession，只複製「答對題」的
+    PracticeAnswer（答對保留、答錯不複製＝被清），學生重進只需重做答錯題。
+    """
+    student_assignment.status = AssignmentStatus.RETURNED
+    student_assignment.returned_at = datetime.now(timezone.utc)
+
+    # 第一次（最近一筆 completed）作答 = 成績紀錄，也是要複製答對題的來源
+    source = (
+        db.query(PracticeSession)
+        .filter(
+            PracticeSession.student_assignment_id == student_assignment.id,
+            PracticeSession.practice_mode == practice_mode,
+            PracticeSession.completed_at.isnot(None),
+        )
+        .order_by(PracticeSession.id.desc())
+        .first()
+    )
+    if source is None:
+        return
+
+    correct_answers = (
+        db.query(PracticeAnswer)
+        .filter(
+            PracticeAnswer.practice_session_id == source.id,
+            PracticeAnswer.is_correct.is_(True),
+        )
+        .all()
+    )
+
+    revision = PracticeSession(
+        student_id=student_assignment.student_id,
+        student_assignment_id=student_assignment.id,
+        practice_mode=practice_mode,
+        words_practiced=len(correct_answers),
+        correct_count=len(correct_answers),
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(revision)
+    db.flush()  # 取得 revision.id 供 PracticeAnswer 參照
+
+    for ans in correct_answers:
+        db.add(
+            PracticeAnswer(
+                practice_session_id=revision.id,
+                content_item_id=ans.content_item_id,
+                is_correct=True,
+                time_spent_seconds=ans.time_spent_seconds,
+                answer_data=ans.answer_data,
+            )
+        )
+
+
 @router.post("/{assignment_id}/return-for-revision")
 async def return_for_revision(
     assignment_id: int,
@@ -945,6 +1111,28 @@ async def return_for_revision(
             "returned_at": (
                 assignment.returned_at.isoformat() if assignment.returned_at else None
             ),
+        }
+
+    # 小考模式（Issue #830）：退回行為與艾賓浩斯不同 —
+    # 清答錯題、保留答對題、凍結第一次作答的成績（成績以舊的為準）。
+    parent = (
+        db.query(Assignment).filter(Assignment.id == assignment.assignment_id).first()
+        if assignment.assignment_id
+        else None
+    )
+    practice_mode = parent.practice_mode if parent else None
+    if practice_mode and practice_mode.endswith("_quiz"):
+        _return_quiz_for_revision(assignment, practice_mode, db)
+        message = data.get("message", "")
+        if message and hasattr(assignment, "return_message"):
+            assignment.return_message = message
+        db.commit()
+        return {
+            "message": "Quiz returned for revision",
+            "assignment_id": assignment.id,
+            "student_id": student_id,
+            "status": assignment.status.value,
+            "returned_at": assignment.returned_at.isoformat(),
         }
 
     # 更新狀態為 RETURNED（要求訂正）

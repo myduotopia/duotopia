@@ -30,6 +30,7 @@ import QuizReviewView, {
   type QuizReviewWord,
 } from "./shared/QuizReviewView";
 import { useQuizTimer } from "./shared/useQuizTimer";
+import { useQuizRevision, allCorrect } from "./shared/useQuizRevision";
 
 interface QuizWord {
   content_item_id: number;
@@ -56,6 +57,8 @@ interface StartResponse {
   shuffle_questions: boolean;
   quiz_time_limit_seconds?: number | null;
   time_remaining_seconds?: number | null;
+  // Issue #830: 退回後為 "RETURNED" → 進入訂正模式
+  status?: string | null;
 }
 
 interface Props {
@@ -115,6 +118,10 @@ export default function WordSpellingQuizActivity({
   // 防止 handleSubmitAll 因 useEffect 重觸 / timer expire 重複進入後端 complete
   const completingRef = useRef(false);
   const navSlot = useQuizNavSlot();
+  // Issue #830: 訂正模式（退回後）— 答錯揭示正解、強制全對才能提交
+  const [quizStatus, setQuizStatus] = useState<string | null>(null);
+  const { isRevision, revealByItem, recordResult } =
+    useQuizRevision(quizStatus);
 
   // --------------------------------------------------------------------
   // Load quiz (or preview)
@@ -151,6 +158,7 @@ export default function WordSpellingQuizActivity({
         });
         setTypedByItem(initialTyped);
         setCorrectByItem(initialCorrect);
+        setQuizStatus(data.status ?? null);
         setSettings({
           show_translation: data.show_translation,
           show_image: data.show_image,
@@ -196,10 +204,13 @@ export default function WordSpellingQuizActivity({
   // Persist a specific item's answer. Returns true on success / no-op,
   // false if the backend POST failed — caller decides whether to retry.
   const persistItemAnswer = useCallback(
-    async (itemId: number, typed: string): Promise<boolean> => {
-      if (isLivePreview || isDemoMode || sessionId == null) return true;
+    async (
+      itemId: number,
+      typed: string,
+    ): Promise<{ ok: boolean; isCorrect?: boolean }> => {
+      if (isLivePreview || isDemoMode || sessionId == null) return { ok: true };
       const trimmed = typed.trim();
-      if (!trimmed) return true;
+      if (!trimmed) return { ok: true };
       try {
         const data = (await apiClient.post(
           `/api/students/assignments/${assignmentId}/vocabulary/spelling_quiz/answer`,
@@ -209,14 +220,16 @@ export default function WordSpellingQuizActivity({
             time_spent_seconds: 0,
             session_id: sessionId,
           },
-        )) as { is_correct: boolean };
+        )) as { is_correct: boolean; correct_answer?: string };
         setCorrectByItem((m) => ({ ...m, [itemId]: data.is_correct }));
-        return true;
+        // 訂正模式：答錯立即揭示正解，答對清除揭示
+        recordResult(itemId, data.is_correct, data.correct_answer);
+        return { ok: true, isCorrect: data.is_correct };
       } catch {
-        return false;
+        return { ok: false };
       }
     },
-    [assignmentId, isDemoMode, isLivePreview, sessionId],
+    [assignmentId, isDemoMode, isLivePreview, sessionId, recordResult],
   );
 
   // 學生切題 / 提交時用。失敗會 toast，並回傳 false 讓 caller 決定重試。
@@ -225,15 +238,29 @@ export default function WordSpellingQuizActivity({
     const typed = typedByItem[currentWord.content_item_id] || "";
     if (!typed.trim()) return true;
     setSubmittingAnswer(true);
-    const ok = await persistItemAnswer(currentWord.content_item_id, typed);
+    const res = await persistItemAnswer(currentWord.content_item_id, typed);
     setSubmittingAnswer(false);
-    if (!ok) {
+    if (!res.ok) {
       toast.error(
         t("wordSpelling.toast.saveFailed") || "Failed to save answer",
       );
     }
-    return ok;
+    return res.ok;
   }, [currentWord, persistItemAnswer, t, typedByItem]);
+
+  // Issue #830 訂正模式：送出當題答案 → 答對才放行到下一題（答錯留在原題看正解）
+  const handleRevisionCheck = useCallback(async () => {
+    if (!currentWord) return;
+    const itemId = currentWord.content_item_id;
+    const typed = (typedByItem[itemId] || "").trim();
+    if (!typed) return;
+    setSubmittingAnswer(true);
+    const res = await persistItemAnswer(itemId, typed);
+    setSubmittingAnswer(false);
+    if (res.isCorrect && currentIndex < words.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    }
+  }, [currentWord, typedByItem, persistItemAnswer, currentIndex, words.length]);
 
   const goTo = useCallback(
     async (idx: number) => {
@@ -338,7 +365,15 @@ export default function WordSpellingQuizActivity({
   // 「時間到才提交但網路抖一下答案沒進 DB」的場景。
   const lastPersistedRef = useRef<Record<number, string>>({});
   useEffect(() => {
-    if (!currentWord || isLivePreview || isDemoMode || alreadySubmitted) return;
+    // 訂正模式不自動 persist：改答案由學生按「送出」明確觸發，才即時揭示正解
+    if (
+      !currentWord ||
+      isLivePreview ||
+      isDemoMode ||
+      alreadySubmitted ||
+      isRevision
+    )
+      return;
     const itemId = currentWord.content_item_id;
     const val = (typedByItem[itemId] || "").trim();
     if (!val) return;
@@ -354,6 +389,7 @@ export default function WordSpellingQuizActivity({
     isLivePreview,
     isDemoMode,
     alreadySubmitted,
+    isRevision,
     persistItemAnswer,
   ]);
 
@@ -411,6 +447,12 @@ export default function WordSpellingQuizActivity({
   }
 
   const isLast = currentIndex === words.length - 1;
+  // Issue #830 訂正模式 gating
+  const currentCorrect = correctByItem[currentWord.content_item_id];
+  const currentResolved = currentCorrect === true;
+  const everyResolved = allCorrect(words, correctByItem);
+  const currentReveal = revealByItem[currentWord.content_item_id];
+  const showCorrectness = settings.show_answer || isRevision;
 
   // 題號 bar — Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
@@ -433,9 +475,9 @@ export default function WordSpellingQuizActivity({
                 ? "bg-amber-500 text-white border-amber-500"
                 : !answered
                   ? "bg-white text-gray-500 border-gray-300 hover:border-amber-400"
-                  : settings.show_answer && priorCorrect === true
+                  : showCorrectness && priorCorrect === true
                     ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                    : settings.show_answer && priorCorrect === false
+                    : showCorrectness && priorCorrect === false
                       ? "bg-rose-50 text-rose-700 border-rose-300"
                       : "bg-amber-50 text-amber-700 border-amber-300",
             )}
@@ -477,6 +519,13 @@ export default function WordSpellingQuizActivity({
                 total: words.length,
               }) || `第 ${currentWord.question_number} / ${words.length} 題`}
             </div>
+
+            {isRevision && (
+              <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {t("wordQuiz.revision.hint") ||
+                  "訂正模式：答錯會顯示正解，全部改對才能提交"}
+              </div>
+            )}
 
             {settings.show_image && currentWord.image_url && (
               <img
@@ -527,23 +576,35 @@ export default function WordSpellingQuizActivity({
                   [currentWord.content_item_id]: next,
                 }))
               }
-              // 最後一題的 inline Send 只暫存答案，不送出整卷；整卷送出統一由
-              // 下方「提交」鈕觸發，避免學生按 Enter 不小心收卷。
+              // 訂正模式：Enter/Send 即送出當題對答案；一般模式只暫存/跳題，
+              // 整卷送出統一由下方「提交」鈕觸發。
               onSubmit={
-                isLast ? () => persistAnswer() : () => goTo(currentIndex + 1)
+                isRevision
+                  ? handleRevisionCheck
+                  : isLast
+                    ? () => persistAnswer()
+                    : () => goTo(currentIndex + 1)
               }
+              // 訂正模式已答對的題目鎖定唯讀，不可再改
+              disabled={isRevision && currentResolved}
               submitting={submittingAnswer}
               state={
-                settings.show_answer &&
-                correctByItem[currentWord.content_item_id] === true
+                showCorrectness && currentCorrect === true
                   ? "correct"
-                  : settings.show_answer &&
-                      correctByItem[currentWord.content_item_id] === false
+                  : showCorrectness && currentCorrect === false
                     ? "wrong"
                     : "neutral"
               }
               autoFocus
             />
+
+            {isRevision && currentReveal && !currentResolved && (
+              <p className="text-center text-sm font-medium text-red-600">
+                {t("wordQuiz.revision.correctAnswer", {
+                  answer: currentReveal,
+                }) || `正解：${currentReveal}`}
+              </p>
+            )}
           </div>
 
           {/* Card footer: prev/next/submit */}
@@ -560,7 +621,11 @@ export default function WordSpellingQuizActivity({
               <Button
                 type="button"
                 onClick={handleSubmitAll}
-                disabled={completing || submittingAnswer}
+                disabled={
+                  completing ||
+                  submittingAnswer ||
+                  (isRevision && !everyResolved)
+                }
               >
                 {completing ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -573,7 +638,7 @@ export default function WordSpellingQuizActivity({
               <Button
                 type="button"
                 onClick={() => goTo(currentIndex + 1)}
-                disabled={submittingAnswer}
+                disabled={submittingAnswer || (isRevision && !currentResolved)}
               >
                 {t("wordQuiz.next") || "下一題"}
               </Button>

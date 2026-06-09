@@ -439,6 +439,8 @@ async def start_word_selection_quiz(
     return {
         "session_id": session.id,
         "practice_mode": "word_selection_quiz",
+        # 退回後 status=RETURNED → 前端進入訂正模式（強制答對 + 答錯 reveal）
+        "status": sa.status.value if sa.status else None,
         "words": words,
         "total_questions": len(words),
         **_common_settings(assignment),
@@ -545,6 +547,8 @@ async def start_word_spelling_quiz(
     return {
         "session_id": session.id,
         "practice_mode": "word_spelling_quiz",
+        # 退回後 status=RETURNED → 前端進入訂正模式（強制答對 + 答錯 reveal）
+        "status": sa.status.value if sa.status else None,
         "words": words,
         "total_questions": len(words),
         **_common_settings(assignment),
@@ -663,6 +667,8 @@ async def start_word_cloze_quiz(
     return {
         "session_id": session.id,
         "practice_mode": "word_cloze_quiz",
+        # 退回後 status=RETURNED → 前端進入訂正模式（強制答對 + 答錯 reveal）
+        "status": sa.status.value if sa.status else None,
         "words": words,
         "total_questions": len(words),
         **_common_settings(assignment),
@@ -777,15 +783,31 @@ def _complete_quiz(
         .count()
     )
 
+    # 訂正再提交（退回後 status=RETURNED）：系統強制學生改到全對才能交。
+    # 後端把關「答錯禁止提交」，未全對就擋下；且成績以舊的為準 — 不覆寫 sa.score。
+    is_revision = sa.status == AssignmentStatus.RETURNED
+    if is_revision and correct_count < total_items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "QUIZ_REVISION_INCOMPLETE",
+                "correct_count": correct_count,
+                "total": total_items,
+            },
+        )
+
     score = round((correct_count / total_items) * 100, 1) if total_items else 0.0
 
     now = datetime.now(timezone.utc)
     session.completed_at = now
     sa.status = AssignmentStatus.SUBMITTED
     sa.submitted_at = now
-    sa.score = score
+    if not is_revision:
+        # 第一次提交才寫分數；訂正成績以舊的為準
+        sa.score = score
     db.commit()
-    return score, correct_count, answered
+    final_score = sa.score if sa.score is not None else score
+    return final_score, correct_count, answered
 
 
 class _QuizCompleteRequest(BaseModel):

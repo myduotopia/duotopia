@@ -2874,6 +2874,15 @@
   },
   "gradingPage": {
     "title": "Grade Assignment",
+    "quiz": {
+      "score": "Score",
+      "accuracy": "Accuracy",
+      "correctCount": "Correct",
+      "noAnswers": "No answers yet",
+      "studentAnswer": "Answer",
+      "correctAnswer": "Correct",
+      "blank": "(blank)"
+    },
     "tabs": {
       "students": "Students",
       "questions": "Questions",
@@ -4807,6 +4816,10 @@
       "correct": "Correct",
       "wrong": "Wrong",
       "scoreSummary": "{{correct}} / {{total}} correct"
+    },
+    "revision": {
+      "hint": "Revision mode: wrong answers reveal the correct answer; fix them all to submit.",
+      "correctAnswer": "Answer: {{answer}}"
     }
   },
   "wordSpelling": {

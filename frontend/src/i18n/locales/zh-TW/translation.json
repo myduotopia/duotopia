@@ -2928,6 +2928,15 @@
   },
   "gradingPage": {
     "title": "批改作業",
+    "quiz": {
+      "score": "分數",
+      "accuracy": "答對率",
+      "correctCount": "答對題數",
+      "noAnswers": "尚無作答紀錄",
+      "studentAnswer": "學生答案",
+      "correctAnswer": "正解",
+      "blank": "（未作答）"
+    },
     "tabs": {
       "students": "學生",
       "questions": "題組",
@@ -4840,6 +4849,10 @@
       "correct": "答對",
       "wrong": "答錯",
       "scoreSummary": "{{correct}} / {{total}} 答對"
+    },
+    "revision": {
+      "hint": "訂正模式：答錯會顯示正解，全部改對才能提交",
+      "correctAnswer": "正解：{{answer}}"
     }
   },
   "wordSpelling": {

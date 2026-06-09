@@ -38,6 +38,11 @@ const SentenceRearrangementPanel = lazy(() =>
     default: m.SentenceRearrangementPanel,
   })),
 );
+const QuizGradingPanel = lazy(() =>
+  import("@/components/grading/QuizGradingPanel").then((m) => ({
+    default: m.QuizGradingPanel,
+  })),
+);
 
 interface AssignmentInfo extends Assignment {
   title: string;
@@ -108,13 +113,22 @@ export interface SubmissionItem {
   max_errors?: number | null;
   item_status?: string;
   completed_at?: string | null;
+  // Issue #830: 小考逐題欄位
+  question_number?: number;
+  correct_answer?: string;
+  is_correct?: boolean;
+  time_spent_seconds?: number;
 }
 
 export type PracticeMode =
   | "reading"
   | "rearrangement"
   | "word_reading"
-  | "word_selection";
+  | "word_selection"
+  // Issue #830: 小考變體（自動判分，批改頁走 QuizGradingPanel 顯示逐題對錯）
+  | "word_selection_quiz"
+  | "word_spelling_quiz"
+  | "word_cloze_quiz";
 
 export interface StudentSubmission {
   student_number: number;
@@ -133,6 +147,11 @@ export interface StudentSubmission {
   }>;
   current_score?: number;
   current_feedback?: string;
+  // Issue #830: 小考彙總
+  score?: number | null;
+  correct_count?: number;
+  total?: number;
+  accuracy?: number;
 }
 
 export interface ItemFeedback {
@@ -851,6 +870,11 @@ export default function GradingPage() {
 
     if (submission.practice_mode === "rearrangement") {
       return <SentenceRearrangementPanel {...panelProps} />;
+    }
+
+    // Issue #830: 小考自動判分 — 逐題對錯 + 答對率，不走 ReadingAssessmentPanel
+    if (submission.practice_mode?.endsWith("_quiz")) {
+      return <QuizGradingPanel submission={submission} activeTab={activeTab} />;
     }
 
     return (
