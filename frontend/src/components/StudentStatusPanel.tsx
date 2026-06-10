@@ -519,6 +519,8 @@ function StudentRow({
   const isUnassigned = student.status === "unassigned";
   // 已是「退回訂正」狀態 → 該列退回鈕 disable（不影響 Graded 鈕與批次退回）
   const returnDisabled = student.status === "RETURNED";
+  // 已是「批改完成」狀態 → 該列 Graded 鈕 disable（不影響退回鈕與批次 Graded）
+  const gradeDisabled = student.status === "GRADED";
   const rowTooltip = tooltip && !isUnassigned ? tooltip : undefined;
   const isClickable = !!rowTooltip;
   // 已派發的學生一律顯示分數（同 StudentCard 規則）。
@@ -623,12 +625,13 @@ function StudentRow({
           </button>
           <button
             type="button"
+            disabled={gradeDisabled}
             onClick={(e) => {
               e.stopPropagation();
-              onGrade?.();
+              if (!gradeDisabled) onGrade?.();
             }}
             title={gradeLabel}
-            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 transition-colors"
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
           >
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline text-xs whitespace-nowrap">

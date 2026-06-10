@@ -4816,7 +4816,7 @@
   "gradingHub": {
     "title": "Grade",
     "returnBtn": "Return ({{count}})",
-    "completeBtn": "Mark graded ({{count}})",
+    "completeBtn": "Graded ({{count}})",
     "completeSuccess": "Marked {{count}} student(s) graded",
     "completeFailed": "Failed to mark graded",
     "returnShort": "Return",
