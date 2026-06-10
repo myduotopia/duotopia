@@ -288,7 +288,7 @@ export function RequestRevisionModal({
             type="button"
             variant="outline"
             onClick={handleReturn}
-            disabled={submitting || selected.length === 0}
+            disabled={submitting}
             className="h-8 px-3 py-1 text-[13px] border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400"
           >
             {submitting ? (
@@ -303,7 +303,7 @@ export function RequestRevisionModal({
           <Button
             type="button"
             onClick={handleComplete}
-            disabled={submitting || selected.length === 0}
+            disabled={submitting}
             className="h-8 px-3 py-1 text-[13px] bg-green-600 hover:bg-green-700 text-white"
           >
             {submitting ? (
