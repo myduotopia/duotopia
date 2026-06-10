@@ -30,6 +30,7 @@ import {
   RotateCcw,
   CheckCircle2,
   Undo2,
+  Sparkles,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -53,6 +54,8 @@ interface Props {
   classroomId: string | number;
   /** 退回/完成成功後通知父層 refetch */
   onDone?: () => void;
+  /** 朗讀/口說作業：是否可用 AI 批改（控制 hub 內「AI 批改」鈕） */
+  canUseAiGrading?: boolean;
 }
 
 const noop = () => {};
@@ -64,6 +67,7 @@ export function RequestRevisionModal({
   initialIndex,
   classroomId,
   onDone,
+  canUseAiGrading,
 }: Props) {
   const { t } = useTranslation();
   const [idx, setIdx] = useState(initialIndex);
@@ -71,6 +75,9 @@ export function RequestRevisionModal({
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
+  const [aiGrading, setAiGrading] = useState(false);
+  // AI 批改算完分數後，重新載入名單（總分/指標才會更新）
+  const [reloadKey, setReloadKey] = useState(0);
 
   // 開啟時對齊到被點的作業
   useEffect(() => {
@@ -78,6 +85,9 @@ export function RequestRevisionModal({
   }, [open, initialIndex]);
 
   const current = assignments[idx];
+  const isReading =
+    current?.practice_mode === "reading" ||
+    current?.practice_mode === "word_reading";
 
   useEffect(() => {
     if (!open || !current) return;
@@ -107,7 +117,27 @@ export function RequestRevisionModal({
     return () => {
       cancelled = true;
     };
-  }, [open, current, t]);
+  }, [open, current, t, reloadKey]);
+
+  // AI 批改：呼叫 batch-grade（彙總每題 AI 分數→總分、補跑漏評估的題、產生評語）。
+  // 不改狀態；算完重載名單讓總分/指標更新。之後老師再用 完成批改/退回 收尾。
+  const handleAiGrade = useCallback(async () => {
+    if (!current) return;
+    setAiGrading(true);
+    try {
+      await apiClient.post(
+        `/api/teachers/assignments/${current.id}/batch-grade`,
+        { classroom_id: Number(classroomId) },
+      );
+      toast.success(t("gradingHub.aiGradeSuccess", "AI 批改完成"));
+      setReloadKey((k) => k + 1);
+      onDone?.();
+    } catch {
+      toast.error(t("gradingHub.aiGradeFailed", "AI 批改失敗"));
+    } finally {
+      setAiGrading(false);
+    }
+  }, [current, classroomId, t, onDone]);
 
   // 退回訂正：batch-return-for-revision（小考建訂正 session、凍結分數）
   // 送出前先排除已是 RETURNED 的學生（取消其勾選）。
@@ -356,6 +386,25 @@ export function RequestRevisionModal({
             </Button>
           </div>
         </DialogHeader>
+
+        {/* 朗讀/口說：AI 批改（呼叫 batch-grade 算分），取代舊 AI Grade modal */}
+        {isReading && canUseAiGrading && (
+          <div className="flex justify-end px-1">
+            <Button
+              type="button"
+              onClick={handleAiGrade}
+              disabled={aiGrading}
+              className="h-8 px-3 py-1 text-[13px] gap-1.5 bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              {aiGrading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {t("assignmentDetail.buttons.batchGrade", "AI 批改")}
+            </Button>
+          </div>
+        )}
 
         {/* 內嵌 progress & grade 的 panel。外層 flex 容器(不自己捲),
             panel scrollable → 只有學生名單區捲動,排序/全選/區間列固定。 */}

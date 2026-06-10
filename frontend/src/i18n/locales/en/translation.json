@@ -4826,6 +4826,8 @@
     "resetSuccess": "Reset {{count}} student(s) to not started",
     "resetFailed": "Failed to reset",
     "rowResetSuccess": "Student reset to not started",
+    "aiGradeSuccess": "AI grading complete",
+    "aiGradeFailed": "AI grading failed",
     "noTarget": "No matching students",
     "rowReturnSuccess": "Student returned for revision",
     "rowGradeSuccess": "Student marked graded"

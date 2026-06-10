@@ -147,6 +147,8 @@ export default function ClassroomDetail({
   // Teacher subscription state
   const [canAssignHomework, setCanAssignHomework] = useState<boolean>(false);
   const [canUseAiGrading, setCanUseAiGrading] = useState<boolean>(true);
+  // #830：批改 hub 內已有「AI 批改」入口取代列表上的 AI Grade 鈕，暫時隱藏列表入口
+  const SHOW_LIST_AI_GRADE = false;
   const [teacherData, setTeacherData] = useState<{
     subscription_status?: string;
     days_remaining?: number;
@@ -2470,9 +2472,10 @@ export default function ClassroomDetail({
                                   </div>
                                   {/* 自動批改模式 (rearrangement / word_selection /
                                       word_spelling / word_cloze / tug_of_war / 三種小考)
-                                      不顯示 AI 批改按鈕 */}
-                                  {assignment.practice_mode !==
-                                    "rearrangement" &&
+                                      不顯示 AI 批改按鈕。#830：列表入口暫時隱藏，改由 hub 內觸發 */}
+                                  {SHOW_LIST_AI_GRADE &&
+                                    assignment.practice_mode !==
+                                      "rearrangement" &&
                                     assignment.practice_mode !==
                                       "word_selection" &&
                                     assignment.practice_mode !==
@@ -2958,9 +2961,10 @@ export default function ClassroomDetail({
                                         )}
                                         {/* 自動批改模式 (rearrangement / word_selection /
                                             word_spelling / word_cloze / tug_of_war / 三種小考)
-                                            不顯示 AI 批改按鈕 */}
-                                        {assignment.practice_mode !==
-                                          "rearrangement" &&
+                                            不顯示 AI 批改按鈕。#830：列表入口暫時隱藏，改由 hub 內觸發 */}
+                                        {SHOW_LIST_AI_GRADE &&
+                                          assignment.practice_mode !==
+                                            "rearrangement" &&
                                           assignment.practice_mode !==
                                             "word_selection" &&
                                           assignment.practice_mode !==
@@ -3859,6 +3863,7 @@ export default function ClassroomDetail({
         assignments={revisionModal.assignments}
         initialIndex={revisionModal.index}
         classroomId={id || ""}
+        canUseAiGrading={canUseAiGrading}
         onDone={() => fetchAssignments()}
       />
 
