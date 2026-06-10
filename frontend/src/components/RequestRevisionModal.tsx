@@ -287,10 +287,11 @@ export function RequestRevisionModal({
           count: ids.length,
         }),
       );
+      // 只改狀態，分數不動（#830 review）
       setStudents((prev) =>
         prev.map((s) =>
           ids.includes(s.student_id)
-            ? { ...s, status: "NOT_STARTED" as const, score: undefined }
+            ? { ...s, status: "NOT_STARTED" as const }
             : s,
         ),
       );
@@ -367,10 +368,11 @@ export function RequestRevisionModal({
           { student_ids: [studentId] },
         );
         toast.success(t("gradingHub.rowResetSuccess", "已還原該學生為未開始"));
+        // 只改狀態，分數不動（#830 review）
         setStudents((prev) =>
           prev.map((s) =>
             s.student_id === studentId
-              ? { ...s, status: "NOT_STARTED" as const, score: undefined }
+              ? { ...s, status: "NOT_STARTED" as const }
               : s,
           ),
         );

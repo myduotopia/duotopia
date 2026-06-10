@@ -820,10 +820,24 @@ def finalize_quiz_submission(
 def score_and_finalize_quiz(
     db: Session, sa: StudentAssignment, expected_mode: str
 ) -> Tuple[float, int, int]:
-    """通用提交路徑用：抓最新 session、算分、收卷（寫分數）。回 (score, correct, answered)。"""
+    """通用提交路徑用：抓最新 session、算分、收卷。回 (score, correct, answered)。
+
+    與 `_complete_quiz` 一致地保護凍結分數：曾被退回（returned_at 有值）＝訂正再提交，
+    不覆寫分數、狀態設 RESUBMITTED；第一次提交才寫分、設 SUBMITTED。
+    """
+    is_revision = sa.returned_at is not None
     session = latest_quiz_session(db, sa.id, expected_mode)
     score, correct_count, _total, answered = compute_quiz_score(db, sa, session)
-    finalize_quiz_submission(db, sa, session, score, write_score=True)
+    finalize_quiz_submission(
+        db,
+        sa,
+        session,
+        score,
+        write_score=not is_revision,
+        status=(
+            AssignmentStatus.RESUBMITTED if is_revision else AssignmentStatus.SUBMITTED
+        ),
+    )
     return score, correct_count, answered
 
 

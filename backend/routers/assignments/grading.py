@@ -1230,7 +1230,8 @@ async def batch_reset_not_started(
 ):
     """批次還原為「未開始」（#830）。
 
-    只清狀態 + 時間戳 + 分數，保留 practice session / 答案 / item progress。
+    只把 status 設回 NOT_STARTED；分數、時間戳、practice session / 答案 / item progress
+    全部保留（review：分數不可動）。
     body: { student_ids: List[int] }（單筆由前端傳 [id] 共用此端點）
     """
     student_ids = data.get("student_ids")
@@ -1268,13 +1269,8 @@ async def batch_reset_not_started(
         if not sa:
             skipped.append(sid)
             continue
+        # 只改狀態；分數、時間戳、作答紀錄全部保留（#830 review：分數不可動）
         sa.status = AssignmentStatus.NOT_STARTED
-        sa.started_at = None
-        sa.submitted_at = None
-        sa.graded_at = None
-        sa.returned_at = None
-        sa.resubmitted_at = None
-        sa.score = None
         reset.append(sid)
 
     db.commit()

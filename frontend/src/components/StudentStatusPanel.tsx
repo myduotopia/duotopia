@@ -487,18 +487,18 @@ function StudentCard({
       {/* 座號 + 姓名（同一列，座號在左） */}
       <div className="flex items-center justify-center gap-1 w-full min-w-0">
         {Number(student.student_number) > 0 && (
-          <span className="text-[15px] leading-normal text-gray-700 dark:text-gray-300 shrink-0">
+          <span className="text-xs sm:text-[15px] leading-normal text-gray-700 dark:text-gray-300 shrink-0">
             {student.student_number}
           </span>
         )}
-        <span className="text-[15px] leading-normal truncate text-gray-600 dark:text-gray-400">
+        <span className="text-xs sm:text-[15px] leading-normal truncate text-gray-600 dark:text-gray-400">
           {student.student_name}
         </span>
       </div>
 
       {/* Score：卡片只顯示分數（不放各項指標），字級放大 */}
       <span
-        className={`text-[55px] font-bold leading-normal ${
+        className={`text-4xl sm:text-[55px] font-bold leading-normal ${
           hasScore
             ? "text-gray-800 dark:text-gray-100"
             : "text-gray-300 dark:text-gray-600"
