@@ -805,12 +805,8 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       <div
         className={`border-t dark:border-gray-700 pt-4 ${scrollable ? "flex flex-col h-full" : ""}`}
       >
-        {/* Header: title + sort + view toggle */}
-        <div className="flex items-center justify-between mb-3 gap-2">
-          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 shrink-0">
-            {t("assignmentDetail.sheet.studentProgress", "學生完成狀況")}
-          </h4>
-
+        {/* Header: sort + view toggle（標題已移除） */}
+        <div className="flex items-center justify-end mb-3 gap-2">
           {/* Sort segmented buttons */}
           <div className="flex items-center rounded-md overflow-hidden border border-gray-200 dark:border-gray-600">
             {sortOptions.map((opt, i) => {
