@@ -3,7 +3,10 @@
  *
  * 薄殼:內嵌 progress & grade 的 StudentStatusPanel（mode="revision"）讓外觀完全一致,
  * 只差:無 tabs、checkbox 勾選要退回的學生、工具列換成「全選未達100 + 分數區間」、
- * 點姓名開該生批改頁。確認退回 → POST batch-return-for-revision。
+ * 點姓名開該生批改頁。
+ *
+ * title 顯示作業名稱 + 上一份/下一份箭頭(切換到相鄰作業的退回 modal),仿 GradingHeader。
+ * 學生名單在 modal 內捲動,不撐破 modal。
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -18,15 +21,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, RotateCcw } from "lucide-react";
+import { Loader2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import StudentStatusPanel, {
   type StudentProgress,
 } from "@/components/StudentStatusPanel";
 
+interface RevisionAssignment {
+  id: number;
+  title: string;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  assignmentId: number;
+  /** 可退回的作業清單（未封存非朗讀），支援上一份/下一份切換 */
+  assignments: RevisionAssignment[];
+  /** 被點開的作業在 assignments 中的索引 */
+  initialIndex: number;
   classroomId: string | number;
   /** 退回成功後通知父層 refetch */
   onDone?: () => void;
@@ -37,25 +48,34 @@ const noop = () => {};
 export function RequestRevisionModal({
   open,
   onOpenChange,
-  assignmentId,
+  assignments,
+  initialIndex,
   classroomId,
   onDone,
 }: Props) {
   const { t } = useTranslation();
+  const [idx, setIdx] = useState(initialIndex);
   const [students, setStudents] = useState<StudentProgress[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
 
+  // 開啟時對齊到被點的作業
   useEffect(() => {
-    if (!open || !assignmentId) return;
+    if (open) setIdx(initialIndex);
+  }, [open, initialIndex]);
+
+  const current = assignments[idx];
+
+  useEffect(() => {
+    if (!open || !current) return;
     let cancelled = false;
     const run = async () => {
       setLoading(true);
       setSelected([]);
       try {
         const resp = (await apiClient.get(
-          `/api/teachers/assignments/${assignmentId}/progress`,
+          `/api/teachers/assignments/${current.id}/progress`,
         )) as
           | StudentProgress[]
           | { students_progress?: StudentProgress[]; data?: StudentProgress[] };
@@ -75,14 +95,14 @@ export function RequestRevisionModal({
     return () => {
       cancelled = true;
     };
-  }, [open, assignmentId, t]);
+  }, [open, current, t]);
 
   const handleSubmit = useCallback(async () => {
-    if (selected.length === 0) return;
+    if (!current || selected.length === 0) return;
     setSubmitting(true);
     try {
       await apiClient.post(
-        `/api/teachers/assignments/${assignmentId}/batch-return-for-revision`,
+        `/api/teachers/assignments/${current.id}/batch-return-for-revision`,
         { student_ids: selected },
       );
       toast.success(
@@ -97,27 +117,62 @@ export function RequestRevisionModal({
     } finally {
       setSubmitting(false);
     }
-  }, [selected, assignmentId, t, onOpenChange, onDone]);
+  }, [current, selected, t, onOpenChange, onDone]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{t("requestRevision.title", "要求訂正")}</DialogTitle>
+          {/* title = 作業名稱 + 上一份/下一份箭頭 */}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={() => setIdx((i) => Math.max(0, i - 1))}
+              disabled={idx <= 0}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <DialogTitle className="flex-1 min-w-0 text-center truncate">
+              {current?.title ?? t("requestRevision.title", "要求訂正")}
+            </DialogTitle>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={() =>
+                setIdx((i) => Math.min(assignments.length - 1, i + 1))
+              }
+              disabled={idx >= assignments.length - 1}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          {assignments.length > 1 && (
+            <p className="text-center text-xs text-gray-400">
+              {idx + 1} / {assignments.length}
+            </p>
+          )}
         </DialogHeader>
 
-        <StudentStatusPanel
-          mode="revision"
-          scrollable
-          students={students}
-          assignmentId={assignmentId}
-          classroomId={classroomId}
-          isEditingStudents={false}
-          onEditingStudentsChange={noop}
-          onStudentIdsChanged={noop}
-          loading={loading}
-          onRevisionSelectionChange={setSelected}
-        />
+        {/* 內嵌 progress & grade 的 panel;名單在此區捲動,不撐破 modal */}
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <StudentStatusPanel
+            mode="revision"
+            scrollable
+            students={students}
+            assignmentId={current?.id ?? 0}
+            classroomId={classroomId}
+            isEditingStudents={false}
+            onEditingStudentsChange={noop}
+            onStudentIdsChanged={noop}
+            loading={loading}
+            onRevisionSelectionChange={setSelected}
+          />
+        </div>
 
         <DialogFooter>
           <Button

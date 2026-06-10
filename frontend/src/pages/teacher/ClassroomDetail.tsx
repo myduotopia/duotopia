@@ -320,10 +320,29 @@ export default function ClassroomDetail({
     classroomId: 0,
   });
   // #830 批次要求訂正 modal
-  const [revisionModal, setRevisionModal] = useState({
+  const [revisionModal, setRevisionModal] = useState<{
+    open: boolean;
+    assignments: { id: number; title: string }[];
+    index: number;
+  }>({
     open: false,
-    assignmentId: 0,
+    assignments: [],
+    index: 0,
   });
+  // 開啟批次要求訂正 modal：以「未封存非朗讀」作業清單支援上一份/下一份切換
+  const openRevisionModal = (assignment: Assignment) => {
+    const eligible = filteredAssignments
+      .filter(
+        (a) =>
+          a.practice_mode !== "reading" && a.practice_mode !== "word_reading",
+      )
+      .map((a) => ({ id: a.id, title: a.title }));
+    const index = Math.max(
+      0,
+      eligible.findIndex((a) => a.id === assignment.id),
+    );
+    setRevisionModal({ open: true, assignments: eligible, index });
+  };
   // Sticky note modal state
   const [stickyNoteModal, setStickyNoteModal] = useState({
     open: false,
@@ -2546,10 +2565,7 @@ export default function ClassroomDetail({
                                         size="sm"
                                         className="flex-1 h-10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-50 dark:hover:bg-orange-900/20"
                                         onClick={() =>
-                                          setRevisionModal({
-                                            open: true,
-                                            assignmentId: assignment.id,
-                                          })
+                                          openRevisionModal(assignment)
                                         }
                                       >
                                         <RotateCcw className="w-4 h-4 mr-1.5" />
@@ -2941,10 +2957,7 @@ export default function ClassroomDetail({
                                               size="sm"
                                               className="text-orange-600 hover:text-orange-700 dark:text-orange-400 h-10 min-h-10"
                                               onClick={() =>
-                                                setRevisionModal({
-                                                  open: true,
-                                                  assignmentId: assignment.id,
-                                                })
+                                                openRevisionModal(assignment)
                                               }
                                             >
                                               <RotateCcw className="w-4 h-4 mr-1" />
@@ -3853,7 +3866,8 @@ export default function ClassroomDetail({
       <RequestRevisionModal
         open={revisionModal.open}
         onOpenChange={(open) => setRevisionModal({ ...revisionModal, open })}
-        assignmentId={revisionModal.assignmentId}
+        assignments={revisionModal.assignments}
+        initialIndex={revisionModal.index}
         classroomId={id || ""}
         onDone={() => fetchAssignments()}
       />
