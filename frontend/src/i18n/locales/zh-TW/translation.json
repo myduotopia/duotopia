@@ -4854,6 +4854,7 @@
     "completeFailed": "完成批改失敗",
     "returnShort": "退回",
     "gradeShort": "完成",
+    "noTarget": "沒有符合的學生",
     "rowReturnSuccess": "已退回該學生訂正",
     "rowGradeSuccess": "已標記該學生完成批改"
   },

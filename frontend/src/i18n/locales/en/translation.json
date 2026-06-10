@@ -4821,6 +4821,7 @@
     "completeFailed": "Failed to mark graded",
     "returnShort": "Return",
     "gradeShort": "Graded",
+    "noTarget": "No matching students",
     "rowReturnSuccess": "Student returned for revision",
     "rowGradeSuccess": "Student marked graded"
   },

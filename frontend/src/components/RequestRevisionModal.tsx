@@ -109,17 +109,26 @@ export function RequestRevisionModal({
   }, [open, current, t]);
 
   // 退回訂正：batch-return-for-revision（小考建訂正 session、凍結分數）
+  // 送出前先排除已是 RETURNED 的學生（取消其勾選）。
   const handleReturn = useCallback(async () => {
-    if (!current || selected.length === 0) return;
+    if (!current) return;
+    const ids = selected.filter((id) => {
+      const s = students.find((x) => x.student_id === id);
+      return !!s && s.status !== "RETURNED";
+    });
+    if (ids.length === 0) {
+      toast.error(t("gradingHub.noTarget", "沒有符合的學生"));
+      return;
+    }
     setSubmitting(true);
     try {
       await apiClient.post(
         `/api/teachers/assignments/${current.id}/batch-return-for-revision`,
-        { student_ids: selected },
+        { student_ids: ids },
       );
       toast.success(
         t("requestRevision.success", "已退回 {{count}} 位學生訂正", {
-          count: selected.length,
+          count: ids.length,
         }),
       );
       onOpenChange(false);
@@ -129,15 +138,24 @@ export function RequestRevisionModal({
     } finally {
       setSubmitting(false);
     }
-  }, [current, selected, t, onOpenChange, onDone]);
+  }, [current, selected, students, t, onOpenChange, onDone]);
 
   // 完成批改：finalize-batch-grade，勾選學生設 GRADED（不覆寫分數）
+  // 送出前先排除已是 GRADED 的學生（取消其勾選）。
   const handleComplete = useCallback(async () => {
-    if (!current || selected.length === 0) return;
+    if (!current) return;
+    const ids = selected.filter((id) => {
+      const s = students.find((x) => x.student_id === id);
+      return !!s && s.status !== "GRADED";
+    });
+    if (ids.length === 0) {
+      toast.error(t("gradingHub.noTarget", "沒有符合的學生"));
+      return;
+    }
     setSubmitting(true);
     try {
       const teacher_decisions: Record<string, "GRADED"> = {};
-      selected.forEach((id) => {
+      ids.forEach((id) => {
         teacher_decisions[String(id)] = "GRADED";
       });
       await apiClient.post(
@@ -146,7 +164,7 @@ export function RequestRevisionModal({
       );
       toast.success(
         t("gradingHub.completeSuccess", "已完成 {{count}} 位學生批改", {
-          count: selected.length,
+          count: ids.length,
         }),
       );
       onOpenChange(false);
@@ -156,7 +174,7 @@ export function RequestRevisionModal({
     } finally {
       setSubmitting(false);
     }
-  }, [current, selected, classroomId, t, onOpenChange, onDone]);
+  }, [current, selected, students, classroomId, t, onOpenChange, onDone]);
 
   // 單一學生：退回訂正（不關 modal，做完重載名單）
   const handleReturnOne = useCallback(
