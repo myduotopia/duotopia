@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   practiceModeLabelKey,
   practiceModeBadgeClass,
+  isQuizMode,
 } from "@/lib/practiceMode";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -2443,7 +2444,8 @@ export default function ClassroomDetail({
                                     </span>
                                   </div>
                                   {/* 自動批改模式 (rearrangement / word_selection /
-                                      word_spelling / word_cloze / tug_of_war) 不顯示 AI 批改按鈕 */}
+                                      word_spelling / word_cloze / tug_of_war / 三種小考)
+                                      不顯示 AI 批改按鈕 */}
                                   {assignment.practice_mode !==
                                     "rearrangement" &&
                                     assignment.practice_mode !==
@@ -2452,6 +2454,7 @@ export default function ClassroomDetail({
                                       "word_spelling" &&
                                     assignment.practice_mode !== "word_cloze" &&
                                     assignment.practice_mode !== "tug_of_war" &&
+                                    !isQuizMode(assignment.practice_mode) &&
                                     canUseAiGrading && (
                                       <div className="flex flex-col items-end flex-shrink-0">
                                         <Button
@@ -2899,7 +2902,8 @@ export default function ClassroomDetail({
                                           )}
                                         </Button>
                                         {/* 自動批改模式 (rearrangement / word_selection /
-                                            word_spelling / word_cloze / tug_of_war) 不顯示 AI 批改按鈕 */}
+                                            word_spelling / word_cloze / tug_of_war / 三種小考)
+                                            不顯示 AI 批改按鈕 */}
                                         {assignment.practice_mode !==
                                           "rearrangement" &&
                                           assignment.practice_mode !==
@@ -2910,6 +2914,9 @@ export default function ClassroomDetail({
                                             "word_cloze" &&
                                           assignment.practice_mode !==
                                             "tug_of_war" &&
+                                          !isQuizMode(
+                                            assignment.practice_mode,
+                                          ) &&
                                           canUseAiGrading && (
                                             <Button
                                               variant="default"
