@@ -383,11 +383,11 @@ function ListHeader({
         className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
       >
         {allSelected ? (
-          <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold shrink-0">
+          <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm bg-blue-500 text-white text-[9px] font-bold shrink-0">
             ✓
           </span>
         ) : (
-          <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700 shrink-0" />
+          <span className="inline-block w-4 h-4 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700 shrink-0" />
         )}
         <span className="truncate">{labels.selectAllStudents}</span>
       </button>
@@ -1048,65 +1048,100 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       <div
         className={`${isRevision ? "" : "border-t dark:border-gray-700 pt-4"} ${scrollable ? "flex flex-col flex-1 min-h-0" : ""}`}
       >
-        {/* Header: sort + view toggle（標題已移除） */}
-        <div className="flex items-center justify-end mb-3 gap-2">
-          {/* Sort segmented buttons */}
-          <div className="flex items-center rounded-md overflow-hidden border border-gray-200 dark:border-gray-600">
-            {sortOptions.map((opt, i) => {
-              const isActive = sortMode === opt.value;
-              return (
+        {/* Header: (revision) 分數區間勾選 + 已選數在左；排序 + 檢視在右 */}
+        <div className="flex items-center gap-2 mb-3">
+          {isRevision && (
+            <div className="flex items-center gap-2 text-xs">
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  value={rangeMin}
+                  onChange={(e) => setRangeMin(e.target.value)}
+                  aria-label="min"
+                  className="w-14 h-7 text-center rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                />
+                <span className="text-gray-400">~</span>
+                <input
+                  type="number"
+                  value={rangeMax}
+                  onChange={(e) => setRangeMax(e.target.value)}
+                  aria-label="max"
+                  className="w-14 h-7 text-center rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                />
                 <button
-                  key={opt.value}
                   type="button"
-                  onClick={() => {
-                    if (isActive) {
-                      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
-                    } else {
-                      setSortMode(opt.value);
-                      setSortDirection("asc");
-                    }
-                  }}
-                  className={`px-2 py-1 text-[10px] font-medium transition-colors ${
-                    isActive
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-                  } ${i > 0 ? "border-l border-gray-200 dark:border-gray-600" : ""}`}
+                  onClick={applyScoreRange}
+                  className="px-2 py-1 font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
-                  {opt.label}
-                  {isActive && (
-                    <span className="ml-0.5">
-                      {sortDirection === "asc" ? "↑" : "↓"}
-                    </span>
-                  )}
+                  {t("requestRevision.applyRange", "依分數勾選")}
                 </button>
-              );
-            })}
-          </div>
+              </div>
+              <span className="text-gray-500 dark:text-gray-400">
+                {t("requestRevision.selectedCount", "已選 {{count}} 位", {
+                  count: selectedIds.size,
+                })}
+              </span>
+            </div>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            {/* Sort segmented buttons */}
+            <div className="flex items-center rounded-md overflow-hidden border border-gray-200 dark:border-gray-600">
+              {sortOptions.map((opt, i) => {
+                const isActive = sortMode === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      if (isActive) {
+                        setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                      } else {
+                        setSortMode(opt.value);
+                        setSortDirection("asc");
+                      }
+                    }}
+                    className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+                      isActive
+                        ? "bg-blue-500 text-white"
+                        : "bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    } ${i > 0 ? "border-l border-gray-200 dark:border-gray-600" : ""}`}
+                  >
+                    {opt.label}
+                    {isActive && (
+                      <span className="ml-0.5">
+                        {sortDirection === "asc" ? "↑" : "↓"}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* View mode toggle */}
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => setViewMode("grid")}
-              className={`p-1 rounded transition-colors ${
-                viewMode === "grid"
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
-              }`}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("list")}
-              className={`p-1 rounded transition-colors ${
-                viewMode === "list"
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
-              }`}
-            >
-              <List className="h-4 w-4" />
-            </button>
+            {/* View mode toggle */}
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewMode("grid")}
+                className={`p-1 rounded transition-colors ${
+                  viewMode === "grid"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+                }`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`p-1 rounded transition-colors ${
+                  viewMode === "list"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+                }`}
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1151,41 +1186,6 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                 {t("assignmentDetail.sheet.selectAll", "全選")}
               </button>
             )}
-          </div>
-        )}
-
-        {/* revision 工具列（取代 tabs 那列）：全選未達100 + 分數區間 */}
-        {isRevision && (
-          <div className="flex items-center flex-wrap gap-2 mb-3 pb-2 text-xs">
-            <div className="flex items-center gap-1">
-              <input
-                type="number"
-                value={rangeMin}
-                onChange={(e) => setRangeMin(e.target.value)}
-                aria-label="min"
-                className="w-14 h-7 text-center rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
-              />
-              <span className="text-gray-400">~</span>
-              <input
-                type="number"
-                value={rangeMax}
-                onChange={(e) => setRangeMax(e.target.value)}
-                aria-label="max"
-                className="w-14 h-7 text-center rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
-              />
-              <button
-                type="button"
-                onClick={applyScoreRange}
-                className="px-2 py-1 font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                {t("requestRevision.applyRange", "依分數勾選")}
-              </button>
-            </div>
-            <span className="ml-auto text-gray-500 dark:text-gray-400">
-              {t("requestRevision.selectedCount", "已選 {{count}} 位", {
-                count: selectedIds.size,
-              })}
-            </span>
           </div>
         )}
 
