@@ -770,7 +770,14 @@ def compute_quiz_score(
             .filter(PracticeAnswer.practice_session_id == session.id)
             .count()
         )
-    score = round((correct_count / total_items) * 100, 1) if total_items else 0.0
+    # 計分：每題扣分 = round(100 / 總題數, 1)；分數 = 100 − 錯誤題數 × 每題扣分。
+    # 未作答視同答錯（錯誤題數 = 總題數 − 答對題數）。clamp 到 [0, 100]。
+    if total_items:
+        per_question = round(100 / total_items, 1)
+        wrong_count = total_items - correct_count
+        score = round(max(0.0, min(100.0, 100.0 - wrong_count * per_question)), 1)
+    else:
+        score = 0.0
     return score, correct_count, total_items, answered
 
 
