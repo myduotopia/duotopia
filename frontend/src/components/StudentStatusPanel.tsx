@@ -1076,11 +1076,6 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   {t("requestRevision.applyRange", "依分數勾選")}
                 </button>
               </div>
-              <span className="text-gray-500 dark:text-gray-400">
-                {t("requestRevision.selectedCount", "已選 {{count}} 位", {
-                  count: selectedIds.size,
-                })}
-              </span>
             </div>
           )}
           <div className="ml-auto flex items-center gap-2">
