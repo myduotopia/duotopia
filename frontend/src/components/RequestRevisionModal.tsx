@@ -174,8 +174,15 @@ export function RequestRevisionModal({
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <DialogTitle className="flex-1 min-w-0 text-center truncate">
-              {current?.title ?? t("gradingHub.title", "批改")}
+            <DialogTitle className="flex-1 min-w-0 flex items-center justify-center gap-1">
+              <span className="truncate">
+                {current?.title ?? t("gradingHub.title", "批改")}
+              </span>
+              {assignments.length > 1 && (
+                <span className="shrink-0 text-gray-400 font-normal">
+                  ({idx + 1}/{assignments.length})
+                </span>
+              )}
             </DialogTitle>
             <Button
               type="button"
@@ -190,11 +197,6 @@ export function RequestRevisionModal({
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          {assignments.length > 1 && (
-            <p className="text-center text-xs text-gray-400">
-              {idx + 1} / {assignments.length}
-            </p>
-          )}
         </DialogHeader>
 
         {/* 內嵌 progress & grade 的 panel。外層 flex 容器(不自己捲),

@@ -926,7 +926,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
 
     return (
       <div
-        className={`border-t dark:border-gray-700 pt-4 ${scrollable ? "flex flex-col flex-1 min-h-0" : ""}`}
+        className={`${isRevision ? "" : "border-t dark:border-gray-700 pt-4"} ${scrollable ? "flex flex-col flex-1 min-h-0" : ""}`}
       >
         {/* Header: sort + view toggle（標題已移除） */}
         <div className="flex items-center justify-end mb-3 gap-2">
@@ -1036,7 +1036,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
 
         {/* revision 工具列（取代 tabs 那列）：全選未達100 + 分數區間 */}
         {isRevision && (
-          <div className="flex items-center flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 mb-3 pb-2 text-xs">
+          <div className="flex items-center flex-wrap gap-2 mb-3 pb-2 text-xs">
             <button
               type="button"
               onClick={selectUnder100}
