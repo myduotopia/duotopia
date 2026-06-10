@@ -70,8 +70,6 @@ export function RequestRevisionModal({
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
-  // 單列動作後重新載入名單（不關 modal）的觸發器
-  const [reloadKey, setReloadKey] = useState(0);
 
   // 開啟時對齊到被點的作業
   useEffect(() => {
@@ -108,7 +106,7 @@ export function RequestRevisionModal({
     return () => {
       cancelled = true;
     };
-  }, [open, current, t, reloadKey]);
+  }, [open, current, t]);
 
   // 退回訂正：batch-return-for-revision（小考建訂正 session、凍結分數）
   const handleReturn = useCallback(async () => {
@@ -170,7 +168,14 @@ export function RequestRevisionModal({
           { student_ids: [studentId] },
         );
         toast.success(t("gradingHub.rowReturnSuccess", "已退回該學生訂正"));
-        setReloadKey((k) => k + 1);
+        // 不重載名單，只就地更新該生狀態（避免畫面跳動）
+        setStudents((prev) =>
+          prev.map((s) =>
+            s.student_id === studentId
+              ? { ...s, status: "RETURNED" as const }
+              : s,
+          ),
+        );
         onDone?.();
       } catch {
         toast.error(t("requestRevision.submitFailed", "退回失敗"));
@@ -192,7 +197,14 @@ export function RequestRevisionModal({
           },
         );
         toast.success(t("gradingHub.rowGradeSuccess", "已標記該學生完成批改"));
-        setReloadKey((k) => k + 1);
+        // 不重載名單，只就地更新該生狀態（避免畫面跳動）
+        setStudents((prev) =>
+          prev.map((s) =>
+            s.student_id === studentId
+              ? { ...s, status: "GRADED" as const }
+              : s,
+          ),
+        );
         onDone?.();
       } catch {
         toast.error(t("gradingHub.completeFailed", "完成批改失敗"));
