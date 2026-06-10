@@ -585,6 +585,9 @@ export default function WordSpellingQuizActivity({
                     ? () => persistAnswer()
                     : () => goTo(currentIndex + 1)
               }
+              // 最後一題（非訂正）隱藏卡片上的 inline 送出鈕 —
+              // 整卷送出由下方「提交」鈕負責，避免兩顆按鈕重複
+              hideSubmitButton={isLast && !isRevision}
               // 訂正模式已答對的題目鎖定唯讀，不可再改
               disabled={isRevision && currentResolved}
               submitting={submittingAnswer}
