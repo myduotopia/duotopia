@@ -4850,7 +4850,11 @@
     "returnBtn": "退回訂正（{{count}}）",
     "completeBtn": "完成批改（{{count}}）",
     "completeSuccess": "已完成 {{count}} 位學生批改",
-    "completeFailed": "完成批改失敗"
+    "completeFailed": "完成批改失敗",
+    "returnShort": "退回",
+    "gradeShort": "完成",
+    "rowReturnSuccess": "已退回該學生訂正",
+    "rowGradeSuccess": "已標記該學生完成批改"
   },
   "studentStatusPanel": {
     "metric": {

@@ -70,6 +70,8 @@ export function RequestRevisionModal({
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
+  // 單列動作後重新載入名單（不關 modal）的觸發器
+  const [reloadKey, setReloadKey] = useState(0);
 
   // 開啟時對齊到被點的作業
   useEffect(() => {
@@ -106,7 +108,7 @@ export function RequestRevisionModal({
     return () => {
       cancelled = true;
     };
-  }, [open, current, t]);
+  }, [open, current, t, reloadKey]);
 
   // 退回訂正：batch-return-for-revision（小考建訂正 session、凍結分數）
   const handleReturn = useCallback(async () => {
@@ -157,6 +159,47 @@ export function RequestRevisionModal({
       setSubmitting(false);
     }
   }, [current, selected, classroomId, t, onOpenChange, onDone]);
+
+  // 單一學生：退回訂正（不關 modal，做完重載名單）
+  const handleReturnOne = useCallback(
+    async (studentId: number) => {
+      if (!current) return;
+      try {
+        await apiClient.post(
+          `/api/teachers/assignments/${current.id}/batch-return-for-revision`,
+          { student_ids: [studentId] },
+        );
+        toast.success(t("gradingHub.rowReturnSuccess", "已退回該學生訂正"));
+        setReloadKey((k) => k + 1);
+        onDone?.();
+      } catch {
+        toast.error(t("requestRevision.submitFailed", "退回失敗"));
+      }
+    },
+    [current, t, onDone],
+  );
+
+  // 單一學生：完成批改（設 GRADED，不關 modal，做完重載名單）
+  const handleGradeOne = useCallback(
+    async (studentId: number) => {
+      if (!current) return;
+      try {
+        await apiClient.post(
+          `/api/teachers/assignments/${current.id}/finalize-batch-grade`,
+          {
+            classroom_id: Number(classroomId),
+            teacher_decisions: { [String(studentId)]: "GRADED" },
+          },
+        );
+        toast.success(t("gradingHub.rowGradeSuccess", "已標記該學生完成批改"));
+        setReloadKey((k) => k + 1);
+        onDone?.();
+      } catch {
+        toast.error(t("gradingHub.completeFailed", "完成批改失敗"));
+      }
+    },
+    [current, classroomId, t, onDone],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -214,6 +257,8 @@ export function RequestRevisionModal({
             onStudentIdsChanged={noop}
             loading={loading}
             onRevisionSelectionChange={setSelected}
+            onRowReturn={handleReturnOne}
+            onRowGrade={handleGradeOne}
           />
         </div>
 

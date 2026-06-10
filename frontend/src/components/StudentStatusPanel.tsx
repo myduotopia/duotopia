@@ -12,7 +12,15 @@
  */
 import { useState, useMemo, useEffect, useCallback, forwardRef } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutGrid, List, Loader2, Save, X } from "lucide-react";
+import {
+  LayoutGrid,
+  List,
+  Loader2,
+  Save,
+  X,
+  RotateCcw,
+  CheckCircle2,
+} from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,6 +75,9 @@ export interface StudentStatusPanelProps {
   mode?: "assign" | "revision";
   /** revision 模式:把目前勾選的 student_ids 回報給父層（modal）。 */
   onRevisionSelectionChange?: (studentIds: number[]) => void;
+  /** revision/hub：單一學生列動作（退回訂正 / 完成批改）。提供才顯示按鈕。 */
+  onRowReturn?: (studentId: number) => void;
+  onRowGrade?: (studentId: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -351,9 +362,11 @@ function metricCellValues(
 function ListHeader({
   metricMode,
   labels,
+  hasActions,
 }: {
   metricMode: MetricMode;
   labels: MetricLabels;
+  hasActions?: boolean;
 }) {
   return (
     <div className="sticky top-0 z-10 flex items-center w-full gap-3 px-3 py-1.5 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -363,6 +376,8 @@ function ListHeader({
           {lbl}
         </span>
       ))}
+      {/* 對齊各列尾端的操作按鈕欄 */}
+      {hasActions && <span className="w-16 sm:w-44 pl-1 shrink-0" />}
     </div>
   );
 }
@@ -483,6 +498,10 @@ function StudentRow({
   onClick,
   tooltip,
   metricMode = "score",
+  onReturn,
+  onGrade,
+  returnLabel,
+  gradeLabel,
 }: {
   student: StudentProgress;
   isEditing: boolean;
@@ -492,8 +511,15 @@ function StudentRow({
   onClick: () => void;
   tooltip?: string;
   metricMode?: MetricMode;
+  onReturn?: () => void;
+  onGrade?: () => void;
+  returnLabel?: string;
+  gradeLabel?: string;
 }) {
   const isUnassigned = student.status === "unassigned";
+  // 單一列動作只對「有提交可批改」的學生顯示
+  const showRowActions =
+    !!onReturn && RETURNABLE_STATUSES.has(String(student.status));
   const rowTooltip = tooltip && !isUnassigned ? tooltip : undefined;
   const isClickable = !!rowTooltip;
   // 已派發的學生一律顯示分數（同 StudentCard 規則）。
@@ -576,6 +602,45 @@ function StudentRow({
           </span>
         ),
       )}
+
+      {/* 單一學生操作（#830）：桌機顯示文字按鈕、手機只顯示 icon。
+          固定欄寬，與表頭尾端 spacer 對齊，避免推移數值欄。 */}
+      {onReturn && (
+        <div className="flex items-center justify-end gap-1 shrink-0 w-16 sm:w-44 pl-1">
+          {showRowActions && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReturn?.();
+                }}
+                title={returnLabel}
+                className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-colors"
+              >
+                <RotateCcw className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline text-xs whitespace-nowrap">
+                  {returnLabel}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onGrade?.();
+                }}
+                title={gradeLabel}
+                className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 transition-colors"
+              >
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline text-xs whitespace-nowrap">
+                  {gradeLabel}
+                </span>
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -600,11 +665,15 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       scrollable = false,
       mode = "assign",
       onRevisionSelectionChange,
+      onRowReturn,
+      onRowGrade,
     },
     ref,
   ) {
     const { t } = useTranslation();
     const isRevision = mode === "revision";
+    const rowReturnLabel = t("gradingHub.returnShort", "退回");
+    const rowGradeLabel = t("gradingHub.gradeShort", "完成");
 
     // 批改 hub（revision 模式）依作業類型決定分數區欄位；assign 模式維持單一分數（不變）。
     const metricMode: MetricMode = !isRevision
@@ -1113,7 +1182,11 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
             <div className="space-y-0.5">
               {/* 批改 hub 表頭：sticky 固定、欄寬對齊各列數值 */}
               {isRevision && (
-                <ListHeader metricMode={metricMode} labels={metricLabels} />
+                <ListHeader
+                  metricMode={metricMode}
+                  labels={metricLabels}
+                  hasActions={!!onRowReturn}
+                />
               )}
               {sortedStudents.map((student) => (
                 <StudentRow
@@ -1125,6 +1198,18 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   onToggle={() => toggleStudent(student.student_id)}
                   onClick={() => handleStudentClick(student)}
                   metricMode={metricMode}
+                  onReturn={
+                    onRowReturn
+                      ? () => onRowReturn(student.student_id)
+                      : undefined
+                  }
+                  onGrade={
+                    onRowGrade
+                      ? () => onRowGrade(student.student_id)
+                      : undefined
+                  }
+                  returnLabel={rowReturnLabel}
+                  gradeLabel={rowGradeLabel}
                   tooltip={
                     isClickableStudent(student)
                       ? t("assignmentDetail.sheet.checkHomework", "批改作業")
