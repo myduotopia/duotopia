@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import {
+  practiceModeLabelKey,
+  practiceModeBadgeClass,
+} from "@/lib/practiceMode";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -2319,7 +2323,17 @@ export default function ClassroomDetail({
                                       "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
                                   };
                                 }
-                                // default: word_reading
+                                // 其餘（含三種小考）由 registry 推導；未知才退回單字朗讀
+                                {
+                                  const key =
+                                    practiceModeLabelKey(practiceMode);
+                                  if (key)
+                                    return {
+                                      label: t(key),
+                                      color:
+                                        practiceModeBadgeClass(practiceMode),
+                                    };
+                                }
                                 return {
                                   label: t(
                                     "classroomDetail.contentTypes.WORD_READING",

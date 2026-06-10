@@ -18,6 +18,10 @@ import VocabularySetPanel, {
   type VocabularySetPanelHandle,
 } from "@/components/VocabularySetPanel";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
+import {
+  practiceModeLabelKey,
+  practiceModeBadgeClass,
+} from "@/lib/practiceMode";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
@@ -384,17 +388,11 @@ export function AssignmentDetailSheet({
     const practiceMode = assignment.practice_mode;
 
     if (contentType === "VOCABULARY_SET" || contentType === "SENTENCE_MAKING") {
-      if (practiceMode === "word_selection") {
-        return {
-          label: t("classroomDetail.contentTypes.WORD_SELECTION"),
-          className:
-            "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-        };
-      }
+      // 依 practice_mode 取正確標籤（含三種小考）；未知才退回「單字集」
+      const key = practiceModeLabelKey(practiceMode);
       return {
-        label: t("classroomDetail.contentTypes.WORD_READING"),
-        className:
-          "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+        label: key ? t(key) : t("classroomDetail.contentTypes.VOCABULARY_SET"),
+        className: practiceModeBadgeClass(practiceMode),
       };
     }
 

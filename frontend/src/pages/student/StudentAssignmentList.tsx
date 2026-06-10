@@ -42,6 +42,10 @@ const PRACTICE_MODE_ICONS: Record<string, React.ReactNode> = {
   word_reading: <Volume2 className="h-7 w-7 sm:h-8 sm:w-8" />,
   word_spelling: <Keyboard className="h-7 w-7 sm:h-8 sm:w-8" />,
   word_cloze: <FileText className="h-7 w-7 sm:h-8 sm:w-8" />,
+  // 小考沿用其 base 模式圖示
+  word_selection_quiz: <MousePointerClick className="h-7 w-7 sm:h-8 sm:w-8" />,
+  word_spelling_quiz: <Keyboard className="h-7 w-7 sm:h-8 sm:w-8" />,
+  word_cloze_quiz: <FileText className="h-7 w-7 sm:h-8 sm:w-8" />,
 };
 
 // Score category colors — keys must match ScoreCategory enum values
@@ -66,6 +70,13 @@ const PRACTICE_MODE_BG: Record<string, string> = {
   word_spelling:
     "crayon-texture bg-gradient-to-b from-amber-100 to-amber-200 text-amber-600",
   word_cloze:
+    "crayon-texture bg-gradient-to-b from-pink-100 to-pink-200 text-pink-600",
+  // 小考沿用其 base 模式底色
+  word_selection_quiz:
+    "crayon-texture bg-gradient-to-b from-emerald-100 to-emerald-200 text-emerald-600",
+  word_spelling_quiz:
+    "crayon-texture bg-gradient-to-b from-amber-100 to-amber-200 text-amber-600",
+  word_cloze_quiz:
     "crayon-texture bg-gradient-to-b from-pink-100 to-pink-200 text-pink-600",
 };
 

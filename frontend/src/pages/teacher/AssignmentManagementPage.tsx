@@ -9,6 +9,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import {
+  practiceModeLabelKey,
+  practiceModeBadgeClass,
+} from "@/lib/practiceMode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -270,48 +274,14 @@ export default function AssignmentManagementPage() {
     }
   };
 
+  // 標籤/顏色集中由 @/lib/practiceMode 推導（含三種小考），避免各處硬寫漂移
   const getPracticeModeLabel = (mode?: string) => {
-    switch (mode) {
-      // "reading" mode = read aloud (speaking); reuses SPEAKING i18n key for app-wide consistency
-      case "reading":
-        return t("classroomDetail.contentTypes.SPEAKING");
-      case "rearrangement":
-        return t("classroomDetail.contentTypes.REARRANGEMENT");
-      case "word_reading":
-        return t("classroomDetail.contentTypes.WORD_READING");
-      case "word_selection":
-        return t("classroomDetail.contentTypes.WORD_SELECTION");
-      case "word_spelling":
-        return t("classroomDetail.contentTypes.WORD_SPELLING");
-      case "word_cloze":
-        return t("classroomDetail.contentTypes.WORD_CLOZE");
-      case "tug_of_war":
-        return t("classroomDetail.contentTypes.TUG_OF_WAR");
-      default:
-        return mode || "—";
-    }
+    const key = practiceModeLabelKey(mode);
+    return key ? t(key) : mode || "—";
   };
 
-  const getPracticeModeBadgeColor = (mode?: string) => {
-    switch (mode) {
-      case "reading":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
-      case "rearrangement":
-        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
-      case "word_reading":
-        return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300";
-      case "word_selection":
-        return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300";
-      case "word_spelling":
-        return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
-      case "word_cloze":
-        return "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300";
-      case "tug_of_war":
-        return "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300";
-      default:
-        return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
-    }
-  };
+  const getPracticeModeBadgeColor = (mode?: string) =>
+    practiceModeBadgeClass(mode);
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "—";
