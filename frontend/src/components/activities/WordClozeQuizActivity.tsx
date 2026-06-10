@@ -28,7 +28,12 @@ import QuizReviewView, {
   type QuizReviewWord,
 } from "./shared/QuizReviewView";
 import { useQuizTimer } from "./shared/useQuizTimer";
-import { useQuizRevision, allCorrect } from "./shared/useQuizRevision";
+import {
+  useQuizRevision,
+  allCorrect,
+  firstUnresolvedIndex,
+  nextUnresolvedIndex,
+} from "./shared/useQuizRevision";
 
 interface QuizWord {
   content_item_id: number;
@@ -164,6 +169,11 @@ export default function WordClozeQuizActivity({
         setTypedByItem(initialTyped);
         setCorrectByItem(initialCorrect);
         setQuizStatus(data.status ?? null);
+        // 訂正模式（退回後 RETURNED）：游標直接停在第一題錯題（略過已答對題）
+        if (data.status === "RETURNED") {
+          const firstWrong = firstUnresolvedIndex(data.words, initialCorrect);
+          if (firstWrong >= 0) setCurrentIndex(firstWrong);
+        }
         setSettings({
           show_translation: data.show_translation,
           play_audio: data.play_audio,
@@ -242,20 +252,6 @@ export default function WordClozeQuizActivity({
     return res.ok;
   }, [currentWord, persistItemAnswer, t, typedByItem]);
 
-  // Issue #830 訂正模式：送出當題答案 → 答對才放行到下一題（答錯留在原題看正解）
-  const handleRevisionCheck = useCallback(async () => {
-    if (!currentWord) return;
-    const itemId = currentWord.content_item_id;
-    const typed = (typedByItem[itemId] || "").trim();
-    if (!typed) return;
-    setSubmittingAnswer(true);
-    const res = await persistItemAnswer(itemId, typed);
-    setSubmittingAnswer(false);
-    if (res.isCorrect && currentIndex < words.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-    }
-  }, [currentWord, typedByItem, persistItemAnswer, currentIndex, words.length]);
-
   const goTo = useCallback(
     async (idx: number) => {
       if (idx === currentIndex || idx < 0 || idx >= words.length) return;
@@ -303,6 +299,36 @@ export default function WordClozeQuizActivity({
     persistAnswer,
     sessionId,
     t,
+  ]);
+
+  // Issue #830 訂正模式：送出當題答案 →
+  //   答錯：留在原題看正解（強制改對）。
+  //   答對：自動跳「下一題錯題」；若已無錯題（剛改對的是最後一題錯題）＝整卷提交。
+  const handleRevisionCheck = useCallback(async () => {
+    if (!currentWord) return;
+    const itemId = currentWord.content_item_id;
+    const typed = (typedByItem[itemId] || "").trim();
+    if (!typed) return;
+    setSubmittingAnswer(true);
+    const res = await persistItemAnswer(itemId, typed);
+    setSubmittingAnswer(false);
+    if (!res.isCorrect) return;
+    // setCorrectByItem 為非同步，先把當題視為已解決再找下一題錯題
+    const resolved = { ...correctByItem, [itemId]: true };
+    const next = nextUnresolvedIndex(words, resolved, currentIndex);
+    if (next === -1) {
+      await handleSubmitAll();
+    } else {
+      setCurrentIndex(next);
+    }
+  }, [
+    currentWord,
+    typedByItem,
+    persistItemAnswer,
+    correctByItem,
+    words,
+    currentIndex,
+    handleSubmitAll,
   ]);
 
   const answeredCount = useMemo(
@@ -606,32 +632,41 @@ export default function WordClozeQuizActivity({
             >
               {t("wordQuiz.prev") || "上一題"}
             </Button>
-            {isLast ? (
-              <Button
-                type="button"
-                onClick={handleSubmitAll}
-                disabled={
-                  completing ||
-                  submittingAnswer ||
-                  (isRevision && !everyResolved)
-                }
-              >
-                {completing ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Send className="h-4 w-4 mr-2" />
-                )}
-                {t("wordQuiz.submit") || "提交"}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                onClick={() => goTo(currentIndex + 1)}
-                disabled={submittingAnswer || (isRevision && !currentResolved)}
-              >
-                {t("wordQuiz.next") || "下一題"}
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {/* 非最後一題：顯示「下一題」（訂正模式也保留手動翻頁，已答對題鎖定） */}
+              {!isLast && (
+                <Button
+                  type="button"
+                  variant={isRevision ? "outline" : "default"}
+                  onClick={() => goTo(currentIndex + 1)}
+                  disabled={
+                    submittingAnswer || (isRevision && !currentResolved)
+                  }
+                >
+                  {t("wordQuiz.next") || "下一題"}
+                </Button>
+              )}
+              {/* 提交鈕：一般模式僅最後一題顯示；訂正模式全程顯示，
+                  但唯有全部改對（everyResolved）才可點擊 */}
+              {(isRevision || isLast) && (
+                <Button
+                  type="button"
+                  onClick={handleSubmitAll}
+                  disabled={
+                    completing ||
+                    submittingAnswer ||
+                    (isRevision && !everyResolved)
+                  }
+                >
+                  {completing ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  {t("wordQuiz.submit") || "提交"}
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

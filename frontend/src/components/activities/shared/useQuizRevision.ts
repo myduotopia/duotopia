@@ -43,3 +43,33 @@ export function allCorrect(
     words.every((w) => correctByItem[w.content_item_id] === true)
   );
 }
+
+/**
+ * 第一題「尚未答對（需訂正）」的索引；全部答對回 -1。
+ * 「未解決」＝ correctByItem[id] !== true（含未作答 null）。
+ * 用於打開訂正小考時直接把游標停在第一題錯題。
+ */
+export function firstUnresolvedIndex(
+  words: { content_item_id: number }[],
+  correctByItem: Record<number, boolean | null>,
+): number {
+  return words.findIndex((w) => correctByItem[w.content_item_id] !== true);
+}
+
+/**
+ * 從 from 之後（不含 from）找下一題尚未答對的索引，找不到則回頭從 0 找；
+ * 全部答對回 -1。用於改對一題後自動跳到下一題錯題。
+ */
+export function nextUnresolvedIndex(
+  words: { content_item_id: number }[],
+  correctByItem: Record<number, boolean | null>,
+  from: number,
+): number {
+  for (let i = from + 1; i < words.length; i++) {
+    if (correctByItem[words[i].content_item_id] !== true) return i;
+  }
+  for (let i = 0; i < from && i < words.length; i++) {
+    if (correctByItem[words[i].content_item_id] !== true) return i;
+  }
+  return -1;
+}

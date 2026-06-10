@@ -117,6 +117,7 @@ def _block_if_submitted(student_assignment: StudentAssignment) -> None:
     """
     if student_assignment.status in (
         AssignmentStatus.SUBMITTED,
+        AssignmentStatus.RESUBMITTED,
         AssignmentStatus.GRADED,
     ):
         raise HTTPException(
@@ -232,8 +233,16 @@ def _upsert_quiz_answer(
     is_correct: bool,
     time_spent_seconds: int,
     answer_data: Dict[str, Any],
+    *,
+    revised: bool = False,
 ) -> PracticeAnswer:
-    """UPDATE the existing PracticeAnswer for this (session, item) or INSERT."""
+    """UPDATE the existing PracticeAnswer for this (session, item) or INSERT.
+
+    ``revised=True``（學生在訂正模式下作答，即 sa 曾被退回）時，於 answer_data 加上
+    ``revised: True`` 旗標，讓「此題是否被訂正」可直接查詢（#830）。
+    """
+    if revised:
+        answer_data = {**answer_data, "revised": True}
     existing = (
         db.query(PracticeAnswer)
         .filter(
@@ -495,6 +504,7 @@ async def submit_word_selection_quiz_answer(
             "selected_answer": request.selected_answer,
             "correct_text": correct_text,
         },
+        revised=sa.returned_at is not None,
     )
     db.commit()
     return {"success": True, "is_correct": is_correct}
@@ -598,6 +608,7 @@ async def submit_word_spelling_quiz_answer(
             "typed_answer": request.typed_answer,
             "correct_answer": correct_answer,
         },
+        revised=sa.returned_at is not None,
     )
     db.commit()
     return {"success": True, "is_correct": is_correct, "correct_answer": correct_answer}
@@ -717,6 +728,7 @@ async def submit_word_cloze_quiz_answer(
             "typed_answer": request.typed_answer,
             "correct_answer": correct_answer,
         },
+        revised=sa.returned_at is not None,
     )
     db.commit()
     return {"success": True, "is_correct": is_correct, "correct_answer": correct_answer}
@@ -788,15 +800,18 @@ def finalize_quiz_submission(
     score: float,
     *,
     write_score: bool = True,
+    status: AssignmentStatus = AssignmentStatus.SUBMITTED,
 ) -> None:
-    """收卷：status=SUBMITTED、submitted_at、session.completed_at；視需要寫 score。
+    """收卷：設定 status、submitted_at、session.completed_at；視需要寫 score。
 
-    小考永遠停在 SUBMITTED（不 GRADED），老師才能退回。不 commit，由呼叫端 commit。
+    第一次提交 → SUBMITTED；訂正再提交 → RESUBMITTED（呼叫端傳入）。
+    小考永遠停在 SUBMITTED/RESUBMITTED（不 GRADED），老師才能退回。
+    不 commit，由呼叫端 commit。
     """
     now = datetime.now(timezone.utc)
     if session is not None:
         session.completed_at = now
-    sa.status = AssignmentStatus.SUBMITTED
+    sa.status = status
     sa.submitted_at = now
     if write_score:
         sa.score = score
@@ -827,7 +842,10 @@ def _complete_quiz(
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
     _get_assignment_or_400(db, sa, expected_mode)
 
-    is_revision = sa.status == AssignmentStatus.RETURNED
+    # 曾被退回過（returned_at 有值）＝本次完成屬「訂正再提交」。改用 returned_at 而非
+    # 當下 status 判定（robust）：避免 status 被別路徑改動成非 RETURNED 時，誤把訂正
+    # 當成第一次提交而覆寫凍結分數（#830：staging sa 1907 分數 95→100 之根因）。
+    is_revision = sa.returned_at is not None
 
     # Idempotent：以「是否已有 completed session」判斷（不再只看 status），
     # 避免別的路徑搶先把 status 設成 SUBMITTED/GRADED 時、真正計分被永久跳過
@@ -860,7 +878,16 @@ def _complete_quiz(
             },
         )
 
-    finalize_quiz_submission(db, sa, session, score, write_score=not is_revision)
+    finalize_quiz_submission(
+        db,
+        sa,
+        session,
+        score,
+        write_score=not is_revision,
+        status=(
+            AssignmentStatus.RESUBMITTED if is_revision else AssignmentStatus.SUBMITTED
+        ),
+    )
     db.commit()
     final_score = sa.score if sa.score is not None else score
     return final_score, correct_count, answered
