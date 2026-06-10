@@ -823,8 +823,8 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     // Unassigned tab: all can be toggled
     const isCheckboxDisabled = useCallback(
       (s: StudentProgress) => {
-        // revision:只有已提交/已批改/已訂正重交可勾選退回
-        if (isRevision) return !RETURNABLE_STATUSES.has(String(s.status));
+        // revision/hub:任何狀態都可勾選（批次端點會自行處理/略過不適用者）
+        if (isRevision) return false;
         if (activeTab === "all") return true;
         if (activeTab === "unassigned") return false;
         // assigned tab: only NOT_STARTED can be unchecked — once a student
