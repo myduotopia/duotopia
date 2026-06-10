@@ -4837,7 +4837,7 @@
     "title": "要求訂正",
     "selectUnder100": "全選未達 100 分",
     "selectAll": "全選",
-    "applyRange": "套用區間",
+    "applyRange": "依分數勾選",
     "selectedCount": "已選 {{count}} 位",
     "empty": "沒有已派發的學生",
     "openGrading": "查看作答 / 批改",

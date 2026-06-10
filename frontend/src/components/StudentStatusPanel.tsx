@@ -517,6 +517,8 @@ function StudentRow({
   gradeLabel?: string;
 }) {
   const isUnassigned = student.status === "unassigned";
+  // 已是「退回訂正」狀態 → 該列退回鈕 disable（不影響 Graded 鈕與批次退回）
+  const returnDisabled = student.status === "RETURNED";
   const rowTooltip = tooltip && !isUnassigned ? tooltip : undefined;
   const isClickable = !!rowTooltip;
   // 已派發的學生一律顯示分數（同 StudentCard 規則）。
@@ -606,12 +608,13 @@ function StudentRow({
         <div className="flex items-center justify-end gap-1 shrink-0 w-16 sm:w-44 pl-1">
           <button
             type="button"
+            disabled={returnDisabled}
             onClick={(e) => {
               e.stopPropagation();
-              onReturn?.();
+              if (!returnDisabled) onReturn?.();
             }}
             title={returnLabel}
-            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-colors"
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
           >
             <RotateCcw className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline text-xs whitespace-nowrap">
@@ -1140,7 +1143,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                 onClick={applyScoreRange}
                 className="px-2 py-1 font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                {t("requestRevision.applyRange", "套用區間")}
+                {t("requestRevision.applyRange", "依分數勾選")}
               </button>
             </div>
             <span className="ml-auto text-gray-500 dark:text-gray-400">

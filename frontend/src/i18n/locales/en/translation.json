@@ -4804,7 +4804,7 @@
     "title": "Request Revision",
     "selectUnder100": "Select all under 100",
     "selectAll": "Select all",
-    "applyRange": "Apply range",
+    "applyRange": "Select by score",
     "selectedCount": "{{count}} selected",
     "empty": "No assigned students",
     "openGrading": "View answers / grade",
