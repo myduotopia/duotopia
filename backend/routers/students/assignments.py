@@ -30,6 +30,7 @@ from services.preview_service import get_sentence_fields, _VOCABULARY_CONTENT_TY
 from services.quota_service import QuotaService
 from utils.cloze import extract_cloze_for_item
 from .dependencies import get_current_student
+from .quiz_assignments import score_and_finalize_quiz
 from .validators import (
     PracticeWord,
     PracticeWordsResponse,
@@ -750,6 +751,9 @@ async def submit_assignment(
 
     # 判斷是否為自動批改類型
     is_auto_graded = practice_mode in AUTO_GRADED_MODES
+    # 小考（#830）：自動判分，但停在 SUBMITTED（老師可退回），分數一律由
+    # practice_answers 計算，不走下面艾賓浩斯 GRADED 路徑（那條對小考永遠回 0）。
+    is_quiz = bool(practice_mode) and practice_mode.endswith("_quiz")
 
     # 更新所有進度為已完成
     progress_records = (
@@ -760,10 +764,10 @@ async def submit_assignment(
 
     for progress in progress_records:
         if progress.status == AssignmentStatus.IN_PROGRESS:
-            # 自動批改類型直接標記為 GRADED，手動批改類型標記為 SUBMITTED
+            # 自動批改類型直接標記為 GRADED，手動批改 / 小考標記為 SUBMITTED
             progress.status = (
                 AssignmentStatus.GRADED
-                if is_auto_graded
+                if (is_auto_graded and not is_quiz)
                 else AssignmentStatus.SUBMITTED
             )
             progress.completed_at = datetime.now(timezone.utc)
@@ -771,7 +775,10 @@ async def submit_assignment(
     # 更新作業狀態
     # Issue #165: 例句重組和單字選擇為自動批改，提交後直接標記為 GRADED（已完成）
     # 例句朗讀和單字朗讀需要老師批改，標記為 SUBMITTED（已提交）
-    if is_auto_graded:
+    if is_quiz:
+        # 小考：算分 + 收卷（SUBMITTED + session.completed_at + 寫 score）
+        score_and_finalize_quiz(db, student_assignment, practice_mode)
+    elif is_auto_graded:
         student_assignment.status = AssignmentStatus.GRADED
         student_assignment.graded_at = datetime.now(timezone.utc)
 

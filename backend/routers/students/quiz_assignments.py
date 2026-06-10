@@ -723,6 +723,89 @@ async def submit_word_cloze_quiz_answer(
 
 
 # ---------------------------------------------------------------------------
+# Shared quiz scoring (single source of truth — #830)
+#
+# 小考分數一律由 practice_answers 自動算（correct/total*100），集中在這裡。
+# 同時被學生提交端點 `_complete_quiz` 與通用提交 `assignments.submit_assignment`
+# 使用，確保不論走哪條路徑都不會把小考存成 0 / 設成 GRADED。
+# ---------------------------------------------------------------------------
+
+
+def latest_quiz_session(
+    db: Session, sa_id: int, expected_mode: str, *, completed_only: bool = False
+) -> Optional[PracticeSession]:
+    """該 student_assignment 在某小考 mode 下最新的 PracticeSession。"""
+    q = db.query(PracticeSession).filter(
+        PracticeSession.student_assignment_id == sa_id,
+        PracticeSession.practice_mode == expected_mode,
+    )
+    if completed_only:
+        q = q.filter(PracticeSession.completed_at.isnot(None))
+    return q.order_by(PracticeSession.id.desc()).first()
+
+
+def compute_quiz_score(
+    db: Session, sa: StudentAssignment, session: Optional[PracticeSession]
+) -> Tuple[float, int, int, int]:
+    """從 session 的 practice_answers 算分。回 (score, correct, total_items, answered)。"""
+    total_items = (
+        db.query(ContentItem)
+        .join(AssignmentContent, AssignmentContent.content_id == ContentItem.content_id)
+        .filter(AssignmentContent.assignment_id == sa.assignment_id)
+        .count()
+    )
+    correct_count = 0
+    answered = 0
+    if session is not None:
+        correct_count = (
+            db.query(PracticeAnswer)
+            .filter(
+                PracticeAnswer.practice_session_id == session.id,
+                PracticeAnswer.is_correct.is_(True),
+            )
+            .count()
+        )
+        answered = (
+            db.query(PracticeAnswer)
+            .filter(PracticeAnswer.practice_session_id == session.id)
+            .count()
+        )
+    score = round((correct_count / total_items) * 100, 1) if total_items else 0.0
+    return score, correct_count, total_items, answered
+
+
+def finalize_quiz_submission(
+    db: Session,
+    sa: StudentAssignment,
+    session: Optional[PracticeSession],
+    score: float,
+    *,
+    write_score: bool = True,
+) -> None:
+    """收卷：status=SUBMITTED、submitted_at、session.completed_at；視需要寫 score。
+
+    小考永遠停在 SUBMITTED（不 GRADED），老師才能退回。不 commit，由呼叫端 commit。
+    """
+    now = datetime.now(timezone.utc)
+    if session is not None:
+        session.completed_at = now
+    sa.status = AssignmentStatus.SUBMITTED
+    sa.submitted_at = now
+    if write_score:
+        sa.score = score
+
+
+def score_and_finalize_quiz(
+    db: Session, sa: StudentAssignment, expected_mode: str
+) -> Tuple[float, int, int]:
+    """通用提交路徑用：抓最新 session、算分、收卷（寫分數）。回 (score, correct, answered)。"""
+    session = latest_quiz_session(db, sa.id, expected_mode)
+    score, correct_count, _total, answered = compute_quiz_score(db, sa, session)
+    finalize_quiz_submission(db, sa, session, score, write_score=True)
+    return score, correct_count, answered
+
+
+# ---------------------------------------------------------------------------
 # Shared completion endpoint (3 modes share identical logic)
 # ---------------------------------------------------------------------------
 
@@ -737,23 +820,19 @@ def _complete_quiz(
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
     _get_assignment_or_400(db, sa, expected_mode)
 
-    # Idempotent: if the assignment was already submitted we still return the
-    # score so the frontend "提交完成" handler is safe to retry.
-    if sa.status in (AssignmentStatus.SUBMITTED, AssignmentStatus.GRADED):
-        score = sa.score or 0
-        # Best-effort answered/total counts from the most recent session
-        recent = (
-            db.query(PracticeSession)
-            .filter(
-                PracticeSession.student_assignment_id == assignment_id,
-                PracticeSession.practice_mode == expected_mode,
+    is_revision = sa.status == AssignmentStatus.RETURNED
+
+    # Idempotent：以「是否已有 completed session」判斷（不再只看 status），
+    # 避免別的路徑搶先把 status 設成 SUBMITTED/GRADED 時、真正計分被永久跳過
+    # （#830：小考 0 分根因）。重複提交時回既有分數即可。
+    if not is_revision:
+        completed = latest_quiz_session(db, sa.id, expected_mode, completed_only=True)
+        if completed is not None:
+            return (
+                sa.score or 0,
+                completed.correct_count or 0,
+                completed.words_practiced or 0,
             )
-            .order_by(PracticeSession.id.desc())
-            .first()
-        )
-        answered = recent.words_practiced if recent else 0
-        correct = recent.correct_count if recent else 0
-        return score, correct, answered
 
     if session_id is None:
         raise HTTPException(
@@ -761,31 +840,9 @@ def _complete_quiz(
             detail="session_id is required to complete the quiz",
         )
     session = _get_quiz_session(db, session_id, student_id, assignment_id)
+    score, correct_count, total_items, answered = compute_quiz_score(db, sa, session)
 
-    # Total questions = ContentItems in this assignment; correct = is_correct=true rows
-    total_items = (
-        db.query(ContentItem)
-        .join(AssignmentContent, AssignmentContent.content_id == ContentItem.content_id)
-        .filter(AssignmentContent.assignment_id == sa.assignment_id)
-        .count()
-    )
-    correct_count = (
-        db.query(PracticeAnswer)
-        .filter(
-            PracticeAnswer.practice_session_id == session.id,
-            PracticeAnswer.is_correct.is_(True),
-        )
-        .count()
-    )
-    answered = (
-        db.query(PracticeAnswer)
-        .filter(PracticeAnswer.practice_session_id == session.id)
-        .count()
-    )
-
-    # 訂正再提交（退回後 status=RETURNED）：系統強制學生改到全對才能交。
-    # 後端把關「答錯禁止提交」，未全對就擋下；且成績以舊的為準 — 不覆寫 sa.score。
-    is_revision = sa.status == AssignmentStatus.RETURNED
+    # 訂正再提交（退回後 status=RETURNED）：強制改到全對才能交，且成績以舊的為準。
     if is_revision and correct_count < total_items:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -796,15 +853,7 @@ def _complete_quiz(
             },
         )
 
-    score = round((correct_count / total_items) * 100, 1) if total_items else 0.0
-
-    now = datetime.now(timezone.utc)
-    session.completed_at = now
-    sa.status = AssignmentStatus.SUBMITTED
-    sa.submitted_at = now
-    if not is_revision:
-        # 第一次提交才寫分數；訂正成績以舊的為準
-        sa.score = score
+    finalize_quiz_submission(db, sa, session, score, write_score=not is_revision)
     db.commit()
     final_score = sa.score if sa.score is not None else score
     return final_score, correct_count, answered

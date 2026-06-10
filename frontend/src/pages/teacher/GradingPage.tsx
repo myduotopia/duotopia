@@ -993,6 +993,10 @@ export default function GradingPage() {
                 : handleRequestRevision
             }
             isAutoScored={isAutoScoredMode(submission?.practice_mode)}
+            // 小考完全自動判分：分數唯讀、不顯示完成批改（僅保留退回）
+            autoScoreReadOnly={
+              submission?.practice_mode?.endsWith("_quiz") ?? false
+            }
             onJumpToItem={handleJumpToItem}
           />
         </div>

@@ -719,6 +719,20 @@ async def get_student_submission(
     }
 
 
+def _is_quiz_assignment(db: Session, student_assignment: StudentAssignment) -> bool:
+    """小考（自動判分）— 老師端不該手動覆寫分數（#830）。"""
+    if not student_assignment.assignment_id:
+        return False
+    parent = (
+        db.query(Assignment)
+        .filter(Assignment.id == student_assignment.assignment_id)
+        .first()
+    )
+    return bool(
+        parent and parent.practice_mode and parent.practice_mode.endswith("_quiz")
+    )
+
+
 @router.post("/{assignment_id}/grade")
 async def grade_student_assignment(
     assignment_id: int,
@@ -763,7 +777,9 @@ async def grade_student_assignment(
         )
 
     # 更新評分資訊
-    assignment.score = grade_data.get("score")
+    # 小考自動判分：忽略老師端送來的 score（避免歸零），分數維持系統計算值；feedback 仍可寫。
+    if not _is_quiz_assignment(db, assignment):
+        assignment.score = grade_data.get("score")
     assignment.feedback = grade_data.get("feedback")
 
     # 只有在 update_status 為 True 時才更新狀態
@@ -1196,8 +1212,9 @@ async def manual_grade_assignment(
             status_code=403, detail="Not authorized to grade this assignment"
         )
 
-    # 更新評分
-    assignment.score = grade_data.get("score")
+    # 更新評分（小考自動判分：忽略外部 score，避免歸零）
+    if not _is_quiz_assignment(db, assignment):
+        assignment.score = grade_data.get("score")
     assignment.feedback = grade_data.get("feedback")
     assignment.status = AssignmentStatus.GRADED
     assignment.graded_at = datetime.now(timezone.utc)
