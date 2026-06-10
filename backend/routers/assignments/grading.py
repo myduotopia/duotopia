@@ -1074,6 +1074,39 @@ def _return_quiz_for_revision(
         )
 
 
+def _do_return_for_revision(
+    student_assignment: StudentAssignment, db: Session, message: str = ""
+) -> str:
+    """套用單筆「要求訂正」（不 commit，供單筆與批次共用）。
+
+    回傳 'already_returned'（已是 RETURNED，略過）或 'returned'。
+    小考走 `_return_quiz_for_revision`（清答錯、保留答對、凍結分數）；
+    其餘維持 RETURNED + 重置 AI 分析額度。
+    """
+    if student_assignment.status == AssignmentStatus.RETURNED:
+        return "already_returned"
+
+    parent = (
+        db.query(Assignment)
+        .filter(Assignment.id == student_assignment.assignment_id)
+        .first()
+        if student_assignment.assignment_id
+        else None
+    )
+    practice_mode = parent.practice_mode if parent else None
+    if practice_mode and practice_mode.endswith("_quiz"):
+        _return_quiz_for_revision(student_assignment, practice_mode, db)
+    else:
+        student_assignment.status = AssignmentStatus.RETURNED
+        student_assignment.returned_at = datetime.now(timezone.utc)
+        # 退回後刷新每題 AI 分析額度（teacher_passed 的題目仍被語音端鎖住，整批重置安全）
+        reset_analysis_count_for_assignment(student_assignment.id, db)
+
+    if message and hasattr(student_assignment, "return_message"):
+        student_assignment.return_message = message
+    return "returned"
+
+
 @router.post("/{assignment_id}/return-for-revision")
 async def return_for_revision(
     assignment_id: int,
@@ -1081,13 +1114,11 @@ async def return_for_revision(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """要求訂正 - 要求學生修改作業"""
-    # 獲取學生ID
+    """要求訂正 - 要求學生修改作業（單筆）"""
     student_id = data.get("student_id")
     if not student_id:
         raise HTTPException(status_code=400, detail="Student ID is required")
 
-    # 使用 assignment_id (主作業ID) 和 student_id 查詢學生作業
     assignment = (
         db.query(StudentAssignment)
         .filter(
@@ -1096,7 +1127,6 @@ async def return_for_revision(
         )
         .first()
     )
-
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
@@ -1111,70 +1141,84 @@ async def return_for_revision(
         )
         .first()
     )
-
     if not classroom:
         raise HTTPException(
             status_code=403, detail="Not authorized to return this assignment"
         )
 
-    # 檢查是否已經是要求訂正狀態
-    if assignment.status == AssignmentStatus.RETURNED:
-        return {
-            "message": "Assignment is already in returned status",
-            "assignment_id": assignment.id,
-            "student_id": student_id,
-            "status": assignment.status.value,
-            "returned_at": (
-                assignment.returned_at.isoformat() if assignment.returned_at else None
-            ),
-        }
-
-    # 小考模式（Issue #830）：退回行為與艾賓浩斯不同 —
-    # 清答錯題、保留答對題、凍結第一次作答的成績（成績以舊的為準）。
-    parent = (
-        db.query(Assignment).filter(Assignment.id == assignment.assignment_id).first()
-        if assignment.assignment_id
-        else None
-    )
-    practice_mode = parent.practice_mode if parent else None
-    if practice_mode and practice_mode.endswith("_quiz"):
-        _return_quiz_for_revision(assignment, practice_mode, db)
-        message = data.get("message", "")
-        if message and hasattr(assignment, "return_message"):
-            assignment.return_message = message
-        db.commit()
-        return {
-            "message": "Quiz returned for revision",
-            "assignment_id": assignment.id,
-            "student_id": student_id,
-            "status": assignment.status.value,
-            "returned_at": assignment.returned_at.isoformat(),
-        }
-
-    # 更新狀態為 RETURNED（要求訂正）
-    assignment.status = AssignmentStatus.RETURNED
-    assignment.returned_at = datetime.now(timezone.utc)
-
-    # 可選：儲存退回訊息
-    message = data.get("message", "")
-    if message and hasattr(assignment, "return_message"):
-        assignment.return_message = message
-
-    # Refresh per-item AI analysis quota for the new revision cycle.
-    # Already-passed items (teacher_passed=True) are still locked from
-    # re-analysis by the speech endpoint, so a blanket reset is safe —
-    # and matches the frontend hook's reset semantics exactly.
-    reset_analysis_count_for_assignment(assignment.id, db)
-
+    result = _do_return_for_revision(assignment, db, data.get("message", ""))
     db.commit()
-
     return {
-        "message": "Assignment returned for revision",
+        "message": (
+            "Assignment is already in returned status"
+            if result == "already_returned"
+            else "Assignment returned for revision"
+        ),
         "assignment_id": assignment.id,
         "student_id": student_id,
         "status": assignment.status.value,
-        "returned_at": assignment.returned_at.isoformat(),
+        "returned_at": (
+            assignment.returned_at.isoformat() if assignment.returned_at else None
+        ),
+        "result": result,
     }
+
+
+@router.post("/{assignment_id}/batch-return-for-revision")
+async def batch_return_for_revision(
+    assignment_id: int,
+    data: dict,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """批次要求訂正 - 一次退回多位學生（#830）。
+
+    body: { student_ids: List[int], message?: str }
+    """
+    student_ids = data.get("student_ids")
+    if not isinstance(student_ids, list) or not student_ids:
+        raise HTTPException(status_code=400, detail="student_ids is required")
+    message = data.get("message", "")
+
+    # 驗權：父作業屬於該老師
+    parent = (
+        db.query(Assignment)
+        .filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == current_teacher.id,
+        )
+        .first()
+    )
+    if not parent:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to return this assignment"
+        )
+    if parent.is_archived:
+        raise HTTPException(
+            status_code=403, detail="Cannot modify grades: assignment is archived"
+        )
+
+    returned: List[int] = []
+    skipped: List[int] = []
+    for sid in student_ids:
+        sa = (
+            db.query(StudentAssignment)
+            .filter(
+                StudentAssignment.assignment_id == assignment_id,
+                StudentAssignment.student_id == sid,
+            )
+            .first()
+        )
+        if not sa:
+            skipped.append(sid)
+            continue
+        if _do_return_for_revision(sa, db, message) == "returned":
+            returned.append(sid)
+        else:
+            skipped.append(sid)
+
+    db.commit()
+    return {"returned": returned, "skipped": skipped, "count": len(returned)}
 
 
 @router.post("/{assignment_id}/manual-grade")

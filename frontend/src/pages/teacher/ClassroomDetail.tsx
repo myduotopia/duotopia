@@ -36,6 +36,7 @@ import { AssignmentDialog, CartItem } from "@/components/AssignmentDialog";
 import { InstantPracticeDialog } from "@/components/InstantPracticeDialog";
 import { AssignmentDetailSheet } from "@/components/AssignmentDetailSheet";
 import BatchGradingModal from "@/components/BatchGradingModal";
+import { RequestRevisionModal } from "@/components/RequestRevisionModal";
 import { StudentCompletionDashboard } from "@/components/StudentCompletionDashboard";
 import { RecursiveTreeAccordion } from "@/components/shared/RecursiveTreeAccordion";
 import { programTreeConfig } from "@/components/shared/programTreeConfig";
@@ -316,6 +317,11 @@ export default function ClassroomDetail({
     open: false,
     assignmentId: 0,
     classroomId: 0,
+  });
+  // #830 批次要求訂正 modal
+  const [revisionModal, setRevisionModal] = useState({
+    open: false,
+    assignmentId: 0,
   });
   // Sticky note modal state
   const [stickyNoteModal, setStickyNoteModal] = useState({
@@ -2529,6 +2535,28 @@ export default function ClassroomDetail({
                                   >
                                     {t("classroomDetail.buttons.previewDemo")}
                                   </Button>
+                                  {/* #830 批次要求訂正（朗讀類除外） */}
+                                  {!showArchived &&
+                                    assignment.practice_mode !== "reading" &&
+                                    assignment.practice_mode !==
+                                      "word_reading" && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1 h-10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                                        onClick={() =>
+                                          setRevisionModal({
+                                            open: true,
+                                            assignmentId: assignment.id,
+                                          })
+                                        }
+                                      >
+                                        <X className="w-4 h-4 mr-1.5" />
+                                        {t(
+                                          "classroomDetail.buttons.requestRevisionBatch",
+                                        )}
+                                      </Button>
+                                    )}
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <Button
@@ -2901,6 +2929,29 @@ export default function ClassroomDetail({
                                             "classroomDetail.buttons.previewDemo",
                                           )}
                                         </Button>
+                                        {/* #830 批次要求訂正（朗讀類除外） */}
+                                        {!showArchived &&
+                                          assignment.practice_mode !==
+                                            "reading" &&
+                                          assignment.practice_mode !==
+                                            "word_reading" && (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="text-orange-600 hover:text-orange-700 dark:text-orange-400 h-10 min-h-10"
+                                              onClick={() =>
+                                                setRevisionModal({
+                                                  open: true,
+                                                  assignmentId: assignment.id,
+                                                })
+                                              }
+                                            >
+                                              <X className="w-4 h-4 mr-1" />
+                                              {t(
+                                                "classroomDetail.buttons.requestRevisionBatch",
+                                              )}
+                                            </Button>
+                                          )}
                                         {/* 自動批改模式 (rearrangement / word_selection /
                                             word_spelling / word_cloze / tug_of_war / 三種小考)
                                             不顯示 AI 批改按鈕 */}
@@ -3795,6 +3846,15 @@ export default function ClassroomDetail({
           });
           fetchAssignments();
         }}
+      />
+
+      {/* #830 批次要求訂正 Modal */}
+      <RequestRevisionModal
+        open={revisionModal.open}
+        onOpenChange={(open) => setRevisionModal({ ...revisionModal, open })}
+        assignmentId={revisionModal.assignmentId}
+        classroomId={id || ""}
+        onDone={() => fetchAssignments()}
       />
 
       {/* Sticky Note Modal */}

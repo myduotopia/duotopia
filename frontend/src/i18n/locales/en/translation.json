@@ -2774,6 +2774,7 @@
       "batchArchive": "Batch Archive",
       "viewDetails": "Edit",
       "previewDemo": "Preview",
+      "requestRevisionBatch": "Request Revision",
       "viewSubmissions": "View Student Submissions",
       "editAssignment": "Edit Assignment",
       "deleteAssignment": "Delete Assignment",
@@ -4797,6 +4798,18 @@
       "completed": "Assignment completed!",
       "completeFailed": "Failed to complete assignment"
     }
+  },
+  "requestRevision": {
+    "title": "Request Revision",
+    "selectUnder100": "Select all under 100",
+    "applyRange": "Apply range",
+    "selectedCount": "{{count}} selected",
+    "empty": "No assigned students",
+    "openGrading": "View answers / grade",
+    "confirm": "Return ({{count}})",
+    "success": "Returned {{count}} student(s) for revision",
+    "submitFailed": "Failed to return",
+    "loadFailed": "Failed to load students"
   },
   "wordQuiz": {
     "questionNav": "Q",

@@ -2828,6 +2828,7 @@
       "viewDetails": "查看詳情",
       "editContent": "編輯內容",
       "previewDemo": "預覽",
+      "requestRevisionBatch": "要求訂正",
       "viewSubmissions": "查看學生提交",
       "editAssignment": "編輯作業",
       "deleteAssignment": "刪除作業",
@@ -4830,6 +4831,18 @@
       "submitted": "作業已提交！",
       "completeFailed": "提交作業失敗"
     }
+  },
+  "requestRevision": {
+    "title": "要求訂正",
+    "selectUnder100": "全選未達 100 分",
+    "applyRange": "套用區間",
+    "selectedCount": "已選 {{count}} 位",
+    "empty": "沒有已派發的學生",
+    "openGrading": "查看作答 / 批改",
+    "confirm": "確認退回（{{count}} 位）",
+    "success": "已退回 {{count}} 位學生訂正",
+    "submitFailed": "退回失敗",
+    "loadFailed": "載入學生名單失敗"
   },
   "wordQuiz": {
     "questionNav": "題號",
