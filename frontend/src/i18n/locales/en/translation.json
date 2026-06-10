@@ -4821,7 +4821,8 @@
   },
   "studentStatusPanel": {
     "metric": {
-      "correct": "Correct",
+      "student": "Student",
+      "correctRate": "Correct",
       "pronunciation": "Pron",
       "accuracy": "Acc",
       "fluency": "Flu",

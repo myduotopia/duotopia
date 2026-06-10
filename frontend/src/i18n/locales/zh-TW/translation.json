@@ -4854,7 +4854,8 @@
   },
   "studentStatusPanel": {
     "metric": {
-      "correct": "答對",
+      "student": "學生",
+      "correctRate": "正確率",
       "pronunciation": "發音",
       "accuracy": "準確",
       "fluency": "流暢",
