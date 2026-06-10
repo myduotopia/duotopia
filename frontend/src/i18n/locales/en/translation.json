@@ -908,6 +908,9 @@
       "word_reading": "Word Reading",
       "word_spelling": "Word Spelling",
       "word_cloze": "Word Cloze",
+      "word_selection_quiz": "Word Selection (Quiz)",
+      "word_spelling_quiz": "Word Spelling (Quiz)",
+      "word_cloze_quiz": "Word Cloze (Quiz)",
       "all": "All Types"
     },
     "sort": {
