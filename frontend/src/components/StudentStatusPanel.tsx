@@ -456,7 +456,7 @@ function StudentCard({
 
       {/* Score：卡片只顯示分數（不放各項指標），字級放大 */}
       <span
-        className={`text-[50px] font-bold leading-loose ${
+        className={`text-[55px] font-bold leading-normal ${
           hasScore
             ? "text-gray-800 dark:text-gray-100"
             : "text-gray-300 dark:text-gray-600"
