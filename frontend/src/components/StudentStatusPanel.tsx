@@ -20,6 +20,7 @@ import {
   X,
   RotateCcw,
   CheckCircle2,
+  Undo2,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -75,7 +76,8 @@ export interface StudentStatusPanelProps {
   mode?: "assign" | "revision";
   /** revision 模式:把目前勾選的 student_ids 回報給父層（modal）。 */
   onRevisionSelectionChange?: (studentIds: number[]) => void;
-  /** revision/hub：單一學生列動作（退回訂正 / 完成批改）。提供才顯示按鈕。 */
+  /** revision/hub：單一學生列動作（還原 / 退回訂正 / 完成批改）。提供才顯示按鈕。 */
+  onRowReset?: (studentId: number) => void;
   onRowReturn?: (studentId: number) => void;
   onRowGrade?: (studentId: number) => void;
 }
@@ -377,7 +379,7 @@ function ListHeader({
         </span>
       ))}
       {/* 對齊各列尾端的操作按鈕欄 */}
-      {hasActions && <span className="w-16 sm:w-44 pl-1 shrink-0" />}
+      {hasActions && <span className="w-24 sm:w-64 pl-1 shrink-0" />}
     </div>
   );
 }
@@ -498,8 +500,10 @@ function StudentRow({
   onClick,
   tooltip,
   metricMode = "score",
+  onReset,
   onReturn,
   onGrade,
+  resetLabel,
   returnLabel,
   gradeLabel,
 }: {
@@ -511,12 +515,16 @@ function StudentRow({
   onClick: () => void;
   tooltip?: string;
   metricMode?: MetricMode;
+  onReset?: () => void;
   onReturn?: () => void;
   onGrade?: () => void;
+  resetLabel?: string;
   returnLabel?: string;
   gradeLabel?: string;
 }) {
   const isUnassigned = student.status === "unassigned";
+  // 已是「未開始」/未派發 → 該列還原鈕 disable
+  const resetDisabled = isUnassigned || student.status === "NOT_STARTED";
   // 已是「退回訂正」狀態 → 該列退回鈕 disable（不影響 Graded 鈕與批次退回）
   const returnDisabled = student.status === "RETURNED";
   // 已是「批改完成」狀態 → 該列 Graded 鈕 disable（不影響退回鈕與批次 Graded）
@@ -606,8 +614,23 @@ function StudentRow({
 
       {/* 單一學生操作（#830）：桌機顯示文字按鈕、手機只顯示 icon。
           固定欄寬，與表頭尾端 spacer 對齊，避免推移數值欄。 */}
-      {onReturn && (
-        <div className="flex items-center justify-end gap-1 shrink-0 w-16 sm:w-44 pl-1">
+      {(onReset || onReturn) && (
+        <div className="flex items-center justify-end gap-1 shrink-0 w-24 sm:w-64 pl-1">
+          <button
+            type="button"
+            disabled={resetDisabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!resetDisabled) onReset?.();
+            }}
+            title={resetLabel}
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700/40 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <Undo2 className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline text-xs whitespace-nowrap">
+              {resetLabel}
+            </span>
+          </button>
           <button
             type="button"
             disabled={returnDisabled}
@@ -664,6 +687,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       scrollable = false,
       mode = "assign",
       onRevisionSelectionChange,
+      onRowReset,
       onRowReturn,
       onRowGrade,
     },
@@ -671,6 +695,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
   ) {
     const { t } = useTranslation();
     const isRevision = mode === "revision";
+    const rowResetLabel = t("gradingHub.resetShort", "還原");
     const rowReturnLabel = t("gradingHub.returnShort", "退回");
     const rowGradeLabel = t("gradingHub.gradeShort", "完成");
 
@@ -1196,7 +1221,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                 <ListHeader
                   metricMode={metricMode}
                   labels={metricLabels}
-                  hasActions={!!onRowReturn}
+                  hasActions={!!onRowReset || !!onRowReturn}
                 />
               )}
               {sortedStudents.map((student) => (
@@ -1209,6 +1234,11 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   onToggle={() => toggleStudent(student.student_id)}
                   onClick={() => handleStudentClick(student)}
                   metricMode={metricMode}
+                  onReset={
+                    onRowReset
+                      ? () => onRowReset(student.student_id)
+                      : undefined
+                  }
                   onReturn={
                     onRowReturn
                       ? () => onRowReturn(student.student_id)
@@ -1219,6 +1249,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                       ? () => onRowGrade(student.student_id)
                       : undefined
                   }
+                  resetLabel={rowResetLabel}
                   returnLabel={rowReturnLabel}
                   gradeLabel={rowGradeLabel}
                   tooltip={

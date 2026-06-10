@@ -1221,6 +1221,66 @@ async def batch_return_for_revision(
     return {"returned": returned, "skipped": skipped, "count": len(returned)}
 
 
+@router.post("/{assignment_id}/batch-reset-not-started")
+async def batch_reset_not_started(
+    assignment_id: int,
+    data: dict,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """批次還原為「未開始」（#830）。
+
+    只清狀態 + 時間戳 + 分數，保留 practice session / 答案 / item progress。
+    body: { student_ids: List[int] }（單筆由前端傳 [id] 共用此端點）
+    """
+    student_ids = data.get("student_ids")
+    if not isinstance(student_ids, list) or not student_ids:
+        raise HTTPException(status_code=400, detail="student_ids is required")
+
+    parent = (
+        db.query(Assignment)
+        .filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == current_teacher.id,
+        )
+        .first()
+    )
+    if not parent:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to modify this assignment"
+        )
+    if parent.is_archived:
+        raise HTTPException(
+            status_code=403, detail="Cannot modify grades: assignment is archived"
+        )
+
+    reset: List[int] = []
+    skipped: List[int] = []
+    for sid in student_ids:
+        sa = (
+            db.query(StudentAssignment)
+            .filter(
+                StudentAssignment.assignment_id == assignment_id,
+                StudentAssignment.student_id == sid,
+            )
+            .first()
+        )
+        if not sa:
+            skipped.append(sid)
+            continue
+        sa.status = AssignmentStatus.NOT_STARTED
+        sa.started_at = None
+        sa.submitted_at = None
+        sa.graded_at = None
+        sa.returned_at = None
+        sa.resubmitted_at = None
+        sa.score = None
+        reset.append(sid)
+
+    db.commit()
+    return {"reset": reset, "skipped": skipped, "count": len(reset)}
+
+
 @router.post("/{assignment_id}/manual-grade")
 async def manual_grade_assignment(
     assignment_id: int,

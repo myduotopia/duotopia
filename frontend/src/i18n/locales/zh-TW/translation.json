@@ -4854,6 +4854,11 @@
     "completeFailed": "完成批改失敗",
     "returnShort": "退回",
     "gradeShort": "完成",
+    "resetShort": "還原",
+    "resetBtn": "還原（{{count}}）",
+    "resetSuccess": "已還原 {{count}} 位學生為未開始",
+    "resetFailed": "還原失敗",
+    "rowResetSuccess": "已還原該學生為未開始",
     "noTarget": "沒有符合的學生",
     "rowReturnSuccess": "已退回該學生訂正",
     "rowGradeSuccess": "已標記該學生完成批改"

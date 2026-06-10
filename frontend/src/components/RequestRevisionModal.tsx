@@ -29,6 +29,7 @@ import {
   Loader2,
   RotateCcw,
   CheckCircle2,
+  Undo2,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -188,6 +189,43 @@ export function RequestRevisionModal({
     }
   }, [current, selected, students, classroomId, t, onDone]);
 
+  // 還原為未開始（批次）：清狀態+時間戳+分數，保留作答紀錄。送出前排除已未開始者。
+  const handleResetBatch = useCallback(async () => {
+    if (!current) return;
+    const ids = selected.filter((id) => {
+      const s = students.find((x) => x.student_id === id);
+      return !!s && s.status !== "NOT_STARTED" && s.status !== "unassigned";
+    });
+    if (ids.length === 0) {
+      toast.error(t("gradingHub.noTarget", "沒有符合的學生"));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await apiClient.post(
+        `/api/teachers/assignments/${current.id}/batch-reset-not-started`,
+        { student_ids: ids },
+      );
+      toast.success(
+        t("gradingHub.resetSuccess", "已還原 {{count}} 位學生為未開始", {
+          count: ids.length,
+        }),
+      );
+      setStudents((prev) =>
+        prev.map((s) =>
+          ids.includes(s.student_id)
+            ? { ...s, status: "NOT_STARTED" as const, score: undefined }
+            : s,
+        ),
+      );
+      onDone?.();
+    } catch {
+      toast.error(t("gradingHub.resetFailed", "還原失敗"));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [current, selected, students, t, onDone]);
+
   // 單一學生：退回訂正（不關 modal，做完重載名單）
   const handleReturnOne = useCallback(
     async (studentId: number) => {
@@ -241,6 +279,31 @@ export function RequestRevisionModal({
       }
     },
     [current, classroomId, t, onDone],
+  );
+
+  // 單一學生：還原為未開始（清狀態+時間戳+分數，保留作答紀錄）
+  const handleResetOne = useCallback(
+    async (studentId: number) => {
+      if (!current) return;
+      try {
+        await apiClient.post(
+          `/api/teachers/assignments/${current.id}/batch-reset-not-started`,
+          { student_ids: [studentId] },
+        );
+        toast.success(t("gradingHub.rowResetSuccess", "已還原該學生為未開始"));
+        setStudents((prev) =>
+          prev.map((s) =>
+            s.student_id === studentId
+              ? { ...s, status: "NOT_STARTED" as const, score: undefined }
+              : s,
+          ),
+        );
+        onDone?.();
+      } catch {
+        toast.error(t("gradingHub.resetFailed", "還原失敗"));
+      }
+    },
+    [current, t, onDone],
   );
 
   return (
@@ -299,6 +362,7 @@ export function RequestRevisionModal({
             onStudentIdsChanged={noop}
             loading={loading}
             onRevisionSelectionChange={setSelected}
+            onRowReset={handleResetOne}
             onRowReturn={handleReturnOne}
             onRowGrade={handleGradeOne}
           />
@@ -316,10 +380,24 @@ export function RequestRevisionModal({
           </Button>
           <Button
             type="button"
-            variant="outline"
+            onClick={handleResetBatch}
+            disabled={submitting}
+            className="h-8 px-3 py-1 text-[13px] bg-slate-500 hover:bg-slate-600 text-white"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Undo2 className="h-4 w-4 mr-2" />
+            )}
+            {t("gradingHub.resetBtn", "還原（{{count}}）", {
+              count: selected.length,
+            })}
+          </Button>
+          <Button
+            type="button"
             onClick={handleReturn}
             disabled={submitting}
-            className="h-8 px-3 py-1 text-[13px] border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400"
+            className="h-8 px-3 py-1 text-[13px] bg-orange-600 hover:bg-orange-700 text-white"
           >
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />

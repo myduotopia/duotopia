@@ -4821,6 +4821,11 @@
     "completeFailed": "Failed to mark graded",
     "returnShort": "Return",
     "gradeShort": "Graded",
+    "resetShort": "Reset",
+    "resetBtn": "Reset ({{count}})",
+    "resetSuccess": "Reset {{count}} student(s) to not started",
+    "resetFailed": "Failed to reset",
+    "rowResetSuccess": "Student reset to not started",
     "noTarget": "No matching students",
     "rowReturnSuccess": "Student returned for revision",
     "rowGradeSuccess": "Student marked graded"
