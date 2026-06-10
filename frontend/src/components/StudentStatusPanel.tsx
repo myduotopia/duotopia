@@ -48,6 +48,14 @@ export interface StudentStatusPanelProps {
   loading: boolean;
   /** When true, data area scrolls internally. When false, expands naturally (parent handles scroll). */
   scrollable?: boolean;
+  /**
+   * "assign"（預設）= 既有派發/取消派發行為（完全不變）。
+   * "revision" = 批次要求訂正:只列已派發、checkbox 勾選要退回的學生、
+   *   工具列換成「全選未達100 + 分數區間」、點姓名開批改頁、不跑派發流程。
+   */
+  mode?: "assign" | "revision";
+  /** revision 模式:把目前勾選的 student_ids 回報給父層（modal）。 */
+  onRevisionSelectionChange?: (studentIds: number[]) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +67,9 @@ type TabValue = "all" | "assigned" | "unassigned";
 type SortMode = "number" | "name" | "score" | "status";
 
 const GRADABLE_MODES = new Set(["reading", "word_reading", "rearrangement"]);
+
+// revision 模式可被退回訂正的狀態（有作答可訂正）
+const RETURNABLE_STATUSES = new Set(["SUBMITTED", "GRADED", "RESUBMITTED"]);
 
 const STATUS_ORDER: Record<string, number> = {
   NOT_STARTED: 0,
@@ -481,27 +492,35 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       saving = false,
       loading,
       scrollable = false,
+      mode = "assign",
+      onRevisionSelectionChange,
     },
     ref,
   ) {
     const { t } = useTranslation();
+    const isRevision = mode === "revision";
 
     const [viewMode, setViewMode] = useState<ViewMode>("list");
     const [activeTab, setActiveTab] = useState<TabValue>("assigned");
     const [sortMode, setSortMode] = useState<SortMode>("number");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    // revision 工具列:分數區間快速勾選（預設 0~80）
+    const [rangeMin, setRangeMin] = useState("0");
+    const [rangeMax, setRangeMax] = useState("80");
 
     const isGradable = practiceMode ? GRADABLE_MODES.has(practiceMode) : false;
 
     // Clear selection when parent resets editing state (e.g. after save)
+    // revision 模式不受 isEditingStudents 影響（避免清掉退回勾選）
     useEffect(() => {
+      if (isRevision) return;
       if (!isEditingStudents) {
         setSelectedIds(new Set());
       }
-    }, [isEditingStudents]);
+    }, [isEditingStudents, isRevision]);
 
-    // Reset marked students when switching tabs
+    // Reset marked students when switching tabs / 重載學生名單時清空勾選
     useEffect(() => {
       setSelectedIds(new Set());
     }, [activeTab, students]);
@@ -521,16 +540,23 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     // hasChanges = any student marked
     const hasChanges = selectedIds.size > 0;
 
-    // Sync editing state to parent
+    // Sync editing state to parent（revision 不參與派發編輯狀態）
     useEffect(() => {
+      if (isRevision) return;
       onEditingStudentsChange(hasChanges);
-    }, [hasChanges, onEditingStudentsChange]);
+    }, [hasChanges, onEditingStudentsChange, isRevision]);
+
+    // revision 模式:把勾選回報給父層 modal
+    useEffect(() => {
+      if (!isRevision) return;
+      onRevisionSelectionChange?.(Array.from(selectedIds));
+    }, [isRevision, selectedIds, onRevisionSelectionChange]);
 
     // Compute final student_ids list based on active tab + marked students
     // Assigned tab: marked = to remove → final = initial minus marked
     // Unassigned tab: marked = to add → final = initial plus marked
     useEffect(() => {
-      if (!hasChanges) {
+      if (isRevision || !hasChanges) {
         return;
       }
       let finalIds: Set<number>;
@@ -550,6 +576,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       initialAssignedIds,
       hasChanges,
       onStudentIdsChanged,
+      isRevision,
     ]);
 
     // Cancel = clear all marks
@@ -603,13 +630,15 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     // Unassigned tab: all can be toggled
     const isCheckboxDisabled = useCallback(
       (s: StudentProgress) => {
+        // revision:只有已提交/已批改/已訂正重交可勾選退回
+        if (isRevision) return !RETURNABLE_STATUSES.has(String(s.status));
         if (activeTab === "all") return true;
         if (activeTab === "unassigned") return false;
         // assigned tab: only NOT_STARTED can be unchecked — once a student
         // starts or submits, un-assigning would silently drop their progress.
         return s.status !== "NOT_STARTED";
       },
-      [activeTab],
+      [activeTab, isRevision],
     );
 
     const toggleStudent = useCallback((studentId: number) => {
@@ -644,6 +673,36 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       });
     }, [filteredStudents, selectedIds, isCheckboxDisabled]);
 
+    // ---- revision 工具列：依條件勾選可退回學生 ----
+    const selectReturnableBy = useCallback(
+      (pred: (s: StudentProgress) => boolean) => {
+        setSelectedIds(
+          new Set(
+            filteredStudents
+              .filter((s) => !isCheckboxDisabled(s) && pred(s))
+              .map((s) => s.student_id),
+          ),
+        );
+      },
+      [filteredStudents, isCheckboxDisabled],
+    );
+    // 全選：分數 < 100
+    const selectUnder100 = useCallback(
+      () => selectReturnableBy((s) => (s.score ?? 0) < 100),
+      [selectReturnableBy],
+    );
+    // 分數區間（預設 0~80）
+    const applyScoreRange = useCallback(() => {
+      const lo = parseFloat(rangeMin);
+      const hi = parseFloat(rangeMax);
+      const min = Number.isNaN(lo) ? 0 : lo;
+      const max = Number.isNaN(hi) ? 100 : hi;
+      selectReturnableBy((s) => {
+        const sc = s.score ?? 0;
+        return sc >= min && sc <= max;
+      });
+    }, [rangeMin, rangeMax, selectReturnableBy]);
+
     // ---- Navigation ----
     // Gradable modes (see GRADABLE_MODES): open grading page for this student in a new tab.
     // Skip unassigned and NOT_STARTED — nothing to grade yet.
@@ -653,15 +712,24 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       [isGradable],
     );
 
+    // revision 模式解除 GRADABLE_MODES 限制:任何可退回學生點姓名都能開批改頁
+    const isClickableStudent = useCallback(
+      (s: StudentProgress) =>
+        isRevision
+          ? RETURNABLE_STATUSES.has(String(s.status))
+          : isGradableStudent(s),
+      [isRevision, isGradableStudent],
+    );
+
     const handleStudentClick = useCallback(
       (student: StudentProgress) => {
-        if (!isGradableStudent(student)) return;
+        if (!isClickableStudent(student)) return;
         window.open(
           `/teacher/classroom/${classroomId}/assignment/${assignmentId}/grading?studentId=${student.student_id}`,
           "_blank",
         );
       },
-      [isGradableStudent, classroomId, assignmentId],
+      [isClickableStudent, classroomId, assignmentId],
     );
 
     // ---- Tab counts ----
@@ -720,7 +788,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     ];
 
     // Whether checkboxes are interactive on current tab
-    const isCheckboxActive = activeTab !== "all";
+    const isCheckboxActive = isRevision || activeTab !== "all";
 
     // ---- Select all checkbox state ----
     const selectAllState = useMemo(() => {
@@ -803,47 +871,92 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
           </div>
         </div>
 
-        {/* Tabs + Select All */}
-        <div className="flex items-center border-b border-gray-200 dark:border-gray-700 mb-3">
-          {tabs.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => setActiveTab(tab.value)}
-              className={`flex-1 text-center py-2 text-xs font-medium border-b-2 transition-colors ${
-                activeTab === tab.value
-                  ? "border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20"
-                  : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-              }`}
-            >
-              {tab.label}
-              {tab.count != null && (
-                <span className="ml-1 text-[10px] text-gray-400">
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
+        {/* Tabs + Select All（assign 模式） */}
+        {!isRevision && (
+          <div className="flex items-center border-b border-gray-200 dark:border-gray-700 mb-3">
+            {tabs.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setActiveTab(tab.value)}
+                className={`flex-1 text-center py-2 text-xs font-medium border-b-2 transition-colors ${
+                  activeTab === tab.value
+                    ? "border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20"
+                    : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                }`}
+              >
+                {tab.label}
+                {tab.count != null && (
+                  <span className="ml-1 text-[10px] text-gray-400">
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
 
-          {/* Select All */}
-          {selectAllState !== "hidden" && (
+            {/* Select All */}
+            {selectAllState !== "hidden" && (
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                disabled={selectAllState === "disabled"}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 shrink-0 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-40"
+              >
+                {selectAllState === "checked" ? (
+                  <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold">
+                    ✓
+                  </span>
+                ) : (
+                  <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
+                )}
+                {t("assignmentDetail.sheet.selectAll", "全選")}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* revision 工具列（取代 tabs 那列）：全選未達100 + 分數區間 */}
+        {isRevision && (
+          <div className="flex items-center flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 mb-3 pb-2 text-xs">
             <button
               type="button"
-              onClick={handleSelectAll}
-              disabled={selectAllState === "disabled"}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 shrink-0 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-40"
+              onClick={selectUnder100}
+              className="inline-flex items-center gap-1.5 px-2 py-1 font-medium text-gray-600 dark:text-gray-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >
-              {selectAllState === "checked" ? (
-                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold">
-                  ✓
-                </span>
-              ) : (
-                <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
-              )}
-              {t("assignmentDetail.sheet.selectAll", "全選")}
+              <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
+              {t("requestRevision.selectUnder100", "全選未達 100 分")}
             </button>
-          )}
-        </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={rangeMin}
+                onChange={(e) => setRangeMin(e.target.value)}
+                aria-label="min"
+                className="w-14 h-7 text-center rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+              />
+              <span className="text-gray-400">~</span>
+              <input
+                type="number"
+                value={rangeMax}
+                onChange={(e) => setRangeMax(e.target.value)}
+                aria-label="max"
+                className="w-14 h-7 text-center rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+              />
+              <button
+                type="button"
+                onClick={applyScoreRange}
+                className="px-2 py-1 font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                {t("requestRevision.applyRange", "套用區間")}
+              </button>
+            </div>
+            <span className="ml-auto text-gray-500 dark:text-gray-400">
+              {t("requestRevision.selectedCount", "已選 {{count}} 位", {
+                count: selectedIds.size,
+              })}
+            </span>
+          </div>
+        )}
 
         {/* Content: loading / empty / grid / list */}
         {/* Data + legend area */}
@@ -870,7 +983,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   onToggle={() => toggleStudent(student.student_id)}
                   onClick={() => handleStudentClick(student)}
                   tooltip={
-                    isGradableStudent(student)
+                    isClickableStudent(student)
                       ? t("assignmentDetail.sheet.checkHomework", "批改作業")
                       : undefined
                   }
@@ -889,7 +1002,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   onToggle={() => toggleStudent(student.student_id)}
                   onClick={() => handleStudentClick(student)}
                   tooltip={
-                    isGradableStudent(student)
+                    isClickableStudent(student)
                       ? t("assignmentDetail.sheet.checkHomework", "批改作業")
                       : undefined
                   }
@@ -899,7 +1012,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
           )}
 
           {/* Save / Cancel bar (after student list, before legend) */}
-          {hasChanges && (
+          {!isRevision && hasChanges && (
             <div className="flex items-center justify-between mt-3 mb-2">
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 {activeTab === "assigned"
