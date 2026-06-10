@@ -131,14 +131,21 @@ export function RequestRevisionModal({
           count: ids.length,
         }),
       );
-      onOpenChange(false);
+      // 不關 modal：就地更新被退回學生的狀態，讓老師自行關閉
+      setStudents((prev) =>
+        prev.map((s) =>
+          ids.includes(s.student_id)
+            ? { ...s, status: "RETURNED" as const }
+            : s,
+        ),
+      );
       onDone?.();
     } catch {
       toast.error(t("requestRevision.submitFailed", "退回失敗"));
     } finally {
       setSubmitting(false);
     }
-  }, [current, selected, students, t, onOpenChange, onDone]);
+  }, [current, selected, students, t, onDone]);
 
   // 完成批改：finalize-batch-grade，勾選學生設 GRADED（不覆寫分數）
   // 送出前先排除已是 GRADED 的學生（取消其勾選）。
@@ -167,14 +174,19 @@ export function RequestRevisionModal({
           count: ids.length,
         }),
       );
-      onOpenChange(false);
+      // 不關 modal：就地更新被批改學生的狀態，讓老師自行關閉
+      setStudents((prev) =>
+        prev.map((s) =>
+          ids.includes(s.student_id) ? { ...s, status: "GRADED" as const } : s,
+        ),
+      );
       onDone?.();
     } catch {
       toast.error(t("gradingHub.completeFailed", "完成批改失敗"));
     } finally {
       setSubmitting(false);
     }
-  }, [current, selected, students, classroomId, t, onOpenChange, onDone]);
+  }, [current, selected, students, classroomId, t, onDone]);
 
   // 單一學生：退回訂正（不關 modal，做完重載名單）
   const handleReturnOne = useCallback(
