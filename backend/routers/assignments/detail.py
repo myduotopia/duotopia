@@ -469,24 +469,32 @@ async def get_assignment_progress(
             if sa_id not in quiz_correct_by_sa:  # 取最小 id（第一次）
                 quiz_correct_by_sa[sa_id] = correct or 0
 
-    # 朗讀/口說：每生發音/準確度/流暢度平均（func.avg 自動忽略 NULL）
+    # 朗讀/口說：每生發音/準確度/流暢度平均。分母為「全部題數」(total_items)，
+    # 未錄音/未評估的題視為 0（與總分 compute_speaking_total_score 一致），
+    # 故用 SUM(score)/total_items，而非 AVG（AVG 只平均有評分的題）。
     reading_metrics_by_sa = {}
-    if is_speaking and sa_ids:
+    if is_speaking and sa_ids and total_items:
         for sa_id, pron, acc, flu in (
             db.query(
                 StudentItemProgress.student_assignment_id,
-                func.avg(StudentItemProgress.pronunciation_score),
-                func.avg(StudentItemProgress.accuracy_score),
-                func.avg(StudentItemProgress.fluency_score),
+                func.sum(StudentItemProgress.pronunciation_score),
+                func.sum(StudentItemProgress.accuracy_score),
+                func.sum(StudentItemProgress.fluency_score),
             )
             .filter(StudentItemProgress.student_assignment_id.in_(sa_ids))
             .group_by(StudentItemProgress.student_assignment_id)
             .all()
         ):
             reading_metrics_by_sa[sa_id] = {
-                "pronunciation": round(float(pron), 1) if pron is not None else None,
-                "accuracy": round(float(acc), 1) if acc is not None else None,
-                "fluency": round(float(flu), 1) if flu is not None else None,
+                "pronunciation": (
+                    round(float(pron) / total_items, 1) if pron is not None else None
+                ),
+                "accuracy": (
+                    round(float(acc) / total_items, 1) if acc is not None else None
+                ),
+                "fluency": (
+                    round(float(flu) / total_items, 1) if flu is not None else None
+                ),
             }
 
     progress_list = []
