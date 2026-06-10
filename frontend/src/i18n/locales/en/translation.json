@@ -4803,6 +4803,7 @@
   "requestRevision": {
     "title": "Request Revision",
     "selectUnder100": "Select all under 100",
+    "selectAll": "Select all",
     "applyRange": "Apply range",
     "selectedCount": "{{count}} selected",
     "empty": "No assigned students",

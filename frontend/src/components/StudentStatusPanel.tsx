@@ -871,11 +871,17 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       },
       [filteredStudents, isCheckboxDisabled],
     );
-    // 全選：分數 < 100
-    const selectUnder100 = useCallback(
-      () => selectReturnableBy((s) => (s.score ?? 0) < 100),
-      [selectReturnableBy],
-    );
+    // 全選 / 取消全選（不分分數）
+    const allFilteredSelected =
+      filteredStudents.length > 0 &&
+      filteredStudents.every((s) => selectedIds.has(s.student_id));
+    const toggleSelectAll = useCallback(() => {
+      setSelectedIds(
+        allFilteredSelected
+          ? new Set<number>()
+          : new Set(filteredStudents.map((s) => s.student_id)),
+      );
+    }, [allFilteredSelected, filteredStudents]);
     // 分數區間（預設 0~80）
     const applyScoreRange = useCallback(() => {
       const lo = parseFloat(rangeMin);
@@ -1101,11 +1107,17 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
           <div className="flex items-center flex-wrap gap-2 mb-3 pb-2 text-xs">
             <button
               type="button"
-              onClick={selectUnder100}
+              onClick={toggleSelectAll}
               className="inline-flex items-center gap-1.5 px-2 py-1 font-medium text-gray-600 dark:text-gray-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >
-              <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
-              {t("requestRevision.selectUnder100", "全選未達 100 分")}
+              {allFilteredSelected ? (
+                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold">
+                  ✓
+                </span>
+              ) : (
+                <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
+              )}
+              {t("requestRevision.selectAll", "全選")}
             </button>
             <div className="flex items-center gap-1">
               <input
