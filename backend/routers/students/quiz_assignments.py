@@ -959,16 +959,23 @@ async def complete_word_cloze_quiz(
 # ---------------------------------------------------------------------------
 
 
-def _latest_completed_session(
+def _first_completed_quiz_session(
     db: Session, assignment_id: int, expected_mode: str
 ) -> Optional[PracticeSession]:
+    """複盤用：取「第一次 completed 的 session」＝被打分、凍結的那筆原始作答。
+
+    訂正會新建一筆訂正 session（id 較大），但分數凍結在第一次，所以複盤要顯示
+    第一次作答（與凍結分一致），而非最新的訂正 session（#830）。一般未訂正小考
+    只有一筆，first == latest。
+    """
     return (
         db.query(PracticeSession)
         .filter(
             PracticeSession.student_assignment_id == assignment_id,
             PracticeSession.practice_mode == expected_mode,
+            PracticeSession.completed_at.isnot(None),
         )
-        .order_by(PracticeSession.id.desc())
+        .order_by(PracticeSession.id.asc())
         .first()
     )
 
@@ -990,7 +997,11 @@ def _build_review_response(
     """
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
     assignment = _get_assignment_or_400(db, sa, expected_mode)
-    if sa.status not in (AssignmentStatus.SUBMITTED, AssignmentStatus.GRADED):
+    if sa.status not in (
+        AssignmentStatus.SUBMITTED,
+        AssignmentStatus.RESUBMITTED,
+        AssignmentStatus.GRADED,
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -1001,7 +1012,7 @@ def _build_review_response(
     # 不洗牌：複盤頁固定按 order_index 顯示，方便師生對照
     items = _load_quiz_items(db, assignment, shuffle=False)
     context = build_context(assignment, items) if build_context else None
-    session = _latest_completed_session(db, assignment_id, expected_mode)
+    session = _first_completed_quiz_session(db, assignment_id, expected_mode)
     answers_map: Dict[int, PracticeAnswer] = {}
     if session:
         answers_map = _existing_answers_for_session(db, session.id)
