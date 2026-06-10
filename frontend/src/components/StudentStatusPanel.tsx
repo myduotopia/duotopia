@@ -517,9 +517,12 @@ function StudentRow({
   gradeLabel?: string;
 }) {
   const isUnassigned = student.status === "unassigned";
-  // 單一列動作只對「有提交可批改」的學生顯示
-  const showRowActions =
-    !!onReturn && RETURNABLE_STATUSES.has(String(student.status));
+  // 單列動作在所有狀態都顯示；不可操作時 disable。
+  // 退回：有提交可退（SUBMITTED/RESUBMITTED/GRADED）。
+  // 完成批改：有待批的提交（SUBMITTED/RESUBMITTED），已 GRADED 不可再按。
+  const canReturn = RETURNABLE_STATUSES.has(String(student.status));
+  const canGrade =
+    student.status === "SUBMITTED" || student.status === "RESUBMITTED";
   const rowTooltip = tooltip && !isUnassigned ? tooltip : undefined;
   const isClickable = !!rowTooltip;
   // 已派發的學生一律顯示分數（同 StudentCard 規則）。
@@ -607,38 +610,36 @@ function StudentRow({
           固定欄寬，與表頭尾端 spacer 對齊，避免推移數值欄。 */}
       {onReturn && (
         <div className="flex items-center justify-end gap-1 shrink-0 w-16 sm:w-44 pl-1">
-          {showRowActions && (
-            <>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReturn?.();
-                }}
-                title={returnLabel}
-                className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-colors"
-              >
-                <RotateCcw className="h-4 w-4 shrink-0" />
-                <span className="hidden sm:inline text-xs whitespace-nowrap">
-                  {returnLabel}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onGrade?.();
-                }}
-                title={gradeLabel}
-                className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 transition-colors"
-              >
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span className="hidden sm:inline text-xs whitespace-nowrap">
-                  {gradeLabel}
-                </span>
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            disabled={!canReturn}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (canReturn) onReturn?.();
+            }}
+            title={returnLabel}
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <RotateCcw className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline text-xs whitespace-nowrap">
+              {returnLabel}
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={!canGrade}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (canGrade) onGrade?.();
+            }}
+            title={gradeLabel}
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline text-xs whitespace-nowrap">
+              {gradeLabel}
+            </span>
+          </button>
         </div>
       )}
     </div>

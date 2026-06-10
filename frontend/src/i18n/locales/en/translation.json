@@ -4819,7 +4819,7 @@
     "completeSuccess": "Marked {{count}} student(s) graded",
     "completeFailed": "Failed to mark graded",
     "returnShort": "Return",
-    "gradeShort": "Done",
+    "gradeShort": "Graded",
     "rowReturnSuccess": "Student returned for revision",
     "rowGradeSuccess": "Student marked graded"
   },
