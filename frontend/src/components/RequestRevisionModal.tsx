@@ -268,6 +268,7 @@ export function RequestRevisionModal({
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={submitting}
+            className="h-8 px-3 py-1 text-[13px]"
           >
             {t("common.cancel", "取消")}
           </Button>
@@ -276,7 +277,7 @@ export function RequestRevisionModal({
             variant="outline"
             onClick={handleReturn}
             disabled={submitting || selected.length === 0}
-            className="border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400"
+            className="h-8 px-3 py-1 text-[13px] border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400"
           >
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -291,7 +292,7 @@ export function RequestRevisionModal({
             type="button"
             onClick={handleComplete}
             disabled={submitting || selected.length === 0}
-            className="bg-green-600 hover:bg-green-700 text-white"
+            className="h-8 px-3 py-1 text-[13px] bg-green-600 hover:bg-green-700 text-white"
           >
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
