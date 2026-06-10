@@ -77,9 +77,6 @@ export function RequestRevisionModal({
   }, [open, initialIndex]);
 
   const current = assignments[idx];
-  const isReading =
-    current?.practice_mode === "reading" ||
-    current?.practice_mode === "word_reading";
 
   useEffect(() => {
     if (!open || !current) return;
@@ -163,9 +160,7 @@ export function RequestRevisionModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={`${isReading ? "max-w-4xl" : "max-w-2xl"} max-h-[85vh] flex flex-col`}
-      >
+      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           {/* title = 作業名稱 + 上一份/下一份箭頭 */}
           <div className="flex items-center gap-2">
