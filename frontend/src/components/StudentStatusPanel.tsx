@@ -442,17 +442,17 @@ function StudentCard({
         <TrafficLightDot status={student.status} size={12} />
       </span>
 
-      {/* Seat number */}
-      {Number(student.student_number) > 0 && (
-        <span className="text-[15px] text-gray-700 dark:text-gray-300 leading-tight">
-          {student.student_number}
+      {/* 座號 + 姓名（同一列，座號在左） */}
+      <div className="flex items-center justify-center gap-1 w-full min-w-0">
+        {Number(student.student_number) > 0 && (
+          <span className="text-[15px] leading-normal text-gray-700 dark:text-gray-300 shrink-0">
+            {student.student_number}
+          </span>
+        )}
+        <span className="text-[15px] leading-normal truncate text-gray-600 dark:text-gray-400">
+          {student.student_name}
         </span>
-      )}
-
-      {/* Name */}
-      <span className="text-[15px] truncate w-full text-gray-600 dark:text-gray-400 leading-tight">
-        {student.student_name}
-      </span>
+      </div>
 
       {/* Score：卡片只顯示分數（不放各項指標），字級放大 */}
       <span
