@@ -391,7 +391,7 @@ export function RequestRevisionModal({
           <Button
             type="button"
             onClick={handleResetBatch}
-            disabled={submitting}
+            disabled={submitting || resetCount === 0}
             className="h-8 px-3 py-1 text-[13px] bg-slate-500 hover:bg-slate-600 text-white"
           >
             {submitting ? (
@@ -406,7 +406,7 @@ export function RequestRevisionModal({
           <Button
             type="button"
             onClick={handleReturn}
-            disabled={submitting}
+            disabled={submitting || returnCount === 0}
             className="h-8 px-3 py-1 text-[13px] bg-orange-600 hover:bg-orange-700 text-white"
           >
             {submitting ? (
@@ -421,7 +421,7 @@ export function RequestRevisionModal({
           <Button
             type="button"
             onClick={handleComplete}
-            disabled={submitting}
+            disabled={submitting || gradeCount === 0}
             className="h-8 px-3 py-1 text-[13px] bg-green-600 hover:bg-green-700 text-white"
           >
             {submitting ? (
