@@ -391,8 +391,15 @@ function ListHeader({
         )}
         <span className="truncate">{labels.selectAllStudents}</span>
       </button>
-      {metricHeaderLabels(metricMode, labels).map((lbl, i) => (
-        <span key={i} className="w-14 text-center shrink-0">
+      {metricHeaderLabels(metricMode, labels).map((lbl, i, arr) => (
+        <span
+          key={i}
+          className={`w-14 text-center shrink-0 ${
+            metricMode === "reading" && i !== arr.length - 1
+              ? "hidden sm:block"
+              : ""
+          }`}
+        >
           {lbl}
         </span>
       ))}
@@ -619,6 +626,10 @@ function StudentRow({
             key={i}
             className={`w-14 text-center shrink-0 text-xs sm:text-sm ${
               i === arr.length - 1 ? "font-bold" : ""
+            } ${
+              metricMode === "reading" && i !== arr.length - 1
+                ? "hidden sm:block"
+                : ""
             } ${
               hasScore
                 ? "text-gray-800 dark:text-gray-100"
