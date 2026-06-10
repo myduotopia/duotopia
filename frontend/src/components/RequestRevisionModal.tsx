@@ -306,6 +306,16 @@ export function RequestRevisionModal({
     [current, t, onDone],
   );
 
+  // 每顆 batch 鈕的數字 = 該動作實際會處理的人數（扣除已是同狀態而會被略過的勾選）
+  const countExcluding = (...excluded: string[]) =>
+    selected.filter((id) => {
+      const s = students.find((x) => x.student_id === id);
+      return !!s && !excluded.includes(String(s.status));
+    }).length;
+  const resetCount = countExcluding("NOT_STARTED", "unassigned");
+  const returnCount = countExcluding("RETURNED");
+  const gradeCount = countExcluding("GRADED");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
@@ -390,7 +400,7 @@ export function RequestRevisionModal({
               <Undo2 className="h-4 w-4 mr-2" />
             )}
             {t("gradingHub.resetBtn", "還原（{{count}}）", {
-              count: selected.length,
+              count: resetCount,
             })}
           </Button>
           <Button
@@ -405,7 +415,7 @@ export function RequestRevisionModal({
               <RotateCcw className="h-4 w-4 mr-2" />
             )}
             {t("gradingHub.returnBtn", "退回訂正（{{count}}）", {
-              count: selected.length,
+              count: returnCount,
             })}
           </Button>
           <Button
@@ -420,7 +430,7 @@ export function RequestRevisionModal({
               <CheckCircle2 className="h-4 w-4 mr-2" />
             )}
             {t("gradingHub.completeBtn", "完成批改（{{count}}）", {
-              count: selected.length,
+              count: gradeCount,
             })}
           </Button>
         </DialogFooter>
