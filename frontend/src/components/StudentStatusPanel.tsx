@@ -375,7 +375,7 @@ function ListHeader({
   onToggleAll?: () => void;
 }) {
   return (
-    <div className="sticky top-0 z-10 flex items-center w-full gap-3 px-3 py-1.5 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[11px] font-medium text-gray-400 dark:text-gray-500">
+    <div className="sticky top-0 z-10 flex items-center w-full gap-2 sm:gap-3 px-3 py-1.5 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[11px] font-medium text-gray-400 dark:text-gray-500">
       {/* 全選 checkbox + 標題（點擊切換全選 / 取消全選） */}
       <button
         type="button"
@@ -565,7 +565,7 @@ function StudentRow({
         }
       }}
       title={rowTooltip}
-      className={`flex items-center w-full gap-3 py-2 px-3 rounded transition-colors ${
+      className={`flex items-center w-full gap-2 sm:gap-3 py-2 px-3 rounded transition-colors ${
         isClickable
           ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
           : "cursor-default"
@@ -608,7 +608,7 @@ function StudentRow({
       )}
 
       {/* Name */}
-      <span className="text-sm text-gray-800 dark:text-gray-200 flex-1 text-left truncate">
+      <span className="text-xs sm:text-sm text-gray-800 dark:text-gray-200 flex-1 text-left truncate">
         {student.student_name}
       </span>
 
@@ -617,7 +617,7 @@ function StudentRow({
         (val, i, arr) => (
           <span
             key={i}
-            className={`w-14 text-center shrink-0 text-sm ${
+            className={`w-14 text-center shrink-0 text-xs sm:text-sm ${
               i === arr.length - 1 ? "font-bold" : ""
             } ${
               hasScore
@@ -1051,7 +1051,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
         {/* Header: (revision) 分數區間勾選 + 已選數在左；排序 + 檢視在右 */}
         <div className="flex items-center gap-2 mb-3">
           {isRevision && (
-            <div className="flex items-center gap-2 text-xs">
+            <div className="hidden sm:flex items-center gap-2 text-xs">
               <div className="flex items-center gap-1">
                 <input
                   type="number"
@@ -1311,8 +1311,14 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
             </div>
           )}
 
-          {/* Status legend */}
-          <StatusLegend />
+          {/* Status legend（hub 手機版隱藏；查看詳情不變） */}
+          {isRevision ? (
+            <div className="hidden sm:block">
+              <StatusLegend />
+            </div>
+          ) : (
+            <StatusLegend />
+          )}
         </div>
       </div>
     );

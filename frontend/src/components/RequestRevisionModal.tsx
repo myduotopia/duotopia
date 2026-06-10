@@ -427,7 +427,7 @@ export function RequestRevisionModal({
           />
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="grid grid-cols-2 gap-x-2 gap-y-3 pt-2 sm:flex sm:gap-x-0 sm:gap-y-0 sm:pt-0">
           <Button
             type="button"
             variant="outline"
