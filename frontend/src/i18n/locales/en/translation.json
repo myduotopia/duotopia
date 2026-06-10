@@ -4832,7 +4832,7 @@
   },
   "studentStatusPanel": {
     "metric": {
-      "student": "Student",
+      "selectAllStudents": "Select all students",
       "correctRate": "Correct",
       "pronunciation": "Pron",
       "accuracy": "Acc",

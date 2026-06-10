@@ -4865,7 +4865,7 @@
   },
   "studentStatusPanel": {
     "metric": {
-      "student": "學生",
+      "selectAllStudents": "全選學生",
       "correctRate": "正確率",
       "pronunciation": "發音",
       "accuracy": "準確",

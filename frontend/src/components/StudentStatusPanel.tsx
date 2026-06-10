@@ -297,7 +297,7 @@ export function StatusLegend({ columns = 2 }: { columns?: 1 | 2 } = {}) {
 // ---------------------------------------------------------------------------
 
 interface MetricLabels {
-  student: string;
+  selectAllStudents: string;
   correctRate: string;
   pronunciation: string;
   accuracy: string;
@@ -365,14 +365,32 @@ function ListHeader({
   metricMode,
   labels,
   hasActions,
+  allSelected,
+  onToggleAll,
 }: {
   metricMode: MetricMode;
   labels: MetricLabels;
   hasActions?: boolean;
+  allSelected?: boolean;
+  onToggleAll?: () => void;
 }) {
   return (
     <div className="sticky top-0 z-10 flex items-center w-full gap-3 px-3 py-1.5 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[11px] font-medium text-gray-400 dark:text-gray-500">
-      <span className="flex-1 text-left truncate">{labels.student}</span>
+      {/* 全選 checkbox + 標題（點擊切換全選 / 取消全選） */}
+      <button
+        type="button"
+        onClick={onToggleAll}
+        className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+      >
+        {allSelected ? (
+          <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold shrink-0">
+            ✓
+          </span>
+        ) : (
+          <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700 shrink-0" />
+        )}
+        <span className="truncate">{labels.selectAllStudents}</span>
+      </button>
       {metricHeaderLabels(metricMode, labels).map((lbl, i) => (
         <span key={i} className="w-14 text-center shrink-0">
           {lbl}
@@ -708,7 +726,10 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
           ? "reading"
           : "score";
     const metricLabels: MetricLabels = {
-      student: t("studentStatusPanel.metric.student", "學生"),
+      selectAllStudents: t(
+        "studentStatusPanel.metric.selectAllStudents",
+        "全選學生",
+      ),
       correctRate: t("studentStatusPanel.metric.correctRate", "正確率"),
       pronunciation: t("studentStatusPanel.metric.pronunciation", "發音"),
       accuracy: t("studentStatusPanel.metric.accuracy", "準確"),
@@ -1136,20 +1157,6 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
         {/* revision 工具列（取代 tabs 那列）：全選未達100 + 分數區間 */}
         {isRevision && (
           <div className="flex items-center flex-wrap gap-2 mb-3 pb-2 text-xs">
-            <button
-              type="button"
-              onClick={toggleSelectAll}
-              className="inline-flex items-center gap-1.5 px-2 py-1 font-medium text-gray-600 dark:text-gray-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
-            >
-              {allFilteredSelected ? (
-                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold">
-                  ✓
-                </span>
-              ) : (
-                <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
-              )}
-              {t("requestRevision.selectAll", "全選")}
-            </button>
             <div className="flex items-center gap-1">
               <input
                 type="number"
@@ -1222,6 +1229,8 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   metricMode={metricMode}
                   labels={metricLabels}
                   hasActions={!!onRowReset || !!onRowReturn}
+                  allSelected={allFilteredSelected}
+                  onToggleAll={toggleSelectAll}
                 />
               )}
               {sortedStudents.map((student) => (
