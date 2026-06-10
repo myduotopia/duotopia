@@ -803,7 +803,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
 
     return (
       <div
-        className={`border-t dark:border-gray-700 pt-4 ${scrollable ? "flex flex-col h-full" : ""}`}
+        className={`border-t dark:border-gray-700 pt-4 ${scrollable ? "flex flex-col flex-1 min-h-0" : ""}`}
       >
         {/* Header: sort + view toggle（標題已移除） */}
         <div className="flex items-center justify-end mb-3 gap-2">

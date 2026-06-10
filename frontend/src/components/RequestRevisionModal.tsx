@@ -158,12 +158,13 @@ export function RequestRevisionModal({
           )}
         </DialogHeader>
 
-        {/* 內嵌 progress & grade 的 panel;捲動容器與 pg modal(AssignmentDetailSheet)
-            一致:外層 flex-1 overflow-y-auto + 自然高度 panel。Dialog 用 max-height,
-            故需 min-h-0 才能縮到比內容小而出現卷軸。 */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* 內嵌 progress & grade 的 panel。外層 flex 容器(不自己捲),
+            panel scrollable → 只有學生名單區捲動,排序/全選/區間列固定。
+            全程用 flex 鏈(無 h-full 百分比),在 Dialog 的 max-height 下穩定。 */}
+        <div className="flex-1 min-h-0 flex flex-col">
           <StudentStatusPanel
             mode="revision"
+            scrollable
             students={students}
             assignmentId={current?.id ?? 0}
             classroomId={classroomId}
