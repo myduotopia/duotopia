@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, X } from "lucide-react";
+import { Loader2, RotateCcw } from "lucide-react";
 import StudentStatusPanel, {
   type StudentProgress,
 } from "@/components/StudentStatusPanel";
@@ -137,7 +137,7 @@ export function RequestRevisionModal({
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (
-              <X className="h-4 w-4 mr-2" />
+              <RotateCcw className="h-4 w-4 mr-2" />
             )}
             {t("requestRevision.confirm", "確認退回（{{count}} 位）", {
               count: selected.length,

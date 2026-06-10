@@ -48,6 +48,7 @@ import {
   Edit,
   FileText,
   X,
+  RotateCcw,
   Save,
   Mic,
   Trash2,
@@ -2551,7 +2552,7 @@ export default function ClassroomDetail({
                                           })
                                         }
                                       >
-                                        <X className="w-4 h-4 mr-1.5" />
+                                        <RotateCcw className="w-4 h-4 mr-1.5" />
                                         {t(
                                           "classroomDetail.buttons.requestRevisionBatch",
                                         )}
@@ -2946,7 +2947,7 @@ export default function ClassroomDetail({
                                                 })
                                               }
                                             >
-                                              <X className="w-4 h-4 mr-1" />
+                                              <RotateCcw className="w-4 h-4 mr-1" />
                                               {t(
                                                 "classroomDetail.buttons.requestRevisionBatch",
                                               )}
