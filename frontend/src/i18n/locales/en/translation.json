@@ -4828,6 +4828,8 @@
     "rowResetSuccess": "Student reset to not started",
     "aiGradeSuccess": "AI grading complete",
     "aiGradeFailed": "AI grading failed",
+    "aiGradeProgress": "AI grading {{current}}/{{total}}",
+    "aiGradePartial": "{{ok}} done, {{fail}} failed",
     "noTarget": "No matching students",
     "rowReturnSuccess": "Student returned for revision",
     "rowGradeSuccess": "Student marked graded"

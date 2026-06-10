@@ -23,6 +23,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -75,7 +76,12 @@ export function RequestRevisionModal({
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
-  const [aiGrading, setAiGrading] = useState(false);
+  // AI 批改進度（null = 未在批改）；aiGrading 由它衍生
+  const [aiProgress, setAiProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
+  const aiGrading = aiProgress !== null;
   // AI 批改算完分數後，重新載入名單（總分/指標才會更新）
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -119,25 +125,65 @@ export function RequestRevisionModal({
     };
   }, [open, current, t, reloadKey]);
 
-  // AI 批改：呼叫 batch-grade（彙總每題 AI 分數→總分、補跑漏評估的題、產生評語）。
+  // AI 批改：把非-GRADED 學生分批（每批 5）、少量並行（3）呼叫 batch-grade，顯示真實進度。
+  // batch-grade 多人模式後端自動跳過 GRADED；只補送「有錄音但未評估」的題到 Azure。
   // 不改狀態；算完重載名單讓總分/指標更新。之後老師再用 完成批改/退回 收尾。
   const handleAiGrade = useCallback(async () => {
     if (!current) return;
-    setAiGrading(true);
+    const targetIds = students
+      .filter((s) => s.status !== "GRADED" && s.status !== "unassigned")
+      .map((s) => s.student_id);
+    if (targetIds.length === 0) {
+      toast.error(t("gradingHub.noTarget", "沒有符合的學生"));
+      return;
+    }
+
+    const CHUNK = 5;
+    const CONCURRENCY = 3;
+    const chunks: number[][] = [];
+    for (let i = 0; i < targetIds.length; i += CHUNK) {
+      chunks.push(targetIds.slice(i, i + CHUNK));
+    }
+
+    setAiProgress({ current: 0, total: targetIds.length });
+    let cursor = 0;
+    let done = 0;
+    let failed = 0;
+    const worker = async () => {
+      while (cursor < chunks.length) {
+        const chunk = chunks[cursor++];
+        try {
+          await apiClient.post(
+            `/api/teachers/assignments/${current.id}/batch-grade`,
+            { classroom_id: Number(classroomId), student_ids: chunk },
+          );
+        } catch {
+          failed += chunk.length;
+        }
+        done += chunk.length;
+        setAiProgress({ current: done, total: targetIds.length });
+      }
+    };
     try {
-      await apiClient.post(
-        `/api/teachers/assignments/${current.id}/batch-grade`,
-        { classroom_id: Number(classroomId) },
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, chunks.length) }, worker),
       );
-      toast.success(t("gradingHub.aiGradeSuccess", "AI 批改完成"));
+      if (failed > 0) {
+        toast.warning(
+          t("gradingHub.aiGradePartial", "完成 {{ok}}，失敗 {{fail}}", {
+            ok: targetIds.length - failed,
+            fail: failed,
+          }),
+        );
+      } else {
+        toast.success(t("gradingHub.aiGradeSuccess", "AI 批改完成"));
+      }
       setReloadKey((k) => k + 1);
       onDone?.();
-    } catch {
-      toast.error(t("gradingHub.aiGradeFailed", "AI 批改失敗"));
     } finally {
-      setAiGrading(false);
+      setAiProgress(null);
     }
-  }, [current, classroomId, t, onDone]);
+  }, [current, students, classroomId, t, onDone]);
 
   // 退回訂正：batch-return-for-revision（小考建訂正 session、凍結分數）
   // 送出前先排除已是 RETURNED 的學生（取消其勾選）。
@@ -387,25 +433,6 @@ export function RequestRevisionModal({
           </div>
         </DialogHeader>
 
-        {/* 朗讀/口說：AI 批改（呼叫 batch-grade 算分），取代舊 AI Grade modal */}
-        {isReading && canUseAiGrading && (
-          <div className="flex justify-end px-1">
-            <Button
-              type="button"
-              onClick={handleAiGrade}
-              disabled={aiGrading}
-              className="h-8 px-3 py-1 text-[13px] gap-1.5 bg-purple-600 hover:bg-purple-700 text-white"
-            >
-              {aiGrading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              {t("assignmentDetail.buttons.batchGrade", "AI 批改")}
-            </Button>
-          </div>
-        )}
-
         {/* 內嵌 progress & grade 的 panel。外層 flex 容器(不自己捲),
             panel scrollable → 只有學生名單區捲動,排序/全選/區間列固定。 */}
         <div className="flex-1 min-h-0 flex flex-col">
@@ -428,19 +455,35 @@ export function RequestRevisionModal({
         </div>
 
         <DialogFooter className="grid grid-cols-2 gap-x-2 gap-y-3 pt-2 sm:flex sm:gap-x-0 sm:gap-y-0 sm:pt-0">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={submitting}
-            className="h-8 px-3 py-1 text-[13px]"
-          >
-            {t("common.cancel", "取消")}
-          </Button>
+          {/* 朗讀/口說：AI 批改（batch-grade 算分，取代舊 AI Grade modal） */}
+          {isReading && canUseAiGrading && (
+            <Button
+              type="button"
+              onClick={handleAiGrade}
+              disabled={submitting || aiGrading}
+              className="h-8 px-3 py-1 text-[13px] bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              {aiGrading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-2" />
+              )}
+              {aiGrading && aiProgress
+                ? t(
+                    "gradingHub.aiGradeProgress",
+                    "AI 批改中 {{current}}/{{total}}",
+                    {
+                      current: aiProgress.current,
+                      total: aiProgress.total,
+                    },
+                  )
+                : t("assignmentDetail.buttons.batchGrade", "AI 批改")}
+            </Button>
+          )}
           <Button
             type="button"
             onClick={handleResetBatch}
-            disabled={submitting || resetCount === 0}
+            disabled={submitting || aiGrading || resetCount === 0}
             className="h-8 px-3 py-1 text-[13px] bg-slate-500 hover:bg-slate-600 text-white"
           >
             {submitting ? (
@@ -455,7 +498,7 @@ export function RequestRevisionModal({
           <Button
             type="button"
             onClick={handleReturn}
-            disabled={submitting || returnCount === 0}
+            disabled={submitting || aiGrading || returnCount === 0}
             className="h-8 px-3 py-1 text-[13px] bg-orange-600 hover:bg-orange-700 text-white"
           >
             {submitting ? (
@@ -470,7 +513,7 @@ export function RequestRevisionModal({
           <Button
             type="button"
             onClick={handleComplete}
-            disabled={submitting || gradeCount === 0}
+            disabled={submitting || aiGrading || gradeCount === 0}
             className="h-8 px-3 py-1 text-[13px] bg-green-600 hover:bg-green-700 text-white"
           >
             {submitting ? (
@@ -483,6 +526,20 @@ export function RequestRevisionModal({
             })}
           </Button>
         </DialogFooter>
+
+        {/* AI 批改進度條：貼在 modal 下邊界（全寬細 bar） */}
+        {aiGrading && aiProgress && (
+          <div className="absolute bottom-0 left-0 right-0">
+            <Progress
+              value={
+                aiProgress.total
+                  ? (aiProgress.current / aiProgress.total) * 100
+                  : 0
+              }
+              className="h-1.5 rounded-none rounded-b-lg"
+            />
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
