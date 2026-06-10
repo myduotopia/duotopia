@@ -444,13 +444,13 @@ function StudentCard({
 
       {/* Seat number */}
       {Number(student.student_number) > 0 && (
-        <span className="text-xs text-gray-700 dark:text-gray-300 leading-tight">
+        <span className="text-[15px] text-gray-700 dark:text-gray-300 leading-tight">
           {student.student_number}
         </span>
       )}
 
       {/* Name */}
-      <span className="text-xs truncate w-full text-gray-600 dark:text-gray-400 leading-tight">
+      <span className="text-[15px] truncate w-full text-gray-600 dark:text-gray-400 leading-tight">
         {student.student_name}
       </span>
 
