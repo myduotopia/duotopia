@@ -1,12 +1,16 @@
 /**
- * RequestRevisionModal — 班級作業列表「批次要求訂正」彈窗（#830）
+ * RequestRevisionModal — 班級作業列表「批改 hub」（#830）
  *
- * 薄殼:內嵌 progress & grade 的 StudentStatusPanel（mode="revision"）讓外觀完全一致,
- * 只差:無 tabs、checkbox 勾選要退回的學生、工具列換成「全選未達100 + 分數區間」、
- * 點姓名開該生批改頁。
+ * 薄殼:內嵌 progress & grade 的 StudentStatusPanel（mode="revision"）顯示每位學生分數,
+ * 老師勾選學生後可批次「退回訂正」或「完成批改」。依作業類型顯示不同分數欄:
+ *   - 小考:答對題數 / 總題數
+ *   - 朗讀:發音 / 準確度 / 流暢度 / 總分（modal 加寬）
+ *   - 其他:單一分數
  *
- * title 顯示作業名稱 + 上一份/下一份箭頭(切換到相鄰作業的退回 modal),仿 GradingHeader。
- * 學生名單在 modal 內捲動,不撐破 modal。
+ * 退回訂正 → batch-return-for-revision（小考會建訂正 session、凍結分數）。
+ * 完成批改 → finalize-batch-grade（勾選學生設 GRADED;不覆寫分數）。
+ *
+ * title 顯示作業名稱 + 上一份/下一份箭頭。學生名單在 modal 內捲動。
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -21,25 +25,32 @@ import {
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Loader2,
+  RotateCcw,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import StudentStatusPanel, {
   type StudentProgress,
 } from "@/components/StudentStatusPanel";
 
-interface RevisionAssignment {
+interface HubAssignment {
   id: number;
   title: string;
+  practice_mode: string;
 }
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 可退回的作業清單（未封存非朗讀），支援上一份/下一份切換 */
-  assignments: RevisionAssignment[];
+  /** 可操作的作業清單（未封存），支援上一份/下一份切換 */
+  assignments: HubAssignment[];
   /** 被點開的作業在 assignments 中的索引 */
   initialIndex: number;
   classroomId: string | number;
-  /** 退回成功後通知父層 refetch */
+  /** 退回/完成成功後通知父層 refetch */
   onDone?: () => void;
 }
 
@@ -66,6 +77,9 @@ export function RequestRevisionModal({
   }, [open, initialIndex]);
 
   const current = assignments[idx];
+  const isReading =
+    current?.practice_mode === "reading" ||
+    current?.practice_mode === "word_reading";
 
   useEffect(() => {
     if (!open || !current) return;
@@ -97,7 +111,8 @@ export function RequestRevisionModal({
     };
   }, [open, current, t]);
 
-  const handleSubmit = useCallback(async () => {
+  // 退回訂正：batch-return-for-revision（小考建訂正 session、凍結分數）
+  const handleReturn = useCallback(async () => {
     if (!current || selected.length === 0) return;
     setSubmitting(true);
     try {
@@ -119,9 +134,38 @@ export function RequestRevisionModal({
     }
   }, [current, selected, t, onOpenChange, onDone]);
 
+  // 完成批改：finalize-batch-grade，勾選學生設 GRADED（不覆寫分數）
+  const handleComplete = useCallback(async () => {
+    if (!current || selected.length === 0) return;
+    setSubmitting(true);
+    try {
+      const teacher_decisions: Record<string, "GRADED"> = {};
+      selected.forEach((id) => {
+        teacher_decisions[String(id)] = "GRADED";
+      });
+      await apiClient.post(
+        `/api/teachers/assignments/${current.id}/finalize-batch-grade`,
+        { classroom_id: Number(classroomId), teacher_decisions },
+      );
+      toast.success(
+        t("gradingHub.completeSuccess", "已完成 {{count}} 位學生批改", {
+          count: selected.length,
+        }),
+      );
+      onOpenChange(false);
+      onDone?.();
+    } catch {
+      toast.error(t("gradingHub.completeFailed", "完成批改失敗"));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [current, selected, classroomId, t, onOpenChange, onDone]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent
+        className={`${isReading ? "max-w-4xl" : "max-w-2xl"} max-h-[85vh] flex flex-col`}
+      >
         <DialogHeader>
           {/* title = 作業名稱 + 上一份/下一份箭頭 */}
           <div className="flex items-center gap-2">
@@ -136,7 +180,7 @@ export function RequestRevisionModal({
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <DialogTitle className="flex-1 min-w-0 text-center truncate">
-              {current?.title ?? t("requestRevision.title", "要求訂正")}
+              {current?.title ?? t("gradingHub.title", "批改")}
             </DialogTitle>
             <Button
               type="button"
@@ -159,8 +203,7 @@ export function RequestRevisionModal({
         </DialogHeader>
 
         {/* 內嵌 progress & grade 的 panel。外層 flex 容器(不自己捲),
-            panel scrollable → 只有學生名單區捲動,排序/全選/區間列固定。
-            全程用 flex 鏈(無 h-full 百分比),在 Dialog 的 max-height 下穩定。 */}
+            panel scrollable → 只有學生名單區捲動,排序/全選/區間列固定。 */}
         <div className="flex-1 min-h-0 flex flex-col">
           <StudentStatusPanel
             mode="revision"
@@ -168,6 +211,7 @@ export function RequestRevisionModal({
             students={students}
             assignmentId={current?.id ?? 0}
             classroomId={classroomId}
+            practiceMode={current?.practice_mode}
             isEditingStudents={false}
             onEditingStudentsChange={noop}
             onStudentIdsChanged={noop}
@@ -187,16 +231,32 @@ export function RequestRevisionModal({
           </Button>
           <Button
             type="button"
-            onClick={handleSubmit}
+            variant="outline"
+            onClick={handleReturn}
             disabled={submitting || selected.length === 0}
-            className="bg-orange-600 hover:bg-orange-700 text-white"
+            className="border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400"
           >
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (
               <RotateCcw className="h-4 w-4 mr-2" />
             )}
-            {t("requestRevision.confirm", "確認退回（{{count}} 位）", {
+            {t("gradingHub.returnBtn", "退回訂正（{{count}}）", {
+              count: selected.length,
+            })}
+          </Button>
+          <Button
+            type="button"
+            onClick={handleComplete}
+            disabled={submitting || selected.length === 0}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+            )}
+            {t("gradingHub.completeBtn", "完成批改（{{count}}）", {
               count: selected.length,
             })}
           </Button>

@@ -2829,6 +2829,7 @@
       "editContent": "編輯內容",
       "previewDemo": "預覽",
       "requestRevisionBatch": "要求訂正",
+      "gradeHub": "批改",
       "viewSubmissions": "查看學生提交",
       "editAssignment": "編輯作業",
       "deleteAssignment": "刪除作業",
@@ -4843,6 +4844,22 @@
     "success": "已退回 {{count}} 位學生訂正",
     "submitFailed": "退回失敗",
     "loadFailed": "載入學生名單失敗"
+  },
+  "gradingHub": {
+    "title": "批改",
+    "returnBtn": "退回訂正（{{count}}）",
+    "completeBtn": "完成批改（{{count}}）",
+    "completeSuccess": "已完成 {{count}} 位學生批改",
+    "completeFailed": "完成批改失敗"
+  },
+  "studentStatusPanel": {
+    "metric": {
+      "correct": "答對",
+      "pronunciation": "發音",
+      "accuracy": "準確",
+      "fluency": "流暢",
+      "total": "總分"
+    }
   },
   "wordQuiz": {
     "questionNav": "題號",

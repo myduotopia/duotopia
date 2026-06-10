@@ -319,24 +319,23 @@ export default function ClassroomDetail({
     assignmentId: 0,
     classroomId: 0,
   });
-  // #830 批次要求訂正 modal
+  // #830 批改 hub modal
   const [revisionModal, setRevisionModal] = useState<{
     open: boolean;
-    assignments: { id: number; title: string }[];
+    assignments: { id: number; title: string; practice_mode: string }[];
     index: number;
   }>({
     open: false,
     assignments: [],
     index: 0,
   });
-  // 開啟批次要求訂正 modal：以「未封存非朗讀」作業清單支援上一份/下一份切換
+  // 開啟批改 hub：以「未封存」作業清單（含朗讀）支援上一份/下一份切換
   const openRevisionModal = (assignment: Assignment) => {
-    const eligible = filteredAssignments
-      .filter(
-        (a) =>
-          a.practice_mode !== "reading" && a.practice_mode !== "word_reading",
-      )
-      .map((a) => ({ id: a.id, title: a.title }));
+    const eligible = filteredAssignments.map((a) => ({
+      id: a.id,
+      title: a.title,
+      practice_mode: a.practice_mode || "",
+    }));
     const index = Math.max(
       0,
       eligible.findIndex((a) => a.id === assignment.id),
@@ -2555,25 +2554,20 @@ export default function ClassroomDetail({
                                   >
                                     {t("classroomDetail.buttons.previewDemo")}
                                   </Button>
-                                  {/* #830 批次要求訂正（朗讀類除外） */}
-                                  {!showArchived &&
-                                    assignment.practice_mode !== "reading" &&
-                                    assignment.practice_mode !==
-                                      "word_reading" && (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="flex-1 h-10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-50 dark:hover:bg-orange-900/20"
-                                        onClick={() =>
-                                          openRevisionModal(assignment)
-                                        }
-                                      >
-                                        <RotateCcw className="w-4 h-4 mr-1.5" />
-                                        {t(
-                                          "classroomDetail.buttons.requestRevisionBatch",
-                                        )}
-                                      </Button>
-                                    )}
+                                  {/* #830 批改 hub（看成績 + 退回訂正 + 完成批改） */}
+                                  {!showArchived && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="flex-1 h-10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                                      onClick={() =>
+                                        openRevisionModal(assignment)
+                                      }
+                                    >
+                                      <RotateCcw className="w-4 h-4 mr-1.5" />
+                                      {t("classroomDetail.buttons.gradeHub")}
+                                    </Button>
+                                  )}
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <Button
@@ -2946,26 +2940,22 @@ export default function ClassroomDetail({
                                             "classroomDetail.buttons.previewDemo",
                                           )}
                                         </Button>
-                                        {/* #830 批次要求訂正（朗讀類除外） */}
-                                        {!showArchived &&
-                                          assignment.practice_mode !==
-                                            "reading" &&
-                                          assignment.practice_mode !==
-                                            "word_reading" && (
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="text-orange-600 hover:text-orange-700 dark:text-orange-400 h-10 min-h-10"
-                                              onClick={() =>
-                                                openRevisionModal(assignment)
-                                              }
-                                            >
-                                              <RotateCcw className="w-4 h-4 mr-1" />
-                                              {t(
-                                                "classroomDetail.buttons.requestRevisionBatch",
-                                              )}
-                                            </Button>
-                                          )}
+                                        {/* #830 批改 hub（看成績 + 退回訂正 + 完成批改） */}
+                                        {!showArchived && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-orange-600 hover:text-orange-700 dark:text-orange-400 h-10 min-h-10"
+                                            onClick={() =>
+                                              openRevisionModal(assignment)
+                                            }
+                                          >
+                                            <RotateCcw className="w-4 h-4 mr-1" />
+                                            {t(
+                                              "classroomDetail.buttons.gradeHub",
+                                            )}
+                                          </Button>
+                                        )}
                                         {/* 自動批改模式 (rearrangement / word_selection /
                                             word_spelling / word_cloze / tug_of_war / 三種小考)
                                             不顯示 AI 批改按鈕 */}

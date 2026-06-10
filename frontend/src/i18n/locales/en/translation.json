@@ -2775,6 +2775,7 @@
       "viewDetails": "Edit",
       "previewDemo": "Preview",
       "requestRevisionBatch": "Revise",
+      "gradeHub": "Grade",
       "viewSubmissions": "View Student Submissions",
       "editAssignment": "Edit Assignment",
       "deleteAssignment": "Delete Assignment",
@@ -4810,6 +4811,22 @@
     "success": "Returned {{count}} student(s) for revision",
     "submitFailed": "Failed to return",
     "loadFailed": "Failed to load students"
+  },
+  "gradingHub": {
+    "title": "Grade",
+    "returnBtn": "Return ({{count}})",
+    "completeBtn": "Mark graded ({{count}})",
+    "completeSuccess": "Marked {{count}} student(s) graded",
+    "completeFailed": "Failed to mark graded"
+  },
+  "studentStatusPanel": {
+    "metric": {
+      "correct": "Correct",
+      "pronunciation": "Pron",
+      "accuracy": "Acc",
+      "fluency": "Flu",
+      "total": "Total"
+    }
   },
   "wordQuiz": {
     "questionNav": "Q",

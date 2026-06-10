@@ -21,6 +21,7 @@ from models import (
     AssignmentContent,
     StudentAssignment,
     StudentItemProgress,
+    PracticeSession,
 )
 from .dependencies import get_current_teacher
 from .utils import compute_speaking_total_score
@@ -440,6 +441,54 @@ async def get_assignment_progress(
         else None
     )
 
+    # 批改 hub 用的每生聚合（#830）：依作業類型擇一，迴圈外一次抓好避免 N+1。
+    practice_mode = assignment.practice_mode or ""
+    is_quiz = practice_mode.endswith("_quiz")
+    is_speaking = practice_mode in _SPEAKING_SCORE_MODES
+    sa_ids = [sa.id for sa in student_assignments]
+
+    # 小考：每生「第一次 completed」session 的答對題數（與凍結分一致）
+    quiz_correct_by_sa = {}
+    if is_quiz and sa_ids:
+        for sa_id, correct in (
+            db.query(
+                PracticeSession.student_assignment_id,
+                PracticeSession.correct_count,
+            )
+            .filter(
+                PracticeSession.student_assignment_id.in_(sa_ids),
+                PracticeSession.practice_mode == practice_mode,
+                PracticeSession.completed_at.isnot(None),
+            )
+            .order_by(
+                PracticeSession.student_assignment_id,
+                PracticeSession.id.asc(),
+            )
+            .all()
+        ):
+            if sa_id not in quiz_correct_by_sa:  # 取最小 id（第一次）
+                quiz_correct_by_sa[sa_id] = correct or 0
+
+    # 朗讀/口說：每生發音/準確度/流暢度平均（func.avg 自動忽略 NULL）
+    reading_metrics_by_sa = {}
+    if is_speaking and sa_ids:
+        for sa_id, pron, acc, flu in (
+            db.query(
+                StudentItemProgress.student_assignment_id,
+                func.avg(StudentItemProgress.pronunciation_score),
+                func.avg(StudentItemProgress.accuracy_score),
+                func.avg(StudentItemProgress.fluency_score),
+            )
+            .filter(StudentItemProgress.student_assignment_id.in_(sa_ids))
+            .group_by(StudentItemProgress.student_assignment_id)
+            .all()
+        ):
+            reading_metrics_by_sa[sa_id] = {
+                "pronunciation": round(float(pron), 1) if pron is not None else None,
+                "accuracy": round(float(acc), 1) if acc is not None else None,
+                "fluency": round(float(flu), 1) if flu is not None else None,
+            }
+
     progress_list = []
     for student in all_students:
         # 使用字典快速查找，O(1) 時間複雜度
@@ -472,6 +521,14 @@ async def get_assignment_progress(
                     else None
                 ),
                 "is_interim_score": _is_interim_score(sa, assignment),
+                # 批改 hub 欄位（#830）：依作業類型擇一，其餘為 None
+                "correct_count": (
+                    quiz_correct_by_sa.get(sa.id) if is_quiz and sa else None
+                ),
+                "total_questions": total_items if is_quiz else None,
+                "metrics": (
+                    reading_metrics_by_sa.get(sa.id) if is_speaking and sa else None
+                ),
                 "attempts": 1 if sa and sa.submitted_at else 0,
                 "last_activity": (
                     sa.updated_at.isoformat()

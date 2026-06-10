@@ -33,7 +33,18 @@ export interface StudentProgress {
   score?: number;
   is_assigned?: boolean;
   is_interim_score?: boolean;
+  // 批改 hub 欄位（#830）：小考用 correct/total；朗讀用 metrics 三項平均
+  correct_count?: number | null;
+  total_questions?: number | null;
+  metrics?: {
+    pronunciation: number | null;
+    accuracy: number | null;
+    fluency: number | null;
+  } | null;
 }
+
+/** 名單分數區顯示型態：小考(答對/總題) / 朗讀(發音·準·流·總分) / 預設單一分數。 */
+export type MetricMode = "quiz" | "reading" | "score";
 
 export interface StudentStatusPanelProps {
   students: StudentProgress[];
@@ -269,6 +280,53 @@ export function StatusLegend({ columns = 2 }: { columns?: 1 | 2 } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// 批改 hub 分數區（#830）：朗讀的單一指標欄（label + 值）
+// ---------------------------------------------------------------------------
+
+interface MetricLabels {
+  correct: string;
+  pronunciation: string;
+  accuracy: string;
+  fluency: string;
+  total: string;
+}
+
+function MetricCol({
+  label,
+  value,
+  bold,
+}: {
+  label: string;
+  value: number | null | undefined;
+  bold?: boolean;
+}) {
+  return (
+    <span className="flex flex-col items-center leading-tight w-10 shrink-0">
+      <span className="text-[9px] text-gray-400 dark:text-gray-500">
+        {label}
+      </span>
+      <span
+        className={
+          bold
+            ? "text-sm font-bold text-gray-800 dark:text-gray-100"
+            : "text-sm text-gray-600 dark:text-gray-300"
+        }
+      >
+        {value == null ? "—" : Number(value).toFixed(0)}
+      </span>
+    </span>
+  );
+}
+
+/** 小考答對/總題的文字（"17/20"）；無資料回 "-"。 */
+function quizScoreText(student: StudentProgress, hasScore: boolean): string {
+  if (!hasScore) return "-";
+  const correct = student.correct_count ?? "—";
+  const total = student.total_questions ?? "—";
+  return `${correct}/${total}`;
+}
+
+// ---------------------------------------------------------------------------
 // StudentCard - Grid view 卡片
 // ---------------------------------------------------------------------------
 
@@ -279,6 +337,7 @@ function StudentCard({
   onToggle,
   onClick,
   tooltip,
+  metricMode = "score",
 }: {
   student: StudentProgress;
   isSelected: boolean;
@@ -286,6 +345,7 @@ function StudentCard({
   onToggle: () => void;
   onClick: () => void;
   tooltip?: string;
+  metricMode?: MetricMode;
 }) {
   const isUnassigned = student.status === "unassigned";
   const cardTooltip = tooltip && !isUnassigned ? tooltip : undefined;
@@ -355,7 +415,7 @@ function StudentCard({
         {student.student_name}
       </span>
 
-      {/* Score */}
+      {/* Score（grid 太小：小考顯示答對/總題，朗讀與預設顯示總分） */}
       <span
         className={`text-base font-bold leading-tight ${
           hasScore
@@ -363,9 +423,11 @@ function StudentCard({
             : "text-gray-300 dark:text-gray-600"
         }`}
       >
-        {hasScore
-          ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
-          : "-"}
+        {metricMode === "quiz"
+          ? quizScoreText(student, hasScore)
+          : hasScore
+            ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
+            : "-"}
       </span>
     </div>
   );
@@ -383,6 +445,8 @@ function StudentRow({
   onToggle,
   onClick,
   tooltip,
+  metricMode = "score",
+  metricLabels,
 }: {
   student: StudentProgress;
   isEditing: boolean;
@@ -391,6 +455,8 @@ function StudentRow({
   onToggle: () => void;
   onClick: () => void;
   tooltip?: string;
+  metricMode?: MetricMode;
+  metricLabels?: MetricLabels;
 }) {
   const isUnassigned = student.status === "unassigned";
   const rowTooltip = tooltip && !isUnassigned ? tooltip : undefined;
@@ -458,18 +524,42 @@ function StudentRow({
         {student.student_name}
       </span>
 
-      {/* Score */}
-      <span
-        className={`text-sm font-bold shrink-0 ${
-          hasScore
-            ? "text-gray-800 dark:text-gray-100"
-            : "text-gray-300 dark:text-gray-600"
-        }`}
-      >
-        {hasScore
-          ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
-          : "-"}
-      </span>
+      {/* Score / 批改 hub 指標（#830） */}
+      {metricMode === "reading" ? (
+        <div className="flex items-center gap-1.5 shrink-0">
+          <MetricCol
+            label={metricLabels?.pronunciation ?? "發音"}
+            value={student.metrics?.pronunciation}
+          />
+          <MetricCol
+            label={metricLabels?.accuracy ?? "準確"}
+            value={student.metrics?.accuracy}
+          />
+          <MetricCol
+            label={metricLabels?.fluency ?? "流暢"}
+            value={student.metrics?.fluency}
+          />
+          <MetricCol
+            label={metricLabels?.total ?? "總分"}
+            value={hasScore ? scoreValue : null}
+            bold
+          />
+        </div>
+      ) : (
+        <span
+          className={`text-sm font-bold shrink-0 ${
+            hasScore
+              ? "text-gray-800 dark:text-gray-100"
+              : "text-gray-300 dark:text-gray-600"
+          }`}
+        >
+          {metricMode === "quiz"
+            ? quizScoreText(student, hasScore)
+            : hasScore
+              ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
+              : "-"}
+        </span>
+      )}
     </div>
   );
 }
@@ -499,6 +589,22 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
   ) {
     const { t } = useTranslation();
     const isRevision = mode === "revision";
+
+    // 批改 hub（revision 模式）依作業類型決定分數區欄位；assign 模式維持單一分數（不變）。
+    const metricMode: MetricMode = !isRevision
+      ? "score"
+      : practiceMode?.endsWith("_quiz")
+        ? "quiz"
+        : practiceMode === "reading" || practiceMode === "word_reading"
+          ? "reading"
+          : "score";
+    const metricLabels: MetricLabels = {
+      correct: t("studentStatusPanel.metric.correct", "答對"),
+      pronunciation: t("studentStatusPanel.metric.pronunciation", "發音"),
+      accuracy: t("studentStatusPanel.metric.accuracy", "準確"),
+      fluency: t("studentStatusPanel.metric.fluency", "流暢"),
+      total: t("studentStatusPanel.metric.total", "總分"),
+    };
 
     const [viewMode, setViewMode] = useState<ViewMode>("list");
     const [activeTab, setActiveTab] = useState<TabValue>("assigned");
@@ -978,6 +1084,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   isDisabled={isCheckboxDisabled(student)}
                   onToggle={() => toggleStudent(student.student_id)}
                   onClick={() => handleStudentClick(student)}
+                  metricMode={metricMode}
                   tooltip={
                     isClickableStudent(student)
                       ? t("assignmentDetail.sheet.checkHomework", "批改作業")
@@ -997,6 +1104,8 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   isDisabled={isCheckboxDisabled(student)}
                   onToggle={() => toggleStudent(student.student_id)}
                   onClick={() => handleStudentClick(student)}
+                  metricMode={metricMode}
+                  metricLabels={metricLabels}
                   tooltip={
                     isClickableStudent(student)
                       ? t("assignmentDetail.sheet.checkHomework", "批改作業")
