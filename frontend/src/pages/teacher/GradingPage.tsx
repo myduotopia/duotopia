@@ -27,6 +27,7 @@ import {
   StudentListPanel,
   OverallFeedbackPanel,
 } from "@/components/grading";
+import { ClassQuizStats } from "@/components/grading/ClassQuizStats";
 
 const ReadingAssessmentPanel = lazy(() =>
   import("@/components/grading/ReadingAssessmentPanel").then((m) => ({
@@ -241,6 +242,10 @@ export default function GradingPage() {
   // 學生列表相關
   const [studentList, setStudentList] = useState<StudentListItem[]>([]);
   const [assignmentTitle, setAssignmentTitle] = useState("");
+  // 作業層級 practice_mode（決定左欄是否顯示小考【班級統計】）
+  const [assignmentPracticeMode, setAssignmentPracticeMode] = useState<
+    string | undefined
+  >(undefined);
 
   // 載入作業資訊和學生列表
   useEffect(() => {
@@ -283,6 +288,7 @@ export default function GradingPage() {
       setAssignmentTitle(
         response.title || `${t("gradingPage.labels.grading")} #${assignmentId}`,
       );
+      setAssignmentPracticeMode(response.practice_mode);
     } catch (error) {
       console.error("Failed to load assignment info:", error);
     }
@@ -959,6 +965,11 @@ export default function GradingPage() {
             currentStudentId={studentId}
             onSelect={handleStudentSelect}
             activeTab={activeTab}
+            topSlot={
+              assignmentId && assignmentPracticeMode?.endsWith("_quiz") ? (
+                <ClassQuizStats assignmentId={assignmentId} />
+              ) : undefined
+            }
           />
 
           <Suspense

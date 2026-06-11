@@ -2936,6 +2936,14 @@
   },
   "gradingPage": {
     "title": "批改作業",
+    "classStats": {
+      "title": "班級統計",
+      "submitted": "已交 {{n}}",
+      "correct": "答對",
+      "wrong": "答錯",
+      "unanswered": "未作答",
+      "questionLabel": "第 {{n}} 題"
+    },
     "quiz": {
       "score": "分數",
       "accuracy": "答對率",

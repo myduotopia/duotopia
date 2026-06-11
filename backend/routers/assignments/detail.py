@@ -22,6 +22,8 @@ from models import (
     StudentAssignment,
     StudentItemProgress,
     PracticeSession,
+    PracticeAnswer,
+    AssignmentStatus,
 )
 from .dependencies import get_current_teacher
 from .utils import compute_speaking_total_score
@@ -574,6 +576,143 @@ async def get_assignment_progress(
         )
 
     return progress_list
+
+
+@router.get("/{assignment_id}/quiz-question-stats")
+async def get_quiz_question_stats(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """小考班級統計：每題答對/答錯/未作答的學生名單（#830）。
+
+    以每位「已提交」學生的第一次 completed session（凍結那筆）為準。
+    答對=有答案且 is_correct；答錯=有答案但不對；未作答=該題無答案紀錄。
+    """
+    assignment = (
+        db.query(Assignment)
+        .filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == current_teacher.id,
+            Assignment.is_active.is_(True),
+        )
+        .first()
+    )
+    if not assignment:
+        raise HTTPException(
+            status_code=404,
+            detail="Assignment not found or you don't have permission",
+        )
+
+    practice_mode = assignment.practice_mode or ""
+    if not practice_mode.endswith("_quiz"):
+        return {"is_quiz": False, "total_submitted": 0, "questions": []}
+
+    # 1. canonical content items（依序 → question_number 1..N）
+    items = (
+        db.query(ContentItem)
+        .join(Content, ContentItem.content_id == Content.id)
+        .join(AssignmentContent, AssignmentContent.content_id == Content.id)
+        .filter(AssignmentContent.assignment_id == assignment_id)
+        .order_by(
+            AssignmentContent.order_index,
+            ContentItem.order_index,
+            ContentItem.id,
+        )
+        .all()
+    )
+
+    # 2. 已提交學生（帶 Student 資料）
+    submitted = (
+        db.query(StudentAssignment, Student)
+        .join(Student, Student.id == StudentAssignment.student_id)
+        .filter(
+            StudentAssignment.assignment_id == assignment_id,
+            StudentAssignment.status.in_(
+                [
+                    AssignmentStatus.SUBMITTED,
+                    AssignmentStatus.RESUBMITTED,
+                    AssignmentStatus.GRADED,
+                ]
+            ),
+        )
+        .all()
+    )
+    student_meta = {
+        sa.id: {
+            "student_id": st.id,
+            "name": st.name,
+            "number": st.student_number,
+        }
+        for sa, st in submitted
+    }
+    sa_ids = list(student_meta.keys())
+
+    # 3. 每位 SA 第一次 completed session（最小 id）
+    first_session_by_sa = {}
+    if sa_ids:
+        for sa_id, sess_id in (
+            db.query(PracticeSession.student_assignment_id, PracticeSession.id)
+            .filter(
+                PracticeSession.student_assignment_id.in_(sa_ids),
+                PracticeSession.practice_mode == practice_mode,
+                PracticeSession.completed_at.isnot(None),
+            )
+            .order_by(
+                PracticeSession.student_assignment_id,
+                PracticeSession.id.asc(),
+            )
+            .all()
+        ):
+            if sa_id not in first_session_by_sa:
+                first_session_by_sa[sa_id] = sess_id
+    session_to_sa = {v: k for k, v in first_session_by_sa.items()}
+
+    # 4. 第一次 session 的答案 → (sa_id, content_item_id) → is_correct
+    correct_map = {}
+    if session_to_sa:
+        for sess_id, item_id, is_correct in (
+            db.query(
+                PracticeAnswer.practice_session_id,
+                PracticeAnswer.content_item_id,
+                PracticeAnswer.is_correct,
+            )
+            .filter(PracticeAnswer.practice_session_id.in_(list(session_to_sa.keys())))
+            .all()
+        ):
+            sa_id = session_to_sa.get(sess_id)
+            if sa_id is not None:
+                correct_map[(sa_id, item_id)] = bool(is_correct)
+
+    # 5. 每題分三類
+    questions = []
+    for idx, item in enumerate(items, start=1):
+        correct, wrong, unanswered = [], [], []
+        for sa_id in sa_ids:
+            meta = student_meta[sa_id]
+            ans = correct_map.get((sa_id, item.id))
+            if ans is True:
+                correct.append(meta)
+            elif ans is False:
+                wrong.append(meta)
+            else:
+                unanswered.append(meta)
+        questions.append(
+            {
+                "question_number": idx,
+                "content_item_id": item.id,
+                "text": item.text or "",
+                "correct": correct,
+                "wrong": wrong,
+                "unanswered": unanswered,
+            }
+        )
+
+    return {
+        "is_quiz": True,
+        "total_submitted": len(sa_ids),
+        "questions": questions,
+    }
 
 
 @router.get("/{assignment_id}/students")
