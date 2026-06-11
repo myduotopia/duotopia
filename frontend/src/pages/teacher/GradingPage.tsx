@@ -974,10 +974,10 @@ export default function GradingPage() {
                 <button
                   type="button"
                   onClick={() => setShowClassReport(true)}
-                  className={`mb-3 flex w-full items-center gap-1.5 rounded-md border px-2 py-2 text-sm font-medium transition-colors ${
+                  className={`btn-metallic mb-3 flex w-full items-center gap-1.5 px-2 py-2 text-sm font-semibold transition-colors ${
                     showClassReport
-                      ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
-                      : "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                      ? "text-blue-700 dark:text-blue-300"
+                      : "text-gray-800 dark:text-gray-100"
                   }`}
                 >
                   <BarChart3 className="h-4 w-4" />
