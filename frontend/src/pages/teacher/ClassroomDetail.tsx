@@ -149,6 +149,8 @@ export default function ClassroomDetail({
   const [canUseAiGrading, setCanUseAiGrading] = useState<boolean>(true);
   // #830：批改 hub 內已有「AI 批改」入口取代列表上的 AI Grade 鈕，暫時隱藏列表入口
   const SHOW_LIST_AI_GRADE = false;
+  // #830：批改 hub 已取代「Progress & Grade」便利貼入口，隱藏每筆作業的該入口
+  const SHOW_PROGRESS_GRADE_ENTRY = false;
   const [teacherData, setTeacherData] = useState<{
     subscription_status?: string;
     days_remaining?: number;
@@ -2585,25 +2587,27 @@ export default function ClassroomDetail({
                                       align="end"
                                       className="bg-white dark:bg-gray-800"
                                     >
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          setStickyNoteModal({
-                                            open: true,
-                                            assignmentIndex: (showArchived
-                                              ? archivedAssignments
-                                              : assignments
-                                            ).findIndex(
-                                              (a) => a.id === assignment.id,
-                                            ),
-                                          })
-                                        }
-                                      >
-                                        <StickyNote className="h-4 w-4 mr-2" />
-                                        {t(
-                                          "classroomDetail.buttons.stickyNote",
-                                          "便利貼",
-                                        )}
-                                      </DropdownMenuItem>
+                                      {SHOW_PROGRESS_GRADE_ENTRY && (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            setStickyNoteModal({
+                                              open: true,
+                                              assignmentIndex: (showArchived
+                                                ? archivedAssignments
+                                                : assignments
+                                              ).findIndex(
+                                                (a) => a.id === assignment.id,
+                                              ),
+                                            })
+                                          }
+                                        >
+                                          <StickyNote className="h-4 w-4 mr-2" />
+                                          {t(
+                                            "classroomDetail.buttons.stickyNote",
+                                            "便利貼",
+                                          )}
+                                        </DropdownMenuItem>
+                                      )}
                                       {showArchived && (
                                         <DropdownMenuItem
                                           onClick={() =>
@@ -2995,28 +2999,30 @@ export default function ClassroomDetail({
                                               )}
                                             </Button>
                                           )}
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="text-amber-600 hover:text-amber-700 dark:text-amber-400 h-10 min-h-10"
-                                          onClick={() =>
-                                            setStickyNoteModal({
-                                              open: true,
-                                              assignmentIndex: (showArchived
-                                                ? archivedAssignments
-                                                : assignments
-                                              ).findIndex(
-                                                (a) => a.id === assignment.id,
-                                              ),
-                                            })
-                                          }
-                                        >
-                                          <StickyNote className="h-5 w-5 mr-1" />
-                                          {t(
-                                            "classroomDetail.buttons.stickyNote",
-                                            "進度",
-                                          )}
-                                        </Button>
+                                        {SHOW_PROGRESS_GRADE_ENTRY && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-amber-600 hover:text-amber-700 dark:text-amber-400 h-10 min-h-10"
+                                            onClick={() =>
+                                              setStickyNoteModal({
+                                                open: true,
+                                                assignmentIndex: (showArchived
+                                                  ? archivedAssignments
+                                                  : assignments
+                                                ).findIndex(
+                                                  (a) => a.id === assignment.id,
+                                                ),
+                                              })
+                                            }
+                                          >
+                                            <StickyNote className="h-5 w-5 mr-1" />
+                                            {t(
+                                              "classroomDetail.buttons.stickyNote",
+                                              "進度",
+                                            )}
+                                          </Button>
+                                        )}
                                         {showArchived ? (
                                           <>
                                             <Button

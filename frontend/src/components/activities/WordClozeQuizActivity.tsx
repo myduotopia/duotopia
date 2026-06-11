@@ -30,6 +30,7 @@ import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import QuizAnswerInput from "./shared/QuizAnswerInput";
+import CardNavArrow from "./shared/CardNavArrow";
 import QuizReviewView, {
   type QuizReviewPayload,
   type QuizReviewWord,
@@ -534,9 +535,23 @@ export default function WordClozeQuizActivity({
         </div>
       )}
 
-      <Card className="flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+      <Card className="relative flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+        {/* #830: 上一題 / 下一題改為卡片左右兩側箭頭（對齊一般單字卡 WordCard） */}
+        {currentIndex > 0 && (
+          <CardNavArrow
+            direction="prev"
+            onClick={() => goTo(currentIndex - 1)}
+          />
+        )}
+        {!isLast && (
+          <CardNavArrow
+            direction="next"
+            disabled={submittingAnswer || (isRevision && !currentResolved)}
+            onClick={() => goTo(currentIndex + 1)}
+          />
+        )}
         <CardContent className="flex-1 min-h-0 flex flex-col gap-4 p-0">
-          <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto">
+          <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto px-10 sm:px-12">
             <div className="text-sm text-gray-500">
               {t("wordQuiz.questionLabel", {
                 current: currentWord.question_number,
@@ -632,52 +647,28 @@ export default function WordClozeQuizActivity({
             )}
           </div>
 
-          {/* Card footer: prev/next/submit */}
-          <div className="flex gap-2 justify-between border-t pt-3 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={currentIndex === 0 || submittingAnswer}
-              onClick={() => goTo(currentIndex - 1)}
-            >
-              {t("wordQuiz.prev") || "上一題"}
-            </Button>
-            <div className="flex gap-2">
-              {/* 非最後一題：顯示「下一題」（訂正模式也保留手動翻頁，已答對題鎖定） */}
-              {!isLast && (
-                <Button
-                  type="button"
-                  variant={isRevision ? "outline" : "default"}
-                  onClick={() => goTo(currentIndex + 1)}
-                  disabled={
-                    submittingAnswer || (isRevision && !currentResolved)
-                  }
-                >
-                  {t("wordQuiz.next") || "下一題"}
-                </Button>
-              )}
-              {/* 提交鈕：一般模式僅最後一題顯示；訂正模式全程顯示，
-                  但唯有全部改對（everyResolved）才可點擊 */}
-              {(isRevision || isLast) && (
-                <Button
-                  type="button"
-                  onClick={handleSubmitAll}
-                  disabled={
-                    completing ||
-                    submittingAnswer ||
-                    (isRevision && !everyResolved)
-                  }
-                >
-                  {completing ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Send className="h-4 w-4 mr-2" />
-                  )}
-                  {t("wordQuiz.submit") || "提交"}
-                </Button>
-              )}
+          {/* Card footer: 只剩提交鈕（prev/next 已移到卡片左右兩側）#830。
+              一般模式僅最後一題顯示；訂正模式全程顯示，唯有全部改對才可點擊。 */}
+          {(isRevision || isLast) && (
+            <div className="flex justify-center border-t pt-3 shrink-0">
+              <Button
+                type="button"
+                onClick={handleSubmitAll}
+                disabled={
+                  completing ||
+                  submittingAnswer ||
+                  (isRevision && !everyResolved)
+                }
+              >
+                {completing ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                {t("wordQuiz.submit") || "提交"}
+              </Button>
             </div>
-          </div>
+          )}
 
           {/* #830: 老師預覽時卡片最下方顯示該題班級表現 %條 */}
           {renderCardFooter?.(currentWord.content_item_id)}
