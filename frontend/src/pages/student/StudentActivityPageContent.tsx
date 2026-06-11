@@ -6,7 +6,14 @@
  * 2. 老師預覽示範頁面 (TeacherAssignmentPreviewPage)
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  type ReactNode,
+} from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -190,6 +197,8 @@ interface StudentActivityPageContentProps {
     show_image?: boolean;
     show_option_images?: boolean;
   };
+  // #830: 老師預覽小考時，注入每張卡底部「該題班級表現」%條（學生作答頁不傳）。
+  renderCardFooter?: (contentItemId: number) => ReactNode;
 }
 
 // =============================================================================
@@ -296,6 +305,7 @@ export default function StudentActivityPageContent({
   canUseAiAnalysis = true,
   timeLimitPerQuestion = 0,
   previewSettings,
+  renderCardFooter,
 }: StudentActivityPageContentProps) {
   const { t } = useTranslation();
 
@@ -1875,6 +1885,7 @@ export default function StudentActivityPageContent({
               play_audio: previewSettings?.play_audio ?? false,
               show_answer: showAnswer,
             }}
+            renderCardFooter={renderCardFooter}
           />
         );
       }
@@ -1900,6 +1911,7 @@ export default function StudentActivityPageContent({
               play_audio: previewSettings?.play_audio ?? false,
               show_answer: showAnswer,
             }}
+            renderCardFooter={renderCardFooter}
           />
         );
       }
@@ -1927,6 +1939,7 @@ export default function StudentActivityPageContent({
               play_audio: previewSettings?.play_audio ?? false,
               show_answer: showAnswer,
             }}
+            renderCardFooter={renderCardFooter}
           />
         );
       }

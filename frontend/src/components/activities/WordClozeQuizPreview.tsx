@@ -3,7 +3,7 @@
  *
  * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import WordClozeQuizActivity from "./WordClozeQuizActivity";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
@@ -16,6 +16,8 @@ interface Props {
     time_limit_per_question?: number;
     shuffle_questions?: boolean;
   };
+  // #830: 老師預覽時注入每張卡底部「該題班級表現」%條（派發 sheet 不傳）。
+  renderCardFooter?: (contentItemId: number) => ReactNode;
 }
 
 interface ApiItem {
@@ -43,7 +45,11 @@ interface QuizWord {
   question_number: number;
 }
 
-export default function WordClozeQuizPreview({ contentId, settings }: Props) {
+export default function WordClozeQuizPreview({
+  contentId,
+  settings,
+  renderCardFooter,
+}: Props) {
   const { token } = useTeacherAuthStore();
   const [items, setItems] = useState<ApiItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -140,6 +146,7 @@ export default function WordClozeQuizPreview({ contentId, settings }: Props) {
         assignmentId={0}
         previewWords={previewWords}
         previewSettings={previewSettings}
+        renderCardFooter={renderCardFooter}
       />
     </div>
   );

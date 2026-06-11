@@ -18,6 +18,22 @@ import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import StudentActivityPageContent, {
   type Activity,
 } from "../student/StudentActivityPageContent";
+// #830: 小考預覽每張卡底部的「該題班級表現」%條
+import QuestionStatBar, {
+  type StudentRef,
+} from "@/components/grading/QuestionStatBar";
+
+interface QuizStatQuestion {
+  content_item_id: number;
+  correct: StudentRef[];
+  wrong: StudentRef[];
+  unanswered: StudentRef[];
+}
+interface QuizStatsResponse {
+  is_quiz: boolean;
+  total_submitted: number;
+  questions: QuizStatQuestion[];
+}
 
 interface ActivityResponse {
   assignment_id: number;
@@ -59,6 +75,37 @@ export default function TeacherAssignmentPreviewPage() {
   );
   const [loading, setLoading] = useState(true);
   const [showBanner, setShowBanner] = useState(true);
+  // #830: 小考每題班級表現（已提交學生第一次作答那筆）。非小考時為 null。
+  const [quizStats, setQuizStats] = useState<{
+    total: number;
+    byItem: Map<number, QuizStatQuestion>;
+  } | null>(null);
+
+  const practiceMode = activityData?.practice_mode || null;
+  useEffect(() => {
+    if (!practiceMode || !practiceMode.endsWith("_quiz")) {
+      setQuizStats(null);
+      return;
+    }
+    let cancelled = false;
+    apiClient
+      .get<QuizStatsResponse>(
+        `/api/teachers/assignments/${assignmentId}/quiz-question-stats`,
+      )
+      .then((resp) => {
+        if (cancelled || !resp?.is_quiz) return;
+        setQuizStats({
+          total: resp.total_submitted,
+          byItem: new Map(resp.questions.map((q) => [q.content_item_id, q])),
+        });
+      })
+      .catch(() => {
+        /* 統計失敗不擋預覽頁 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assignmentId, practiceMode]);
 
   const fetchPreviewData = useCallback(async () => {
     try {
@@ -160,6 +207,22 @@ export default function TeacherAssignmentPreviewPage() {
         }}
         isPreviewMode={true}
         authToken={token || undefined}
+        renderCardFooter={
+          quizStats
+            ? (id) => {
+                const q = quizStats.byItem.get(id);
+                if (!q) return null;
+                return (
+                  <QuestionStatBar
+                    correct={q.correct}
+                    wrong={q.wrong}
+                    unanswered={q.unanswered}
+                    total={quizStats.total}
+                  />
+                );
+              }
+            : undefined
+        }
         onBack={goBack}
         onSubmit={async () => {
           // 預覽模式完成時，跳回作業列表

@@ -11,7 +11,14 @@
  *     + useShortLandscape 走橫式排版（圖左、選項右 2×2）
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
@@ -80,6 +87,8 @@ interface Props {
   onComplete?: () => void;
   previewWords?: QuizWord[];
   previewSettings?: Partial<StartResponse>;
+  // #830: 老師預覽時注入每張卡底部的「該題班級表現」%條（學生端不傳）。
+  renderCardFooter?: (contentItemId: number) => ReactNode;
 }
 
 export default function WordSelectionQuizActivity({
@@ -89,6 +98,7 @@ export default function WordSelectionQuizActivity({
   onComplete,
   previewWords,
   previewSettings,
+  renderCardFooter,
 }: Props) {
   void _isPreviewMode;
   const { t } = useTranslation();
@@ -661,6 +671,9 @@ export default function WordSelectionQuizActivity({
               )}
             </div>
           </div>
+
+          {/* #830: 老師預覽時卡片最下方顯示該題班級表現 %條 */}
+          {renderCardFooter?.(currentWord.content_item_id)}
         </CardContent>
       </Card>
     </div>
