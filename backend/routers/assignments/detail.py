@@ -684,7 +684,8 @@ async def get_quiz_question_stats(
             if sa_id is not None:
                 correct_map[(sa_id, item_id)] = bool(is_correct)
 
-    # 5. 每題分三類
+    # 5. 每題分三類 + 題目/答案（依類型）
+    is_cloze = practice_mode == "word_cloze_quiz"
     questions = []
     for idx, item in enumerate(items, start=1):
         correct, wrong, unanswered = [], [], []
@@ -697,11 +698,19 @@ async def get_quiz_question_stats(
                 wrong.append(meta)
             else:
                 unanswered.append(meta)
+        # 題目(prompt)＝給學生看的提示；答案(answer)＝正確答案
+        if is_cloze:
+            prompt = getattr(item, "example_sentence", None) or ""
+            answer = getattr(item, "cloze_answer", None) or item.text or ""
+        else:
+            prompt = getattr(item, "translation", None) or ""
+            answer = item.text or ""
         questions.append(
             {
                 "question_number": idx,
                 "content_item_id": item.id,
-                "text": item.text or "",
+                "prompt": prompt,
+                "answer": answer,
                 "correct": correct,
                 "wrong": wrong,
                 "unanswered": unanswered,

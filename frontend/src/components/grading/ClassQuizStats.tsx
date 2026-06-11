@@ -27,7 +27,8 @@ interface StudentRef {
 interface QuestionStat {
   question_number: number;
   content_item_id: number;
-  text: string;
+  prompt: string; // 題目（提示）
+  answer: string; // 正確答案
   correct: StudentRef[];
   wrong: StudentRef[];
   unanswered: StudentRef[];
@@ -48,6 +49,40 @@ const COLORS = {
   wrong: "#ef4444",
   unanswered: "#eab308",
 };
+// 題目 / 答案 在 Y 軸標籤的顏色（兩色不同）
+const PROMPT_COLOR = "#6b7280"; // 題目：灰
+const ANSWER_COLOR = "#2563eb"; // 答案：藍
+
+function truncate(s: string, n = 8): string {
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+interface YTickProps {
+  x?: number;
+  y?: number;
+  payload?: { value: number };
+  byNum: Record<number, QuestionStat>;
+}
+
+/** Y 軸客製：題號 + 題目(灰) + 答案(藍)。 */
+function YQuestionTick({ x = 0, y = 0, payload, byNum }: YTickProps) {
+  const q = payload ? byNum[payload.value] : undefined;
+  return (
+    <text x={x} y={y} textAnchor="end" dominantBaseline="middle" fontSize={11}>
+      <tspan fill="#9ca3af">{payload?.value}.</tspan>
+      {q?.prompt ? (
+        <tspan fill={PROMPT_COLOR} dx={4}>
+          {truncate(q.prompt)}
+        </tspan>
+      ) : null}
+      {q?.answer ? (
+        <tspan fill={ANSWER_COLOR} dx={4}>
+          {q.answer}
+        </tspan>
+      ) : null}
+    </text>
+  );
+}
 
 export function ClassQuizStats({
   assignmentId,
@@ -132,10 +167,14 @@ export function ClassQuizStats({
               <YAxis
                 type="category"
                 dataKey="question_number"
-                tick={{ fontSize: 11 }}
-                width={48}
-                tickFormatter={(n) =>
-                  t("gradingPage.classStats.qShort", "第{{n}}題", { n })
+                width={150}
+                interval={0}
+                tick={
+                  <YQuestionTick
+                    byNum={Object.fromEntries(
+                      data.questions.map((q) => [q.question_number, q]),
+                    )}
+                  />
                 }
               />
               <Tooltip content={<StatTooltip />} cursor={{ fill: "#f3f4f6" }} />
@@ -210,6 +249,16 @@ function StatTooltip({ active, payload }: StatTooltipProps) {
         {t("gradingPage.classStats.questionLabel", "第 {{n}} 題", {
           n: q.question_number,
         })}
+        {q.prompt ? (
+          <span className="ml-1 font-normal" style={{ color: PROMPT_COLOR }}>
+            {q.prompt}
+          </span>
+        ) : null}
+        {q.answer ? (
+          <span className="ml-1 font-normal" style={{ color: ANSWER_COLOR }}>
+            {q.answer}
+          </span>
+        ) : null}
       </div>
       <Row
         color={COLORS.correct}
