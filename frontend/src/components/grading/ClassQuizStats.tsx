@@ -1,9 +1,9 @@
 /**
- * ClassQuizStats — 批改頁左欄【班級統計】（小考每題答對/答錯/未作答堆疊長條）#830
+ * ClassQuizStats — 批改頁中間欄【班級報告】（小考每題答對/答錯/未作答）#830
  *
- * 取自每位「已提交」學生第一次作答（凍結那筆）。
- * 堆疊長條:綠=答對、紅=答錯、黃=未作答;hover 顯示三類學生座號+姓名。
- * 只在小考顯示(由 GradingPage 依作業 practice_mode 決定是否渲染本元件)。
+ * 由左欄「班級報告」入口開啟,顯示在中間大欄。橫向堆疊長條:
+ *   綠=答對、紅=答錯、黃=未作答;每題一列;hover 顯示三類學生座號+姓名。
+ * 資料取每位「已提交」學生第一次作答（凍結那筆）;未作答=該題無答案紀錄。
  */
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,7 +15,8 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { BarChart3, Loader2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
 
 interface StudentRef {
@@ -56,7 +57,6 @@ export function ClassQuizStats({
   const { t } = useTranslation();
   const [data, setData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,65 +77,31 @@ export function ClassQuizStats({
     };
   }, [assignmentId]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-3 text-gray-400">
-        <Loader2 className="h-4 w-4 animate-spin" />
-      </div>
-    );
-  }
-  if (!data || !data.is_quiz || data.questions.length === 0) return null;
-
-  const chartData: ChartRow[] = data.questions.map((q) => ({
-    ...q,
-    correct_count: q.correct.length,
-    wrong_count: q.wrong.length,
-    unanswered_count: q.unanswered.length,
-  }));
-
   return (
-    <div className="mb-3 border-b border-gray-200 dark:border-gray-700 pb-3">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 w-full text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
-      >
-        {open ? (
-          <ChevronDown className="h-4 w-4" />
-        ) : (
-          <ChevronRight className="h-4 w-4" />
+    <Card className="p-4">
+      <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-800 dark:text-gray-100">
+        <BarChart3 className="h-5 w-5" />
+        {t("gradingPage.classStats.title", "班級報告")}
+        {data && (
+          <span className="ml-auto text-sm font-normal text-gray-400">
+            {t("gradingPage.classStats.submitted", "已交 {{n}}", {
+              n: data.total_submitted,
+            })}
+          </span>
         )}
-        {t("gradingPage.classStats.title", "班級統計")}
-        <span className="ml-auto text-xs text-gray-400">
-          {t("gradingPage.classStats.submitted", "已交 {{n}}", {
-            n: data.total_submitted,
-          })}
-        </span>
-      </button>
-      {open && (
+      </h3>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-gray-400">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      ) : !data || !data.is_quiz || data.questions.length === 0 ? (
+        <p className="py-12 text-center text-sm text-gray-400">
+          {t("gradingPage.classStats.noData", "尚無提交資料")}
+        </p>
+      ) : (
         <>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart
-              data={chartData}
-              margin={{ top: 4, right: 4, bottom: 0, left: -24 }}
-            >
-              <XAxis
-                dataKey="question_number"
-                tick={{ fontSize: 10 }}
-                interval="preserveStartEnd"
-              />
-              <YAxis allowDecimals={false} tick={{ fontSize: 10 }} width={28} />
-              <Tooltip content={<StatTooltip />} />
-              <Bar dataKey="correct_count" stackId="a" fill={COLORS.correct} />
-              <Bar dataKey="wrong_count" stackId="a" fill={COLORS.wrong} />
-              <Bar
-                dataKey="unanswered_count"
-                stackId="a"
-                fill={COLORS.unanswered}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="flex items-center gap-3 text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+          <div className="mb-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
             <LegendDot
               color={COLORS.correct}
               label={t("gradingPage.classStats.correct", "答對")}
@@ -149,17 +115,59 @@ export function ClassQuizStats({
               label={t("gradingPage.classStats.unanswered", "未作答")}
             />
           </div>
+          <ResponsiveContainer
+            width="100%"
+            height={Math.max(220, data.questions.length * 44 + 40)}
+          >
+            <BarChart
+              layout="vertical"
+              data={toChartRows(data.questions)}
+              margin={{ top: 0, right: 16, bottom: 0, left: 8 }}
+            >
+              <XAxis
+                type="number"
+                allowDecimals={false}
+                tick={{ fontSize: 11 }}
+              />
+              <YAxis
+                type="category"
+                dataKey="question_number"
+                tick={{ fontSize: 11 }}
+                width={48}
+                tickFormatter={(n) =>
+                  t("gradingPage.classStats.qShort", "第{{n}}題", { n })
+                }
+              />
+              <Tooltip content={<StatTooltip />} cursor={{ fill: "#f3f4f6" }} />
+              <Bar dataKey="correct_count" stackId="a" fill={COLORS.correct} />
+              <Bar dataKey="wrong_count" stackId="a" fill={COLORS.wrong} />
+              <Bar
+                dataKey="unanswered_count"
+                stackId="a"
+                fill={COLORS.unanswered}
+              />
+            </BarChart>
+          </ResponsiveContainer>
         </>
       )}
-    </div>
+    </Card>
   );
+}
+
+function toChartRows(questions: QuestionStat[]): ChartRow[] {
+  return questions.map((q) => ({
+    ...q,
+    correct_count: q.correct.length,
+    wrong_count: q.wrong.length,
+    unanswered_count: q.unanswered.length,
+  }));
 }
 
 function LegendDot({ color, label }: { color: string; label: string }) {
   return (
     <span className="inline-flex items-center gap-1">
       <span
-        className="inline-block w-2.5 h-2.5 rounded-sm"
+        className="inline-block h-2.5 w-2.5 rounded-sm"
         style={{ backgroundColor: color }}
       />
       {label}
@@ -197,8 +205,8 @@ function StatTooltip({ active, payload }: StatTooltipProps) {
     </div>
   );
   return (
-    <div className="max-w-[220px] rounded-md border border-gray-200 bg-white p-2 text-[11px] shadow-md dark:border-gray-600 dark:bg-gray-800">
-      <div className="mb-1 font-semibold text-gray-800 dark:text-gray-100">
+    <div className="max-w-[280px] rounded-md border border-gray-200 bg-white p-2.5 text-xs shadow-md dark:border-gray-600 dark:bg-gray-800">
+      <div className="mb-1.5 font-semibold text-gray-800 dark:text-gray-100">
         {t("gradingPage.classStats.questionLabel", "第 {{n}} 題", {
           n: q.question_number,
         })}

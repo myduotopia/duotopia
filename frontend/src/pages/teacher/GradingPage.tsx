@@ -28,6 +28,7 @@ import {
   OverallFeedbackPanel,
 } from "@/components/grading";
 import { ClassQuizStats } from "@/components/grading/ClassQuizStats";
+import { BarChart3 } from "lucide-react";
 
 const ReadingAssessmentPanel = lazy(() =>
   import("@/components/grading/ReadingAssessmentPanel").then((m) => ({
@@ -242,10 +243,12 @@ export default function GradingPage() {
   // 學生列表相關
   const [studentList, setStudentList] = useState<StudentListItem[]>([]);
   const [assignmentTitle, setAssignmentTitle] = useState("");
-  // 作業層級 practice_mode（決定左欄是否顯示小考【班級統計】）
+  // 作業層級 practice_mode（決定左欄是否顯示小考【班級報告】入口）
   const [assignmentPracticeMode, setAssignmentPracticeMode] = useState<
     string | undefined
   >(undefined);
+  // 中間欄是否顯示【班級報告】（點學生則切回個別批改）
+  const [showClassReport, setShowClassReport] = useState(false);
 
   // 載入作業資訊和學生列表
   useEffect(() => {
@@ -779,6 +782,7 @@ export default function GradingPage() {
   };
 
   const handleStudentSelect = async (student: StudentListItem) => {
+    setShowClassReport(false); // 點學生 → 中間切回個別批改，離開班級報告
     setSearchParams({ studentId: (student.student_id || 0).toString() });
     setActiveTab("content"); // 選擇學生後自動切換到題組 tab
   };
@@ -966,50 +970,71 @@ export default function GradingPage() {
             onSelect={handleStudentSelect}
             activeTab={activeTab}
             topSlot={
-              assignmentId && assignmentPracticeMode?.endsWith("_quiz") ? (
-                <ClassQuizStats assignmentId={assignmentId} />
+              assignmentPracticeMode?.endsWith("_quiz") ? (
+                <button
+                  type="button"
+                  onClick={() => setShowClassReport(true)}
+                  className={`mb-3 flex w-full items-center gap-1.5 rounded-md border px-2 py-2 text-sm font-medium transition-colors ${
+                    showClassReport
+                      ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
+                      : "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  }`}
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  {t("gradingPage.classStats.title", "班級報告")}
+                </button>
               ) : undefined
             }
           />
 
-          <Suspense
-            fallback={
-              <div className="col-span-12 lg:col-span-6 flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              </div>
-            }
-          >
-            {renderContentPanel()}
-          </Suspense>
+          {showClassReport &&
+          assignmentId &&
+          assignmentPracticeMode?.endsWith("_quiz") ? (
+            <div className="col-span-12 lg:col-span-10">
+              <ClassQuizStats assignmentId={assignmentId} />
+            </div>
+          ) : (
+            <>
+              <Suspense
+                fallback={
+                  <div className="col-span-12 lg:col-span-6 flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                }
+              >
+                {renderContentPanel()}
+              </Suspense>
 
-          <OverallFeedbackPanel
-            submission={submission}
-            score={score}
-            feedback={feedback}
-            itemFeedbacks={feedbacksForDisplay}
-            isAutoCalculatedScore={isAutoCalculatedScore}
-            submitting={submitting}
-            activeTab={activeTab}
-            totalQuestions={totalQuestions}
-            onScoreChange={(v) => {
-              setScore(v);
-              setIsAutoCalculatedScore(false);
-            }}
-            onFeedbackChange={setFeedback}
-            onAutoSave={() => performAutoSave()}
-            onComplete={handleCompleteGrading}
-            onRequestRevision={
-              isAutoScoredMode(submission?.practice_mode)
-                ? undefined
-                : handleRequestRevision
-            }
-            isAutoScored={isAutoScoredMode(submission?.practice_mode)}
-            // 小考完全自動判分：分數唯讀、不顯示完成批改（僅保留退回）
-            autoScoreReadOnly={
-              submission?.practice_mode?.endsWith("_quiz") ?? false
-            }
-            onJumpToItem={handleJumpToItem}
-          />
+              <OverallFeedbackPanel
+                submission={submission}
+                score={score}
+                feedback={feedback}
+                itemFeedbacks={feedbacksForDisplay}
+                isAutoCalculatedScore={isAutoCalculatedScore}
+                submitting={submitting}
+                activeTab={activeTab}
+                totalQuestions={totalQuestions}
+                onScoreChange={(v) => {
+                  setScore(v);
+                  setIsAutoCalculatedScore(false);
+                }}
+                onFeedbackChange={setFeedback}
+                onAutoSave={() => performAutoSave()}
+                onComplete={handleCompleteGrading}
+                onRequestRevision={
+                  isAutoScoredMode(submission?.practice_mode)
+                    ? undefined
+                    : handleRequestRevision
+                }
+                isAutoScored={isAutoScoredMode(submission?.practice_mode)}
+                // 小考完全自動判分：分數唯讀、不顯示完成批改（僅保留退回）
+                autoScoreReadOnly={
+                  submission?.practice_mode?.endsWith("_quiz") ?? false
+                }
+                onJumpToItem={handleJumpToItem}
+              />
+            </>
+          )}
         </div>
       </div>
     </div>

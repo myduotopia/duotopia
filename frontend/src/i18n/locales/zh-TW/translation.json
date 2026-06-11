@@ -2937,12 +2937,14 @@
   "gradingPage": {
     "title": "批改作業",
     "classStats": {
-      "title": "班級統計",
+      "title": "班級報告",
       "submitted": "已交 {{n}}",
       "correct": "答對",
       "wrong": "答錯",
       "unanswered": "未作答",
-      "questionLabel": "第 {{n}} 題"
+      "questionLabel": "第 {{n}} 題",
+      "qShort": "第{{n}}題",
+      "noData": "尚無提交資料"
     },
     "quiz": {
       "score": "分數",

@@ -2883,12 +2883,14 @@
   "gradingPage": {
     "title": "Grade Assignment",
     "classStats": {
-      "title": "Class stats",
+      "title": "Class report",
       "submitted": "{{n}} submitted",
       "correct": "Correct",
       "wrong": "Wrong",
       "unanswered": "Unanswered",
-      "questionLabel": "Q{{n}}"
+      "questionLabel": "Q{{n}}",
+      "qShort": "Q{{n}}",
+      "noData": "No submissions yet"
     },
     "quiz": {
       "score": "Score",
