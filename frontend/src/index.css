@@ -215,19 +215,19 @@ body {
     linear-gradient(#ffffff, #ffffff) padding-box,
     linear-gradient(
         110deg,
-        #9ca3af,
-        #f8fafc,
-        #cbd5e1,
-        #ffffff,
-        #94a3b8,
-        #f1f5f9,
-        #9ca3af
+        #1e40af,
+        #93c5fd,
+        #2563eb,
+        #eff6ff,
+        #3b82f6,
+        #bfdbfe,
+        #1e40af
       )
       border-box;
   background-size:
     100% 100%,
-    200% 100%;
-  animation: metallic-shine 2.8s linear infinite;
+    220% 100%;
+  animation: metallic-shine 6s linear infinite;
 }
 
 .dark .btn-metallic {
@@ -235,18 +235,18 @@ body {
     linear-gradient(#1f2937, #1f2937) padding-box,
     linear-gradient(
         110deg,
-        #6b7280,
-        #e5e7eb,
-        #9ca3af,
-        #f3f4f6,
-        #6b7280,
-        #d1d5db,
-        #6b7280
+        #1e3a8a,
+        #93c5fd,
+        #3b82f6,
+        #dbeafe,
+        #60a5fa,
+        #bfdbfe,
+        #1e3a8a
       )
       border-box;
   background-size:
     100% 100%,
-    200% 100%;
+    220% 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {
