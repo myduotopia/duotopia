@@ -14,8 +14,6 @@ import {
   Play,
   Square,
   Share2,
-  Copy,
-  Check,
   HelpCircle,
   ExternalLink,
   BookOpen,
@@ -27,7 +25,7 @@ import {
   Gamepad2,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { QRCodeSVG } from "qrcode.react";
+import StudentLoginQRShare from "@/components/teacher/StudentLoginQRShare";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useTranslation } from "react-i18next";
 import {
@@ -37,7 +35,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 /** Compute max scale so the tool can fill up to 95% of the viewport */
@@ -1326,7 +1323,6 @@ const DigitalTeachingToolbar: React.FC = () => {
   const [showDice, setShowDice] = useState(false);
   const [showRps, setShowRps] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [toolbarY, setToolbarY] = useState<number | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [helpDismissed, setHelpDismissed] = useState(
@@ -1444,23 +1440,6 @@ const DigitalTeachingToolbar: React.FC = () => {
     });
   }, []);
 
-  const getStudentLoginUrl = useCallback(() => {
-    if (!user?.email) return "";
-    return `${window.location.origin}/student/login?teacher_email=${user.email}`;
-  }, [user?.email]);
-
-  const handleCopyUrl = useCallback(async () => {
-    const url = getStudentLoginUrl();
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      void err;
-    }
-  }, [getStudentLoginUrl]);
-
   return (
     <div className="fixed inset-0 pointer-events-none z-[140]">
       {/* Share to Students Dialog */}
@@ -1473,29 +1452,8 @@ const DigitalTeachingToolbar: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="flex justify-center p-4 bg-white border rounded-lg">
-              <QRCodeSVG value={getStudentLoginUrl()} size={200} />
-            </div>
-            <div className="flex items-center space-x-2">
-              <Input value={getStudentLoginUrl()} readOnly className="flex-1" />
-              <Button
-                size="sm"
-                onClick={handleCopyUrl}
-                className="flex-shrink-0"
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-4 w-4 mr-2" />
-                    {t("teacherDashboard.share.copied")}
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4 mr-2" />
-                    {t("teacherDashboard.share.copy")}
-                  </>
-                )}
-              </Button>
-            </div>
+            {/* #793：QR 含視圖選擇器，分享指定機構/學校/個人視圖 */}
+            <StudentLoginQRShare email={user?.email || ""} />
             <div className="text-sm text-gray-600 space-y-2">
               <p>{t("teacherDashboard.share.instructions")}</p>
               <ul className="list-disc list-inside space-y-1 text-xs">

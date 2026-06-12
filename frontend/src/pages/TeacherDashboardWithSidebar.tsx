@@ -16,7 +16,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Users,
   GraduationCap,
@@ -29,10 +28,8 @@ import {
   ChevronRight,
   Filter,
   Share2,
-  Copy,
-  Check,
 } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
+import StudentLoginQRShare from "@/components/teacher/StudentLoginQRShare";
 import { apiClient } from "../lib/api";
 
 interface TeacherProfile {
@@ -112,7 +109,6 @@ export default function TeacherDashboardWithSidebar() {
 
   // Share dialog state
   const [showShareDialog, setShowShareDialog] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   // Data for different views
   const [classroomsDetail, setClassroomsDetail] = useState<ClassroomDetail[]>(
@@ -176,23 +172,6 @@ export default function TeacherDashboardWithSidebar() {
     navigate("/teacher/login");
   };
 
-  const handleCopyUrl = async () => {
-    if (!dashboardData) return;
-    const studentLoginUrl = `${window.location.origin}/student/login?teacher_email=${dashboardData.teacher.email}`;
-    try {
-      await navigator.clipboard.writeText(studentLoginUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy URL:", err);
-    }
-  };
-
-  const getStudentLoginUrl = () => {
-    if (!dashboardData) return "";
-    return `${window.location.origin}/student/login?teacher_email=${dashboardData.teacher.email}`;
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
@@ -253,32 +232,8 @@ export default function TeacherDashboardWithSidebar() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {/* QR Code */}
-            <div className="flex justify-center p-4 bg-white border rounded-lg">
-              <QRCodeSVG value={getStudentLoginUrl()} size={200} />
-            </div>
-
-            {/* URL Input with Copy Button */}
-            <div className="flex items-center space-x-2">
-              <Input value={getStudentLoginUrl()} readOnly className="flex-1" />
-              <Button
-                size="sm"
-                onClick={handleCopyUrl}
-                className="flex-shrink-0"
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-4 w-4 mr-2" />
-                    {t("teacherDashboard.share.copied")}
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4 mr-2" />
-                    {t("teacherDashboard.share.copy")}
-                  </>
-                )}
-              </Button>
-            </div>
+            {/* #793：QR 含視圖選擇器，分享指定機構/學校/個人視圖 */}
+            <StudentLoginQRShare email={dashboardData.teacher.email} />
 
             {/* Instructions */}
             <div className="text-sm text-gray-600 space-y-2">

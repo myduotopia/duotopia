@@ -1286,6 +1286,12 @@
       "button": "學校帳號登入 (1Campus)"
     }
   },
+  "studentLoginQR": {
+    "viewLabel": "選擇分享視圖",
+    "personal": "個人班級",
+    "orgPrefix": "機構：",
+    "schoolPrefix": "學校："
+  },
   "studentLogin": {
     "header": {
       "home": "返回首頁",
@@ -1301,7 +1307,8 @@
       "recentTeachers": "或選擇最近使用過的老師："
     },
     "step2": {
-      "title": "請選擇你的班級和名字"
+      "title": "請選擇你的班級和名字",
+      "showAll": "看不到你的班級？顯示全部"
     },
     "step3": {
       "title": "請選擇你的名字"
