@@ -11,6 +11,7 @@ import {
   TooltipTrigger,
   TooltipContent,
   TooltipProvider,
+  TooltipPortal,
 } from "@/components/ui/tooltip";
 
 export interface StudentRef {
@@ -94,14 +95,19 @@ export default function QuestionStatBar({
                 }}
                 aria-label={`${s.label} ${s.list.length}/${total}`}
               />
-              <TooltipContent className="max-w-[280px]">
-                <div className="mb-1 font-semibold" style={{ color: s.color }}>
-                  {s.label}（{s.list.length}/{total}）
-                </div>
-                <div className="text-gray-600 dark:text-gray-300">
-                  {names(s.list)}
-                </div>
-              </TooltipContent>
+              <TooltipPortal>
+                <TooltipContent className="z-[100] max-w-[280px] border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+                  <div
+                    className="mb-1 font-semibold"
+                    style={{ color: s.color }}
+                  >
+                    {s.label}（{s.list.length}/{total}）
+                  </div>
+                  <div className="text-gray-600 dark:text-gray-300">
+                    {names(s.list)}
+                  </div>
+                </TooltipContent>
+              </TooltipPortal>
             </Tooltip>
           ))}
         </div>
