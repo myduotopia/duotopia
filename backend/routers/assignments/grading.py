@@ -4,7 +4,7 @@ Grading operations (AI and manual)
 
 import json
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
@@ -1075,24 +1075,29 @@ def _return_quiz_for_revision(
 
 
 def _do_return_for_revision(
-    student_assignment: StudentAssignment, db: Session, message: str = ""
+    student_assignment: StudentAssignment,
+    db: Session,
+    message: str = "",
+    parent: Optional[Assignment] = None,
 ) -> str:
     """套用單筆「要求訂正」（不 commit，供單筆與批次共用）。
 
     回傳 'already_returned'（已是 RETURNED，略過）或 'returned'。
     小考走 `_return_quiz_for_revision`（清答錯、保留答對、凍結分數）；
     其餘維持 RETURNED + 重置 AI 分析額度。
+
+    `parent` 可由批次端點傳入（同一份作業對全班是常數），避免每位學生
+    重複查 Assignment（#830 N+1 修正）；未傳入時才自行查。
     """
     if student_assignment.status == AssignmentStatus.RETURNED:
         return "already_returned"
 
-    parent = (
-        db.query(Assignment)
-        .filter(Assignment.id == student_assignment.assignment_id)
-        .first()
-        if student_assignment.assignment_id
-        else None
-    )
+    if parent is None and student_assignment.assignment_id:
+        parent = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
     practice_mode = parent.practice_mode if parent else None
     if practice_mode and practice_mode.endswith("_quiz"):
         _return_quiz_for_revision(student_assignment, practice_mode, db)
@@ -1198,21 +1203,26 @@ async def batch_return_for_revision(
             status_code=403, detail="Cannot modify grades: assignment is archived"
         )
 
+    # 一次撈出本批所有 StudentAssignment（避免逐筆 N+1，#830）
+    sa_by_student = {
+        sa.student_id: sa
+        for sa in db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.assignment_id == assignment_id,
+            StudentAssignment.student_id.in_(student_ids),
+        )
+        .all()
+    }
+
     returned: List[int] = []
     skipped: List[int] = []
     for sid in student_ids:
-        sa = (
-            db.query(StudentAssignment)
-            .filter(
-                StudentAssignment.assignment_id == assignment_id,
-                StudentAssignment.student_id == sid,
-            )
-            .first()
-        )
+        sa = sa_by_student.get(sid)
         if not sa:
             skipped.append(sid)
             continue
-        if _do_return_for_revision(sa, db, message) == "returned":
+        # parent 已在上方載入，傳入避免每位學生重查 Assignment
+        if _do_return_for_revision(sa, db, message, parent=parent) == "returned":
             returned.append(sid)
         else:
             skipped.append(sid)
@@ -1255,17 +1265,21 @@ async def batch_reset_not_started(
             status_code=403, detail="Cannot modify grades: assignment is archived"
         )
 
+    # 一次撈出本批所有 StudentAssignment（避免逐筆 N+1，#830）
+    sa_by_student = {
+        sa.student_id: sa
+        for sa in db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.assignment_id == assignment_id,
+            StudentAssignment.student_id.in_(student_ids),
+        )
+        .all()
+    }
+
     reset: List[int] = []
     skipped: List[int] = []
     for sid in student_ids:
-        sa = (
-            db.query(StudentAssignment)
-            .filter(
-                StudentAssignment.assignment_id == assignment_id,
-                StudentAssignment.student_id == sid,
-            )
-            .first()
-        )
+        sa = sa_by_student.get(sid)
         if not sa:
             skipped.append(sid)
             continue
