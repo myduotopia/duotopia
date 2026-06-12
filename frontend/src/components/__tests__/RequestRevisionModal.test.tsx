@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import { toast } from "sonner";
 import { RequestRevisionModal } from "../RequestRevisionModal";
 import type { StudentProgress } from "@/components/StudentStatusPanel";
@@ -94,7 +100,9 @@ const assignments = [
   { id: 200, title: "Quiz Two", practice_mode: "word_selection_quiz" },
 ];
 
-const renderModal = (props?: Partial<React.ComponentProps<typeof RequestRevisionModal>>) =>
+const renderModal = (
+  props?: Partial<React.ComponentProps<typeof RequestRevisionModal>>,
+) =>
   render(
     <RequestRevisionModal
       open

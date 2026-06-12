@@ -153,9 +153,7 @@ describe("QuizGradingPanel", () => {
     const submission = makeSubmission({ submissions: [] });
     render(<QuizGradingPanel submission={submission} activeTab="content" />);
     // t mock returns the key; the noAnswers key falls back via `|| ...`
-    expect(
-      screen.getByText("gradingPage.quiz.noAnswers"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("gradingPage.quiz.noAnswers")).toBeInTheDocument();
     // total=0 → accuracy guard yields 0
     expect(screen.getByText("0%")).toBeInTheDocument();
     expect(screen.getByText("0 / 0")).toBeInTheDocument();

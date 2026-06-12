@@ -13,7 +13,8 @@ import {
   nextUnresolvedIndex,
 } from "../useQuizRevision";
 
-const words = (...ids: number[]) => ids.map((content_item_id) => ({ content_item_id }));
+const words = (...ids: number[]) =>
+  ids.map((content_item_id) => ({ content_item_id }));
 
 describe("allCorrect", () => {
   it("空題目陣列回 false（沒有題目不算全對）", () => {
@@ -21,7 +22,9 @@ describe("allCorrect", () => {
   });
 
   it("全部 true 才回 true", () => {
-    expect(allCorrect(words(1, 2, 3), { 1: true, 2: true, 3: true })).toBe(true);
+    expect(allCorrect(words(1, 2, 3), { 1: true, 2: true, 3: true })).toBe(
+      true,
+    );
   });
 
   it("任一題 false / null / 未填皆回 false", () => {
@@ -33,8 +36,12 @@ describe("allCorrect", () => {
 
 describe("firstUnresolvedIndex", () => {
   it("回第一個非 true 的索引", () => {
-    expect(firstUnresolvedIndex(words(1, 2, 3), { 1: true, 2: false, 3: true })).toBe(1);
-    expect(firstUnresolvedIndex(words(1, 2, 3), { 1: null, 2: true, 3: true })).toBe(0);
+    expect(
+      firstUnresolvedIndex(words(1, 2, 3), { 1: true, 2: false, 3: true }),
+    ).toBe(1);
+    expect(
+      firstUnresolvedIndex(words(1, 2, 3), { 1: null, 2: true, 3: true }),
+    ).toBe(0);
   });
 
   it("全部答對回 -1", () => {
@@ -49,7 +56,11 @@ describe("firstUnresolvedIndex", () => {
 describe("nextUnresolvedIndex", () => {
   it("從 from 之後找下一個未解決", () => {
     expect(
-      nextUnresolvedIndex(words(1, 2, 3, 4), { 1: true, 2: true, 3: false, 4: false }, 1),
+      nextUnresolvedIndex(
+        words(1, 2, 3, 4),
+        { 1: true, 2: true, 3: false, 4: false },
+        1,
+      ),
     ).toBe(2);
   });
 
@@ -60,7 +71,9 @@ describe("nextUnresolvedIndex", () => {
   });
 
   it("全部答對回 -1", () => {
-    expect(nextUnresolvedIndex(words(1, 2, 3), { 1: true, 2: true, 3: true }, 0)).toBe(-1);
+    expect(
+      nextUnresolvedIndex(words(1, 2, 3), { 1: true, 2: true, 3: true }, 0),
+    ).toBe(-1);
   });
 
   it("只剩 from 自己未解決也回 -1（不會卡回自己）", () => {
