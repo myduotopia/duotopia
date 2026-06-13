@@ -265,7 +265,7 @@ export function RequestRevisionModal({
     }
   }, [current, selected, students, classroomId, t, onDone]);
 
-  // 還原為未開始（批次）：清狀態+時間戳+分數，保留作答紀錄。送出前排除已未開始者。
+  // 還原為未開始（批次）：只清狀態+時間戳，分數與作答紀錄都保留（#845 review：分數不動）。送出前排除已未開始者。
   const handleResetBatch = useCallback(async () => {
     if (!current) return;
     const ids = selected.filter((id) => {
@@ -358,7 +358,7 @@ export function RequestRevisionModal({
     [current, classroomId, t, onDone],
   );
 
-  // 單一學生：還原為未開始（清狀態+時間戳+分數，保留作答紀錄）
+  // 單一學生：還原為未開始（只清狀態+時間戳，分數與作答紀錄都保留）
   const handleResetOne = useCallback(
     async (studentId: number) => {
       if (!current) return;
@@ -388,7 +388,8 @@ export function RequestRevisionModal({
   const countExcluding = (...excluded: string[]) =>
     selected.filter((id) => {
       const s = students.find((x) => x.student_id === id);
-      return !!s && !excluded.includes(String(s.status));
+      // s.status 已是字串字面量 union（StudentProgress.status），不需再 String() 包裝
+      return !!s && !excluded.includes(s.status);
     }).length;
   const resetCount = countExcluding("NOT_STARTED", "unassigned");
   const returnCount = countExcluding("RETURNED");

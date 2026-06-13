@@ -623,6 +623,9 @@ async def get_quiz_question_stats(
     )
 
     # 2. 已提交學生（帶 Student 資料）
+    # 註（#845 review）：刻意只算 SUBMITTED/RESUBMITTED/GRADED；RETURNED 的學生正處於
+    # 訂正循環中，會暫時從每題統計桶消失，等他們重新提交（→ RESUBMITTED）才回到統計。
+    # 這是「正在訂正＝尚未定稿」的取捨，避免把訂正中的中間狀態混進班級答對率。
     submitted = (
         db.query(StudentAssignment, Student)
         .join(Student, Student.id == StudentAssignment.student_id)
