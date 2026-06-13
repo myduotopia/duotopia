@@ -9,7 +9,14 @@
  *   - 題目以 example_sentence 將 cloze_answer 挖空，學生填入正確變形
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
@@ -23,11 +30,18 @@ import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import QuizAnswerInput from "./shared/QuizAnswerInput";
+import CardNavArrow from "./shared/CardNavArrow";
 import QuizReviewView, {
   type QuizReviewPayload,
   type QuizReviewWord,
 } from "./shared/QuizReviewView";
 import { useQuizTimer } from "./shared/useQuizTimer";
+import {
+  useQuizRevision,
+  allCorrect,
+  firstUnresolvedIndex,
+  nextUnresolvedIndex,
+} from "./shared/useQuizRevision";
 
 interface QuizWord {
   content_item_id: number;
@@ -58,6 +72,8 @@ interface StartResponse {
   shuffle_questions: boolean;
   quiz_time_limit_seconds?: number | null;
   time_remaining_seconds?: number | null;
+  // Issue #830: 退回後為 "RETURNED" → 進入訂正模式
+  status?: string | null;
 }
 
 interface Props {
@@ -67,6 +83,8 @@ interface Props {
   onComplete?: () => void;
   previewWords?: QuizWord[];
   previewSettings?: Partial<StartResponse>;
+  // #830: 老師預覽時注入每張卡底部的「該題班級表現」%條（學生端不傳）。
+  renderCardFooter?: (contentItemId: number) => ReactNode;
 }
 
 /**
@@ -91,6 +109,7 @@ export default function WordClozeQuizActivity({
   onComplete,
   previewWords,
   previewSettings,
+  renderCardFooter,
 }: Props) {
   void _isPreviewMode;
   const { t } = useTranslation();
@@ -124,6 +143,10 @@ export default function WordClozeQuizActivity({
   const [timerTotal, setTimerTotal] = useState<number | null>(null);
   const completingRef = useRef(false);
   const navSlot = useQuizNavSlot();
+  // Issue #830: 訂正模式（退回後）— 答錯揭示正解、強制全對才能提交
+  const [quizStatus, setQuizStatus] = useState<string | null>(null);
+  const { isRevision, revealByItem, recordResult } =
+    useQuizRevision(quizStatus);
 
   useEffect(() => {
     if (isLivePreview) {
@@ -156,6 +179,12 @@ export default function WordClozeQuizActivity({
         });
         setTypedByItem(initialTyped);
         setCorrectByItem(initialCorrect);
+        setQuizStatus(data.status ?? null);
+        // 訂正模式（退回後 RETURNED）：游標直接停在第一題錯題（略過已答對題）
+        if (data.status === "RETURNED") {
+          const firstWrong = firstUnresolvedIndex(data.words, initialCorrect);
+          if (firstWrong >= 0) setCurrentIndex(firstWrong);
+        }
         setSettings({
           show_translation: data.show_translation,
           play_audio: data.play_audio,
@@ -193,10 +222,13 @@ export default function WordClozeQuizActivity({
   }, []);
 
   const persistItemAnswer = useCallback(
-    async (itemId: number, typed: string): Promise<boolean> => {
-      if (isLivePreview || isDemoMode || sessionId == null) return true;
+    async (
+      itemId: number,
+      typed: string,
+    ): Promise<{ ok: boolean; isCorrect?: boolean }> => {
+      if (isLivePreview || isDemoMode || sessionId == null) return { ok: true };
       const trimmed = typed.trim();
-      if (!trimmed) return true;
+      if (!trimmed) return { ok: true };
       try {
         const data = (await apiClient.post(
           `/api/students/assignments/${assignmentId}/vocabulary/cloze_quiz/answer`,
@@ -206,14 +238,16 @@ export default function WordClozeQuizActivity({
             time_spent_seconds: 0,
             session_id: sessionId,
           },
-        )) as { is_correct: boolean };
+        )) as { is_correct: boolean; correct_answer?: string };
         setCorrectByItem((m) => ({ ...m, [itemId]: data.is_correct }));
-        return true;
+        // 訂正模式：答錯立即揭示正解，答對清除揭示
+        recordResult(itemId, data.is_correct, data.correct_answer);
+        return { ok: true, isCorrect: data.is_correct };
       } catch {
-        return false;
+        return { ok: false };
       }
     },
-    [assignmentId, isDemoMode, isLivePreview, sessionId],
+    [assignmentId, isDemoMode, isLivePreview, sessionId, recordResult],
   );
 
   const persistAnswer = useCallback(async (): Promise<boolean> => {
@@ -221,12 +255,12 @@ export default function WordClozeQuizActivity({
     const typed = typedByItem[currentWord.content_item_id] || "";
     if (!typed.trim()) return true;
     setSubmittingAnswer(true);
-    const ok = await persistItemAnswer(currentWord.content_item_id, typed);
+    const res = await persistItemAnswer(currentWord.content_item_id, typed);
     setSubmittingAnswer(false);
-    if (!ok) {
+    if (!res.ok) {
       toast.error(t("wordCloze.toast.saveFailed") || "Failed to save answer");
     }
-    return ok;
+    return res.ok;
   }, [currentWord, persistItemAnswer, t, typedByItem]);
 
   const goTo = useCallback(
@@ -278,6 +312,36 @@ export default function WordClozeQuizActivity({
     t,
   ]);
 
+  // Issue #830 訂正模式：送出當題答案 →
+  //   答錯：留在原題看正解（強制改對）。
+  //   答對：自動跳「下一題錯題」；若已無錯題（剛改對的是最後一題錯題）＝整卷提交。
+  const handleRevisionCheck = useCallback(async () => {
+    if (!currentWord) return;
+    const itemId = currentWord.content_item_id;
+    const typed = (typedByItem[itemId] || "").trim();
+    if (!typed) return;
+    setSubmittingAnswer(true);
+    const res = await persistItemAnswer(itemId, typed);
+    setSubmittingAnswer(false);
+    if (!res.isCorrect) return;
+    // setCorrectByItem 為非同步，先把當題視為已解決再找下一題錯題
+    const resolved = { ...correctByItem, [itemId]: true };
+    const next = nextUnresolvedIndex(words, resolved, currentIndex);
+    if (next === -1) {
+      await handleSubmitAll();
+    } else {
+      setCurrentIndex(next);
+    }
+  }, [
+    currentWord,
+    typedByItem,
+    persistItemAnswer,
+    correctByItem,
+    words,
+    currentIndex,
+    handleSubmitAll,
+  ]);
+
   const answeredCount = useMemo(
     () =>
       Object.values(typedByItem).filter((v) => v && v.trim().length > 0).length,
@@ -324,7 +388,15 @@ export default function WordClozeQuizActivity({
   // Auto-persist on typing pause (1s) — see WordSpellingQuizActivity for rationale.
   const lastPersistedRef = useRef<Record<number, string>>({});
   useEffect(() => {
-    if (!currentWord || isLivePreview || isDemoMode || alreadySubmitted) return;
+    // 訂正模式不自動 persist：改答案由學生按「送出」明確觸發，才即時揭示正解
+    if (
+      !currentWord ||
+      isLivePreview ||
+      isDemoMode ||
+      alreadySubmitted ||
+      isRevision
+    )
+      return;
     const itemId = currentWord.content_item_id;
     const val = (typedByItem[itemId] || "").trim();
     if (!val) return;
@@ -340,6 +412,7 @@ export default function WordClozeQuizActivity({
     isLivePreview,
     isDemoMode,
     alreadySubmitted,
+    isRevision,
     persistItemAnswer,
   ]);
 
@@ -399,6 +472,12 @@ export default function WordClozeQuizActivity({
     currentWord.example_sentence,
     currentWord.cloze_answer,
   );
+  // Issue #830 訂正模式 gating
+  const currentCorrect = correctByItem[currentWord.content_item_id];
+  const currentResolved = currentCorrect === true;
+  const everyResolved = allCorrect(words, correctByItem);
+  const currentReveal = revealByItem[currentWord.content_item_id];
+  const showCorrectness = settings.show_answer || isRevision;
 
   // 題號 bar — Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
@@ -421,9 +500,9 @@ export default function WordClozeQuizActivity({
                 ? "bg-pink-500 text-white border-pink-500"
                 : !answered
                   ? "bg-white text-gray-500 border-gray-300 hover:border-pink-400"
-                  : settings.show_answer && priorCorrect === true
+                  : showCorrectness && priorCorrect === true
                     ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                    : settings.show_answer && priorCorrect === false
+                    : showCorrectness && priorCorrect === false
                       ? "bg-rose-50 text-rose-700 border-rose-300"
                       : "bg-pink-50 text-pink-700 border-pink-300",
             )}
@@ -456,15 +535,36 @@ export default function WordClozeQuizActivity({
         </div>
       )}
 
-      <Card className="flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+      <Card className="relative flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+        {/* #830: 上一題 / 下一題改為卡片左右兩側箭頭（對齊一般單字卡 WordCard） */}
+        {currentIndex > 0 && (
+          <CardNavArrow
+            direction="prev"
+            onClick={() => goTo(currentIndex - 1)}
+          />
+        )}
+        {!isLast && (
+          <CardNavArrow
+            direction="next"
+            disabled={submittingAnswer || (isRevision && !currentResolved)}
+            onClick={() => goTo(currentIndex + 1)}
+          />
+        )}
         <CardContent className="flex-1 min-h-0 flex flex-col gap-4 p-0">
-          <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto">
+          <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto px-10 sm:px-12">
             <div className="text-sm text-gray-500">
               {t("wordQuiz.questionLabel", {
                 current: currentWord.question_number,
                 total: words.length,
               }) || `第 ${currentWord.question_number} / ${words.length} 題`}
             </div>
+
+            {isRevision && (
+              <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {t("wordQuiz.revision.hint") ||
+                  "訂正模式：答錯會顯示正解，全部改對才能提交"}
+              </div>
+            )}
 
             {/* 樣式對齊 WordClozeActivity (艾賓浩斯版) */}
             {settings.play_audio && currentWord.example_sentence_audio_url && (
@@ -513,40 +613,52 @@ export default function WordClozeQuizActivity({
                   [currentWord.content_item_id]: next,
                 }))
               }
-              // 最後一題的 inline Send 只暫存答案，不送出整卷；整卷送出統一由
-              // 下方「提交」鈕觸發，避免學生按 Enter 不小心收卷。
+              // 訂正模式：Enter/Send 即送出當題對答案；一般模式只暫存/跳題，
+              // 整卷送出統一由下方「提交」鈕觸發。
               onSubmit={
-                isLast ? () => persistAnswer() : () => goTo(currentIndex + 1)
+                isRevision
+                  ? handleRevisionCheck
+                  : isLast
+                    ? () => persistAnswer()
+                    : () => goTo(currentIndex + 1)
               }
+              // 最後一題（非訂正）隱藏卡片上的 inline 送出鈕 —
+              // 整卷送出由下方「提交」鈕負責，避免兩顆按鈕重複
+              hideSubmitButton={isLast && !isRevision}
+              // 訂正模式已答對的題目鎖定唯讀，不可再改
+              disabled={isRevision && currentResolved}
               submitting={submittingAnswer}
               state={
-                settings.show_answer &&
-                correctByItem[currentWord.content_item_id] === true
+                showCorrectness && currentCorrect === true
                   ? "correct"
-                  : settings.show_answer &&
-                      correctByItem[currentWord.content_item_id] === false
+                  : showCorrectness && currentCorrect === false
                     ? "wrong"
                     : "neutral"
               }
               autoFocus
             />
+
+            {isRevision && currentReveal && !currentResolved && (
+              <p className="text-center text-sm font-medium text-red-600">
+                {t("wordQuiz.revision.correctAnswer", {
+                  answer: currentReveal,
+                }) || `正解：${currentReveal}`}
+              </p>
+            )}
           </div>
 
-          {/* Card footer: prev/next/submit */}
-          <div className="flex gap-2 justify-between border-t pt-3 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={currentIndex === 0 || submittingAnswer}
-              onClick={() => goTo(currentIndex - 1)}
-            >
-              {t("wordQuiz.prev") || "上一題"}
-            </Button>
-            {isLast ? (
+          {/* Card footer: 只剩提交鈕（prev/next 已移到卡片左右兩側）#830。
+              一般模式僅最後一題顯示；訂正模式全程顯示，唯有全部改對才可點擊。 */}
+          {(isRevision || isLast) && (
+            <div className="flex justify-center border-t pt-3 shrink-0">
               <Button
                 type="button"
                 onClick={handleSubmitAll}
-                disabled={completing || submittingAnswer}
+                disabled={
+                  completing ||
+                  submittingAnswer ||
+                  (isRevision && !everyResolved)
+                }
               >
                 {completing ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -555,16 +667,11 @@ export default function WordClozeQuizActivity({
                 )}
                 {t("wordQuiz.submit") || "提交"}
               </Button>
-            ) : (
-              <Button
-                type="button"
-                onClick={() => goTo(currentIndex + 1)}
-                disabled={submittingAnswer}
-              >
-                {t("wordQuiz.next") || "下一題"}
-              </Button>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* #830: 老師預覽時卡片最下方顯示該題班級表現 %條 */}
+          {renderCardFooter?.(currentWord.content_item_id)}
         </CardContent>
       </Card>
     </div>

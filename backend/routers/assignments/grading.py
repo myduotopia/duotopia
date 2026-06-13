@@ -4,7 +4,7 @@ Grading operations (AI and manual)
 
 import json
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
@@ -25,6 +25,8 @@ from models import (
     StudentContentProgress,
     StudentItemProgress,
     AssignmentStatus,
+    PracticeSession,
+    PracticeAnswer,
 )
 from .validators import (
     AIGradingRequest,
@@ -64,19 +66,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _check_not_archived(student_assignment: StudentAssignment, db: Session):
-    """封存後禁止修改成績"""
-    if student_assignment.assignment_id:
-        parent = (
-            db.query(Assignment)
-            .filter(Assignment.id == student_assignment.assignment_id)
-            .first()
+def _check_not_archived(
+    student_assignment: StudentAssignment, db: Session
+) -> Optional[Assignment]:
+    """封存後禁止修改成績；回傳已載入的 parent Assignment 供呼叫端重用（避免重複查詢）。"""
+    if not student_assignment.assignment_id:
+        return None
+    parent = (
+        db.query(Assignment)
+        .filter(Assignment.id == student_assignment.assignment_id)
+        .first()
+    )
+    if parent and parent.is_archived:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot modify grades: assignment is archived",
         )
-        if parent and parent.is_archived:
-            raise HTTPException(
-                status_code=403,
-                detail="Cannot modify grades: assignment is archived",
-            )
+    if parent and not parent.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot modify grades: assignment is deleted",
+        )
+    return parent
 
 
 @router.post("/{assignment_id}/ai-grade", response_model=AIGradingResponse)
@@ -339,6 +350,112 @@ async def get_assignment_submissions(
     return result
 
 
+def _build_quiz_submission(
+    db: Session,
+    student_assignment: StudentAssignment,
+    student: Student,
+    practice_mode: str,
+) -> Dict[str, Any]:
+    """小考批改視圖（Issue #830）。
+
+    成績紀錄＝第一次作答（最早 completed PracticeSession），與凍結的 sa.score 一致。
+    逐題回傳學生答案 / 正解 / 對錯，供老師端 QuizGradingPanel 顯示錯題清單與答對率。
+    """
+    source = (
+        db.query(PracticeSession)
+        .filter(
+            PracticeSession.student_assignment_id == student_assignment.id,
+            PracticeSession.practice_mode == practice_mode,
+            PracticeSession.completed_at.isnot(None),
+        )
+        .order_by(PracticeSession.id.asc())
+        .first()
+    )
+    answers_by_item: Dict[int, PracticeAnswer] = {}
+    if source:
+        for ans in (
+            db.query(PracticeAnswer)
+            .filter(PracticeAnswer.practice_session_id == source.id)
+            .all()
+        ):
+            answers_by_item[ans.content_item_id] = ans
+
+    items = (
+        db.query(ContentItem)
+        .join(AssignmentContent, AssignmentContent.content_id == ContentItem.content_id)
+        .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
+        # 必須與 detail.get_quiz_question_stats 的排序一致（AssignmentContent.order_index
+        # 為主鍵），否則跨 content group 時 question_number 會與班級統計圖對不上（#845 review）
+        .order_by(
+            AssignmentContent.order_index.asc(),
+            ContentItem.order_index.asc(),
+            ContentItem.id.asc(),
+        )
+        .all()
+    )
+
+    def _fallback_correct(item: ContentItem) -> str:
+        # 學生若漏答某題（無 PracticeAnswer），仍從題目本身推導正解讓老師看得到
+        if practice_mode == "word_cloze_quiz":
+            return item.cloze_answer or item.text or ""
+        return item.text or ""
+
+    questions = []
+    correct_count = 0
+    for idx, item in enumerate(items, start=1):
+        ans = answers_by_item.get(item.id)
+        data = (ans.answer_data if ans and ans.answer_data else {}) or {}
+        student_answer = data.get("typed_answer") or data.get("selected_answer") or ""
+        correct_answer = (
+            data.get("correct_answer")
+            or data.get("correct_text")
+            or _fallback_correct(item)
+        )
+        is_correct = bool(ans.is_correct) if ans else False
+        if is_correct:
+            correct_count += 1
+        questions.append(
+            {
+                "content_item_id": item.id,
+                "question_number": idx,
+                "item_index": idx - 1,
+                "question_text": item.text or "",
+                "question_translation": item.translation or "",
+                "student_answer": student_answer,
+                "correct_answer": correct_answer,
+                "is_correct": is_correct,
+                "passed": is_correct,  # 沿用右欄逐題燈號（pass/fail）
+                "time_spent_seconds": ans.time_spent_seconds if ans else 0,
+            }
+        )
+
+    total = len(items)
+    accuracy = round(correct_count / total * 100, 1) if total else 0.0
+    return {
+        "student_id": student.id,
+        "student_name": student.name,
+        "student_email": student.email,
+        "status": student_assignment.status.value
+        if student_assignment.status
+        else None,
+        "submitted_at": (
+            student_assignment.submitted_at.isoformat()
+            if student_assignment.submitted_at
+            else None
+        ),
+        "content_type": "QUIZ",
+        "practice_mode": practice_mode,
+        "submissions": questions,
+        "content_groups": [],
+        "score": student_assignment.score,
+        "correct_count": correct_count,
+        "total": total,
+        "accuracy": accuracy,
+        "current_score": student_assignment.score,
+        "current_feedback": student_assignment.feedback,
+    }
+
+
 @router.get("/{assignment_id}/submissions/{student_id}")
 async def get_student_submission(
     assignment_id: int,
@@ -379,6 +496,11 @@ async def get_student_submission(
         if parent_assignment and parent_assignment.practice_mode
         else "reading"
     )
+
+    # 小考（Issue #830）：資料在 practice_answers 而非 StudentItemProgress，
+    # 走獨立的逐題視圖，不進入下方 speaking/rearrangement 流程。
+    if practice_mode.endswith("_quiz"):
+        return _build_quiz_submission(db, assignment, student, practice_mode)
 
     # 查詢作業關聯的 contents (按 order_index 排序)
     assignment_contents = (
@@ -612,6 +734,28 @@ async def get_student_submission(
     }
 
 
+def _is_quiz_assignment(
+    db: Session,
+    student_assignment: StudentAssignment,
+    parent: Optional[Assignment] = None,
+) -> bool:
+    """小考（自動判分）— 老師端不該手動覆寫分數（#830）。
+
+    `parent` 可由呼叫端傳入（例如 `_check_not_archived` 已載入），避免重複查 Assignment。
+    """
+    if not student_assignment.assignment_id:
+        return False
+    if parent is None:
+        parent = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+    return bool(
+        parent and parent.practice_mode and parent.practice_mode.endswith("_quiz")
+    )
+
+
 @router.post("/{assignment_id}/grade")
 async def grade_student_assignment(
     assignment_id: int,
@@ -656,7 +800,9 @@ async def grade_student_assignment(
         )
 
     # 更新評分資訊
-    assignment.score = grade_data.get("score")
+    # 小考自動判分：忽略老師端送來的 score（避免歸零），分數維持系統計算值；feedback 仍可寫。
+    if not _is_quiz_assignment(db, assignment):
+        assignment.score = grade_data.get("score")
     assignment.feedback = grade_data.get("feedback")
 
     # 只有在 update_status 為 True 時才更新狀態
@@ -892,6 +1038,107 @@ async def set_assignment_in_progress(
     }
 
 
+def _return_quiz_for_revision(
+    student_assignment: StudentAssignment, practice_mode: str, db: Session
+) -> None:
+    """退回小考作業讓學生訂正錯題（Issue #830）。
+
+    與艾賓浩斯退回不同 — 小考要把第一次作答的成績「凍結」（成績以舊的為準），
+    所以不覆寫 ``sa.score``、不動第一次作答的 PracticeSession（那是成績紀錄）。
+    訂正存成獨立一筆：新建一個訂正用 PracticeSession，只複製「答對題」的
+    PracticeAnswer（答對保留、答錯不複製＝被清），學生重進只需重做答錯題。
+    """
+    student_assignment.status = AssignmentStatus.RETURNED
+    student_assignment.returned_at = datetime.now(timezone.utc)
+
+    # 複製答對題的來源＝「最近一筆 completed」作答（id.desc()）。
+    # 注意：這不是成績紀錄 — 成績凍結用的是「第一次」作答，由
+    # _build_quiz_submission 以 id.asc() 取得。這裡刻意取最新一筆，
+    # 因為多輪訂正時要保留「目前為止所有答對的題」（含前一輪訂正後才答對的），
+    # 只清掉仍然答錯的題，學生下一輪只需重做還沒對的題。
+    source = (
+        db.query(PracticeSession)
+        .filter(
+            PracticeSession.student_assignment_id == student_assignment.id,
+            PracticeSession.practice_mode == practice_mode,
+            PracticeSession.completed_at.isnot(None),
+        )
+        .order_by(PracticeSession.id.desc())
+        .first()
+    )
+    if source is None:
+        return
+
+    correct_answers = (
+        db.query(PracticeAnswer)
+        .filter(
+            PracticeAnswer.practice_session_id == source.id,
+            PracticeAnswer.is_correct.is_(True),
+        )
+        .all()
+    )
+
+    revision = PracticeSession(
+        student_id=student_assignment.student_id,
+        student_assignment_id=student_assignment.id,
+        practice_mode=practice_mode,
+        words_practiced=len(correct_answers),
+        correct_count=len(correct_answers),
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(revision)
+    db.flush()  # 取得 revision.id 供 PracticeAnswer 參照
+
+    for ans in correct_answers:
+        db.add(
+            PracticeAnswer(
+                practice_session_id=revision.id,
+                content_item_id=ans.content_item_id,
+                is_correct=True,
+                time_spent_seconds=ans.time_spent_seconds,
+                answer_data=ans.answer_data,
+            )
+        )
+
+
+def _do_return_for_revision(
+    student_assignment: StudentAssignment,
+    db: Session,
+    message: str = "",
+    parent: Optional[Assignment] = None,
+) -> str:
+    """套用單筆「要求訂正」（不 commit，供單筆與批次共用）。
+
+    回傳 'already_returned'（已是 RETURNED，略過）或 'returned'。
+    小考走 `_return_quiz_for_revision`（清答錯、保留答對、凍結分數）；
+    其餘維持 RETURNED + 重置 AI 分析額度。
+
+    `parent` 可由批次端點傳入（同一份作業對全班是常數），避免每位學生
+    重複查 Assignment（#830 N+1 修正）；未傳入時才自行查。
+    """
+    if student_assignment.status == AssignmentStatus.RETURNED:
+        return "already_returned"
+
+    if parent is None and student_assignment.assignment_id is not None:
+        parent = (
+            db.query(Assignment)
+            .filter(Assignment.id == student_assignment.assignment_id)
+            .first()
+        )
+    practice_mode = parent.practice_mode if parent else None
+    if practice_mode and practice_mode.endswith("_quiz"):
+        _return_quiz_for_revision(student_assignment, practice_mode, db)
+    else:
+        student_assignment.status = AssignmentStatus.RETURNED
+        student_assignment.returned_at = datetime.now(timezone.utc)
+        # 退回後刷新每題 AI 分析額度（teacher_passed 的題目仍被語音端鎖住，整批重置安全）
+        reset_analysis_count_for_assignment(student_assignment.id, db)
+
+    if message and hasattr(student_assignment, "return_message"):
+        student_assignment.return_message = message
+    return "returned"
+
+
 @router.post("/{assignment_id}/return-for-revision")
 async def return_for_revision(
     assignment_id: int,
@@ -899,13 +1146,11 @@ async def return_for_revision(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """要求訂正 - 要求學生修改作業"""
-    # 獲取學生ID
+    """要求訂正 - 要求學生修改作業（單筆）"""
     student_id = data.get("student_id")
     if not student_id:
         raise HTTPException(status_code=400, detail="Student ID is required")
 
-    # 使用 assignment_id (主作業ID) 和 student_id 查詢學生作業
     assignment = (
         db.query(StudentAssignment)
         .filter(
@@ -914,7 +1159,6 @@ async def return_for_revision(
         )
         .first()
     )
-
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
@@ -929,48 +1173,151 @@ async def return_for_revision(
         )
         .first()
     )
-
     if not classroom:
         raise HTTPException(
             status_code=403, detail="Not authorized to return this assignment"
         )
 
-    # 檢查是否已經是要求訂正狀態
-    if assignment.status == AssignmentStatus.RETURNED:
-        return {
-            "message": "Assignment is already in returned status",
-            "assignment_id": assignment.id,
-            "student_id": student_id,
-            "status": assignment.status.value,
-            "returned_at": (
-                assignment.returned_at.isoformat() if assignment.returned_at else None
-            ),
-        }
-
-    # 更新狀態為 RETURNED（要求訂正）
-    assignment.status = AssignmentStatus.RETURNED
-    assignment.returned_at = datetime.now(timezone.utc)
-
-    # 可選：儲存退回訊息
-    message = data.get("message", "")
-    if message and hasattr(assignment, "return_message"):
-        assignment.return_message = message
-
-    # Refresh per-item AI analysis quota for the new revision cycle.
-    # Already-passed items (teacher_passed=True) are still locked from
-    # re-analysis by the speech endpoint, so a blanket reset is safe —
-    # and matches the frontend hook's reset semantics exactly.
-    reset_analysis_count_for_assignment(assignment.id, db)
-
+    result = _do_return_for_revision(assignment, db, data.get("message", ""))
     db.commit()
-
     return {
-        "message": "Assignment returned for revision",
+        "message": (
+            "Assignment is already in returned status"
+            if result == "already_returned"
+            else "Assignment returned for revision"
+        ),
         "assignment_id": assignment.id,
         "student_id": student_id,
         "status": assignment.status.value,
-        "returned_at": assignment.returned_at.isoformat(),
+        "returned_at": (
+            assignment.returned_at.isoformat() if assignment.returned_at else None
+        ),
+        "result": result,
     }
+
+
+@router.post("/{assignment_id}/batch-return-for-revision")
+async def batch_return_for_revision(
+    assignment_id: int,
+    data: dict,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """批次要求訂正 - 一次退回多位學生（#830）。
+
+    body: { student_ids: List[int], message?: str }
+    """
+    student_ids = data.get("student_ids")
+    if not isinstance(student_ids, list) or not student_ids:
+        raise HTTPException(status_code=400, detail="student_ids is required")
+    message = data.get("message", "")
+
+    # 驗權：父作業屬於該老師（且未被軟刪除 is_active=False，#845 review）
+    parent = (
+        db.query(Assignment)
+        .filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == current_teacher.id,
+            Assignment.is_active.is_(True),
+        )
+        .first()
+    )
+    if not parent:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to return this assignment"
+        )
+    if parent.is_archived:
+        raise HTTPException(
+            status_code=403, detail="Cannot modify grades: assignment is archived"
+        )
+
+    # 一次撈出本批所有 StudentAssignment（避免逐筆 N+1，#830）
+    sa_by_student = {
+        sa.student_id: sa
+        for sa in db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.assignment_id == assignment_id,
+            StudentAssignment.student_id.in_(student_ids),
+        )
+        .all()
+    }
+
+    returned: List[int] = []
+    skipped: List[int] = []
+    for sid in student_ids:
+        sa = sa_by_student.get(sid)
+        if not sa:
+            skipped.append(sid)
+            continue
+        # parent 已在上方載入，傳入避免每位學生重查 Assignment
+        if _do_return_for_revision(sa, db, message, parent=parent) == "returned":
+            returned.append(sid)
+        else:
+            skipped.append(sid)
+
+    db.commit()
+    return {"returned": returned, "skipped": skipped, "count": len(returned)}
+
+
+@router.post("/{assignment_id}/batch-reset-not-started")
+async def batch_reset_not_started(
+    assignment_id: int,
+    data: dict,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """批次還原為「未開始」（#830）。
+
+    只把 status 設回 NOT_STARTED；分數、時間戳、practice session / 答案 / item progress
+    全部保留（review：分數不可動）。
+    body: { student_ids: List[int] }（單筆由前端傳 [id] 共用此端點）
+    """
+    student_ids = data.get("student_ids")
+    if not isinstance(student_ids, list) or not student_ids:
+        raise HTTPException(status_code=400, detail="student_ids is required")
+
+    parent = (
+        db.query(Assignment)
+        .filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == current_teacher.id,
+            Assignment.is_active.is_(True),
+        )
+        .first()
+    )
+    if not parent:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to modify this assignment"
+        )
+    if parent.is_archived:
+        raise HTTPException(
+            status_code=403, detail="Cannot modify grades: assignment is archived"
+        )
+
+    # 一次撈出本批所有 StudentAssignment（避免逐筆 N+1，#830）
+    sa_by_student = {
+        sa.student_id: sa
+        for sa in db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.assignment_id == assignment_id,
+            StudentAssignment.student_id.in_(student_ids),
+        )
+        .all()
+    }
+
+    reset: List[int] = []
+    skipped: List[int] = []
+    for sid in student_ids:
+        sa = sa_by_student.get(sid)
+        if not sa:
+            skipped.append(sid)
+            continue
+        # 只改狀態；分數、時間戳、作答紀錄全部保留（#830 review：分數不可動）
+        sa.status = AssignmentStatus.NOT_STARTED
+        reset.append(sid)
+
+    db.commit()
+    return {"reset": reset, "skipped": skipped, "count": len(reset)}
 
 
 @router.post("/{assignment_id}/manual-grade")
@@ -991,7 +1338,7 @@ async def manual_grade_assignment(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
-    _check_not_archived(assignment, db)
+    parent = _check_not_archived(assignment, db)
 
     # 驗證教師權限（檢查作業是否屬於教師的班級）
     classroom = (
@@ -1008,8 +1355,9 @@ async def manual_grade_assignment(
             status_code=403, detail="Not authorized to grade this assignment"
         )
 
-    # 更新評分
-    assignment.score = grade_data.get("score")
+    # 更新評分（小考自動判分：忽略外部 score，避免歸零）
+    if not _is_quiz_assignment(db, assignment, parent):
+        assignment.score = grade_data.get("score")
     assignment.feedback = grade_data.get("feedback")
     assignment.status = AssignmentStatus.GRADED
     assignment.graded_at = datetime.now(timezone.utc)

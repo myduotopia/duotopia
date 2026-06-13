@@ -12,7 +12,16 @@
  */
 import { useState, useMemo, useEffect, useCallback, forwardRef } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutGrid, List, Loader2, Save, X } from "lucide-react";
+import {
+  LayoutGrid,
+  List,
+  Loader2,
+  Save,
+  X,
+  RotateCcw,
+  CheckCircle2,
+  Undo2,
+} from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,7 +42,18 @@ export interface StudentProgress {
   score?: number;
   is_assigned?: boolean;
   is_interim_score?: boolean;
+  // 批改 hub 欄位（#830）：小考用 correct/total；朗讀用 metrics 三項平均
+  correct_count?: number | null;
+  total_questions?: number | null;
+  metrics?: {
+    pronunciation: number | null;
+    accuracy: number | null;
+    fluency: number | null;
+  } | null;
 }
+
+/** 名單分數區顯示型態：小考(答對/總題) / 朗讀(發音·準·流·總分) / 預設單一分數。 */
+export type MetricMode = "quiz" | "reading" | "score";
 
 export interface StudentStatusPanelProps {
   students: StudentProgress[];
@@ -48,6 +68,18 @@ export interface StudentStatusPanelProps {
   loading: boolean;
   /** When true, data area scrolls internally. When false, expands naturally (parent handles scroll). */
   scrollable?: boolean;
+  /**
+   * "assign"（預設）= 既有派發/取消派發行為（完全不變）。
+   * "revision" = 批次要求訂正:只列已派發、checkbox 勾選要退回的學生、
+   *   工具列換成「全選未達100 + 分數區間」、點姓名開批改頁、不跑派發流程。
+   */
+  mode?: "assign" | "revision";
+  /** revision 模式:把目前勾選的 student_ids 回報給父層（modal）。 */
+  onRevisionSelectionChange?: (studentIds: number[]) => void;
+  /** revision/hub：單一學生列動作（還原 / 退回訂正 / 完成批改）。提供才顯示按鈕。 */
+  onRowReset?: (studentId: number) => void;
+  onRowReturn?: (studentId: number) => void;
+  onRowGrade?: (studentId: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +91,9 @@ type TabValue = "all" | "assigned" | "unassigned";
 type SortMode = "number" | "name" | "score" | "status";
 
 const GRADABLE_MODES = new Set(["reading", "word_reading", "rearrangement"]);
+
+// revision 模式可被退回訂正的狀態（有作答可訂正）
+const RETURNABLE_STATUSES = new Set(["SUBMITTED", "GRADED", "RESUBMITTED"]);
 
 const STATUS_ORDER: Record<string, number> = {
   NOT_STARTED: 0,
@@ -258,6 +293,123 @@ export function StatusLegend({ columns = 2 }: { columns?: 1 | 2 } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// 批改 hub 分數區（#830）：朗讀的單一指標欄（label + 值）
+// ---------------------------------------------------------------------------
+
+interface MetricLabels {
+  selectAllStudents: string;
+  correctRate: string;
+  pronunciation: string;
+  accuracy: string;
+  fluency: string;
+  total: string;
+}
+
+/** 小考答對/總題的文字（"17/20"）；無資料回 "-"。 */
+function quizScoreText(student: StudentProgress, hasScore: boolean): string {
+  if (!hasScore) return "-";
+  const correct = student.correct_count ?? "—";
+  const total = student.total_questions ?? "—";
+  return `${correct}/${total}`;
+}
+
+/** 表頭欄位標題（不含「學生」欄）— 依 metricMode。 */
+function metricHeaderLabels(
+  metricMode: MetricMode,
+  labels: MetricLabels,
+): string[] {
+  switch (metricMode) {
+    case "quiz":
+      return [labels.correctRate, labels.total];
+    case "reading":
+      return [
+        labels.pronunciation,
+        labels.accuracy,
+        labels.fluency,
+        labels.total,
+      ];
+    default:
+      return [labels.total];
+  }
+}
+
+/** 一列的數值欄（與表頭順序/數量對齊）；最後一欄為總分。 */
+function metricCellValues(
+  student: StudentProgress,
+  metricMode: MetricMode,
+  hasScore: boolean,
+  scoreValue: number,
+): string[] {
+  const m0 = (v: number | null | undefined) =>
+    v == null ? "—" : String(Number(v).toFixed(0));
+  const total = hasScore
+    ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
+    : "-";
+  switch (metricMode) {
+    case "quiz":
+      return [quizScoreText(student, hasScore), total];
+    case "reading":
+      return [
+        m0(student.metrics?.pronunciation),
+        m0(student.metrics?.accuracy),
+        m0(student.metrics?.fluency),
+        total,
+      ];
+    default:
+      return [total];
+  }
+}
+
+/** list 表頭列（批改 hub）：固定 sticky、欄寬與 StudentRow 對齊。 */
+function ListHeader({
+  metricMode,
+  labels,
+  hasActions,
+  allSelected,
+  onToggleAll,
+}: {
+  metricMode: MetricMode;
+  labels: MetricLabels;
+  hasActions?: boolean;
+  allSelected?: boolean;
+  onToggleAll?: () => void;
+}) {
+  return (
+    <div className="sticky top-0 z-10 flex items-center w-full gap-2 sm:gap-3 px-3 py-1.5 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[11px] font-medium text-gray-400 dark:text-gray-500">
+      {/* 全選 checkbox + 標題（點擊切換全選 / 取消全選） */}
+      <button
+        type="button"
+        onClick={onToggleAll}
+        className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+      >
+        {allSelected ? (
+          <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm bg-blue-500 text-white text-[9px] font-bold shrink-0">
+            ✓
+          </span>
+        ) : (
+          <span className="inline-block w-4 h-4 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700 shrink-0" />
+        )}
+        <span className="truncate">{labels.selectAllStudents}</span>
+      </button>
+      {metricHeaderLabels(metricMode, labels).map((lbl, i, arr) => (
+        <span
+          key={i}
+          className={`w-14 text-center shrink-0 ${
+            metricMode === "reading" && i !== arr.length - 1
+              ? "hidden sm:block"
+              : ""
+          }`}
+        >
+          {lbl}
+        </span>
+      ))}
+      {/* 對齊各列尾端的操作按鈕欄 */}
+      {hasActions && <span className="w-24 sm:w-64 pl-1 shrink-0" />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // StudentCard - Grid view 卡片
 // ---------------------------------------------------------------------------
 
@@ -332,28 +484,28 @@ function StudentCard({
         <TrafficLightDot status={student.status} size={12} />
       </span>
 
-      {/* Seat number */}
-      {Number(student.student_number) > 0 && (
-        <span className="text-xs text-gray-700 dark:text-gray-300 leading-tight">
-          {student.student_number}
+      {/* 座號 + 姓名（同一列，座號在左） */}
+      <div className="flex items-center justify-center gap-1 w-full min-w-0">
+        {Number(student.student_number) > 0 && (
+          <span className="text-xs sm:text-[15px] leading-normal text-gray-700 dark:text-gray-300 shrink-0">
+            {student.student_number}
+          </span>
+        )}
+        <span className="text-xs sm:text-[15px] leading-normal truncate text-gray-600 dark:text-gray-400">
+          {student.student_name}
         </span>
-      )}
+      </div>
 
-      {/* Name */}
-      <span className="text-xs truncate w-full text-gray-600 dark:text-gray-400 leading-tight">
-        {student.student_name}
-      </span>
-
-      {/* Score */}
+      {/* Score：卡片只顯示分數（不放各項指標），字級放大 */}
       <span
-        className={`text-base font-bold leading-tight ${
+        className={`text-xs sm:text-[55px] font-bold leading-none ${
           hasScore
             ? "text-gray-800 dark:text-gray-100"
             : "text-gray-300 dark:text-gray-600"
         }`}
       >
         {hasScore
-          ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
+          ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(0)}`
           : "-"}
       </span>
     </div>
@@ -372,6 +524,13 @@ function StudentRow({
   onToggle,
   onClick,
   tooltip,
+  metricMode = "score",
+  onReset,
+  onReturn,
+  onGrade,
+  resetLabel,
+  returnLabel,
+  gradeLabel,
 }: {
   student: StudentProgress;
   isEditing: boolean;
@@ -380,8 +539,21 @@ function StudentRow({
   onToggle: () => void;
   onClick: () => void;
   tooltip?: string;
+  metricMode?: MetricMode;
+  onReset?: () => void;
+  onReturn?: () => void;
+  onGrade?: () => void;
+  resetLabel?: string;
+  returnLabel?: string;
+  gradeLabel?: string;
 }) {
   const isUnassigned = student.status === "unassigned";
+  // 已是「未開始」/未派發 → 該列還原鈕 disable
+  const resetDisabled = isUnassigned || student.status === "NOT_STARTED";
+  // 已是「退回訂正」狀態 → 該列退回鈕 disable（不影響 Graded 鈕與批次退回）
+  const returnDisabled = student.status === "RETURNED";
+  // 已是「批改完成」狀態 → 該列 Graded 鈕 disable（不影響退回鈕與批次 Graded）
+  const gradeDisabled = student.status === "GRADED";
   const rowTooltip = tooltip && !isUnassigned ? tooltip : undefined;
   const isClickable = !!rowTooltip;
   // 已派發的學生一律顯示分數（同 StudentCard 規則）。
@@ -400,7 +572,7 @@ function StudentRow({
         }
       }}
       title={rowTooltip}
-      className={`flex items-center w-full gap-3 py-2 px-3 rounded transition-colors ${
+      className={`flex items-center w-full gap-2 sm:gap-3 py-2 px-3 rounded transition-colors ${
         isClickable
           ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
           : "cursor-default"
@@ -443,22 +615,83 @@ function StudentRow({
       )}
 
       {/* Name */}
-      <span className="text-sm text-gray-800 dark:text-gray-200 flex-1 text-left truncate">
+      <span className="text-xs sm:text-sm text-gray-800 dark:text-gray-200 flex-1 text-left truncate">
         {student.student_name}
       </span>
 
-      {/* Score */}
-      <span
-        className={`text-sm font-bold shrink-0 ${
-          hasScore
-            ? "text-gray-800 dark:text-gray-100"
-            : "text-gray-300 dark:text-gray-600"
-        }`}
-      >
-        {hasScore
-          ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
-          : "-"}
-      </span>
+      {/* 數值欄（#830）：欄寬與表頭對齊，純數值無標籤；最後一欄為總分(粗體) */}
+      {metricCellValues(student, metricMode, hasScore, scoreValue).map(
+        (val, i, arr) => (
+          <span
+            key={i}
+            className={`w-14 text-center shrink-0 text-xs sm:text-sm ${
+              i === arr.length - 1 ? "font-bold" : ""
+            } ${
+              metricMode === "reading" && i !== arr.length - 1
+                ? "hidden sm:block"
+                : ""
+            } ${
+              hasScore
+                ? "text-gray-800 dark:text-gray-100"
+                : "text-gray-300 dark:text-gray-600"
+            }`}
+          >
+            {val}
+          </span>
+        ),
+      )}
+
+      {/* 單一學生操作（#830）：桌機顯示文字按鈕、手機只顯示 icon。
+          固定欄寬，與表頭尾端 spacer 對齊，避免推移數值欄。 */}
+      {(onReset || onReturn) && (
+        <div className="flex items-center justify-end gap-1 shrink-0 w-24 sm:w-64 pl-1">
+          <button
+            type="button"
+            disabled={resetDisabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!resetDisabled) onReset?.();
+            }}
+            title={resetLabel}
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700/40 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <Undo2 className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline text-xs whitespace-nowrap">
+              {resetLabel}
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={returnDisabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!returnDisabled) onReturn?.();
+            }}
+            title={returnLabel}
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <RotateCcw className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline text-xs whitespace-nowrap">
+              {returnLabel}
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={gradeDisabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!gradeDisabled) onGrade?.();
+            }}
+            title={gradeLabel}
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline text-xs whitespace-nowrap">
+              {gradeLabel}
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -481,27 +714,61 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       saving = false,
       loading,
       scrollable = false,
+      mode = "assign",
+      onRevisionSelectionChange,
+      onRowReset,
+      onRowReturn,
+      onRowGrade,
     },
     ref,
   ) {
     const { t } = useTranslation();
+    const isRevision = mode === "revision";
+    const rowResetLabel = t("gradingHub.resetShort", "還原");
+    const rowReturnLabel = t("gradingHub.returnShort", "退回");
+    const rowGradeLabel = t("gradingHub.gradeShort", "完成");
+
+    // 批改 hub（revision 模式）依作業類型決定分數區欄位；assign 模式維持單一分數（不變）。
+    const metricMode: MetricMode = !isRevision
+      ? "score"
+      : practiceMode?.endsWith("_quiz")
+        ? "quiz"
+        : practiceMode === "reading" || practiceMode === "word_reading"
+          ? "reading"
+          : "score";
+    const metricLabels: MetricLabels = {
+      selectAllStudents: t(
+        "studentStatusPanel.metric.selectAllStudents",
+        "全選學生",
+      ),
+      correctRate: t("studentStatusPanel.metric.correctRate", "正確率"),
+      pronunciation: t("studentStatusPanel.metric.pronunciation", "發音"),
+      accuracy: t("studentStatusPanel.metric.accuracy", "準確"),
+      fluency: t("studentStatusPanel.metric.fluency", "流暢"),
+      total: t("studentStatusPanel.metric.total", "總分"),
+    };
 
     const [viewMode, setViewMode] = useState<ViewMode>("list");
     const [activeTab, setActiveTab] = useState<TabValue>("assigned");
     const [sortMode, setSortMode] = useState<SortMode>("number");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    // revision 工具列:分數區間快速勾選（預設 0~80）
+    const [rangeMin, setRangeMin] = useState("0");
+    const [rangeMax, setRangeMax] = useState("80");
 
     const isGradable = practiceMode ? GRADABLE_MODES.has(practiceMode) : false;
 
     // Clear selection when parent resets editing state (e.g. after save)
+    // revision 模式不受 isEditingStudents 影響（避免清掉退回勾選）
     useEffect(() => {
+      if (isRevision) return;
       if (!isEditingStudents) {
         setSelectedIds(new Set());
       }
-    }, [isEditingStudents]);
+    }, [isEditingStudents, isRevision]);
 
-    // Reset marked students when switching tabs
+    // Reset marked students when switching tabs / 重載學生名單時清空勾選
     useEffect(() => {
       setSelectedIds(new Set());
     }, [activeTab, students]);
@@ -521,16 +788,23 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     // hasChanges = any student marked
     const hasChanges = selectedIds.size > 0;
 
-    // Sync editing state to parent
+    // Sync editing state to parent（revision 不參與派發編輯狀態）
     useEffect(() => {
+      if (isRevision) return;
       onEditingStudentsChange(hasChanges);
-    }, [hasChanges, onEditingStudentsChange]);
+    }, [hasChanges, onEditingStudentsChange, isRevision]);
+
+    // revision 模式:把勾選回報給父層 modal
+    useEffect(() => {
+      if (!isRevision) return;
+      onRevisionSelectionChange?.(Array.from(selectedIds));
+    }, [isRevision, selectedIds, onRevisionSelectionChange]);
 
     // Compute final student_ids list based on active tab + marked students
     // Assigned tab: marked = to remove → final = initial minus marked
     // Unassigned tab: marked = to add → final = initial plus marked
     useEffect(() => {
-      if (!hasChanges) {
+      if (isRevision || !hasChanges) {
         return;
       }
       let finalIds: Set<number>;
@@ -550,6 +824,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       initialAssignedIds,
       hasChanges,
       onStudentIdsChanged,
+      isRevision,
     ]);
 
     // Cancel = clear all marks
@@ -603,13 +878,15 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     // Unassigned tab: all can be toggled
     const isCheckboxDisabled = useCallback(
       (s: StudentProgress) => {
+        // revision/hub:任何狀態都可勾選（批次端點會自行處理/略過不適用者）
+        if (isRevision) return false;
         if (activeTab === "all") return true;
         if (activeTab === "unassigned") return false;
         // assigned tab: only NOT_STARTED can be unchecked — once a student
         // starts or submits, un-assigning would silently drop their progress.
         return s.status !== "NOT_STARTED";
       },
-      [activeTab],
+      [activeTab, isRevision],
     );
 
     const toggleStudent = useCallback((studentId: number) => {
@@ -644,6 +921,42 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       });
     }, [filteredStudents, selectedIds, isCheckboxDisabled]);
 
+    // ---- revision 工具列：依條件勾選可退回學生 ----
+    const selectReturnableBy = useCallback(
+      (pred: (s: StudentProgress) => boolean) => {
+        setSelectedIds(
+          new Set(
+            filteredStudents
+              .filter((s) => !isCheckboxDisabled(s) && pred(s))
+              .map((s) => s.student_id),
+          ),
+        );
+      },
+      [filteredStudents, isCheckboxDisabled],
+    );
+    // 全選 / 取消全選（不分分數）
+    const allFilteredSelected =
+      filteredStudents.length > 0 &&
+      filteredStudents.every((s) => selectedIds.has(s.student_id));
+    const toggleSelectAll = useCallback(() => {
+      setSelectedIds(
+        allFilteredSelected
+          ? new Set<number>()
+          : new Set(filteredStudents.map((s) => s.student_id)),
+      );
+    }, [allFilteredSelected, filteredStudents]);
+    // 分數區間（預設 0~80）
+    const applyScoreRange = useCallback(() => {
+      const lo = parseFloat(rangeMin);
+      const hi = parseFloat(rangeMax);
+      const min = Number.isNaN(lo) ? 0 : lo;
+      const max = Number.isNaN(hi) ? 100 : hi;
+      selectReturnableBy((s) => {
+        const sc = s.score ?? 0;
+        return sc >= min && sc <= max;
+      });
+    }, [rangeMin, rangeMax, selectReturnableBy]);
+
     // ---- Navigation ----
     // Gradable modes (see GRADABLE_MODES): open grading page for this student in a new tab.
     // Skip unassigned and NOT_STARTED — nothing to grade yet.
@@ -653,15 +966,24 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       [isGradable],
     );
 
+    // revision 模式解除 GRADABLE_MODES 限制:任何可退回學生點姓名都能開批改頁
+    const isClickableStudent = useCallback(
+      (s: StudentProgress) =>
+        isRevision
+          ? RETURNABLE_STATUSES.has(String(s.status))
+          : isGradableStudent(s),
+      [isRevision, isGradableStudent],
+    );
+
     const handleStudentClick = useCallback(
       (student: StudentProgress) => {
-        if (!isGradableStudent(student)) return;
+        if (!isClickableStudent(student)) return;
         window.open(
           `/teacher/classroom/${classroomId}/assignment/${assignmentId}/grading?studentId=${student.student_id}`,
           "_blank",
         );
       },
-      [isGradableStudent, classroomId, assignmentId],
+      [isClickableStudent, classroomId, assignmentId],
     );
 
     // ---- Tab counts ----
@@ -720,7 +1042,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     ];
 
     // Whether checkboxes are interactive on current tab
-    const isCheckboxActive = activeTab !== "all";
+    const isCheckboxActive = isRevision || activeTab !== "all";
 
     // ---- Select all checkbox state ----
     const selectAllState = useMemo(() => {
@@ -735,115 +1057,143 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
 
     return (
       <div
-        className={`border-t dark:border-gray-700 pt-4 ${scrollable ? "flex flex-col h-full" : ""}`}
+        className={`${isRevision ? "" : "border-t dark:border-gray-700 pt-4"} ${scrollable ? "flex flex-col flex-1 min-h-0" : ""}`}
       >
-        {/* Header: title + sort + view toggle */}
-        <div className="flex items-center justify-between mb-3 gap-2">
-          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 shrink-0">
-            {t("assignmentDetail.sheet.studentProgress", "學生完成狀況")}
-          </h4>
-
-          {/* Sort segmented buttons */}
-          <div className="flex items-center rounded-md overflow-hidden border border-gray-200 dark:border-gray-600">
-            {sortOptions.map((opt, i) => {
-              const isActive = sortMode === opt.value;
-              return (
+        {/* Header: (revision) 分數區間勾選 + 已選數在左；排序 + 檢視在右 */}
+        <div className="flex items-center gap-2 mb-3">
+          {isRevision && (
+            <div className="hidden sm:flex items-center gap-2 text-xs">
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  value={rangeMin}
+                  onChange={(e) => setRangeMin(e.target.value)}
+                  aria-label="min"
+                  className="w-14 h-7 text-center rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                />
+                <span className="text-gray-400">~</span>
+                <input
+                  type="number"
+                  value={rangeMax}
+                  onChange={(e) => setRangeMax(e.target.value)}
+                  aria-label="max"
+                  className="w-14 h-7 text-center rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                />
                 <button
-                  key={opt.value}
                   type="button"
-                  onClick={() => {
-                    if (isActive) {
-                      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
-                    } else {
-                      setSortMode(opt.value);
-                      setSortDirection("asc");
-                    }
-                  }}
-                  className={`px-2 py-1 text-[10px] font-medium transition-colors ${
-                    isActive
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-                  } ${i > 0 ? "border-l border-gray-200 dark:border-gray-600" : ""}`}
+                  onClick={applyScoreRange}
+                  className="px-2 py-1 font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
-                  {opt.label}
-                  {isActive && (
-                    <span className="ml-0.5">
-                      {sortDirection === "asc" ? "↑" : "↓"}
-                    </span>
-                  )}
+                  {t("requestRevision.applyRange", "依分數勾選")}
                 </button>
-              );
-            })}
-          </div>
-
-          {/* View mode toggle */}
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => setViewMode("grid")}
-              className={`p-1 rounded transition-colors ${
-                viewMode === "grid"
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
-              }`}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("list")}
-              className={`p-1 rounded transition-colors ${
-                viewMode === "list"
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
-              }`}
-            >
-              <List className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Tabs + Select All */}
-        <div className="flex items-center border-b border-gray-200 dark:border-gray-700 mb-3">
-          {tabs.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => setActiveTab(tab.value)}
-              className={`flex-1 text-center py-2 text-xs font-medium border-b-2 transition-colors ${
-                activeTab === tab.value
-                  ? "border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20"
-                  : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-              }`}
-            >
-              {tab.label}
-              {tab.count != null && (
-                <span className="ml-1 text-[10px] text-gray-400">
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
-
-          {/* Select All */}
-          {selectAllState !== "hidden" && (
-            <button
-              type="button"
-              onClick={handleSelectAll}
-              disabled={selectAllState === "disabled"}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 shrink-0 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-40"
-            >
-              {selectAllState === "checked" ? (
-                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold">
-                  ✓
-                </span>
-              ) : (
-                <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
-              )}
-              {t("assignmentDetail.sheet.selectAll", "全選")}
-            </button>
+              </div>
+            </div>
           )}
+          <div className="ml-auto flex items-center gap-2">
+            {/* Sort segmented buttons */}
+            <div className="flex items-center rounded-md overflow-hidden border border-gray-200 dark:border-gray-600">
+              {sortOptions.map((opt, i) => {
+                const isActive = sortMode === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      if (isActive) {
+                        setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                      } else {
+                        setSortMode(opt.value);
+                        setSortDirection("asc");
+                      }
+                    }}
+                    className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+                      isActive
+                        ? "bg-blue-500 text-white"
+                        : "bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    } ${i > 0 ? "border-l border-gray-200 dark:border-gray-600" : ""}`}
+                  >
+                    {opt.label}
+                    {isActive && (
+                      <span className="ml-0.5">
+                        {sortDirection === "asc" ? "↑" : "↓"}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* View mode toggle */}
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewMode("grid")}
+                className={`p-1 rounded transition-colors ${
+                  viewMode === "grid"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+                }`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`p-1 rounded transition-colors ${
+                  viewMode === "list"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+                }`}
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
+
+        {/* Tabs + Select All（assign 模式） */}
+        {!isRevision && (
+          <div className="flex items-center border-b border-gray-200 dark:border-gray-700 mb-3">
+            {tabs.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setActiveTab(tab.value)}
+                className={`flex-1 text-center py-2 text-xs font-medium border-b-2 transition-colors ${
+                  activeTab === tab.value
+                    ? "border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20"
+                    : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                }`}
+              >
+                {tab.label}
+                {tab.count != null && (
+                  <span className="ml-1 text-[10px] text-gray-400">
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
+
+            {/* Select All */}
+            {selectAllState !== "hidden" && (
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                disabled={selectAllState === "disabled"}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 shrink-0 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-40"
+              >
+                {selectAllState === "checked" ? (
+                  <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-blue-500 text-white text-[8px] font-bold">
+                    ✓
+                  </span>
+                ) : (
+                  <span className="inline-block w-3.5 h-3.5 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700" />
+                )}
+                {t("assignmentDetail.sheet.selectAll", "全選")}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Content: loading / empty / grid / list */}
         {/* Data + legend area */}
@@ -870,7 +1220,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   onToggle={() => toggleStudent(student.student_id)}
                   onClick={() => handleStudentClick(student)}
                   tooltip={
-                    isGradableStudent(student)
+                    isClickableStudent(student)
                       ? t("assignmentDetail.sheet.checkHomework", "批改作業")
                       : undefined
                   }
@@ -879,6 +1229,16 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
             </div>
           ) : (
             <div className="space-y-0.5">
+              {/* 批改 hub 表頭：sticky 固定、欄寬對齊各列數值 */}
+              {isRevision && (
+                <ListHeader
+                  metricMode={metricMode}
+                  labels={metricLabels}
+                  hasActions={!!onRowReset || !!onRowReturn}
+                  allSelected={allFilteredSelected}
+                  onToggleAll={toggleSelectAll}
+                />
+              )}
               {sortedStudents.map((student) => (
                 <StudentRow
                   key={student.student_id}
@@ -888,8 +1248,27 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   isDisabled={isCheckboxDisabled(student)}
                   onToggle={() => toggleStudent(student.student_id)}
                   onClick={() => handleStudentClick(student)}
+                  metricMode={metricMode}
+                  onReset={
+                    onRowReset
+                      ? () => onRowReset(student.student_id)
+                      : undefined
+                  }
+                  onReturn={
+                    onRowReturn
+                      ? () => onRowReturn(student.student_id)
+                      : undefined
+                  }
+                  onGrade={
+                    onRowGrade
+                      ? () => onRowGrade(student.student_id)
+                      : undefined
+                  }
+                  resetLabel={rowResetLabel}
+                  returnLabel={rowReturnLabel}
+                  gradeLabel={rowGradeLabel}
                   tooltip={
-                    isGradableStudent(student)
+                    isClickableStudent(student)
                       ? t("assignmentDetail.sheet.checkHomework", "批改作業")
                       : undefined
                   }
@@ -899,7 +1278,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
           )}
 
           {/* Save / Cancel bar (after student list, before legend) */}
-          {hasChanges && (
+          {!isRevision && hasChanges && (
             <div className="flex items-center justify-between mt-3 mb-2">
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 {activeTab === "assigned"
@@ -943,8 +1322,14 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
             </div>
           )}
 
-          {/* Status legend */}
-          <StatusLegend />
+          {/* Status legend（hub 手機版隱藏；查看詳情不變） */}
+          {isRevision ? (
+            <div className="hidden sm:block">
+              <StatusLegend />
+            </div>
+          ) : (
+            <StatusLegend />
+          )}
         </div>
       </div>
     );

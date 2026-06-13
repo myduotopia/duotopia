@@ -11,7 +11,14 @@
  *     + useShortLandscape 走橫式排版（圖左、選項右 2×2）
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
@@ -23,6 +30,7 @@ import { apiClient } from "@/lib/api";
 import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
+import CardNavArrow from "./shared/CardNavArrow";
 import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
 import { useShortLandscape } from "./shared/useShortLandscape";
 import QuizReviewView, {
@@ -30,6 +38,12 @@ import QuizReviewView, {
   type QuizReviewWord,
 } from "./shared/QuizReviewView";
 import { useQuizTimer } from "./shared/useQuizTimer";
+import {
+  useQuizRevision,
+  allCorrect,
+  firstUnresolvedIndex,
+  nextUnresolvedIndex,
+} from "./shared/useQuizRevision";
 
 interface QuizOption {
   text: string;
@@ -63,6 +77,8 @@ interface StartResponse {
   shuffle_questions: boolean;
   quiz_time_limit_seconds?: number | null;
   time_remaining_seconds?: number | null;
+  // Issue #830: 退回後為 "RETURNED" → 進入訂正模式
+  status?: string | null;
 }
 
 interface Props {
@@ -72,6 +88,8 @@ interface Props {
   onComplete?: () => void;
   previewWords?: QuizWord[];
   previewSettings?: Partial<StartResponse>;
+  // #830: 老師預覽時注入每張卡底部的「該題班級表現」%條（學生端不傳）。
+  renderCardFooter?: (contentItemId: number) => ReactNode;
 }
 
 export default function WordSelectionQuizActivity({
@@ -81,6 +99,7 @@ export default function WordSelectionQuizActivity({
   onComplete,
   previewWords,
   previewSettings,
+  renderCardFooter,
 }: Props) {
   void _isPreviewMode;
   const { t } = useTranslation();
@@ -121,6 +140,9 @@ export default function WordSelectionQuizActivity({
   // 必須放在 early return 之前，否則違反 Rules of Hooks
   const isShortLandscape = useShortLandscape();
   const navSlot = useQuizNavSlot();
+  // Issue #830: 訂正模式（退回後）— 答錯揭示正解、強制全對才能提交
+  const [quizStatus, setQuizStatus] = useState<string | null>(null);
+  const { isRevision } = useQuizRevision(quizStatus);
 
   useEffect(() => {
     if (isLivePreview) {
@@ -155,6 +177,12 @@ export default function WordSelectionQuizActivity({
         });
         setSelectedByItem(initialSel);
         setCorrectByItem(initialCorrect);
+        setQuizStatus(data.status ?? null);
+        // 訂正模式（退回後 RETURNED）：游標直接停在第一題錯題（略過已答對題）
+        if (data.status === "RETURNED") {
+          const firstWrong = firstUnresolvedIndex(data.words, initialCorrect);
+          if (firstWrong >= 0) setCurrentIndex(firstWrong);
+        }
         setSettings({
           show_word: data.show_word,
           show_image: data.show_image,
@@ -196,9 +224,9 @@ export default function WordSelectionQuizActivity({
   }, []);
 
   const persistSelection = useCallback(
-    async (selected: string) => {
+    async (selected: string): Promise<boolean | undefined> => {
       if (!currentWord || isLivePreview || isDemoMode || sessionId == null)
-        return;
+        return undefined;
       setSubmittingAnswer(true);
       try {
         // correctness is decided server-side; trust the response, never compute
@@ -216,27 +244,17 @@ export default function WordSelectionQuizActivity({
           ...m,
           [currentWord.content_item_id]: resp?.is_correct ?? null,
         }));
+        return resp?.is_correct ?? undefined;
       } catch {
         toast.error(
           t("wordSelection.toast.saveFailed") || "Failed to save answer",
         );
+        return undefined;
       } finally {
         setSubmittingAnswer(false);
       }
     },
     [assignmentId, currentWord, isDemoMode, isLivePreview, sessionId, t],
-  );
-
-  const choose = useCallback(
-    async (text: string) => {
-      if (!currentWord) return;
-      setSelectedByItem((m) => ({
-        ...m,
-        [currentWord.content_item_id]: text,
-      }));
-      await persistSelection(text);
-    },
-    [currentWord, persistSelection],
   );
 
   const goTo = useCallback(
@@ -270,6 +288,37 @@ export default function WordSelectionQuizActivity({
       setCompleting(false);
     }
   }, [assignmentId, isDemoMode, isLivePreview, onComplete, sessionId, t]);
+
+  // Issue #830 訂正模式：選對選項 → 自動跳「下一題錯題」；若已無錯題（剛改對的是
+  // 最後一題錯題）＝整卷提交；選錯則留在原題、選項即時揭示正解（強制改對）。
+  const choose = useCallback(
+    async (text: string) => {
+      if (!currentWord) return;
+      const itemId = currentWord.content_item_id;
+      // 訂正模式：已答對的題目鎖定，不可改選
+      if (isRevision && correctByItem[itemId] === true) return;
+      setSelectedByItem((m) => ({ ...m, [itemId]: text }));
+      const isCorrect = await persistSelection(text);
+      if (!isRevision || !isCorrect) return;
+      // setCorrectByItem 為非同步，先把當題視為已解決再找下一題錯題
+      const resolved = { ...correctByItem, [itemId]: true };
+      const next = nextUnresolvedIndex(words, resolved, currentIndex);
+      if (next === -1) {
+        await handleSubmitAll();
+      } else {
+        setCurrentIndex(next);
+      }
+    },
+    [
+      currentWord,
+      persistSelection,
+      isRevision,
+      correctByItem,
+      words,
+      currentIndex,
+      handleSubmitAll,
+    ],
+  );
 
   const answeredCount = useMemo(
     () =>
@@ -398,6 +447,14 @@ export default function WordSelectionQuizActivity({
   // 直式優先；題目有圖 + 矮橫螢幕（手機橫放）才走橫式（圖左、選項右 2×2）
   const useHorizontal =
     settings.show_image && !!currentWord.image_url && isShortLandscape;
+  // Issue #830 訂正模式 gating + 揭示
+  const currentCorrect = correctByItem[currentWord.content_item_id];
+  const currentResolved = currentCorrect === true;
+  const everyResolved = allCorrect(words, correctByItem);
+  const showCorrectness = settings.show_answer || isRevision;
+  // 訂正模式下已作答（對或錯）→ 揭示選項正解（參考艾賓浩斯）
+  const revealCurrent =
+    isRevision && (currentCorrect === true || currentCorrect === false);
 
   // 題號 bar：Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
@@ -421,9 +478,9 @@ export default function WordSelectionQuizActivity({
                 ? "bg-emerald-500 text-white border-emerald-500"
                 : !answered
                   ? "bg-white text-gray-500 border-gray-300 hover:border-emerald-400"
-                  : settings.show_answer && priorCorrect === true
+                  : showCorrectness && priorCorrect === true
                     ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                    : settings.show_answer && priorCorrect === false
+                    : showCorrectness && priorCorrect === false
                       ? "bg-rose-50 text-rose-700 border-rose-300"
                       : "bg-emerald-50 text-emerald-700 border-emerald-300",
             )}
@@ -456,14 +513,35 @@ export default function WordSelectionQuizActivity({
         </div>
       )}
 
-      <Card className="flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
-        <CardContent className="flex-1 min-h-0 flex flex-col gap-3 p-0">
+      <Card className="relative flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+        {/* #830: 上一題 / 下一題改為卡片左右兩側箭頭（對齊一般單字卡 WordCard） */}
+        {currentIndex > 0 && (
+          <CardNavArrow
+            direction="prev"
+            onClick={() => goTo(currentIndex - 1)}
+          />
+        )}
+        {!isLast && (
+          <CardNavArrow
+            direction="next"
+            disabled={submittingAnswer || (isRevision && !currentResolved)}
+            onClick={() => goTo(currentIndex + 1)}
+          />
+        )}
+        <CardContent className="flex-1 min-h-0 flex flex-col gap-3 px-10 sm:px-12 py-0">
           <div className="text-sm text-gray-500 shrink-0">
             {t("wordQuiz.questionLabel", {
               current: currentWord.question_number,
               total: words.length,
             }) || `第 ${currentWord.question_number} / ${words.length} 題`}
           </div>
+
+          {isRevision && (
+            <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 shrink-0">
+              {t("wordQuiz.revision.hint") ||
+                "訂正模式：答錯會顯示正解，全部改對才能提交"}
+            </div>
+          )}
 
           {/* 內容區：直式（圖→文→選項垂直）或橫式（圖左、文字+選項右）— 對齊艾賓浩斯版 */}
           <div
@@ -535,6 +613,10 @@ export default function WordSelectionQuizActivity({
                   const isSelected = selectedForCurrent === opt.text;
                   const renderAsImage =
                     settings.show_option_images && !!opt.image_url;
+                  // 訂正模式作答後揭示：正解綠勾、學生答錯紅叉（參考艾賓浩斯）
+                  const isCorrectOption =
+                    opt.text.trim().toLowerCase() ===
+                    currentWord.correct_text.trim().toLowerCase();
                   return (
                     <WordSelectionOptionButton
                       key={opt.text}
@@ -543,7 +625,13 @@ export default function WordSelectionQuizActivity({
                       showAsImage={renderAsImage}
                       colorIndex={index}
                       isSelected={isSelected}
-                      disabled={submittingAnswer}
+                      // 已答對鎖定；答錯時仍可改選正解
+                      disabled={submittingAnswer || currentResolved}
+                      showResult={revealCurrent}
+                      showCorrect={revealCurrent && isCorrectOption}
+                      showIncorrect={
+                        revealCurrent && isSelected && !isCorrectOption
+                      }
                       onClick={() => choose(opt.text)}
                     />
                   );
@@ -552,21 +640,18 @@ export default function WordSelectionQuizActivity({
             </div>
           </div>
 
-          {/* Card footer: prev/next/submit — 與題目區共用 Card，不另起 sibling */}
-          <div className="flex gap-2 justify-between border-t pt-3 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={currentIndex === 0 || submittingAnswer}
-              onClick={() => goTo(currentIndex - 1)}
-            >
-              {t("wordQuiz.prev") || "上一題"}
-            </Button>
-            {isLast ? (
+          {/* Card footer: 只剩提交鈕（prev/next 已移到卡片左右兩側）#830。
+              一般模式僅最後一題顯示；訂正模式全程顯示，唯有全部改對才可點擊。 */}
+          {(isRevision || isLast) && (
+            <div className="flex justify-center border-t pt-3 shrink-0">
               <Button
                 type="button"
                 onClick={handleSubmitAll}
-                disabled={completing || submittingAnswer}
+                disabled={
+                  completing ||
+                  submittingAnswer ||
+                  (isRevision && !everyResolved)
+                }
               >
                 {completing ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -575,16 +660,11 @@ export default function WordSelectionQuizActivity({
                 )}
                 {t("wordQuiz.submit") || "提交"}
               </Button>
-            ) : (
-              <Button
-                type="button"
-                onClick={() => goTo(currentIndex + 1)}
-                disabled={submittingAnswer}
-              >
-                {t("wordQuiz.next") || "下一題"}
-              </Button>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* #830: 老師預覽時卡片最下方顯示該題班級表現 %條 */}
+          {renderCardFooter?.(currentWord.content_item_id)}
         </CardContent>
       </Card>
     </div>

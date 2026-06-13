@@ -6,7 +6,14 @@
  * 2. 老師預覽示範頁面 (TeacherAssignmentPreviewPage)
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  type ReactNode,
+} from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -190,6 +197,8 @@ interface StudentActivityPageContentProps {
     show_image?: boolean;
     show_option_images?: boolean;
   };
+  // #830: 老師預覽小考時，注入每張卡底部「該題班級表現」%條（學生作答頁不傳）。
+  renderCardFooter?: (contentItemId: number) => ReactNode;
 }
 
 // =============================================================================
@@ -296,6 +305,7 @@ export default function StudentActivityPageContent({
   canUseAiAnalysis = true,
   timeLimitPerQuestion = 0,
   previewSettings,
+  renderCardFooter,
 }: StudentActivityPageContentProps) {
   const { t } = useTranslation();
 
@@ -1875,6 +1885,7 @@ export default function StudentActivityPageContent({
               play_audio: previewSettings?.play_audio ?? false,
               show_answer: showAnswer,
             }}
+            renderCardFooter={renderCardFooter}
           />
         );
       }
@@ -1900,6 +1911,7 @@ export default function StudentActivityPageContent({
               play_audio: previewSettings?.play_audio ?? false,
               show_answer: showAnswer,
             }}
+            renderCardFooter={renderCardFooter}
           />
         );
       }
@@ -1927,6 +1939,7 @@ export default function StudentActivityPageContent({
               play_audio: previewSettings?.play_audio ?? false,
               show_answer: showAnswer,
             }}
+            renderCardFooter={renderCardFooter}
           />
         );
       }
@@ -2441,7 +2454,7 @@ export default function StudentActivityPageContent({
 
         {/* Header with progress */}
         <div className="sticky top-0 bg-white border-b z-10">
-          {/* 🎯 單字選擇預覽模式：使用 max-w-7xl px-4 對齊預覽頁的藍色提示條 */}
+          {/* #830: 單字選擇/拼寫/克漏字預覽：用較寬 max-w-7xl px-4 對齊小考卡片排版 */}
           <div
             className={
               (practiceMode === "word_selection" ||
@@ -2454,40 +2467,31 @@ export default function StudentActivityPageContent({
           >
             {/* Mobile header layout */}
             <div className="flex flex-row items-center justify-between gap-2 mb-2">
-              {/* 🎯 單字選擇/拼寫/克漏字預覽模式：只顯示標題（外層已有返回按鈕）；學生端保留返回按鈕 */}
-              {(practiceMode === "word_selection" ||
-                practiceMode === "word_spelling" ||
-                practiceMode === "word_cloze") &&
-              isPreviewMode ? (
+              {/* #830: 預覽頁外層 header 已移除，所有模式（含單字選擇/拼寫/克漏字）統一在題號列顯示返回按鈕，避免無返回入口 */}
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                {onBack && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onBack}
+                    className="flex-shrink-0 px-2 sm:px-3"
+                  >
+                    <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                    <span className="hidden sm:inline">
+                      {t("studentActivityPage.buttons.back")}
+                    </span>
+                    <span className="sm:hidden">
+                      {t("studentActivityPage.buttons.backShort")}
+                    </span>
+                  </Button>
+                )}
+                {onBack && (
+                  <div className="h-4 sm:h-6 w-px bg-gray-300 flex-shrink-0" />
+                )}
                 <h1 className="text-sm sm:text-base font-semibold truncate min-w-0">
                   {assignmentTitle}
                 </h1>
-              ) : (
-                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                  {onBack && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={onBack}
-                      className="flex-shrink-0 px-2 sm:px-3"
-                    >
-                      <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                      <span className="hidden sm:inline">
-                        {t("studentActivityPage.buttons.back")}
-                      </span>
-                      <span className="sm:hidden">
-                        {t("studentActivityPage.buttons.backShort")}
-                      </span>
-                    </Button>
-                  )}
-                  {onBack && (
-                    <div className="h-4 sm:h-6 w-px bg-gray-300 flex-shrink-0" />
-                  )}
-                  <h1 className="text-sm sm:text-base font-semibold truncate min-w-0">
-                    {assignmentTitle}
-                  </h1>
-                </div>
-              )}
+              </div>
 
               <div className="flex items-center gap-2 sm:gap-3 justify-end flex-shrink-0">
                 {saving && (

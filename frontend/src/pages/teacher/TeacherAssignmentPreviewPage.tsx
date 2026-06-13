@@ -9,7 +9,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Info, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
@@ -18,6 +25,22 @@ import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import StudentActivityPageContent, {
   type Activity,
 } from "../student/StudentActivityPageContent";
+// #830: 小考預覽每張卡底部的「該題班級表現」%條
+import QuestionStatBar, {
+  type StudentRef,
+} from "@/components/grading/QuestionStatBar";
+
+interface QuizStatQuestion {
+  content_item_id: number;
+  correct: StudentRef[];
+  wrong: StudentRef[];
+  unanswered: StudentRef[];
+}
+interface QuizStatsResponse {
+  is_quiz: boolean;
+  total_submitted: number;
+  questions: QuizStatQuestion[];
+}
 
 interface ActivityResponse {
   assignment_id: number;
@@ -59,6 +82,37 @@ export default function TeacherAssignmentPreviewPage() {
   );
   const [loading, setLoading] = useState(true);
   const [showBanner, setShowBanner] = useState(true);
+  // #830: 小考每題班級表現（已提交學生第一次作答那筆）。非小考時為 null。
+  const [quizStats, setQuizStats] = useState<{
+    total: number;
+    byItem: Map<number, QuizStatQuestion>;
+  } | null>(null);
+
+  const practiceMode = activityData?.practice_mode || null;
+  useEffect(() => {
+    if (!practiceMode || !practiceMode.endsWith("_quiz")) {
+      setQuizStats(null);
+      return;
+    }
+    let cancelled = false;
+    apiClient
+      .get<QuizStatsResponse>(
+        `/api/teachers/assignments/${assignmentId}/quiz-question-stats`,
+      )
+      .then((resp) => {
+        if (cancelled || !resp?.is_quiz) return;
+        setQuizStats({
+          total: resp.total_submitted,
+          byItem: new Map(resp.questions.map((q) => [q.content_item_id, q])),
+        });
+      })
+      .catch(() => {
+        /* 統計失敗不擋預覽頁 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assignmentId, practiceMode]);
 
   const fetchPreviewData = useCallback(async () => {
     try {
@@ -109,39 +163,23 @@ export default function TeacherAssignmentPreviewPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Preview Mode Header */}
-      <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={goBack}
-              className="gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              {t("previewPage.buttons.backToList")}
+      {/* #830: 外層 header 與返回鈕已移除（與題號列返回鈕重複），返回入口統一由題號列提供。
+          原 Info Banner 改為進頁自動跳出的 Modal，由使用者自行關閉。 */}
+      <Dialog open={showBanner} onOpenChange={setShowBanner}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>{t("previewPage.badge.previewMode")}</DialogTitle>
+            <DialogDescription className="text-base pt-2">
+              {t("previewPage.info.description")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowBanner(false)}>
+              {t("common.close")}
             </Button>
-          </div>
-
-          {/* Info Banner — dismissible */}
-          {showBanner && (
-            <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-start gap-2">
-              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-              <p className="text-sm text-blue-700 dark:text-blue-300 flex-1">
-                <strong>{t("previewPage.badge.previewMode")}</strong>
-                {t("previewPage.info.suffix")}
-              </p>
-              <button
-                onClick={() => setShowBanner(false)}
-                className="text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300 flex-shrink-0"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 使用學生的完整 Activity Page 內容 */}
       <StudentActivityPageContent
@@ -160,6 +198,22 @@ export default function TeacherAssignmentPreviewPage() {
         }}
         isPreviewMode={true}
         authToken={token || undefined}
+        renderCardFooter={
+          quizStats
+            ? (id) => {
+                const q = quizStats.byItem.get(id);
+                if (!q) return null;
+                return (
+                  <QuestionStatBar
+                    correct={q.correct}
+                    wrong={q.wrong}
+                    unanswered={q.unanswered}
+                    total={quizStats.total}
+                  />
+                );
+              }
+            : undefined
+        }
         onBack={goBack}
         onSubmit={async () => {
           // 預覽模式完成時，跳回作業列表

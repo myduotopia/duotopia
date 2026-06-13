@@ -21,6 +21,9 @@ from models import (
     AssignmentContent,
     StudentAssignment,
     StudentItemProgress,
+    PracticeSession,
+    PracticeAnswer,
+    AssignmentStatus,
 )
 from .dependencies import get_current_teacher
 from .utils import compute_speaking_total_score
@@ -440,6 +443,62 @@ async def get_assignment_progress(
         else None
     )
 
+    # 批改 hub 用的每生聚合（#830）：依作業類型擇一，迴圈外一次抓好避免 N+1。
+    practice_mode = assignment.practice_mode or ""
+    is_quiz = practice_mode.endswith("_quiz")
+    is_speaking = practice_mode in _SPEAKING_SCORE_MODES
+    sa_ids = [sa.id for sa in student_assignments]
+
+    # 小考：每生「第一次 completed」session 的答對題數（與凍結分一致）
+    quiz_correct_by_sa = {}
+    if is_quiz and sa_ids:
+        for sa_id, correct in (
+            db.query(
+                PracticeSession.student_assignment_id,
+                PracticeSession.correct_count,
+            )
+            .filter(
+                PracticeSession.student_assignment_id.in_(sa_ids),
+                PracticeSession.practice_mode == practice_mode,
+                PracticeSession.completed_at.isnot(None),
+            )
+            .order_by(
+                PracticeSession.student_assignment_id,
+                PracticeSession.id.asc(),
+            )
+            .all()
+        ):
+            if sa_id not in quiz_correct_by_sa:  # 取最小 id（第一次）
+                quiz_correct_by_sa[sa_id] = correct or 0
+
+    # 朗讀/口說：每生發音/準確度/流暢度平均。分母為「全部題數」(total_items)，
+    # 未錄音/未評估的題視為 0（與總分 compute_speaking_total_score 一致），
+    # 故用 SUM(score)/total_items，而非 AVG（AVG 只平均有評分的題）。
+    reading_metrics_by_sa = {}
+    if is_speaking and sa_ids and total_items:
+        for sa_id, pron, acc, flu in (
+            db.query(
+                StudentItemProgress.student_assignment_id,
+                func.sum(StudentItemProgress.pronunciation_score),
+                func.sum(StudentItemProgress.accuracy_score),
+                func.sum(StudentItemProgress.fluency_score),
+            )
+            .filter(StudentItemProgress.student_assignment_id.in_(sa_ids))
+            .group_by(StudentItemProgress.student_assignment_id)
+            .all()
+        ):
+            reading_metrics_by_sa[sa_id] = {
+                "pronunciation": (
+                    round(float(pron) / total_items, 1) if pron is not None else None
+                ),
+                "accuracy": (
+                    round(float(acc) / total_items, 1) if acc is not None else None
+                ),
+                "fluency": (
+                    round(float(flu) / total_items, 1) if flu is not None else None
+                ),
+            }
+
     progress_list = []
     for student in all_students:
         # 使用字典快速查找，O(1) 時間複雜度
@@ -472,6 +531,14 @@ async def get_assignment_progress(
                     else None
                 ),
                 "is_interim_score": _is_interim_score(sa, assignment),
+                # 批改 hub 欄位（#830）：依作業類型擇一，其餘為 None
+                "correct_count": (
+                    quiz_correct_by_sa.get(sa.id) if is_quiz and sa else None
+                ),
+                "total_questions": total_items if is_quiz else None,
+                "metrics": (
+                    reading_metrics_by_sa.get(sa.id) if is_speaking and sa else None
+                ),
                 "attempts": 1 if sa and sa.submitted_at else 0,
                 "last_activity": (
                     sa.updated_at.isoformat()
@@ -509,6 +576,155 @@ async def get_assignment_progress(
         )
 
     return progress_list
+
+
+@router.get("/{assignment_id}/quiz-question-stats")
+async def get_quiz_question_stats(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """小考班級統計：每題答對/答錯/未作答的學生名單（#830）。
+
+    以每位「已提交」學生的第一次 completed session（凍結那筆）為準。
+    答對=有答案且 is_correct；答錯=有答案但不對；未作答=該題無答案紀錄。
+    """
+    assignment = (
+        db.query(Assignment)
+        .filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == current_teacher.id,
+            Assignment.is_active.is_(True),
+        )
+        .first()
+    )
+    if not assignment:
+        raise HTTPException(
+            status_code=404,
+            detail="Assignment not found or you don't have permission",
+        )
+
+    practice_mode = assignment.practice_mode or ""
+    if not practice_mode.endswith("_quiz"):
+        return {"is_quiz": False, "total_submitted": 0, "questions": []}
+
+    # 1. canonical content items（依序 → question_number 1..N）
+    items = (
+        db.query(ContentItem)
+        .join(Content, ContentItem.content_id == Content.id)
+        .join(AssignmentContent, AssignmentContent.content_id == Content.id)
+        .filter(AssignmentContent.assignment_id == assignment_id)
+        .order_by(
+            AssignmentContent.order_index,
+            ContentItem.order_index,
+            ContentItem.id,
+        )
+        .all()
+    )
+
+    # 2. 已提交學生（帶 Student 資料）
+    # 註（#845 review）：刻意只算 SUBMITTED/RESUBMITTED/GRADED；RETURNED 的學生正處於
+    # 訂正循環中，會暫時從每題統計桶消失，等他們重新提交（→ RESUBMITTED）才回到統計。
+    # 這是「正在訂正＝尚未定稿」的取捨，避免把訂正中的中間狀態混進班級答對率。
+    submitted = (
+        db.query(StudentAssignment, Student)
+        .join(Student, Student.id == StudentAssignment.student_id)
+        .filter(
+            StudentAssignment.assignment_id == assignment_id,
+            StudentAssignment.status.in_(
+                [
+                    AssignmentStatus.SUBMITTED,
+                    AssignmentStatus.RESUBMITTED,
+                    AssignmentStatus.GRADED,
+                ]
+            ),
+        )
+        .all()
+    )
+    student_meta = {
+        sa.id: {
+            "student_id": st.id,
+            "name": st.name,
+            "number": st.student_number,
+        }
+        for sa, st in submitted
+    }
+    sa_ids = list(student_meta.keys())
+
+    # 3. 每位 SA 第一次 completed session（最小 id）
+    first_session_by_sa = {}
+    if sa_ids:
+        for sa_id, sess_id in (
+            db.query(PracticeSession.student_assignment_id, PracticeSession.id)
+            .filter(
+                PracticeSession.student_assignment_id.in_(sa_ids),
+                PracticeSession.practice_mode == practice_mode,
+                PracticeSession.completed_at.isnot(None),
+            )
+            .order_by(
+                PracticeSession.student_assignment_id,
+                PracticeSession.id.asc(),
+            )
+            .all()
+        ):
+            if sa_id not in first_session_by_sa:
+                first_session_by_sa[sa_id] = sess_id
+    session_to_sa = {v: k for k, v in first_session_by_sa.items()}
+
+    # 4. 第一次 session 的答案 → (sa_id, content_item_id) → is_correct
+    correct_map = {}
+    if session_to_sa:
+        for sess_id, item_id, is_correct in (
+            db.query(
+                PracticeAnswer.practice_session_id,
+                PracticeAnswer.content_item_id,
+                PracticeAnswer.is_correct,
+            )
+            .filter(PracticeAnswer.practice_session_id.in_(list(session_to_sa.keys())))
+            .all()
+        ):
+            sa_id = session_to_sa.get(sess_id)
+            if sa_id is not None:
+                correct_map[(sa_id, item_id)] = bool(is_correct)
+
+    # 5. 每題分三類 + 題目/答案（依類型）
+    is_cloze = practice_mode == "word_cloze_quiz"
+    questions = []
+    for idx, item in enumerate(items, start=1):
+        correct, wrong, unanswered = [], [], []
+        for sa_id in sa_ids:
+            meta = student_meta[sa_id]
+            ans = correct_map.get((sa_id, item.id))
+            if ans is True:
+                correct.append(meta)
+            elif ans is False:
+                wrong.append(meta)
+            else:
+                unanswered.append(meta)
+        # 題目(prompt)＝給學生看的提示；答案(answer)＝正確答案
+        if is_cloze:
+            prompt = getattr(item, "example_sentence", None) or ""
+            answer = getattr(item, "cloze_answer", None) or item.text or ""
+        else:
+            prompt = getattr(item, "translation", None) or ""
+            answer = item.text or ""
+        questions.append(
+            {
+                "question_number": idx,
+                "content_item_id": item.id,
+                "prompt": prompt,
+                "answer": answer,
+                "correct": correct,
+                "wrong": wrong,
+                "unanswered": unanswered,
+            }
+        )
+
+    return {
+        "is_quiz": True,
+        "total_submitted": len(sa_ids),
+        "questions": questions,
+    }
 
 
 @router.get("/{assignment_id}/students")

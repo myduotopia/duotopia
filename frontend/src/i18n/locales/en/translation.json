@@ -908,6 +908,9 @@
       "word_reading": "Word Reading",
       "word_spelling": "Word Spelling",
       "word_cloze": "Word Cloze",
+      "word_selection_quiz": "Word Selection (Quiz)",
+      "word_spelling_quiz": "Word Spelling (Quiz)",
+      "word_cloze_quiz": "Word Cloze (Quiz)",
       "all": "All Types"
     },
     "sort": {
@@ -2771,6 +2774,8 @@
       "batchArchive": "Batch Archive",
       "viewDetails": "Edit",
       "previewDemo": "Preview",
+      "requestRevisionBatch": "Revise",
+      "gradeHub": "Grade",
       "viewSubmissions": "View Student Submissions",
       "editAssignment": "Edit Assignment",
       "deleteAssignment": "Delete Assignment",
@@ -2849,6 +2854,9 @@
       "WORD_READING": "Word Reading",
       "WORD_SPELLING": "Word Spelling",
       "WORD_CLOZE": "Word Cloze",
+      "WORD_SELECTION_QUIZ": "Word Selection (Quiz)",
+      "WORD_SPELLING_QUIZ": "Word Spelling (Quiz)",
+      "WORD_CLOZE_QUIZ": "Word Cloze (Quiz)",
       "TUG_OF_WAR": "Tug of War",
       "speakingPractice": "Speaking Practice",
       "speaking_practice": "Speaking Practice",
@@ -2874,6 +2882,26 @@
   },
   "gradingPage": {
     "title": "Grade Assignment",
+    "classStats": {
+      "title": "Class report",
+      "submitted": "{{n}} submitted",
+      "correct": "Correct",
+      "wrong": "Wrong",
+      "unanswered": "Unanswered",
+      "questionLabel": "Q{{n}}",
+      "qShort": "Q{{n}}",
+      "noData": "No submissions yet",
+      "loadError": "Failed to load class report. Please try again."
+    },
+    "quiz": {
+      "score": "Score",
+      "accuracy": "Accuracy",
+      "correctCount": "Correct",
+      "noAnswers": "No answers yet",
+      "studentAnswer": "Answer",
+      "correctAnswer": "Correct",
+      "blank": "(blank)"
+    },
     "tabs": {
       "students": "Students",
       "questions": "Questions",
@@ -4783,6 +4811,50 @@
       "completeFailed": "Failed to complete assignment"
     }
   },
+  "requestRevision": {
+    "title": "Request Revision",
+    "selectUnder100": "Select all under 100",
+    "selectAll": "Select all",
+    "applyRange": "Select by score",
+    "selectedCount": "{{count}} selected",
+    "empty": "No assigned students",
+    "openGrading": "View answers / grade",
+    "confirm": "Return ({{count}})",
+    "success": "Returned {{count}} student(s) for revision",
+    "submitFailed": "Failed to return",
+    "loadFailed": "Failed to load students"
+  },
+  "gradingHub": {
+    "title": "Grade",
+    "returnBtn": "Return ({{count}})",
+    "completeBtn": "Graded ({{count}})",
+    "completeSuccess": "Marked {{count}} student(s) graded",
+    "completeFailed": "Failed to mark graded",
+    "returnShort": "Return",
+    "gradeShort": "Graded",
+    "resetShort": "Reset",
+    "resetBtn": "Reset ({{count}})",
+    "resetSuccess": "Reset {{count}} student(s) to not started",
+    "resetFailed": "Failed to reset",
+    "rowResetSuccess": "Student reset to not started",
+    "aiGradeSuccess": "AI grading complete",
+    "aiGradeFailed": "AI grading failed",
+    "aiGradeProgress": "AI grading {{current}}/{{total}}",
+    "aiGradePartial": "{{ok}} done, {{fail}} failed",
+    "noTarget": "No matching students",
+    "rowReturnSuccess": "Student returned for revision",
+    "rowGradeSuccess": "Student marked graded"
+  },
+  "studentStatusPanel": {
+    "metric": {
+      "selectAllStudents": "Select all students",
+      "correctRate": "Correct",
+      "pronunciation": "Pron",
+      "accuracy": "Acc",
+      "fluency": "Flu",
+      "total": "Total"
+    }
+  },
   "wordQuiz": {
     "questionNav": "Q",
     "questionLabel": "Question {{current}} / {{total}}",
@@ -4807,6 +4879,10 @@
       "correct": "Correct",
       "wrong": "Wrong",
       "scoreSummary": "{{correct}} / {{total}} correct"
+    },
+    "revision": {
+      "hint": "Revision mode: wrong answers reveal the correct answer; fix them all to submit.",
+      "correctAnswer": "Answer: {{answer}}"
     }
   },
   "wordSpelling": {
