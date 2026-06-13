@@ -2944,7 +2944,8 @@
       "unanswered": "未作答",
       "questionLabel": "第 {{n}} 題",
       "qShort": "第{{n}}題",
-      "noData": "尚無提交資料"
+      "noData": "尚無提交資料",
+      "loadError": "班級報告載入失敗，請稍後再試"
     },
     "quiz": {
       "score": "分數",

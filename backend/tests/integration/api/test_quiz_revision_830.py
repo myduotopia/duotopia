@@ -225,6 +225,11 @@ def _complete(headers: dict, session_id: int):
     )
 
 
+def _submit(headers: dict):
+    """Generic submit path (POST /assignments/{id}/submit) — not the quiz /complete."""
+    return client.post("/api/students/assignments/1/submit", headers=headers)
+
+
 def _sa_status() -> AssignmentStatus:
     db = TestingSessionLocal()
     try:
@@ -360,3 +365,55 @@ def test_revision_success_freezes_original_score(setup_database):
     finally:
         db.close()
     assert stored == 66.7
+
+
+def test_first_submission_all_wrong_scores_point_one(setup_database):
+    """All-wrong first submission → score 0.1 (NOT 0.0), SUBMITTED.
+
+    Documents the deliberate edge case flagged in the #845 review: with 3 items,
+    per_question = round(100/3, 1) = 33.3, so 100 - 3*33.3 = 0.1 after rounding,
+    which clamps to 0.1 rather than the old formula's 0.0. Pinning this guards
+    against an accidental flip back to a hard zero.
+    """
+    _seed()
+    headers = _student_headers()
+    session_id = _start(headers)
+    _answer(headers, session_id, 1, "wrong-1")
+    _answer(headers, session_id, 2, "wrong-2")
+    _answer(headers, session_id, 3, "wrong-3")
+
+    done = _complete(headers, session_id)
+    assert done.status_code == 200, done.text
+    body = done.json()
+    assert body["score"] == 0.1
+    assert body["correct_count"] == 0
+    assert _sa_status() == AssignmentStatus.SUBMITTED
+
+
+def test_generic_submit_endpoint_scores_quiz(setup_database):
+    """The generic /submit path also routes quizzes through score_and_finalize_quiz.
+
+    Guards the #830 wiring in ``students/assignments.py::submit_assignment`` — a
+    student POSTing to the generic ``/submit`` (instead of the quiz ``/complete``)
+    still gets the subtractive score and lands on SUBMITTED, not the Ebbinghaus
+    GRADED-with-0 path. Requested in the #845 review.
+    """
+    _seed()
+    headers = _student_headers()
+    session_id = _start(headers)
+    for item_id, _text, translation in _ITEMS:
+        _answer(headers, session_id, item_id, translation)
+
+    done = _submit(headers)
+    assert done.status_code == 200, done.text
+    body = done.json()
+    assert body["status"] == AssignmentStatus.SUBMITTED.value
+    assert body["score"] == 100
+
+    db = TestingSessionLocal()
+    try:
+        sa = db.query(StudentAssignment).filter_by(id=1).first()
+    finally:
+        db.close()
+    assert sa.score == 100
+    assert sa.status == AssignmentStatus.SUBMITTED

@@ -15,7 +15,8 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import { BarChart3, Loader2 } from "lucide-react";
+import { BarChart3, Loader2, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
 
@@ -92,17 +93,28 @@ export function ClassQuizStats({
   const { t } = useTranslation();
   const [data, setData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(false);
     apiClient
       .get(`/api/teachers/assignments/${assignmentId}/quiz-question-stats`)
       .then((resp) => {
         if (!cancelled) setData(resp as StatsResponse);
       })
       .catch(() => {
-        /* 統計失敗不擋批改頁 */
+        // 統計失敗不擋批改頁，但需與「尚無提交資料」區分 — 標記 error 並提示老師
+        if (!cancelled) {
+          setError(true);
+          toast.error(
+            t(
+              "gradingPage.classStats.loadError",
+              "班級報告載入失敗，請稍後再試",
+            ),
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -110,7 +122,7 @@ export function ClassQuizStats({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId]);
+  }, [assignmentId, t]);
 
   return (
     <Card className="p-4">
@@ -130,6 +142,14 @@ export function ClassQuizStats({
         <div className="flex items-center justify-center py-16 text-gray-400">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
+      ) : error ? (
+        <p className="flex items-center justify-center gap-2 py-12 text-center text-sm text-red-400">
+          <AlertCircle className="h-4 w-4" />
+          {t(
+            "gradingPage.classStats.loadError",
+            "班級報告載入失敗，請稍後再試",
+          )}
+        </p>
       ) : !data || !data.is_quiz || data.questions.length === 0 ? (
         <p className="py-12 text-center text-sm text-gray-400">
           {t("gradingPage.classStats.noData", "尚無提交資料")}

@@ -2890,7 +2890,8 @@
       "unanswered": "Unanswered",
       "questionLabel": "Q{{n}}",
       "qShort": "Q{{n}}",
-      "noData": "No submissions yet"
+      "noData": "No submissions yet",
+      "loadError": "Failed to load class report. Please try again."
     },
     "quiz": {
       "score": "Score",

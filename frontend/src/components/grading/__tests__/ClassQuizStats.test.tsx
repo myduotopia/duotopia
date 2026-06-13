@@ -18,6 +18,13 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
+const mockToastError = vi.fn();
+vi.mock("sonner", () => ({
+  toast: {
+    error: (...args: unknown[]) => mockToastError(...args),
+  },
+}));
+
 // recharts ResponsiveContainer measures DOM size (0 in jsdom). Stub the chart
 // primitives so the data path renders deterministically.
 vi.mock("recharts", () => ({
@@ -135,14 +142,27 @@ describe("ClassQuizStats", () => {
     });
   });
 
-  it("swallows fetch rejection and renders the empty state without throwing", async () => {
+  it("renders a distinct error state (not the empty state) on fetch rejection", async () => {
     mockGet.mockRejectedValue(new Error("network down"));
     render(<ClassQuizStats assignmentId={1} />);
-    // Component intentionally swallows the error; loading resolves to empty state.
+    // #845 review: a failed load must be distinguishable from "no submissions yet".
     await waitFor(() => {
-      expect(screen.getByText("尚無提交資料")).toBeInTheDocument();
+      expect(
+        screen.getByText("班級報告載入失敗，請稍後再試"),
+      ).toBeInTheDocument();
     });
+    expect(screen.queryByText("尚無提交資料")).not.toBeInTheDocument();
     expect(screen.queryByTestId("barchart")).not.toBeInTheDocument();
+  });
+
+  it("surfaces a toast so the teacher knows the chart failed to load", async () => {
+    mockGet.mockRejectedValue(new Error("network down"));
+    render(<ClassQuizStats assignmentId={1} />);
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith(
+        "班級報告載入失敗，請稍後再試",
+      );
+    });
   });
 
   it("always renders the card title regardless of data state", async () => {
