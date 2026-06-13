@@ -12,7 +12,14 @@ from sqlalchemy import func
 from typing import List, Optional  # noqa: F401
 from pydantic import BaseModel, EmailStr
 from database import get_db
-from models import Teacher, Classroom, Student, ClassroomStudent
+from models import (
+    Teacher,
+    Classroom,
+    Student,
+    ClassroomStudent,
+    ClassroomSchool,
+    School,
+)
 from services.blog_service import BlogService
 import logging
 import os
@@ -97,8 +104,25 @@ def get_teachers(db: Session = Depends(get_db)):
 
 
 @router.get("/teacher-classrooms", response_model=List[ClassroomResponse])
-def get_teacher_classrooms(email: str, db: Session = Depends(get_db)):
-    """獲取教師的所有班級（公開資訊）"""
+def get_teacher_classrooms(
+    email: str,
+    scope: Optional[str] = Query(
+        None,
+        description="視圖：personal | school | org；省略＝全部（相容舊 QR）",
+    ),
+    org_id: Optional[str] = Query(None, description="scope=org 時的機構 id"),
+    school_id: Optional[str] = Query(None, description="scope=school 時的學校 id"),
+    db: Session = Depends(get_db),
+):
+    """獲取教師的班級（公開資訊）。
+
+    #793 視圖過濾（軟預設，不鎖學生）：
+      - scope=personal      → 僅「個人班級」（無 active ClassroomSchool 連結者）
+      - scope=school + school_id → 僅該學校的班級
+      - scope=org + org_id  → 僅該機構（旗下各校）的班級
+      - 省略 scope，或 scope 與對應 id 不齊 → 回全部，向後相容既有流通的 QR。
+    前端會對 scoped 結果提供「顯示全部」逃生口，避免掃錯視圖 QR 的學生被鎖在外面。
+    """
     # 先找到教師
     teacher = (
         db.query(Teacher).filter(func.lower(Teacher.email) == func.lower(email)).first()
@@ -107,21 +131,44 @@ def get_teacher_classrooms(email: str, db: Session = Depends(get_db)):
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
 
-    # 獲取該教師的所有班級和學生數量 - 使用 JOIN 和 GROUP BY 優化
-    # 原本：1 + N 次查詢（1次班級 + N次學生數）
-    # 現在：1次查詢（JOIN + GROUP BY）
-
-    classrooms_with_count = (
+    # 獲取該教師的班級和學生數量 - 使用 JOIN 和 GROUP BY 優化（1 次查詢）
+    query = (
         db.query(
             Classroom.id,
             Classroom.name,
             func.count(ClassroomStudent.id).label("student_count"),
         )
-        .outerjoin(ClassroomStudent)  # 使用 outerjoin 以包含沒有學生的班級
-        .filter(Classroom.teacher_id == teacher.id, Classroom.is_active.is_(True))
-        .group_by(Classroom.id, Classroom.name)
-        .all()
+        # 明確 ON：避免與下方 #793 的 ClassroomSchool join 產生條件歧義
+        .outerjoin(
+            ClassroomStudent, ClassroomStudent.classroom_id == Classroom.id
+        ).filter(Classroom.teacher_id == teacher.id, Classroom.is_active.is_(True))
     )
+
+    # #793：依視圖 scope 過濾班級（軟預設）
+    if scope == "personal":
+        linked = db.query(ClassroomSchool.classroom_id).filter(
+            ClassroomSchool.is_active.is_(True)
+        )
+        query = query.filter(~Classroom.id.in_(linked))
+    elif scope == "school" and school_id:
+        query = query.join(
+            ClassroomSchool,
+            (ClassroomSchool.classroom_id == Classroom.id)
+            & (ClassroomSchool.is_active.is_(True)),
+        ).filter(ClassroomSchool.school_id == school_id)
+    elif scope == "org" and org_id:
+        query = (
+            query.join(
+                ClassroomSchool,
+                (ClassroomSchool.classroom_id == Classroom.id)
+                & (ClassroomSchool.is_active.is_(True)),
+            )
+            .join(School, School.id == ClassroomSchool.school_id)
+            .filter(School.organization_id == org_id)
+        )
+    # 其餘（無 scope / id 不齊）：不加過濾 → 回全部
+
+    classrooms_with_count = query.group_by(Classroom.id, Classroom.name).all()
 
     result = []
     for classroom_id, classroom_name, student_count in classrooms_with_count:

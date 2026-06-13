@@ -1236,6 +1236,12 @@
       "button": "Log in with School Account (1Campus)"
     }
   },
+  "studentLoginQR": {
+    "viewLabel": "Select share view",
+    "personal": "Personal",
+    "orgPrefix": "Org: ",
+    "schoolPrefix": "School: "
+  },
   "studentLogin": {
     "header": {
       "home": "Back to Home",
@@ -1251,7 +1257,8 @@
       "recentTeachers": "Or select a recently used teacher:"
     },
     "step2": {
-      "title": "Select Your Class and Name"
+      "title": "Select Your Class and Name",
+      "showAll": "Can't find your class? Show all"
     },
     "step3": {
       "title": "Select Your Name"
