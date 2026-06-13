@@ -5,6 +5,9 @@
  * 並提供確認/暫停按鈕與進度條。
  *
  * 各 panel 透過 props 傳入自己的解析邏輯（onConfirm）和額外 slot（children）。
+ *
+ * pasteLabel：覆寫貼上區標題文字（往下傳給 BatchPasteArea 的 label）。
+ *   未傳則沿用 BatchPasteArea 預設（單字用字串）；例句集/朗讀應傳入句子相關文案。
  */
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -28,6 +31,8 @@ export interface BatchWorkPanelProps {
   onTextChange: (text: string) => void;
   maxItems: number;
   placeholder?: string;
+  /** 貼上區標題文字（往下傳給 BatchPasteArea 的 label）；未傳則用其預設 */
+  pasteLabel?: string;
 
   // --- Translate settings ---
   autoTranslate: boolean;
@@ -59,6 +64,7 @@ export function BatchWorkPanel({
   onTextChange,
   maxItems,
   placeholder,
+  pasteLabel,
   autoTranslate,
   onAutoTranslateChange,
   selectedLanguage,
@@ -86,6 +92,7 @@ export function BatchWorkPanel({
           text={text}
           onChange={onTextChange}
           maxItems={maxItems}
+          label={pasteLabel}
           placeholder={placeholder}
           variant="inline"
         />

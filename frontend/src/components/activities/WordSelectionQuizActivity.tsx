@@ -504,7 +504,7 @@ export default function WordSelectionQuizActivity({
   );
 
   return (
-    <div className="flex flex-col gap-4 min-h-[calc(98dvh-14rem)] max-h-[98dvh]">
+    <div className="flex flex-col gap-4 pb-6 sm:pb-8 min-h-[calc(100dvh-14rem)] max-h-[100dvh]">
       {navSlot ? (
         createPortal(navBar, navSlot)
       ) : (
@@ -592,7 +592,7 @@ export default function WordSelectionQuizActivity({
 
               {/* show_image=true → 顯示翻譯（圖+翻譯，避免英文選項秒解）；否則顯示英文題 */}
               {!settings.play_audio && (
-                <div className="text-center">
+                <div className="text-center py-4 sm:py-6">
                   <h2 className="text-[clamp(2rem,9vh,6rem)] font-bold text-gray-800 select-none">
                     {settings.show_image
                       ? currentWord.translation
