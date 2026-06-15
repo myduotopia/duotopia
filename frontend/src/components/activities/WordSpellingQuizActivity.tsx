@@ -150,6 +150,27 @@ export default function WordSpellingQuizActivity({
   const { isRevision, revealByItem, recordResult } =
     useQuizRevision(quizStatus);
 
+  // #844：虛擬鍵盤 handler（經 QuizAnswerInput ref 操作 focused slot，同艾賓浩斯版）。
+  // 必須宣告在所有 early return 之前，否則違反 hooks 呼叫順序。
+  const vkAppend = useCallback(
+    (ch: string) => {
+      const cw = words[currentIndex];
+      // 訂正模式已答對的題鎖定，不接受鍵盤輸入
+      if (isRevision && cw && correctByItem[cw.content_item_id] === true) return;
+      quizInputRef.current?.appendChar(ch);
+    },
+    [words, currentIndex, correctByItem, isRevision],
+  );
+  const vkBackspace = useCallback(() => {
+    const cw = words[currentIndex];
+    if (isRevision && cw && correctByItem[cw.content_item_id] === true) return;
+    quizInputRef.current?.backspace();
+  }, [words, currentIndex, correctByItem, isRevision]);
+  const vkEnter = useCallback(() => {
+    // submit() 內部已檢查 disabled/submitting，並呼叫 QuizAnswerInput 的 onSubmit
+    quizInputRef.current?.submit();
+  }, []);
+
   // --------------------------------------------------------------------
   // Load quiz (or preview)
   // --------------------------------------------------------------------
@@ -501,23 +522,6 @@ export default function WordSpellingQuizActivity({
   const everyResolved = allCorrect(words, correctByItem);
   const currentReveal = revealByItem[currentWord.content_item_id];
   const showCorrectness = settings.show_answer || isRevision;
-
-  // #844：虛擬鍵盤經 QuizAnswerInput ref 操作 focused slot（同艾賓浩斯版）
-  const vkAppend = useCallback(
-    (ch: string) => {
-      if (isRevision && currentResolved) return; // 訂正已答對鎖定
-      quizInputRef.current?.appendChar(ch);
-    },
-    [isRevision, currentResolved],
-  );
-  const vkBackspace = useCallback(() => {
-    if (isRevision && currentResolved) return;
-    quizInputRef.current?.backspace();
-  }, [isRevision, currentResolved]);
-  const vkEnter = useCallback(() => {
-    // submit() 內部已檢查 disabled/submitting，並呼叫 QuizAnswerInput 的 onSubmit
-    quizInputRef.current?.submit();
-  }, []);
 
   // 題號 bar — Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
