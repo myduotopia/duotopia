@@ -9,6 +9,9 @@
  *   - 不更新 memory_strength；答案寫進 practice_answers (type=word_spelling_quiz)
  *
  * 此元件同被學生作答頁與派發 sheet preview 共用（透過 previewWords 注入）。
+ *
+ * #844：手機/平板顯示 VirtualKeyboard（同艾賓浩斯版 WordSpellingActivity），
+ * mobile 在卡片下方、tablet 在右側；inputMode=none 抑制系統鍵盤建議列。
  */
 
 import {
@@ -29,9 +32,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
 import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
+import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
-import QuizAnswerInput from "./shared/QuizAnswerInput";
+import QuizAnswerInput, {
+  type QuizAnswerInputHandle,
+} from "./shared/QuizAnswerInput";
+import VirtualKeyboard from "./shared/VirtualKeyboard";
 import CardNavArrow from "./shared/CardNavArrow";
 import QuizReviewView, {
   type QuizReviewPayload,
@@ -134,10 +141,36 @@ export default function WordSpellingQuizActivity({
   // 防止 handleSubmitAll 因 useEffect 重觸 / timer expire 重複進入後端 complete
   const completingRef = useRef(false);
   const navSlot = useQuizNavSlot();
+  // #844：手機/平板顯示虛擬鍵盤（同艾賓浩斯版）；桌機用實體鍵盤
+  const deviceMode = useInputDeviceMode();
+  const useVirtualKeyboard = deviceMode !== "desktop";
+  const quizInputRef = useRef<QuizAnswerInputHandle>(null);
   // Issue #830: 訂正模式（退回後）— 答錯揭示正解、強制全對才能提交
   const [quizStatus, setQuizStatus] = useState<string | null>(null);
   const { isRevision, revealByItem, recordResult } =
     useQuizRevision(quizStatus);
+
+  // #844：虛擬鍵盤 handler（經 QuizAnswerInput ref 操作 focused slot，同艾賓浩斯版）。
+  // 必須宣告在所有 early return 之前，否則違反 hooks 呼叫順序。
+  const vkAppend = useCallback(
+    (ch: string) => {
+      const cw = words[currentIndex];
+      // 訂正模式已答對的題鎖定，不接受鍵盤輸入
+      if (isRevision && cw && correctByItem[cw.content_item_id] === true)
+        return;
+      quizInputRef.current?.appendChar(ch);
+    },
+    [words, currentIndex, correctByItem, isRevision],
+  );
+  const vkBackspace = useCallback(() => {
+    const cw = words[currentIndex];
+    if (isRevision && cw && correctByItem[cw.content_item_id] === true) return;
+    quizInputRef.current?.backspace();
+  }, [words, currentIndex, correctByItem, isRevision]);
+  const vkEnter = useCallback(() => {
+    // submit() 內部已檢查 disabled/submitting，並呼叫 QuizAnswerInput 的 onSubmit
+    quizInputRef.current?.submit();
+  }, []);
 
   // --------------------------------------------------------------------
   // Load quiz (or preview)
@@ -489,41 +522,39 @@ export default function WordSpellingQuizActivity({
   const currentResolved = currentCorrect === true;
   const everyResolved = allCorrect(words, correctByItem);
   const currentReveal = revealByItem[currentWord.content_item_id];
-  const showCorrectness = settings.show_answer || isRevision;
 
   // 題號 bar — Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
     <>
-      <span className="text-xs text-gray-500 mr-1">
+      <span className="text-xs text-gray-500 mr-1 shrink-0">
         {t("wordQuiz.questionNav") || "題號"}
       </span>
-      {words.map((w, idx) => {
-        const answered = (typedByItem[w.content_item_id] || "").trim() !== "";
-        const isCurrent = idx === currentIndex;
-        const priorCorrect = correctByItem[w.content_item_id];
-        return (
-          <button
-            key={w.content_item_id}
-            type="button"
-            onClick={() => goTo(idx)}
-            className={cn(
-              "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
-              isCurrent
-                ? "bg-amber-500 text-white border-amber-500"
-                : !answered
-                  ? "bg-white text-gray-500 border-gray-300 hover:border-amber-400"
-                  : showCorrectness && priorCorrect === true
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                    : showCorrectness && priorCorrect === false
-                      ? "bg-rose-50 text-rose-700 border-rose-300"
-                      : "bg-amber-50 text-amber-700 border-amber-300",
-            )}
-          >
-            {idx + 1}
-          </button>
-        );
-      })}
-      <span className="text-xs text-gray-400 ml-auto">
+      {/* #844：題號多時不換行，改水平捲動；標題／計數／計時器留在外面不被推走 */}
+      <div className="flex gap-1 sm:gap-1.5 items-center overflow-x-auto min-w-0 flex-1 py-0.5">
+        {words.map((w, idx) => {
+          const answered = (typedByItem[w.content_item_id] || "").trim() !== "";
+          const isCurrent = idx === currentIndex;
+          return (
+            <button
+              key={w.content_item_id}
+              type="button"
+              onClick={() => goTo(idx)}
+              className={cn(
+                "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
+                isCurrent
+                  ? "bg-amber-500 text-white border-amber-500"
+                  : !answered
+                    ? "bg-white text-gray-500 border-gray-300 hover:border-amber-400"
+                    : // #844 有答題=黃色，不洩漏正誤（含訂正模式）
+                      "bg-yellow-100 text-yellow-800 border-yellow-400",
+              )}
+            >
+              {idx + 1}
+            </button>
+          );
+        })}
+      </div>
+      <span className="text-xs text-gray-400 ml-2 shrink-0">
         {answeredCount} / {words.length}
       </span>
       {timeRemaining !== null && timerTotal !== null && (
@@ -542,152 +573,173 @@ export default function WordSpellingQuizActivity({
       {navSlot ? (
         createPortal(navBar, navSlot)
       ) : (
-        <div className="flex flex-wrap gap-1 sm:gap-1.5 items-center">
-          {navBar}
-        </div>
+        <div className="flex gap-1 sm:gap-1.5 items-center">{navBar}</div>
       )}
 
-      <Card className="relative flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
-        {/* #830: 上一題 / 下一題改為卡片左右兩側箭頭（對齊一般單字卡 WordCard） */}
-        {currentIndex > 0 && (
-          <CardNavArrow
-            direction="prev"
-            onClick={() => goTo(currentIndex - 1)}
-          />
+      <div
+        className={cn(
+          "flex-1 min-h-0 flex gap-4",
+          deviceMode === "tablet" ? "flex-row items-stretch" : "flex-col",
         )}
-        {!isLast && (
-          <CardNavArrow
-            direction="next"
-            disabled={submittingAnswer || (isRevision && !currentResolved)}
-            onClick={() => goTo(currentIndex + 1)}
-          />
-        )}
-        <CardContent className="flex-1 min-h-0 flex flex-col gap-4 p-0">
-          <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto px-10 sm:px-12">
-            <div className="text-sm text-gray-500">
-              {t("wordQuiz.questionLabel", {
-                current: currentWord.question_number,
-                total: words.length,
-              }) || `第 ${currentWord.question_number} / ${words.length} 題`}
-            </div>
-
-            {isRevision && (
-              <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                {t("wordQuiz.revision.hint") ||
-                  "訂正模式：答錯會顯示正解，全部改對才能提交"}
-              </div>
-            )}
-
-            {settings.show_image && currentWord.image_url && (
-              <img
-                src={currentWord.image_url}
-                alt=""
-                className="mx-auto max-h-40 object-contain"
+      >
+        <div
+          className={cn(
+            "min-w-0 flex flex-col",
+            deviceMode === "tablet" ? "flex-[6]" : "flex-1 min-h-0",
+          )}
+        >
+          <Card className="relative flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+            {/* #830: 上一題 / 下一題改為卡片左右兩側箭頭（對齊一般單字卡 WordCard） */}
+            {currentIndex > 0 && (
+              <CardNavArrow
+                direction="prev"
+                onClick={() => goTo(currentIndex - 1)}
               />
             )}
-
-            {/* 樣式對齊 WordSpellingActivity (艾賓浩斯版) */}
-            {settings.play_audio && currentWord.audio_url && (
-              <div className="flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => playAudio(currentWord.audio_url)}
-                  aria-label={t("wordQuiz.playAudio") || "Play"}
-                  className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-12 w-12 text-blue-500 hover:text-blue-600"
-                >
-                  <Volume2 className="h-7 w-7" />
-                </button>
-              </div>
+            {!isLast && (
+              <CardNavArrow
+                direction="next"
+                disabled={submittingAnswer || (isRevision && !currentResolved)}
+                onClick={() => goTo(currentIndex + 1)}
+              />
             )}
+            <CardContent className="flex-1 min-h-0 flex flex-col gap-4 p-0">
+              <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto px-10 sm:px-12">
+                <div className="text-sm text-gray-500">
+                  {t("wordQuiz.questionLabel", {
+                    current: currentWord.question_number,
+                    total: words.length,
+                  }) ||
+                    `第 ${currentWord.question_number} / ${words.length} 題`}
+                </div>
 
-            {settings.show_translation && currentWord.translation && (
-              <div className="text-center py-3 space-y-1">
-                <h2 className="text-3xl md:text-4xl font-bold text-gray-800 tracking-wide">
-                  {currentWord.translation}
-                </h2>
-                {currentWord.part_of_speech && (
-                  <div className="flex justify-center">
-                    <Badge
-                      variant="secondary"
-                      className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
-                    >
-                      {currentWord.part_of_speech}
-                    </Badge>
+                {isRevision && (
+                  <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {t("wordQuiz.revision.hint") ||
+                      "訂正模式：答錯會顯示正解，全部改對才能提交"}
                   </div>
                 )}
-              </div>
-            )}
 
-            <QuizAnswerInput
-              value={typedByItem[currentWord.content_item_id] || ""}
-              expectedAnswer={currentWord.text}
-              onChange={(next) =>
-                setTypedByItem((m) => ({
-                  ...m,
-                  [currentWord.content_item_id]: next,
-                }))
-              }
-              // 訂正模式：Enter/Send 即送出當題對答案；一般模式只暫存/跳題，
-              // 整卷送出統一由下方「提交」鈕觸發。
-              onSubmit={
-                isRevision
-                  ? handleRevisionCheck
-                  : isLast
-                    ? () => persistAnswer()
-                    : () => goTo(currentIndex + 1)
-              }
-              // 最後一題（非訂正）隱藏卡片上的 inline 送出鈕 —
-              // 整卷送出由下方「提交」鈕負責，避免兩顆按鈕重複
-              hideSubmitButton={isLast && !isRevision}
-              // 訂正模式已答對的題目鎖定唯讀，不可再改
-              disabled={isRevision && currentResolved}
-              submitting={submittingAnswer}
-              state={
-                showCorrectness && currentCorrect === true
-                  ? "correct"
-                  : showCorrectness && currentCorrect === false
-                    ? "wrong"
-                    : "neutral"
-              }
-              autoFocus
-            />
-
-            {isRevision && currentReveal && !currentResolved && (
-              <p className="text-center text-sm font-medium text-red-600">
-                {t("wordQuiz.revision.correctAnswer", {
-                  answer: currentReveal,
-                }) || `正解：${currentReveal}`}
-              </p>
-            )}
-          </div>
-
-          {/* Card footer: 只剩提交鈕（prev/next 已移到卡片左右兩側）#830。
-              一般模式僅最後一題顯示；訂正模式全程顯示，唯有全部改對才可點擊。 */}
-          {(isRevision || isLast) && (
-            <div className="flex justify-center border-t pt-3 shrink-0">
-              <Button
-                type="button"
-                onClick={handleSubmitAll}
-                disabled={
-                  completing ||
-                  submittingAnswer ||
-                  (isRevision && !everyResolved)
-                }
-              >
-                {completing ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Send className="h-4 w-4 mr-2" />
+                {settings.show_image && currentWord.image_url && (
+                  <img
+                    src={currentWord.image_url}
+                    alt=""
+                    className="mx-auto max-h-40 object-contain"
+                  />
                 )}
-                {t("wordQuiz.submit") || "提交"}
-              </Button>
-            </div>
-          )}
 
-          {/* #830: 老師預覽時卡片最下方顯示該題班級表現 %條 */}
-          {renderCardFooter?.(currentWord.content_item_id)}
-        </CardContent>
-      </Card>
+                {/* 樣式對齊 WordSpellingActivity (艾賓浩斯版) */}
+                {settings.play_audio && currentWord.audio_url && (
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => playAudio(currentWord.audio_url)}
+                      aria-label={t("wordQuiz.playAudio") || "Play"}
+                      className="inline-flex items-center justify-center transition-colors shrink-0 bg-transparent h-12 w-12 text-blue-500 hover:text-blue-600"
+                    >
+                      <Volume2 className="h-7 w-7" />
+                    </button>
+                  </div>
+                )}
+
+                {settings.show_translation && currentWord.translation && (
+                  <div className="text-center py-3 space-y-1">
+                    <h2 className="text-3xl md:text-4xl font-bold text-gray-800 tracking-wide">
+                      {currentWord.translation}
+                    </h2>
+                    {currentWord.part_of_speech && (
+                      <div className="flex justify-center">
+                        <Badge
+                          variant="secondary"
+                          className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
+                        >
+                          {currentWord.part_of_speech}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <QuizAnswerInput
+                  ref={quizInputRef}
+                  useVirtualKeyboard={useVirtualKeyboard}
+                  value={typedByItem[currentWord.content_item_id] || ""}
+                  expectedAnswer={currentWord.text}
+                  onChange={(next) =>
+                    setTypedByItem((m) => ({
+                      ...m,
+                      [currentWord.content_item_id]: next,
+                    }))
+                  }
+                  // #844：箭頭行為 — 訂正：對答案；最後一題：整卷提交；其餘：跳下一題。
+                  // 不再有 footer 提交鈕（最後一題改用內嵌箭頭送出）。
+                  onSubmit={
+                    isRevision
+                      ? handleRevisionCheck
+                      : isLast
+                        ? handleSubmitAll
+                        : () => goTo(currentIndex + 1)
+                  }
+                  // 訂正模式已答對的題目鎖定唯讀，不可再改
+                  disabled={isRevision && currentResolved}
+                  submitting={submittingAnswer}
+                  // #844：小考 input 一律中性色，不因正誤變色（防作弊；state 預設 neutral）
+                  autoFocus
+                />
+
+                {isRevision && currentReveal && !currentResolved && (
+                  <p className="text-center text-sm font-medium text-red-600">
+                    {t("wordQuiz.revision.correctAnswer", {
+                      answer: currentReveal,
+                    }) || `正解：${currentReveal}`}
+                  </p>
+                )}
+              </div>
+
+              {/* Card footer 提交鈕：#844 一般作答（最後一題）改用內嵌箭頭送出，
+              footer 只剩「訂正模式」顯示（全部改對才可點）。 */}
+              {isRevision && (
+                <div className="flex justify-center border-t pt-3 shrink-0">
+                  <Button
+                    type="button"
+                    onClick={handleSubmitAll}
+                    disabled={
+                      completing ||
+                      submittingAnswer ||
+                      (isRevision && !everyResolved)
+                    }
+                  >
+                    {completing ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Send className="h-4 w-4 mr-2" />
+                    )}
+                    {t("wordQuiz.submit") || "提交"}
+                  </Button>
+                </div>
+              )}
+
+              {/* #830: 老師預覽時卡片最下方顯示該題班級表現 %條 */}
+              {renderCardFooter?.(currentWord.content_item_id)}
+            </CardContent>
+          </Card>
+        </div>
+        {useVirtualKeyboard && (
+          <div
+            className={cn(
+              deviceMode === "tablet"
+                ? "flex-[4] min-w-0 flex flex-col justify-center"
+                : "shrink-0",
+            )}
+          >
+            <VirtualKeyboard
+              onKey={vkAppend}
+              onBackspace={vkBackspace}
+              onEnter={vkEnter}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

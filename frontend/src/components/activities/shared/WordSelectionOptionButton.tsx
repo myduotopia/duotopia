@@ -4,9 +4,11 @@
  * 設計：
  * - 4 色循環（OPTION_COLORS）：藍 / 紫 / 琥珀 / 青，由呼叫端傳 colorIndex
  * - 圖片模式 (showAsImage=true 且有 imageUrl)：上圖下標籤
- * - 字級自適應：button 內層 div 套 [container-type:size]，文字 max 字級用 cqh + cqw min() 隨選項框縮放
- *   （#842：改為 content-aware shrink-to-fit — useShrinkToFit hook 量測 overflow 後動態縮字，
- *    取代純 clamp()，確保長文字完整顯示而非 ... 截斷。min: 純文字 10px、圖片模式 8px）
+ *   （#844：手機版圖片高度約縮到框的 50%、寬度等比，sm 以上維持填滿）
+ * - 字級「撐滿格子」：useShrinkToFit hook 量測 overflow 後，在 [min,max] 內取不溢出的最大字級
+ *   （#842：取代純 clamp()，長文字自動縮小完整顯示而非 ... 截斷。
+ *    #844：改為 fit-to-box — 字少放大到貼合框、字多縮到剛好放得下。
+ *    純文字 16–80px、圖片標籤 14–28px；上下限互不影響）
  * - 揭示態（quiz 模式不傳 showCorrect/showIncorrect）：
  *   - showCorrect → 綠底/邊/字 + 左上角 ✓
  *   - showIncorrect → 紅底/邊/字 + 左上角 ✗
@@ -57,12 +59,17 @@ export default function WordSelectionOptionButton({
   const renderAsImage = showAsImage && !!imageUrl;
   const dimmed = showResult && !showCorrect && !showIncorrect;
 
-  // #842 content-aware shrink：max 比例對齊原 cqh/cqw，min 守住可讀下限
+  // 字級撐滿格子（#842 量測 overflow、#844 改 fit-to-box）；
   // ready=false 時 span 以 opacity-0 隱藏，避免閃過 fallback 字型 / 過大字
   const textSpanRef = useRef<HTMLSpanElement>(null);
   const { fontSize, ready } = useShrinkToFit(textSpanRef, {
-    maxRatio: renderAsImage ? { h: 0.1, w: 0.08 } : { h: 0.16, w: 0.11 },
-    minFontSize: renderAsImage ? 7 : 8,
+    // #844 撐滿格子：字少放大貼合框（上限），字多縮到剛好放得下（下限）。
+    // 上限：純文字與圖片標籤都 26px（讓短選項撐大但不誇張）。
+    // 一般下限：純文字 16px、圖片 14px；hardMin：塞不下時才再縮到此，保證不裁字（不變「...」）。
+    // 長選項可讀性主要靠版面（單欄／圖在上）給足寬度，不靠抬高下限。
+    maxFontSize: 26,
+    minFontSize: renderAsImage ? 14 : 16,
+    hardMinFontSize: renderAsImage ? 9 : 10,
     deps: [text, renderAsImage],
   });
 
@@ -73,7 +80,7 @@ export default function WordSelectionOptionButton({
       disabled={disabled}
       aria-label={text}
       className={cn(
-        "h-full min-h-[5rem] py-1 px-3 sm:py-1 sm:px-4 font-medium",
+        "h-full min-h-[4rem] py-1 px-3 sm:py-1 sm:px-4 font-medium",
         "grid overflow-hidden",
         "rounded-2xl border-2 shadow-md select-none relative",
         "transition-all duration-200",
@@ -105,13 +112,15 @@ export default function WordSelectionOptionButton({
         </span>
       )}
       {/* 字級用 useShrinkToFit 量測 overflow 後動態縮放（取代純 clamp） */}
-      <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+      <div className="w-full h-full min-h-0 overflow-hidden flex flex-col items-center justify-center gap-2">
         {renderAsImage ? (
           <>
             <img
               src={imageUrl as string}
               alt={text}
-              className="flex-1 min-h-0 w-full object-contain rounded-md"
+              // #844：手機版選項圖片高度約縮到框的 50%（object-contain → 寬度等比縮小）；
+              // sm 以上維持填滿 flex-1
+              className="flex-1 min-h-0 w-full object-contain rounded-md max-h-[50%] sm:max-h-none"
             />
             <span
               ref={textSpanRef}

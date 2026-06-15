@@ -9,6 +9,8 @@
  *   - 單字卡樣式對齊艾賓浩斯版：共用 shared/WordSelectionOptionButton
  *     （4 色循環、border-2/rounded-2xl/shadow、字級用 cqh+cqw min() 自適應、ring 選中態）
  *     + useShortLandscape 走橫式排版（圖左、選項右 2×2）
+ *   - #844 欄數固定（不依字長翻轉）：手機單欄、平板 2×2、桌機 4 欄；長選項另把題目圖移到上方。
+ *     字級用 fit-to-box（撐大／縮／不裁字）
  */
 
 import {
@@ -444,14 +446,21 @@ export default function WordSelectionQuizActivity({
 
   const isLast = currentIndex === words.length - 1;
   const selectedForCurrent = selectedByItem[currentWord.content_item_id];
-  // 直式優先；題目有圖 + 矮橫螢幕（手機橫放）才走橫式（圖左、選項右 2×2）
-  const useHorizontal =
-    settings.show_image && !!currentWord.image_url && isShortLandscape;
+  const showQuestionImage = settings.show_image && !!currentWord.image_url;
+  // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
+  // 拿全寬（窄螢幕、或圖在上時），讓長句有整列寬度好換行、字級不被擠小。
+  const hasLongOption =
+    !settings.show_option_images &&
+    (currentWord.options ?? []).some(
+      (o) => (o.text?.trim().split(/\s+/).length ?? 0) >= 5,
+    );
+  // 直式優先；題目有圖 + 矮橫螢幕（手機橫放）才走橫式（圖左、選項右）。
+  // #844：長選項時關閉橫式 → 圖回到上方，下方選項拿全寬單欄。
+  const useHorizontal = showQuestionImage && isShortLandscape && !hasLongOption;
   // Issue #830 訂正模式 gating + 揭示
   const currentCorrect = correctByItem[currentWord.content_item_id];
   const currentResolved = currentCorrect === true;
   const everyResolved = allCorrect(words, correctByItem);
-  const showCorrectness = settings.show_answer || isRevision;
   // 訂正模式下已作答（對或錯）→ 揭示選項正解（參考艾賓浩斯）
   const revealCurrent =
     isRevision && (currentCorrect === true || currentCorrect === false);
@@ -459,37 +468,36 @@ export default function WordSelectionQuizActivity({
   // 題號 bar：Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
     <>
-      <span className="text-xs text-gray-500 mr-1">
+      <span className="text-xs text-gray-500 mr-1 shrink-0">
         {t("wordQuiz.questionNav") || "題號"}
       </span>
-      {words.map((w, idx) => {
-        const answered =
-          (selectedByItem[w.content_item_id] || "").trim() !== "";
-        const isCurrent = idx === currentIndex;
-        const priorCorrect = correctByItem[w.content_item_id];
-        return (
-          <button
-            key={w.content_item_id}
-            type="button"
-            onClick={() => goTo(idx)}
-            className={cn(
-              "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
-              isCurrent
-                ? "bg-emerald-500 text-white border-emerald-500"
-                : !answered
-                  ? "bg-white text-gray-500 border-gray-300 hover:border-emerald-400"
-                  : showCorrectness && priorCorrect === true
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                    : showCorrectness && priorCorrect === false
-                      ? "bg-rose-50 text-rose-700 border-rose-300"
-                      : "bg-emerald-50 text-emerald-700 border-emerald-300",
-            )}
-          >
-            {idx + 1}
-          </button>
-        );
-      })}
-      <span className="text-xs text-gray-400 ml-auto">
+      {/* #844：題號多時不換行，改水平捲動；標題／計數／計時器留在外面不被推走 */}
+      <div className="flex gap-1 sm:gap-1.5 items-center overflow-x-auto min-w-0 flex-1 py-0.5">
+        {words.map((w, idx) => {
+          const answered =
+            (selectedByItem[w.content_item_id] || "").trim() !== "";
+          const isCurrent = idx === currentIndex;
+          return (
+            <button
+              key={w.content_item_id}
+              type="button"
+              onClick={() => goTo(idx)}
+              className={cn(
+                "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
+                isCurrent
+                  ? "bg-emerald-500 text-white border-emerald-500"
+                  : !answered
+                    ? "bg-white text-gray-500 border-gray-300 hover:border-emerald-400"
+                    : // #844 有答題=黃色，不洩漏正誤（含訂正模式）
+                      "bg-yellow-100 text-yellow-800 border-yellow-400",
+              )}
+            >
+              {idx + 1}
+            </button>
+          );
+        })}
+      </div>
+      <span className="text-xs text-gray-400 ml-2 shrink-0">
         {answeredCount} / {words.length}
       </span>
       {timeRemaining !== null && timerTotal !== null && (
@@ -499,6 +507,24 @@ export default function WordSelectionQuizActivity({
           size={56}
           longForm
         />
+      )}
+      {/* #844：選擇題無輸入框，最後一題（非訂正）的提交鈕放在題號列；
+          訂正模式維持卡片下方 footer 提交鈕。 */}
+      {isLast && !isRevision && (
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleSubmitAll}
+          disabled={completing || submittingAnswer}
+          className="shrink-0 ml-1"
+        >
+          {completing ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+          ) : (
+            <Send className="h-4 w-4 mr-1" />
+          )}
+          {t("wordQuiz.submit") || "提交"}
+        </Button>
       )}
     </>
   );
@@ -593,7 +619,7 @@ export default function WordSelectionQuizActivity({
               {/* show_image=true → 顯示翻譯（圖+翻譯，避免英文選項秒解）；否則顯示英文題 */}
               {!settings.play_audio && (
                 <div className="text-center py-4 sm:py-6">
-                  <h2 className="text-[clamp(2rem,9vh,6rem)] font-bold text-gray-800 select-none">
+                  <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
                     {settings.show_image
                       ? currentWord.translation
                       : currentWord.text}
@@ -604,10 +630,15 @@ export default function WordSelectionQuizActivity({
               <div
                 className={cn(
                   "grid gap-3 sm:gap-4 flex-1 min-h-0",
-                  // 橫式：強制 2×2；直式：寬螢幕 1×4、窄螢幕 2×2
-                  useHorizontal ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4",
+                  // #844 欄數固定（不依字長翻轉，避免間距忽近忽遠）：
+                  // 手機單欄、平板 2×2、桌機 4 欄；圖左 landscape 維持單欄。
+                  // 圖片位置另由 hasLongOption 控制（長選項時圖移到上方）。
+                  useHorizontal
+                    ? "grid-cols-1"
+                    : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
                 )}
-                style={{ gridAutoRows: "1fr" }}
+                // #844：列高鎖 minmax(0,1fr) 不被文字撐大 → fit-to-box 有固定框可量、不爆版
+                style={{ gridAutoRows: "minmax(0, 1fr)" }}
               >
                 {currentWord.options.map((opt, index) => {
                   const isSelected = selectedForCurrent === opt.text;
@@ -640,9 +671,9 @@ export default function WordSelectionQuizActivity({
             </div>
           </div>
 
-          {/* Card footer: 只剩提交鈕（prev/next 已移到卡片左右兩側）#830。
-              一般模式僅最後一題顯示；訂正模式全程顯示，唯有全部改對才可點擊。 */}
-          {(isRevision || isLast) && (
+          {/* Card footer 提交鈕：#844 一般作答的最後一題改放題號列，
+              footer 只剩「訂正模式」顯示（全部改對才可點）。 */}
+          {isRevision && (
             <div className="flex justify-center border-t pt-3 shrink-0">
               <Button
                 type="button"
