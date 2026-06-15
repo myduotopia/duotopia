@@ -609,7 +609,7 @@ export default function WordSelectionQuizActivity({
               {/* show_image=true → 顯示翻譯（圖+翻譯，避免英文選項秒解）；否則顯示英文題 */}
               {!settings.play_audio && (
                 <div className="text-center py-4 sm:py-6">
-                  <h2 className="text-[clamp(2rem,9vh,6rem)] font-bold text-gray-800 select-none">
+                  <h2 className="text-[clamp(2rem,9vh,3rem)] font-bold text-gray-800 select-none">
                     {settings.show_image
                       ? currentWord.translation
                       : currentWord.text}
