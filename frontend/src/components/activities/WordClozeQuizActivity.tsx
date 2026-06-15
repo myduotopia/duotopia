@@ -655,15 +655,16 @@ export default function WordClozeQuizActivity({
                   [currentWord.content_item_id]: next,
                 }))
               }
-              // #844：箭頭行為 — 訂正：對答案；最後一題：整卷提交；其餘：跳下一題。
-              // 不再有 footer 提交鈕（最後一題改用內嵌箭頭送出）。
+              // 訂正：對答案；其餘：暫存/跳題。最後一題整卷送出改由頁面頂部「提交」負責，
+              // 故最後一題隱藏內嵌箭頭（hideSubmitButton），避免重複提交入口。
               onSubmit={
                 isRevision
                   ? handleRevisionCheck
                   : isLast
-                    ? handleSubmitAll
+                    ? () => persistAnswer()
                     : () => goTo(currentIndex + 1)
               }
+              hideSubmitButton={isLast && !isRevision}
               // 訂正模式已答對的題目鎖定唯讀，不可再改
               disabled={isRevision && currentResolved}
               submitting={submittingAnswer}

@@ -1010,7 +1010,7 @@ export default function WordSelectionActivity({
           {/* Answer Options */}
           <div
             className={cn(
-              "grid gap-3 sm:gap-4 flex-1 min-h-0",
+              "grid gap-2 flex-1 min-h-0",
               // #844 欄數固定（不依字長翻轉，避免間距忽近忽遠）：
               // 手機單欄、平板 2×2、桌機 4 欄；圖左 landscape 維持單欄。
               // 圖片位置另由 hasLongOption 控制（長選項時圖移到上方）。
@@ -1018,8 +1018,9 @@ export default function WordSelectionActivity({
                 ? "grid-cols-1"
                 : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
             )}
-            // #844：列高鎖 minmax(0,1fr) 不被文字撐大 → fit-to-box 有固定框可量、不爆版
-            style={{ gridAutoRows: "minmax(0, 1fr)" }}
+            // #844：列高鎖 minmax(4rem,1fr)（min ≥ 按鈕 min-h），按鈕不溢出列、
+            // 選項上下間距固定 8px（gap-2）每題一致；max 仍 1fr 故不爆版、fit-to-box 有界
+            style={{ gridAutoRows: "minmax(4rem, 1fr)" }}
           >
             {currentWord.options.map((option, index) => {
               const optionText = option.text;
