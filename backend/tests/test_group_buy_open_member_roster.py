@@ -437,9 +437,13 @@ def test_leader_already_in_group_buy_team_can_still_open_new_team(
         .all()
     )
     assert len(leader_bindings) == 2
-    school_ids = {b.school_id for b in leader_bindings}
-    assert other_school.id in school_ids
-    assert int(body["school_id"]) in school_ids
+    # Compare as strings so the assertion stays correct if `school_id`
+    # is ever surfaced as a UUID in the response (currently an int cast
+    # to str). The int(...) cast in the prior round would have failed
+    # silently on that refactor.
+    school_ids = {str(b.school_id) for b in leader_bindings}
+    assert str(other_school.id) in school_ids
+    assert str(body["school_id"]) in school_ids
 
 
 def test_in_tx_member_became_ineligible_rolls_back_and_charges_no_one(

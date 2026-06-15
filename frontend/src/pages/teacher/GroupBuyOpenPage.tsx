@@ -819,7 +819,12 @@ export default function GroupBuyOpenPage() {
   }
 
   // ----- Step 3: payment -----
-  const memberEmails = roster
+  // Source roster is `dedupedRoster` — the payment gate (`allOk`)
+  // already uses it, so deriving the payload from the same view keeps
+  // the two consistent. A user who reaches Step 3 with duplicate rows
+  // via browser history would otherwise send a payload guaranteed to
+  // 400 at the backend's distinct check.
+  const memberEmails = dedupedRoster
     .slice(1)
     .map((r) => r.email.trim().toLowerCase())
     .filter((e) => e !== "");

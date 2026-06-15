@@ -837,7 +837,9 @@ def _classify_team_emails(emails: list[str], db: Session) -> dict:
                            active group-buy school (any team — they can't
                            be in two at once)
     """
-    out: dict[str, tuple] = {}
+    # Value tuple: (Teacher row or None when the email is unknown,
+    # eligibility status string from the documented set).
+    out: dict[str, tuple[Optional[Teacher], str]] = {}
     if not emails:
         return out
     # Filter on `is_active=True` so a deactivated teacher (admin off-board,
@@ -1344,9 +1346,13 @@ async def open_group_buy(
                         # the REFUND-REQUIRED compensation path; the
                         # different tag helps incident responders pick
                         # the right remediation (refund vs hand-finish).
+                        # `email=` / `status=` key-value layout (instead
+                        # of colon-delimited) so an email containing a
+                        # colon doesn't break the incident-response
+                        # regex grepping these logs.
                         raise RuntimeError(
-                            "member_became_ineligible_or_partial_retry:"
-                            f"{email}:{status}"
+                            "member_became_ineligible_or_partial_retry "
+                            f"email={email!r} status={status!r}"
                         )
                     db.add(
                         TeacherSchool(

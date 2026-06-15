@@ -194,6 +194,35 @@ def test_rejects_batches_over_100(test_client, caller):
     assert "100" in body
 
 
+def test_inactive_teacher_reports_not_registered(
+    test_client, caller, shared_test_session
+):
+    """A deactivated teacher (is_active=False) is filtered out by
+    `_classify_team_emails` so the roster treats them as never having
+    existed. Without this gate, an off-boarded account could rejoin a
+    new group-buy team and continue receiving monthly grants.
+
+    Issue #768 PR #851 review round 8 — pins the `is_active` filter
+    behavior. A future refactor that drops the filter would silently
+    open a security hole, so we test the negative observable here.
+    """
+    inactive = Teacher(
+        email="inactive-validate-emails@school.com",
+        password_hash=get_password_hash("x"),
+        name="Inactive",
+        is_active=False,  # the value under test
+        email_verified=True,
+    )
+    shared_test_session.add(inactive)
+    shared_test_session.commit()
+    r = _post(test_client, caller, [inactive.email])
+    assert r.status_code == 200
+    row = r.json()["results"][0]
+    assert row["status"] == "not_registered"
+    assert row["exists"] is False
+    assert row["verified"] is False
+
+
 def test_invalid_email_format_returns_422(test_client, caller):
     """Pydantic EmailStr enforces format before our logic runs."""
     r = _post(test_client, caller, ["not-an-email"])
