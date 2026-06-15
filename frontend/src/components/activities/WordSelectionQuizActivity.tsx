@@ -573,7 +573,7 @@ export default function WordSelectionQuizActivity({
                     "object-contain rounded-lg",
                     useHorizontal
                       ? "absolute inset-0 w-full h-full"
-                      : "max-h-[clamp(8rem,38vh,22rem)] w-auto",
+                      : "max-h-[clamp(8rem,30vh,22rem)] w-auto",
                   )}
                 />
               </div>
