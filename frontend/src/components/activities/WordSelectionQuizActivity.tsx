@@ -508,24 +508,6 @@ export default function WordSelectionQuizActivity({
           longForm
         />
       )}
-      {/* #844：選擇題無輸入框，最後一題（非訂正）的提交鈕放在題號列；
-          訂正模式維持卡片下方 footer 提交鈕。 */}
-      {isLast && !isRevision && (
-        <Button
-          type="button"
-          size="sm"
-          onClick={handleSubmitAll}
-          disabled={completing || submittingAnswer}
-          className="shrink-0 ml-1"
-        >
-          {completing ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-1" />
-          ) : (
-            <Send className="h-4 w-4 mr-1" />
-          )}
-          {t("wordQuiz.submit") || "提交"}
-        </Button>
-      )}
     </>
   );
 
@@ -590,7 +572,7 @@ export default function WordSelectionQuizActivity({
                     "object-contain rounded-lg",
                     useHorizontal
                       ? "absolute inset-0 w-full h-full"
-                      : "max-h-[clamp(8rem,38vh,22rem)] w-auto",
+                      : "max-h-[clamp(8rem,30vh,22rem)] w-auto",
                   )}
                 />
               </div>
@@ -629,7 +611,7 @@ export default function WordSelectionQuizActivity({
 
               <div
                 className={cn(
-                  "grid gap-3 sm:gap-4 flex-1 min-h-0",
+                  "grid gap-2 flex-1 min-h-0",
                   // #844 欄數固定（不依字長翻轉，避免間距忽近忽遠）：
                   // 手機單欄、平板 2×2、桌機 4 欄；圖左 landscape 維持單欄。
                   // 圖片位置另由 hasLongOption 控制（長選項時圖移到上方）。
@@ -637,8 +619,9 @@ export default function WordSelectionQuizActivity({
                     ? "grid-cols-1"
                     : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
                 )}
-                // #844：列高鎖 minmax(0,1fr) 不被文字撐大 → fit-to-box 有固定框可量、不爆版
-                style={{ gridAutoRows: "minmax(0, 1fr)" }}
+                // #844：列高鎖 minmax(4rem,1fr)（min ≥ 按鈕 min-h），按鈕不溢出列、
+                // 選項上下間距固定 8px（gap-2）每題一致；max 仍 1fr 故不爆版、fit-to-box 有界
+                style={{ gridAutoRows: "minmax(4rem, 1fr)" }}
               >
                 {currentWord.options.map((opt, index) => {
                   const isSelected = selectedForCurrent === opt.text;
