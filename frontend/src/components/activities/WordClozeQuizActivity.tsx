@@ -508,7 +508,6 @@ export default function WordClozeQuizActivity({
   const currentResolved = currentCorrect === true;
   const everyResolved = allCorrect(words, correctByItem);
   const currentReveal = revealByItem[currentWord.content_item_id];
-  const showCorrectness = settings.show_answer || isRevision;
 
   // 題號 bar — Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
@@ -671,13 +670,7 @@ export default function WordClozeQuizActivity({
               // 訂正模式已答對的題目鎖定唯讀，不可再改
               disabled={isRevision && currentResolved}
               submitting={submittingAnswer}
-              state={
-                showCorrectness && currentCorrect === true
-                  ? "correct"
-                  : showCorrectness && currentCorrect === false
-                    ? "wrong"
-                    : "neutral"
-              }
+              // #844：小考 input 一律中性色，不因正誤變色（防作弊；state 預設 neutral）
               autoFocus
             />
 
