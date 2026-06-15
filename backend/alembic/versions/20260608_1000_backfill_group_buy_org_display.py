@@ -26,7 +26,7 @@ from alembic import op
 
 
 revision: str = "20260608_1000"
-down_revision: Union[str, None] = "20260603_1000"
+down_revision: Union[str, None] = "20260615_1000"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
