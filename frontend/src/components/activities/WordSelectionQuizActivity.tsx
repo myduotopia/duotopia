@@ -456,8 +456,7 @@ export default function WordSelectionQuizActivity({
     );
   // 直式優先；題目有圖 + 矮橫螢幕（手機橫放）才走橫式（圖左、選項右）。
   // #844：長選項時關閉橫式 → 圖回到上方，下方選項拿全寬單欄。
-  const useHorizontal =
-    showQuestionImage && isShortLandscape && !hasLongOption;
+  const useHorizontal = showQuestionImage && isShortLandscape && !hasLongOption;
   // Issue #830 訂正模式 gating + 揭示
   const currentCorrect = correctByItem[currentWord.content_item_id];
   const currentResolved = currentCorrect === true;
@@ -475,28 +474,28 @@ export default function WordSelectionQuizActivity({
       {/* #844：題號多時不換行，改水平捲動；標題／計數／計時器留在外面不被推走 */}
       <div className="flex gap-1 sm:gap-1.5 items-center overflow-x-auto min-w-0 flex-1 py-0.5">
         {words.map((w, idx) => {
-        const answered =
-          (selectedByItem[w.content_item_id] || "").trim() !== "";
-        const isCurrent = idx === currentIndex;
-        return (
-          <button
-            key={w.content_item_id}
-            type="button"
-            onClick={() => goTo(idx)}
-            className={cn(
-              "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
-              isCurrent
-                ? "bg-emerald-500 text-white border-emerald-500"
-                : !answered
-                  ? "bg-white text-gray-500 border-gray-300 hover:border-emerald-400"
-                  : // #844 有答題=黃色，不洩漏正誤（含訂正模式）
-                    "bg-yellow-100 text-yellow-800 border-yellow-400",
-            )}
-          >
-            {idx + 1}
-          </button>
-        );
-      })}
+          const answered =
+            (selectedByItem[w.content_item_id] || "").trim() !== "";
+          const isCurrent = idx === currentIndex;
+          return (
+            <button
+              key={w.content_item_id}
+              type="button"
+              onClick={() => goTo(idx)}
+              className={cn(
+                "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
+                isCurrent
+                  ? "bg-emerald-500 text-white border-emerald-500"
+                  : !answered
+                    ? "bg-white text-gray-500 border-gray-300 hover:border-emerald-400"
+                    : // #844 有答題=黃色，不洩漏正誤（含訂正模式）
+                      "bg-yellow-100 text-yellow-800 border-yellow-400",
+              )}
+            >
+              {idx + 1}
+            </button>
+          );
+        })}
       </div>
       <span className="text-xs text-gray-400 ml-2 shrink-0">
         {answeredCount} / {words.length}

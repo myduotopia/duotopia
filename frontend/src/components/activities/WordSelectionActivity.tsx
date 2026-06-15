@@ -893,8 +893,7 @@ export default function WordSelectionActivity({
 
   // 直式優先：題目有圖且視窗矮（橫向手機）才退回橫式（圖左、選項右）。
   // #844：長選項時關閉橫式 → 圖回到上方，下方選項拿全寬單欄。
-  const useHorizontal =
-    showQuestionImage && isShortLandscape && !hasLongOption;
+  const useHorizontal = showQuestionImage && isShortLandscape && !hasLongOption;
 
   return (
     <div className="flex flex-col gap-6 min-h-[calc(100dvh-8rem)]">
