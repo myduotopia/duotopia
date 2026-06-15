@@ -121,6 +121,11 @@ class GroupBuyOpenRequest(BaseModel):
     # only the leader's binding is created (legacy path; admin uses PR #841
     # to add members later via /admin/subscription/create).
     member_emails: List[EmailStr] = []
+    # Issue #768 comment 4638082532 item 2 — team leader's contact phone.
+    # The original spec said "連絡電話(必填)"; we capture it here for the
+    # leader's row only and persist into the audit metadata so support
+    # can reach the buyer if needed. Frontend enforces non-empty.
+    leader_phone: Optional[str] = None
 
 
 class GroupBuyOpenResponse(BaseModel):

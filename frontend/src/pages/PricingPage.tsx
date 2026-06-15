@@ -37,6 +37,7 @@ import LineContactButton, {
   LINE_FRIEND_URL,
 } from "@/components/LineContactButton";
 import { apiClient } from "@/lib/api";
+import { GroupBuyPlanCards } from "@/components/pricing/GroupBuyPlanCards";
 
 function getSubscriptionPlans(t: (key: string) => string): SubscriptionPlan[] {
   return [
@@ -110,128 +111,10 @@ const pointPackages: PointPackage[] = [
 
 const BASE_UNIT_COST = 0.18; // highest unit cost for discount calculation
 
-// Issue #768 comment #3 part 2 — group-buy marketing cards. Fetched from
-// the (now public) /api/credit-packages/group-buy-plans endpoint so admin
-// edits to the Plan table propagate live. Hardcoded seed used as fallback
-// only if the request fails — keeps anonymous visitors from seeing an
-// empty card grid on transient API hiccups.
-interface GroupBuyMarketingPlan {
-  name: string;
-  teacher_seats: number;
-  annual_fee: number;
-  total_amount: number;
-  topup_discount: number;
-  monthly_quota: number;
-  display_order: number;
-}
-
-// IMPORTANT: these values mirror the DB seed as of 2026-06-15.
-// Admin action path: after editing any 團購 plan at `/admin/plans`
-// (quota, annual_fee, topup_discount, teacher_seats), ALSO update the
-// corresponding entry in this `GROUP_BUY_FALLBACK` constant. Live
-// PricingPage will reflect the new values as long as the API request
-// succeeds; this fallback only fires on network failure / 5xx, and at
-// that point will silently show stale data unless kept in sync. There
-// is no automated enforcement — this comment is the only safety net.
-const GROUP_BUY_FALLBACK: GroupBuyMarketingPlan[] = [
-  {
-    name: "團購-10席",
-    teacher_seats: 10,
-    annual_fee: 1500,
-    total_amount: 15000,
-    topup_discount: 0.95,
-    monthly_quota: 1000,
-    display_order: 10,
-  },
-  {
-    name: "團購-30席",
-    teacher_seats: 30,
-    annual_fee: 1300,
-    total_amount: 39000,
-    topup_discount: 0.9,
-    monthly_quota: 1000,
-    display_order: 11,
-  },
-  {
-    name: "團購-50席",
-    teacher_seats: 50,
-    annual_fee: 1000,
-    total_amount: 50000,
-    topup_discount: 0.85,
-    monthly_quota: 1000,
-    display_order: 12,
-  },
-];
-
-function GroupBuyCards() {
-  const [plans, setPlans] =
-    useState<GroupBuyMarketingPlan[]>(GROUP_BUY_FALLBACK);
-  useEffect(() => {
-    let cancelled = false;
-    apiClient
-      .listGroupBuyPlans()
-      .then((data) => {
-        if (cancelled) return;
-        if (Array.isArray(data) && data.length > 0) setPlans(data);
-      })
-      .catch(() => {
-        // Keep the fallback; the page already renders something useful.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return (
-    <>
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-900">👥 教師團購方案</h2>
-        <p className="text-sm text-gray-600 mt-2 max-w-2xl mx-auto">
-          為您的教師團隊一次採購年費方案，享更低的每席費用 +
-          加購點數包折扣。團主刷卡一次即可開團，月配點自動發放給團內每位教師。
-        </p>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {plans.map((p) => (
-          <div
-            key={p.name}
-            className="rounded-xl border border-gray-200 bg-white p-6 flex flex-col"
-          >
-            <div className="text-lg font-bold text-gray-900">{p.name}</div>
-            <div className="text-sm text-gray-500">
-              {p.teacher_seats} 位教師席次
-            </div>
-            <div className="my-4 space-y-1 text-sm">
-              <div>
-                每席年費{" "}
-                <span className="font-semibold">
-                  NT$ {p.annual_fee.toLocaleString()}
-                </span>
-              </div>
-              <div>
-                月配點{" "}
-                <span className="font-semibold">
-                  {p.monthly_quota.toLocaleString()} 點 / 教師
-                </span>
-              </div>
-              <div>
-                加購折扣{" "}
-                <span className="font-semibold">
-                  {Math.round((1 - p.topup_discount) * 100)}% off
-                </span>
-              </div>
-            </div>
-            <div className="mt-auto pt-3 border-t border-gray-200">
-              <div className="text-xs text-gray-500">團隊總價</div>
-              <div className="text-xl font-bold text-blue-600">
-                NT$ {p.total_amount.toLocaleString()} / 年
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
+// Group-buy marketing cards extracted to a shared component so
+// `/teacher/subscription` can render the same grid + fetch + fallback
+// semantics (issue #768 comment 4638082532 item 3). See the component
+// for the admin-update sync rule and DB-seed snapshot.
 
 export default function PricingPage() {
   const navigate = useNavigate();
@@ -575,7 +458,7 @@ export default function PricingPage() {
                   case the API request fails so anonymous visitors still
                   see something useful. */}
               <div className="space-y-4">
-                <GroupBuyCards />
+                <GroupBuyPlanCards />
                 <div className="text-center pt-2">
                   <button
                     type="button"
