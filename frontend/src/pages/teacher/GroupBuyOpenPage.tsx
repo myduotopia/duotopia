@@ -183,7 +183,10 @@ export default function GroupBuyOpenPage() {
   // required field on the roster step. We persist it via localStorage
   // alongside the roster so it survives navigation, and ship it to
   // backend in the open-team payload (audit log captures it for
-  // support to reach the buyer).
+  // support to reach the buyer). Intentionally not cleared on plan
+  // change: phone belongs to the leader (constant across plan picks)
+  // rather than to the plan; clearing on swap would just force the
+  // user to re-type the same number.
   const [leaderPhone, setLeaderPhone] = React.useState("");
   const csvInputRef = React.useRef<HTMLInputElement>(null);
 

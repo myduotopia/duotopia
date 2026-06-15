@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from dateutil.relativedelta import relativedelta
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, Dict, Any, List
 import logging
 import uuid
@@ -122,10 +122,23 @@ class GroupBuyOpenRequest(BaseModel):
     # to add members later via /admin/subscription/create).
     member_emails: List[EmailStr] = []
     # Issue #768 comment 4638082532 item 2 — team leader's contact phone.
-    # The original spec said "連絡電話(必填)"; we capture it here for the
-    # leader's row only and persist into the audit metadata so support
-    # can reach the buyer if needed. Frontend enforces non-empty.
-    leader_phone: Optional[str] = None
+    # The original spec said "連絡電話(必填)"; we capture it here and ship
+    # it into BigQuery audit so support can reach the buyer on refunds /
+    # disputes. Server-side `min_length=1` (after strip) so a client
+    # bypassing the frontend with curl can't silently submit empty —
+    # which would defeat the audit purpose. `max_length=20` mirrors a
+    # reasonable phone-number ceiling (intl prefix + digits + dashes).
+    leader_phone: Optional[str] = Field(None, max_length=20)
+
+    @field_validator("leader_phone")
+    @classmethod
+    def _phone_non_blank(cls, v):
+        if v is None:
+            return v
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("leader_phone must not be empty or whitespace-only")
+        return stripped
 
 
 class GroupBuyOpenResponse(BaseModel):

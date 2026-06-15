@@ -15,6 +15,9 @@ from models import (
     SubscriptionPeriod,
     PointUsageLog,
     TeacherOrganization,
+    Organization,
+    School,
+    TeacherSchool,
 )
 from routers.teachers import get_current_teacher
 from services.tappay_service import TapPayService
@@ -964,17 +967,38 @@ async def get_subscription_status(
         # Owner is a special case: they're ALSO a member, and we
         # surface a distinct `plan_type` so the frontend can show
         # team-management UI (future).
-        from models import (
-            Organization,
-            School,
-            TeacherOrganization,
-            TeacherSchool,
-        )
-
-        gb_membership = (
-            db.query(Organization, School)
+        #
+        # Multi-org edge case: the R2-F2 single-org guard in
+        # `open_group_buy` prevents a teacher from opening more than
+        # one team they own, and the validate-team-emails check rejects
+        # adding a member who is already in another group-buy team. So
+        # in normal operation each teacher belongs to at most one
+        # active group-buy org. The `order_by(...end_date.desc()
+        # .nullslast())` here is purely defensive: if a manual data
+        # fix or admin override ever produced two active rows, we'd
+        # surface the longer-lived one, which is the more useful date
+        # to show the user.
+        #
+        # Single LEFT JOIN against TeacherOrganization on the same
+        # query so the owner-vs-member determination is one round-trip
+        # instead of two. For individual teachers this stays a single
+        # zero-row query; for the (much rarer) group-buy case it's one
+        # query for both bits of info.
+        gb_query = (
+            db.query(
+                Organization,
+                School,
+                TeacherOrganization.role,
+            )
             .join(School, School.organization_id == Organization.id)
             .join(TeacherSchool, TeacherSchool.school_id == School.id)
+            .outerjoin(
+                TeacherOrganization,
+                (TeacherOrganization.organization_id == Organization.id)
+                & (TeacherOrganization.teacher_id == current_teacher.id)
+                & (TeacherOrganization.is_active.is_(True))
+                & (TeacherOrganization.role == "org_owner"),
+            )
             .filter(
                 TeacherSchool.teacher_id == current_teacher.id,
                 TeacherSchool.is_active.is_(True),
@@ -988,23 +1012,13 @@ async def get_subscription_status(
         plan_type = "individual"
         gb_end_date_override = None
         gb_auto_renew_override = None
-        if gb_membership is not None:
-            gb_org, _ = gb_membership
-            # Member by default; promote to owner if a matching
-            # TeacherOrganization row exists.
-            plan_type = "group_buy_member"
-            is_owner = (
-                db.query(TeacherOrganization)
-                .filter(
-                    TeacherOrganization.teacher_id == current_teacher.id,
-                    TeacherOrganization.organization_id == gb_org.id,
-                    TeacherOrganization.role == "org_owner",
-                    TeacherOrganization.is_active.is_(True),
-                )
-                .first()
+        if gb_query is not None:
+            gb_org, _gb_school, gb_owner_role = gb_query
+            plan_type = (
+                "group_buy_owner"
+                if gb_owner_role == "org_owner"
+                else "group_buy_member"
             )
-            if is_owner is not None:
-                plan_type = "group_buy_owner"
             gb_end_date_override = gb_org.subscription_end_date
             # Group-buy plans don't have per-teacher auto-renew — points
             # come from the team leader's annual fee.

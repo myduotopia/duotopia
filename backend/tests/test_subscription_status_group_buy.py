@@ -148,10 +148,19 @@ def test_group_buy_member_status_overrides_end_date_and_plan_type(
     body = r.json()
     assert body["plan_type"] == "group_buy_member"
     assert body["auto_renew"] is False
-    # end_date should match the org's annual subscription end date,
-    # NOT the member's monthly period end_date.
-    org_end_iso = org.subscription_end_date.isoformat()
-    assert body["end_date"] == org_end_iso
+    # Refresh from session so we compare the DB-persisted value (the
+    # ORM may return tz-naive on a TIMESTAMP WITHOUT TIME ZONE column;
+    # the in-memory fixture value is tz-aware via datetime.now(utc)).
+    # Compare both sides as datetimes (tz-stripped) instead of ISO
+    # strings so the assertion is robust across both representations.
+    shared_test_session.refresh(org)
+    body_end = datetime.fromisoformat(body["end_date"])
+    org_end = org.subscription_end_date
+    if body_end.tzinfo is not None:
+        body_end = body_end.replace(tzinfo=None)
+    if org_end.tzinfo is not None:
+        org_end = org_end.replace(tzinfo=None)
+    assert body_end == org_end
     # ~365 days minus the time elapsed since fixture setup (sub-second).
     assert body["days_remaining"] >= 360
     assert body["is_active"] is True

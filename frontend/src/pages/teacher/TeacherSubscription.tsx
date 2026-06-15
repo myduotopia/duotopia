@@ -541,6 +541,12 @@ export default function TeacherSubscription() {
                 subscription?.plan_type !== "group_buy_owner" && (
                   <div className="space-y-4">
                     <GroupBuyPlanCards
+                      // Plan name is intentionally ignored here — the
+                      // group-buy open page has its own plan-selection
+                      // step (Step 1 of the 3-step wizard) where the
+                      // user can confirm or change their pick. Pre-
+                      // selecting via query param is a future polish,
+                      // tracked for the next iteration.
                       onSelectPlan={() => navigate("/teacher/group-buy/open")}
                     />
                     <div className="text-center">
@@ -655,9 +661,13 @@ export default function TeacherSubscription() {
                             // generic "tutor" template said 2000 點/月
                             // for a 1000-點 group-buy plan.
                             <>
+                              {/* `??` (nullish coalescing) instead of
+                                  `||` so a literal `0` from backend
+                                  isn't treated as falsy and the value
+                                  shown matches the data. */}
                               {(
-                                subscription.subscription_total ||
-                                subscription.quota_total ||
+                                subscription.subscription_total ??
+                                subscription.quota_total ??
                                 0
                               ).toLocaleString()}{" "}
                               點 AI 配額 / 月（團購配給）
