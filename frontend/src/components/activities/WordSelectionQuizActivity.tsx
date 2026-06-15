@@ -454,6 +454,11 @@ export default function WordSelectionQuizActivity({
     (currentWord.options ?? []).some(
       (o) => (o.text?.trim().split(/\s+/).length ?? 0) >= 5,
     );
+  // Issue #844: 任一非圖片選項字元數 >5 → 手機版（窄螢幕）由 2×2 改單欄，避免擠；
+  // sm 以上維持 2×2 / 4 欄。與 hasLongOption（≥5 詞）獨立。
+  const hasOver5CharOption =
+    !settings.show_option_images &&
+    (currentWord.options ?? []).some((o) => (o.text?.trim().length ?? 0) > 5);
   // 直式優先；題目有圖 + 矮橫螢幕（手機橫放）才走橫式（圖左、選項右）。
   // #844：長選項時關閉橫式 → 圖回到上方，下方選項拿全寬單欄。
   const useHorizontal =
@@ -619,6 +624,7 @@ export default function WordSelectionQuizActivity({
                   // - 圖左 + 短選項：右側單欄 grid-cols-1
                   // - 長選項 + 有題目圖：圖在上、選項單欄拿全寬 grid-cols-1
                   // - 長選項 + 無題目圖：2×2（grid-cols-2，不升 4 欄，長文字才有寬度）
+                  // - 短選項但字元 >5：手機單欄、sm 2×2、寬螢幕 1×4
                   // - 短選項（一般）：窄螢幕 2×2、寬螢幕 1×4
                   useHorizontal
                     ? "grid-cols-1"
@@ -626,7 +632,9 @@ export default function WordSelectionQuizActivity({
                       ? showQuestionImage
                         ? "grid-cols-1"
                         : "grid-cols-2"
-                      : "grid-cols-2 lg:grid-cols-4",
+                      : hasOver5CharOption
+                        ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+                        : "grid-cols-2 lg:grid-cols-4",
                 )}
                 // #844：列高鎖 minmax(0,1fr) 不被文字撐大 → fit-to-box 有固定框可量、不爆版
                 style={{ gridAutoRows: "minmax(0, 1fr)" }}
