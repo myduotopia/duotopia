@@ -227,6 +227,65 @@ class TestTeacherEmailAutoMerge:
 
 
 # ---------------------------------------------------------------------------
+# New SSO teachers must be auto-verified (Issue #850)
+#
+# 1Campus is the IdP and verifies institutional emails on its side, so a
+# teacher created via SSO must land with email_verified=True on BOTH the
+# Identity AND the Teacher. The admin "Unverified" badge reads
+# Teacher.email_verified, so a False there shows verified SSO teachers as
+# unverified.
+# ---------------------------------------------------------------------------
+
+
+class TestSsoTeacherAutoVerified:
+    """Newly-created SSO teachers must have email_verified=True."""
+
+    def test_identity_code_flow_new_teacher_is_verified(self, shared_test_session):
+        """find_or_create_teacher (Identity Code flow) → teacher & identity verified."""
+        db = shared_test_session
+
+        identity, teacher, action = OneCampusAccountService.find_or_create_teacher(
+            db,
+            one_campus_account="newteacher@school.edu.tw",
+            teacher_name="New SSO Teacher",
+            national_id_hash="c" * 64,
+        )
+
+        assert action == "created"
+        # Teacher is what the admin list reads — must be verified
+        assert teacher.email_verified is True
+        assert teacher.email_verified_at is not None
+        # Identity must also reflect the trusted-IdP verification
+        assert identity.email_verified is True
+        assert identity.email_verified_at is not None
+
+    def test_oauth_flow_new_teacher_is_verified(self, shared_test_session):
+        """find_or_create_by_oauth (OAuth flow) → teacher & identity verified."""
+        db = shared_test_session
+
+        (
+            identity,
+            teacher,
+            role_type,
+            action,
+        ) = OneCampusAccountService.find_or_create_by_oauth(
+            db,
+            uuid="oauth-uuid-verified-001",
+            mail="oauthteacher@school.edu.tw",
+            first_name="OAuth",
+            last_name="Teacher",
+            role_type="teacher",
+            teacher_name="OAuth Teacher",
+        )
+
+        assert action == "created"
+        assert role_type == "teacher"
+        assert teacher.email_verified is True
+        assert teacher.email_verified_at is not None
+        assert identity.email_verified is True
+
+
+# ---------------------------------------------------------------------------
 # Aggregated classrooms via identity_id
 # ---------------------------------------------------------------------------
 

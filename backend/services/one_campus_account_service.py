@@ -503,11 +503,17 @@ class OneCampusAccountService:
         else:
             teacher_email = one_campus_account
 
+        # 1Campus is the IdP and verifies institutional emails on its side,
+        # so we trust the returned account as already verified (mirrors the
+        # OAuth flow below). The admin "Unverified" badge reads
+        # Teacher.email_verified, so both rows must carry the verified flag.
+        verified_at = datetime.now(timezone.utc)
         identity = Identity(
             email=one_campus_account if not identity_email_taken else None,
             one_campus_account=one_campus_account,
             national_id_hash=national_id_hash,
-            email_verified=False,
+            email_verified=bool(one_campus_account),
+            email_verified_at=verified_at if one_campus_account else None,
             is_active=True,
         )
         db.add(identity)
@@ -520,6 +526,8 @@ class OneCampusAccountService:
             has_password=False,
             identity_id=identity.id,
             is_active=True,
+            email_verified=True,
+            email_verified_at=verified_at,
         )
         db.add(teacher)
         db.commit()
@@ -821,6 +829,11 @@ class OneCampusAccountService:
                 has_password=False,
                 identity_id=identity.id,
                 is_active=True,
+                # 1Campus verifies institutional emails on its side; the admin
+                # "Unverified" badge reads Teacher.email_verified, so a verified
+                # SSO login must set it here too.
+                email_verified=True,
+                email_verified_at=datetime.now(timezone.utc),
             )
             db.add(teacher)
             db.commit()
