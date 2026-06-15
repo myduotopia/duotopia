@@ -4,10 +4,10 @@
  * 設計：
  * - 4 色循環（OPTION_COLORS）：藍 / 紫 / 琥珀 / 青，由呼叫端傳 colorIndex
  * - 圖片模式 (showAsImage=true 且有 imageUrl)：上圖下標籤
- * - 字級自適應：button 內層 div 套 [container-type:size]，文字 max 字級用 cqh + cqw min() 隨選項框縮放
- *   （#842：改為 content-aware shrink-to-fit — useShrinkToFit hook 量測 overflow 後動態縮字，
- *    取代純 clamp()，確保長文字完整顯示而非 ... 截斷。
- *    #844：可讀下限 minFontSize 由 8/7 提高為 純文字 16px、圖片模式 14px）
+ * - 字級「撐滿格子」：useShrinkToFit hook 量測 overflow 後，在 [min,max] 內取不溢出的最大字級
+ *   （#842：取代純 clamp()，長文字自動縮小完整顯示而非 ... 截斷。
+ *    #844：改為 fit-to-box — 字少放大到貼合框、字多縮到剛好放得下。
+ *    純文字 16–80px、圖片標籤 14–28px；上下限互不影響）
  * - 揭示態（quiz 模式不傳 showCorrect/showIncorrect）：
  *   - showCorrect → 綠底/邊/字 + 左上角 ✓
  *   - showIncorrect → 紅底/邊/字 + 左上角 ✗
@@ -58,13 +58,14 @@ export default function WordSelectionOptionButton({
   const renderAsImage = showAsImage && !!imageUrl;
   const dimmed = showResult && !showCorrect && !showIncorrect;
 
-  // #842 content-aware shrink：max 比例對齊原 cqh/cqw，min 守住可讀下限
+  // 字級撐滿格子（#842 量測 overflow、#844 改 fit-to-box）；
   // ready=false 時 span 以 opacity-0 隱藏，避免閃過 fallback 字型 / 過大字
   const textSpanRef = useRef<HTMLSpanElement>(null);
   const { fontSize, ready } = useShrinkToFit(textSpanRef, {
-    maxRatio: renderAsImage ? { h: 0.1, w: 0.08 } : { h: 0.16, w: 0.11 },
-    // #844：把可讀下限拉高（文字 16px、圖片標籤 14px）。極長選項在窄螢幕已由
-    // 上層 grid 改單欄（grid-cols-1）給足寬度，故此處抬高 floor 不致過度截斷。
+    // #844 撐滿格子：字少時放大到貼合框（上限），字多時縮到剛好放得下（下限）。
+    // 上限放寬讓短選項填滿框（純文字最大 80px、圖片標籤最大 28px）；
+    // 下限守住可讀性（純文字 16px、圖片標籤 14px）。兩者互不影響。
+    maxFontSize: renderAsImage ? 28 : 80,
     minFontSize: renderAsImage ? 14 : 16,
     deps: [text, renderAsImage],
   });
