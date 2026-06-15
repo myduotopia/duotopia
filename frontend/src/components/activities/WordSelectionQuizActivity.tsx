@@ -475,10 +475,12 @@ export default function WordSelectionQuizActivity({
   // 題號 bar：Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
     <>
-      <span className="text-xs text-gray-500 mr-1">
+      <span className="text-xs text-gray-500 mr-1 shrink-0">
         {t("wordQuiz.questionNav") || "題號"}
       </span>
-      {words.map((w, idx) => {
+      {/* #844：題號多時不換行，改水平捲動；標題／計數／計時器留在外面不被推走 */}
+      <div className="flex gap-1 sm:gap-1.5 items-center overflow-x-auto min-w-0 flex-1 py-0.5">
+        {words.map((w, idx) => {
         const answered =
           (selectedByItem[w.content_item_id] || "").trim() !== "";
         const isCurrent = idx === currentIndex;
@@ -505,7 +507,8 @@ export default function WordSelectionQuizActivity({
           </button>
         );
       })}
-      <span className="text-xs text-gray-400 ml-auto">
+      </div>
+      <span className="text-xs text-gray-400 ml-2 shrink-0">
         {answeredCount} / {words.length}
       </span>
       {timeRemaining !== null && timerTotal !== null && (
