@@ -467,7 +467,6 @@ export default function WordSelectionQuizActivity({
   const currentCorrect = correctByItem[currentWord.content_item_id];
   const currentResolved = currentCorrect === true;
   const everyResolved = allCorrect(words, correctByItem);
-  const showCorrectness = settings.show_answer || isRevision;
   // 訂正模式下已作答（對或錯）→ 揭示選項正解（參考艾賓浩斯）
   const revealCurrent =
     isRevision && (currentCorrect === true || currentCorrect === false);
