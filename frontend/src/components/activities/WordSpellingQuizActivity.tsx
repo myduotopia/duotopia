@@ -526,36 +526,40 @@ export default function WordSpellingQuizActivity({
   // 題號 bar — Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
     <>
-      <span className="text-xs text-gray-500 mr-1">
+      <span className="text-xs text-gray-500 mr-1 shrink-0">
         {t("wordQuiz.questionNav") || "題號"}
       </span>
-      {words.map((w, idx) => {
-        const answered = (typedByItem[w.content_item_id] || "").trim() !== "";
-        const isCurrent = idx === currentIndex;
-        const priorCorrect = correctByItem[w.content_item_id];
-        return (
-          <button
-            key={w.content_item_id}
-            type="button"
-            onClick={() => goTo(idx)}
-            className={cn(
-              "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
-              isCurrent
-                ? "bg-amber-500 text-white border-amber-500"
-                : !answered
-                  ? "bg-white text-gray-500 border-gray-300 hover:border-amber-400"
-                  : showCorrectness && priorCorrect === true
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                    : showCorrectness && priorCorrect === false
-                      ? "bg-rose-50 text-rose-700 border-rose-300"
-                      : "bg-amber-50 text-amber-700 border-amber-300",
-            )}
-          >
-            {idx + 1}
-          </button>
-        );
-      })}
-      <span className="text-xs text-gray-400 ml-auto">
+      {/* #844：題號多時不換行，改水平捲動；標題／計數／計時器留在外面不被推走 */}
+      <div className="flex gap-1 sm:gap-1.5 items-center overflow-x-auto min-w-0 flex-1 py-0.5">
+        {words.map((w, idx) => {
+          const answered =
+            (typedByItem[w.content_item_id] || "").trim() !== "";
+          const isCurrent = idx === currentIndex;
+          const priorCorrect = correctByItem[w.content_item_id];
+          return (
+            <button
+              key={w.content_item_id}
+              type="button"
+              onClick={() => goTo(idx)}
+              className={cn(
+                "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
+                isCurrent
+                  ? "bg-amber-500 text-white border-amber-500"
+                  : !answered
+                    ? "bg-white text-gray-500 border-gray-300 hover:border-amber-400"
+                    : showCorrectness && priorCorrect === true
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                      : showCorrectness && priorCorrect === false
+                        ? "bg-rose-50 text-rose-700 border-rose-300"
+                        : "bg-amber-50 text-amber-700 border-amber-300",
+              )}
+            >
+              {idx + 1}
+            </button>
+          );
+        })}
+      </div>
+      <span className="text-xs text-gray-400 ml-2 shrink-0">
         {answeredCount} / {words.length}
       </span>
       {timeRemaining !== null && timerTotal !== null && (
@@ -574,9 +578,7 @@ export default function WordSpellingQuizActivity({
       {navSlot ? (
         createPortal(navBar, navSlot)
       ) : (
-        <div className="flex flex-wrap gap-1 sm:gap-1.5 items-center">
-          {navBar}
-        </div>
+        <div className="flex gap-1 sm:gap-1.5 items-center">{navBar}</div>
       )}
 
       <div

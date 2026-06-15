@@ -2561,7 +2561,7 @@ export default function StudentActivityPageContent({
             {isQuizMode && (
               <div
                 ref={setQuizNavSlot}
-                className="flex flex-wrap gap-1 sm:gap-1.5 items-center pt-2"
+                className="flex gap-1 sm:gap-1.5 items-center pt-2"
               />
             )}
 
