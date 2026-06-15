@@ -361,6 +361,87 @@ def test_happy_path_binds_every_member_atomically(
         assert period.payment_id == "REC-ROSTER-HAPPY"
 
 
+def test_leader_already_in_group_buy_team_can_still_open_new_team(
+    test_client,
+    auth_header,
+    leader,
+    gb_plan_10,
+    nine_members,
+    shared_test_session,
+):
+    """Per design Q2: the leader is allowed to open multiple teams. If
+    the current teacher is already an active member of another
+    group-buy school, that should NOT block them from opening a fresh
+    team — backend uses `current_teacher` as `org_owner` regardless
+    and never runs the leader through `_classify_team_emails` for the
+    roster shape check.
+
+    Pins this behaviour with an explicit test so a future refactor
+    (e.g. someone adding a "current_teacher must not be in group-buy
+    team" guard for symmetry with member checks) gets caught here
+    instead of silently breaking the open-multiple flow.
+    """
+    # Plant the leader inside an unrelated active group-buy team.
+    other_org = Organization(
+        name="Other 團 (leader is a member)",
+        org_type="group_buy",
+        is_active=True,
+    )
+    shared_test_session.add(other_org)
+    shared_test_session.flush()
+    other_school = School(
+        organization_id=other_org.id,
+        name="Other 團 School",
+        plan_id=gb_plan_10.id,
+        teacher_seat_limit=gb_plan_10.teacher_seats,
+        is_active=True,
+    )
+    shared_test_session.add(other_school)
+    shared_test_session.flush()
+    shared_test_session.add(
+        TeacherSchool(
+            teacher_id=leader.id,
+            school_id=other_school.id,
+            roles=["teacher"],
+            is_active=True,
+        )
+    )
+    shared_test_session.commit()
+
+    mock_tappay = _mock_tappay("REC-LEADER-IN-TEAM-OPENS")
+    emails = [m.email for m in nine_members]
+    with patch("routers.credit_packages.ENABLE_PAYMENT", True), patch(
+        "routers.credit_packages.TapPayService", return_value=mock_tappay
+    ):
+        r = _post(
+            test_client,
+            auth_header,
+            {
+                "prime": "prime-x",
+                "plan_name": gb_plan_10.name,
+                "member_emails": emails,
+            },
+        )
+    assert r.status_code == 200, r.json()
+    body = r.json()
+    assert body["members_bound"] == 9
+    # Leader binding in the new school still exists alongside the
+    # pre-existing one in `other_school` — both stay active.
+    shared_test_session.expire_all()
+    leader_bindings = (
+        shared_test_session.query(TeacherSchool)
+        .filter(
+            TeacherSchool.teacher_id == leader.id,
+            TeacherSchool.is_active.is_(True),
+        )
+        .all()
+    )
+    assert len(leader_bindings) == 2
+    school_ids = {b.school_id for b in leader_bindings}
+    assert other_school.id in school_ids
+    assert int(body["school_id"]) in school_ids
+
+
 def test_in_tx_member_became_ineligible_rolls_back_and_charges_no_one(
     test_client,
     auth_header,

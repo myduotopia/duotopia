@@ -3,7 +3,7 @@ Credit Packages API - Purchase and manage credit packages (point bundles)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -827,15 +827,22 @@ def _classify_team_emails(emails: list[str], db: Session) -> dict:
     # through with status="ok" and getting bound to a new team. Inactive
     # rows would otherwise pass both the verified-email and not-in-team
     # checks and cause a downstream binding to a disabled account.
+    # Match emails case-insensitively (func.lower) — auth registration
+    # normalises new emails to lowercase but legacy / admin-created rows
+    # in this project (and confirmed in `auth.py` login at L114) carry
+    # mixed-case addresses. Skipping `func.lower` here would leak those
+    # legitimate accounts as `not_registered` and have the roster reject
+    # real teachers. Dict key is also lowercased so the per-email lookup
+    # in the loop below matches the input keys.
     teachers = (
         db.query(Teacher)
         .filter(
-            Teacher.email.in_(emails),
+            func.lower(Teacher.email).in_(emails),
             Teacher.is_active.is_(True),
         )
         .all()
     )
-    by_email = {t.email: t for t in teachers}
+    by_email = {t.email.lower(): t for t in teachers}
     teacher_ids_verified = [t.id for t in teachers if t.email_verified]
     in_team_ids: set[int] = set()
     if teacher_ids_verified:
