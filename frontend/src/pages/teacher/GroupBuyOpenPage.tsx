@@ -179,6 +179,15 @@ export default function GroupBuyOpenPage() {
   const [csvOpen, setCsvOpen] = React.useState(false);
   const [shareTarget, setShareTarget] = React.useState<string | null>(null);
   const [promoCode, setPromoCode] = React.useState<string | null>(null);
+  // Issue #768 comment 4638082532 item 2 — leader's contact phone is a
+  // required field on the roster step. We persist it via localStorage
+  // alongside the roster so it survives navigation, and ship it to
+  // backend in the open-team payload (audit log captures it for
+  // support to reach the buyer). Intentionally not cleared on plan
+  // change: phone belongs to the leader (constant across plan picks)
+  // rather than to the plan; clearing on swap would just force the
+  // user to re-type the same number.
+  const [leaderPhone, setLeaderPhone] = React.useState("");
   const csvInputRef = React.useRef<HTMLInputElement>(null);
 
   // ----- plan list (Step 1) -----
@@ -232,7 +241,10 @@ export default function GroupBuyOpenPage() {
     try {
       const stored = window.localStorage.getItem(key);
       if (stored) {
-        const parsed = JSON.parse(stored) as { rows?: RosterRow[] };
+        const parsed = JSON.parse(stored) as {
+          rows?: RosterRow[];
+          leaderPhone?: string;
+        };
         if (parsed.rows && parsed.rows.length === selectedPlan.teacher_seats) {
           // Any "checking" left over from a prior session is stale — reset
           // so the next blur runs a fresh validation request.
@@ -241,6 +253,9 @@ export default function GroupBuyOpenPage() {
             status: r.status === "checking" ? "idle" : r.status,
             id: r.id || makeRowId(),
           }));
+        }
+        if (typeof parsed.leaderPhone === "string") {
+          setLeaderPhone(parsed.leaderPhone);
         }
       }
     } catch {
@@ -284,11 +299,14 @@ export default function GroupBuyOpenPage() {
     if (!selectedPlan || !teacher || roster.length === 0) return;
     const key = lsKey(teacher.id, selectedPlan.name);
     try {
-      window.localStorage.setItem(key, JSON.stringify({ rows: roster }));
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({ rows: roster, leaderPhone }),
+      );
     } catch {
       // Storage full / private mode — degrade silently.
     }
-  }, [roster, selectedPlan, teacher]);
+  }, [roster, leaderPhone, selectedPlan, teacher]);
 
   // ----- per-row validation on blur -----
   // Row 0 (leader) is also validated here so that if the leader edits their
@@ -517,10 +535,14 @@ export default function GroupBuyOpenPage() {
   // ----- derived: row counters with deduped statuses -----
   const dedupedRoster = React.useMemo(() => dedupeStatuses(roster), [roster]);
   const okCount = dedupedRoster.filter((r) => r.status === "ok").length;
+  // Issue #768 comment 4638082532 item 2 — phone is part of the
+  // payment gate. Trim guard so whitespace-only doesn't satisfy.
+  const phoneOk = leaderPhone.trim().length > 0;
   const allOk =
     selectedPlan !== null &&
     dedupedRoster.length === selectedPlan.teacher_seats &&
-    okCount === selectedPlan.teacher_seats;
+    okCount === selectedPlan.teacher_seats &&
+    phoneOk;
 
   // ----- payment handlers -----
   const handlePaymentSuccess = (transactionId: string) => {
@@ -644,6 +666,38 @@ export default function GroupBuyOpenPage() {
           帳號，付款按鈕在全部 ✓ 後才會啟用。
         </p>
 
+        {/* Issue #768 comment 4638082532 item 2 — 連絡電話(必填) for
+            the team leader. Required to enable the payment button so
+            support can reach the buyer if there's a refund / dispute. */}
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="text-sm font-semibold">團主資訊</div>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="w-20 text-gray-600">Email</span>
+              <span className="text-gray-900">
+                {teacher?.email || "（尚未登入）"}
+              </span>
+              <span className="text-xs text-gray-500">（不可修改）</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <label className="w-20 text-gray-600" htmlFor="gb-leader-phone">
+                連絡電話 <span className="text-red-600">*</span>
+              </label>
+              <Input
+                id="gb-leader-phone"
+                type="tel"
+                className="flex-1 max-w-xs"
+                placeholder="如 0912345678"
+                value={leaderPhone}
+                onChange={(e) => setLeaderPhone(e.target.value)}
+              />
+              {!phoneOk && (
+                <span className="text-xs text-red-600">必填欄位</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => setCsvOpen(true)}>
             📂 從 CSV 匯入
@@ -729,7 +783,9 @@ export default function GroupBuyOpenPage() {
             title={
               allOk
                 ? ""
-                : `${selectedPlan.teacher_seats - okCount} 位老師尚未通過驗證`
+                : !phoneOk
+                  ? "請填寫連絡電話"
+                  : `${selectedPlan.teacher_seats - okCount} 位老師尚未通過驗證`
             }
           >
             下一步：付款 →
@@ -856,6 +912,7 @@ export default function GroupBuyOpenPage() {
             customPayload={{
               plan_name: selectedPlan.name,
               member_emails: memberEmails,
+              leader_phone: leaderPhone.trim(),
             }}
             onPaymentSuccess={handlePaymentSuccess}
             onPaymentError={handlePaymentError}
