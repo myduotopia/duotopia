@@ -296,13 +296,21 @@ export default function GroupBuyOpenPage() {
   // re-resolves to "ok" / "in_group_buy_team" / etc. The earlier short-
   // circuit on idx===0 left the payment button permanently disabled after
   // any manual edit because nothing else would set status back to "ok".
-  // useCallback + roster/teacher deps: every onBlur handler closes over
-  // these values, and the roster ranges from 10 to 50 rows — recreating
-  // all closures on every keystroke was wasteful. The deps still cover
-  // every value the function reads.
+  // Reads row state via a ref instead of `roster` to keep the closure
+  // identity stable across keystrokes. With `roster` in the dep array,
+  // a 50-row table recreated all 50 onBlur closures on every character —
+  // visible jank when typing fast. The ref tracks the latest roster
+  // snapshot synchronously (updated below in a write-through effect),
+  // so the function still sees fresh values without re-binding deps.
+  const rosterRef = React.useRef<RosterRow[]>(roster);
+  React.useEffect(() => {
+    rosterRef.current = roster;
+  }, [roster]);
+
   const validateRow = React.useCallback(
     async (idx: number) => {
-      const value = roster[idx]?.email?.trim().toLowerCase() || "";
+      const current = rosterRef.current;
+      const value = current[idx]?.email?.trim().toLowerCase() || "";
       if (!value) {
         setRoster((prev) =>
           prev.map((r, i) => (i === idx ? { ...r, status: "idle" } : r)),
@@ -317,7 +325,7 @@ export default function GroupBuyOpenPage() {
         );
         return;
       }
-      const dupIdx = roster.findIndex(
+      const dupIdx = current.findIndex(
         (r, j) =>
           j !== idx && r.email.trim().toLowerCase() === value && value !== "",
       );
@@ -351,7 +359,7 @@ export default function GroupBuyOpenPage() {
         );
       }
     },
-    [roster, teacher],
+    [teacher],
   );
 
   // Pure helper: takes a roster snapshot, fires the batch endpoint, and
@@ -401,18 +409,19 @@ export default function GroupBuyOpenPage() {
   );
 
   // ----- batch revalidate (after CSV import or "重新檢查") -----
-  // Memoised for consistency with validateRow / applyBatchStatusesTo so
-  // the 50-row roster's button binding stays stable across re-renders.
+  // Uses rosterRef so this handler's identity is stable across roster
+  // edits — matches the validateRow optimisation above.
   const revalidateAll = React.useCallback(async () => {
-    const hasAny = roster.some((r) => r.email.trim().length > 0);
+    const current = rosterRef.current;
+    const hasAny = current.some((r) => r.email.trim().length > 0);
     if (!hasAny) return;
-    const inFlight = roster.map((r) =>
+    const inFlight = current.map((r) =>
       r.email.trim() ? { ...r, status: "checking" as RowStatus } : r,
     );
     setRoster(inFlight);
     const next = await applyBatchStatusesTo(inFlight);
     setRoster(next);
-  }, [roster, applyBatchStatusesTo]);
+  }, [applyBatchStatusesTo]);
 
   // ----- CSV import -----
   const handleCsvFile = async (file: File) => {
@@ -567,12 +576,18 @@ export default function GroupBuyOpenPage() {
 
   // ----- Step 2: roster -----
   if (step === "roster") {
-    const shareUrl =
-      shareTarget && promoCode
-        ? `${window.location.origin}/teacher/register?promo=${encodeURIComponent(promoCode)}`
-        : shareTarget
-          ? `${window.location.origin}/teacher/register`
-          : "";
+    // Pin the invitee's email into the share link as well as the promo
+    // code. Without it the invitee can register with any address, leave
+    // the roster slot stale, and the leader has no way to recover. The
+    // register page reads ?email= and pre-fills the field (changes-only-
+    // if-empty so the invitee can still override if needed).
+    const shareUrl = shareTarget
+      ? `${window.location.origin}/teacher/register?` +
+        new URLSearchParams({
+          ...(promoCode ? { promo: promoCode } : {}),
+          email: shareTarget,
+        }).toString()
+      : "";
 
     return (
       <div className="p-6 space-y-4 max-w-4xl mx-auto">
@@ -687,6 +702,11 @@ export default function GroupBuyOpenPage() {
                 檔案格式：第一列為英文欄位名 <code>Email</code>，下方每列一個
                 email。最多會匯入 {selectedPlan.teacher_seats - 1} 筆，覆蓋第 2
                 ~ 第 {selectedPlan.teacher_seats} 列；發起人那一列不會被動到。
+                <br />
+                <span className="text-xs text-gray-500">
+                  ⚠ 請使用 <strong>UTF-8</strong> 編碼存檔（Excel
+                  匯出時請選「CSV UTF-8」，避免 BIG5 造成中文亂碼或讀檔失敗）。
+                </span>
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2 text-sm">

@@ -139,10 +139,15 @@ class TeamEmailValidationRequest(BaseModel):
 
 
 class TeamEmailStatus(BaseModel):
-    # Always lowercased — the validate endpoint normalises before
-    # responding so frontend roster rows can map status back to their
-    # input deterministically. Explicit @field_validator makes the
-    # contract self-documenting for OpenAPI / future consumers.
+    # Always lowercased. There are TWO normalisation sites by design:
+    #   1) The endpoint normalises + dedupes the request list so it
+    #      drives a single batched SQL query and stable response order.
+    #   2) The @field_validator below normalises the response field
+    #      itself, so OpenAPI consumers and direct callers of this
+    #      model (tests, internal services) get the same contract even
+    #      if they bypass the endpoint. This is defence-in-depth, not
+    #      redundancy — removing the validator would let any future
+    #      caller leak mixed-case values into the response.
     email: str
     exists: bool
     verified: bool
