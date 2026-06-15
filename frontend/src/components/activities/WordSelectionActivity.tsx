@@ -14,8 +14,8 @@
  *       viewport (≥640px); vertical on narrow viewport.
  *   (b) Option images mode: options grid switches to 4×1 when its
  *       container is wide enough (~600px) to fit four images, else 2×2.
- *   (c) #844 長選項（任一選項 ≥5 詞）一律單欄拿全寬：圖左時關閉橫式改圖在上、
- *       選項單欄；無題目圖則窄螢幕單欄、寬螢幕仍 1×4。短選項維持原本多欄。
+ *   (c) #844 長選項（任一選項 ≥5 詞）拿足寬度：有題目圖時關閉橫式改圖在上、選項
+ *       單欄；無題目圖則固定 2×2（不升 4 欄）。短選項維持原本多欄。
  *       字級用 useShrinkToFit fit-to-box（字少撐大、字多縮到塞得下、不裁字）。
  *
  * show_image 模式（看圖選英文）：
@@ -1014,14 +1014,14 @@ export default function WordSelectionActivity({
               // #844 版面矩陣（有無題目圖 × 是否長選項）：
               // - 圖左 + 短選項：右側單欄 grid-cols-1
               // - 長選項 + 有題目圖：圖在上、選項單欄拿全寬 grid-cols-1
-              // - 長選項 + 無題目圖：窄螢幕單欄、寬螢幕 1×4
+              // - 長選項 + 無題目圖：2×2（grid-cols-2，不升 4 欄，長文字才有寬度）
               // - 短選項（一般）：窄螢幕 2×2、寬螢幕 1×4
               useHorizontal
                 ? "grid-cols-1"
                 : hasLongOption
                   ? showQuestionImage
                     ? "grid-cols-1"
-                    : "grid-cols-1 lg:grid-cols-4"
+                    : "grid-cols-2"
                   : "grid-cols-2 lg:grid-cols-4",
             )}
             // #844：列高鎖 minmax(0,1fr) 不被文字撐大 → fit-to-box 有固定框可量、不爆版
