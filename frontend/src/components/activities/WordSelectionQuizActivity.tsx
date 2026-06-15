@@ -9,7 +9,8 @@
  *   - 單字卡樣式對齊艾賓浩斯版：共用 shared/WordSelectionOptionButton
  *     （4 色循環、border-2/rounded-2xl/shadow、字級用 cqh+cqw min() 自適應、ring 選中態）
  *     + useShortLandscape 走橫式排版（圖左、選項右 2×2）
- *   - #844 長選項（任一選項 ≥5 詞）：窄螢幕改單欄（grid-cols-1），寬螢幕仍 1×4
+ *   - #844 長選項（任一選項 ≥5 詞）一律單欄拿全寬：圖左關閉橫式改圖在上、選項單欄；
+ *     無題目圖則窄螢幕單欄、寬螢幕仍 1×4。字級用 fit-to-box（撐大／縮到塞得下／不裁字）
  */
 
 import {
@@ -445,16 +446,18 @@ export default function WordSelectionQuizActivity({
 
   const isLast = currentIndex === words.length - 1;
   const selectedForCurrent = selectedByItem[currentWord.content_item_id];
-  // 直式優先；題目有圖 + 矮橫螢幕（手機橫放）才走橫式（圖左、選項右 2×2）
-  const useHorizontal =
-    settings.show_image && !!currentWord.image_url && isShortLandscape;
-  // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項，窄螢幕改單欄，
-  // 讓長句有整列寬度好換行；寬螢幕（lg）維持原本多欄。
+  const showQuestionImage = settings.show_image && !!currentWord.image_url;
+  // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
+  // 拿全寬（窄螢幕、或圖在上時），讓長句有整列寬度好換行、字級不被擠小。
   const hasLongOption =
     !settings.show_option_images &&
     (currentWord.options ?? []).some(
       (o) => (o.text?.trim().split(/\s+/).length ?? 0) >= 5,
     );
+  // 直式優先；題目有圖 + 矮橫螢幕（手機橫放）才走橫式（圖左、選項右）。
+  // #844：長選項時關閉橫式 → 圖回到上方，下方選項拿全寬單欄。
+  const useHorizontal =
+    showQuestionImage && isShortLandscape && !hasLongOption;
   // Issue #830 訂正模式 gating + 揭示
   const currentCorrect = correctByItem[currentWord.content_item_id];
   const currentResolved = currentCorrect === true;
@@ -612,15 +615,21 @@ export default function WordSelectionQuizActivity({
               <div
                 className={cn(
                   "grid gap-3 sm:gap-4 flex-1 min-h-0",
-                  // 橫式：強制 2×2；直式：寬螢幕 1×4、窄螢幕 2×2
-                  // #844：長選項在窄螢幕改單欄（grid-cols-1），寬螢幕仍 1×4
+                  // #844 版面矩陣（有無題目圖 × 是否長選項）：
+                  // - 圖左 + 短選項：右側單欄 grid-cols-1
+                  // - 長選項 + 有題目圖：圖在上、選項單欄拿全寬 grid-cols-1
+                  // - 長選項 + 無題目圖：窄螢幕單欄、寬螢幕 1×4
+                  // - 短選項（一般）：窄螢幕 2×2、寬螢幕 1×4
                   useHorizontal
-                    ? "grid-cols-2"
+                    ? "grid-cols-1"
                     : hasLongOption
-                      ? "grid-cols-1 lg:grid-cols-4"
+                      ? showQuestionImage
+                        ? "grid-cols-1"
+                        : "grid-cols-1 lg:grid-cols-4"
                       : "grid-cols-2 lg:grid-cols-4",
                 )}
-                style={{ gridAutoRows: "1fr" }}
+                // #844：列高鎖 minmax(0,1fr) 不被文字撐大 → fit-to-box 有固定框可量、不爆版
+                style={{ gridAutoRows: "minmax(0, 1fr)" }}
               >
                 {currentWord.options.map((opt, index) => {
                   const isSelected = selectedForCurrent === opt.text;
