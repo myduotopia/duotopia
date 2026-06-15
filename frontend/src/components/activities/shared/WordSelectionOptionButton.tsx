@@ -63,10 +63,10 @@ export default function WordSelectionOptionButton({
   const textSpanRef = useRef<HTMLSpanElement>(null);
   const { fontSize, ready } = useShrinkToFit(textSpanRef, {
     // #844 撐滿格子：字少放大貼合框（上限），字多縮到剛好放得下（下限）。
-    // 上限：純文字 40px、圖片標籤 28px（讓短選項撐大但不誇張）。
+    // 上限：純文字 34px、圖片標籤 28px（讓短選項撐大但不誇張）。
     // 一般下限：純文字 16px、圖片 14px；hardMin：塞不下時才再縮到此，保證不裁字（不變「...」）。
     // 長選項可讀性主要靠版面（單欄／圖在上）給足寬度，不靠抬高下限。
-    maxFontSize: renderAsImage ? 28 : 40,
+    maxFontSize: renderAsImage ? 28 : 34,
     minFontSize: renderAsImage ? 14 : 16,
     hardMinFontSize: renderAsImage ? 9 : 10,
     deps: [text, renderAsImage],
