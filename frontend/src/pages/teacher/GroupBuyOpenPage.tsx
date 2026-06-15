@@ -103,6 +103,29 @@ const STATUS_COLOR: Record<RowStatus, string> = {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Single source of truth for the "leader is allowed to open multiple
+// teams" exception. Both the per-row blur handler and the batch
+// revalidate path need to apply this rule consistently — extracting it
+// here eliminates the prior code-duplication and keeps the two paths
+// from drifting if the rule changes (e.g. add "OR leader is admin").
+function resolveLeaderStatus(
+  idx: number,
+  normalizedEmail: string,
+  leaderEmail: string | undefined,
+  status: RowStatus,
+): RowStatus {
+  const leader = leaderEmail?.trim().toLowerCase();
+  if (
+    idx === 0 &&
+    status === "in_group_buy_team" &&
+    leader &&
+    normalizedEmail === leader
+  ) {
+    return "ok";
+  }
+  return status;
+}
+
 function lsKey(teacherId: number | string | undefined, planName: string) {
   return `gb-open-roster:${teacherId ?? "anon"}:${planName}`;
 }
@@ -310,20 +333,8 @@ export default function GroupBuyOpenPage() {
       try {
         const res = await apiClient.validateTeamEmails([value]);
         const row = res.results[0];
-        let status: RowStatus = row?.status ?? "not_registered";
-        // Row 0 = the leader slot. Backend always uses current_teacher as the
-        // org_owner regardless of the row 0 value, AND the leader is allowed
-        // to open multiple teams (design Q2). So if the leader types their
-        // own email and the API says "already in another group-buy team",
-        // we still let the payment gate open — backend wouldn't block.
-        if (
-          idx === 0 &&
-          status === "in_group_buy_team" &&
-          teacher?.email &&
-          value === teacher.email.trim().toLowerCase()
-        ) {
-          status = "ok";
-        }
+        const raw: RowStatus = row?.status ?? "not_registered";
+        const status = resolveLeaderStatus(idx, value, teacher?.email, raw);
         setRoster((prev) =>
           prev.map((r, i) => (i === idx ? { ...r, status } : r)),
         );
@@ -352,32 +363,24 @@ export default function GroupBuyOpenPage() {
   // "idle" badge and wonder why the payment button stays disabled.
   const applyBatchStatusesTo = React.useCallback(
     async (src: RosterRow[]): Promise<RosterRow[]> => {
+      // Format-check up front so an invalid-format row from CSV import
+      // doesn't reach Pydantic and surface a generic 422 — those rows
+      // already carry their own "invalid_format" badge from the CSV
+      // handler and stay flagged via the per-row map below.
       const candidates = src
         .map((r, idx) => ({ idx, email: r.email.trim().toLowerCase() }))
-        .filter(({ email }) => Boolean(email));
+        .filter(({ email }) => Boolean(email) && EMAIL_REGEX.test(email));
       if (candidates.length === 0) return src;
       try {
         const res = await apiClient.validateTeamEmails(
           candidates.map((x) => x.email),
         );
         const byEmail = new Map(res.results.map((r) => [r.email, r]));
-        const leaderEmail = teacher?.email?.trim().toLowerCase();
         return src.map((r, i) => {
           const v = r.email.trim().toLowerCase();
           if (!v) return r;
-          let status: RowStatus = byEmail.get(v)?.status ?? "idle";
-          // Row 0 leader-self special case: the leader is allowed to
-          // open multiple teams; if their own email comes back
-          // "in_group_buy_team" we still mark "ok" because the backend
-          // uses current_teacher as org_owner regardless.
-          if (
-            i === 0 &&
-            status === "in_group_buy_team" &&
-            leaderEmail &&
-            v === leaderEmail
-          ) {
-            status = "ok";
-          }
+          const raw: RowStatus = byEmail.get(v)?.status ?? "idle";
+          const status = resolveLeaderStatus(i, v, teacher?.email, raw);
           return { ...r, status };
         });
       } catch (e) {
@@ -398,7 +401,9 @@ export default function GroupBuyOpenPage() {
   );
 
   // ----- batch revalidate (after CSV import or "重新檢查") -----
-  const revalidateAll = async () => {
+  // Memoised for consistency with validateRow / applyBatchStatusesTo so
+  // the 50-row roster's button binding stays stable across re-renders.
+  const revalidateAll = React.useCallback(async () => {
     const hasAny = roster.some((r) => r.email.trim().length > 0);
     if (!hasAny) return;
     const inFlight = roster.map((r) =>
@@ -407,7 +412,7 @@ export default function GroupBuyOpenPage() {
     setRoster(inFlight);
     const next = await applyBatchStatusesTo(inFlight);
     setRoster(next);
-  };
+  }, [roster, applyBatchStatusesTo]);
 
   // ----- CSV import -----
   const handleCsvFile = async (file: File) => {
@@ -420,10 +425,18 @@ export default function GroupBuyOpenPage() {
       .slice(0, selectedPlan.teacher_seats - 1);
     // Build the post-import roster up-front so we can hand it to the batch
     // validator directly — no setTimeout or closure-over-roster needed.
+    // Pre-flight email format check per row: matches what `validateRow`
+    // does on blur, so a malformed CSV row gets an "invalid_format"
+    // badge immediately instead of vanishing into a 422 from the
+    // backend (the catch block resets to "idle" and leaves the user
+    // with no per-row clue what went wrong).
     const newRoster: RosterRow[] = roster.map((r, i) => {
       if (i === 0) return r;
       const incoming = emails[i - 1];
       if (incoming === undefined) return { ...r, email: "", status: "idle" };
+      if (!EMAIL_REGEX.test(incoming)) {
+        return { ...r, email: incoming, status: "invalid_format" };
+      }
       return { ...r, email: incoming, status: "checking" };
     });
     setRoster(newRoster);

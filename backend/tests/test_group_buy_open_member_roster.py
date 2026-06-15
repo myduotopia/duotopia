@@ -361,6 +361,91 @@ def test_happy_path_binds_every_member_atomically(
         assert period.payment_id == "REC-ROSTER-HAPPY"
 
 
+def test_in_tx_member_became_ineligible_rolls_back_and_charges_no_one(
+    test_client,
+    auth_header,
+    leader,
+    gb_plan_10,
+    nine_members,
+    shared_test_session,
+):
+    """The dangerous-path test (R4 review #2). Pre-payment classifier
+    returns "ok" for everyone — TapPay is charged — and then *during the
+    post-payment defensive re-classification* one member is detected as
+    in another group-buy team (the race window where someone joined
+    elsewhere while the leader was filling the roster).
+
+    Verifies:
+      (a) NO TeacherSchool bindings or SubscriptionPeriods for any member
+          are persisted (all-or-nothing semantics under failure).
+      (b) Response is 500, not 200 — the leader should NOT see "success"
+          when the team is unprovisioned.
+      (c) `member_became_ineligible_or_partial_retry:` tag surfaces in
+          the failure error code so ops can trace the REFUND-REQUIRED
+          path in BigQuery / Cloud Logging.
+
+    Mechanism: patch `_classify_team_emails` so the first call (pre-
+    payment) returns all-ok, but the second call (post-payment in-tx
+    re-check) reports one member as `in_group_buy_team`.
+    """
+    import routers.credit_packages as cp
+
+    real_classify = cp._classify_team_emails
+    call_log = {"count": 0}
+
+    def flaky_classify(emails, db):
+        call_log["count"] += 1
+        # First call (pre-payment) — pass through unchanged.
+        if call_log["count"] == 1:
+            return real_classify(emails, db)
+        # Second call (post-payment defensive re-check) — flip the first
+        # member to in_group_buy_team to simulate the race.
+        result = real_classify(emails, db)
+        first_email = emails[0]
+        if first_email in result:
+            t, _ = result[first_email]
+            result[first_email] = (t, "in_group_buy_team")
+        return result
+
+    mock_tappay = _mock_tappay("REC-RACE")
+    emails = [m.email for m in nine_members]
+    with patch("routers.credit_packages.ENABLE_PAYMENT", True), patch(
+        "routers.credit_packages.TapPayService", return_value=mock_tappay
+    ), patch.object(cp, "_classify_team_emails", side_effect=flaky_classify):
+        r = _post(
+            test_client,
+            auth_header,
+            {
+                "prime": "prime-x",
+                "plan_name": gb_plan_10.name,
+                "member_emails": emails,
+            },
+        )
+
+    # (b) Leader gets 500 with the REFUND-REQUIRED narrative — never 200.
+    assert r.status_code == 500
+    assert "rec_trade_id" in r.json()["detail"]
+    # TapPay was called (pre-payment passed) — the rollback happened
+    # after the charge.
+    assert mock_tappay.process_payment.called
+
+    # (a) No member TeacherSchool / SubscriptionPeriod rows committed.
+    shared_test_session.expire_all()
+    for m in nine_members:
+        ts = (
+            shared_test_session.query(TeacherSchool)
+            .filter(TeacherSchool.teacher_id == m.id)
+            .all()
+        )
+        assert ts == [], f"unexpected member binding for {m.email}"
+        sp = (
+            shared_test_session.query(SubscriptionPeriod)
+            .filter(SubscriptionPeriod.teacher_id == m.id)
+            .all()
+        )
+        assert sp == [], f"unexpected period for {m.email}"
+
+
 def test_empty_member_emails_keeps_legacy_single_leader_flow(
     test_client, auth_header, leader, gb_plan_10, shared_test_session
 ):

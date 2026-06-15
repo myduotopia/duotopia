@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from dateutil.relativedelta import relativedelta
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, Dict, Any, List
 import logging
 import uuid
@@ -139,12 +139,21 @@ class TeamEmailValidationRequest(BaseModel):
 
 
 class TeamEmailStatus(BaseModel):
+    # Always lowercased — the validate endpoint normalises before
+    # responding so frontend roster rows can map status back to their
+    # input deterministically. Explicit @field_validator makes the
+    # contract self-documenting for OpenAPI / future consumers.
     email: str
     exists: bool
     verified: bool
     in_group_buy_team: bool
     # "ok" | "not_registered" | "not_verified" | "in_group_buy_team"
     status: str
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _lower(cls, v):
+        return v.strip().lower() if isinstance(v, str) else v
 
 
 class TeamEmailValidationResponse(BaseModel):
@@ -882,10 +891,19 @@ async def validate_team_emails(
             status_code=400,
             detail="Too many emails; max 100 per request",
         )
-    # Normalise once, then a single 2-query batch — bounded regardless of
-    # how many emails the leader pasted in. Preserves request order in the
-    # response so the frontend can map status back to its rows positionally.
-    normalized = [raw.strip().lower() for raw in body.emails]
+    # Normalise then dedup so the response contract is "one row per unique
+    # email", preserving first-occurrence order. Without the dedup, a
+    # caller passing the same email twice gets two identical response
+    # rows — surprising, and easy to silently break downstream consumers.
+    # The 2-query batch is bounded regardless of input size.
+    normalized: List[str] = []
+    seen: set[str] = set()
+    for raw in body.emails:
+        email = raw.strip().lower()
+        if email in seen:
+            continue
+        seen.add(email)
+        normalized.append(email)
     classified = _classify_team_emails(normalized, db)
     results: List[TeamEmailStatus] = []
     for email in normalized:
@@ -1297,7 +1315,19 @@ async def open_group_buy(
                         email, (None, "not_registered")
                     )
                     if status != "ok":
-                        raise RuntimeError(f"member_became_ineligible:{email}:{status}")
+                        # The error tag distinguishes (a) genuine race —
+                        # member joined another team between roster fill
+                        # and pay, from (b) partial-write retry — a prior
+                        # transaction committed some TeacherSchool rows
+                        # before crashing, so a retry sees those members
+                        # as `in_group_buy_team`. Both outcomes route to
+                        # the REFUND-REQUIRED compensation path; the
+                        # different tag helps incident responders pick
+                        # the right remediation (refund vs hand-finish).
+                        raise RuntimeError(
+                            "member_became_ineligible_or_partial_retry:"
+                            f"{email}:{status}"
+                        )
                     db.add(
                         TeacherSchool(
                             teacher_id=member.id,
