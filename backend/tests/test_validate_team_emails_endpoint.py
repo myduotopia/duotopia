@@ -26,7 +26,7 @@ def _bearer(teacher_id):
 def caller(shared_test_session):
     """Some authenticated teacher hitting the endpoint."""
     t = Teacher(
-        email="caller@duotopia.com",
+        email="caller-validate-emails@duotopia.com",
         password_hash=get_password_hash("x"),
         name="Caller",
         is_active=True,
@@ -41,7 +41,7 @@ def caller(shared_test_session):
 @pytest.fixture
 def verified_teacher(shared_test_session):
     t = Teacher(
-        email="verified@school.com",
+        email="verified-validate-emails@school.com",
         password_hash=get_password_hash("x"),
         name="Verified",
         is_active=True,
@@ -56,7 +56,7 @@ def verified_teacher(shared_test_session):
 @pytest.fixture
 def unverified_teacher(shared_test_session):
     t = Teacher(
-        email="unverified@school.com",
+        email="unverified-validate-emails@school.com",
         password_hash=get_password_hash("x"),
         name="Unverified",
         is_active=True,
@@ -72,7 +72,7 @@ def unverified_teacher(shared_test_session):
 def teacher_in_group_buy_team(shared_test_session):
     """A teacher already bound to an active group-buy school."""
     t = Teacher(
-        email="in-team@school.com",
+        email="in-team-validate-emails@school.com",
         password_hash=get_password_hash("x"),
         name="InTeam",
         is_active=True,
@@ -171,7 +171,7 @@ def test_classifies_each_email_in_one_call(
 
 
 def test_normalizes_uppercase_and_whitespace(test_client, caller, verified_teacher):
-    """Input ' VERIFIED@SCHOOL.COM ' should resolve to verified@school.com
+    """Input ' VERIFIED@SCHOOL.COM ' should resolve to verified-validate-emails@school.com
     so the frontend doesn't need to do its own case-folding."""
     r = _post(test_client, caller, [f"  {verified_teacher.email.upper()}  "])
     assert r.status_code == 200

@@ -347,24 +347,37 @@ export default function GroupBuyOpenPage() {
   // returns a new roster with statuses applied. Decoupled from React state
   // so callers can pass the freshly-computed roster (CSV import) instead of
   // depending on stale-closure timing via setTimeout.
-  // Stateless — no deps needed; memoizing it just keeps the identity
-  // stable across re-renders so consumers don't need their own deps.
+  // Row 0 is included in the batch so 「重新檢查」 also refreshes the leader
+  // after a manual edit — otherwise the leader could land on a stale
+  // "idle" badge and wonder why the payment button stays disabled.
   const applyBatchStatusesTo = React.useCallback(
     async (src: RosterRow[]): Promise<RosterRow[]> => {
       const candidates = src
         .map((r, idx) => ({ idx, email: r.email.trim().toLowerCase() }))
-        .filter(({ idx, email }) => idx > 0 && email);
+        .filter(({ email }) => Boolean(email));
       if (candidates.length === 0) return src;
       try {
         const res = await apiClient.validateTeamEmails(
           candidates.map((x) => x.email),
         );
         const byEmail = new Map(res.results.map((r) => [r.email, r]));
+        const leaderEmail = teacher?.email?.trim().toLowerCase();
         return src.map((r, i) => {
-          if (i === 0) return r;
           const v = r.email.trim().toLowerCase();
           if (!v) return r;
-          const status: RowStatus = byEmail.get(v)?.status ?? "idle";
+          let status: RowStatus = byEmail.get(v)?.status ?? "idle";
+          // Row 0 leader-self special case: the leader is allowed to
+          // open multiple teams; if their own email comes back
+          // "in_group_buy_team" we still mark "ok" because the backend
+          // uses current_teacher as org_owner regardless.
+          if (
+            i === 0 &&
+            status === "in_group_buy_team" &&
+            leaderEmail &&
+            v === leaderEmail
+          ) {
+            status = "ok";
+          }
           return { ...r, status };
         });
       } catch (e) {
@@ -376,20 +389,20 @@ export default function GroupBuyOpenPage() {
             : "批次驗證失敗";
         toast.error(msg);
         // Reset any in-flight "checking" so users can re-trigger.
-        return src.map((r, i) =>
-          i > 0 && r.status === "checking" ? { ...r, status: "idle" } : r,
+        return src.map((r) =>
+          r.status === "checking" ? { ...r, status: "idle" } : r,
         );
       }
     },
-    [],
+    [teacher],
   );
 
   // ----- batch revalidate (after CSV import or "重新檢查") -----
   const revalidateAll = async () => {
-    const hasAny = roster.some((r, i) => i > 0 && r.email.trim().length > 0);
+    const hasAny = roster.some((r) => r.email.trim().length > 0);
     if (!hasAny) return;
-    const inFlight = roster.map((r, i) =>
-      i > 0 && r.email.trim() ? { ...r, status: "checking" as RowStatus } : r,
+    const inFlight = roster.map((r) =>
+      r.email.trim() ? { ...r, status: "checking" as RowStatus } : r,
     );
     setRoster(inFlight);
     const next = await applyBatchStatusesTo(inFlight);

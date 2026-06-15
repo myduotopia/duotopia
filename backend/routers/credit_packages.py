@@ -813,7 +813,19 @@ def _classify_team_emails(emails: list[str], db: Session) -> dict:
     out: dict[str, tuple] = {}
     if not emails:
         return out
-    teachers = db.query(Teacher).filter(Teacher.email.in_(emails)).all()
+    # Filter on `is_active=True` so a deactivated teacher (admin off-board,
+    # GDPR delete, etc.) is treated as not_registered rather than slipping
+    # through with status="ok" and getting bound to a new team. Inactive
+    # rows would otherwise pass both the verified-email and not-in-team
+    # checks and cause a downstream binding to a disabled account.
+    teachers = (
+        db.query(Teacher)
+        .filter(
+            Teacher.email.in_(emails),
+            Teacher.is_active.is_(True),
+        )
+        .all()
+    )
     by_email = {t.email: t for t in teachers}
     teacher_ids_verified = [t.id for t in teachers if t.email_verified]
     in_team_ids: set[int] = set()
@@ -843,18 +855,6 @@ def _classify_team_emails(emails: list[str], db: Session) -> dict:
         else:
             out[email] = (teacher, "ok")
     return out
-
-
-def _validate_team_email_for_join(email: str, db: Session):
-    """Single-email convenience wrapper kept for the post-payment defensive
-    re-check inside `open_group_buy` (a single lookup there is fine — it's
-    one of N already-charged operations, not a batch). Always returns the
-    same shape as ``_classify_team_emails`` so callers can dispatch
-    identically."""
-    normalized = email.strip().lower()
-    return _classify_team_emails([normalized], db).get(
-        normalized, (None, "not_registered")
-    )
 
 
 @router.post("/validate-team-emails", response_model=TeamEmailValidationResponse)
