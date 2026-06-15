@@ -1646,6 +1646,10 @@ class ApiClient {
     prime: string;
     plan_name: string;
     cardholder?: { name?: string; email?: string; phone_number?: string };
+    // issue #768 comment #3 roster flow: leader supplies all member emails
+    // up-front. Length must equal plan.teacher_seats - 1; backend rejects
+    // payment if any is not_registered / not_verified / in_group_buy_team.
+    member_emails?: string[];
   }) {
     return this.request<{
       success: boolean;
@@ -1655,10 +1659,48 @@ class ApiClient {
       school_id?: string;
       subscription_end_date?: string;
       teacher_seat_limit?: number;
+      members_bound?: number;
     }>("/api/credit-packages/group-buy-open", {
       method: "POST",
       body: JSON.stringify(body),
     });
+  }
+
+  // ===== Phase 5-2 (issue #768 comment #3): roster email validation =====
+  async validateTeamEmails(emails: string[], signal?: AbortSignal) {
+    return this.request<{
+      results: Array<{
+        email: string;
+        exists: boolean;
+        verified: boolean;
+        in_group_buy_team: boolean;
+        // Backend contract — kept as a literal union so callers get a
+        // compile error if a new status is added on either side and not
+        // mirrored. Saves a runtime `as RowStatus` cast at the call site.
+        status: "ok" | "not_registered" | "not_verified" | "in_group_buy_team";
+      }>;
+    }>("/api/credit-packages/validate-team-emails", {
+      method: "POST",
+      body: JSON.stringify({ emails }),
+      signal,
+    });
+  }
+
+  // ===== Personal promo code (issue #637) — needed for share-invite UX =====
+  async getMyPersonalPromoCode() {
+    // Backend `MyPromoCodeResponse.expires_at: Optional[str] = None`
+    // serialises as `null` when the personal code is permanent. The
+    // field is always present in the response — `string | null`, not
+    // `?: string`. Drops the unreachable `undefined` from the type.
+    return this.request<{
+      code: string;
+      expires_at: string | null;
+      is_active: boolean;
+      referral_count: number;
+      verified_count: number;
+      paid_count: number;
+      total_points_awarded: number;
+    }>("/api/teachers/me/promo-code", { method: "GET" });
   }
 
   // ============ Admin Plans Methods ============

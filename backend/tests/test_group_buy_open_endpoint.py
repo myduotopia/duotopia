@@ -320,3 +320,133 @@ def test_idempotent_within_60s_returns_existing_transaction(
     assert body["teacher_seat_limit"] == gb_plan.teacher_seats
     # TapPay should NOT be called again
     mock_tappay_class.assert_not_called()
+
+
+def test_idempotent_retry_with_roster_returns_existing_with_member_count(
+    test_client, auth_header, teacher, gb_plan, shared_test_session
+):
+    """Issue #768 PR #851 review round 7 #3 — Cover the retry path where
+    the leader re-submits a roster request after a successful purchase.
+    The endpoint should:
+
+      (a) NOT charge TapPay a second time,
+      (b) Return the existing org/school IDs (same as the no-roster
+          retry path), AND
+      (c) Surface `members_bound` consistent with the new-path semantic
+          (member count excluding the leader), so the frontend's
+          success screen shows the same number whether it's the first
+          response or a retry.
+
+    Without this test, a future refactor of the idempotency-shortcut
+    block could silently switch `retry_bound` to include the leader and
+    the UI would display the wrong member count on retry.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    # Production-shape state after the original purchase committed:
+    # org + school + leader's TeacherOrganization + leader's TeacherSchool
+    # + a couple of member TeacherSchool rows + a SUCCESS transaction.
+    org = Organization(
+        name="Existing 團 (with members)",
+        org_type="group_buy",
+        subscription_start_date=now,
+        subscription_end_date=now + timedelta(days=365),
+        is_active=True,
+    )
+    shared_test_session.add(org)
+    shared_test_session.flush()
+    school = School(
+        organization_id=org.id,
+        name="Existing 團 School (with members)",
+        plan_id=gb_plan.id,
+        teacher_seat_limit=gb_plan.teacher_seats,
+        is_active=True,
+    )
+    shared_test_session.add(school)
+    shared_test_session.flush()
+    shared_test_session.add(
+        TeacherOrganization(
+            teacher_id=teacher.id,
+            organization_id=org.id,
+            role="org_owner",
+            is_active=True,
+        )
+    )
+    # Leader binding into the school.
+    shared_test_session.add(
+        TeacherSchool(
+            teacher_id=teacher.id,
+            school_id=school.id,
+            roles=["school_admin"],
+            is_active=True,
+        )
+    )
+    # Three member bindings — what `members_bound` should report on retry.
+    from auth import get_password_hash
+
+    expected_members = 3
+    for i in range(expected_members):
+        m = Teacher(
+            email=f"retry-member-{i}@duotopia.com",
+            password_hash=get_password_hash("x"),
+            name=f"RetryMember{i}",
+            is_active=True,
+            email_verified=True,
+        )
+        shared_test_session.add(m)
+        shared_test_session.flush()
+        shared_test_session.add(
+            TeacherSchool(
+                teacher_id=m.id,
+                school_id=school.id,
+                roles=["teacher"],
+                is_active=True,
+            )
+        )
+    shared_test_session.add(
+        TeacherSubscriptionTransaction(
+            teacher_id=teacher.id,
+            teacher_email=teacher.email,
+            transaction_type="RECHARGE",
+            subscription_type=gb_plan.name,
+            amount=gb_plan.annual_fee * gb_plan.teacher_seats,
+            currency="TWD",
+            status="SUCCESS",
+            months=12,
+            period_start=now,
+            period_end=now + timedelta(days=365),
+            new_end_date=now + timedelta(days=365),
+            payment_provider="tappay",
+            payment_method="credit_card",
+            external_transaction_id="REC-RETRY-WITH-ROSTER",
+            processed_at=now,
+        )
+    )
+    shared_test_session.commit()
+
+    # Retry with a member_emails list — mirrors a real frontend re-send.
+    roster = [f"retry-member-{i}@duotopia.com" for i in range(expected_members)]
+    with patch("routers.credit_packages.ENABLE_PAYMENT", True), patch(
+        "routers.credit_packages.TapPayService"
+    ) as mock_tappay_class:
+        r = test_client.post(
+            "/api/credit-packages/group-buy-open",
+            json={
+                "prime": "prime-retry",
+                "plan_name": gb_plan.name,
+                "member_emails": roster,
+            },
+            headers=auth_header,
+        )
+
+    assert r.status_code == 200, r.json()
+    body = r.json()
+    assert body["transaction_id"] == "REC-RETRY-WITH-ROSTER"
+    # (a) No second TapPay call.
+    mock_tappay_class.assert_not_called()
+    # (b) Same org/school IDs.
+    assert body["organization_id"] == str(org.id)
+    assert body["school_id"] == str(school.id)
+    # (c) `members_bound` excludes the leader — same semantic as new path.
+    assert body["members_bound"] == expected_members

@@ -3,13 +3,13 @@ Credit Packages API - Purchase and manage credit packages (point bundles)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from dateutil.relativedelta import relativedelta
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, Dict, Any, List
 import logging
 import uuid
@@ -25,6 +25,7 @@ from models import (
     TransactionType,
     Organization,
     TeacherOrganization,
+    TeacherSchool,
     School,
     Plan,
 )
@@ -114,6 +115,12 @@ class GroupBuyOpenRequest(BaseModel):
     prime: str
     plan_name: str  # group-buy plan name e.g. "團購-30席"
     cardholder: Optional[Dict[str, Any]] = None
+    # Issue #768 comment #3 — Roster flow: the team leader supplies all member
+    # emails up-front. List length must equal plan.teacher_seats - 1 (the
+    # leader takes 1 seat). Optional for backward compatibility: when empty,
+    # only the leader's binding is created (legacy path; admin uses PR #841
+    # to add members later via /admin/subscription/create).
+    member_emails: List[EmailStr] = []
 
 
 class GroupBuyOpenResponse(BaseModel):
@@ -124,6 +131,51 @@ class GroupBuyOpenResponse(BaseModel):
     school_id: Optional[str] = None
     subscription_end_date: Optional[str] = None
     teacher_seat_limit: Optional[int] = None
+    members_bound: Optional[int] = None
+
+
+class TeamEmailValidationRequest(BaseModel):
+    emails: List[EmailStr]
+
+    @field_validator("emails")
+    @classmethod
+    def _cap(cls, v):
+        # Pydantic-level cap so the validation error comes back as a
+        # 422 (consistent with other request schema violations) and the
+        # constraint is visible in the OpenAPI schema. Previously this
+        # was a runtime `if len(...) > 100: raise HTTPException(400)`
+        # inside the endpoint — same outcome but invisible to schema
+        # consumers and inconsistent with other size limits.
+        if len(v) > 100:
+            raise ValueError("max 100 emails per request")
+        return v
+
+
+class TeamEmailStatus(BaseModel):
+    # Always lowercased. There are TWO normalisation sites by design:
+    #   1) The endpoint normalises + dedupes the request list so it
+    #      drives a single batched SQL query and stable response order.
+    #   2) The @field_validator below normalises the response field
+    #      itself, so OpenAPI consumers and direct callers of this
+    #      model (tests, internal services) get the same contract even
+    #      if they bypass the endpoint. This is defence-in-depth, not
+    #      redundancy — removing the validator would let any future
+    #      caller leak mixed-case values into the response.
+    email: str
+    exists: bool
+    verified: bool
+    in_group_buy_team: bool
+    # "ok" | "not_registered" | "not_verified" | "in_group_buy_team"
+    status: str
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _lower(cls, v):
+        return v.strip().lower() if isinstance(v, str) else v
+
+
+class TeamEmailValidationResponse(BaseModel):
+    results: List[TeamEmailStatus]
 
 
 # === Endpoints ===
@@ -767,15 +819,139 @@ async def org_renew_credit_package(
         raise HTTPException(status_code=500, detail="Renewal processing failed")
 
 
-@router.get("/group-buy-plans", response_model=List[GroupBuyPlanInfo])
-async def list_group_buy_plans(
+def _classify_team_emails(emails: list[str], db: Session) -> dict:
+    """Batch-classify a list of (already-normalised, lowercased) teacher
+    emails for group-buy team eligibility.
+
+    Returns ``{email: (teacher_or_None, status)}`` keyed on the normalised
+    address. Uses two SQL queries total — one for the teacher rows, one
+    for the in-team membership check — regardless of input size. Replaces
+    the prior per-email 2-3 round-trip helper that became an N+1 burden
+    at the 100-email cap.
+
+    status one of:
+      - "ok"               teacher exists, email_verified, not in any group-buy team
+      - "not_registered"   no Teacher row for this email
+      - "not_verified"     Teacher exists but email_verified is False
+      - "in_group_buy_team" Teacher is already an active member of some
+                           active group-buy school (any team — they can't
+                           be in two at once)
+    """
+    # Value tuple: (Teacher row or None when the email is unknown,
+    # eligibility status string from the documented set).
+    out: dict[str, tuple[Optional[Teacher], str]] = {}
+    if not emails:
+        return out
+    # Filter on `is_active=True` so a deactivated teacher (admin off-board,
+    # GDPR delete, etc.) is treated as not_registered rather than slipping
+    # through with status="ok" and getting bound to a new team. Inactive
+    # rows would otherwise pass both the verified-email and not-in-team
+    # checks and cause a downstream binding to a disabled account.
+    # Match emails case-insensitively (func.lower) — auth registration
+    # normalises new emails to lowercase but legacy / admin-created rows
+    # in this project (and confirmed in `auth.py` login at L114) carry
+    # mixed-case addresses. Skipping `func.lower` here would leak those
+    # legitimate accounts as `not_registered` and have the roster reject
+    # real teachers. Dict key is also lowercased so the per-email lookup
+    # in the loop below matches the input keys.
+    teachers = (
+        db.query(Teacher)
+        .filter(
+            func.lower(Teacher.email).in_(emails),
+            Teacher.is_active.is_(True),
+        )
+        .all()
+    )
+    by_email = {t.email.lower(): t for t in teachers}
+    teacher_ids_verified = [t.id for t in teachers if t.email_verified]
+    in_team_ids: set[int] = set()
+    if teacher_ids_verified:
+        in_team_ids = {
+            row[0]
+            for row in db.query(TeacherSchool.teacher_id)
+            .join(School, School.id == TeacherSchool.school_id)
+            .join(Organization, Organization.id == School.organization_id)
+            .filter(
+                TeacherSchool.teacher_id.in_(teacher_ids_verified),
+                TeacherSchool.is_active.is_(True),
+                School.is_active.is_(True),
+                Organization.org_type == "group_buy",
+                Organization.is_active.is_(True),
+            )
+            .all()
+        }
+    for email in emails:
+        teacher = by_email.get(email)
+        if teacher is None:
+            out[email] = (None, "not_registered")
+        elif not teacher.email_verified:
+            out[email] = (teacher, "not_verified")
+        elif teacher.id in in_team_ids:
+            out[email] = (teacher, "in_group_buy_team")
+        else:
+            out[email] = (teacher, "ok")
+    return out
+
+
+@router.post("/validate-team-emails", response_model=TeamEmailValidationResponse)
+async def validate_team_emails(
+    body: TeamEmailValidationRequest,
     db: Session = Depends(get_db),
     current_teacher: Teacher = Depends(get_current_teacher),
 ):
+    """Batch-validate a list of teacher emails for group-buy roster (issue
+    #768 comment #3). The frontend calls this on-blur per email plus once
+    after CSV import to render ✓/✗ badges and offer the share-invite path
+    for not_registered / not_verified emails.
+
+    Auth: any authenticated teacher. Note: teacher auth is identity
+    verification, NOT throttling — a determined attacker with a teacher
+    account could enumerate up to 100 emails per call across many calls.
+    Accepted risk for now because (a) caller is logged in and traceable
+    via audit logs, (b) the response leaks only eligibility booleans, no
+    PII like name / last-login / phone. A per-teacher rate limit (Redis
+    token bucket) is the right follow-up if enumeration shows up in
+    BigQuery scrutiny.
+    """
+    # Normalise then dedup so the response contract is "one row per unique
+    # email", preserving first-occurrence order. Without the dedup, a
+    # caller passing the same email twice gets two identical response
+    # rows — surprising, and easy to silently break downstream consumers.
+    # The 2-query batch is bounded regardless of input size.
+    normalized: List[str] = []
+    seen: set[str] = set()
+    for raw in body.emails:
+        email = raw.strip().lower()
+        if email in seen:
+            continue
+        seen.add(email)
+        normalized.append(email)
+    classified = _classify_team_emails(normalized, db)
+    results: List[TeamEmailStatus] = []
+    for email in normalized:
+        teacher, status = classified.get(email, (None, "not_registered"))
+        results.append(
+            TeamEmailStatus(
+                email=email,
+                exists=teacher is not None,
+                verified=bool(teacher and teacher.email_verified),
+                in_group_buy_team=(status == "in_group_buy_team"),
+                status=status,
+            )
+        )
+    return TeamEmailValidationResponse(results=results)
+
+
+@router.get("/group-buy-plans", response_model=List[GroupBuyPlanInfo])
+async def list_group_buy_plans(
+    db: Session = Depends(get_db),
+):
     """List active group-buy plans for the open-group page (issue #768 Phase 5-2).
 
-    Auth: any authenticated teacher. Pricing is canonical from the DB; the
-    frontend MUST NOT compute or trust its own totals.
+    Auth: public (issue #768 comment #3 part 2). The /pricing marketing page
+    fetches this for anonymous visitors so admin plan-edit changes flow
+    through to the public site automatically. Returned data is pricing
+    metadata only — never user-identifying information.
     """
     rows = (
         db.query(Plan)
@@ -833,6 +1009,64 @@ async def open_group_buy(
 
     amount = compute_group_buy_total(plan)
     now = datetime.now(timezone.utc)
+
+    # Issue #768 comment #3 — Roster pre-validation. The leader's request
+    # supplies all member emails up-front; we refuse to charge TapPay if
+    # any one is ineligible. Three rules:
+    #
+    #   1. Shape: len(member_emails) == plan.teacher_seats - 1
+    #      (the leader takes one seat themselves)
+    #   2. Distinct: no duplicates within the list AND must NOT include the
+    #      leader's own email
+    #   3. Eligibility: each email is a registered, email-verified teacher
+    #      AND is not already in another active group-buy team
+    #
+    # When `member_emails` is empty we keep the legacy behaviour (open team
+    # with only the leader; admin uses PR #841's /admin/subscription/create
+    # to backfill members). This matters because PR #841's flow is still
+    # the recovery path when a member fails verification post-purchase.
+    normalized_member_emails = [e.strip().lower() for e in open_request.member_emails]
+    if normalized_member_emails:
+        required_count = plan.teacher_seats - 1
+        if len(normalized_member_emails) != required_count:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"This plan needs exactly {required_count} member "
+                    f"emails (excluding the team leader); got "
+                    f"{len(normalized_member_emails)}."
+                ),
+            )
+        leader_email = current_teacher.email.strip().lower()
+        if leader_email in normalized_member_emails:
+            raise HTTPException(
+                status_code=400,
+                detail="Member emails must not include the team leader's email.",
+            )
+        if len(set(normalized_member_emails)) != len(normalized_member_emails):
+            raise HTTPException(
+                status_code=400,
+                detail="Member emails must be distinct.",
+            )
+        # Single batched 2-query classification for the whole roster
+        # (matches the validate-team-emails endpoint perf profile).
+        classified = _classify_team_emails(normalized_member_emails, db)
+        failed_members: list[dict] = []
+        for email in normalized_member_emails:
+            _t, status = classified.get(email, (None, "not_registered"))
+            if status != "ok":
+                failed_members.append({"email": email, "status": status})
+        if failed_members:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": (
+                        "Some member emails are not eligible. Please update "
+                        "the roster and try again."
+                    ),
+                    "failed": failed_members,
+                },
+            )
 
     # Audit trail
     start_time = time.time()
@@ -974,6 +1208,21 @@ async def open_group_buy(
                     "support."
                 ),
             )
+        # Idempotent retry path — surface current bound member count so
+        # the frontend can re-render the post-purchase success screen
+        # with a count consistent with the new-path response. New path
+        # returns `members_bound` = members only (leader excluded), so
+        # we exclude `current_teacher.id` here too to keep the two paths
+        # numerically interchangeable.
+        retry_bound = (
+            db.query(TeacherSchool)
+            .filter(
+                TeacherSchool.school_id == owned_school.id,
+                TeacherSchool.is_active.is_(True),
+                TeacherSchool.teacher_id != current_teacher.id,
+            )
+            .count()
+        )
         return GroupBuyOpenResponse(
             success=True,
             message="此筆開團已完成",
@@ -986,6 +1235,7 @@ async def open_group_buy(
                 else None
             ),
             teacher_seat_limit=owned_school.teacher_seat_limit,
+            members_bound=retry_bound,
         )
 
     try:
@@ -1066,6 +1316,60 @@ async def open_group_buy(
                 start=now,
                 payment_id=external_transaction_id,
             )
+
+            # Issue #768 comment #3 — Atomic multi-bind. Inside the same
+            # post-payment txn as the org/school/leader-period creation, we
+            # bind every roster member and grant them their first monthly
+            # period. Any failure here propagates to the compensation block
+            # below: card already charged ⇒ "REFUND REQUIRED" log line ⇒
+            # 500 to the leader. We re-run eligibility inside this txn (the
+            # leader-fill window from roster to pay is hours; a member
+            # could have joined another team in between). All-or-nothing.
+            members_bound = 0
+            if normalized_member_emails:
+                # Batch the defensive in-tx re-check too — at the 50-seat
+                # ceiling the per-email helper was 49 × 2 = 98 queries
+                # inside the payment transaction. Single batch call drops
+                # it to 2 queries regardless of roster size.
+                classified_post = _classify_team_emails(normalized_member_emails, db)
+                for email in normalized_member_emails:
+                    member, status = classified_post.get(
+                        email, (None, "not_registered")
+                    )
+                    if status != "ok":
+                        # The error tag distinguishes (a) genuine race —
+                        # member joined another team between roster fill
+                        # and pay, from (b) partial-write retry — a prior
+                        # transaction committed some TeacherSchool rows
+                        # before crashing, so a retry sees those members
+                        # as `in_group_buy_team`. Both outcomes route to
+                        # the REFUND-REQUIRED compensation path; the
+                        # different tag helps incident responders pick
+                        # the right remediation (refund vs hand-finish).
+                        # `email=` / `status=` key-value layout (instead
+                        # of colon-delimited) so an email containing a
+                        # colon doesn't break the incident-response
+                        # regex grepping these logs.
+                        raise RuntimeError(
+                            "member_became_ineligible_or_partial_retry "
+                            f"email={email!r} status={status!r}"
+                        )
+                    db.add(
+                        TeacherSchool(
+                            teacher_id=member.id,
+                            school_id=school.id,
+                            roles=["teacher"],
+                            is_active=True,
+                        )
+                    )
+                    create_group_buy_period(
+                        member,
+                        plan,
+                        db,
+                        start=now,
+                        payment_id=external_transaction_id,
+                    )
+                    members_bound += 1
 
             success_txn = TeacherSubscriptionTransaction(
                 teacher_id=current_teacher.id,
@@ -1234,6 +1538,7 @@ async def open_group_buy(
             school_id=str(school.id),
             subscription_end_date=org.subscription_end_date.isoformat(),
             teacher_seat_limit=school.teacher_seat_limit,
+            members_bound=members_bound,
         )
 
     except HTTPException:
