@@ -79,9 +79,14 @@ export default function TeacherRegister() {
     if (patch.promoCode || patch.email) {
       setFormData((prev) => ({
         ...prev,
+        // .trim() guard so a whitespace-only "prev.promoCode" (e.g. user
+        // tabbed into the field and tabbed out) still counts as empty
+        // and gets the URL-supplied value.
         promoCode:
-          patch.promoCode && !prev.promoCode ? patch.promoCode : prev.promoCode,
-        email: patch.email && !prev.email ? patch.email : prev.email,
+          patch.promoCode && !prev.promoCode.trim()
+            ? patch.promoCode
+            : prev.promoCode,
+        email: patch.email && !prev.email.trim() ? patch.email : prev.email,
       }));
     }
   }, [searchParams]);

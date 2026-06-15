@@ -307,6 +307,13 @@ export default function GroupBuyOpenPage() {
     rosterRef.current = roster;
   }, [roster]);
 
+  // Per-row AbortController so a fast blur→edit→blur sequence on the
+  // same row aborts the in-flight request. Without this, a slow first
+  // response could land after a fresher one and overwrite the correct
+  // status (e.g. user fixes a typo, gets "ok", then the stale "not_
+  // registered" arrives and flips the badge red).
+  const inFlightRef = React.useRef<Map<number, AbortController>>(new Map());
+
   const validateRow = React.useCallback(
     async (idx: number) => {
       const current = rosterRef.current;
@@ -335,11 +342,25 @@ export default function GroupBuyOpenPage() {
         );
         return;
       }
+      // Abort any in-flight request for this same row before firing a
+      // new one — stale-response-overwrites-fresh is the worst kind of
+      // validation bug because the badge ends up wrong on a row the
+      // user thinks they just fixed.
+      const prior = inFlightRef.current.get(idx);
+      if (prior) prior.abort();
+      const controller = new AbortController();
+      inFlightRef.current.set(idx, controller);
       setRoster((prev) =>
         prev.map((r, i) => (i === idx ? { ...r, status: "checking" } : r)),
       );
       try {
-        const res = await apiClient.validateTeamEmails([value]);
+        const res = await apiClient.validateTeamEmails(
+          [value],
+          controller.signal,
+        );
+        // Defence in depth: if a newer request superseded us between
+        // the await and here, drop the response on the floor.
+        if (inFlightRef.current.get(idx) !== controller) return;
         const row = res.results[0];
         const raw: RowStatus = row?.status ?? "not_registered";
         const status = resolveLeaderStatus(idx, value, teacher?.email, raw);
@@ -347,6 +368,14 @@ export default function GroupBuyOpenPage() {
           prev.map((r, i) => (i === idx ? { ...r, status } : r)),
         );
       } catch (e) {
+        // AbortError from the supersession path is intentional — quiet
+        // exit, no toast, leave the newer request's status alone.
+        if (
+          (e as { name?: string })?.name === "AbortError" ||
+          inFlightRef.current.get(idx) !== controller
+        ) {
+          return;
+        }
         const msg =
           e instanceof ApiError
             ? typeof e.detail === "string"
@@ -357,6 +386,12 @@ export default function GroupBuyOpenPage() {
         setRoster((prev) =>
           prev.map((r, i) => (i === idx ? { ...r, status: "idle" } : r)),
         );
+      } finally {
+        // Clean up the map entry only if it's still ours, so a later
+        // delete doesn't clobber a newer controller.
+        if (inFlightRef.current.get(idx) === controller) {
+          inFlightRef.current.delete(idx);
+        }
       }
     },
     [teacher],
@@ -642,11 +677,19 @@ export default function GroupBuyOpenPage() {
                   }
                   value={row.email}
                   onChange={(e) =>
+                    // Apply dedupe to the resulting roster (not just the
+                    // rendered view) so other rows that were "duplicate"
+                    // because of the edited row immediately reset to
+                    // "idle". Otherwise revalidateAll / rosterRef would
+                    // still see stale "duplicate" statuses on those rows
+                    // and skip them on the next "重新檢查" press.
                     setRoster((prev) =>
-                      prev.map((r, i) =>
-                        i === idx
-                          ? { ...r, email: e.target.value, status: "idle" }
-                          : r,
+                      dedupeStatuses(
+                        prev.map((r, i) =>
+                          i === idx
+                            ? { ...r, email: e.target.value, status: "idle" }
+                            : r,
+                        ),
                       ),
                     )
                   }

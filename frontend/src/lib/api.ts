@@ -1667,7 +1667,7 @@ class ApiClient {
   }
 
   // ===== Phase 5-2 (issue #768 comment #3): roster email validation =====
-  async validateTeamEmails(emails: string[]) {
+  async validateTeamEmails(emails: string[], signal?: AbortSignal) {
     return this.request<{
       results: Array<{
         email: string;
@@ -1682,6 +1682,7 @@ class ApiClient {
     }>("/api/credit-packages/validate-team-emails", {
       method: "POST",
       body: JSON.stringify({ emails }),
+      signal,
     });
   }
 

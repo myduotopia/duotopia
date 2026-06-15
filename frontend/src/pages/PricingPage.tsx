@@ -125,6 +125,14 @@ interface GroupBuyMarketingPlan {
   display_order: number;
 }
 
+// IMPORTANT: these values mirror the DB seed as of 2026-06-15. If an
+// admin changes a Plan's quota / annual_fee / topup_discount via
+// `/admin/plans`, the public PricingPage will reflect the new values
+// AS LONG AS the API request succeeds. The fallback only kicks in on
+// network failure / 5xx, and at that point it will show this stale
+// snapshot instead of the live data — drift is therefore mostly
+// invisible to admins. When updating plan economics, also bump these
+// constants to keep the failure mode honest.
 const GROUP_BUY_FALLBACK: GroupBuyMarketingPlan[] = [
   {
     name: "團購-10席",

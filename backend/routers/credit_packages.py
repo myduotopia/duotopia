@@ -137,6 +137,19 @@ class GroupBuyOpenResponse(BaseModel):
 class TeamEmailValidationRequest(BaseModel):
     emails: List[EmailStr]
 
+    @field_validator("emails")
+    @classmethod
+    def _cap(cls, v):
+        # Pydantic-level cap so the validation error comes back as a
+        # 422 (consistent with other request schema violations) and the
+        # constraint is visible in the OpenAPI schema. Previously this
+        # was a runtime `if len(...) > 100: raise HTTPException(400)`
+        # inside the endpoint — same outcome but invisible to schema
+        # consumers and inconsistent with other size limits.
+        if len(v) > 100:
+            raise ValueError("max 100 emails per request")
+        return v
+
 
 class TeamEmailStatus(BaseModel):
     # Always lowercased. There are TWO normalisation sites by design:
@@ -898,11 +911,6 @@ async def validate_team_emails(
     token bucket) is the right follow-up if enumeration shows up in
     BigQuery scrutiny.
     """
-    if len(body.emails) > 100:
-        raise HTTPException(
-            status_code=400,
-            detail="Too many emails; max 100 per request",
-        )
     # Normalise then dedup so the response contract is "one row per unique
     # email", preserving first-occurrence order. Without the dedup, a
     # caller passing the same email twice gets two identical response

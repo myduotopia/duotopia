@@ -181,11 +181,17 @@ def test_normalizes_uppercase_and_whitespace(test_client, caller, verified_teach
 
 
 def test_rejects_batches_over_100(test_client, caller):
-    """Hard cap so a runaway CSV upload can't DoS the lookup."""
+    """Hard cap so a runaway CSV upload can't DoS the lookup.
+    The cap lives on the Pydantic field validator so the failure is a
+    schema 422 (consistent with other validation errors) and surfaces
+    in the OpenAPI contract — earlier rounds raised a runtime 400 from
+    inside the endpoint, which hid the constraint."""
     emails = [f"t{i}@example.com" for i in range(101)]
     r = _post(test_client, caller, emails)
-    assert r.status_code == 400
-    assert "100" in r.json()["detail"]
+    assert r.status_code == 422
+    # The cap message appears nested in the FastAPI validation detail.
+    body = str(r.json())
+    assert "100" in body
 
 
 def test_invalid_email_format_returns_422(test_client, caller):
