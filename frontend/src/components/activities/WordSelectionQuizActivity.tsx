@@ -9,6 +9,7 @@
  *   - 單字卡樣式對齊艾賓浩斯版：共用 shared/WordSelectionOptionButton
  *     （4 色循環、border-2/rounded-2xl/shadow、字級用 cqh+cqw min() 自適應、ring 選中態）
  *     + useShortLandscape 走橫式排版（圖左、選項右 2×2）
+ *   - #844 長選項（任一選項 ≥5 詞）：窄螢幕改單欄（grid-cols-1），寬螢幕仍 1×4
  */
 
 import {
@@ -447,6 +448,13 @@ export default function WordSelectionQuizActivity({
   // 直式優先；題目有圖 + 矮橫螢幕（手機橫放）才走橫式（圖左、選項右 2×2）
   const useHorizontal =
     settings.show_image && !!currentWord.image_url && isShortLandscape;
+  // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項，窄螢幕改單欄，
+  // 讓長句有整列寬度好換行；寬螢幕（lg）維持原本多欄。
+  const hasLongOption =
+    !settings.show_option_images &&
+    (currentWord.options ?? []).some(
+      (o) => (o.text?.trim().split(/\s+/).length ?? 0) >= 5,
+    );
   // Issue #830 訂正模式 gating + 揭示
   const currentCorrect = correctByItem[currentWord.content_item_id];
   const currentResolved = currentCorrect === true;
@@ -605,7 +613,12 @@ export default function WordSelectionQuizActivity({
                 className={cn(
                   "grid gap-3 sm:gap-4 flex-1 min-h-0",
                   // 橫式：強制 2×2；直式：寬螢幕 1×4、窄螢幕 2×2
-                  useHorizontal ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4",
+                  // #844：長選項在窄螢幕改單欄（grid-cols-1），寬螢幕仍 1×4
+                  useHorizontal
+                    ? "grid-cols-2"
+                    : hasLongOption
+                      ? "grid-cols-1 lg:grid-cols-4"
+                      : "grid-cols-2 lg:grid-cols-4",
                 )}
                 style={{ gridAutoRows: "1fr" }}
               >

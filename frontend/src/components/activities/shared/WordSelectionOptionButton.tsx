@@ -6,7 +6,8 @@
  * - 圖片模式 (showAsImage=true 且有 imageUrl)：上圖下標籤
  * - 字級自適應：button 內層 div 套 [container-type:size]，文字 max 字級用 cqh + cqw min() 隨選項框縮放
  *   （#842：改為 content-aware shrink-to-fit — useShrinkToFit hook 量測 overflow 後動態縮字，
- *    取代純 clamp()，確保長文字完整顯示而非 ... 截斷。min: 純文字 10px、圖片模式 8px）
+ *    取代純 clamp()，確保長文字完整顯示而非 ... 截斷。
+ *    #844：可讀下限 minFontSize 由 8/7 提高為 純文字 16px、圖片模式 14px）
  * - 揭示態（quiz 模式不傳 showCorrect/showIncorrect）：
  *   - showCorrect → 綠底/邊/字 + 左上角 ✓
  *   - showIncorrect → 紅底/邊/字 + 左上角 ✗
@@ -62,7 +63,9 @@ export default function WordSelectionOptionButton({
   const textSpanRef = useRef<HTMLSpanElement>(null);
   const { fontSize, ready } = useShrinkToFit(textSpanRef, {
     maxRatio: renderAsImage ? { h: 0.1, w: 0.08 } : { h: 0.16, w: 0.11 },
-    minFontSize: renderAsImage ? 7 : 8,
+    // #844：把可讀下限拉高（文字 16px、圖片標籤 14px）。極長選項在窄螢幕已由
+    // 上層 grid 改單欄（grid-cols-1）給足寬度，故此處抬高 floor 不致過度截斷。
+    minFontSize: renderAsImage ? 14 : 16,
     deps: [text, renderAsImage],
   });
 

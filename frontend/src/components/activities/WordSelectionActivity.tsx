@@ -14,6 +14,8 @@
  *       viewport (≥640px); vertical on narrow viewport.
  *   (b) Option images mode: options grid switches to 4×1 when its
  *       container is wide enough (~600px) to fit four images, else 2×2.
+ *   (c) #844 長選項（任一選項 ≥5 詞）：窄螢幕改單欄（grid-cols-1）讓長句
+ *       有整列寬度換行，寬螢幕（lg）仍維持 1×4。
  *
  * show_image 模式（看圖選英文）：
  * - 題目隱藏英文，改顯示翻譯提示 + 圖片
@@ -883,6 +885,14 @@ export default function WordSelectionActivity({
   const useHorizontal =
     showImage && !!currentWord?.image_url && isShortLandscape;
 
+  // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項，窄螢幕改單欄，
+  // 讓長句有整列寬度好換行；寬螢幕（lg）維持原本多欄。
+  const hasLongOption =
+    !showOptionImages &&
+    (currentWord?.options ?? []).some(
+      (o) => (o.text?.trim().split(/\s+/).length ?? 0) >= 5,
+    );
+
   return (
     <div className="flex flex-col gap-6 min-h-[calc(100dvh-8rem)]">
       {/* Practice mode banner */}
@@ -1000,7 +1010,12 @@ export default function WordSelectionActivity({
               "grid gap-3 sm:gap-4 flex-1 min-h-0",
               // 直式：寬螢幕（lg ≥ 1024px）→ 1×4；窄螢幕 → 2×2
               // 橫式（題目圖左、內容右半欄）：強制 2×2，避免右欄 ~50% 寬塞 4 格被擠爆
-              useHorizontal ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4",
+              // #844：長選項在窄螢幕改單欄（grid-cols-1），寬螢幕仍 1×4
+              useHorizontal
+                ? "grid-cols-2"
+                : hasLongOption
+                  ? "grid-cols-1 lg:grid-cols-4"
+                  : "grid-cols-2 lg:grid-cols-4",
             )}
             style={{ gridAutoRows: "1fr" }}
           >
