@@ -273,106 +273,116 @@ export default function GroupBuyOpenPage() {
   // re-resolves to "ok" / "in_group_buy_team" / etc. The earlier short-
   // circuit on idx===0 left the payment button permanently disabled after
   // any manual edit because nothing else would set status back to "ok".
-  const validateRow = async (idx: number) => {
-    const value = roster[idx]?.email?.trim().toLowerCase() || "";
-    if (!value) {
-      setRoster((prev) =>
-        prev.map((r, i) => (i === idx ? { ...r, status: "idle" } : r)),
+  // useCallback + roster/teacher deps: every onBlur handler closes over
+  // these values, and the roster ranges from 10 to 50 rows — recreating
+  // all closures on every keystroke was wasteful. The deps still cover
+  // every value the function reads.
+  const validateRow = React.useCallback(
+    async (idx: number) => {
+      const value = roster[idx]?.email?.trim().toLowerCase() || "";
+      if (!value) {
+        setRoster((prev) =>
+          prev.map((r, i) => (i === idx ? { ...r, status: "idle" } : r)),
+        );
+        return;
+      }
+      if (!EMAIL_REGEX.test(value)) {
+        setRoster((prev) =>
+          prev.map((r, i) =>
+            i === idx ? { ...r, status: "invalid_format" } : r,
+          ),
+        );
+        return;
+      }
+      const dupIdx = roster.findIndex(
+        (r, j) =>
+          j !== idx && r.email.trim().toLowerCase() === value && value !== "",
       );
-      return;
-    }
-    if (!EMAIL_REGEX.test(value)) {
-      setRoster((prev) =>
-        prev.map((r, i) =>
-          i === idx ? { ...r, status: "invalid_format" } : r,
-        ),
-      );
-      return;
-    }
-    const dupIdx = roster.findIndex(
-      (r, j) =>
-        j !== idx && r.email.trim().toLowerCase() === value && value !== "",
-    );
-    if (dupIdx !== -1 && dupIdx < idx) {
-      setRoster((prev) =>
-        prev.map((r, i) => (i === idx ? { ...r, status: "duplicate" } : r)),
-      );
-      return;
-    }
-    setRoster((prev) =>
-      prev.map((r, i) => (i === idx ? { ...r, status: "checking" } : r)),
-    );
-    try {
-      const res = await apiClient.validateTeamEmails([value]);
-      const row = res.results[0];
-      let status: RowStatus = row?.status ?? "not_registered";
-      // Row 0 = the leader slot. Backend always uses current_teacher as the
-      // org_owner regardless of the row 0 value, AND the leader is allowed
-      // to open multiple teams (design Q2). So if the leader types their
-      // own email and the API says "already in another group-buy team",
-      // we still let the payment gate open — backend wouldn't block.
-      if (
-        idx === 0 &&
-        status === "in_group_buy_team" &&
-        teacher?.email &&
-        value === teacher.email.trim().toLowerCase()
-      ) {
-        status = "ok";
+      if (dupIdx !== -1 && dupIdx < idx) {
+        setRoster((prev) =>
+          prev.map((r, i) => (i === idx ? { ...r, status: "duplicate" } : r)),
+        );
+        return;
       }
       setRoster((prev) =>
-        prev.map((r, i) => (i === idx ? { ...r, status } : r)),
+        prev.map((r, i) => (i === idx ? { ...r, status: "checking" } : r)),
       );
-    } catch (e) {
-      const msg =
-        e instanceof ApiError
-          ? typeof e.detail === "string"
-            ? e.detail
-            : e.message
-          : "驗證失敗";
-      toast.error(msg);
-      setRoster((prev) =>
-        prev.map((r, i) => (i === idx ? { ...r, status: "idle" } : r)),
-      );
-    }
-  };
+      try {
+        const res = await apiClient.validateTeamEmails([value]);
+        const row = res.results[0];
+        let status: RowStatus = row?.status ?? "not_registered";
+        // Row 0 = the leader slot. Backend always uses current_teacher as the
+        // org_owner regardless of the row 0 value, AND the leader is allowed
+        // to open multiple teams (design Q2). So if the leader types their
+        // own email and the API says "already in another group-buy team",
+        // we still let the payment gate open — backend wouldn't block.
+        if (
+          idx === 0 &&
+          status === "in_group_buy_team" &&
+          teacher?.email &&
+          value === teacher.email.trim().toLowerCase()
+        ) {
+          status = "ok";
+        }
+        setRoster((prev) =>
+          prev.map((r, i) => (i === idx ? { ...r, status } : r)),
+        );
+      } catch (e) {
+        const msg =
+          e instanceof ApiError
+            ? typeof e.detail === "string"
+              ? e.detail
+              : e.message
+            : "驗證失敗";
+        toast.error(msg);
+        setRoster((prev) =>
+          prev.map((r, i) => (i === idx ? { ...r, status: "idle" } : r)),
+        );
+      }
+    },
+    [roster, teacher],
+  );
 
   // Pure helper: takes a roster snapshot, fires the batch endpoint, and
   // returns a new roster with statuses applied. Decoupled from React state
   // so callers can pass the freshly-computed roster (CSV import) instead of
   // depending on stale-closure timing via setTimeout.
-  const applyBatchStatusesTo = async (
-    src: RosterRow[],
-  ): Promise<RosterRow[]> => {
-    const candidates = src
-      .map((r, idx) => ({ idx, email: r.email.trim().toLowerCase() }))
-      .filter(({ idx, email }) => idx > 0 && email);
-    if (candidates.length === 0) return src;
-    try {
-      const res = await apiClient.validateTeamEmails(
-        candidates.map((x) => x.email),
-      );
-      const byEmail = new Map(res.results.map((r) => [r.email, r]));
-      return src.map((r, i) => {
-        if (i === 0) return r;
-        const v = r.email.trim().toLowerCase();
-        if (!v) return r;
-        const status: RowStatus = byEmail.get(v)?.status ?? "idle";
-        return { ...r, status };
-      });
-    } catch (e) {
-      const msg =
-        e instanceof ApiError
-          ? typeof e.detail === "string"
-            ? e.detail
-            : e.message
-          : "批次驗證失敗";
-      toast.error(msg);
-      // Reset any in-flight "checking" so users can re-trigger.
-      return src.map((r, i) =>
-        i > 0 && r.status === "checking" ? { ...r, status: "idle" } : r,
-      );
-    }
-  };
+  // Stateless — no deps needed; memoizing it just keeps the identity
+  // stable across re-renders so consumers don't need their own deps.
+  const applyBatchStatusesTo = React.useCallback(
+    async (src: RosterRow[]): Promise<RosterRow[]> => {
+      const candidates = src
+        .map((r, idx) => ({ idx, email: r.email.trim().toLowerCase() }))
+        .filter(({ idx, email }) => idx > 0 && email);
+      if (candidates.length === 0) return src;
+      try {
+        const res = await apiClient.validateTeamEmails(
+          candidates.map((x) => x.email),
+        );
+        const byEmail = new Map(res.results.map((r) => [r.email, r]));
+        return src.map((r, i) => {
+          if (i === 0) return r;
+          const v = r.email.trim().toLowerCase();
+          if (!v) return r;
+          const status: RowStatus = byEmail.get(v)?.status ?? "idle";
+          return { ...r, status };
+        });
+      } catch (e) {
+        const msg =
+          e instanceof ApiError
+            ? typeof e.detail === "string"
+              ? e.detail
+              : e.message
+            : "批次驗證失敗";
+        toast.error(msg);
+        // Reset any in-flight "checking" so users can re-trigger.
+        return src.map((r, i) =>
+          i > 0 && r.status === "checking" ? { ...r, status: "idle" } : r,
+        );
+      }
+    },
+    [],
+  );
 
   // ----- batch revalidate (after CSV import or "重新檢查") -----
   const revalidateAll = async () => {
@@ -410,10 +420,17 @@ export default function GroupBuyOpenPage() {
   };
 
   const downloadCsvTemplate = () => {
-    const blob = new Blob(
-      ["Email\nteacher2@example.com\nteacher3@example.com"],
-      { type: "text/csv;charset=utf-8" },
+    // Dynamic row count keyed off the chosen plan so a 50-seat purchaser
+    // sees the actual expected length (49 member rows) instead of a
+    // hardcoded 2 — caught by review and worth the explicitness.
+    const seats = selectedPlan?.teacher_seats ?? 2;
+    const rows = Array.from(
+      { length: Math.max(1, seats - 1) },
+      (_, i) => `teacher${i + 2}@example.com`,
     );
+    const blob = new Blob([`Email\n${rows.join("\n")}`], {
+      type: "text/csv;charset=utf-8",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

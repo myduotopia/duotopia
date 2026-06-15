@@ -868,10 +868,14 @@ async def validate_team_emails(
     after CSV import to render ✓/✗ badges and offer the share-invite path
     for not_registered / not_verified emails.
 
-    Auth: any authenticated teacher (rate-limited via teacher auth — anyone
-    abusing this to enumerate registered emails is logged-in and traceable).
-    The endpoint never returns Teacher fields beyond the eligibility flags,
-    so it does not leak PII like name or last-login.
+    Auth: any authenticated teacher. Note: teacher auth is identity
+    verification, NOT throttling — a determined attacker with a teacher
+    account could enumerate up to 100 emails per call across many calls.
+    Accepted risk for now because (a) caller is logged in and traceable
+    via audit logs, (b) the response leaks only eligibility booleans, no
+    PII like name / last-login / phone. A per-teacher rate limit (Redis
+    token bucket) is the right follow-up if enumeration shows up in
+    BigQuery scrutiny.
     """
     if len(body.emails) > 100:
         raise HTTPException(
@@ -1164,14 +1168,18 @@ async def open_group_buy(
                     "support."
                 ),
             )
-        # Idempotent retry path — surface current bound count so the
-        # frontend can re-render the post-purchase success screen with
-        # consistent member count. The leader counts as one binding.
+        # Idempotent retry path — surface current bound member count so
+        # the frontend can re-render the post-purchase success screen
+        # with a count consistent with the new-path response. New path
+        # returns `members_bound` = members only (leader excluded), so
+        # we exclude `current_teacher.id` here too to keep the two paths
+        # numerically interchangeable.
         retry_bound = (
             db.query(TeacherSchool)
             .filter(
                 TeacherSchool.school_id == owned_school.id,
                 TeacherSchool.is_active.is_(True),
+                TeacherSchool.teacher_id != current_teacher.id,
             )
             .count()
         )
@@ -1279,8 +1287,15 @@ async def open_group_buy(
             # could have joined another team in between). All-or-nothing.
             members_bound = 0
             if normalized_member_emails:
+                # Batch the defensive in-tx re-check too — at the 50-seat
+                # ceiling the per-email helper was 49 × 2 = 98 queries
+                # inside the payment transaction. Single batch call drops
+                # it to 2 queries regardless of roster size.
+                classified_post = _classify_team_emails(normalized_member_emails, db)
                 for email in normalized_member_emails:
-                    member, status = _validate_team_email_for_join(email, db)
+                    member, status = classified_post.get(
+                        email, (None, "not_registered")
+                    )
                     if status != "ok":
                         raise RuntimeError(f"member_became_ineligible:{email}:{status}")
                     db.add(

@@ -1687,9 +1687,13 @@ class ApiClient {
 
   // ===== Personal promo code (issue #637) — needed for share-invite UX =====
   async getMyPersonalPromoCode() {
+    // Backend `MyPromoCodeResponse.expires_at: Optional[str] = None`
+    // serialises as `null` when the personal code is permanent. The
+    // field is always present in the response — `string | null`, not
+    // `?: string`. Drops the unreachable `undefined` from the type.
     return this.request<{
       code: string;
-      expires_at?: string | null;
+      expires_at: string | null;
       is_active: boolean;
       referral_count: number;
       verified_count: number;
