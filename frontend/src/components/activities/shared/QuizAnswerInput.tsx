@@ -2,10 +2,13 @@
  * QuizAnswerInput — 小考拼寫 / 克漏字共用的答題輸入元件
  *
  * 行為：
- *   - 樣式對齊艾賓浩斯版 (WordSpellingActivity)：底線、置中、text-2xl，
- *     右側 Send 按鈕。
+ *   - 樣式對齊艾賓浩斯版 (WordSpellingActivity)：底線、置中、text-2xl。
+ *     Send 送出鍵疊在「最後一個 input」內部右側（#844）。
  *   - 答案含空格（如 "take pictures"）→ 自動依空格拆成多個 slot，每單字
  *     一個 input；自動聚焦下一個 slot、空 slot 按 Backspace 跳回前一個。
+ *     多 input 時換行（flex-wrap），不水平卷軸（#844）。
+ *   - autoFocus 時換題（expectedAnswer 變）自動聚焦第一格（#844）。
+ *   - VirtualKeyboard Space 鍵 → 跳到下一個 slot（#844，見 appendChar）。
  *   - 過濾允許字元：英文字母、連字號、撇號、句號、逗號、問號、驚嘆號。
  *     （單字 slot 內不允許空格 — 空格是分隔，不該由學生輸入）
  *   - 完整支援標準編輯（Backspace、刪除、游標移動、選取重打）。
@@ -102,12 +105,15 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
       refs.current = refs.current.slice(0, slotWords.length);
     }, [slotWords.length]);
 
+    // #844：autoFocus 時，換題（expectedAnswer 變）就把焦點移回第一格，
+    // 讓學生可直接打字。依賴 expectedAnswer 而非 slotWords.length，
+    // 否則換到相同 slot 數的題目焦點會殘留在上一題的格子。
     useEffect(() => {
       if (autoFocus && refs.current[0]) {
         refs.current[0]?.focus();
         setFocusedIdx(0);
       }
-    }, [autoFocus, slotWords.length]);
+    }, [autoFocus, expectedAnswer]);
 
     const writeSlot = useCallback(
       (idx: number, next: string) => {
@@ -144,12 +150,20 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
       ref,
       () => ({
         appendChar: (ch: string) => {
-          const cleaned = sanitize(ch);
-          if (!cleaned) return;
           const target = Math.max(
             0,
             Math.min(focusedIdx, slotWords.length - 1),
           );
+          // #844 VK 空白鍵：多字答案跳到下一個 slot（對齊實體鍵盤空白鍵）
+          if (ch === " ") {
+            if (target < slotWords.length - 1) {
+              refs.current[target + 1]?.focus();
+              setFocusedIdx(target + 1);
+            }
+            return;
+          }
+          const cleaned = sanitize(ch);
+          if (!cleaned) return;
           const newSlots = currentSlots.slice();
           newSlots[target] = (newSlots[target] || "") + cleaned;
           onChange(newSlots.join(" ").trim());
@@ -197,73 +211,78 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
     const showSubmit = !hideSubmitButton && !!onSubmit;
 
     return (
-      <div
-        className={cn(
-          "relative max-w-md mx-auto",
-          showSubmit && "pr-12 sm:pr-14",
-        )}
-      >
-        <div className="flex items-center justify-center gap-2 sm:gap-3">
-          {slotWords.map((slotExpected, idx) => (
-            <Input
-              key={idx}
-              ref={(el) => {
-                refs.current[idx] = el;
-              }}
-              type="text"
-              inputMode={useVirtualKeyboard ? "none" : "text"}
-              value={currentSlots[idx] || ""}
-              onChange={(e) => writeSlot(idx, e.target.value)}
-              onKeyDown={handleKeyDown(idx)}
-              onFocus={() => setFocusedIdx(idx)}
-              onBeforeInput={(e) => {
-                const ev = e.nativeEvent as InputEvent;
-                if (ev.inputType === "insertReplacementText") {
-                  e.preventDefault();
-                }
-              }}
-              onPaste={(e) => e.preventDefault()}
-              onDrop={(e) => e.preventDefault()}
-              disabled={disabled}
-              autoComplete="off"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-              // Issue #828: 寬度依答案長度自適應，+4 ch 預留 padding + 較寬字元
-              style={
-                multi
-                  ? { width: `${Math.max(slotExpected.length + 4, 6)}ch` }
-                  : { width: `${Math.max(slotExpected.length + 4, 8)}ch` }
-              }
-              className={cn(
-                "text-center text-2xl h-14 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
-                "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
-                stateBorder,
-              )}
-            />
-          ))}
+      <div className="relative max-w-md mx-auto">
+        {/* #844：多 input 換行不水平卷軸；送出箭頭疊在最後一個 input 內部 */}
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+          {slotWords.map((slotExpected, idx) => {
+            const isLastSlot = idx === slotWords.length - 1;
+            const withSubmit = isLastSlot && showSubmit;
+            return (
+              <span key={idx} className="relative inline-flex items-center">
+                <Input
+                  ref={(el) => {
+                    refs.current[idx] = el;
+                  }}
+                  type="text"
+                  inputMode={useVirtualKeyboard ? "none" : "text"}
+                  value={currentSlots[idx] || ""}
+                  onChange={(e) => writeSlot(idx, e.target.value)}
+                  onKeyDown={handleKeyDown(idx)}
+                  onFocus={() => setFocusedIdx(idx)}
+                  onBeforeInput={(e) => {
+                    const ev = e.nativeEvent as InputEvent;
+                    if (ev.inputType === "insertReplacementText") {
+                      e.preventDefault();
+                    }
+                  }}
+                  onPaste={(e) => e.preventDefault()}
+                  onDrop={(e) => e.preventDefault()}
+                  disabled={disabled}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  // Issue #828: 寬度依答案長度自適應，+4 ch 預留 padding + 較寬字元
+                  // #844: 末格內含送出鍵時右側多留 padding，避免文字被圖示蓋住
+                  style={
+                    multi
+                      ? { width: `${Math.max(slotExpected.length + 4, 6)}ch` }
+                      : { width: `${Math.max(slotExpected.length + 4, 8)}ch` }
+                  }
+                  className={cn(
+                    "text-center text-2xl h-14 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
+                    "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
+                    withSubmit && "pr-9",
+                    stateBorder,
+                  )}
+                />
+                {withSubmit && (
+                  <button
+                    type="button"
+                    onClick={onSubmit}
+                    disabled={
+                      disabled ||
+                      submitting ||
+                      (value || "").trim().length === 0
+                    }
+                    aria-label="Submit answer"
+                    className={cn(
+                      "absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-colors",
+                      "text-indigo-600 hover:bg-indigo-50",
+                      "disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed",
+                    )}
+                  >
+                    {submitting ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Send className="h-5 w-5" />
+                    )}
+                  </button>
+                )}
+              </span>
+            );
+          })}
         </div>
-        {showSubmit && (
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={
-              disabled || submitting || (value || "").trim().length === 0
-            }
-            aria-label="Submit answer"
-            className={cn(
-              "absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors",
-              "text-indigo-600 hover:bg-indigo-50",
-              "disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed",
-            )}
-          >
-            {submitting ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
-          </button>
-        )}
       </div>
     );
   },

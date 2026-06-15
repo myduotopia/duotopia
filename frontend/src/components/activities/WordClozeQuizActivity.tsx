@@ -522,7 +522,6 @@ export default function WordClozeQuizActivity({
           const answered =
             (typedByItem[w.content_item_id] || "").trim() !== "";
           const isCurrent = idx === currentIndex;
-          const priorCorrect = correctByItem[w.content_item_id];
           return (
             <button
               key={w.content_item_id}
@@ -534,11 +533,8 @@ export default function WordClozeQuizActivity({
                   ? "bg-pink-500 text-white border-pink-500"
                   : !answered
                     ? "bg-white text-gray-500 border-gray-300 hover:border-pink-400"
-                    : showCorrectness && priorCorrect === true
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                      : showCorrectness && priorCorrect === false
-                        ? "bg-rose-50 text-rose-700 border-rose-300"
-                        : "bg-pink-50 text-pink-700 border-pink-300",
+                    : // #844 有答題=黃色，不洩漏正誤（含訂正模式）
+                      "bg-yellow-100 text-yellow-800 border-yellow-400",
               )}
             >
               {idx + 1}
