@@ -4,6 +4,7 @@
  * 設計：
  * - 4 色循環（OPTION_COLORS）：藍 / 紫 / 琥珀 / 青，由呼叫端傳 colorIndex
  * - 圖片模式 (showAsImage=true 且有 imageUrl)：上圖下標籤
+ *   （#844：手機版圖片高度約縮到框的 50%、寬度等比，sm 以上維持填滿）
  * - 字級「撐滿格子」：useShrinkToFit hook 量測 overflow 後，在 [min,max] 內取不溢出的最大字級
  *   （#842：取代純 clamp()，長文字自動縮小完整顯示而非 ... 截斷。
  *    #844：改為 fit-to-box — 字少放大到貼合框、字多縮到剛好放得下。
@@ -117,7 +118,9 @@ export default function WordSelectionOptionButton({
             <img
               src={imageUrl as string}
               alt={text}
-              className="flex-1 min-h-0 w-full object-contain rounded-md"
+              // #844：手機版選項圖片高度約縮到框的 50%（object-contain → 寬度等比縮小）；
+              // sm 以上維持填滿 flex-1
+              className="flex-1 min-h-0 w-full object-contain rounded-md max-h-[50%] sm:max-h-none"
             />
             <span
               ref={textSpanRef}
