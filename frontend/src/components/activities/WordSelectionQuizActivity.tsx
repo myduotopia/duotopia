@@ -9,8 +9,8 @@
  *   - 單字卡樣式對齊艾賓浩斯版：共用 shared/WordSelectionOptionButton
  *     （4 色循環、border-2/rounded-2xl/shadow、字級用 cqh+cqw min() 自適應、ring 選中態）
  *     + useShortLandscape 走橫式排版（圖左、選項右 2×2）
- *   - #844 長選項（任一選項 ≥5 詞）拿足寬度：有題目圖關閉橫式改圖在上、選項單欄；
- *     無題目圖則固定 2×2（不升 4 欄）。字級用 fit-to-box（撐大／縮到塞得下／不裁字）
+ *   - #844 欄數：任一非圖片選項 >5 字元（含 ≥5 詞長句）→ 不分螢幕一律單欄；全部 ≤5 字元
+ *     才 2×2 / 寬螢幕 4 欄。長選項另把題目圖移到上方。字級用 fit-to-box（撐大／縮／不裁字）
  */
 
 import {
@@ -623,21 +623,16 @@ export default function WordSelectionQuizActivity({
               <div
                 className={cn(
                   "grid gap-3 sm:gap-4 flex-1 min-h-0",
-                  // #844 版面矩陣（有無題目圖 × 是否長選項）：
-                  // - 圖左 + 短選項：右側單欄 grid-cols-1
-                  // - 長選項 + 有題目圖：圖在上、選項單欄拿全寬 grid-cols-1
-                  // - 長選項 + 無題目圖：2×2（grid-cols-2，不升 4 欄，長文字才有寬度）
-                  // - 短選項但字元 >5：不分螢幕寬度一律單欄 grid-cols-1
-                  // - 短選項（一般，≤5 字元）：窄螢幕 2×2、寬螢幕 1×4
+                  // #844 欄數規則（收斂後）：
+                  // - 圖左 + 短選項（useHorizontal）：右側單欄 grid-cols-1
+                  // - 任一非圖片選項 >5 字元（含 ≥5 詞長句）：不分螢幕寬度一律單欄 grid-cols-1
+                  //   （圖片位置另由 hasLongOption 控制：長選項時圖移到上方）
+                  // - 全部 ≤5 字元：窄螢幕 2×2、寬螢幕 1×4
                   useHorizontal
                     ? "grid-cols-1"
-                    : hasLongOption
-                      ? showQuestionImage
-                        ? "grid-cols-1"
-                        : "grid-cols-2"
-                      : hasOver5CharOption
-                        ? "grid-cols-1"
-                        : "grid-cols-2 lg:grid-cols-4",
+                    : hasOver5CharOption
+                      ? "grid-cols-1"
+                      : "grid-cols-2 lg:grid-cols-4",
                 )}
                 // #844：列高鎖 minmax(0,1fr) 不被文字撐大 → fit-to-box 有固定框可量、不爆版
                 style={{ gridAutoRows: "minmax(0, 1fr)" }}
