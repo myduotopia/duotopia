@@ -9,8 +9,8 @@
  *   - 單字卡樣式對齊艾賓浩斯版：共用 shared/WordSelectionOptionButton
  *     （4 色循環、border-2/rounded-2xl/shadow、字級用 cqh+cqw min() 自適應、ring 選中態）
  *     + useShortLandscape 走橫式排版（圖左、選項右 2×2）
- *   - #844 欄數：任一非圖片選項 >5 字元（含 ≥5 詞長句）→ 不分螢幕一律單欄；全部 ≤5 字元
- *     才 2×2 / 寬螢幕 4 欄。長選項另把題目圖移到上方。字級用 fit-to-box（撐大／縮／不裁字）
+ *   - #844 欄數固定（不依字長翻轉）：手機單欄、平板 2×2、桌機 4 欄；長選項另把題目圖移到上方。
+ *     字級用 fit-to-box（撐大／縮／不裁字）
  */
 
 import {
@@ -454,11 +454,6 @@ export default function WordSelectionQuizActivity({
     (currentWord.options ?? []).some(
       (o) => (o.text?.trim().split(/\s+/).length ?? 0) >= 5,
     );
-  // Issue #844: 任一非圖片選項字元數 >5 → 不分螢幕寬度一律單欄（grid-cols-1），
-  // 避免選項擠成兩欄。與 hasLongOption（≥5 詞）獨立。
-  const hasOver5CharOption =
-    !settings.show_option_images &&
-    (currentWord.options ?? []).some((o) => (o.text?.trim().length ?? 0) > 5);
   // 直式優先；題目有圖 + 矮橫螢幕（手機橫放）才走橫式（圖左、選項右）。
   // #844：長選項時關閉橫式 → 圖回到上方，下方選項拿全寬單欄。
   const useHorizontal =
@@ -513,6 +508,24 @@ export default function WordSelectionQuizActivity({
           size={56}
           longForm
         />
+      )}
+      {/* #844：選擇題無輸入框，最後一題（非訂正）的提交鈕放在題號列；
+          訂正模式維持卡片下方 footer 提交鈕。 */}
+      {isLast && !isRevision && (
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleSubmitAll}
+          disabled={completing || submittingAnswer}
+          className="shrink-0 ml-1"
+        >
+          {completing ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+          ) : (
+            <Send className="h-4 w-4 mr-1" />
+          )}
+          {t("wordQuiz.submit") || "提交"}
+        </Button>
       )}
     </>
   );
@@ -618,16 +631,12 @@ export default function WordSelectionQuizActivity({
               <div
                 className={cn(
                   "grid gap-3 sm:gap-4 flex-1 min-h-0",
-                  // #844 欄數規則（收斂後）：
-                  // - 圖左 + 短選項（useHorizontal）：右側單欄 grid-cols-1
-                  // - 任一非圖片選項 >5 字元（含 ≥5 詞長句）：不分螢幕寬度一律單欄 grid-cols-1
-                  //   （圖片位置另由 hasLongOption 控制：長選項時圖移到上方）
-                  // - 全部 ≤5 字元：窄螢幕 2×2、寬螢幕 1×4
+                  // #844 欄數固定（不依字長翻轉，避免間距忽近忽遠）：
+                  // 手機單欄、平板 2×2、桌機 4 欄；圖左 landscape 維持單欄。
+                  // 圖片位置另由 hasLongOption 控制（長選項時圖移到上方）。
                   useHorizontal
                     ? "grid-cols-1"
-                    : hasOver5CharOption
-                      ? "grid-cols-1"
-                      : "grid-cols-2 lg:grid-cols-4",
+                    : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
                 )}
                 // #844：列高鎖 minmax(0,1fr) 不被文字撐大 → fit-to-box 有固定框可量、不爆版
                 style={{ gridAutoRows: "minmax(0, 1fr)" }}
@@ -663,9 +672,9 @@ export default function WordSelectionQuizActivity({
             </div>
           </div>
 
-          {/* Card footer: 只剩提交鈕（prev/next 已移到卡片左右兩側）#830。
-              一般模式僅最後一題顯示；訂正模式全程顯示，唯有全部改對才可點擊。 */}
-          {(isRevision || isLast) && (
+          {/* Card footer 提交鈕：#844 一般作答的最後一題改放題號列，
+              footer 只剩「訂正模式」顯示（全部改對才可點）。 */}
+          {isRevision && (
             <div className="flex justify-center border-t pt-3 shrink-0">
               <Button
                 type="button"

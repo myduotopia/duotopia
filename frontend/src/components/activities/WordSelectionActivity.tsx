@@ -14,8 +14,8 @@
  *       viewport (≥640px); vertical on narrow viewport.
  *   (b) Option images mode: options grid switches to 4×1 when its
  *       container is wide enough (~600px) to fit four images, else 2×2.
- *   (c) #844 欄數：任一非圖片選項 >5 字元（含 ≥5 詞長句）→ 不分螢幕一律單欄；
- *       全部 ≤5 字元才 2×2 / 寬螢幕 4 欄。長選項（≥5 詞）另把題目圖移到上方。
+ *   (c) #844 欄數固定（不依字長翻轉，避免間距忽近忽遠）：手機單欄、平板 2×2、
+ *       桌機 4 欄；圖左 landscape 維持單欄。長選項（≥5 詞）另把題目圖移到上方。
  *       字級用 useShrinkToFit fit-to-box（字少撐大、字多縮到塞得下、不裁字）。
  *
  * show_image 模式（看圖選英文）：
@@ -891,12 +891,6 @@ export default function WordSelectionActivity({
       (o) => (o.text?.trim().split(/\s+/).length ?? 0) >= 5,
     );
 
-  // Issue #844: 任一非圖片選項字元數 >5 → 不分螢幕寬度一律單欄（grid-cols-1），
-  // 避免選項擠成兩欄。與 hasLongOption（≥5 詞）獨立。
-  const hasOver5CharOption =
-    !showOptionImages &&
-    (currentWord?.options ?? []).some((o) => (o.text?.trim().length ?? 0) > 5);
-
   // 直式優先：題目有圖且視窗矮（橫向手機）才退回橫式（圖左、選項右）。
   // #844：長選項時關閉橫式 → 圖回到上方，下方選項拿全寬單欄。
   const useHorizontal =
@@ -1017,16 +1011,12 @@ export default function WordSelectionActivity({
           <div
             className={cn(
               "grid gap-3 sm:gap-4 flex-1 min-h-0",
-              // #844 欄數規則（收斂後）：
-              // - 圖左 + 短選項（useHorizontal）：右側單欄 grid-cols-1
-              // - 任一非圖片選項 >5 字元（含 ≥5 詞長句）：不分螢幕寬度一律單欄 grid-cols-1
-              //   （圖片位置另由 hasLongOption 控制：長選項時圖移到上方）
-              // - 全部 ≤5 字元：窄螢幕 2×2、寬螢幕 1×4
+              // #844 欄數固定（不依字長翻轉，避免間距忽近忽遠）：
+              // 手機單欄、平板 2×2、桌機 4 欄；圖左 landscape 維持單欄。
+              // 圖片位置另由 hasLongOption 控制（長選項時圖移到上方）。
               useHorizontal
                 ? "grid-cols-1"
-                : hasOver5CharOption
-                  ? "grid-cols-1"
-                  : "grid-cols-2 lg:grid-cols-4",
+                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
             )}
             // #844：列高鎖 minmax(0,1fr) 不被文字撐大 → fit-to-box 有固定框可量、不爆版
             style={{ gridAutoRows: "minmax(0, 1fr)" }}

@@ -655,18 +655,15 @@ export default function WordClozeQuizActivity({
                   [currentWord.content_item_id]: next,
                 }))
               }
-              // 訂正模式：Enter/Send 即送出當題對答案；一般模式只暫存/跳題，
-              // 整卷送出統一由下方「提交」鈕觸發。
+              // #844：箭頭行為 — 訂正：對答案；最後一題：整卷提交；其餘：跳下一題。
+              // 不再有 footer 提交鈕（最後一題改用內嵌箭頭送出）。
               onSubmit={
                 isRevision
                   ? handleRevisionCheck
                   : isLast
-                    ? () => persistAnswer()
+                    ? handleSubmitAll
                     : () => goTo(currentIndex + 1)
               }
-              // 最後一題（非訂正）隱藏卡片上的 inline 送出鈕 —
-              // 整卷送出由下方「提交」鈕負責，避免兩顆按鈕重複
-              hideSubmitButton={isLast && !isRevision}
               // 訂正模式已答對的題目鎖定唯讀，不可再改
               disabled={isRevision && currentResolved}
               submitting={submittingAnswer}
@@ -683,9 +680,9 @@ export default function WordClozeQuizActivity({
             )}
           </div>
 
-          {/* Card footer: 只剩提交鈕（prev/next 已移到卡片左右兩側）#830。
-              一般模式僅最後一題顯示；訂正模式全程顯示，唯有全部改對才可點擊。 */}
-          {(isRevision || isLast) && (
+          {/* Card footer 提交鈕：#844 一般作答（最後一題）改用內嵌箭頭送出，
+              footer 只剩「訂正模式」顯示（全部改對才可點）。 */}
+          {isRevision && (
             <div className="flex justify-center border-t pt-3 shrink-0">
               <Button
                 type="button"
