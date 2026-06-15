@@ -792,9 +792,15 @@ async def org_renew_credit_package(
         raise HTTPException(status_code=500, detail="Renewal processing failed")
 
 
-def _validate_team_email_for_join(email: str, db: Session):
-    """Look up a teacher by email and classify their eligibility to join a
-    group-buy team. Returns (teacher_or_None, status).
+def _classify_team_emails(emails: list[str], db: Session) -> dict:
+    """Batch-classify a list of (already-normalised, lowercased) teacher
+    emails for group-buy team eligibility.
+
+    Returns ``{email: (teacher_or_None, status)}`` keyed on the normalised
+    address. Uses two SQL queries total — one for the teacher rows, one
+    for the in-team membership check — regardless of input size. Replaces
+    the prior per-email 2-3 round-trip helper that became an N+1 burden
+    at the 100-email cap.
 
     status one of:
       - "ok"               teacher exists, email_verified, not in any group-buy team
@@ -803,34 +809,52 @@ def _validate_team_email_for_join(email: str, db: Session):
       - "in_group_buy_team" Teacher is already an active member of some
                            active group-buy school (any team — they can't
                            be in two at once)
-
-    Used by both the validate-team-emails endpoint (frontend roster check)
-    and the open endpoint (defensive re-check inside the payment txn). The
-    second use closes the small window where the same email could become
-    invalid between roster-fill time and pay time.
     """
+    out: dict[str, tuple] = {}
+    if not emails:
+        return out
+    teachers = db.query(Teacher).filter(Teacher.email.in_(emails)).all()
+    by_email = {t.email: t for t in teachers}
+    teacher_ids_verified = [t.id for t in teachers if t.email_verified]
+    in_team_ids: set[int] = set()
+    if teacher_ids_verified:
+        in_team_ids = {
+            row[0]
+            for row in db.query(TeacherSchool.teacher_id)
+            .join(School, School.id == TeacherSchool.school_id)
+            .join(Organization, Organization.id == School.organization_id)
+            .filter(
+                TeacherSchool.teacher_id.in_(teacher_ids_verified),
+                TeacherSchool.is_active.is_(True),
+                School.is_active.is_(True),
+                Organization.org_type == "group_buy",
+                Organization.is_active.is_(True),
+            )
+            .all()
+        }
+    for email in emails:
+        teacher = by_email.get(email)
+        if teacher is None:
+            out[email] = (None, "not_registered")
+        elif not teacher.email_verified:
+            out[email] = (teacher, "not_verified")
+        elif teacher.id in in_team_ids:
+            out[email] = (teacher, "in_group_buy_team")
+        else:
+            out[email] = (teacher, "ok")
+    return out
+
+
+def _validate_team_email_for_join(email: str, db: Session):
+    """Single-email convenience wrapper kept for the post-payment defensive
+    re-check inside `open_group_buy` (a single lookup there is fine — it's
+    one of N already-charged operations, not a batch). Always returns the
+    same shape as ``_classify_team_emails`` so callers can dispatch
+    identically."""
     normalized = email.strip().lower()
-    teacher = db.query(Teacher).filter(Teacher.email == normalized).first()
-    if teacher is None:
-        return None, "not_registered"
-    if not teacher.email_verified:
-        return teacher, "not_verified"
-    in_team = (
-        db.query(TeacherSchool.id)
-        .join(School, School.id == TeacherSchool.school_id)
-        .join(Organization, Organization.id == School.organization_id)
-        .filter(
-            TeacherSchool.teacher_id == teacher.id,
-            TeacherSchool.is_active.is_(True),
-            School.is_active.is_(True),
-            Organization.org_type == "group_buy",
-            Organization.is_active.is_(True),
-        )
-        .first()
+    return _classify_team_emails([normalized], db).get(
+        normalized, (None, "not_registered")
     )
-    if in_team is not None:
-        return teacher, "in_group_buy_team"
-    return teacher, "ok"
 
 
 @router.post("/validate-team-emails", response_model=TeamEmailValidationResponse)
@@ -854,13 +878,17 @@ async def validate_team_emails(
             status_code=400,
             detail="Too many emails; max 100 per request",
         )
+    # Normalise once, then a single 2-query batch — bounded regardless of
+    # how many emails the leader pasted in. Preserves request order in the
+    # response so the frontend can map status back to its rows positionally.
+    normalized = [raw.strip().lower() for raw in body.emails]
+    classified = _classify_team_emails(normalized, db)
     results: List[TeamEmailStatus] = []
-    for raw in body.emails:
-        normalized = raw.strip().lower()
-        teacher, status = _validate_team_email_for_join(normalized, db)
+    for email in normalized:
+        teacher, status = classified.get(email, (None, "not_registered"))
         results.append(
             TeamEmailStatus(
-                email=normalized,
+                email=email,
                 exists=teacher is not None,
                 verified=bool(teacher and teacher.email_verified),
                 in_group_buy_team=(status == "in_group_buy_team"),
@@ -953,9 +981,7 @@ async def open_group_buy(
     # with only the leader; admin uses PR #841's /admin/subscription/create
     # to backfill members). This matters because PR #841's flow is still
     # the recovery path when a member fails verification post-purchase.
-    normalized_member_emails = [
-        e.strip().lower() for e in (open_request.member_emails or [])
-    ]
+    normalized_member_emails = [e.strip().lower() for e in open_request.member_emails]
     if normalized_member_emails:
         required_count = plan.teacher_seats - 1
         if len(normalized_member_emails) != required_count:
@@ -978,9 +1004,12 @@ async def open_group_buy(
                 status_code=400,
                 detail="Member emails must be distinct.",
             )
+        # Single batched 2-query classification for the whole roster
+        # (matches the validate-team-emails endpoint perf profile).
+        classified = _classify_team_emails(normalized_member_emails, db)
         failed_members: list[dict] = []
         for email in normalized_member_emails:
-            _t, status = _validate_team_email_for_join(email, db)
+            _t, status = classified.get(email, (None, "not_registered"))
             if status != "ok":
                 failed_members.append({"email": email, "status": status})
         if failed_members:

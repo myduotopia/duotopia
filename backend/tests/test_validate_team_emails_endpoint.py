@@ -80,8 +80,12 @@ def teacher_in_group_buy_team(shared_test_session):
     )
     shared_test_session.add(t)
     shared_test_session.flush()
+    # Distinct plan name so this file's fixtures can't collide with
+    # other test modules that also seed a 團購 plan when pytest reuses
+    # the same shared_test_session across files. Plan.name is the
+    # natural key, so any clash would be a hard failure here.
     plan = Plan(
-        name="團購-10席",
+        name="團購-10席-validate-fixture",
         price=None,
         quota=1000,
         teacher_seats=10,

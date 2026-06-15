@@ -1674,8 +1674,10 @@ class ApiClient {
         exists: boolean;
         verified: boolean;
         in_group_buy_team: boolean;
-        // "ok" | "not_registered" | "not_verified" | "in_group_buy_team"
-        status: string;
+        // Backend contract — kept as a literal union so callers get a
+        // compile error if a new status is added on either side and not
+        // mirrored. Saves a runtime `as RowStatus` cast at the call site.
+        status: "ok" | "not_registered" | "not_verified" | "in_group_buy_team";
       }>;
     }>("/api/credit-packages/validate-team-emails", {
       method: "POST",

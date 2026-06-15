@@ -49,9 +49,11 @@ def auth_header(leader):
 @pytest.fixture
 def gb_plan_10(shared_test_session):
     """團購-10席 chosen for fixture brevity: a fully-populated roster needs
-    9 member teachers (one seat goes to the leader)."""
+    9 member teachers (one seat goes to the leader). Distinct plan name
+    so this fixture can't collide with other test modules that also
+    seed a 團購 plan in the same shared_test_session."""
     p = Plan(
-        name="團購-10席",
+        name="團購-10席-roster-fixture",
         price=None,
         quota=1000,
         teacher_seats=10,

@@ -268,8 +268,12 @@ export default function GroupBuyOpenPage() {
   }, [roster, selectedPlan, teacher]);
 
   // ----- per-row validation on blur -----
+  // Row 0 (leader) is also validated here so that if the leader edits their
+  // own field — e.g. to open the team for another teacher — the status
+  // re-resolves to "ok" / "in_group_buy_team" / etc. The earlier short-
+  // circuit on idx===0 left the payment button permanently disabled after
+  // any manual edit because nothing else would set status back to "ok".
   const validateRow = async (idx: number) => {
-    if (idx === 0) return; // leader: handled by the prefill effect
     const value = roster[idx]?.email?.trim().toLowerCase() || "";
     if (!value) {
       setRoster((prev) =>
@@ -301,7 +305,20 @@ export default function GroupBuyOpenPage() {
     try {
       const res = await apiClient.validateTeamEmails([value]);
       const row = res.results[0];
-      const status = (row?.status as RowStatus) || "not_registered";
+      let status: RowStatus = row?.status ?? "not_registered";
+      // Row 0 = the leader slot. Backend always uses current_teacher as the
+      // org_owner regardless of the row 0 value, AND the leader is allowed
+      // to open multiple teams (design Q2). So if the leader types their
+      // own email and the API says "already in another group-buy team",
+      // we still let the payment gate open — backend wouldn't block.
+      if (
+        idx === 0 &&
+        status === "in_group_buy_team" &&
+        teacher?.email &&
+        value === teacher.email.trim().toLowerCase()
+      ) {
+        status = "ok";
+      }
       setRoster((prev) =>
         prev.map((r, i) => (i === idx ? { ...r, status } : r)),
       );
@@ -319,31 +336,29 @@ export default function GroupBuyOpenPage() {
     }
   };
 
-  // ----- batch revalidate (after CSV import or "重新檢查") -----
-  const revalidateAll = async () => {
-    const indexed = roster
+  // Pure helper: takes a roster snapshot, fires the batch endpoint, and
+  // returns a new roster with statuses applied. Decoupled from React state
+  // so callers can pass the freshly-computed roster (CSV import) instead of
+  // depending on stale-closure timing via setTimeout.
+  const applyBatchStatusesTo = async (
+    src: RosterRow[],
+  ): Promise<RosterRow[]> => {
+    const candidates = src
       .map((r, idx) => ({ idx, email: r.email.trim().toLowerCase() }))
       .filter(({ idx, email }) => idx > 0 && email);
-    if (indexed.length === 0) return;
-    setRoster((prev) =>
-      prev.map((r, i) =>
-        i > 0 && r.email.trim() ? { ...r, status: "checking" } : r,
-      ),
-    );
+    if (candidates.length === 0) return src;
     try {
       const res = await apiClient.validateTeamEmails(
-        indexed.map((x) => x.email),
+        candidates.map((x) => x.email),
       );
       const byEmail = new Map(res.results.map((r) => [r.email, r]));
-      setRoster((prev) =>
-        prev.map((r, i) => {
-          if (i === 0) return r;
-          const v = r.email.trim().toLowerCase();
-          if (!v) return r;
-          const status = (byEmail.get(v)?.status as RowStatus) || "idle";
-          return { ...r, status };
-        }),
-      );
+      return src.map((r, i) => {
+        if (i === 0) return r;
+        const v = r.email.trim().toLowerCase();
+        if (!v) return r;
+        const status: RowStatus = byEmail.get(v)?.status ?? "idle";
+        return { ...r, status };
+      });
     } catch (e) {
       const msg =
         e instanceof ApiError
@@ -352,34 +367,46 @@ export default function GroupBuyOpenPage() {
             : e.message
           : "批次驗證失敗";
       toast.error(msg);
-      setRoster((prev) =>
-        prev.map((r, i) =>
-          i > 0 && r.status === "checking" ? { ...r, status: "idle" } : r,
-        ),
+      // Reset any in-flight "checking" so users can re-trigger.
+      return src.map((r, i) =>
+        i > 0 && r.status === "checking" ? { ...r, status: "idle" } : r,
       );
     }
   };
 
+  // ----- batch revalidate (after CSV import or "重新檢查") -----
+  const revalidateAll = async () => {
+    const hasAny = roster.some((r, i) => i > 0 && r.email.trim().length > 0);
+    if (!hasAny) return;
+    const inFlight = roster.map((r, i) =>
+      i > 0 && r.email.trim() ? { ...r, status: "checking" as RowStatus } : r,
+    );
+    setRoster(inFlight);
+    const next = await applyBatchStatusesTo(inFlight);
+    setRoster(next);
+  };
+
   // ----- CSV import -----
   const handleCsvFile = async (file: File) => {
+    if (!selectedPlan) return;
     const text = await file.text();
     const emails = text
       .split(/\r?\n/)
       .map((line) => line.split(",")[0].trim())
       .filter((line) => line && line.toLowerCase() !== "email")
-      .slice(0, (selectedPlan?.teacher_seats || 1) - 1);
-    setRoster((prev) =>
-      prev.map((r, i) => {
-        if (i === 0) return r;
-        const incoming = emails[i - 1];
-        if (incoming === undefined) return { ...r, email: "", status: "idle" };
-        return { ...r, email: incoming, status: "idle" };
-      }),
-    );
+      .slice(0, selectedPlan.teacher_seats - 1);
+    // Build the post-import roster up-front so we can hand it to the batch
+    // validator directly — no setTimeout or closure-over-roster needed.
+    const newRoster: RosterRow[] = roster.map((r, i) => {
+      if (i === 0) return r;
+      const incoming = emails[i - 1];
+      if (incoming === undefined) return { ...r, email: "", status: "idle" };
+      return { ...r, email: incoming, status: "checking" };
+    });
+    setRoster(newRoster);
     setCsvOpen(false);
-    setTimeout(() => {
-      revalidateAll();
-    }, 0);
+    const validated = await applyBatchStatusesTo(newRoster);
+    setRoster(validated);
   };
 
   const downloadCsvTemplate = () => {
@@ -391,7 +418,12 @@ export default function GroupBuyOpenPage() {
     const a = document.createElement("a");
     a.href = url;
     a.download = "team-roster-template.csv";
+    // Spec doesn't guarantee a detached <a>.click() works; some browsers
+    // (older Safari, embedded webviews) only honour the synthesised click
+    // once the anchor is in the document.
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
@@ -691,7 +723,7 @@ export default function GroupBuyOpenPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">開團刷卡 — {selectedPlan.name}</h1>
         <Button variant="ghost" onClick={() => setStep("roster")}>
-          ← 回 roster
+          ← 返回填寫名單
         </Button>
       </div>
       <Card>
