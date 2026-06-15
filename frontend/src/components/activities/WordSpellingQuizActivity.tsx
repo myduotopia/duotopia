@@ -9,6 +9,9 @@
  *   - 不更新 memory_strength；答案寫進 practice_answers (type=word_spelling_quiz)
  *
  * 此元件同被學生作答頁與派發 sheet preview 共用（透過 previewWords 注入）。
+ *
+ * #844：手機/平板顯示 VirtualKeyboard（同艾賓浩斯版 WordSpellingActivity），
+ * mobile 在卡片下方、tablet 在右側；inputMode=none 抑制系統鍵盤建議列。
  */
 
 import {
@@ -29,9 +32,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
 import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
+import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
-import QuizAnswerInput from "./shared/QuizAnswerInput";
+import QuizAnswerInput, {
+  type QuizAnswerInputHandle,
+} from "./shared/QuizAnswerInput";
+import VirtualKeyboard from "./shared/VirtualKeyboard";
 import CardNavArrow from "./shared/CardNavArrow";
 import QuizReviewView, {
   type QuizReviewPayload,
@@ -134,6 +141,10 @@ export default function WordSpellingQuizActivity({
   // 防止 handleSubmitAll 因 useEffect 重觸 / timer expire 重複進入後端 complete
   const completingRef = useRef(false);
   const navSlot = useQuizNavSlot();
+  // #844：手機/平板顯示虛擬鍵盤（同艾賓浩斯版）；桌機用實體鍵盤
+  const deviceMode = useInputDeviceMode();
+  const useVirtualKeyboard = deviceMode !== "desktop";
+  const quizInputRef = useRef<QuizAnswerInputHandle>(null);
   // Issue #830: 訂正模式（退回後）— 答錯揭示正解、強制全對才能提交
   const [quizStatus, setQuizStatus] = useState<string | null>(null);
   const { isRevision, revealByItem, recordResult } =
@@ -491,6 +502,23 @@ export default function WordSpellingQuizActivity({
   const currentReveal = revealByItem[currentWord.content_item_id];
   const showCorrectness = settings.show_answer || isRevision;
 
+  // #844：虛擬鍵盤經 QuizAnswerInput ref 操作 focused slot（同艾賓浩斯版）
+  const vkAppend = useCallback(
+    (ch: string) => {
+      if (isRevision && currentResolved) return; // 訂正已答對鎖定
+      quizInputRef.current?.appendChar(ch);
+    },
+    [isRevision, currentResolved],
+  );
+  const vkBackspace = useCallback(() => {
+    if (isRevision && currentResolved) return;
+    quizInputRef.current?.backspace();
+  }, [isRevision, currentResolved]);
+  const vkEnter = useCallback(() => {
+    // submit() 內部已檢查 disabled/submitting，並呼叫 QuizAnswerInput 的 onSubmit
+    quizInputRef.current?.submit();
+  }, []);
+
   // 題號 bar — Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
     <>
@@ -547,6 +575,18 @@ export default function WordSpellingQuizActivity({
         </div>
       )}
 
+      <div
+        className={cn(
+          "flex-1 min-h-0 flex gap-4",
+          deviceMode === "tablet" ? "flex-row items-stretch" : "flex-col",
+        )}
+      >
+        <div
+          className={cn(
+            "min-w-0 flex flex-col",
+            deviceMode === "tablet" ? "flex-[6]" : "flex-1 min-h-0",
+          )}
+        >
       <Card className="relative flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
         {/* #830: 上一題 / 下一題改為卡片左右兩側箭頭（對齊一般單字卡 WordCard） */}
         {currentIndex > 0 && (
@@ -619,6 +659,8 @@ export default function WordSpellingQuizActivity({
             )}
 
             <QuizAnswerInput
+              ref={quizInputRef}
+              useVirtualKeyboard={useVirtualKeyboard}
               value={typedByItem[currentWord.content_item_id] || ""}
               expectedAnswer={currentWord.text}
               onChange={(next) =>
@@ -688,6 +730,23 @@ export default function WordSpellingQuizActivity({
           {renderCardFooter?.(currentWord.content_item_id)}
         </CardContent>
       </Card>
+        </div>
+        {useVirtualKeyboard && (
+          <div
+            className={cn(
+              deviceMode === "tablet"
+                ? "flex-[4] min-w-0 flex flex-col justify-center"
+                : "shrink-0",
+            )}
+          >
+            <VirtualKeyboard
+              onKey={vkAppend}
+              onBackspace={vkBackspace}
+              onEnter={vkEnter}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
