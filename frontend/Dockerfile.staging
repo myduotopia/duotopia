@@ -38,6 +38,12 @@ ENV VITE_GA_MEASUREMENT_ID=$VITE_GA_MEASUREMENT_ID
 ARG VITE_META_PIXEL_ID
 ENV VITE_META_PIXEL_ID=$VITE_META_PIXEL_ID
 
+# Issue #768 group-buy entry-point gate. Production deploy passes
+# "false" so the staging→main release can hide the not-yet-ready
+# feature; other envs default to "true". See frontend/config/featureFlags.ts.
+ARG VITE_ENABLE_GROUP_BUY=true
+ENV VITE_ENABLE_GROUP_BUY=$VITE_ENABLE_GROUP_BUY
+
 # 建置（Vite 會自動使用 VITE_API_URL 環境變數）
 RUN npm run build
 

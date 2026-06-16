@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Crown, Pencil, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { ENABLE_GROUP_BUY } from "@/config/featureFlags";
 
 interface Plan {
   id: number;
@@ -80,7 +81,14 @@ export default function AdminPlansPage() {
     setError(null);
     try {
       const data = await apiClient.listAdminPlans();
-      setPlans(data);
+      // Issue #768 — when the entry-point gate is off, hide the
+      // group-buy plan rows from the list editor so a production
+      // admin doesn't see / edit not-yet-released plan economics.
+      // Backend rows stay intact so flipping the flag re-exposes
+      // them without a DB change.
+      setPlans(
+        ENABLE_GROUP_BUY ? data : data.filter((p) => p.teacher_seats == null),
+      );
     } catch (err) {
       console.error("Failed to fetch plans:", err);
       setError(err instanceof Error ? err.message : "Failed to load plans");
