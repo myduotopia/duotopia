@@ -38,6 +38,7 @@ import LineContactButton, {
 } from "@/components/LineContactButton";
 import { apiClient } from "@/lib/api";
 import { GroupBuyPlanCards } from "@/components/pricing/GroupBuyPlanCards";
+import { ENABLE_GROUP_BUY } from "@/config/featureFlags";
 
 function getSubscriptionPlans(t: (key: string) => string): SubscriptionPlan[] {
   return [
@@ -450,31 +451,31 @@ export default function PricingPage() {
                 ))}
               </div>
 
-              {/* Phase 5-2 follow-up (#768 comment #3 part 2): group-buy
-                  cards fetched from /api/credit-packages/group-buy-plans
-                  (made public in the same PR) so admin /admin/plans edits
-                  propagate to the marketing site without a code change.
-                  Hardcoded seed values stay as a fallback for the (rare)
-                  case the API request fails so anonymous visitors still
-                  see something useful. */}
-              <div className="space-y-4">
-                <GroupBuyPlanCards />
-                <div className="text-center pt-2">
-                  <button
-                    type="button"
-                    onClick={() => navigate("/teacher/group-buy/open")}
-                    disabled={isStudent}
-                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    立即開設團購方案 →
-                  </button>
-                  <p className="text-xs text-gray-500 mt-2">
-                    {isStudent
-                      ? "請先登出學生帳號"
-                      : "需教師帳號登入；尚未登入會引導至教師登入頁。"}
-                  </p>
+              {/* Phase 5-2 follow-up (#768) — group-buy marketing
+                  surface gated by ENABLE_GROUP_BUY so the staging→main
+                  release can ship without exposing the feature on
+                  production. Re-enable by flipping the build env in
+                  deploy-frontend.yml; no code change required. */}
+              {ENABLE_GROUP_BUY && (
+                <div className="space-y-4">
+                  <GroupBuyPlanCards />
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate("/teacher/group-buy/open")}
+                      disabled={isStudent}
+                      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      立即開設團購方案 →
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      {isStudent
+                        ? "請先登出學生帳號"
+                        : "需教師帳號登入；尚未登入會引導至教師登入頁。"}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 

@@ -57,6 +57,7 @@ import {
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { apiClient } from "@/lib/api";
 import { GroupBuyPlanCards } from "@/components/pricing/GroupBuyPlanCards";
+import { ENABLE_GROUP_BUY } from "@/config/featureFlags";
 
 interface CreditPackageInfo {
   id: number;
@@ -537,16 +538,11 @@ export default function TeacherSubscription() {
                   straight into the open-team flow. Hidden for teachers
                   who are already on a group-buy plan (R2-F2 single-org
                   guard would 409 their open attempt anyway). */}
-              {subscription?.plan_type !== "group_buy_member" &&
+              {ENABLE_GROUP_BUY &&
+                subscription?.plan_type !== "group_buy_member" &&
                 subscription?.plan_type !== "group_buy_owner" && (
                   <div className="space-y-4">
                     <GroupBuyPlanCards
-                      // Plan name is intentionally ignored here — the
-                      // group-buy open page has its own plan-selection
-                      // step (Step 1 of the 3-step wizard) where the
-                      // user can confirm or change their pick. Pre-
-                      // selecting via query param is a future polish,
-                      // tracked for the next iteration.
                       onSelectPlan={() => navigate("/teacher/group-buy/open")}
                     />
                     <div className="text-center">
@@ -590,7 +586,7 @@ export default function TeacherSubscription() {
                 single-org guard and 409.
                 TODO: replace prefix check with a backend-supplied flag
                 when SubscriptionInfo exposes teacher_seats or org_type. */}
-            {!subscription?.plan?.startsWith("團購") && (
+            {ENABLE_GROUP_BUY && !subscription?.plan?.startsWith("團購") && (
               <Card className="mb-6 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
                 <CardContent className="py-5">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

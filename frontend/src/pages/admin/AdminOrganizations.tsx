@@ -46,6 +46,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ENABLE_GROUP_BUY } from "@/config/featureFlags";
 
 const DEBOUNCE_DELAY = 300;
 
@@ -587,21 +588,27 @@ export default function AdminOrganizations() {
                                 編輯
                               </Button>
                               {/* Phase 5-2 (#768): institution monthly billing */}
-                              {org.org_type === "institution" && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    navigate(
-                                      `/admin/organizations/${org.id}/billing`,
-                                    )
-                                  }
-                                  className="flex items-center gap-1"
-                                  title="查看機構月度計費"
-                                >
-                                  月結
-                                </Button>
-                              )}
+                              {/* Issue #768 — Monthly-billing page is
+                                  part of the institution billing flow
+                                  introduced for group-buy. Gated for
+                                  the staging→main release; re-enabled
+                                  by flipping VITE_ENABLE_GROUP_BUY. */}
+                              {ENABLE_GROUP_BUY &&
+                                org.org_type === "institution" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      navigate(
+                                        `/admin/organizations/${org.id}/billing`,
+                                      )
+                                    }
+                                    className="flex items-center gap-1"
+                                    title="查看機構月度計費"
+                                  >
+                                    月結
+                                  </Button>
+                                )}
                             </div>
                           </TableCell>
                         </TableRow>

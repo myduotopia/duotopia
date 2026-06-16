@@ -176,11 +176,26 @@ jobs:
         echo "BACKEND_URL=$BACKEND_URL" >> $GITHUB_OUTPUT
         echo "🌐 Using backend URL: $BACKEND_URL"
 
+    - name: Resolve feature flag values per environment
+      id: feature_flags
+      run: |
+        # Issue #768 — group-buy entry points are gated. Production
+        # ships hidden so a staging→main release can carry the rest of
+        # staging without exposing the feature; staging / develop keep
+        # them visible for ongoing testing. Flip prod by editing this
+        # block (no code re-PR required).
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "ENABLE_GROUP_BUY=false" >> $GITHUB_OUTPUT
+        else
+          echo "ENABLE_GROUP_BUY=true" >> $GITHUB_OUTPUT
+        fi
+
     - name: Create .env file
       working-directory: ./frontend
       run: |
         echo "VITE_API_URL=${{ steps.backend_url.outputs.BACKEND_URL }}" > .env
         echo "VITE_ENVIRONMENT=${{ steps.env_vars.outputs.ENV_NAME }}" >> .env
+        echo "VITE_ENABLE_GROUP_BUY=${{ steps.feature_flags.outputs.ENABLE_GROUP_BUY }}" >> .env
         echo "Created .env with:"
         cat .env
 
@@ -204,6 +219,7 @@ jobs:
         docker build -f $DOCKERFILE \
           --build-arg VITE_API_URL=${{ steps.backend_url.outputs.BACKEND_URL }} \
           --build-arg VITE_ENVIRONMENT=${{ steps.env_vars.outputs.ENV_NAME }} \
+          --build-arg VITE_ENABLE_GROUP_BUY=${{ steps.feature_flags.outputs.ENABLE_GROUP_BUY }} \
           --build-arg VITE_TAPPAY_SERVER_TYPE=$TAPPAY_SERVER_TYPE \
           --build-arg VITE_TAPPAY_PRODUCTION_APP_ID=$TAPPAY_PRODUCTION_APP_ID \
           --build-arg VITE_TAPPAY_PRODUCTION_APP_KEY=$TAPPAY_PRODUCTION_APP_KEY \

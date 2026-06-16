@@ -54,6 +54,7 @@ import {
   X,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
+import { ENABLE_GROUP_BUY } from "@/config/featureFlags";
 import {
   exportToCSV,
   formatDate as csvFormatDate,
@@ -408,7 +409,15 @@ export default function AdminSubscriptionDashboard() {
       try {
         const plans = await apiClient.listAdminPlans();
         if (cancelled) return;
-        setAvailablePlans(plans.filter((p) => p.is_active));
+        // Issue #768 — when the entry-point gate is off, group-buy
+        // plans (those with `teacher_seats` populated) are filtered
+        // out of the admin dropdown so admins can't accidentally
+        // assign a teacher to a not-yet-released plan on production.
+        // Their editor row in /admin/plans is also hidden separately.
+        const filtered = plans
+          .filter((p) => p.is_active)
+          .filter((p) => ENABLE_GROUP_BUY || p.teacher_seats == null);
+        setAvailablePlans(filtered);
         setAvailablePlansError(null);
       } catch (e) {
         if (cancelled) return;
