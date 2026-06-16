@@ -66,10 +66,28 @@ export default function TeacherRegister() {
     // Clamp to the DB column length; a value set programmatically bypasses the
     // input's maxLength, so an oversized URL code would otherwise 422 on submit.
     const promo = searchParams.get("promo")?.trim().slice(0, 16);
-    if (promo) {
-      setFormData((prev) =>
-        prev.promoCode ? prev : { ...prev, promoCode: promo },
-      );
+    // Issue #768 PR #851 review round 6 — the group-buy roster share link
+    // dispatches `?email=<invitee>` alongside `?promo=` so the invitee
+    // lands here with both pre-filled. Critical for the team-formation
+    // flow: registering with a different address would leave the leader
+    // with a phantom unfilled roster slot. Same "only fill if empty"
+    // guard as promo so a back-nav from a typo can't re-clobber edits.
+    const emailParam = searchParams.get("email")?.trim().toLowerCase();
+    const patch: Partial<typeof formData> = {};
+    if (promo) patch.promoCode = promo;
+    if (emailParam) patch.email = emailParam;
+    if (patch.promoCode || patch.email) {
+      setFormData((prev) => ({
+        ...prev,
+        // .trim() guard so a whitespace-only "prev.promoCode" (e.g. user
+        // tabbed into the field and tabbed out) still counts as empty
+        // and gets the URL-supplied value.
+        promoCode:
+          patch.promoCode && !prev.promoCode.trim()
+            ? patch.promoCode
+            : prev.promoCode,
+        email: patch.email && !prev.email.trim() ? patch.email : prev.email,
+      }));
     }
   }, [searchParams]);
 

@@ -15,6 +15,9 @@ from models import (
     SubscriptionPeriod,
     PointUsageLog,
     TeacherOrganization,
+    Organization,
+    School,
+    TeacherSchool,
 )
 from routers.teachers import get_current_teacher
 from services.tappay_service import TapPayService
@@ -931,6 +934,13 @@ async def get_subscription_status(
     - 是否自動續訂
     - 取消時間
     - 配額使用狀況
+
+    Issue #768 — group-buy members see their team's ANNUAL end date
+    (Organization.subscription_end_date) and no "auto_renew" UI, even
+    though their underlying monthly SubscriptionPeriod ends at month
+    boundary (cron grants the next month). Without this override the
+    UI showed the monthly date as the user's expiry, which was a
+    user-visible defect (issue #768 comment 4638082532 item 4).
     """
     try:
         # Calculate is_active
@@ -950,6 +960,69 @@ async def get_subscription_status(
         except Exception as e:
             logger.error(f"Error fetching current_period: {e}")
             # Continue without period data
+
+        # Issue #768 — Detect group-buy membership and override expiry +
+        # auto-renew semantics. A teacher is a group-buy member if they
+        # have an active TeacherSchool in an active group-buy School.
+        # Owner is a special case: they're ALSO a member, and we
+        # surface a distinct `plan_type` so the frontend can show
+        # team-management UI (future).
+        #
+        # Multi-org edge case: the R2-F2 single-org guard in
+        # `open_group_buy` prevents a teacher from opening more than
+        # one team they own, and the validate-team-emails check rejects
+        # adding a member who is already in another group-buy team. So
+        # in normal operation each teacher belongs to at most one
+        # active group-buy org. The `order_by(...end_date.desc()
+        # .nullslast())` here is purely defensive: if a manual data
+        # fix or admin override ever produced two active rows, we'd
+        # surface the longer-lived one, which is the more useful date
+        # to show the user.
+        #
+        # Single LEFT JOIN against TeacherOrganization on the same
+        # query so the owner-vs-member determination is one round-trip
+        # instead of two. For individual teachers this stays a single
+        # zero-row query; for the (much rarer) group-buy case it's one
+        # query for both bits of info.
+        gb_query = (
+            db.query(
+                Organization,
+                School,
+                TeacherOrganization.role,
+            )
+            .join(School, School.organization_id == Organization.id)
+            .join(TeacherSchool, TeacherSchool.school_id == School.id)
+            .outerjoin(
+                TeacherOrganization,
+                (TeacherOrganization.organization_id == Organization.id)
+                & (TeacherOrganization.teacher_id == current_teacher.id)
+                & (TeacherOrganization.is_active.is_(True))
+                & (TeacherOrganization.role == "org_owner"),
+            )
+            .filter(
+                TeacherSchool.teacher_id == current_teacher.id,
+                TeacherSchool.is_active.is_(True),
+                School.is_active.is_(True),
+                Organization.is_active.is_(True),
+                Organization.org_type == "group_buy",
+            )
+            .order_by(Organization.subscription_end_date.desc().nullslast())
+            .first()
+        )
+        plan_type = "individual"
+        gb_end_date_override = None
+        gb_auto_renew_override = None
+        if gb_query is not None:
+            gb_org, _gb_school, gb_owner_role = gb_query
+            plan_type = (
+                "group_buy_owner"
+                if gb_owner_role == "org_owner"
+                else "group_buy_member"
+            )
+            gb_end_date_override = gb_org.subscription_end_date
+            # Group-buy plans don't have per-teacher auto-renew — points
+            # come from the team leader's annual fee.
+            gb_auto_renew_override = False
 
         # Aggregated quota (subscription + credit packages)
         from services.quota_service import QuotaService
@@ -995,21 +1068,45 @@ async def get_subscription_status(
             for pkg in credit_packages
         ]
 
-        return {
-            "status": current_teacher.subscription_status or "INACTIVE",
-            "plan": current_period.plan_name if current_period else None,
-            "end_date": (
-                current_teacher.subscription_end_date.isoformat()
-                if current_teacher.subscription_end_date
-                else None
-            ),
-            "days_remaining": current_teacher.days_remaining,
-            "is_active": is_active,
-            "auto_renew": (
+        # Build end_date with group-buy override when applicable.
+        if gb_end_date_override is not None:
+            effective_end_date = gb_end_date_override
+            now = datetime.now(timezone.utc)
+            end_utc = (
+                effective_end_date.replace(tzinfo=timezone.utc)
+                if effective_end_date.tzinfo is None
+                else effective_end_date
+            )
+            is_active = end_utc > now
+            days_remaining = max(0, (end_utc - now).days)
+        else:
+            effective_end_date = current_teacher.subscription_end_date
+            days_remaining = current_teacher.days_remaining
+
+        if gb_auto_renew_override is not None:
+            auto_renew = gb_auto_renew_override
+        else:
+            auto_renew = (
                 current_teacher.subscription_auto_renew
                 if current_teacher.subscription_auto_renew is not None
                 else True
+            )
+
+        return {
+            "status": current_teacher.subscription_status or "INACTIVE",
+            "plan": current_period.plan_name if current_period else None,
+            # Issue #768 — surfaces whether this teacher is on an
+            # individual plan, a group-buy member, or the group-buy
+            # team leader. Frontend reads this to pick the right
+            # quota label, auto-renew banner visibility, and any
+            # team-management CTAs.
+            "plan_type": plan_type,
+            "end_date": (
+                effective_end_date.isoformat() if effective_end_date else None
             ),
+            "days_remaining": days_remaining,
+            "is_active": is_active,
+            "auto_renew": auto_renew,
             "cancelled_at": (
                 current_teacher.subscription_cancelled_at.isoformat()
                 if current_teacher.subscription_cancelled_at

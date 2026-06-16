@@ -1114,6 +1114,8 @@ async def list_organizations(
                 subscription_end_date=org.subscription_end_date.isoformat()
                 if org.subscription_end_date
                 else None,
+                org_type=org.org_type,
+                per_student_price=org.per_student_price,
             )
         )
 

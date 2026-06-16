@@ -329,6 +329,22 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
         "show_answer": assignment.show_answer or False,
         "score_category": assignment.score_category,
         "time_limit_per_question": assignment.time_limit_per_question,
+        # Issue #828: surface the teacher's display settings so the quiz preview
+        # reflects the actual assignment config (was hardcoded in the frontend).
+        "play_audio": assignment.play_audio or False,
+        "show_translation": (
+            assignment.show_translation
+            if assignment.show_translation is not None
+            else True
+        ),
+        "show_word": (
+            assignment.show_word if assignment.show_word is not None else True
+        ),
+        "show_image": (
+            assignment.show_image if assignment.show_image is not None else True
+        ),
+        "show_option_images": bool(getattr(assignment, "show_option_images", False)),
+        "quiz_time_limit_seconds": assignment.quiz_time_limit_seconds,
         "total_activities": len(activities),
         "activities": activities,
     }

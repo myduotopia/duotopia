@@ -42,6 +42,9 @@ import DatabaseAdminPage from "./pages/admin/DatabaseAdminPage";
 import AdminMonitoringPage from "./pages/admin/AdminMonitoringPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import CreateOrganization from "./pages/admin/CreateOrganization";
+import AdminOrgMonthlyBilling from "./pages/admin/AdminOrgMonthlyBilling";
+import GroupBuyOpenPage from "./pages/teacher/GroupBuyOpenPage";
+import { ENABLE_GROUP_BUY } from "./config/featureFlags";
 import BlogListPage from "./pages/BlogListPage";
 import BlogPostPage from "./pages/BlogPostPage";
 import AdminBlogPage from "./pages/admin/AdminBlogPage";
@@ -357,6 +360,34 @@ function App() {
             </ProtectedRoute>
           }
         />
+        {/* Phase 5-2 (#768) routes — gated by ENABLE_GROUP_BUY so the
+            staging→main release can ship without exposing the feature
+            on production. Not registering the routes at all (vs. just
+            hiding the entry points) means a direct URL hit falls
+            through to the 404 / catch-all — defence in depth against
+            any link that might leak via copy-paste / bookmarks. */}
+        {ENABLE_GROUP_BUY && (
+          <Route
+            path="/admin/organizations/:orgId/billing"
+            element={
+              <ProtectedRoute requireAdmin>
+                <AdminOrgMonthlyBilling />
+              </ProtectedRoute>
+            }
+          />
+        )}
+        {ENABLE_GROUP_BUY && (
+          <Route
+            path="/teacher/group-buy/open"
+            element={
+              <ProtectedRoute>
+                <TeacherLayout>
+                  <GroupBuyOpenPage />
+                </TeacherLayout>
+              </ProtectedRoute>
+            }
+          />
+        )}
 
         {/* Student Routes with Layout */}
         <Route

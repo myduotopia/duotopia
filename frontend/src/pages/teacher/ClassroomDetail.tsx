@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import {
+  practiceModeLabelKey,
+  practiceModeBadgeClass,
+  isQuizMode,
+} from "@/lib/practiceMode";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -31,6 +36,7 @@ import { AssignmentDialog, CartItem } from "@/components/AssignmentDialog";
 import { InstantPracticeDialog } from "@/components/InstantPracticeDialog";
 import { AssignmentDetailSheet } from "@/components/AssignmentDetailSheet";
 import BatchGradingModal from "@/components/BatchGradingModal";
+import { RequestRevisionModal } from "@/components/RequestRevisionModal";
 import { StudentCompletionDashboard } from "@/components/StudentCompletionDashboard";
 import { RecursiveTreeAccordion } from "@/components/shared/RecursiveTreeAccordion";
 import { programTreeConfig } from "@/components/shared/programTreeConfig";
@@ -42,6 +48,7 @@ import {
   Edit,
   FileText,
   X,
+  RotateCcw,
   Save,
   Mic,
   Trash2,
@@ -140,6 +147,10 @@ export default function ClassroomDetail({
   // Teacher subscription state
   const [canAssignHomework, setCanAssignHomework] = useState<boolean>(false);
   const [canUseAiGrading, setCanUseAiGrading] = useState<boolean>(true);
+  // #830：批改 hub 內已有「AI 批改」入口取代列表上的 AI Grade 鈕，暫時隱藏列表入口
+  const SHOW_LIST_AI_GRADE = false;
+  // #830：批改 hub 已取代「Progress & Grade」便利貼入口，隱藏每筆作業的該入口
+  const SHOW_PROGRESS_GRADE_ENTRY = false;
   const [teacherData, setTeacherData] = useState<{
     subscription_status?: string;
     days_remaining?: number;
@@ -312,6 +323,29 @@ export default function ClassroomDetail({
     assignmentId: 0,
     classroomId: 0,
   });
+  // #830 批改 hub modal
+  const [revisionModal, setRevisionModal] = useState<{
+    open: boolean;
+    assignments: { id: number; title: string; practice_mode: string }[];
+    index: number;
+  }>({
+    open: false,
+    assignments: [],
+    index: 0,
+  });
+  // 開啟批改 hub：以「未封存」作業清單（含朗讀）支援上一份/下一份切換
+  const openRevisionModal = (assignment: Assignment) => {
+    const eligible = filteredAssignments.map((a) => ({
+      id: a.id,
+      title: a.title,
+      practice_mode: a.practice_mode || "",
+    }));
+    const index = Math.max(
+      0,
+      eligible.findIndex((a) => a.id === assignment.id),
+    );
+    setRevisionModal({ open: true, assignments: eligible, index });
+  };
   // Sticky note modal state
   const [stickyNoteModal, setStickyNoteModal] = useState({
     open: false,
@@ -1113,6 +1147,31 @@ export default function ClassroomDetail({
     }
   };
 
+  // Phase 5-2 (#768): activate/deactivate a student. The endpoint writes
+  // to student_status_history (driving Phase 4 monthly billing) AND syncs
+  // Student.is_active so existing UI flows keep working.
+  const handleToggleStudentStatus = async (
+    student: Student,
+    nextStatus: "active" | "inactive",
+  ) => {
+    try {
+      await apiClient.updateStudentStatus(student.id, { status: nextStatus });
+      toast.success(
+        nextStatus === "inactive"
+          ? `已停用 ${student.name}`
+          : `已啟用 ${student.name}`,
+      );
+      // Refresh BOTH the student list (toggle UI state) AND classroom
+      // metadata. fetchClassroomDetail alone leaves the student array stale.
+      await Promise.all([fetchStudents(), fetchClassroomDetail(false)]);
+    } catch (error) {
+      console.error("Failed to update student status:", error);
+      const message =
+        error instanceof ApiError ? error.message : "更新學生狀態失敗";
+      toast.error(message);
+    }
+  };
+
   const handleSaveStudent = async () => {
     // Refresh data after save (parallel requests, no loading spinner)
     await Promise.all([
@@ -1769,6 +1828,7 @@ export default function ClassroomDetail({
                     onViewStudent={handleViewStudent}
                     onEditStudent={handleEditStudent}
                     onResetPassword={handleResetPassword}
+                    onToggleStatus={handleToggleStudentStatus}
                     onDeleteStudent={handleDeleteStudentRow}
                     emptyMessage={t("classroomDetail.messages.noStudents")}
                     disableActions={isOrgMode}
@@ -2293,7 +2353,17 @@ export default function ClassroomDetail({
                                       "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
                                   };
                                 }
-                                // default: word_reading
+                                // 其餘（含三種小考）由 registry 推導；未知才退回單字朗讀
+                                {
+                                  const key =
+                                    practiceModeLabelKey(practiceMode);
+                                  if (key)
+                                    return {
+                                      label: t(key),
+                                      color:
+                                        practiceModeBadgeClass(practiceMode),
+                                    };
+                                }
                                 return {
                                   label: t(
                                     "classroomDetail.contentTypes.WORD_READING",
@@ -2403,15 +2473,18 @@ export default function ClassroomDetail({
                                     </span>
                                   </div>
                                   {/* 自動批改模式 (rearrangement / word_selection /
-                                      word_spelling / word_cloze / tug_of_war) 不顯示 AI 批改按鈕 */}
-                                  {assignment.practice_mode !==
-                                    "rearrangement" &&
+                                      word_spelling / word_cloze / tug_of_war / 三種小考)
+                                      不顯示 AI 批改按鈕。#830：列表入口暫時隱藏，改由 hub 內觸發 */}
+                                  {SHOW_LIST_AI_GRADE &&
+                                    assignment.practice_mode !==
+                                      "rearrangement" &&
                                     assignment.practice_mode !==
                                       "word_selection" &&
                                     assignment.practice_mode !==
                                       "word_spelling" &&
                                     assignment.practice_mode !== "word_cloze" &&
                                     assignment.practice_mode !== "tug_of_war" &&
+                                    !isQuizMode(assignment.practice_mode) &&
                                     canUseAiGrading && (
                                       <div className="flex flex-col items-end flex-shrink-0">
                                         <Button
@@ -2486,6 +2559,20 @@ export default function ClassroomDetail({
                                   >
                                     {t("classroomDetail.buttons.previewDemo")}
                                   </Button>
+                                  {/* #830 批改 hub（看成績 + 退回訂正 + 完成批改） */}
+                                  {!showArchived && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="flex-1 h-10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                                      onClick={() =>
+                                        openRevisionModal(assignment)
+                                      }
+                                    >
+                                      <RotateCcw className="w-4 h-4 mr-1.5" />
+                                      {t("classroomDetail.buttons.gradeHub")}
+                                    </Button>
+                                  )}
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <Button
@@ -2500,25 +2587,27 @@ export default function ClassroomDetail({
                                       align="end"
                                       className="bg-white dark:bg-gray-800"
                                     >
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          setStickyNoteModal({
-                                            open: true,
-                                            assignmentIndex: (showArchived
-                                              ? archivedAssignments
-                                              : assignments
-                                            ).findIndex(
-                                              (a) => a.id === assignment.id,
-                                            ),
-                                          })
-                                        }
-                                      >
-                                        <StickyNote className="h-4 w-4 mr-2" />
-                                        {t(
-                                          "classroomDetail.buttons.stickyNote",
-                                          "便利貼",
-                                        )}
-                                      </DropdownMenuItem>
+                                      {SHOW_PROGRESS_GRADE_ENTRY && (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            setStickyNoteModal({
+                                              open: true,
+                                              assignmentIndex: (showArchived
+                                                ? archivedAssignments
+                                                : assignments
+                                              ).findIndex(
+                                                (a) => a.id === assignment.id,
+                                              ),
+                                            })
+                                          }
+                                        >
+                                          <StickyNote className="h-4 w-4 mr-2" />
+                                          {t(
+                                            "classroomDetail.buttons.stickyNote",
+                                            "便利貼",
+                                          )}
+                                        </DropdownMenuItem>
+                                      )}
                                       {showArchived && (
                                         <DropdownMenuItem
                                           onClick={() =>
@@ -2664,7 +2753,19 @@ export default function ClassroomDetail({
                                           "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
                                       };
                                     }
-                                    // default: word_reading
+                                    // 其餘（含三種小考）由 registry 推導；未知才退回單字朗讀
+                                    {
+                                      const key =
+                                        practiceModeLabelKey(practiceMode);
+                                      if (key)
+                                        return {
+                                          label: t(key),
+                                          color:
+                                            practiceModeBadgeClass(
+                                              practiceMode,
+                                            ),
+                                        };
+                                    }
                                     return {
                                       label: t(
                                         "classroomDetail.contentTypes.WORD_READING",
@@ -2846,10 +2947,28 @@ export default function ClassroomDetail({
                                             "classroomDetail.buttons.previewDemo",
                                           )}
                                         </Button>
+                                        {/* #830 批改 hub（看成績 + 退回訂正 + 完成批改） */}
+                                        {!showArchived && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-orange-600 hover:text-orange-700 dark:text-orange-400 h-10 min-h-10"
+                                            onClick={() =>
+                                              openRevisionModal(assignment)
+                                            }
+                                          >
+                                            <RotateCcw className="w-4 h-4 mr-1" />
+                                            {t(
+                                              "classroomDetail.buttons.gradeHub",
+                                            )}
+                                          </Button>
+                                        )}
                                         {/* 自動批改模式 (rearrangement / word_selection /
-                                            word_spelling / word_cloze / tug_of_war) 不顯示 AI 批改按鈕 */}
-                                        {assignment.practice_mode !==
-                                          "rearrangement" &&
+                                            word_spelling / word_cloze / tug_of_war / 三種小考)
+                                            不顯示 AI 批改按鈕。#830：列表入口暫時隱藏，改由 hub 內觸發 */}
+                                        {SHOW_LIST_AI_GRADE &&
+                                          assignment.practice_mode !==
+                                            "rearrangement" &&
                                           assignment.practice_mode !==
                                             "word_selection" &&
                                           assignment.practice_mode !==
@@ -2858,6 +2977,9 @@ export default function ClassroomDetail({
                                             "word_cloze" &&
                                           assignment.practice_mode !==
                                             "tug_of_war" &&
+                                          !isQuizMode(
+                                            assignment.practice_mode,
+                                          ) &&
                                           canUseAiGrading && (
                                             <Button
                                               variant="default"
@@ -2877,28 +2999,30 @@ export default function ClassroomDetail({
                                               )}
                                             </Button>
                                           )}
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="text-amber-600 hover:text-amber-700 dark:text-amber-400 h-10 min-h-10"
-                                          onClick={() =>
-                                            setStickyNoteModal({
-                                              open: true,
-                                              assignmentIndex: (showArchived
-                                                ? archivedAssignments
-                                                : assignments
-                                              ).findIndex(
-                                                (a) => a.id === assignment.id,
-                                              ),
-                                            })
-                                          }
-                                        >
-                                          <StickyNote className="h-5 w-5 mr-1" />
-                                          {t(
-                                            "classroomDetail.buttons.stickyNote",
-                                            "進度",
-                                          )}
-                                        </Button>
+                                        {SHOW_PROGRESS_GRADE_ENTRY && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-amber-600 hover:text-amber-700 dark:text-amber-400 h-10 min-h-10"
+                                            onClick={() =>
+                                              setStickyNoteModal({
+                                                open: true,
+                                                assignmentIndex: (showArchived
+                                                  ? archivedAssignments
+                                                  : assignments
+                                                ).findIndex(
+                                                  (a) => a.id === assignment.id,
+                                                ),
+                                              })
+                                            }
+                                          >
+                                            <StickyNote className="h-5 w-5 mr-1" />
+                                            {t(
+                                              "classroomDetail.buttons.stickyNote",
+                                              "進度",
+                                            )}
+                                          </Button>
+                                        )}
                                         {showArchived ? (
                                           <>
                                             <Button
@@ -3736,6 +3860,17 @@ export default function ClassroomDetail({
           });
           fetchAssignments();
         }}
+      />
+
+      {/* #830 批次要求訂正 Modal */}
+      <RequestRevisionModal
+        open={revisionModal.open}
+        onOpenChange={(open) => setRevisionModal({ ...revisionModal, open })}
+        assignments={revisionModal.assignments}
+        initialIndex={revisionModal.index}
+        classroomId={id || ""}
+        canUseAiGrading={canUseAiGrading}
+        onDone={() => fetchAssignments()}
       />
 
       {/* Sticky Note Modal */}

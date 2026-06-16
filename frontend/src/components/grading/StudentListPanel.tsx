@@ -7,6 +7,7 @@
  * 詳見 docs/design/grading-page-architecture.md
  */
 
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { TrafficLightDot, StatusLegend } from "@/components/StudentStatusPanel";
@@ -18,6 +19,8 @@ interface StudentListPanelProps {
   currentStudentId: string | null;
   onSelect: (student: StudentListItem) => void;
   activeTab: "students" | "content" | "grading";
+  /** 上方可選插槽（如小考【班級統計】）；本元件不判斷作業類型，僅渲染。 */
+  topSlot?: ReactNode;
 }
 
 export function StudentListPanel({
@@ -25,6 +28,7 @@ export function StudentListPanel({
   currentStudentId,
   onSelect,
   activeTab,
+  topSlot,
 }: StudentListPanelProps) {
   const { t } = useTranslation();
 
@@ -39,6 +43,7 @@ export function StudentListPanel({
       }`}
     >
       <Card className="p-3">
+        {topSlot}
         <h3 className="text-sm font-medium mb-3 flex items-center justify-between text-gray-700">
           <div className="flex items-center gap-1">
             <Users className="h-4 w-4" />

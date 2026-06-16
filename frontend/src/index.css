@@ -116,6 +116,17 @@ body {
   font-weight: 600;
 }
 
+/* Issue #844: 觸控裝置鍵盤按鈕與字級放大，提升可點性與可讀性。
+   覆寫 react-simple-keyboard 預設（.hg-theme-default .hg-button = 高 40px、
+   font-size inherit ~16px）。用 .vk-wrapper .simple-keyboard .hg-button（3 個
+   class）拉高 specificity 蓋過預設（2 個 class），不受 CSS import 順序影響。
+   字級套在所有 hg-button → 字母、標點、Shift/Bksp/Space/Enter 一致放大；
+   .vk-punct 的 flex-basis 是百分比公式，不受 height/font 影響故不需更動。 */
+.vk-wrapper .simple-keyboard .hg-button {
+  height: 48px; /* 40 → 48 */
+  font-size: 22px; /* inherit(~16) → 22 */
+}
+
 /* Issue #763: 標點鍵與字母排同寬。字母排為 10 鍵 + 9 個 5px gap，
    每鍵寬 (rowWidth − 9×gap) / 10；標點直接用同公式當 flex-basis，
    Space / Enter 維持 flex-grow:1 自動吃剩餘空間。 */
@@ -191,4 +202,66 @@ body {
   border-radius: inherit;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
   background-size: 200px 200px;
+}
+
+/* 金屬光澤閃動邊框（#830 班級報告入口按鈕） */
+@keyframes metallic-shine {
+  0% {
+    background-position:
+      0 0,
+      200% 0;
+  }
+  100% {
+    background-position:
+      0 0,
+      -200% 0;
+  }
+}
+
+.btn-metallic {
+  position: relative;
+  border: 2px solid transparent;
+  border-radius: 0.5rem;
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    linear-gradient(
+        110deg,
+        #1e40af,
+        #93c5fd,
+        #2563eb,
+        #eff6ff,
+        #3b82f6,
+        #bfdbfe,
+        #1e40af
+      )
+      border-box;
+  background-size:
+    100% 100%,
+    220% 100%;
+  animation: metallic-shine 6s linear infinite;
+}
+
+.dark .btn-metallic {
+  background:
+    linear-gradient(#1f2937, #1f2937) padding-box,
+    linear-gradient(
+        110deg,
+        #1e3a8a,
+        #93c5fd,
+        #3b82f6,
+        #dbeafe,
+        #60a5fa,
+        #bfdbfe,
+        #1e3a8a
+      )
+      border-box;
+  background-size:
+    100% 100%,
+    220% 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-metallic {
+    animation: none;
+  }
 }

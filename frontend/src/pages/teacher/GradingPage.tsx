@@ -27,6 +27,8 @@ import {
   StudentListPanel,
   OverallFeedbackPanel,
 } from "@/components/grading";
+import { ClassQuizStats } from "@/components/grading/ClassQuizStats";
+import { BarChart3 } from "lucide-react";
 
 const ReadingAssessmentPanel = lazy(() =>
   import("@/components/grading/ReadingAssessmentPanel").then((m) => ({
@@ -36,6 +38,11 @@ const ReadingAssessmentPanel = lazy(() =>
 const SentenceRearrangementPanel = lazy(() =>
   import("@/components/grading/SentenceRearrangementPanel").then((m) => ({
     default: m.SentenceRearrangementPanel,
+  })),
+);
+const QuizGradingPanel = lazy(() =>
+  import("@/components/grading/QuizGradingPanel").then((m) => ({
+    default: m.QuizGradingPanel,
   })),
 );
 
@@ -108,13 +115,22 @@ export interface SubmissionItem {
   max_errors?: number | null;
   item_status?: string;
   completed_at?: string | null;
+  // Issue #830: 小考逐題欄位
+  question_number?: number;
+  correct_answer?: string;
+  is_correct?: boolean;
+  time_spent_seconds?: number;
 }
 
 export type PracticeMode =
   | "reading"
   | "rearrangement"
   | "word_reading"
-  | "word_selection";
+  | "word_selection"
+  // Issue #830: 小考變體（自動判分，批改頁走 QuizGradingPanel 顯示逐題對錯）
+  | "word_selection_quiz"
+  | "word_spelling_quiz"
+  | "word_cloze_quiz";
 
 export interface StudentSubmission {
   student_number: number;
@@ -133,6 +149,11 @@ export interface StudentSubmission {
   }>;
   current_score?: number;
   current_feedback?: string;
+  // Issue #830: 小考彙總
+  score?: number | null;
+  correct_count?: number;
+  total?: number;
+  accuracy?: number;
 }
 
 export interface ItemFeedback {
@@ -222,6 +243,12 @@ export default function GradingPage() {
   // 學生列表相關
   const [studentList, setStudentList] = useState<StudentListItem[]>([]);
   const [assignmentTitle, setAssignmentTitle] = useState("");
+  // 作業層級 practice_mode（決定左欄是否顯示小考【班級報告】入口）
+  const [assignmentPracticeMode, setAssignmentPracticeMode] = useState<
+    string | undefined
+  >(undefined);
+  // 中間欄是否顯示【班級報告】（點學生則切回個別批改）
+  const [showClassReport, setShowClassReport] = useState(false);
 
   // 載入作業資訊和學生列表
   useEffect(() => {
@@ -264,6 +291,7 @@ export default function GradingPage() {
       setAssignmentTitle(
         response.title || `${t("gradingPage.labels.grading")} #${assignmentId}`,
       );
+      setAssignmentPracticeMode(response.practice_mode);
     } catch (error) {
       console.error("Failed to load assignment info:", error);
     }
@@ -754,6 +782,7 @@ export default function GradingPage() {
   };
 
   const handleStudentSelect = async (student: StudentListItem) => {
+    setShowClassReport(false); // 點學生 → 中間切回個別批改，離開班級報告
     setSearchParams({ studentId: (student.student_id || 0).toString() });
     setActiveTab("content"); // 選擇學生後自動切換到題組 tab
   };
@@ -853,6 +882,11 @@ export default function GradingPage() {
       return <SentenceRearrangementPanel {...panelProps} />;
     }
 
+    // Issue #830: 小考自動判分 — 逐題對錯 + 答對率，不走 ReadingAssessmentPanel
+    if (submission.practice_mode?.endsWith("_quiz")) {
+      return <QuizGradingPanel submission={submission} activeTab={activeTab} />;
+    }
+
     return (
       <ReadingAssessmentPanel
         {...panelProps}
@@ -935,42 +969,72 @@ export default function GradingPage() {
             currentStudentId={studentId}
             onSelect={handleStudentSelect}
             activeTab={activeTab}
+            topSlot={
+              assignmentPracticeMode?.endsWith("_quiz") ? (
+                <button
+                  type="button"
+                  onClick={() => setShowClassReport(true)}
+                  className={`btn-metallic mb-3 flex w-full items-center gap-1.5 px-2 py-2 text-sm font-semibold transition-colors ${
+                    showClassReport
+                      ? "text-blue-700 dark:text-blue-300"
+                      : "text-gray-800 dark:text-gray-100"
+                  }`}
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  {t("gradingPage.classStats.title", "班級報告")}
+                </button>
+              ) : undefined
+            }
           />
 
-          <Suspense
-            fallback={
-              <div className="col-span-12 lg:col-span-6 flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              </div>
-            }
-          >
-            {renderContentPanel()}
-          </Suspense>
+          {showClassReport &&
+          assignmentId &&
+          assignmentPracticeMode?.endsWith("_quiz") ? (
+            <div className="col-span-12 lg:col-span-10">
+              <ClassQuizStats assignmentId={assignmentId} />
+            </div>
+          ) : (
+            <>
+              <Suspense
+                fallback={
+                  <div className="col-span-12 lg:col-span-6 flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                }
+              >
+                {renderContentPanel()}
+              </Suspense>
 
-          <OverallFeedbackPanel
-            submission={submission}
-            score={score}
-            feedback={feedback}
-            itemFeedbacks={feedbacksForDisplay}
-            isAutoCalculatedScore={isAutoCalculatedScore}
-            submitting={submitting}
-            activeTab={activeTab}
-            totalQuestions={totalQuestions}
-            onScoreChange={(v) => {
-              setScore(v);
-              setIsAutoCalculatedScore(false);
-            }}
-            onFeedbackChange={setFeedback}
-            onAutoSave={() => performAutoSave()}
-            onComplete={handleCompleteGrading}
-            onRequestRevision={
-              isAutoScoredMode(submission?.practice_mode)
-                ? undefined
-                : handleRequestRevision
-            }
-            isAutoScored={isAutoScoredMode(submission?.practice_mode)}
-            onJumpToItem={handleJumpToItem}
-          />
+              <OverallFeedbackPanel
+                submission={submission}
+                score={score}
+                feedback={feedback}
+                itemFeedbacks={feedbacksForDisplay}
+                isAutoCalculatedScore={isAutoCalculatedScore}
+                submitting={submitting}
+                activeTab={activeTab}
+                totalQuestions={totalQuestions}
+                onScoreChange={(v) => {
+                  setScore(v);
+                  setIsAutoCalculatedScore(false);
+                }}
+                onFeedbackChange={setFeedback}
+                onAutoSave={() => performAutoSave()}
+                onComplete={handleCompleteGrading}
+                onRequestRevision={
+                  isAutoScoredMode(submission?.practice_mode)
+                    ? undefined
+                    : handleRequestRevision
+                }
+                isAutoScored={isAutoScoredMode(submission?.practice_mode)}
+                // 小考完全自動判分：分數唯讀、不顯示完成批改（僅保留退回）
+                autoScoreReadOnly={
+                  submission?.practice_mode?.endsWith("_quiz") ?? false
+                }
+                onJumpToItem={handleJumpToItem}
+              />
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -37,6 +37,8 @@ import LineContactButton, {
   LINE_FRIEND_URL,
 } from "@/components/LineContactButton";
 import { apiClient } from "@/lib/api";
+import { GroupBuyPlanCards } from "@/components/pricing/GroupBuyPlanCards";
+import { ENABLE_GROUP_BUY } from "@/config/featureFlags";
 
 function getSubscriptionPlans(t: (key: string) => string): SubscriptionPlan[] {
   return [
@@ -109,6 +111,11 @@ const pointPackages: PointPackage[] = [
 ];
 
 const BASE_UNIT_COST = 0.18; // highest unit cost for discount calculation
+
+// Group-buy marketing cards extracted to a shared component so
+// `/teacher/subscription` can render the same grid + fetch + fallback
+// semantics (issue #768 comment 4638082532 item 3). See the component
+// for the admin-update sync rule and DB-seed snapshot.
 
 export default function PricingPage() {
   const navigate = useNavigate();
@@ -428,7 +435,7 @@ export default function PricingPage() {
         {/* Tabs: Monthly Subscription | Point Packages */}
         <div className="max-w-5xl mx-auto">
           {activeTab === "subscription" && (
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-4xl mx-auto space-y-12">
               <div className="grid md:grid-cols-2 gap-8">
                 {subscriptionPlans.map((plan) => (
                   <SubscriptionPlanCard
@@ -443,6 +450,32 @@ export default function PricingPage() {
                   />
                 ))}
               </div>
+
+              {/* Phase 5-2 follow-up (#768) — group-buy marketing
+                  surface gated by ENABLE_GROUP_BUY so the staging→main
+                  release can ship without exposing the feature on
+                  production. Re-enable by flipping the build env in
+                  deploy-frontend.yml; no code change required. */}
+              {ENABLE_GROUP_BUY && (
+                <div className="space-y-4">
+                  <GroupBuyPlanCards />
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate("/teacher/group-buy/open")}
+                      disabled={isStudent}
+                      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      立即開設團購方案 →
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      {isStudent
+                        ? "請先登出學生帳號"
+                        : "需教師帳號登入；尚未登入會引導至教師登入頁。"}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

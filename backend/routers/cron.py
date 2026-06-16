@@ -24,6 +24,7 @@ from models import (
 )
 from services.email_service import email_service
 from services.tappay_service import TapPayService
+from services.group_buy import grant_monthly_for_group_buy
 from google.cloud import bigquery
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
@@ -35,7 +36,9 @@ CRON_SECRET = os.getenv("CRON_SECRET", "dev-secret-change-me")
 
 @router.post("/monthly-renewal")
 async def monthly_renewal_cron(
-    x_cron_secret: str = Header(None), db: Session = Depends(get_db)
+    x_cron_secret: str = Header(None),
+    db: Session = Depends(get_db),
+    force: bool = False,
 ):
     """
     每月 1 號執行的自動續訂任務
@@ -70,8 +73,11 @@ async def monthly_renewal_cron(
     logger.info(f"   Taipei time: {now_taipei}")
     logger.info(f"   UTC time: {now_utc}")
 
-    # 檢查是否為每月 1 號（台北時間）
-    if today_taipei.day != 1:
+    # 檢查是否為每月 1 號（台北時間）— `?force=true` (cron-secret gated)
+    # bypasses the day-1 guard for ops recovery (e.g. Phase 3 failed on day 1
+    # and we need to re-run on day 2). The CRON_SECRET check above already
+    # gates this.
+    if today_taipei.day != 1 and not force:
         logger.info(
             f"Not the 1st of the month (Taipei: {today_taipei}), skipping renewal"
         )
@@ -80,17 +86,26 @@ async def monthly_renewal_cron(
             "message": f"Not the 1st of the month. Today is {today_taipei}",
             "date": today_taipei.isoformat(),
         }
+    if force:
+        logger.warning(
+            f"⚠️  Day-1 guard bypassed via force=true (today={today_taipei})"
+        )
 
     # ========================================
     # Phase 1: 標記所有過期訂閱為 expired
     # ========================================
     logger.info("📋 Phase 1: Marking expired subscriptions")
 
+    # F6 — Compare against the full tz-aware now_taipei datetime, not the
+    # naive .date(). end_date is timestamptz; comparing to a bare `date`
+    # forces Postgres to cast using the session timezone (UTC on Cloud Run),
+    # which incorrectly preserves a Taipei-end-of-Dec-31 period as active
+    # past Taipei Jan 1.
     expired_periods = (
         db.query(SubscriptionPeriod)
         .filter(
             SubscriptionPeriod.status == "active",
-            SubscriptionPeriod.end_date < today_taipei,
+            SubscriptionPeriod.end_date < now_taipei,
         )
         .all()
     )
@@ -133,6 +148,9 @@ async def monthly_renewal_cron(
         "renewal_failed": 0,
         "auto_renew_disabled": 0,
         "skipped": 0,
+        # Group-buy monthly grants (issue #768 Phase 3, 五.2)
+        "group_buy_grants_created": 0,
+        "group_buy_grants_skipped_duplicate": 0,
         "errors": [],
     }
 
@@ -367,14 +385,54 @@ async def monthly_renewal_cron(
             results["renewal_failed"] += 1
             results["errors"].append({"teacher": teacher.email, "error": str(e)})
 
+    # ========================================
+    # Phase 3 (issue #768 五.2): 團購月配發 1000 點
+    # ========================================
+    # For every active group-buy school where the org's annual subscription
+    # is still in date, create a fresh 1000-quota SubscriptionPeriod for
+    # every bound teacher. Old periods get marked expired by Phase 1 above.
+    logger.info("🎁 Phase 3: Group-buy monthly grants")
+    group_buy_failed = False
+    try:
+        gb_result = grant_monthly_for_group_buy(now_taipei, db)
+        results["group_buy_grants_created"] = gb_result["grants_created"]
+        results["group_buy_grants_skipped_duplicate"] = gb_result[
+            "grants_skipped_duplicate"
+        ]
+        logger.info(
+            f"✅ Group-buy grants: created={gb_result['grants_created']} "
+            f"skipped_duplicate={gb_result['grants_skipped_duplicate']}"
+        )
+    except Exception as e:
+        # R2-F4 — Explicit rollback to clear any dirty/pending state from a
+        # partial Phase 3 commit attempt, so subsequent DB access in this
+        # request (e.g. logging) interacts with a clean session.
+        db.rollback()
+        logger.error(f"❌ Group-buy grant phase failed: {e}")
+        results["errors"].append({"phase": "group_buy_grant", "error": str(e)})
+        group_buy_failed = True
+
     logger.info(
         f"🔄 Monthly renewal completed: "
         f"Marked expired: {results['marked_expired']}, "
         f"Auto-renewed: {results['auto_renewed']}, "
         f"Failed: {results['renewal_failed']}, "
         f"Auto-renew disabled: {results['auto_renew_disabled']}, "
-        f"Skipped: {results['skipped']}"
+        f"Skipped: {results['skipped']}, "
+        f"Group-buy grants: {results['group_buy_grants_created']}"
     )
+
+    # F7 — Surface Phase 3 total failure as HTTP 500 so Cloud Scheduler's
+    # failure threshold triggers an alert. Partial Phase-2 per-teacher
+    # failures stay 200 to match historical behaviour.
+    if group_buy_failed:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Group-buy monthly grant phase failed; manual recovery needed.",
+                "results": results,
+            },
+        )
 
     return results
 

@@ -908,6 +908,9 @@
       "word_reading": "Word Reading",
       "word_spelling": "Word Spelling",
       "word_cloze": "Word Cloze",
+      "word_selection_quiz": "Word Selection (Quiz)",
+      "word_spelling_quiz": "Word Spelling (Quiz)",
+      "word_cloze_quiz": "Word Cloze (Quiz)",
       "all": "All Types"
     },
     "sort": {
@@ -1233,6 +1236,12 @@
       "button": "Log in with School Account (1Campus)"
     }
   },
+  "studentLoginQR": {
+    "viewLabel": "Select share view",
+    "personal": "Personal",
+    "orgPrefix": "Org: ",
+    "schoolPrefix": "School: "
+  },
   "studentLogin": {
     "header": {
       "home": "Back to Home",
@@ -1248,7 +1257,8 @@
       "recentTeachers": "Or select a recently used teacher:"
     },
     "step2": {
-      "title": "Select Your Class and Name"
+      "title": "Select Your Class and Name",
+      "showAll": "Can't find your class? Show all"
     },
     "step3": {
       "title": "Select Your Name"
@@ -1795,12 +1805,19 @@
         "scoreSpeaking": "Score Category: Speaking",
         "wordReading": "Word Reading",
         "wordReadingDesc": "Students read words aloud, system scores pronunciation",
-        "wordSelection": "Word Selection",
-        "wordSelectionDesc": "View words or listen to audio, select the correct translation",
-        "wordSpelling": "Word Spelling",
-        "wordSpellingDesc": "View translation or listen to audio, type the correct spelling",
-        "wordCloze": "Word Cloze",
-        "wordClozeDesc": "Fill in the blank in the example sentence with the correct word form",
+        "wordSelection": "Word Selection · Ebbinghaus",
+        "wordSelectionDesc": "View words or listen to audio, select the correct translation (Ebbinghaus item selection)",
+        "wordSelectionQuiz": "Word Selection · Quiz",
+        "wordSelectionQuizDesc": "Answer all items in order with question numbers; locks on submit",
+        "quizTimeLimit": "Whole-quiz time limit (auto-submits when reached)",
+        "wordSpelling": "Word Spelling · Ebbinghaus",
+        "wordSpellingDesc": "View translation or listen to audio, type the correct spelling (Ebbinghaus item selection)",
+        "wordCloze": "Word Cloze · Ebbinghaus",
+        "wordClozeDesc": "Fill in the blank in the example sentence with the correct word form (Ebbinghaus item selection)",
+        "wordSpellingQuiz": "Word Spelling · Quiz",
+        "wordSpellingQuizDesc": "Answer all items in order with question numbers; locks on submit",
+        "wordClozeQuiz": "Word Cloze · Quiz",
+        "wordClozeQuizDesc": "Answer all items in order with question numbers; locks on submit",
         "targetProficiency": "Target Proficiency",
         "targetProficiencyDesc": "Students must reach this proficiency to complete the assignment",
         "showTranslation": "Show Translation",
@@ -2764,6 +2781,8 @@
       "batchArchive": "Batch Archive",
       "viewDetails": "Edit",
       "previewDemo": "Preview",
+      "requestRevisionBatch": "Revise",
+      "gradeHub": "Grade",
       "viewSubmissions": "View Student Submissions",
       "editAssignment": "Edit Assignment",
       "deleteAssignment": "Delete Assignment",
@@ -2842,6 +2861,9 @@
       "WORD_READING": "Word Reading",
       "WORD_SPELLING": "Word Spelling",
       "WORD_CLOZE": "Word Cloze",
+      "WORD_SELECTION_QUIZ": "Word Selection (Quiz)",
+      "WORD_SPELLING_QUIZ": "Word Spelling (Quiz)",
+      "WORD_CLOZE_QUIZ": "Word Cloze (Quiz)",
       "TUG_OF_WAR": "Tug of War",
       "speakingPractice": "Speaking Practice",
       "speaking_practice": "Speaking Practice",
@@ -2867,6 +2889,26 @@
   },
   "gradingPage": {
     "title": "Grade Assignment",
+    "classStats": {
+      "title": "Class report",
+      "submitted": "{{n}} submitted",
+      "correct": "Correct",
+      "wrong": "Wrong",
+      "unanswered": "Unanswered",
+      "questionLabel": "Q{{n}}",
+      "qShort": "Q{{n}}",
+      "noData": "No submissions yet",
+      "loadError": "Failed to load class report. Please try again."
+    },
+    "quiz": {
+      "score": "Score",
+      "accuracy": "Accuracy",
+      "correctCount": "Correct",
+      "noAnswers": "No answers yet",
+      "studentAnswer": "Answer",
+      "correctAnswer": "Correct",
+      "blank": "(blank)"
+    },
     "tabs": {
       "students": "Students",
       "questions": "Questions",
@@ -4438,6 +4480,7 @@
     "labels": {
       "title": "Title",
       "pasteContent": "Paste vocabulary",
+      "pasteSentences": "Paste sentences",
       "batchOperations": "Batch Operations",
       "aiGenerateTTS": "AI Generate Audio",
       "aiGenerateTranslation": "AI Auto Translate",
@@ -4774,6 +4817,80 @@
       "submitFailed": "Failed to submit answer",
       "completed": "Assignment completed!",
       "completeFailed": "Failed to complete assignment"
+    }
+  },
+  "requestRevision": {
+    "title": "Request Revision",
+    "selectUnder100": "Select all under 100",
+    "selectAll": "Select all",
+    "applyRange": "Select by score",
+    "selectedCount": "{{count}} selected",
+    "empty": "No assigned students",
+    "openGrading": "View answers / grade",
+    "confirm": "Return ({{count}})",
+    "success": "Returned {{count}} student(s) for revision",
+    "submitFailed": "Failed to return",
+    "loadFailed": "Failed to load students"
+  },
+  "gradingHub": {
+    "title": "Grade",
+    "returnBtn": "Return ({{count}})",
+    "completeBtn": "Graded ({{count}})",
+    "completeSuccess": "Marked {{count}} student(s) graded",
+    "completeFailed": "Failed to mark graded",
+    "returnShort": "Return",
+    "gradeShort": "Graded",
+    "resetShort": "Reset",
+    "resetBtn": "Reset ({{count}})",
+    "resetSuccess": "Reset {{count}} student(s) to not started",
+    "resetFailed": "Failed to reset",
+    "rowResetSuccess": "Student reset to not started",
+    "aiGradeSuccess": "AI grading complete",
+    "aiGradeFailed": "AI grading failed",
+    "aiGradeProgress": "AI grading {{current}}/{{total}}",
+    "aiGradePartial": "{{ok}} done, {{fail}} failed",
+    "noTarget": "No matching students",
+    "rowReturnSuccess": "Student returned for revision",
+    "rowGradeSuccess": "Student marked graded"
+  },
+  "studentStatusPanel": {
+    "metric": {
+      "selectAllStudents": "Select all students",
+      "correctRate": "Correct",
+      "pronunciation": "Pron",
+      "accuracy": "Acc",
+      "fluency": "Flu",
+      "total": "Total"
+    }
+  },
+  "wordQuiz": {
+    "questionNav": "Q",
+    "questionLabel": "Question {{current}} / {{total}}",
+    "typeHere": "Type your answer…",
+    "playAudio": "Play audio",
+    "prev": "Previous",
+    "next": "Next",
+    "submit": "Submit",
+    "empty": "No questions available.",
+    "locked": {
+      "title": "Quiz already submitted",
+      "desc": "Submission is one-shot; wait for the teacher to return the assignment to fix wrong answers."
+    },
+    "toast": {
+      "lastAnswerNotSaved": "Could not save the last answer; submitting with previously-saved answers.",
+      "reviewLoadFailed": "Failed to load quiz review"
+    },
+    "review": {
+      "yourAnswer": "Your answer",
+      "correctAnswer": "Correct answer",
+      "unanswered": "Not answered",
+      "correct": "Correct",
+      "wrong": "Wrong",
+      "scoreSummary": "{{correct}} / {{total}} correct"
+    },
+    "revision": {
+      "hint": "Revision mode: wrong answers reveal the correct answer; fix them all to submit.",
+      "correctAnswer": "Answer: {{answer}}"
     }
   },
   "wordSpelling": {

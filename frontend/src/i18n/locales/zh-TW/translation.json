@@ -964,6 +964,9 @@
       "word_reading": "單字朗讀",
       "word_spelling": "單字拼寫",
       "word_cloze": "克漏字",
+      "word_selection_quiz": "單字選擇·小考",
+      "word_spelling_quiz": "單字拼寫·小考",
+      "word_cloze_quiz": "單字克漏字·小考",
       "all": "全部類型"
     },
     "sort": {
@@ -1286,6 +1289,12 @@
       "button": "學校帳號登入 (1Campus)"
     }
   },
+  "studentLoginQR": {
+    "viewLabel": "選擇分享視圖",
+    "personal": "個人班級",
+    "orgPrefix": "機構：",
+    "schoolPrefix": "學校："
+  },
   "studentLogin": {
     "header": {
       "home": "返回首頁",
@@ -1301,7 +1310,8 @@
       "recentTeachers": "或選擇最近使用過的老師："
     },
     "step2": {
-      "title": "請選擇你的班級和名字"
+      "title": "請選擇你的班級和名字",
+      "showAll": "看不到你的班級？顯示全部"
     },
     "step3": {
       "title": "請選擇你的名字"
@@ -1848,12 +1858,19 @@
         "scoreSpeaking": "計分類別：口說",
         "wordReading": "單字朗讀",
         "wordReadingDesc": "學生朗讀單字，系統評分發音",
-        "wordSelection": "單字選擇",
-        "wordSelectionDesc": "看單字或聽音檔，選擇正確的翻譯",
-        "wordSpelling": "單字拼寫",
-        "wordSpellingDesc": "看翻譯或聽音檔，拼寫正確的單字",
-        "wordCloze": "克漏字",
-        "wordClozeDesc": "看例句填空，輸入正確的單字變形",
+        "wordSelection": "單字選擇·艾賓浩斯",
+        "wordSelectionDesc": "看單字或聽音檔，選擇正確的翻譯（艾賓浩斯記憶曲線選題）",
+        "wordSelectionQuiz": "單字選擇·小考",
+        "wordSelectionQuizDesc": "依教材題目順序作答，有題號，提交即鎖定",
+        "quizTimeLimit": "整卷時間限制（時間到自動提交）",
+        "wordSpelling": "單字拼寫·艾賓浩斯",
+        "wordSpellingDesc": "看翻譯或聽音檔，拼寫正確的單字（艾賓浩斯記憶曲線選題）",
+        "wordCloze": "單字克漏字·艾賓浩斯",
+        "wordClozeDesc": "看例句填空，輸入正確的單字變形（艾賓浩斯記憶曲線選題）",
+        "wordSpellingQuiz": "單字拼寫·小考",
+        "wordSpellingQuizDesc": "依教材題目順序作答，有題號，提交即鎖定",
+        "wordClozeQuiz": "單字克漏字·小考",
+        "wordClozeQuizDesc": "依教材題目順序作答，有題號，提交即鎖定",
         "targetProficiency": "達標熟悉度",
         "targetProficiencyDesc": "學生需達到此熟悉度才算完成作業",
         "showTranslation": "顯示翻譯",
@@ -2818,6 +2835,8 @@
       "viewDetails": "查看詳情",
       "editContent": "編輯內容",
       "previewDemo": "預覽",
+      "requestRevisionBatch": "要求訂正",
+      "gradeHub": "批改",
       "viewSubmissions": "查看學生提交",
       "editAssignment": "編輯作業",
       "deleteAssignment": "刪除作業",
@@ -2896,6 +2915,9 @@
       "WORD_READING": "單字朗讀",
       "WORD_SPELLING": "單字拼寫",
       "WORD_CLOZE": "單字克漏字",
+      "WORD_SELECTION_QUIZ": "單字選擇·小考",
+      "WORD_SPELLING_QUIZ": "單字拼寫·小考",
+      "WORD_CLOZE_QUIZ": "單字克漏字·小考",
       "TUG_OF_WAR": "拔河遊戲",
       "speakingPractice": "口說練習",
       "speaking_practice": "口說練習",
@@ -2921,6 +2943,26 @@
   },
   "gradingPage": {
     "title": "批改作業",
+    "classStats": {
+      "title": "班級報告",
+      "submitted": "已交 {{n}}",
+      "correct": "答對",
+      "wrong": "答錯",
+      "unanswered": "未作答",
+      "questionLabel": "第 {{n}} 題",
+      "qShort": "第{{n}}題",
+      "noData": "尚無提交資料",
+      "loadError": "班級報告載入失敗，請稍後再試"
+    },
+    "quiz": {
+      "score": "分數",
+      "accuracy": "答對率",
+      "correctCount": "答對題數",
+      "noAnswers": "尚無作答紀錄",
+      "studentAnswer": "學生答案",
+      "correctAnswer": "正解",
+      "blank": "（未作答）"
+    },
     "tabs": {
       "students": "學生",
       "questions": "題組",
@@ -4456,6 +4498,7 @@
     "labels": {
       "title": "標題",
       "pasteContent": "請貼上單字",
+      "pasteSentences": "請貼上句子",
       "batchOperations": "批次操作",
       "aiGenerateTTS": "AI 生成語音",
       "aiGenerateTranslation": "AI 自動翻譯",
@@ -4807,6 +4850,80 @@
       "completed": "作業已完成！",
       "submitted": "作業已提交！",
       "completeFailed": "提交作業失敗"
+    }
+  },
+  "requestRevision": {
+    "title": "要求訂正",
+    "selectUnder100": "全選未達 100 分",
+    "selectAll": "全選",
+    "applyRange": "依分數勾選",
+    "selectedCount": "已選 {{count}} 位",
+    "empty": "沒有已派發的學生",
+    "openGrading": "查看作答 / 批改",
+    "confirm": "確認退回（{{count}} 位）",
+    "success": "已退回 {{count}} 位學生訂正",
+    "submitFailed": "退回失敗",
+    "loadFailed": "載入學生名單失敗"
+  },
+  "gradingHub": {
+    "title": "批改",
+    "returnBtn": "退回訂正（{{count}}）",
+    "completeBtn": "完成批改（{{count}}）",
+    "completeSuccess": "已完成 {{count}} 位學生批改",
+    "completeFailed": "完成批改失敗",
+    "returnShort": "退回",
+    "gradeShort": "完成",
+    "resetShort": "還原",
+    "resetBtn": "還原（{{count}}）",
+    "resetSuccess": "已還原 {{count}} 位學生為未開始",
+    "resetFailed": "還原失敗",
+    "rowResetSuccess": "已還原該學生為未開始",
+    "aiGradeSuccess": "AI 批改完成",
+    "aiGradeFailed": "AI 批改失敗",
+    "aiGradeProgress": "AI 批改中 {{current}}/{{total}}",
+    "aiGradePartial": "完成 {{ok}}，失敗 {{fail}}",
+    "noTarget": "沒有符合的學生",
+    "rowReturnSuccess": "已退回該學生訂正",
+    "rowGradeSuccess": "已標記該學生完成批改"
+  },
+  "studentStatusPanel": {
+    "metric": {
+      "selectAllStudents": "全選學生",
+      "correctRate": "正確率",
+      "pronunciation": "發音",
+      "accuracy": "準確",
+      "fluency": "流暢",
+      "total": "總分"
+    }
+  },
+  "wordQuiz": {
+    "questionNav": "題號",
+    "questionLabel": "第 {{current}} / {{total}} 題",
+    "typeHere": "輸入答案…",
+    "playAudio": "播放音檔",
+    "prev": "上一題",
+    "next": "下一題",
+    "submit": "提交",
+    "empty": "尚無題目可作答。",
+    "locked": {
+      "title": "本次小考已提交",
+      "desc": "提交後不可重做；等待老師退回後才能訂正錯題。"
+    },
+    "toast": {
+      "lastAnswerNotSaved": "最後一題答案儲存失敗，仍以已答題目計分提交",
+      "reviewLoadFailed": "載入複盤資料失敗"
+    },
+    "review": {
+      "yourAnswer": "你的答案",
+      "correctAnswer": "正確答案",
+      "unanswered": "未作答",
+      "correct": "答對",
+      "wrong": "答錯",
+      "scoreSummary": "{{correct}} / {{total}} 答對"
+    },
+    "revision": {
+      "hint": "訂正模式：答錯會顯示正解，全部改對才能提交",
+      "correctAnswer": "正解：{{answer}}"
     }
   },
   "wordSpelling": {

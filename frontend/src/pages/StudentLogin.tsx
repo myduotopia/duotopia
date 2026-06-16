@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,10 @@ import {
 } from "lucide-react";
 import { useStudentAuthStore, StudentUser } from "@/stores/studentAuthStore";
 import { authService } from "@/services/authService";
-import { teacherService } from "@/services/teacherService";
+import {
+  teacherService,
+  type StudentLoginScope,
+} from "@/services/teacherService";
 import { apiClient } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -60,6 +63,20 @@ export default function StudentLogin() {
   const searchParams = new URLSearchParams(window.location.search);
   const isDemoMode = searchParams.get("is_demo") === "true";
   const urlTeacherEmail = searchParams.get("teacher_email");
+
+  // #793：QR 帶的「視圖」scope（個人 / 機構 / 學校）。解析一次即可（URL 在本頁固定）。
+  const urlScope = useMemo<StudentLoginScope | null>(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const type = sp.get("scope");
+    const orgId = sp.get("org_id");
+    const schoolId = sp.get("school_id");
+    if (type === "personal") return { type: "personal" };
+    if (type === "org" && orgId) return { type: "org", orgId };
+    if (type === "school" && schoolId) return { type: "school", schoolId };
+    return null;
+  }, []);
+  // 已點「顯示全部」逃生口後為 true，避免再帶 scope 過濾
+  const [showAllClassrooms, setShowAllClassrooms] = useState(false);
 
   // 檢查環境
   const isProduction = import.meta.env.VITE_ENVIRONMENT === "production";
@@ -132,9 +149,11 @@ export default function StudentLogin() {
           setTeacherHistory(updatedHistory);
           setSelectedTeacher(teacher);
 
-          // Load classrooms for this teacher
-          const classroomsData =
-            await teacherService.getPublicClassrooms(email);
+          // Load classrooms for this teacher（#793：依 QR 帶的視圖 scope 軟過濾）
+          const classroomsData = await teacherService.getPublicClassrooms(
+            email,
+            urlScope,
+          );
           setClassrooms(classroomsData);
           setStep(2);
         } else {
@@ -146,8 +165,24 @@ export default function StudentLogin() {
         setLoading(false);
       }
     },
-    [teacherEmail, teacherHistory, t],
+    [teacherEmail, teacherHistory, t, urlScope],
   );
+
+  // #793 逃生口：掃到錯視圖 QR 的學生點「顯示全部」→ 不帶 scope 重新載入全部班級
+  const handleShowAllClassrooms = useCallback(async () => {
+    if (!teacherEmail) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await teacherService.getPublicClassrooms(teacherEmail, null);
+      setClassrooms(data);
+      setShowAllClassrooms(true);
+    } catch {
+      setError(t("studentLogin.errors.loadClassroomFailed"));
+    } finally {
+      setLoading(false);
+    }
+  }, [teacherEmail, t]);
 
   // Auto-validate teacher email from URL parameter
   useEffect(() => {
@@ -588,6 +623,23 @@ export default function StudentLogin() {
                   </Button>
                 ))}
               </div>
+
+              {/* #793 逃生口：QR 帶了視圖 scope 時，提供「顯示全部」避免掃錯視圖的學生被鎖住 */}
+              {urlScope && !showAllClassrooms && (
+                <div className="text-center pt-1">
+                  <Button
+                    variant="link"
+                    className="text-gray-500 hover:text-gray-700"
+                    onClick={handleShowAllClassrooms}
+                    disabled={loading}
+                  >
+                    {t(
+                      "studentLogin.step2.showAll",
+                      "看不到你的班級？顯示全部",
+                    )}
+                  </Button>
+                </div>
+              )}
 
               {error && <p className="text-red-500 text-center">{error}</p>}
             </div>

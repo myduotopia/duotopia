@@ -12,7 +12,8 @@ from models.base import ScoreCategory
 _SPEAKING_MODES = frozenset({"reading", "word_reading"})
 
 # practice_mode values that are inherently "reading" regardless of audio
-_ALWAYS_READING_MODES = frozenset({"word_cloze"})
+# _quiz variants share the same mapping as their base mode.
+_ALWAYS_READING_MODES = frozenset({"word_cloze", "word_cloze_quiz"})
 
 # practice_mode values that go to "reading" only when audio is off
 _READING_WHEN_SILENT_MODES = frozenset({"rearrangement"})

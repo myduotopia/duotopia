@@ -4,7 +4,23 @@ Pydantic models and validators for assignments
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, field_validator
+
+# Issue #828: 整卷限時上限守衛（10 小時），擋掉負數/超大值；
+# 不用精確 allow-list 以免日後 UI 新增選項就壞掉
+_MAX_QUIZ_TIME_LIMIT_SECONDS = 36000
+
+
+def _validate_quiz_time_limit(value: Optional[int]) -> Optional[int]:
+    if value is None:
+        return value
+    # null = 不限時（前端把 0 也視為不限時並送 null）；其餘需在合理範圍內
+    if value < 0 or value > _MAX_QUIZ_TIME_LIMIT_SECONDS:
+        raise ValueError(
+            "quiz_time_limit_seconds must be null (no limit) or between "
+            f"0 and {_MAX_QUIZ_TIME_LIMIT_SECONDS}"
+        )
+    return value
 
 
 class CreateAssignmentRequest(BaseModel):
@@ -21,13 +37,15 @@ class CreateAssignmentRequest(BaseModel):
     organization_id: Optional[str] = None
     school_id: Optional[str] = None
     # 作答模式設定
-    practice_mode: Optional[
-        str
-    ] = None  # reading, rearrangement, word_reading, word_selection, word_spelling, word_cloze
+    # reading, rearrangement, word_reading, word_selection, word_spelling,
+    # word_cloze, word_selection_quiz, word_spelling_quiz, word_cloze_quiz
+    practice_mode: Optional[str] = None
     answer_mode: Optional[
         str
     ] = None  # DEPRECATED: only 'listening'/'writing' allowed by DB
     time_limit_per_question: Optional[int] = None
+    # Issue #828: 小考整卷限時（秒）；null 不限時
+    quiz_time_limit_seconds: Optional[int] = None
     shuffle_questions: Optional[bool] = False
     show_answer: Optional[bool] = False
     play_audio: Optional[bool] = False
@@ -38,6 +56,11 @@ class CreateAssignmentRequest(BaseModel):
     show_translation: Optional[bool] = None
     show_option_images: Optional[bool] = None  # Issue #631
     score_category: Optional[str] = None
+
+    @field_validator("quiz_time_limit_seconds")
+    @classmethod
+    def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
+        return _validate_quiz_time_limit(v)
 
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "CreateAssignmentRequest":
@@ -58,6 +81,7 @@ class UpdateAssignmentRequest(BaseModel):
     student_ids: Optional[List[int]] = None
     # 進階設定
     time_limit_per_question: Optional[int] = None
+    quiz_time_limit_seconds: Optional[int] = None
     shuffle_questions: Optional[bool] = None
     show_answer: Optional[bool] = None
     play_audio: Optional[bool] = None
@@ -66,6 +90,11 @@ class UpdateAssignmentRequest(BaseModel):
     show_image: Optional[bool] = None
     show_translation: Optional[bool] = None
     show_option_images: Optional[bool] = None  # Issue #631
+
+    @field_validator("quiz_time_limit_seconds")
+    @classmethod
+    def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
+        return _validate_quiz_time_limit(v)
 
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "UpdateAssignmentRequest":

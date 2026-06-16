@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PLAN_NAMES } from "@/constants/plans";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +56,8 @@ import {
 } from "@/components/pricing/PointPackageCard";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { apiClient } from "@/lib/api";
+import { GroupBuyPlanCards } from "@/components/pricing/GroupBuyPlanCards";
+import { ENABLE_GROUP_BUY } from "@/config/featureFlags";
 
 interface CreditPackageInfo {
   id: number;
@@ -70,9 +73,20 @@ interface CreditPackageInfo {
   is_expired: boolean;
 }
 
+// Backend-supplied flag (issue #768 comment 4638082532 item 4) so the
+// UI can pick the right quota label, expiry date (annual vs monthly),
+// and hide the "auto-renew" banner for group-buy members whose points
+// come from the team leader's annual fee rather than a personal
+// recurring charge.
+type SubscriptionPlanType =
+  | "individual"
+  | "group_buy_member"
+  | "group_buy_owner";
+
 interface SubscriptionInfo {
   status: string;
   plan: string | null;
+  plan_type?: SubscriptionPlanType;
   end_date: string | null;
   days_remaining: number;
   is_active: boolean;
@@ -209,6 +223,7 @@ const PLAN_RANK: Record<string, number> = { free: 0, tutor: 1, school: 2 };
 
 export default function TeacherSubscription() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(
     null,
@@ -462,7 +477,7 @@ export default function TeacherSubscription() {
 
           {/* Tab 1: Plans */}
           <TabsContent value="plans">
-            <div>
+            <div className="space-y-10">
               <div className="grid md:grid-cols-3 gap-6">
                 {subscriptionPlans.map((plan) => {
                   const isCurrentPlan = currentPlanId === plan.id;
@@ -515,6 +530,31 @@ export default function TeacherSubscription() {
                   );
                 })}
               </div>
+
+              {/* Issue #768 comment 4638082532 item 3 — surface the 3
+                  group-buy plans directly in the subscription page so
+                  teachers don't have to navigate to /pricing to learn
+                  about them. Cards are clickable: any click jumps
+                  straight into the open-team flow. Hidden for teachers
+                  who are already on a group-buy plan (R2-F2 single-org
+                  guard would 409 their open attempt anyway). */}
+              {ENABLE_GROUP_BUY &&
+                subscription?.plan_type !== "group_buy_member" &&
+                subscription?.plan_type !== "group_buy_owner" && (
+                  <div className="space-y-4">
+                    <GroupBuyPlanCards
+                      onSelectPlan={() => navigate("/teacher/group-buy/open")}
+                    />
+                    <div className="text-center">
+                      <Button
+                        variant="outline"
+                        onClick={() => navigate("/teacher/group-buy/open")}
+                      >
+                        立即開設團購方案 →
+                      </Button>
+                    </div>
+                  </div>
+                )}
             </div>
           </TabsContent>
 
@@ -540,6 +580,37 @@ export default function TeacherSubscription() {
 
           {/* Tab 3: Subscription Management */}
           <TabsContent value="management" className="space-y-6">
+            {/* Phase 5-2 follow-up (#768): group-buy upsell CTA for
+                existing individual subscribers. Hide for teachers already
+                on a group-buy plan — clicking through would hit R2-F2
+                single-org guard and 409.
+                TODO: replace prefix check with a backend-supplied flag
+                when SubscriptionInfo exposes teacher_seats or org_type. */}
+            {ENABLE_GROUP_BUY && !subscription?.plan?.startsWith("團購") && (
+              <Card className="mb-6 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+                <CardContent className="py-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="font-semibold text-gray-900">
+                        👥 想為團隊一起採購？
+                      </div>
+                      <div className="text-sm text-gray-600 mt-1">
+                        開設 10 / 30 / 50 席教師團購方案，享更低每席費用 +
+                        加購點數包折扣。團主刷卡一次即可開團。
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100 shrink-0"
+                      onClick={() => navigate("/teacher/group-buy/open")}
+                    >
+                      了解團購方案 →
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -578,13 +649,32 @@ export default function TeacherSubscription() {
                             : t("teacherSubscription.subscription.statusGood")}
                         </p>
                         <p className="text-sm text-blue-600 mt-1 font-medium">
-                          {subscription.plan === "School Teachers"
-                            ? t("teacherSubscription.subscription.quotaSchool")
-                            : subscription.plan === PLAN_NAMES.FREE_TRIAL
-                              ? t("teacherSubscription.subscription.quotaTrial")
-                              : t(
-                                  "teacherSubscription.subscription.quotaTutor",
-                                )}
+                          {subscription.plan_type === "group_buy_member" ||
+                          subscription.plan_type === "group_buy_owner" ? (
+                            // Group-buy: backend ships the per-teacher
+                            // monthly quota in quota_total. Showing that
+                            // directly avoids the prior bug where the
+                            // generic "tutor" template said 2000 點/月
+                            // for a 1000-點 group-buy plan.
+                            <>
+                              {/* `??` (nullish coalescing) instead of
+                                  `||` so a literal `0` from backend
+                                  isn't treated as falsy and the value
+                                  shown matches the data. */}
+                              {(
+                                subscription.subscription_total ??
+                                subscription.quota_total ??
+                                0
+                              ).toLocaleString()}{" "}
+                              點 AI 配額 / 月（團購配給）
+                            </>
+                          ) : subscription.plan === "School Teachers" ? (
+                            t("teacherSubscription.subscription.quotaSchool")
+                          ) : subscription.plan === PLAN_NAMES.FREE_TRIAL ? (
+                            t("teacherSubscription.subscription.quotaTrial")
+                          ) : (
+                            t("teacherSubscription.subscription.quotaTutor")
+                          )}
                         </p>
                       </div>
                       {subscription.plan === PLAN_NAMES.FREE_TRIAL && (
@@ -692,7 +782,19 @@ export default function TeacherSubscription() {
                           <p className="text-sm text-gray-600 mb-2">
                             {t("teacherSubscription.labels.autoRenew")}
                           </p>
-                          {subscription.auto_renew ? (
+                          {subscription.plan_type === "group_buy_member" ||
+                          subscription.plan_type === "group_buy_owner" ? (
+                            // Group-buy members get points from the team
+                            // leader's annual fee — no per-teacher
+                            // auto-renew. Surface this explicitly so the
+                            // teacher doesn't go hunting for a button
+                            // that wouldn't apply to them.
+                            <p className="text-sm text-gray-600">
+                              {subscription.plan_type === "group_buy_owner"
+                                ? "團主：團隊年費於到期時手動續訂；不適用個人自動續訂。"
+                                : "團員：配額由團主年費自動配給，不需個人續訂。"}
+                            </p>
+                          ) : subscription.auto_renew ? (
                             <div className="flex items-center gap-3">
                               <p className="font-semibold text-green-600">
                                 {t("teacherSubscription.labels.enabled")}
@@ -746,17 +848,22 @@ export default function TeacherSubscription() {
                       </div>
                     </div>
 
-                    {!subscription.auto_renew && (
-                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                        <p className="text-orange-800 text-sm">
-                          {t("teacherSubscription.warnings.renewalCancelled", {
-                            date: subscription.end_date
-                              ? formatDate(subscription.end_date)
-                              : t("teacherSubscription.labels.expiryDate"),
-                          })}
-                        </p>
-                      </div>
-                    )}
+                    {!subscription.auto_renew &&
+                      subscription.plan_type !== "group_buy_member" &&
+                      subscription.plan_type !== "group_buy_owner" && (
+                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                          <p className="text-orange-800 text-sm">
+                            {t(
+                              "teacherSubscription.warnings.renewalCancelled",
+                              {
+                                date: subscription.end_date
+                                  ? formatDate(subscription.end_date)
+                                  : t("teacherSubscription.labels.expiryDate"),
+                              },
+                            )}
+                          </p>
+                        </div>
+                      )}
 
                     {subscription.days_remaining <= 7 && (
                       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">

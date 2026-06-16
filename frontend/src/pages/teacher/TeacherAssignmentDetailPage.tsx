@@ -68,7 +68,13 @@ interface AssignmentDetail extends Assignment {
     | "reading"
     | "rearrangement"
     | "word_reading"
-    | "word_selection"; // 練習模式
+    | "word_selection"
+    | "word_selection_quiz"
+    | "word_spelling"
+    | "word_spelling_quiz"
+    | "word_cloze"
+    | "word_cloze_quiz"
+    | "tug_of_war"; // 練習模式
   content?: {
     title: string;
     type: string;

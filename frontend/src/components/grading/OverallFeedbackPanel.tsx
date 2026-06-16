@@ -40,6 +40,8 @@ interface OverallFeedbackPanelProps {
   onRequestRevision?: () => void;
   // true 時主按鈕文案顯示「儲存」而非「完成批改」（auto-graded 模式）
   isAutoScored?: boolean;
+  // true 時分數唯讀、不顯示主按鈕（小考完全自動判分，老師不可改分/完成批改，僅可退回）
+  autoScoreReadOnly?: boolean;
   onJumpToItem: (groupIndex: number, globalIndex: number) => void;
 }
 
@@ -58,6 +60,7 @@ export function OverallFeedbackPanel({
   onComplete,
   onRequestRevision,
   isAutoScored,
+  autoScoreReadOnly,
   onJumpToItem,
 }: OverallFeedbackPanelProps) {
   const { t } = useTranslation();
@@ -152,35 +155,44 @@ export function OverallFeedbackPanel({
             <label className="text-sm font-medium mb-2 block">
               {t("gradingPage.labels.giveScore")}
             </label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={score === null ? "" : score}
-              onBlur={async () => {
-                await onAutoSave();
-              }}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (value === "") {
-                  onScoreChange(null);
-                } else if (/^\d+(\.\d{0,1})?$/.test(value)) {
-                  const numValue = parseFloat(value);
-                  if (numValue >= 0 && numValue <= 100) {
-                    onScoreChange(numValue);
-                  }
-                }
-              }}
-              placeholder={t("gradingPage.labels.enterScore")}
-              className="w-full px-3 py-2 text-lg font-bold border-2 rounded focus:outline-none focus:ring-2 text-center bg-white border-blue-500 text-blue-600 focus:ring-blue-500"
-            />
-            {isAutoCalculatedScore && (
-              <div className="text-xs text-green-600 dark:text-green-400 text-center mt-1 font-medium">
-                {t("gradingPage.labels.usingAverageScore")}
+            {autoScoreReadOnly ? (
+              // 小考自動判分：分數唯讀，老師不可改
+              <div className="w-full px-3 py-2 text-lg font-bold border-2 rounded text-center bg-gray-50 border-gray-200 text-gray-700">
+                {score === null ? "—" : score}
               </div>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={score === null ? "" : score}
+                  onBlur={async () => {
+                    await onAutoSave();
+                  }}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "") {
+                      onScoreChange(null);
+                    } else if (/^\d+(\.\d{0,1})?$/.test(value)) {
+                      const numValue = parseFloat(value);
+                      if (numValue >= 0 && numValue <= 100) {
+                        onScoreChange(numValue);
+                      }
+                    }
+                  }}
+                  placeholder={t("gradingPage.labels.enterScore")}
+                  className="w-full px-3 py-2 text-lg font-bold border-2 rounded focus:outline-none focus:ring-2 text-center bg-white border-blue-500 text-blue-600 focus:ring-blue-500"
+                />
+                {isAutoCalculatedScore && (
+                  <div className="text-xs text-green-600 dark:text-green-400 text-center mt-1 font-medium">
+                    {t("gradingPage.labels.usingAverageScore")}
+                  </div>
+                )}
+                <div className="text-xs text-gray-500 text-center mt-1">
+                  {t("gradingPage.labels.scoreRange")}
+                </div>
+              </>
             )}
-            <div className="text-xs text-gray-500 text-center mt-1">
-              {t("gradingPage.labels.scoreRange")}
-            </div>
           </div>
 
           <div>
@@ -225,23 +237,26 @@ export function OverallFeedbackPanel({
                 </Button>
               )}
 
-              <Button
-                onClick={onComplete}
-                disabled={submitting || !submission}
-                variant={
-                  submission?.status === "GRADED" ? "default" : "outline"
-                }
-                className={`flex-1 ${
-                  submission?.status === "GRADED"
-                    ? "bg-green-600 hover:bg-green-700 text-white"
-                    : "border-green-600 text-green-600 hover:bg-green-50"
-                }`}
-              >
-                <CheckCircle className="h-4 w-4 mr-2" />
-                {isAutoScored
-                  ? t("common.save")
-                  : t("gradingPage.buttons.completeGrading")}
-              </Button>
+              {/* 小考完全自動判分：不顯示「完成批改/儲存」，老師僅可退回 */}
+              {!autoScoreReadOnly && (
+                <Button
+                  onClick={onComplete}
+                  disabled={submitting || !submission}
+                  variant={
+                    submission?.status === "GRADED" ? "default" : "outline"
+                  }
+                  className={`flex-1 ${
+                    submission?.status === "GRADED"
+                      ? "bg-green-600 hover:bg-green-700 text-white"
+                      : "border-green-600 text-green-600 hover:bg-green-50"
+                  }`}
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  {isAutoScored
+                    ? t("common.save")
+                    : t("gradingPage.buttons.completeGrading")}
+                </Button>
+              )}
             </div>
           </div>
         </div>

@@ -1007,8 +1007,16 @@ function SortableRowInner({
           <textarea
             value={row.text}
             onChange={(e) => {
-              const words = e.target.value.trim().split(/\s+/).filter(Boolean);
-              if (words.length > MAX_WORDS_PER_ITEM) return;
+              const newCount = e.target.value
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean).length;
+              const prevCount =
+                row.text?.trim().split(/\s+/).filter(Boolean).length ?? 0;
+              // Allow edits that reduce or keep word count; only block when
+              // user is adding words beyond the cap. This lets users shrink a
+              // row that was duplicated while still over the limit.
+              if (newCount > MAX_WORDS_PER_ITEM && newCount > prevCount) return;
               handleUpdateRow(index, "text", e.target.value);
               e.target.style.height = "auto";
               e.target.style.height = e.target.scrollHeight + "px";
@@ -2189,11 +2197,16 @@ const ReadingAssessmentPanel = forwardRef<
   };
 
   const handleBatchPaste = async (autoTTS: boolean, autoTranslate: boolean) => {
-    // 分割文字，每行一個項目
-    const rawLines = batchPasteText
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+    // 預處理：把破折號（— 或連續 ——）替換為單一空白，避免黏字
+    const normalized = batchPasteText.replace(/—+/g, " ");
+    // 分割文字：先依換行，再依句末標點 . ? !（含全形）切成獨立 item
+    // 句末標點會保留在前一句尾端
+    const rawLines = normalized.split("\n").flatMap((line) =>
+      line
+        .split(/(?<=[.?!。？！])\s+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+    );
 
     // 1. 貼上框內部去重（忽略大小寫）
     const seen = new Set<string>();
@@ -2672,7 +2685,7 @@ const ReadingAssessmentPanel = forwardRef<
   }
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-70px)]">
+    <div className="flex flex-col">
       {/* Fixed Header Section */}
       <div className="flex-shrink-0 space-y-4 pb-4">
         {/* Assignment Copy Warning Banner */}
@@ -2777,12 +2790,13 @@ const ReadingAssessmentPanel = forwardRef<
       </div>
 
       {/* Desktop: Side-by-side layout / Mobile: Editor only */}
-      <div className="flex flex-1 gap-4 min-h-0">
+      <div className="flex gap-4">
         {/* Left: Batch Work Area (Desktop only) */}
         <BatchWorkPanel
           text={batchPasteText}
           onTextChange={setBatchPasteText}
           maxItems={MAX_BATCH_ITEMS}
+          pasteLabel={t("contentEditor.labels.pasteSentences")}
           placeholder="put&#10;Put it away.&#10;It's time to put everything away. Right now."
           autoTranslate={batchPasteAutoTranslate}
           onAutoTranslateChange={setBatchPasteAutoTranslate}
@@ -2817,7 +2831,7 @@ const ReadingAssessmentPanel = forwardRef<
         />
 
         {/* Right: Editor Area */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col">
           {/* Scrollable Content Rows with dnd-kit */}
           <DndContext
             sensors={sensors}

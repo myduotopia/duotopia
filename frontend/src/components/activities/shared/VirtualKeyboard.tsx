@@ -12,6 +12,11 @@
  *
  * The component is layout-agnostic: caller positions it (mobile = fixed
  * bottom overlay, tablet = right-side panel).
+ *
+ * Button sizing: the react-simple-keyboard default (40px tall, ~16px font)
+ * is enlarged for touch via a `.vk-wrapper .simple-keyboard .hg-button`
+ * override in index.css (Issue #844: 48px tall, 22px font) — letters,
+ * punctuation and the Shift/Bksp/Space/Enter keys all scale together.
  */
 
 import { useState } from "react";
