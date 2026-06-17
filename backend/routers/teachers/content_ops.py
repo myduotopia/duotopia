@@ -4,7 +4,7 @@ Content Ops operations for teachers.
 from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
 from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func, text
+from sqlalchemy import func
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 
@@ -396,6 +396,141 @@ async def get_content_detail(
     }
 
 
+def _build_item_fields(
+    item_data: dict, idx: int, existing_row: Optional[ContentItem] = None
+) -> dict:
+    """組出 ContentItem 的欄位值（INSERT 與 UPDATE 共用，#861）。
+
+    update_content 改採 id-based 原地 upsert（不再全刪重建），這個 helper
+    讓「新增題目」與「更新既有題目」兩條路徑用同一套欄位推導邏輯，保留
+    #366／#632／#757 既有行為。回傳的 dict 直接當 ContentItem 的 kwargs，
+    或在 UPDATE 路徑用 setattr 套到既有列。content_id 不在此處（INSERT 時補）。
+
+    existing_row 提供時（UPDATE 路徑），cloze_answer 以既有列的值為
+    existing_answer，保留老師既有的覆寫值；INSERT 路徑沿用前端帶回的值。
+    """
+    # Store additional fields in item_metadata
+    metadata: Dict[str, Any] = {}
+    if "options" in item_data:
+        metadata["options"] = item_data["options"]
+    if "correct_answer" in item_data:
+        metadata["correct_answer"] = item_data["correct_answer"]
+    if "question_type" in item_data:
+        metadata["question_type"] = item_data["question_type"]
+
+    # 處理翻譯支援 (#366 清理)
+    # chinese_translation 永遠從 definition 取得
+    if "definition" in item_data:
+        metadata["chinese_translation"] = item_data["definition"]
+
+    # 統一翻譯欄位（canonical）
+    if "vocabulary_translation" in item_data:
+        metadata["vocabulary_translation"] = item_data["vocabulary_translation"]
+    if "vocabulary_translation_lang" in item_data:
+        metadata["vocabulary_translation_lang"] = item_data[
+            "vocabulary_translation_lang"
+        ]
+
+    # 向後相容：ReadingAssessmentPanel 仍送 english_definition
+    # + selectedLanguage，接受並映射到新欄位
+    if "english_definition" in item_data:
+        metadata["english_definition"] = item_data["english_definition"]
+        # 若無 vocabulary_translation，映射到新欄位
+        if (
+            "vocabulary_translation" not in item_data
+            and item_data["english_definition"]
+        ):
+            metadata["vocabulary_translation"] = item_data["english_definition"]
+    if "selectedLanguage" in item_data:
+        metadata["selected_language"] = item_data["selectedLanguage"]
+        if "vocabulary_translation_lang" not in item_data:
+            metadata["vocabulary_translation_lang"] = item_data["selectedLanguage"]
+    # 舊的 translation + selectedLanguage=english 組合
+    if (
+        "translation" in item_data
+        and item_data["translation"]
+        and item_data.get("selectedLanguage") == "english"
+    ):
+        metadata["english_definition"] = item_data["translation"]
+        if "vocabulary_translation" not in item_data:
+            metadata["vocabulary_translation"] = item_data["translation"]
+    # 儲存完整的 parts_of_speech 陣列到 metadata
+    if "parts_of_speech" in item_data:
+        metadata["parts_of_speech"] = item_data["parts_of_speech"]
+
+    # 儲存 TTS audio settings（accent/gender/speed）供例句 TTS 生成使用
+    if "audio_settings" in item_data:
+        metadata["audio_settings"] = item_data["audio_settings"]
+
+    # 根據前端傳來的資料決定存儲到 translation 欄位的內容
+    # 優先使用語言感知的 vocabulary_translation（前端目前選擇語言的翻譯，
+    # 中/英/日/韓），舊欄位作為相容性 fallback。
+    translation_value = (
+        item_data.get("vocabulary_translation")
+        or item_data.get("definition")
+        or item_data.get("translation", "")
+        or ""  # guard against explicit None value
+    )
+
+    # 計算 word_count（如果有 example_sentence）
+    example_sentence = item_data.get("example_sentence", "")
+    word_count = len(example_sentence.split()) if example_sentence else None
+    # 根據 word_count 計算 max_errors
+    max_errors = None
+    if word_count:
+        if word_count <= 10:
+            max_errors = 3
+        elif word_count <= 25:
+            max_errors = 5
+        else:
+            max_errors = 7
+
+    # 處理 part_of_speech：前端可能傳送 parts_of_speech (plural, array)
+    # 後端欄位是 part_of_speech (singular, string)，只存第一個
+    # 完整陣列已存到 metadata["parts_of_speech"]
+    part_of_speech = item_data.get("part_of_speech")
+    if not part_of_speech and "parts_of_speech" in item_data:
+        # 如果是陣列，取第一個元素存到 DB 欄位
+        parts = item_data.get("parts_of_speech", [])
+        if parts and isinstance(parts, list) and len(parts) > 0:
+            part_of_speech = parts[0]
+
+    # Issue #632 / #861: 編輯儲存時重新檢查克漏字答案。
+    # UPDATE 路徑可直接拿既有列的 cloze_answer 當 existing_answer（最準確）；
+    # INSERT 路徑（新題或前端未送 id）沿用前端帶回的值。
+    existing_cloze = existing_row.cloze_answer if existing_row is not None else None
+    cloze_answer = resolve_cloze_answer_on_save(
+        base_word=item_data.get("text", ""),
+        example_sentence=example_sentence,
+        incoming_answer=None,
+        existing_answer=existing_cloze
+        if existing_cloze is not None
+        else item_data.get("cloze_answer"),
+    )
+
+    return {
+        "order_index": idx,
+        "text": item_data.get("text", ""),
+        "translation": translation_value,
+        "audio_url": item_data.get("audio_url"),
+        # 例句相關欄位
+        "example_sentence": example_sentence or None,
+        "example_sentence_translation": item_data.get("example_sentence_translation"),
+        "example_sentence_definition": item_data.get("example_sentence_definition"),
+        "example_sentence_audio_url": item_data.get("example_sentence_audio_url"),
+        "word_count": word_count,
+        "max_errors": max_errors,
+        # 單字集相關欄位
+        "image_url": item_data.get("image_url"),
+        "part_of_speech": part_of_speech,
+        "distractors": item_data.get("distractors"),
+        "cloze_answer": cloze_answer,
+        # item_metadata 是 JSON 欄位：UPDATE 時務必指派「新 dict」（不要原地
+        # mutate），SQLAlchemy 才偵測得到變更並寫回。
+        "item_metadata": metadata,
+    }
+
+
 @router.put("/contents/{content_id}")
 async def update_content(
     content_id: int,
@@ -438,161 +573,69 @@ async def update_content(
                 if existing_item.audio_url not in new_audio_urls:
                     audio_manager.delete_old_audio(existing_item.audio_url)
 
-        # 先刪除參照 content_items 的 practice_answers（老師修改內容後舊答題紀錄失效）
-        # 顯式刪除：防止 ON DELETE CASCADE migration (20260415_1000) 尚未執行的環境
-        existing_item_ids = [item.id for item in existing_items]
-        if existing_item_ids:
-            # Lazy import to avoid circular dependency (progress → program → content)
-            from models.progress import PracticeAnswer
+        # #861: 改為 id-based diff upsert（原地更新），不再「全刪重建」。
+        # 老師改考題時，學生作答綁定的是作業副本 ContentItem 的 id；舊作法把整批
+        # ContentItem 刪掉重建會讓 id 全換，practice_answers / student_item_progress
+        # 失聯導致批改時分數歸零。改成：
+        #   - payload 帶 id 且命中既有 → UPDATE 原地（PK 不變，作答續連）
+        #   - 無 id（或 id 不存在） → INSERT 新題
+        #   - 既有 id 不在 payload   → DELETE（該題答案隨 FK ondelete=CASCADE 一併移除）
+        existing_by_id = {ci.id: ci for ci in existing_items}
+        only_dicts = [it for it in update_data.items if isinstance(it, dict)]
 
-            db.query(PracticeAnswer).filter(
-                PracticeAnswer.content_item_id.in_(existing_item_ids)
-            ).delete(synchronize_session=False)
+        # 前端可能把 id 送成字串（ContentItem.id 型別為 number | string）；統一轉成 int
+        # 再對既有列比對，避免 "3" != 3 而誤判成新題。
+        def _match_existing(item_data: dict) -> Optional[ContentItem]:
+            raw = item_data.get("id")
+            if isinstance(raw, bool):
+                return None
+            if isinstance(raw, int):
+                return existing_by_id.get(raw)
+            if isinstance(raw, str) and raw.isdigit():
+                return existing_by_id.get(int(raw))
+            return None
 
-        # 使用參數化查詢刪除所有現有的 ContentItem，確保唯一約束不衝突
-        try:
-            db.execute(
-                text("DELETE FROM content_items WHERE content_id = :content_id"),
-                {"content_id": content.id},
+        # 每個 payload item 預先配對到既有列（None = 新題，要 INSERT）。
+        matched = [(it, _match_existing(it)) for it in only_dicts]
+
+        # 防呆：有既有資料卻整批沒配對到任何既有列，代表前端漏送 id；此時會退化成
+        # 全刪重建並重現 #861。記 warning 方便追查（但仍照常處理，避免擋住存檔）。
+        if existing_items and not any(row is not None for _, row in matched):
+            logger.warning(
+                "update_content(content_id=%s): payload items 未帶任何可對應的 id，"
+                "既有 ContentItem 將被視為全新項目，學生作答紀錄可能失聯（#861）",
+                content.id,
+            )
+
+        kept_ids = {row.id for _, row in matched if row is not None}
+        ids_to_delete = [cid for cid in existing_by_id if cid not in kept_ids]
+
+        # 1) 先刪除被老師移除的題目（其 practice_answers / item_progress 隨
+        #    FK ondelete=CASCADE 一併移除，符合「題目被移除則答案消失」的預期）。
+        if ids_to_delete:
+            db.query(ContentItem).filter(ContentItem.id.in_(ids_to_delete)).delete(
+                synchronize_session=False
             )
             db.flush()
-        except IntegrityError:
-            db.rollback()
-            raise HTTPException(status_code=409, detail="無法刪除內容項目，因為存在相關引用")
 
-        # 創建新的 ContentItem
-        for idx, item_data in enumerate(update_data.items):
-            if isinstance(item_data, dict):
-                # Store additional fields in item_metadata
-                metadata = {}
-                if "options" in item_data:
-                    metadata["options"] = item_data["options"]
-                if "correct_answer" in item_data:
-                    metadata["correct_answer"] = item_data["correct_answer"]
-                if "question_type" in item_data:
-                    metadata["question_type"] = item_data["question_type"]
+        # 2) 第一階段：把所有「保留/更新」的既有列 order_index 暫存為負值，避免最終
+        #    order_index 與既有值在 UNIQUE(content_id, order_index) 上瞬間衝突。
+        has_staged = False
+        for idx, (_item_data, existing_row) in enumerate(matched):
+            if existing_row is not None:
+                existing_row.order_index = -(idx + 1)
+                has_staged = True
+        if has_staged:
+            db.flush()
 
-                # 處理翻譯支援 (#366 清理)
-                # chinese_translation 永遠從 definition 取得
-                if "definition" in item_data:
-                    metadata["chinese_translation"] = item_data["definition"]
-
-                # 統一翻譯欄位（canonical）
-                if "vocabulary_translation" in item_data:
-                    metadata["vocabulary_translation"] = item_data[
-                        "vocabulary_translation"
-                    ]
-                if "vocabulary_translation_lang" in item_data:
-                    metadata["vocabulary_translation_lang"] = item_data[
-                        "vocabulary_translation_lang"
-                    ]
-
-                # 向後相容：ReadingAssessmentPanel 仍送 english_definition
-                # + selectedLanguage，接受並映射到新欄位
-                if "english_definition" in item_data:
-                    metadata["english_definition"] = item_data["english_definition"]
-                    # 若無 vocabulary_translation，映射到新欄位
-                    if (
-                        "vocabulary_translation" not in item_data
-                        and item_data["english_definition"]
-                    ):
-                        metadata["vocabulary_translation"] = item_data[
-                            "english_definition"
-                        ]
-                if "selectedLanguage" in item_data:
-                    metadata["selected_language"] = item_data["selectedLanguage"]
-                    if "vocabulary_translation_lang" not in item_data:
-                        metadata["vocabulary_translation_lang"] = item_data[
-                            "selectedLanguage"
-                        ]
-                # 舊的 translation + selectedLanguage=english 組合
-                if (
-                    "translation" in item_data
-                    and item_data["translation"]
-                    and item_data.get("selectedLanguage") == "english"
-                ):
-                    metadata["english_definition"] = item_data["translation"]
-                    if "vocabulary_translation" not in item_data:
-                        metadata["vocabulary_translation"] = item_data["translation"]
-                # 儲存完整的 parts_of_speech 陣列到 metadata
-                if "parts_of_speech" in item_data:
-                    metadata["parts_of_speech"] = item_data["parts_of_speech"]
-
-                # 儲存 TTS audio settings（accent/gender/speed）供例句 TTS 生成使用
-                if "audio_settings" in item_data:
-                    metadata["audio_settings"] = item_data["audio_settings"]
-
-                # 根據前端傳來的資料決定存儲到 translation 欄位的內容
-                # 優先使用語言感知的 vocabulary_translation（前端目前選擇語言的翻譯，
-                # 中/英/日/韓），舊欄位作為相容性 fallback。
-                translation_value = (
-                    item_data.get("vocabulary_translation")
-                    or item_data.get("definition")
-                    or item_data.get("translation", "")
-                    or ""  # guard against explicit None value
-                )
-
-                # 計算 word_count（如果有 example_sentence）
-                example_sentence = item_data.get("example_sentence", "")
-                word_count = len(example_sentence.split()) if example_sentence else None
-                # 根據 word_count 計算 max_errors
-                max_errors = None
-                if word_count:
-                    if word_count <= 10:
-                        max_errors = 3
-                    elif word_count <= 25:
-                        max_errors = 5
-                    else:
-                        max_errors = 7
-
-                # 處理 part_of_speech：前端可能傳送 parts_of_speech (plural, array)
-                # 後端欄位是 part_of_speech (singular, string)，只存第一個
-                # 完整陣列已存到 metadata["parts_of_speech"]
-                part_of_speech = item_data.get("part_of_speech")
-                if not part_of_speech and "parts_of_speech" in item_data:
-                    # 如果是陣列，取第一個元素存到 DB 欄位
-                    parts = item_data.get("parts_of_speech", [])
-                    if parts and isinstance(parts, list) and len(parts) > 0:
-                        part_of_speech = parts[0]
-
-                # Issue #632: 編輯儲存時重新檢查克漏字答案。
-                # update_content 採「先刪除全部 ContentItem 再重建」策略，
-                # 沒有 existing row 可比對，因此老師的覆寫值需透過 item_data
-                # 的 cloze_answer 帶回（前端會把現有值一併送出）。
-                cloze_answer = resolve_cloze_answer_on_save(
-                    base_word=item_data.get("text", ""),
-                    example_sentence=example_sentence,
-                    incoming_answer=None,
-                    existing_answer=item_data.get("cloze_answer"),
-                )
-
-                content_item = ContentItem(
-                    content_id=content.id,
-                    order_index=idx,
-                    text=item_data.get("text", ""),
-                    translation=translation_value,
-                    audio_url=item_data.get("audio_url"),
-                    # 例句相關欄位
-                    example_sentence=example_sentence or None,
-                    example_sentence_translation=item_data.get(
-                        "example_sentence_translation"
-                    ),
-                    example_sentence_definition=item_data.get(
-                        "example_sentence_definition"
-                    ),
-                    example_sentence_audio_url=item_data.get(
-                        "example_sentence_audio_url"
-                    ),
-                    word_count=word_count,
-                    max_errors=max_errors,
-                    # 單字集相關欄位
-                    image_url=item_data.get("image_url"),
-                    part_of_speech=part_of_speech,
-                    distractors=item_data.get("distractors"),
-                    cloze_answer=cloze_answer,
-                    item_metadata=metadata,
-                )
-                db.add(content_item)
+        # 3) 第二階段：寫入最終欄位（含最終 order_index）；新題則 INSERT。
+        for idx, (item_data, existing_row) in enumerate(matched):
+            fields = _build_item_fields(item_data, idx, existing_row)
+            if existing_row is not None:
+                for key, value in fields.items():
+                    setattr(existing_row, key, value)
+            else:
+                db.add(ContentItem(content_id=content.id, **fields))
     if update_data.target_wpm is not None:
         content.target_wpm = update_data.target_wpm
     if update_data.target_accuracy is not None:

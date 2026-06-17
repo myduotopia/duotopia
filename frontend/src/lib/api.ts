@@ -1179,6 +1179,10 @@ class ApiClient {
     data: {
       title?: string;
       items?: Array<{
+        // #861: 既有題目帶上真實 DB id，後端據此原地更新而非全刪重建，
+        // 學生作答紀錄才不會失聯（新題目不帶 id）。後端會把字串 id 轉成 int 比對，
+        // 故型別放寬為 number | string 以相容 ContentItem.id。
+        id?: number | string;
         text: string;
         translation?: string;
         definition?: string;

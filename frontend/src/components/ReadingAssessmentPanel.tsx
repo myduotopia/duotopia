@@ -133,6 +133,12 @@ interface ContentRow {
   has_student_progress?: boolean; // 是否有學生進度
 }
 
+// #861: 既有題目（從 API 載入時 row.id 會是數字 = 真實 DB ContentItem id）存檔時帶回
+// id，後端據此原地更新而非全刪重建，學生作答紀錄才不會失聯。新題目 row.id 是合成
+// 字串，不帶 id（後端會 INSERT）。
+const itemIdField = (row: { id: string | number }) =>
+  typeof row.id === "number" ? { id: row.id } : {};
+
 interface TTSModalProps {
   open: boolean;
   onClose: () => void;
@@ -1347,6 +1353,7 @@ const ReadingAssessmentPanel = forwardRef<
     const saveData = {
       title: title,
       items: validRows.map((row) => ({
+        ...itemIdField(row),
         text: fixSentenceSpacing(row.text.trim()),
         definition: row.definition || "",
         english_definition: row.translation || "",
@@ -1718,6 +1725,7 @@ const ReadingAssessmentPanel = forwardRef<
     if (!isCreating && editingContent?.id) {
       try {
         const items = newRows.map((row) => ({
+          ...itemIdField(row),
           text: row.text,
           definition: row.definition,
           translation: row.translation,
@@ -1792,6 +1800,7 @@ const ReadingAssessmentPanel = forwardRef<
 
         // 立即更新 content 並儲存到後端
         const items = newRows.map((row) => ({
+          ...itemIdField(row),
           text: row.text,
           definition: row.definition, // 中文翻譯
           translation: row.translation, // 英文釋義
@@ -1973,6 +1982,7 @@ const ReadingAssessmentPanel = forwardRef<
 
       // 立即更新 content 並儲存到後端（不要用 onSave 避免關閉 panel）
       const items = newRows.map((row) => ({
+        ...itemIdField(row),
         text: row.text,
         definition: row.definition, // 中文翻譯
         translation: row.translation, // 英文釋義
@@ -2617,6 +2627,7 @@ const ReadingAssessmentPanel = forwardRef<
         const saveData = {
           title: title,
           items: updatedRows.map((row) => ({
+            ...itemIdField(row),
             text: row.text.trim(),
             definition: row.definition || "",
             english_definition: row.translation || "",
@@ -2650,6 +2661,7 @@ const ReadingAssessmentPanel = forwardRef<
           ...editingContent,
           title,
           items: updatedRows.map((row) => ({
+            ...itemIdField(row),
             text: row.text,
             definition: row.definition,
             translation: row.translation,
