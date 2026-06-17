@@ -1266,10 +1266,13 @@ async def batch_reset_not_started(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """批次還原為「未開始」（#830）。
+    """批次還原為「未開始」（#861，刻意推翻 #830 的「分數不可動」）。
 
-    只把 status 設回 NOT_STARTED；分數、時間戳、practice session / 答案 / item progress
-    全部保留（review：分數不可動）。
+    #830 原本只改 status、保留分數與作答；但這會讓學生重新作答提交時，新答案與
+    殘留的舊 PracticeSession / 答案混在一起算分（#861 回報：分數錯誤、答案像沒記錄）。
+    改為「全部清空」：刪除該生此作業的 PracticeAnswer / PracticeSession /
+    StudentItemProgress / StudentContentProgress，並把分數、時間戳、總評歸零、
+    status 設回 NOT_STARTED。所有刪除/重設都以 student_assignment 為範圍，不影響他人。
     body: { student_ids: List[int] }（單筆由前端傳 [id] 共用此端點）
     """
     student_ids = data.get("student_ids")
@@ -1307,14 +1310,51 @@ async def batch_reset_not_started(
 
     reset: List[int] = []
     skipped: List[int] = []
+    sas: List[StudentAssignment] = []
     for sid in student_ids:
         sa = sa_by_student.get(sid)
         if not sa:
             skipped.append(sid)
             continue
-        # 只改狀態；分數、時間戳、作答紀錄全部保留（#830 review：分數不可動）
-        sa.status = AssignmentStatus.NOT_STARTED
+        sas.append(sa)
         reset.append(sid)
+
+    if sas:
+        sa_ids = [sa.id for sa in sas]
+
+        # #861: 清空該生此作業的所有作答紀錄。依 FK 順序刪除：
+        # PracticeAnswer → PracticeSession；StudentItemProgress / StudentContentProgress。
+        # 全部以 student_assignment_id 為範圍，絕不波及其他學生。
+        session_ids = [
+            row[0]
+            for row in db.query(PracticeSession.id)
+            .filter(PracticeSession.student_assignment_id.in_(sa_ids))
+            .all()
+        ]
+        if session_ids:
+            db.query(PracticeAnswer).filter(
+                PracticeAnswer.practice_session_id.in_(session_ids)
+            ).delete(synchronize_session=False)
+        db.query(PracticeSession).filter(
+            PracticeSession.student_assignment_id.in_(sa_ids)
+        ).delete(synchronize_session=False)
+        db.query(StudentItemProgress).filter(
+            StudentItemProgress.student_assignment_id.in_(sa_ids)
+        ).delete(synchronize_session=False)
+        db.query(StudentContentProgress).filter(
+            StudentContentProgress.student_assignment_id.in_(sa_ids)
+        ).delete(synchronize_session=False)
+
+        # 重設為乾淨的「未開始」狀態（分數、時間戳、總評全部歸零）。
+        for sa in sas:
+            sa.status = AssignmentStatus.NOT_STARTED
+            sa.score = None
+            sa.started_at = None
+            sa.submitted_at = None
+            sa.graded_at = None
+            sa.returned_at = None
+            sa.resubmitted_at = None
+            sa.feedback = None
 
     db.commit()
     return {"reset": reset, "skipped": skipped, "count": len(reset)}
