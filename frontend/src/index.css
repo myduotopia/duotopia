@@ -138,6 +138,28 @@ body {
   flex: 0 0 calc((100% - 9 * var(--vk-gap)) / 10);
 }
 
+/* #861 E: 打字型小考 / 艾賓浩斯作答畫面的響應式字級（單一來源，克漏字 + 拼寫、
+   小考 + 艾賓浩斯共 4 支元件 + 共用 input/review 一律引用）。隨視窗寬度自適應，
+   解決寬螢幕（>768）字太小；min/max 夾住避免過小或爆版。數值可再微調。
+   用法：移除原本固定的 text-* 字級 class，改掛這些 class（其餘 font-weight /
+   leading / tracking 等保留）。 */
+.quiz-question-font {
+  font-size: clamp(20px, 2.6vw, 32px);
+}
+.quiz-translation-font {
+  font-size: clamp(16px, 1.7vw, 20px);
+}
+.quiz-input-font {
+  font-size: clamp(24px, 2.6vw, 32px);
+}
+/* #861 E-2: 翻卡正面（單字資料）字級——單字為焦點放最大，例句次之。 */
+.word-card-word {
+  font-size: clamp(22px, 2.6vw, 34px);
+}
+.word-card-sentence {
+  font-size: clamp(16px, 1.9vw, 24px);
+}
+
 /* Countdown ring: drain the stroke over the question's full duration.
    The element sets `--countdown-circ` (circumference) and
    `animation-duration` (total seconds) inline. */

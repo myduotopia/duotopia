@@ -248,7 +248,10 @@ function findDuplicates(
 }
 
 interface ContentRow {
-  id: string | number;
+  id: string | number; // 本地用（React key / drag-drop），非 DB id
+  // #861: 既有題目的真實 DB ContentItem id；新題目為 undefined。存檔時帶回後端，
+  // 後端據此原地更新而非全刪重建，學生作答紀錄才不會失聯。
+  dbId?: number;
   text: string;
   definition: string; // 中文翻譯
   audioUrl?: string;
@@ -283,6 +286,7 @@ interface ContentRow {
 export type Distractor = string | { text: string; image_url?: string | null };
 
 interface ApiContentItem {
+  id?: number; // #861: 真實 DB ContentItem id，存檔時帶回供後端原地更新
   text?: string;
   definition?: string;
   audio_url?: string;
@@ -356,6 +360,7 @@ function mapApiItemToRow(item: ApiContentItem, index: number): ContentRow {
 
   return {
     id: (index + 1).toString(),
+    dbId: item.id, // #861: 保留真實 DB id 供存檔時帶回
     text: item.text || "",
     definition,
     translation,
@@ -2220,6 +2225,9 @@ const VocabularySetPanel = forwardRef<
     }
 
     return {
+      // #861: 既有題目帶回真實 DB id，後端據此原地更新（保留學生作答）；
+      // 新題目沒有 dbId，不帶 id，後端會 INSERT。
+      ...(row.dbId != null ? { id: row.dbId } : {}),
       text: (row.text || "").trim(),
       vocabulary_translation: vocabularyTranslation,
       vocabulary_translation_lang: wordLang,

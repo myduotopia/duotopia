@@ -50,6 +50,10 @@ export interface StudentProgress {
     accuracy: number | null;
     fluency: number | null;
   } | null;
+  // #861: 訂正紀錄時間。resubmitted_at = 訂正日期（退回後重新提交）；
+  // returned_at = 老師退回訂正的時間。有 resubmitted_at 即代表有訂正紀錄。
+  resubmitted_at?: string | null;
+  returned_at?: string | null;
 }
 
 /** 名單分數區顯示型態：小考(答對/總題) / 朗讀(發音·準·流·總分) / 預設單一分數。 */
@@ -410,6 +414,35 @@ function ListHeader({
 }
 
 // ---------------------------------------------------------------------------
+// CorrectionDateBadge - #861 訂正日期
+// ---------------------------------------------------------------------------
+
+/** #861: 有 resubmitted_at（退回後重新提交）即代表有訂正紀錄，顯示訂正日期。 */
+function CorrectionDateBadge({
+  student,
+  label,
+}: {
+  student: StudentProgress;
+  label: string;
+}) {
+  if (!student.resubmitted_at) return null;
+  const d = new Date(student.resubmitted_at);
+  if (isNaN(d.getTime())) return null;
+  const text = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(
+    2,
+    "0",
+  )}/${String(d.getDate()).padStart(2, "0")}`;
+  return (
+    <span
+      className="shrink-0 rounded bg-emerald-50 px-1 py-0.5 text-[10px] leading-none text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
+      title={`${label} ${text}`}
+    >
+      {label} {text}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // StudentCard - Grid view 卡片
 // ---------------------------------------------------------------------------
 
@@ -420,6 +453,7 @@ function StudentCard({
   onToggle,
   onClick,
   tooltip,
+  correctionLabel,
 }: {
   student: StudentProgress;
   isSelected: boolean;
@@ -427,6 +461,7 @@ function StudentCard({
   onToggle: () => void;
   onClick: () => void;
   tooltip?: string;
+  correctionLabel?: string;
 }) {
   const isUnassigned = student.status === "unassigned";
   const cardTooltip = tooltip && !isUnassigned ? tooltip : undefined;
@@ -496,6 +531,12 @@ function StudentCard({
         </span>
       </div>
 
+      {/* #861: 訂正日期（有訂正紀錄才顯示） */}
+      <CorrectionDateBadge
+        student={student}
+        label={correctionLabel ?? "訂正"}
+      />
+
       {/* Score：卡片只顯示分數（不放各項指標），字級放大 */}
       <span
         className={`text-xs sm:text-[55px] font-bold leading-none ${
@@ -531,6 +572,7 @@ function StudentRow({
   resetLabel,
   returnLabel,
   gradeLabel,
+  correctionLabel,
 }: {
   student: StudentProgress;
   isEditing: boolean;
@@ -546,6 +588,7 @@ function StudentRow({
   resetLabel?: string;
   returnLabel?: string;
   gradeLabel?: string;
+  correctionLabel?: string;
 }) {
   const isUnassigned = student.status === "unassigned";
   // 已是「未開始」/未派發 → 該列還原鈕 disable
@@ -618,6 +661,12 @@ function StudentRow({
       <span className="text-xs sm:text-sm text-gray-800 dark:text-gray-200 flex-1 text-left truncate">
         {student.student_name}
       </span>
+
+      {/* #861: 訂正日期（有訂正紀錄才顯示） */}
+      <CorrectionDateBadge
+        student={student}
+        label={correctionLabel ?? "訂正"}
+      />
 
       {/* 數值欄（#830）：欄寬與表頭對齊，純數值無標籤；最後一欄為總分(粗體) */}
       {metricCellValues(student, metricMode, hasScore, scoreValue).map(
@@ -727,6 +776,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     const rowResetLabel = t("gradingHub.resetShort", "還原");
     const rowReturnLabel = t("gradingHub.returnShort", "退回");
     const rowGradeLabel = t("gradingHub.gradeShort", "完成");
+    const correctionLabel = t("gradingHub.correctionDate", "訂正");
 
     // 批改 hub（revision 模式）依作業類型決定分數區欄位；assign 模式維持單一分數（不變）。
     const metricMode: MetricMode = !isRevision
@@ -1219,6 +1269,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   isDisabled={isCheckboxDisabled(student)}
                   onToggle={() => toggleStudent(student.student_id)}
                   onClick={() => handleStudentClick(student)}
+                  correctionLabel={correctionLabel}
                   tooltip={
                     isClickableStudent(student)
                       ? t("assignmentDetail.sheet.checkHomework", "批改作業")
@@ -1267,6 +1318,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   resetLabel={rowResetLabel}
                   returnLabel={rowReturnLabel}
                   gradeLabel={rowGradeLabel}
+                  correctionLabel={correctionLabel}
                   tooltip={
                     isClickableStudent(student)
                       ? t("assignmentDetail.sheet.checkHomework", "批改作業")

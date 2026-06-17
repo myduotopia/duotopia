@@ -531,6 +531,14 @@ async def get_assignment_progress(
                     else None
                 ),
                 "is_interim_score": _is_interim_score(sa, assignment),
+                # #861: 訂正紀錄時間（批改 hub 顯示「訂正日期」）。resubmitted_at =
+                # 退回後重新提交的時間；returned_at = 老師退回訂正的時間。
+                "resubmitted_at": (
+                    sa.resubmitted_at.isoformat() if sa and sa.resubmitted_at else None
+                ),
+                "returned_at": (
+                    sa.returned_at.isoformat() if sa and sa.returned_at else None
+                ),
                 # 批改 hub 欄位（#830）：依作業類型擇一，其餘為 None
                 "correct_count": (
                     quiz_correct_by_sa.get(sa.id) if is_quiz and sa else None

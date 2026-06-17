@@ -1252,6 +1252,8 @@ async def submit_vocabulary_assignment(
     # 待訂正（RETURNED）提交後為已訂正（RESUBMITTED），其他為已提交（SUBMITTED）
     if student_assignment.status == AssignmentStatus.RETURNED:
         student_assignment.status = AssignmentStatus.RESUBMITTED
+        # #861: 記錄訂正提交時間，供批改 modal 顯示「訂正日期」
+        student_assignment.resubmitted_at = datetime.now(timezone.utc)
     else:
         student_assignment.status = AssignmentStatus.SUBMITTED
     student_assignment.submitted_at = datetime.now(timezone.utc)

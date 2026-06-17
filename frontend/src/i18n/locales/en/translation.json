@@ -2903,6 +2903,7 @@
     "quiz": {
       "score": "Score",
       "accuracy": "Accuracy",
+      "perQuestionPoints": "Points/question",
       "correctCount": "Correct",
       "noAnswers": "No answers yet",
       "studentAnswer": "Answer",
@@ -4845,6 +4846,9 @@
     "resetSuccess": "Reset {{count}} student(s) to not started",
     "resetFailed": "Failed to reset",
     "rowResetSuccess": "Student reset to not started",
+    "resetConfirm": "Reset will erase these {{count}} student(s)' score and all answers for this assignment, and cannot be undone. Reset anyway?",
+    "rowResetConfirm": "Reset will erase this student's score and all answers for this assignment, and cannot be undone. Reset anyway?",
+    "correctionDate": "Revised",
     "aiGradeSuccess": "AI grading complete",
     "aiGradeFailed": "AI grading failed",
     "aiGradeProgress": "AI grading {{current}}/{{total}}",

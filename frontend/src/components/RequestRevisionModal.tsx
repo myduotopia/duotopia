@@ -265,7 +265,8 @@ export function RequestRevisionModal({
     }
   }, [current, selected, students, classroomId, t, onDone]);
 
-  // 還原為未開始（批次）：只清狀態+時間戳，分數與作答紀錄都保留（#845 review：分數不動）。送出前排除已未開始者。
+  // 還原為未開始（批次）：清空該生此作業的分數與作答紀錄（#861，破壞性）。
+  // 送出前排除已未開始者。
   const handleResetBatch = useCallback(async () => {
     if (!current) return;
     const ids = selected.filter((id) => {
@@ -274,6 +275,18 @@ export function RequestRevisionModal({
     });
     if (ids.length === 0) {
       toast.error(t("gradingHub.noTarget", "沒有符合的學生"));
+      return;
+    }
+    // #861: 破壞性動作，會清空分數與作答紀錄，先確認。
+    if (
+      !window.confirm(
+        t(
+          "gradingHub.resetConfirm",
+          "還原會清空這 {{count}} 位學生此作業的分數與所有作答紀錄，且無法復原。確定要還原嗎？",
+          { count: ids.length },
+        ),
+      )
+    ) {
       return;
     }
     setSubmitting(true);
@@ -287,11 +300,19 @@ export function RequestRevisionModal({
           count: ids.length,
         }),
       );
-      // 只改狀態，分數不動（#830 review）
+      // #861: 還原會清空分數與作答；本地同步清掉顯示分數，避免顯示殘留舊值。
       setStudents((prev) =>
         prev.map((s) =>
           ids.includes(s.student_id)
-            ? { ...s, status: "NOT_STARTED" as const }
+            ? {
+                ...s,
+                status: "NOT_STARTED" as const,
+                score: undefined,
+                correct_count: null,
+                total_questions: null,
+                metrics: null,
+                is_interim_score: false,
+              }
             : s,
         ),
       );
@@ -358,21 +379,40 @@ export function RequestRevisionModal({
     [current, classroomId, t, onDone],
   );
 
-  // 單一學生：還原為未開始（只清狀態+時間戳，分數與作答紀錄都保留）
+  // 單一學生：還原為未開始（#861：清空該生此作業的分數與作答紀錄，破壞性）
   const handleResetOne = useCallback(
     async (studentId: number) => {
       if (!current) return;
+      // #861: 破壞性動作，會清空該生此作業的分數與作答紀錄，先確認。
+      if (
+        !window.confirm(
+          t(
+            "gradingHub.rowResetConfirm",
+            "還原會清空該學生此作業的分數與所有作答紀錄，且無法復原。確定要還原嗎？",
+          ),
+        )
+      ) {
+        return;
+      }
       try {
         await apiClient.post(
           `/api/teachers/assignments/${current.id}/batch-reset-not-started`,
           { student_ids: [studentId] },
         );
         toast.success(t("gradingHub.rowResetSuccess", "已還原該學生為未開始"));
-        // 只改狀態，分數不動（#830 review）
+        // #861: 還原會清空分數與作答；本地同步清掉顯示分數。
         setStudents((prev) =>
           prev.map((s) =>
             s.student_id === studentId
-              ? { ...s, status: "NOT_STARTED" as const }
+              ? {
+                  ...s,
+                  status: "NOT_STARTED" as const,
+                  score: undefined,
+                  correct_count: null,
+                  total_questions: null,
+                  metrics: null,
+                  is_interim_score: false,
+                }
               : s,
           ),
         );

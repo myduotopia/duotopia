@@ -39,7 +39,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
@@ -116,7 +115,8 @@ export default function WordSpellingActivity({
   // Issue #716: 觸控裝置（手機 / 平板）改用 VirtualKeyboard，避免系統鍵盤的
   // 「建議選字」讓學生直接點答案。桌機保留實體鍵盤。
   const deviceMode = useInputDeviceMode();
-  const useVirtualKeyboard = deviceMode !== "desktop";
+  // #861 E: 老師預覽也顯示虛擬鍵盤（即使桌機）以便示範
+  const useVirtualKeyboard = isLivePreview || deviceMode !== "desktop";
 
   // State — 預覽模式 items 從 props 來，不需要 loading
   const [loading, setLoading] = useState(!isLivePreview);
@@ -841,10 +841,9 @@ export default function WordSpellingActivity({
         />
       </div>
 
-      <div
-        className={cn(deviceMode === "tablet" && "flex items-stretch gap-4")}
-      >
-        <div className={cn("min-w-0", deviceMode === "tablet" && "flex-[6]")}>
+      <div>
+        {/* #861 E: 鍵盤一律置於作答區下方（移除平板右側窄欄） */}
+        <div className="min-w-0">
           <WordCard
             viewMode={deviceMode === "mobile" ? "mobile" : "desktop"}
             face={cardFace}
@@ -875,7 +874,7 @@ export default function WordSpellingActivity({
                 )}
                 {showTranslation && currentWord.translation && (
                   <div className="text-center py-3 space-y-1">
-                    <h2 className="text-3xl md:text-4xl font-bold text-gray-800 tracking-wide">
+                    <h2 className="quiz-question-font font-bold text-gray-800 tracking-wide">
                       {currentWord.translation}
                     </h2>
                     {currentWord.part_of_speech && (
@@ -926,25 +925,21 @@ export default function WordSpellingActivity({
                         : "neutral"
                   }
                 />
+
+                {/* #861 E: 虛擬鍵盤放進單字卡的「答題面」（背面）；正面（播音檔/
+                    顯示單字例句）不顯示鍵盤。 */}
+                {useVirtualKeyboard && (
+                  <VirtualKeyboard
+                    className="-mx-6"
+                    onKey={vkAppend}
+                    onBackspace={vkBackspace}
+                    onEnter={vkEnter}
+                  />
+                )}
               </div>
             }
           />
         </div>
-        {useVirtualKeyboard && (
-          <div
-            className={cn(
-              deviceMode === "tablet"
-                ? "flex-[4] min-w-0 flex flex-col justify-center"
-                : "mt-3",
-            )}
-          >
-            <VirtualKeyboard
-              onKey={vkAppend}
-              onBackspace={vkBackspace}
-              onEnter={vkEnter}
-            />
-          </div>
-        )}
       </div>
 
       <ScoreOverlay
