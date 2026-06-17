@@ -305,7 +305,39 @@ export default function WordClozeQuizActivity({
   );
 
   const handleSubmitAll = useCallback(async () => {
-    if (isLivePreview || isDemoMode) {
+    if (isLivePreview) {
+      // #861 D: 預覽提交 → 前端用目前打字作答組複盤，重用學生端 QuizReviewView。
+      const norm = (s: string | null | undefined) =>
+        (s ?? "").trim().toLowerCase();
+      const reviewWords: ClozeReviewWord[] = words.map((w) => {
+        const typed = (typedByItem[w.content_item_id] || "").trim();
+        const isCorrect = !!typed && norm(typed) === norm(w.cloze_answer);
+        return {
+          content_item_id: w.content_item_id,
+          question_number: w.question_number,
+          is_correct: isCorrect,
+          student_answer: typed || null,
+          correct_answer: w.cloze_answer,
+          example_sentence: w.example_sentence,
+          example_sentence_translation: w.example_sentence_translation,
+          part_of_speech: w.part_of_speech,
+        };
+      });
+      const correctCount = reviewWords.filter((r) => r.is_correct).length;
+      const total = reviewWords.length;
+      setReviewData({
+        practice_mode: "word_cloze_quiz",
+        words: reviewWords,
+        total_questions: total,
+        correct_count: correctCount,
+        score: total ? Math.round((correctCount / total) * 100) : 0,
+        status: null,
+        submitted_at: null,
+      });
+      setAlreadySubmitted(true);
+      return;
+    }
+    if (isDemoMode) {
       onComplete?.();
       return;
     }
@@ -342,6 +374,8 @@ export default function WordClozeQuizActivity({
     persistAnswer,
     sessionId,
     t,
+    words,
+    typedByItem,
   ]);
 
   // Issue #830 訂正模式：送出當題答案 →
@@ -551,6 +585,18 @@ export default function WordClozeQuizActivity({
           size={56}
           longForm
         />
+      )}
+      {/* #861 D: 預覽模式在題號列右上角提供提交鈕（前端組複盤，提交後顯示正解）。 */}
+      {isLivePreview && (
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleSubmitAll}
+          className="ml-2 shrink-0"
+        >
+          <Send className="h-4 w-4 mr-1" />
+          {t("wordQuiz.submit") || "提交"}
+        </Button>
       )}
     </>
   );

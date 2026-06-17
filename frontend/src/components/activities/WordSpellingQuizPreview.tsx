@@ -11,7 +11,10 @@ import WordSpellingQuizActivity from "./WordSpellingQuizActivity";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
 interface Props {
-  contentId: number;
+  // #861 D: assignmentId（合併全部單字集、後端依 shuffle_questions 打亂）優先；
+  // contentId（單一 content）為 AssignmentDialog 建立流程即時預覽的 fallback。
+  assignmentId?: number;
+  contentId?: number;
   settings: {
     show_translation?: boolean;
     show_image?: boolean;
@@ -43,15 +46,31 @@ interface QuizWord {
   question_number: number;
 }
 
+// 後端 /preview/spelling-quiz-start 回傳的題目形狀（#861 D）
+interface ServerQuizWord {
+  content_item_id: number;
+  text: string;
+  translation?: string;
+  audio_url?: string | null;
+  image_url?: string | null;
+  part_of_speech?: string | null;
+  question_number?: number;
+}
+
 export default function WordSpellingQuizPreview({
+  assignmentId,
   contentId,
   settings,
   renderCardFooter,
 }: Props) {
   const { token } = useTeacherAuthStore();
   const [items, setItems] = useState<ApiItem[]>([]);
+  const [serverWords, setServerWords] = useState<ServerQuizWord[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // assignmentId 路徑：後端跨所有單字集收題、依設定打亂（#861 D）。
+  const useAssignment = assignmentId != null;
 
   useEffect(() => {
     let cancelled = false;
@@ -60,16 +79,20 @@ export default function WordSpellingQuizPreview({
       setError(null);
       try {
         const apiUrl = import.meta.env.VITE_API_URL || "";
-        const resp = await fetch(
-          `${apiUrl}/api/teachers/contents/${contentId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
+        const url = useAssignment
+          ? `${apiUrl}/api/teachers/assignments/${assignmentId}/preview/spelling-quiz-start`
+          : `${apiUrl}/api/teachers/contents/${contentId}`;
+        const resp = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         if (!cancelled) {
-          setItems(data.items || []);
+          if (useAssignment) {
+            setServerWords(data.words || []);
+          } else {
+            setItems(data.items || []);
+          }
           setLoading(false);
         }
       } catch (e) {
@@ -83,21 +106,30 @@ export default function WordSpellingQuizPreview({
     return () => {
       cancelled = true;
     };
-  }, [contentId, token]);
+  }, [useAssignment, assignmentId, contentId, token]);
 
-  const previewWords = useMemo<QuizWord[]>(
-    () =>
-      items.map((item, idx) => ({
-        content_item_id: item.id,
-        text: item.text,
-        translation: item.translation || "",
-        audio_url: item.audio_url,
-        image_url: item.image_url,
-        part_of_speech: item.part_of_speech,
-        question_number: idx + 1,
-      })),
-    [items],
-  );
+  const previewWords = useMemo<QuizWord[]>(() => {
+    if (useAssignment) {
+      return (serverWords || []).map((w, idx) => ({
+        content_item_id: w.content_item_id,
+        text: w.text,
+        translation: w.translation || "",
+        audio_url: w.audio_url,
+        image_url: w.image_url,
+        part_of_speech: w.part_of_speech,
+        question_number: w.question_number ?? idx + 1,
+      }));
+    }
+    return items.map((item, idx) => ({
+      content_item_id: item.id,
+      text: item.text,
+      translation: item.translation || "",
+      audio_url: item.audio_url,
+      image_url: item.image_url,
+      part_of_speech: item.part_of_speech,
+      question_number: idx + 1,
+    }));
+  }, [useAssignment, serverWords, items]);
 
   const previewSettings = useMemo(
     () => ({
@@ -134,13 +166,14 @@ export default function WordSpellingQuizPreview({
 
   return (
     <div className="space-y-2">
-      {settings.shuffle_questions && (
+      {/* assignmentId 路徑後端已實際打亂，不需提示橫幅；contentId 路徑維持原提示 */}
+      {!useAssignment && settings.shuffle_questions && (
         <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
           🔀 學生實際作答時題目順序會被打亂（預覽固定按原順序顯示）
         </div>
       )}
       <WordSpellingQuizActivity
-        assignmentId={0}
+        assignmentId={assignmentId ?? 0}
         previewWords={previewWords}
         previewSettings={previewSettings}
         renderCardFooter={renderCardFooter}
