@@ -800,9 +800,12 @@ async def grade_student_assignment(
         )
 
     # 更新評分資訊
-    # 小考自動判分：忽略老師端送來的 score（避免歸零），分數維持系統計算值；feedback 仍可寫。
-    if not _is_quiz_assignment(db, assignment):
-        assignment.score = grade_data.get("score")
+    # 小考自動判分：預設不覆寫系統算的分數（避免送 null 歸零）；但老師在批改頁
+    # 明確調整分數時（score 有值）允許寫入，作為老師最終裁量（#861 c-2）。
+    # 非小考一律沿用送來的 score。
+    incoming_score = grade_data.get("score")
+    if not _is_quiz_assignment(db, assignment) or incoming_score is not None:
+        assignment.score = incoming_score
     assignment.feedback = grade_data.get("feedback")
 
     # 只有在 update_status 為 True 時才更新狀態

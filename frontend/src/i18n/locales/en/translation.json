@@ -2903,6 +2903,7 @@
     "quiz": {
       "score": "Score",
       "accuracy": "Accuracy",
+      "perQuestionPoints": "Points/question",
       "correctCount": "Correct",
       "noAnswers": "No answers yet",
       "studentAnswer": "Answer",

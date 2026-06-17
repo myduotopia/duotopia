@@ -655,6 +655,47 @@ export default function GradingPage() {
     }
   };
 
+  // #861 c-2: 還原為未開始（破壞性，會清空該生此作業的分數與所有作答紀錄）。
+  // 與批改 hub 的「還原」共用同一端點，沿用 B 的清空語意。
+  const handleResetToNotStarted = async () => {
+    if (!submission) return;
+    if (
+      !window.confirm(
+        t(
+          "gradingPage.messages.resetConfirm",
+          "還原會清空該學生此作業的分數與所有作答紀錄，且無法復原。確定要還原嗎？",
+        ),
+      )
+    ) {
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await apiClient.post(
+        `/api/teachers/assignments/${assignmentId}/batch-reset-not-started`,
+        { student_ids: [parseInt(studentId!)] },
+      );
+      toast.success(t("gradingPage.messages.resetSuccess", "已還原為未開始"));
+      setScore(null);
+      if (submission) {
+        setSubmission({ ...submission, status: "NOT_STARTED", score: null });
+      }
+      setStudentList((prev) =>
+        prev.map((student) =>
+          student.student_id === parseInt(studentId!)
+            ? { ...student, status: "NOT_STARTED", score: null }
+            : student,
+        ),
+      );
+      await loadSubmission();
+    } catch (error) {
+      console.error("Failed to reset:", error);
+      toast.error(t("gradingPage.messages.resetFailed", "還原失敗"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleCompleteGrading = async () => {
     if (!submission) return;
 
@@ -687,7 +728,13 @@ export default function GradingPage() {
       toast.success(t("gradingPage.messages.gradingSuccess"));
 
       if (submission) {
-        setSubmission({ ...submission, status: "GRADED" });
+        // 同步 current_score/score，讓「完成」鈕在存檔後重新禁用（直到下次改分數）
+        setSubmission({
+          ...submission,
+          status: "GRADED",
+          current_score: score ?? undefined,
+          score: score ?? null,
+        });
       }
 
       setStudentList((prev) =>
@@ -698,6 +745,10 @@ export default function GradingPage() {
         ),
       );
 
+      // #861 c-2: 小考批改完成後停在原學生（與 Grade hub 的 grade 行為一致），
+      // 不自動跳下一位——否則 setSearchParams 會觸發重載別的學生，造成畫面多次
+      // 閃動且跳到 B 學生。其他模式維持原本的循序批改。
+      const isQuiz = submission.practice_mode?.endsWith("_quiz");
       const assignedStudents = studentList.filter(
         (s) => s.status && s.status !== "NOT_ASSIGNED",
       );
@@ -705,7 +756,7 @@ export default function GradingPage() {
         (s) => s.student_id === parseInt(studentId!),
       );
 
-      if (currentAssignedIndex < assignedStudents.length - 1) {
+      if (!isQuiz && currentAssignedIndex < assignedStudents.length - 1) {
         await handleNextStudent();
       }
     } catch (error) {
@@ -1021,16 +1072,15 @@ export default function GradingPage() {
                 onFeedbackChange={setFeedback}
                 onAutoSave={() => performAutoSave()}
                 onComplete={handleCompleteGrading}
+                onReset={handleResetToNotStarted}
                 onRequestRevision={
                   isAutoScoredMode(submission?.practice_mode)
                     ? undefined
                     : handleRequestRevision
                 }
                 isAutoScored={isAutoScoredMode(submission?.practice_mode)}
-                // 小考完全自動判分：分數唯讀、不顯示完成批改（僅保留退回）
-                autoScoreReadOnly={
-                  submission?.practice_mode?.endsWith("_quiz") ?? false
-                }
+                // #861 c-2: 小考分數改為可編輯（老師可手動調整後按 graded 存檔），
+                // 故不再傳 autoScoreReadOnly。
                 onJumpToItem={handleJumpToItem}
               />
             </>

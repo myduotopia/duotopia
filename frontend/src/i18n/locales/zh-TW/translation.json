@@ -2957,6 +2957,7 @@
     "quiz": {
       "score": "分數",
       "accuracy": "答對率",
+      "perQuestionPoints": "單題分數",
       "correctCount": "答對題數",
       "noAnswers": "尚無作答紀錄",
       "studentAnswer": "學生答案",
