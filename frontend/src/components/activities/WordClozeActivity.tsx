@@ -39,7 +39,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
@@ -120,7 +119,8 @@ export default function WordClozeActivity({
   const { t } = useTranslation();
   // Issue #716: 觸控裝置改用 VirtualKeyboard，避免系統建議選字。
   const deviceMode = useInputDeviceMode();
-  const useVirtualKeyboard = deviceMode !== "desktop";
+  // #861 E: 老師預覽也顯示虛擬鍵盤（即使桌機）以便示範
+  const useVirtualKeyboard = isLivePreview || deviceMode !== "desktop";
 
   const [loading, setLoading] = useState(!isLivePreview);
   const [questions, setQuestions] = useState<ClozeQuestion[]>([]);
@@ -842,10 +842,9 @@ export default function WordClozeActivity({
         />
       </div>
 
-      <div
-        className={cn(deviceMode === "tablet" && "flex items-stretch gap-4")}
-      >
-        <div className={cn("min-w-0", deviceMode === "tablet" && "flex-[6]")}>
+      {/* #861 E: 鍵盤一律置於作答區下方（移除平板右側窄欄） */}
+      <div>
+        <div className="min-w-0">
           <WordCard
             viewMode={deviceMode === "mobile" ? "mobile" : "desktop"}
             face={cardFace}
@@ -901,11 +900,11 @@ export default function WordClozeActivity({
                       </Badge>
                     </div>
                   )}
-                  <p className="text-lg md:text-xl leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
+                  <p className="quiz-question-font leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
                     {currentQ.blanked_sentence}
                   </p>
                   {showTranslation && currentQ.sentence_translation && (
-                    <p className="text-sm text-gray-500">
+                    <p className="quiz-translation-font text-gray-500">
                       {currentQ.sentence_translation}
                     </p>
                   )}
@@ -937,13 +936,7 @@ export default function WordClozeActivity({
           />
         </div>
         {useVirtualKeyboard && (
-          <div
-            className={cn(
-              deviceMode === "tablet"
-                ? "flex-[4] min-w-0 flex flex-col justify-center"
-                : "mt-3",
-            )}
-          >
+          <div className="mt-3 w-full max-w-3xl mx-auto">
             <VirtualKeyboard
               onKey={vkAppend}
               onBackspace={vkBackspace}

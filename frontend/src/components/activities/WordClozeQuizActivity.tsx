@@ -30,6 +30,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
 import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
+import { useShortLandscape } from "./shared/useShortLandscape";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import QuizAnswerInput, {
@@ -151,7 +152,10 @@ export default function WordClozeQuizActivity({
   const navSlot = useQuizNavSlot();
   // #844：手機/平板顯示虛擬鍵盤（同艾賓浩斯版）；桌機用實體鍵盤
   const deviceMode = useInputDeviceMode();
-  const useVirtualKeyboard = deviceMode !== "desktop";
+  // #861 E: 手機橫放（矮）→ 題目與鍵盤共用一個捲軸，避免互搶高度
+  const shortLandscape = useShortLandscape();
+  // #861 E: 老師預覽也顯示虛擬鍵盤（即使桌機）以便示範
+  const useVirtualKeyboard = isLivePreview || deviceMode !== "desktop";
   const quizInputRef = useRef<QuizAnswerInputHandle>(null);
   // Issue #830: 訂正模式（退回後）— 答錯揭示正解、強制全對才能提交
   const [quizStatus, setQuizStatus] = useState<string | null>(null);
@@ -510,11 +514,11 @@ export default function WordClozeQuizActivity({
                   ({w.part_of_speech})
                 </span>
               )}
-              <p className="text-lg leading-relaxed text-gray-800 font-semibold tracking-wide">
+              <p className="quiz-question-font leading-relaxed text-gray-800 font-semibold tracking-wide">
                 {blanked}
               </p>
               {w.example_sentence_translation && (
-                <p className="text-sm text-gray-500">
+                <p className="quiz-translation-font text-gray-500">
                   {w.example_sentence_translation}
                 </p>
               )}
@@ -609,19 +613,26 @@ export default function WordClozeQuizActivity({
         <div className="flex gap-1 sm:gap-1.5 items-center">{navBar}</div>
       )}
 
+      {/* #861 E: 鍵盤一律置於下方（移除平板右側窄欄）。手機橫放(shortLandscape)時
+          外層整塊一起捲，題目與鍵盤共用一個捲軸、互不搶高度。 */}
       <div
         className={cn(
-          "flex-1 min-h-0 flex gap-4",
-          deviceMode === "tablet" ? "flex-row items-stretch" : "flex-col",
+          "flex-1 min-h-0 flex flex-col gap-4",
+          shortLandscape && "overflow-y-auto",
         )}
       >
         <div
           className={cn(
             "min-w-0 flex flex-col",
-            deviceMode === "tablet" ? "flex-[6]" : "flex-1 min-h-0",
+            !shortLandscape && "flex-1 min-h-0",
           )}
         >
-          <Card className="relative flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+          <Card
+            className={cn(
+              "relative flex flex-col border-0 shadow-none bg-transparent",
+              !shortLandscape && "flex-1 min-h-0",
+            )}
+          >
             {/* #830: 上一題 / 下一題改為卡片左右兩側箭頭（對齊一般單字卡 WordCard） */}
             {currentIndex > 0 && (
               <CardNavArrow
@@ -636,8 +647,18 @@ export default function WordClozeQuizActivity({
                 onClick={() => goTo(currentIndex + 1)}
               />
             )}
-            <CardContent className="flex-1 min-h-0 flex flex-col gap-4 p-0">
-              <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto px-10 sm:px-12">
+            <CardContent
+              className={cn(
+                "flex flex-col gap-4 p-0",
+                !shortLandscape && "flex-1 min-h-0",
+              )}
+            >
+              <div
+                className={cn(
+                  "flex flex-col gap-4 px-10 sm:px-12",
+                  !shortLandscape && "flex-1 min-h-0 overflow-y-auto",
+                )}
+              >
                 <div className="text-sm text-gray-500">
                   {t("wordQuiz.questionLabel", {
                     current: currentWord.question_number,
@@ -681,12 +702,12 @@ export default function WordClozeQuizActivity({
                       </Badge>
                     </div>
                   )}
-                  <p className="text-lg md:text-xl leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
+                  <p className="quiz-question-font leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
                     {blanked}
                   </p>
                   {settings.show_translation &&
                     currentWord.example_sentence_translation && (
-                      <p className="text-sm text-gray-500">
+                      <p className="quiz-translation-font text-gray-500">
                         {currentWord.example_sentence_translation}
                       </p>
                     )}
@@ -758,13 +779,7 @@ export default function WordClozeQuizActivity({
           </Card>
         </div>
         {useVirtualKeyboard && (
-          <div
-            className={cn(
-              deviceMode === "tablet"
-                ? "flex-[4] min-w-0 flex flex-col justify-center"
-                : "shrink-0",
-            )}
-          >
+          <div className="shrink-0 w-full max-w-3xl mx-auto">
             <VirtualKeyboard
               onKey={vkAppend}
               onBackspace={vkBackspace}

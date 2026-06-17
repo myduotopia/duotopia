@@ -250,7 +250,7 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
                       : { width: `${Math.max(slotExpected.length + 4, 8)}ch` }
                   }
                   className={cn(
-                    "text-center text-2xl h-14 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
+                    "text-center quiz-input-font h-14 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
                     "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
                     withSubmit && "pr-9",
                     stateBorder,
