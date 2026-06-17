@@ -268,7 +268,41 @@ export default function WordSelectionQuizActivity({
   );
 
   const handleSubmitAll = useCallback(async () => {
-    if (isLivePreview || isDemoMode) {
+    if (isLivePreview) {
+      // #861 D: 預覽提交 → 前端用目前作答組複盤資料，重用學生端 QuizReviewView，
+      // 樣式與學生小考後的正解畫面完全一致（不打學生 API）。
+      const norm = (s: string | null | undefined) =>
+        (s ?? "").trim().toLowerCase();
+      const reviewWords: SelectionReviewWord[] = words.map((w) => {
+        const picked = selectedByItem[w.content_item_id] ?? null;
+        const isCorrect = !!picked && norm(picked) === norm(w.correct_text);
+        return {
+          content_item_id: w.content_item_id,
+          question_number: w.question_number,
+          is_correct: isCorrect,
+          student_answer: picked,
+          correct_answer: w.correct_text,
+          text: w.text,
+          translation: w.translation,
+          options: w.options,
+          image_url: w.image_url ?? null,
+        };
+      });
+      const correctCount = reviewWords.filter((w) => w.is_correct).length;
+      const total = reviewWords.length;
+      setReviewData({
+        practice_mode: "word_selection_quiz",
+        words: reviewWords,
+        total_questions: total,
+        correct_count: correctCount,
+        score: total ? Math.round((correctCount / total) * 100) : 0,
+        status: null,
+        submitted_at: null,
+      });
+      setAlreadySubmitted(true);
+      return;
+    }
+    if (isDemoMode) {
       onComplete?.();
       return;
     }
@@ -289,7 +323,16 @@ export default function WordSelectionQuizActivity({
     } finally {
       setCompleting(false);
     }
-  }, [assignmentId, isDemoMode, isLivePreview, onComplete, sessionId, t]);
+  }, [
+    assignmentId,
+    isDemoMode,
+    isLivePreview,
+    onComplete,
+    sessionId,
+    t,
+    words,
+    selectedByItem,
+  ]);
 
   // Issue #830 訂正模式：選對選項 → 自動跳「下一題錯題」；若已無錯題（剛改對的是
   // 最後一題錯題）＝整卷提交；選錯則留在原題、選項即時揭示正解（強制改對）。
@@ -507,6 +550,19 @@ export default function WordSelectionQuizActivity({
           size={56}
           longForm
         />
+      )}
+      {/* #861 D: 預覽模式在題號列右上角提供提交鈕（前端組複盤，提交後顯示正解）。
+          學生端正常作答的提交鈕屬 #844 範疇，這裡僅 isLivePreview 顯示。 */}
+      {isLivePreview && (
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleSubmitAll}
+          className="ml-2 shrink-0"
+        >
+          <Send className="h-4 w-4 mr-1" />
+          {t("wordQuiz.submit") || "提交"}
+        </Button>
       )}
     </>
   );

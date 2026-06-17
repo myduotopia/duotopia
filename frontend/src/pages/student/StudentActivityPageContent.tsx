@@ -1930,8 +1930,10 @@ export default function StudentActivityPageContent({
     if (practiceMode === "word_selection_quiz") {
       if (isPreviewMode) {
         return (
+          // #861 D: 改用 assignmentId → 後端合併「所有單字集」題目並依設定打亂，
+          // 取代原本每個 activity（單一單字集）各別預覽只顯示 1 組的行為。
           <WordSelectionQuizPreview
-            contentId={activity.content_id}
+            assignmentId={assignmentId}
             settings={{
               show_word: previewSettings?.show_word ?? true,
               show_image: previewSettings?.show_image ?? true,
