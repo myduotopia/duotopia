@@ -925,19 +925,20 @@ export default function WordSpellingActivity({
                         : "neutral"
                   }
                 />
+
+                {/* #861 E: 虛擬鍵盤放進單字卡的「答題面」（背面）；正面（播音檔/
+                    顯示單字例句）不顯示鍵盤。 */}
+                {useVirtualKeyboard && (
+                  <VirtualKeyboard
+                    onKey={vkAppend}
+                    onBackspace={vkBackspace}
+                    onEnter={vkEnter}
+                  />
+                )}
               </div>
             }
           />
         </div>
-        {useVirtualKeyboard && (
-          <div className="mt-3 w-full max-w-3xl mx-auto">
-            <VirtualKeyboard
-              onKey={vkAppend}
-              onBackspace={vkBackspace}
-              onEnter={vkEnter}
-            />
-          </div>
-        )}
       </div>
 
       <ScoreOverlay
