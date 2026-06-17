@@ -330,7 +330,7 @@ function WordCardFront({
               size="sm"
               ariaLabel="播放單字音檔"
             />
-            <h2 className="text-lg font-bold text-gray-900 break-all">
+            <h2 className="word-card-word font-bold text-gray-900 break-all">
               {word}
             </h2>
           </div>
@@ -347,7 +347,7 @@ function WordCardFront({
                 </Badge>
               )}
               {translation && (
-                <p className="text-sm md:text-base text-gray-700">
+                <p className="quiz-translation-font text-gray-700">
                   {translation}
                 </p>
               )}
@@ -369,7 +369,7 @@ function WordCardFront({
                 size="sm"
                 ariaLabel="播放例句音檔"
               />
-              <p className="flex-1 text-base leading-relaxed text-gray-900">
+              <p className="flex-1 word-card-sentence leading-relaxed text-gray-900">
                 <HighlightedSentence
                   sentence={exampleSentence!}
                   target={word}
@@ -377,7 +377,7 @@ function WordCardFront({
               </p>
             </div>
             {exampleSentenceTranslation && (
-              <p className="text-sm text-gray-600 leading-relaxed pl-10">
+              <p className="quiz-translation-font text-gray-600 leading-relaxed pl-10">
                 {exampleSentenceTranslation}
               </p>
             )}

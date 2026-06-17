@@ -152,6 +152,13 @@ body {
 .quiz-input-font {
   font-size: clamp(24px, 2.6vw, 32px);
 }
+/* #861 E-2: 翻卡正面（單字資料）字級——單字為焦點放最大，例句次之。 */
+.word-card-word {
+  font-size: clamp(22px, 2.6vw, 34px);
+}
+.word-card-sentence {
+  font-size: clamp(16px, 1.9vw, 24px);
+}
 
 /* Countdown ring: drain the stroke over the question's full duration.
    The element sets `--countdown-circ` (circumference) and
