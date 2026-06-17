@@ -930,6 +930,7 @@ export default function WordSpellingActivity({
                     顯示單字例句）不顯示鍵盤。 */}
                 {useVirtualKeyboard && (
                   <VirtualKeyboard
+                    className="-mx-6"
                     onKey={vkAppend}
                     onBackspace={vkBackspace}
                     onEnter={vkEnter}
