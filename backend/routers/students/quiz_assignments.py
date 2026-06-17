@@ -813,6 +813,9 @@ def finalize_quiz_submission(
         session.completed_at = now
     sa.status = status
     sa.submitted_at = now
+    # #861: 訂正再提交時記錄訂正時間，供批改 modal 顯示「訂正日期」
+    if status == AssignmentStatus.RESUBMITTED:
+        sa.resubmitted_at = now
     if write_score:
         sa.score = score
 
