@@ -515,7 +515,7 @@ export default function WordSelectionQuizActivity({
         {t("wordQuiz.questionNav") || "題號"}
       </span>
       {/* #844：題號多時不換行，改水平捲動；標題／計數／計時器留在外面不被推走 */}
-      <div className="flex gap-1 sm:gap-1.5 items-center overflow-x-auto min-w-0 flex-1 py-0.5">
+      <div className="flex gap-1 sm:gap-1.5 items-center overflow-x-auto min-w-0 flex-1 py-1">
         {words.map((w, idx) => {
           const answered =
             (selectedByItem[w.content_item_id] || "").trim() !== "";
@@ -526,7 +526,7 @@ export default function WordSelectionQuizActivity({
               type="button"
               onClick={() => goTo(idx)}
               className={cn(
-                "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
+                "h-8 min-w-8 shrink-0 inline-flex items-center justify-center rounded text-sm font-medium border transition",
                 isCurrent
                   ? "bg-emerald-500 text-white border-emerald-500"
                   : !answered

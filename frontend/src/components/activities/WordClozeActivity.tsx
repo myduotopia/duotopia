@@ -46,6 +46,7 @@ import VirtualKeyboard from "./shared/VirtualKeyboard";
 import QuizAnswerInput, {
   type QuizAnswerInputHandle,
 } from "./shared/QuizAnswerInput";
+import ClozeBlankText from "./shared/ClozeBlankText";
 import { WordCard } from "./shared/WordCard";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
@@ -895,7 +896,7 @@ export default function WordClozeActivity({
                     </div>
                   )}
                   <p className="quiz-question-font leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
-                    {currentQ.blanked_sentence}
+                    <ClozeBlankText text={currentQ.blanked_sentence} />
                   </p>
                   {showTranslation && currentQ.sentence_translation && (
                     <p className="quiz-translation-font text-gray-500">
