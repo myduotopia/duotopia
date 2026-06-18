@@ -274,6 +274,159 @@ async def preview_word_cloze_start(
     return await get_word_cloze_start(assignment, db, exclude_ids)
 
 
+@router.get("/assignments/{assignment_id}/preview/selection-quiz-start")
+async def preview_selection_quiz_start(
+    assignment_id: int,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """老師預覽單字選擇小考（#861 D）：跨所有單字集、依 shuffle_questions 打亂，附正解與選項。
+
+    與學生端 ``start_word_selection_quiz`` 同源（共用 ``_load_quiz_items`` /
+    ``_build_selection_options``），但不建立 PracticeSession、不需作答紀錄。
+    """
+    assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
+    if assignment.practice_mode != "word_selection_quiz":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This assignment is not a word_selection_quiz",
+        )
+
+    # Lazy import 避免 teacher ↔ student router 的 import-time 循環
+    from routers.students.quiz_assignments import (
+        _load_quiz_items,
+        _build_selection_options,
+        _attach_question_numbers,
+        _common_settings,
+    )
+    from utils.distractors import text_field_for_show_image
+
+    items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
+    options_by_item = _build_selection_options(items, assignment)
+    show_image = assignment.show_image if assignment.show_image is not None else True
+    answer_key = text_field_for_show_image(show_image)
+
+    def builder(item: ContentItem) -> Dict[str, Any]:
+        correct = getattr(item, answer_key) or ""
+        return {
+            "content_item_id": item.id,
+            "text": item.text,
+            "translation": item.translation or "",
+            "correct_text": correct,
+            "audio_url": item.audio_url,
+            "image_url": item.image_url,
+            "options": options_by_item[item.id],
+        }
+
+    words = _attach_question_numbers(items, builder)
+    return {
+        "practice_mode": "word_selection_quiz",
+        "words": words,
+        "total_questions": len(words),
+        **_common_settings(assignment),
+        "show_option_images": bool(assignment.show_option_images),
+    }
+
+
+@router.get("/assignments/{assignment_id}/preview/spelling-quiz-start")
+async def preview_spelling_quiz_start(
+    assignment_id: int,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """老師預覽單字拼寫小考（#861 D）：跨所有單字集、依 shuffle_questions 打亂。
+
+    與學生端 ``start_word_spelling_quiz`` 同源（共用 ``_load_quiz_items``），但不建
+    PracticeSession、不需作答紀錄。拼寫為打字作答，無選項；正解為 ``item.text``。
+    """
+    assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
+    if assignment.practice_mode != "word_spelling_quiz":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This assignment is not a word_spelling_quiz",
+        )
+
+    from routers.students.quiz_assignments import (
+        _load_quiz_items,
+        _attach_question_numbers,
+        _common_settings,
+    )
+
+    items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
+
+    def builder(item: ContentItem) -> Dict[str, Any]:
+        return {
+            "content_item_id": item.id,
+            "text": item.text,
+            "translation": item.translation or "",
+            "audio_url": item.audio_url,
+            "image_url": item.image_url,
+            "part_of_speech": item.part_of_speech,
+            "example_sentence": item.example_sentence,
+            "example_sentence_translation": item.example_sentence_translation,
+            "example_sentence_audio_url": item.example_sentence_audio_url,
+        }
+
+    words = _attach_question_numbers(items, builder)
+    return {
+        "practice_mode": "word_spelling_quiz",
+        "words": words,
+        "total_questions": len(words),
+        **_common_settings(assignment),
+    }
+
+
+@router.get("/assignments/{assignment_id}/preview/cloze-quiz-start")
+async def preview_cloze_quiz_start(
+    assignment_id: int,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """老師預覽單字克漏字小考（#861 D）：跨所有單字集、依 shuffle_questions 打亂。
+
+    與學生端 ``start_word_cloze_quiz`` 同源（共用 ``_load_quiz_items`` /
+    ``_resolve_cloze_answer``），但不建 PracticeSession、不需作答紀錄。打字作答，
+    正解為 ``_resolve_cloze_answer(item)``。
+    """
+    assignment = _get_teacher_assignment(assignment_id, current_teacher, db)
+    if assignment.practice_mode != "word_cloze_quiz":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This assignment is not a word_cloze_quiz",
+        )
+
+    from routers.students.quiz_assignments import (
+        _load_quiz_items,
+        _attach_question_numbers,
+        _common_settings,
+        _resolve_cloze_answer,
+    )
+
+    items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
+
+    def builder(item: ContentItem) -> Dict[str, Any]:
+        return {
+            "content_item_id": item.id,
+            "text": item.text,
+            "translation": item.translation or "",
+            "part_of_speech": item.part_of_speech,
+            "example_sentence": item.example_sentence or "",
+            "example_sentence_translation": item.example_sentence_translation or "",
+            "example_sentence_audio_url": item.example_sentence_audio_url,
+            "cloze_answer": _resolve_cloze_answer(item),
+            "image_url": item.image_url,
+            "audio_url": item.audio_url,
+        }
+
+    words = _attach_question_numbers(items, builder)
+    return {
+        "practice_mode": "word_cloze_quiz",
+        "words": words,
+        "total_questions": len(words),
+        **_common_settings(assignment),
+    }
+
+
 @router.post("/assignments/{assignment_id}/preview/word-selection-answer")
 async def preview_word_selection_answer(
     assignment_id: int,

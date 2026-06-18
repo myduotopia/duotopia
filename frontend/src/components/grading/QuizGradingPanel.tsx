@@ -32,9 +32,9 @@ export function QuizGradingPanel({
   const total = submission.total ?? items.length;
   const correctCount =
     submission.correct_count ?? items.filter((i) => i.is_correct).length;
-  const accuracy =
-    submission.accuracy ??
-    (total > 0 ? Math.round((correctCount / total) * 1000) / 10 : 0);
+  // #861 c-2: 顯示「單題分數」(每題配分 = 100 / 題數)，與後端 compute_quiz_score
+  // 的 per_question = round(100/題數, 1) 一致；取代原本的「答對率」。
+  const perQuestionPoints = total > 0 ? Math.round(1000 / total) / 10 : 0;
   const score = submission.score ?? submission.current_score ?? null;
 
   return (
@@ -57,10 +57,10 @@ export function QuizGradingPanel({
             </div>
             <div>
               <div className="text-2xl font-bold text-gray-800">
-                {accuracy}%
+                {perQuestionPoints}
               </div>
               <div className="text-xs text-gray-500">
-                {t("gradingPage.quiz.accuracy") || "答對率"}
+                {t("gradingPage.quiz.perQuestionPoints") || "單題分數"}
               </div>
             </div>
             <div>

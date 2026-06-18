@@ -13,11 +13,10 @@
  */
 
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { TrafficLightDot } from "@/components/StudentStatusPanel";
-import { User, CheckCircle, X } from "lucide-react";
+import { User, Undo2, RotateCcw, CheckCircle2 } from "lucide-react";
 import type {
   StudentSubmission,
   ItemFeedback,
@@ -36,6 +35,8 @@ interface OverallFeedbackPanelProps {
   onFeedbackChange: (value: string) => void;
   onAutoSave: () => Promise<void>;
   onComplete: () => void;
+  // #861 c-2: 省略不傳即不顯示「還原」按鈕（破壞性：清空該生分數與作答）
+  onReset?: () => void;
   // 省略不傳即不顯示「要求訂正」按鈕（用於自動評分模式，如 rearrangement）
   onRequestRevision?: () => void;
   // true 時主按鈕文案顯示「儲存」而非「完成批改」（auto-graded 模式）
@@ -58,12 +59,30 @@ export function OverallFeedbackPanel({
   onFeedbackChange,
   onAutoSave,
   onComplete,
+  onReset,
   onRequestRevision,
-  isAutoScored,
   autoScoreReadOnly,
   onJumpToItem,
 }: OverallFeedbackPanelProps) {
   const { t } = useTranslation();
+
+  // #861 c-2: 三顆動作鈕的 disabled 狀態與 Grade hub（StudentStatusPanel）一致
+  const status = submission?.status;
+  const resetDisabled =
+    submitting ||
+    !submission ||
+    status === "NOT_STARTED" ||
+    status === "unassigned";
+  const returnDisabled = submitting || !submission || status === "RETURNED";
+  // #861 c-2:「完成」鈕同時負責儲存老師改後的分數。已 GRADED 時預設禁用，
+  // 但只要老師改動分數（與目前儲存值不同）就重新啟用，讓老師能存新分數。
+  const storedScore =
+    submission?.current_score != null
+      ? Math.round(submission.current_score * 10) / 10
+      : null;
+  const scoreChanged = score !== storedScore;
+  const gradeDisabled =
+    submitting || !submission || (status === "GRADED" && !scoreChanged);
 
   return (
     <div
@@ -218,45 +237,51 @@ export function OverallFeedbackPanel({
               {t("gradingPage.labels.selectGradingStatus")}
             </div>
 
-            <div className="flex gap-2">
-              {onRequestRevision && (
-                <Button
-                  onClick={onRequestRevision}
-                  disabled={submitting || !submission}
-                  variant={
-                    submission?.status === "RETURNED" ? "default" : "outline"
-                  }
-                  className={`flex-1 ${
-                    submission?.status === "RETURNED"
-                      ? "bg-orange-600 hover:bg-orange-700 text-white"
-                      : "border-orange-600 text-orange-600 hover:bg-orange-50"
-                  }`}
+            {/* #861 c-2: 三顆動作鈕（還原 / 退回 / 完成）外觀與 Grade hub
+                StudentStatusPanel 的 row 按鈕完全一致 */}
+            <div className="flex items-center justify-center gap-1">
+              {onReset && (
+                <button
+                  type="button"
+                  disabled={resetDisabled}
+                  onClick={onReset}
+                  title={t("gradingHub.resetShort")}
+                  className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700/40 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                 >
-                  <X className="h-4 w-4 mr-2" />
-                  {t("gradingPage.buttons.requestRevision")}
-                </Button>
+                  <Undo2 className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline text-xs whitespace-nowrap">
+                    {t("gradingHub.resetShort")}
+                  </span>
+                </button>
               )}
 
-              {/* 小考完全自動判分：不顯示「完成批改/儲存」，老師僅可退回 */}
-              {!autoScoreReadOnly && (
-                <Button
-                  onClick={onComplete}
-                  disabled={submitting || !submission}
-                  variant={
-                    submission?.status === "GRADED" ? "default" : "outline"
-                  }
-                  className={`flex-1 ${
-                    submission?.status === "GRADED"
-                      ? "bg-green-600 hover:bg-green-700 text-white"
-                      : "border-green-600 text-green-600 hover:bg-green-50"
-                  }`}
+              {onRequestRevision && (
+                <button
+                  type="button"
+                  disabled={returnDisabled}
+                  onClick={onRequestRevision}
+                  title={t("gradingHub.returnShort")}
+                  className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                 >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  {isAutoScored
-                    ? t("common.save")
-                    : t("gradingPage.buttons.completeGrading")}
-                </Button>
+                  <RotateCcw className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline text-xs whitespace-nowrap">
+                    {t("gradingHub.returnShort")}
+                  </span>
+                </button>
               )}
+
+              <button
+                type="button"
+                disabled={gradeDisabled}
+                onClick={onComplete}
+                title={t("gradingHub.gradeShort")}
+                className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              >
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline text-xs whitespace-nowrap">
+                  {t("gradingHub.gradeShort")}
+                </span>
+              </button>
             </div>
           </div>
         </div>

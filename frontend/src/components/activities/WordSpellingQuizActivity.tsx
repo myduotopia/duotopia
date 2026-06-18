@@ -33,6 +33,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
 import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
+import { useShortLandscape } from "./shared/useShortLandscape";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import QuizAnswerInput, {
@@ -143,7 +144,10 @@ export default function WordSpellingQuizActivity({
   const navSlot = useQuizNavSlot();
   // #844：手機/平板顯示虛擬鍵盤（同艾賓浩斯版）；桌機用實體鍵盤
   const deviceMode = useInputDeviceMode();
-  const useVirtualKeyboard = deviceMode !== "desktop";
+  // #861 E: 手機橫放（矮）→ 題目與鍵盤共用一個捲軸，避免互搶高度
+  const shortLandscape = useShortLandscape();
+  // #861 E: 老師預覽也顯示虛擬鍵盤（即使桌機）以便示範
+  const useVirtualKeyboard = isLivePreview || deviceMode !== "desktop";
   const quizInputRef = useRef<QuizAnswerInputHandle>(null);
   // Issue #830: 訂正模式（退回後）— 答錯揭示正解、強制全對才能提交
   const [quizStatus, setQuizStatus] = useState<string | null>(null);
@@ -312,7 +316,41 @@ export default function WordSpellingQuizActivity({
   );
 
   const handleSubmitAll = useCallback(async () => {
-    if (isLivePreview || isDemoMode) {
+    if (isLivePreview) {
+      // #861 D: 預覽提交 → 前端用目前打字作答組複盤，重用學生端 QuizReviewView。
+      const norm = (s: string | null | undefined) =>
+        (s ?? "").trim().toLowerCase();
+      const reviewWords: SpellingReviewWord[] = words.map((w) => {
+        const typed = (typedByItem[w.content_item_id] || "").trim();
+        const isCorrect = !!typed && norm(typed) === norm(w.text);
+        return {
+          content_item_id: w.content_item_id,
+          question_number: w.question_number,
+          is_correct: isCorrect,
+          student_answer: typed || null,
+          correct_answer: w.text,
+          text: w.text,
+          translation: w.translation,
+          part_of_speech: w.part_of_speech,
+          audio_url: w.audio_url ?? null,
+          image_url: w.image_url ?? null,
+        };
+      });
+      const correctCount = reviewWords.filter((r) => r.is_correct).length;
+      const total = reviewWords.length;
+      setReviewData({
+        practice_mode: "word_spelling_quiz",
+        words: reviewWords,
+        total_questions: total,
+        correct_count: correctCount,
+        score: total ? Math.round((correctCount / total) * 100) : 0,
+        status: null,
+        submitted_at: null,
+      });
+      setAlreadySubmitted(true);
+      return;
+    }
+    if (isDemoMode) {
       onComplete?.();
       return;
     }
@@ -351,6 +389,8 @@ export default function WordSpellingQuizActivity({
     persistAnswer,
     sessionId,
     t,
+    words,
+    typedByItem,
   ]);
 
   // Issue #830 訂正模式：送出當題答案 →
@@ -494,7 +534,7 @@ export default function WordSpellingQuizActivity({
                 className="mx-auto max-h-32 object-contain"
               />
             )}
-            <h3 className="text-2xl font-bold text-gray-800 tracking-wide">
+            <h3 className="quiz-question-font font-bold text-gray-800 tracking-wide">
               {w.translation || w.text}
             </h3>
             {w.part_of_speech && (
@@ -565,6 +605,18 @@ export default function WordSpellingQuizActivity({
           longForm
         />
       )}
+      {/* #861 D: 預覽模式在題號列右上角提供提交鈕（前端組複盤，提交後顯示正解）。 */}
+      {isLivePreview && (
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleSubmitAll}
+          className="ml-2 shrink-0"
+        >
+          <Send className="h-4 w-4 mr-1" />
+          {t("wordQuiz.submit") || "提交"}
+        </Button>
+      )}
     </>
   );
 
@@ -576,19 +628,26 @@ export default function WordSpellingQuizActivity({
         <div className="flex gap-1 sm:gap-1.5 items-center">{navBar}</div>
       )}
 
+      {/* #861 E: 鍵盤一律置於下方（移除平板右側窄欄）。手機橫放(shortLandscape)時
+          外層整塊一起捲，題目與鍵盤共用一個捲軸、互不搶高度。 */}
       <div
         className={cn(
-          "flex-1 min-h-0 flex gap-4",
-          deviceMode === "tablet" ? "flex-row items-stretch" : "flex-col",
+          "flex-1 min-h-0 flex flex-col gap-4",
+          shortLandscape && "overflow-y-auto",
         )}
       >
         <div
           className={cn(
             "min-w-0 flex flex-col",
-            deviceMode === "tablet" ? "flex-[6]" : "flex-1 min-h-0",
+            !shortLandscape && "flex-1 min-h-0",
           )}
         >
-          <Card className="relative flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+          <Card
+            className={cn(
+              "relative flex flex-col border-0 shadow-none bg-transparent",
+              !shortLandscape && "flex-1 min-h-0",
+            )}
+          >
             {/* #830: 上一題 / 下一題改為卡片左右兩側箭頭（對齊一般單字卡 WordCard） */}
             {currentIndex > 0 && (
               <CardNavArrow
@@ -603,8 +662,18 @@ export default function WordSpellingQuizActivity({
                 onClick={() => goTo(currentIndex + 1)}
               />
             )}
-            <CardContent className="flex-1 min-h-0 flex flex-col gap-4 p-0">
-              <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto px-10 sm:px-12">
+            <CardContent
+              className={cn(
+                "flex flex-col gap-4 p-0",
+                !shortLandscape && "flex-1 min-h-0",
+              )}
+            >
+              <div
+                className={cn(
+                  "flex flex-col gap-4 px-10 sm:px-12",
+                  !shortLandscape && "flex-1 min-h-0 overflow-y-auto",
+                )}
+              >
                 <div className="text-sm text-gray-500">
                   {t("wordQuiz.questionLabel", {
                     current: currentWord.question_number,
@@ -644,7 +713,7 @@ export default function WordSpellingQuizActivity({
 
                 {settings.show_translation && currentWord.translation && (
                   <div className="text-center py-3 space-y-1">
-                    <h2 className="text-3xl md:text-4xl font-bold text-gray-800 tracking-wide">
+                    <h2 className="quiz-question-font font-bold text-gray-800 tracking-wide">
                       {currentWord.translation}
                     </h2>
                     {currentWord.part_of_speech && (
@@ -726,13 +795,7 @@ export default function WordSpellingQuizActivity({
           </Card>
         </div>
         {useVirtualKeyboard && (
-          <div
-            className={cn(
-              deviceMode === "tablet"
-                ? "flex-[4] min-w-0 flex flex-col justify-center"
-                : "shrink-0",
-            )}
-          >
+          <div className="shrink-0 w-full max-w-3xl mx-auto">
             <VirtualKeyboard
               onKey={vkAppend}
               onBackspace={vkBackspace}
