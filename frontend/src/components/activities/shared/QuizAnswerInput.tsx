@@ -11,7 +11,8 @@
  *   - VirtualKeyboard Space 鍵 → 跳到下一個 slot（#844，見 appendChar）。
  *   - 過濾允許字元：英文字母、連字號、撇號、句號、逗號、問號、驚嘆號。
  *     （單字 slot 內不允許空格 — 空格是分隔，不該由學生輸入）
- *   - 完整支援標準編輯（Backspace、刪除、游標移動、選取重打）。
+ *   - 支援標準編輯（Backspace、刪除、游標移動、中間插入/刪改）；
+ *     #867 起以 select-none 禁止反白選取（防查字），游標定位與編輯不受影響。
  *   - 透過 ref 暴露 VirtualKeyboard 整合：appendChar / backspace / submit /
  *     focusFirst 由父元件的 VK 觸發，作用在當前 focused slot 上。
  *   - revealAnswer（#867）：艾賓浩斯答錯且老師開「答錯顯示答案」時，以紅色
@@ -259,7 +260,9 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
                       : { width: `${Math.max(slotExpected.length + 4, 8)}ch` }
                   }
                   className={cn(
-                    "text-center quiz-input-font h-14 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
+                    // #867: select-none 禁止反白選取已輸入答案（防查字）；
+                    //   不影響游標定位、方向鍵、中間插入/刪改、slot 聚焦。
+                    "text-center quiz-input-font h-14 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors select-none",
                     "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
                     withSubmit && "pr-9",
                     stateBorder,

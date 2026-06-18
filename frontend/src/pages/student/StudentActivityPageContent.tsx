@@ -2840,7 +2840,10 @@ export default function StudentActivityPageContent({
               </CardHeader>
             )}
 
-            <CardContent className="p-2 sm:p-3">
+            {/* #867: select-none 禁止反白選取作答內容（題目/翻譯/單字卡），
+                防學生反白後搜尋/翻譯查字。此容器涵蓋所有 practice_mode，
+                未來新模式自動繼承；input 答案另在 QuizAnswerInput 處理。 */}
+            <CardContent className="p-2 sm:p-3 select-none">
               {renderActivityContent(currentActivity)}
 
               {/* Navigation buttons */}
