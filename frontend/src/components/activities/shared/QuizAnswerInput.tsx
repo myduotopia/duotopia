@@ -11,8 +11,9 @@
  *   - VirtualKeyboard Space 鍵 → 跳到下一個 slot（#844，見 appendChar）。
  *   - 過濾允許字元：英文字母、連字號、撇號、句號、逗號、問號、驚嘆號。
  *     （單字 slot 內不允許空格 — 空格是分隔，不該由學生輸入）
- *   - 支援標準編輯（Backspace、刪除、游標移動、中間插入/刪改）；
- *     #867 起以 select-none 禁止反白選取（防查字），游標定位與編輯不受影響。
+ *   - 支援標準編輯（Backspace、刪除、游標移動、中間插入/刪改、可全選清除）。
+ *   - #867 防查字：允許選取，但禁止複製/剪下/右鍵/拖曳帶出（全裝置）；
+ *     每格 maxLength = 答案長度 + 2；寬度加長（+6 ch）。
  *   - 透過 ref 暴露 VirtualKeyboard 整合：appendChar / backspace / submit /
  *     focusFirst 由父元件的 VK 觸發，作用在當前 focused slot 上。
  *   - revealAnswer（#867）：艾賓浩斯答錯且老師開「答錯顯示答案」時，以紅色
@@ -247,22 +248,29 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
                   }}
                   onPaste={(e) => e.preventDefault()}
                   onDrop={(e) => e.preventDefault()}
+                  // #867: 允許選取（方便全選清除重打），但全裝置禁止複製/帶出，
+                  //   避免學生把答案複製/右鍵搜尋/拖去搜尋列查字。
+                  onCopy={(e) => e.preventDefault()}
+                  onCut={(e) => e.preventDefault()}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onDragStart={(e) => e.preventDefault()}
+                  // #867: 限制每格字母數 = 該格答案長度 + 2 緩衝
+                  maxLength={slotExpected.length + 2}
                   disabled={disabled}
                   autoComplete="off"
                   autoCapitalize="off"
                   autoCorrect="off"
                   spellCheck={false}
-                  // Issue #828: 寬度依答案長度自適應，+4 ch 預留 padding + 較寬字元
+                  // Issue #828: 寬度依答案長度自適應，預留 padding + 較寬字元
                   // #844: 末格內含送出鍵時右側多留 padding，避免文字被圖示蓋住
+                  // #867: 加長寬度（+6 ch），輸入更從容
                   style={
                     multi
-                      ? { width: `${Math.max(slotExpected.length + 4, 6)}ch` }
-                      : { width: `${Math.max(slotExpected.length + 4, 8)}ch` }
+                      ? { width: `${Math.max(slotExpected.length + 6, 8)}ch` }
+                      : { width: `${Math.max(slotExpected.length + 6, 10)}ch` }
                   }
                   className={cn(
-                    // #867: select-none 禁止反白選取已輸入答案（防查字）；
-                    //   不影響游標定位、方向鍵、中間插入/刪改、slot 聚焦。
-                    "text-center quiz-input-font h-14 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors select-none",
+                    "text-center quiz-input-font h-14 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",
                     "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
                     withSubmit && "pr-9",
                     stateBorder,
