@@ -68,6 +68,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import type { PracticeMode } from "@/lib/practiceMode";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceSafe } from "@/contexts/WorkspaceContext";
 import { getScoreCategory, type ScoreCategory } from "@/utils/scoreCategory";
@@ -482,17 +483,8 @@ export function AssignmentDialog({
     due_date: undefined as Date | undefined,
     start_date: undefined as Date | undefined,
     // ===== 例句集作答模式設定 =====
-    practice_mode: "word_selection" as
-      | ""
-      | "reading"
-      | "rearrangement"
-      | "word_reading"
-      | "word_selection"
-      | "word_spelling"
-      | "word_cloze"
-      | "word_selection_quiz"
-      | "word_spelling_quiz"
-      | "word_cloze_quiz", // 作答模式（預設單字選擇）
+    // Issue #843: 型別統一由 @/lib/practiceMode 提供（含 tug_of_war 與三種小考）
+    practice_mode: "word_selection" as "" | PracticeMode, // 作答模式（預設單字選擇）
     time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40, // 每題時間限制 (0 = 不限時)
     // Issue #828: 小考整卷限時（秒）；null/0 不限時，預設 0
     quiz_time_limit_seconds: 0 as 0 | 180 | 300 | 600 | 900 | 1200 | 1800,

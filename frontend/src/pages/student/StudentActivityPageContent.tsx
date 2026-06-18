@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { isQuizMode as resolveIsQuizMode } from "@/lib/practiceMode";
 import { QuizNavSlotContext } from "@/contexts/QuizNavSlotContext";
 import ReadingAssessmentTemplate from "@/components/activities/ReadingAssessmentTemplate";
 import ListeningClozeTemplate from "@/components/activities/ListeningClozeTemplate";
@@ -332,10 +333,7 @@ export default function StudentActivityPageContent({
   const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
   // Quiz 題號 bar 的 Portal slot — Page 保留 DOM，Activity 投放 nav JSX
   const [quizNavSlot, setQuizNavSlot] = useState<HTMLDivElement | null>(null);
-  const isQuizMode =
-    practiceMode === "word_selection_quiz" ||
-    practiceMode === "word_spelling_quiz" ||
-    practiceMode === "word_cloze_quiz";
+  const isQuizMode = resolveIsQuizMode(practiceMode);
   const [currentSubQuestionIndex, setCurrentSubQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Map<number, Answer>>(new Map());
   const [saving] = useState(false);
