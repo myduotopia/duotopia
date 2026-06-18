@@ -5,6 +5,7 @@ import {
   ResourceMaterial,
   ResourceMaterialDetail,
 } from "@/hooks/useResourceMaterialsAPI";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import ResourceFolderView from "@/components/shared/ResourceFolderView";
 import type { ResourceContentItem } from "@/components/shared/ResourceFolderView";
 import MaterialsToolbar from "@/components/shared/MaterialsToolbar";
@@ -152,6 +153,13 @@ function ResourceMaterialsInner() {
   const { loading, listMaterials, getMaterialDetail, copyMaterial } =
     useResourceMaterialsAPI();
 
+  // 機構視圖（含校內視圖）時，資源包複製/列表改用機構 scope。
+  // 後端複製 API 僅支援 individual/organization，故只要 selectedOrganization
+  // 存在就一律歸到該機構。沿用 TeacherClassrooms 等頁的 workspace 分流慣例。
+  const { mode, selectedOrganization } = useWorkspace();
+  const orgScope = mode === "organization" && !!selectedOrganization;
+  const orgId = selectedOrganization?.id;
+
   const [materials, setMaterials] = useState<ResourceMaterial[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("folder");
   const [searchQuery, setSearchQuery] = useState("");
@@ -178,9 +186,12 @@ function ResourceMaterialsInner() {
   const [copying, setCopying] = useState(false);
 
   const fetchMaterials = useCallback(async () => {
-    const result = await listMaterials("individual");
+    const result = await listMaterials(
+      orgScope ? "organization" : "individual",
+      orgScope ? orgId : undefined,
+    );
     setMaterials(result.materials);
-  }, [listMaterials]);
+  }, [listMaterials, orgScope, orgId]);
 
   useEffect(() => {
     fetchMaterials();
@@ -232,9 +243,18 @@ function ResourceMaterialsInner() {
     if (!copyTarget) return;
     setCopying(true);
     try {
-      await copyMaterial(copyTarget.id, "individual");
+      await copyMaterial(
+        copyTarget.id,
+        orgScope ? "organization" : "individual",
+        orgScope ? orgId : undefined,
+      );
       toast.success(
-        t("resourceMaterials.toast.copySuccess", { name: copyTarget.name }),
+        t(
+          orgScope
+            ? "resourceMaterials.toast.copySuccessOrg"
+            : "resourceMaterials.toast.copySuccess",
+          { name: copyTarget.name },
+        ),
       );
       setMaterials((prev) =>
         prev.map((m) => {
