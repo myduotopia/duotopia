@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import {
   practiceModeLabelKey,
   practiceModeBadgeClass,
+  practiceModeFilterOptions,
 } from "@/lib/practiceMode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -388,27 +389,12 @@ export default function AssignmentManagementPage() {
           className="h-9 rounded-md border border-input bg-background px-3 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200"
         >
           <option value="">{t("classroomDetail.filters.allTypes")}</option>
-          <option value="reading">
-            {t("classroomDetail.contentTypes.SPEAKING")}
-          </option>
-          <option value="rearrangement">
-            {t("classroomDetail.contentTypes.REARRANGEMENT")}
-          </option>
-          <option value="word_reading">
-            {t("classroomDetail.contentTypes.WORD_READING")}
-          </option>
-          <option value="word_selection">
-            {t("classroomDetail.contentTypes.WORD_SELECTION")}
-          </option>
-          <option value="word_spelling">
-            {t("classroomDetail.contentTypes.WORD_SPELLING")}
-          </option>
-          <option value="word_cloze">
-            {t("classroomDetail.contentTypes.WORD_CLOZE")}
-          </option>
-          <option value="tug_of_war">
-            {t("classroomDetail.contentTypes.TUG_OF_WAR")}
-          </option>
+          {/* Issue #843: 選項由 @/lib/practiceMode 產生（含三種小考），不再硬寫 */}
+          {practiceModeFilterOptions().map((opt) => (
+            <option key={opt.mode} value={opt.mode}>
+              {t(opt.labelKey)}
+            </option>
+          ))}
         </select>
 
         <div className="relative w-full md:w-[250px]">

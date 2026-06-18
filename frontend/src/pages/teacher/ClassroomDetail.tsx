@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 import {
   practiceModeLabelKey,
   practiceModeBadgeClass,
-  isQuizMode,
+  practiceModeFilterOptions,
+  isAutoScoredMode,
 } from "@/lib/practiceMode";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -249,12 +250,72 @@ export default function ClassroomDetail({
     "" | "completed" | "in_progress" | "overdue"
   >("");
 
-  // Filter type → practice_mode mapping
-  const filterTypeMap: Record<string, string> = {
-    WORD_READING: "word_reading",
-    WORD_SELECTION: "word_selection",
-    SPEAKING: "reading",
-    REARRANGEMENT: "rearrangement",
+  // Issue #843: 作業卡「類型標籤/顏色」單一來源。
+  // VOCABULARY_SET / SENTENCE_MAKING → 由 practice_mode 查 registry（含三種小考），
+  // 未知模式退回單字朗讀；EXAMPLE_SENTENCES / READING_ASSESSMENT 與其他 content_type
+  // 維持原內容型別語意。桌機/手機兩處作業卡共用此函式（原本是兩段相同的 getTypeInfo）。
+  const getAssignmentTypeInfo = (assignment: Assignment) => {
+    const contentType = assignment.content_type?.toUpperCase();
+    const practiceMode = assignment.practice_mode;
+
+    if (contentType === "VOCABULARY_SET" || contentType === "SENTENCE_MAKING") {
+      const key = practiceModeLabelKey(practiceMode);
+      if (key) {
+        return { label: t(key), color: practiceModeBadgeClass(practiceMode) };
+      }
+      return {
+        label: t("classroomDetail.contentTypes.WORD_READING"),
+        color:
+          "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+      };
+    }
+
+    if (
+      contentType === "EXAMPLE_SENTENCES" ||
+      contentType === "READING_ASSESSMENT"
+    ) {
+      if (practiceMode === "rearrangement") {
+        return {
+          label: t("classroomDetail.contentTypes.REARRANGEMENT"),
+          color:
+            "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+        };
+      }
+      return {
+        label: t("classroomDetail.contentTypes.SPEAKING"),
+        color:
+          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+      };
+    }
+
+    const otherTypeLabels: Record<string, { label: string; color: string }> = {
+      SPEAKING_PRACTICE: {
+        label: t("classroomDetail.contentTypes.speakingPractice"),
+        color:
+          "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+      },
+      SPEAKING_SCENARIO: {
+        label: t("classroomDetail.contentTypes.speakingScenario"),
+        color:
+          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+      },
+      LISTENING_CLOZE: {
+        label: t("classroomDetail.contentTypes.listeningCloze"),
+        color:
+          "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+      },
+      SPEAKING_QUIZ: {
+        label: t("classroomDetail.contentTypes.speakingQuiz"),
+        color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+      },
+    };
+
+    return (
+      otherTypeLabels[contentType || ""] || {
+        label: t("classroomDetail.labels.unknownType"),
+        color: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
+      }
+    );
   };
 
   // Archive states
@@ -272,8 +333,7 @@ export default function ClassroomDetail({
       !a.title.toLowerCase().includes(filterKeyword.toLowerCase())
     )
       return false;
-    if (filterType && a.practice_mode !== filterTypeMap[filterType])
-      return false;
+    if (filterType && a.practice_mode !== filterType) return false;
     if (filterDateFrom && a.created_at) {
       if (new Date(a.created_at) < new Date(filterDateFrom)) return false;
     }
@@ -2203,18 +2263,13 @@ export default function ClassroomDetail({
                           <option value="">
                             {t("classroomDetail.filters.allTypes")}
                           </option>
-                          <option value="WORD_READING">
-                            {t("classroomDetail.contentTypes.WORD_READING")}
-                          </option>
-                          <option value="WORD_SELECTION">
-                            {t("classroomDetail.contentTypes.WORD_SELECTION")}
-                          </option>
-                          <option value="SPEAKING">
-                            {t("classroomDetail.contentTypes.SPEAKING")}
-                          </option>
-                          <option value="REARRANGEMENT">
-                            {t("classroomDetail.contentTypes.REARRANGEMENT")}
-                          </option>
+                          {/* Issue #843: 選項由 @/lib/practiceMode 產生（含三種小考），
+                              value 直接用 practice_mode，不再經 filterTypeMap 轉換 */}
+                          {practiceModeFilterOptions().map((opt) => (
+                            <option key={opt.mode} value={opt.mode}>
+                              {t(opt.labelKey)}
+                            </option>
+                          ))}
                         </select>
                         <div className="relative w-full md:w-[35%]">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -2289,159 +2344,7 @@ export default function ClassroomDetail({
                             const completionRate =
                               assignment.completion_rate || 0;
                             // 🎯 Issue #118: 根據 content_type + practice_mode 決定顯示標籤
-                            const getTypeInfo = () => {
-                              const contentType =
-                                assignment.content_type?.toUpperCase();
-                              const practiceMode = assignment.practice_mode;
-
-                              // VOCABULARY_SET 或 SENTENCE_MAKING → 根據 practice_mode
-                              if (
-                                contentType === "VOCABULARY_SET" ||
-                                contentType === "SENTENCE_MAKING"
-                              ) {
-                                if (practiceMode === "word_selection") {
-                                  return {
-                                    label: t(
-                                      "classroomDetail.contentTypes.WORD_SELECTION",
-                                    ),
-                                    color:
-                                      "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-                                  };
-                                }
-                                if (practiceMode === "word_spelling") {
-                                  return {
-                                    label: t(
-                                      "classroomDetail.contentTypes.WORD_SPELLING",
-                                    ),
-                                    color:
-                                      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-                                  };
-                                }
-                                if (practiceMode === "word_cloze") {
-                                  return {
-                                    label: t(
-                                      "classroomDetail.contentTypes.WORD_CLOZE",
-                                    ),
-                                    color:
-                                      "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300",
-                                  };
-                                }
-                                if (practiceMode === "tug_of_war") {
-                                  return {
-                                    label: t(
-                                      "classroomDetail.contentTypes.TUG_OF_WAR",
-                                    ),
-                                    color:
-                                      "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
-                                  };
-                                }
-                                if (practiceMode === "rearrangement") {
-                                  return {
-                                    label: t(
-                                      "classroomDetail.contentTypes.REARRANGEMENT",
-                                    ),
-                                    color:
-                                      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-                                  };
-                                }
-                                if (practiceMode === "reading") {
-                                  return {
-                                    label: t(
-                                      "classroomDetail.contentTypes.SPEAKING",
-                                    ),
-                                    color:
-                                      "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-                                  };
-                                }
-                                // 其餘（含三種小考）由 registry 推導；未知才退回單字朗讀
-                                {
-                                  const key =
-                                    practiceModeLabelKey(practiceMode);
-                                  if (key)
-                                    return {
-                                      label: t(key),
-                                      color:
-                                        practiceModeBadgeClass(practiceMode),
-                                    };
-                                }
-                                return {
-                                  label: t(
-                                    "classroomDetail.contentTypes.WORD_READING",
-                                  ),
-                                  color:
-                                    "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-                                };
-                              }
-
-                              // EXAMPLE_SENTENCES 或 READING_ASSESSMENT → 根據 practice_mode
-                              if (
-                                contentType === "EXAMPLE_SENTENCES" ||
-                                contentType === "READING_ASSESSMENT"
-                              ) {
-                                if (practiceMode === "rearrangement") {
-                                  return {
-                                    label: t(
-                                      "classroomDetail.contentTypes.REARRANGEMENT",
-                                    ),
-                                    color:
-                                      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-                                  };
-                                }
-                                return {
-                                  label: t(
-                                    "classroomDetail.contentTypes.SPEAKING",
-                                  ),
-                                  color:
-                                    "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-                                };
-                              }
-
-                              // 其他類型保持原有邏輯
-                              const otherTypeLabels: Record<
-                                string,
-                                { label: string; color: string }
-                              > = {
-                                SPEAKING_PRACTICE: {
-                                  label: t(
-                                    "classroomDetail.contentTypes.speakingPractice",
-                                  ),
-                                  color:
-                                    "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-                                },
-                                SPEAKING_SCENARIO: {
-                                  label: t(
-                                    "classroomDetail.contentTypes.speakingScenario",
-                                  ),
-                                  color:
-                                    "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-                                },
-                                LISTENING_CLOZE: {
-                                  label: t(
-                                    "classroomDetail.contentTypes.listeningCloze",
-                                  ),
-                                  color:
-                                    "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-                                },
-                                SPEAKING_QUIZ: {
-                                  label: t(
-                                    "classroomDetail.contentTypes.speakingQuiz",
-                                  ),
-                                  color:
-                                    "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-                                },
-                              };
-
-                              return (
-                                otherTypeLabels[contentType || ""] || {
-                                  label: t(
-                                    "classroomDetail.labels.unknownType",
-                                  ),
-                                  color:
-                                    "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
-                                }
-                              );
-                            };
-                            const typeInfo = getTypeInfo();
+                            const typeInfo = getAssignmentTypeInfo(assignment);
 
                             return (
                               <div
@@ -2476,15 +2379,9 @@ export default function ClassroomDetail({
                                       word_spelling / word_cloze / tug_of_war / 三種小考)
                                       不顯示 AI 批改按鈕。#830：列表入口暫時隱藏，改由 hub 內觸發 */}
                                   {SHOW_LIST_AI_GRADE &&
-                                    assignment.practice_mode !==
-                                      "rearrangement" &&
-                                    assignment.practice_mode !==
-                                      "word_selection" &&
-                                    assignment.practice_mode !==
-                                      "word_spelling" &&
-                                    assignment.practice_mode !== "word_cloze" &&
-                                    assignment.practice_mode !== "tug_of_war" &&
-                                    !isQuizMode(assignment.practice_mode) &&
+                                    !isAutoScoredMode(
+                                      assignment.practice_mode,
+                                    ) &&
                                     canUseAiGrading && (
                                       <div className="flex flex-col items-end flex-shrink-0">
                                         <Button
@@ -2689,161 +2586,8 @@ export default function ClassroomDetail({
                                 const completionRate =
                                   assignment.completion_rate || 0;
                                 // 🎯 Issue #118: 根據 content_type + practice_mode 決定顯示標籤
-                                const getTypeInfo = () => {
-                                  const contentType =
-                                    assignment.content_type?.toUpperCase();
-                                  const practiceMode = assignment.practice_mode;
-
-                                  // VOCABULARY_SET 或 SENTENCE_MAKING → 根據 practice_mode
-                                  if (
-                                    contentType === "VOCABULARY_SET" ||
-                                    contentType === "SENTENCE_MAKING"
-                                  ) {
-                                    if (practiceMode === "word_selection") {
-                                      return {
-                                        label: t(
-                                          "classroomDetail.contentTypes.WORD_SELECTION",
-                                        ),
-                                        color:
-                                          "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-                                      };
-                                    }
-                                    if (practiceMode === "word_spelling") {
-                                      return {
-                                        label: t(
-                                          "classroomDetail.contentTypes.WORD_SPELLING",
-                                        ),
-                                        color:
-                                          "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-                                      };
-                                    }
-                                    if (practiceMode === "word_cloze") {
-                                      return {
-                                        label: t(
-                                          "classroomDetail.contentTypes.WORD_CLOZE",
-                                        ),
-                                        color:
-                                          "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300",
-                                      };
-                                    }
-                                    if (practiceMode === "tug_of_war") {
-                                      return {
-                                        label: t(
-                                          "classroomDetail.contentTypes.TUG_OF_WAR",
-                                        ),
-                                        color:
-                                          "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
-                                      };
-                                    }
-                                    if (practiceMode === "rearrangement") {
-                                      return {
-                                        label: t(
-                                          "classroomDetail.contentTypes.REARRANGEMENT",
-                                        ),
-                                        color:
-                                          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-                                      };
-                                    }
-                                    if (practiceMode === "reading") {
-                                      return {
-                                        label: t(
-                                          "classroomDetail.contentTypes.SPEAKING",
-                                        ),
-                                        color:
-                                          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-                                      };
-                                    }
-                                    // 其餘（含三種小考）由 registry 推導；未知才退回單字朗讀
-                                    {
-                                      const key =
-                                        practiceModeLabelKey(practiceMode);
-                                      if (key)
-                                        return {
-                                          label: t(key),
-                                          color:
-                                            practiceModeBadgeClass(
-                                              practiceMode,
-                                            ),
-                                        };
-                                    }
-                                    return {
-                                      label: t(
-                                        "classroomDetail.contentTypes.WORD_READING",
-                                      ),
-                                      color:
-                                        "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-                                    };
-                                  }
-
-                                  // EXAMPLE_SENTENCES 或 READING_ASSESSMENT → 根據 practice_mode
-                                  if (
-                                    contentType === "EXAMPLE_SENTENCES" ||
-                                    contentType === "READING_ASSESSMENT"
-                                  ) {
-                                    if (practiceMode === "rearrangement") {
-                                      return {
-                                        label: t(
-                                          "classroomDetail.contentTypes.REARRANGEMENT",
-                                        ),
-                                        color:
-                                          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-                                      };
-                                    }
-                                    return {
-                                      label: t(
-                                        "classroomDetail.contentTypes.SPEAKING",
-                                      ),
-                                      color:
-                                        "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-                                    };
-                                  }
-
-                                  // 其他類型
-                                  const otherTypeLabels: Record<
-                                    string,
-                                    { label: string; color: string }
-                                  > = {
-                                    SPEAKING_PRACTICE: {
-                                      label: t(
-                                        "classroomDetail.contentTypes.speakingPractice",
-                                      ),
-                                      color:
-                                        "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-                                    },
-                                    SPEAKING_SCENARIO: {
-                                      label: t(
-                                        "classroomDetail.contentTypes.speakingScenario",
-                                      ),
-                                      color:
-                                        "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-                                    },
-                                    LISTENING_CLOZE: {
-                                      label: t(
-                                        "classroomDetail.contentTypes.listeningCloze",
-                                      ),
-                                      color:
-                                        "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-                                    },
-                                    SPEAKING_QUIZ: {
-                                      label: t(
-                                        "classroomDetail.contentTypes.speakingQuiz",
-                                      ),
-                                      color:
-                                        "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-                                    },
-                                  };
-
-                                  return (
-                                    otherTypeLabels[contentType || ""] || {
-                                      label: t(
-                                        "classroomDetail.labels.unknownType",
-                                      ),
-                                      color:
-                                        "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
-                                    }
-                                  );
-                                };
-                                const typeInfo = getTypeInfo();
+                                const typeInfo =
+                                  getAssignmentTypeInfo(assignment);
 
                                 return (
                                   <tr
@@ -2967,17 +2711,7 @@ export default function ClassroomDetail({
                                             word_spelling / word_cloze / tug_of_war / 三種小考)
                                             不顯示 AI 批改按鈕。#830：列表入口暫時隱藏，改由 hub 內觸發 */}
                                         {SHOW_LIST_AI_GRADE &&
-                                          assignment.practice_mode !==
-                                            "rearrangement" &&
-                                          assignment.practice_mode !==
-                                            "word_selection" &&
-                                          assignment.practice_mode !==
-                                            "word_spelling" &&
-                                          assignment.practice_mode !==
-                                            "word_cloze" &&
-                                          assignment.practice_mode !==
-                                            "tug_of_war" &&
-                                          !isQuizMode(
+                                          !isAutoScoredMode(
                                             assignment.practice_mode,
                                           ) &&
                                           canUseAiGrading && (

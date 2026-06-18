@@ -12,6 +12,7 @@
  */
 import { useState, useMemo, useEffect, useCallback, forwardRef } from "react";
 import { useTranslation } from "react-i18next";
+import { isQuizMode, isGradableMode } from "@/lib/practiceMode";
 import {
   LayoutGrid,
   List,
@@ -94,8 +95,7 @@ type ViewMode = "grid" | "list";
 type TabValue = "all" | "assigned" | "unassigned";
 type SortMode = "number" | "name" | "score" | "status";
 
-const GRADABLE_MODES = new Set(["reading", "word_reading", "rearrangement"]);
-
+// 可由老師點姓名開批改頁的模式（isGradableMode）：reading / word_reading / rearrangement
 // revision 模式可被退回訂正的狀態（有作答可訂正）
 const RETURNABLE_STATUSES = new Set(["SUBMITTED", "GRADED", "RESUBMITTED"]);
 
@@ -781,7 +781,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     // 批改 hub（revision 模式）依作業類型決定分數區欄位；assign 模式維持單一分數（不變）。
     const metricMode: MetricMode = !isRevision
       ? "score"
-      : practiceMode?.endsWith("_quiz")
+      : isQuizMode(practiceMode)
         ? "quiz"
         : practiceMode === "reading" || practiceMode === "word_reading"
           ? "reading"
@@ -807,7 +807,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     const [rangeMin, setRangeMin] = useState("0");
     const [rangeMax, setRangeMax] = useState("80");
 
-    const isGradable = practiceMode ? GRADABLE_MODES.has(practiceMode) : false;
+    const isGradable = isGradableMode(practiceMode);
 
     // Clear selection when parent resets editing state (e.g. after save)
     // revision 模式不受 isEditingStudents 影響（避免清掉退回勾選）
@@ -1008,7 +1008,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     }, [rangeMin, rangeMax, selectReturnableBy]);
 
     // ---- Navigation ----
-    // Gradable modes (see GRADABLE_MODES): open grading page for this student in a new tab.
+    // Gradable modes (isGradableMode): open grading page for this student in a new tab.
     // Skip unassigned and NOT_STARTED — nothing to grade yet.
     const isGradableStudent = useCallback(
       (s: StudentProgress) =>
@@ -1016,7 +1016,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       [isGradable],
     );
 
-    // revision 模式解除 GRADABLE_MODES 限制:任何可退回學生點姓名都能開批改頁
+    // revision 模式解除 isGradableMode 限制:任何可退回學生點姓名都能開批改頁
     const isClickableStudent = useCallback(
       (s: StudentProgress) =>
         isRevision

@@ -7,7 +7,23 @@
  * 這裡集中定義，各顯示點改用 helper，避免再漂移。
  *
  * 標籤鍵對應 i18n 的 `classroomDetail.contentTypes.*`；顏色沿用既有 badge 配色。
+ *
+ * 注意：成績類別（聽說讀寫 score_category）刻意「不」放進這裡 —— 它不是
+ * practice_mode 的純函式（還要看 play_audio），且唯一真相在後端
+ * `backend/utils/score_category.py`，前端只讀後端算好的值。詳見
+ * `docs/design/score-category-mapping.md`。
  */
+
+import {
+  Mic,
+  Shuffle,
+  MousePointerClick,
+  Volume2,
+  Keyboard,
+  FileText,
+  BookOpen,
+  type LucideIcon,
+} from "lucide-react";
 
 export type PracticeMode =
   | "reading"
@@ -83,4 +99,129 @@ export function practiceModeLabelKey(mode?: string | null): string {
 /** 回傳該 practice_mode 的 badge className（未知回中性灰）。 */
 export function practiceModeBadgeClass(mode?: string | null): string {
   return (mode && BADGE_CLASS[mode as PracticeMode]) || BADGE_CLASS_DEFAULT;
+}
+
+/**
+ * practice_mode → 學生卡 lucide 圖示（component 參照，由呼叫端決定尺寸 className）。
+ * 小考沿用其 base 模式圖示；tug_of_war 目前無專屬圖示，沿用既有 BookOpen fallback。
+ */
+const MODE_ICON: Record<PracticeMode, LucideIcon> = {
+  reading: Mic,
+  rearrangement: Shuffle,
+  word_reading: Volume2,
+  word_selection: MousePointerClick,
+  word_selection_quiz: MousePointerClick,
+  word_spelling: Keyboard,
+  word_spelling_quiz: Keyboard,
+  word_cloze: FileText,
+  word_cloze_quiz: FileText,
+  tug_of_war: BookOpen,
+};
+
+const MODE_ICON_DEFAULT: LucideIcon = BookOpen;
+
+/** 回傳該 practice_mode 的 lucide 圖示 component（未知回 BookOpen）。 */
+export function practiceModeIcon(mode?: string | null): LucideIcon {
+  return (mode && MODE_ICON[mode as PracticeMode]) || MODE_ICON_DEFAULT;
+}
+
+/**
+ * practice_mode → 學生卡左側圖示區「蠟筆」底色 class。
+ * 小考沿用其 base 模式底色；tug_of_war 目前無專屬底色，沿用既有灰底 fallback（行為不變）。
+ */
+const CRAYON_BG_DEFAULT = "bg-gray-50 text-gray-600";
+
+const CRAYON_BG: Record<PracticeMode, string> = {
+  reading:
+    "crayon-texture bg-gradient-to-b from-orange-100 to-orange-200 text-orange-600",
+  rearrangement:
+    "crayon-texture bg-gradient-to-b from-blue-100 to-blue-200 text-blue-600",
+  word_selection:
+    "crayon-texture bg-gradient-to-b from-emerald-100 to-emerald-200 text-emerald-600",
+  word_selection_quiz:
+    "crayon-texture bg-gradient-to-b from-emerald-100 to-emerald-200 text-emerald-600",
+  word_reading:
+    "crayon-texture bg-gradient-to-b from-purple-100 to-purple-200 text-purple-600",
+  word_spelling:
+    "crayon-texture bg-gradient-to-b from-amber-100 to-amber-200 text-amber-600",
+  word_spelling_quiz:
+    "crayon-texture bg-gradient-to-b from-amber-100 to-amber-200 text-amber-600",
+  word_cloze:
+    "crayon-texture bg-gradient-to-b from-pink-100 to-pink-200 text-pink-600",
+  word_cloze_quiz:
+    "crayon-texture bg-gradient-to-b from-pink-100 to-pink-200 text-pink-600",
+  tug_of_war: CRAYON_BG_DEFAULT,
+};
+
+/** 回傳該 practice_mode 的學生卡蠟筆底色 class（未知回灰底）。 */
+export function practiceModeCrayonBg(mode?: string | null): string {
+  return (mode && CRAYON_BG[mode as PracticeMode]) || CRAYON_BG_DEFAULT;
+}
+
+/**
+ * 篩選/顯示用的標準順序（含三種小考）。每個 base 模式後緊接其小考變體，
+ * 篩選下拉、按鈕清單都應依此產生，避免各頁各自硬寫且遺漏小考。
+ */
+export const PRACTICE_MODE_ORDER: PracticeMode[] = [
+  "reading",
+  "word_reading",
+  "rearrangement",
+  "word_selection",
+  "word_selection_quiz",
+  "word_spelling",
+  "word_spelling_quiz",
+  "word_cloze",
+  "word_cloze_quiz",
+  "tug_of_war",
+];
+
+export interface PracticeModeFilterOption {
+  /** 原始 practice_mode 值（作為 select value / 後端 query 參數） */
+  mode: PracticeMode;
+  /** i18n key（`classroomDetail.contentTypes.*`） */
+  labelKey: string;
+}
+
+/**
+ * 產生作業模式篩選下拉/按鈕的選項清單（依 PRACTICE_MODE_ORDER，含小考）。
+ * 不含「全部」選項 —— 由各頁自行加上（key 各自既有）。
+ */
+export function practiceModeFilterOptions(): PracticeModeFilterOption[] {
+  return PRACTICE_MODE_ORDER.map((mode) => ({
+    mode,
+    labelKey: practiceModeLabelKey(mode),
+  }));
+}
+
+/**
+ * 自動計分模式：系統自動判分、不需 AI 發音批改的模式。
+ * = {rearrangement, word_selection, word_spelling, word_cloze, tug_of_war} ∪ 三種小考。
+ * 補集為朗讀類（reading / word_reading）—— 需 AI 批改。
+ */
+const AUTO_SCORED_MODES: ReadonlySet<PracticeMode> = new Set([
+  "rearrangement",
+  "word_selection",
+  "word_spelling",
+  "word_cloze",
+  "tug_of_war",
+]);
+
+export function isAutoScoredMode(mode?: string | null): boolean {
+  if (!mode) return false;
+  return AUTO_SCORED_MODES.has(mode as PracticeMode) || isQuizMode(mode);
+}
+
+/**
+ * 可由老師「點進去手動批改/檢視」的模式（StudentStatusPanel 既有 GRADABLE_MODES）。
+ * = {reading, word_reading, rearrangement}。語意與 isAutoScoredMode 補集「不」相同，
+ * 故獨立定義，維持各自既有行為。
+ */
+const GRADABLE_MODES: ReadonlySet<PracticeMode> = new Set([
+  "reading",
+  "word_reading",
+  "rearrangement",
+]);
+
+export function isGradableMode(mode?: string | null): boolean {
+  return !!mode && GRADABLE_MODES.has(mode as PracticeMode);
 }
