@@ -26,7 +26,7 @@ export default function ClozeBlankText({ text }: Props) {
           <span
             key={i}
             aria-hidden="true"
-            className="inline-block rounded-md bg-indigo-50 border border-indigo-200 px-5 py-0.5 mx-1 align-middle select-none"
+            className="inline-block rounded-md bg-indigo-50 border border-indigo-200 px-[3.125rem] py-0.5 mx-1 align-middle select-none"
           >
             {" "}
           </span>
