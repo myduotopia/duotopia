@@ -107,6 +107,13 @@ async def get_student_assignments(
             "word_reading",
             "word_spelling",
             "word_cloze",
+            # Issue #843: 對齊前端 registry（含三種小考與 tug_of_war），
+            # 否則學生端篩選這些模式會 422，前端誤跳「載入失敗」。
+            # 無對應作業時回空陣列，前端顯示空狀態而非報錯。
+            "word_selection_quiz",
+            "word_spelling_quiz",
+            "word_cloze_quiz",
+            "tug_of_war",
         ]
     ] = None,
     current_student: Dict[str, Any] = Depends(get_current_student),
