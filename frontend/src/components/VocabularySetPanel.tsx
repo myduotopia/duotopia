@@ -1305,7 +1305,7 @@ function SortableRowInner({
   handleGenerateSingleDefinition,
   handleGenerateSingleDefinitionWithLang:
     _handleGenerateSingleDefinitionWithLang,
-  handleGenerateExampleTranslation: _handleGenerateExampleTranslation,
+  handleGenerateExampleTranslation,
   handleGenerateExampleTranslationWithLang:
     _handleGenerateExampleTranslationWithLang,
   handleOpenAIGenerateModal,
@@ -1318,8 +1318,8 @@ function SortableRowInner({
   showOptionImages = false,
   duplicateReasons,
   customTranslationLang = "",
-  sentenceTranslationLang = "",
-  customSentenceTranslationLang: customSentenceLang = "",
+  sentenceTranslationLang: _sentenceTranslationLang = "",
+  customSentenceTranslationLang: _customSentenceLang = "",
 }: SortableRowInnerProps) {
   const { t } = useTranslation();
   const {
@@ -1774,13 +1774,19 @@ function SortableRowInner({
           maxLength={500}
         />
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
-          <span className="text-xs text-gray-400">
-            {sentenceTranslationLang === "other"
-              ? customSentenceLang || "..."
-              : SENTENCE_TRANSLATION_LANGUAGES.find(
-                  (l) => l.value === sentenceTranslationLang,
-                )?.label || ""}
-          </span>
+          <button
+            onClick={() => handleGenerateExampleTranslation(index)}
+            className="text-xs text-gray-400 hover:text-blue-500 hover:underline cursor-pointer transition-colors"
+            title={t("vocabularySet.tooltips.generateExampleTranslation", {
+              lang: SENTENCE_TRANSLATION_LANGUAGES.find(
+                (l) => l.value === (row.selectedSentenceLanguage || "chinese"),
+              )?.label,
+            })}
+          >
+            {SENTENCE_TRANSLATION_LANGUAGES.find(
+              (l) => l.value === (row.selectedSentenceLanguage || "chinese"),
+            )?.label || ""}
+          </button>
         </div>
       </div>
 

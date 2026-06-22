@@ -829,6 +829,35 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
                 if "word" not in sentence:
                     sentence["word"] = words[i]
 
+            # Issue #873: 有要求翻譯時，確保每個句子都帶 translation。
+            # AI 偶爾會漏掉某些句子的 translation 欄位（魔術貼上時觀察到第一個
+            # 單字最常缺漏），導致前端例句翻譯空白。對缺漏者用 translate_text 補齊
+            # （與例句翻譯按鈕走同一條 /translate 路徑，行為一致）。
+            if translate_to:
+                missing = [
+                    i
+                    for i, s in enumerate(sentences)
+                    if s.get("sentence") and not (s.get("translation") or "").strip()
+                ]
+                if missing:
+                    fallback = await asyncio.gather(
+                        *[
+                            self.translate_text(sentences[i]["sentence"], translate_to)
+                            for i in missing
+                        ],
+                        return_exceptions=True,
+                    )
+                    for i, result in zip(missing, fallback):
+                        if isinstance(result, Exception):
+                            logger.warning(
+                                "Fallback translation failed for '%s': %s",
+                                sentences[i].get("sentence"),
+                                result,
+                            )
+                            sentences[i].setdefault("translation", "")
+                        else:
+                            sentences[i]["translation"] = result
+
             return sentences
 
         except Exception as e:
