@@ -407,3 +407,122 @@ class TestSentenceGenerationChunking:
         for i, result in enumerate(results):
             assert result["word"] == words[i]
             assert "Vertex example" in result["sentence"]
+
+
+@pytest.mark.unit
+class TestSentenceTranslationBackfill:
+    """Issue #873: ensure every sentence has a translation when translate_to is set.
+
+    The AI intermittently omits the ``translation`` field for some sentences
+    (most often the first word during magic-paste), which left the example
+    sentence translation blank in the UI. The service must backfill any missing
+    translation via ``translate_text``.
+    """
+
+    @pytest.fixture
+    def service(self):
+        svc = TranslationService()
+        svc.use_vertex_ai = False
+        return svc
+
+    @pytest.mark.asyncio
+    async def test_missing_translation_is_backfilled(self, service):
+        """When AI omits translation for the first word, it is filled via translate_text."""
+        words = ["grape", "passionfruit"]
+
+        # AI response: first sentence has NO translation, second one does.
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[
+            0
+        ].message.content = """[
+            {"sentence": "I ate a grape.", "word": "grape"},
+            {"sentence": "Passionfruit is sweet.", "translation": "百香果很甜。", "word": "passionfruit"}
+        ]"""
+
+        mock_client = Mock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        service.client = mock_client
+
+        # Mock the fallback single-sentence translator.
+        service.translate_text = AsyncMock(return_value="我吃了一顆葡萄。")
+
+        results = await service.generate_sentences(words=words, translate_to="zh-TW")
+
+        # Fallback called exactly once, for the missing (first) sentence.
+        service.translate_text.assert_awaited_once_with("I ate a grape.", "zh-TW")
+
+        # Both sentences now have a non-empty translation.
+        assert results[0]["translation"] == "我吃了一顆葡萄。"
+        assert results[1]["translation"] == "百香果很甜。"
+
+    @pytest.mark.asyncio
+    async def test_empty_string_translation_is_backfilled(self, service):
+        """A present-but-empty translation is also treated as missing."""
+        words = ["grape"]
+
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[
+            0
+        ].message.content = """[
+            {"sentence": "I ate a grape.", "translation": "  ", "word": "grape"}
+        ]"""
+
+        mock_client = Mock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        service.client = mock_client
+        service.translate_text = AsyncMock(return_value="我吃了一顆葡萄。")
+
+        results = await service.generate_sentences(words=words, translate_to="zh-TW")
+
+        service.translate_text.assert_awaited_once_with("I ate a grape.", "zh-TW")
+        assert results[0]["translation"] == "我吃了一顆葡萄。"
+
+    @pytest.mark.asyncio
+    async def test_no_backfill_when_translate_to_is_none(self, service):
+        """When no translation is requested, no fallback runs and no translation key is added."""
+        words = ["grape", "passionfruit"]
+
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[
+            0
+        ].message.content = """[
+            {"sentence": "I ate a grape.", "word": "grape"},
+            {"sentence": "Passionfruit is sweet.", "word": "passionfruit"}
+        ]"""
+
+        mock_client = Mock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        service.client = mock_client
+        service.translate_text = AsyncMock(return_value="should-not-be-used")
+
+        results = await service.generate_sentences(words=words, translate_to=None)
+
+        service.translate_text.assert_not_awaited()
+        for result in results:
+            assert "translation" not in result
+
+    @pytest.mark.asyncio
+    async def test_backfill_failure_leaves_empty_translation(self, service):
+        """If the fallback translate_text raises, the sentence keeps an empty translation
+        rather than propagating the error."""
+        words = ["grape"]
+
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[
+            0
+        ].message.content = """[
+            {"sentence": "I ate a grape.", "word": "grape"}
+        ]"""
+
+        mock_client = Mock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        service.client = mock_client
+        service.translate_text = AsyncMock(side_effect=Exception("translate down"))
+
+        results = await service.generate_sentences(words=words, translate_to="zh-TW")
+
+        assert results[0]["translation"] == ""
