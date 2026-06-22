@@ -791,6 +791,7 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
                     max_tokens=dynamic_max_tokens,
                     temperature=0.7,  # Match GPT temperature for consistent quality
                     system_instruction=system_prompt,
+                    disable_thinking=True,
                 )
             else:
                 response = await self.client.chat.completions.create(
@@ -956,6 +957,7 @@ JSON 陣列，只包含 {count} 個干擾項：
                     max_tokens=200,
                     temperature=0.2,  # Very low temperature to strictly follow prompt rules
                     system_instruction=system_instruction,
+                    disable_thinking=True,
                 )
             else:
                 response = await self.client.chat.completions.create(
@@ -1087,6 +1089,7 @@ JSON 陣列，每個元素是一個包含 {count} 個干擾項的陣列。
                     max_tokens=1000,
                     temperature=0.2,  # Very low temperature to strictly follow prompt rules
                     system_instruction=system_instruction,
+                    disable_thinking=True,
                 )
             else:
                 response = await self.client.chat.completions.create(
