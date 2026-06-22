@@ -14,7 +14,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { toast } from "sonner";
 import {
-  BookOpen,
   Clock,
   Calendar,
   CheckCircle,
@@ -23,30 +22,17 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowRight,
-  Mic,
-  Shuffle,
-  MousePointerClick,
-  Volume2,
   ArrowUpDown,
-  Keyboard,
-  FileText,
+  Filter,
 } from "lucide-react";
 import { StudentAssignmentCard, AssignmentStatusEnum } from "@/types";
 import { useTranslation } from "react-i18next";
-
-// Practice mode icon mapping
-const PRACTICE_MODE_ICONS: Record<string, React.ReactNode> = {
-  reading: <Mic className="h-7 w-7 sm:h-8 sm:w-8" />,
-  rearrangement: <Shuffle className="h-7 w-7 sm:h-8 sm:w-8" />,
-  word_selection: <MousePointerClick className="h-7 w-7 sm:h-8 sm:w-8" />,
-  word_reading: <Volume2 className="h-7 w-7 sm:h-8 sm:w-8" />,
-  word_spelling: <Keyboard className="h-7 w-7 sm:h-8 sm:w-8" />,
-  word_cloze: <FileText className="h-7 w-7 sm:h-8 sm:w-8" />,
-  // 小考沿用其 base 模式圖示
-  word_selection_quiz: <MousePointerClick className="h-7 w-7 sm:h-8 sm:w-8" />,
-  word_spelling_quiz: <Keyboard className="h-7 w-7 sm:h-8 sm:w-8" />,
-  word_cloze_quiz: <FileText className="h-7 w-7 sm:h-8 sm:w-8" />,
-};
+import {
+  practiceModeIcon,
+  practiceModeCrayonBg,
+  practiceModeLabelKey,
+  practiceModeFilterOptions,
+} from "@/lib/practiceMode";
 
 // Score category colors — keys must match ScoreCategory enum values
 // (see docs/design/score-category-mapping.md)
@@ -57,31 +43,13 @@ const SCORE_CATEGORY_COLORS: Record<string, string> = {
   reading: "bg-pink-100 text-pink-700 border-pink-200",
 };
 
-// Practice mode background colors for left icon area (crayon style)
-const PRACTICE_MODE_BG: Record<string, string> = {
-  reading:
-    "crayon-texture bg-gradient-to-b from-orange-100 to-orange-200 text-orange-600",
-  rearrangement:
-    "crayon-texture bg-gradient-to-b from-blue-100 to-blue-200 text-blue-600",
-  word_selection:
-    "crayon-texture bg-gradient-to-b from-emerald-100 to-emerald-200 text-emerald-600",
-  word_reading:
-    "crayon-texture bg-gradient-to-b from-purple-100 to-purple-200 text-purple-600",
-  word_spelling:
-    "crayon-texture bg-gradient-to-b from-amber-100 to-amber-200 text-amber-600",
-  word_cloze:
-    "crayon-texture bg-gradient-to-b from-pink-100 to-pink-200 text-pink-600",
-  // 小考沿用其 base 模式底色
-  word_selection_quiz:
-    "crayon-texture bg-gradient-to-b from-emerald-100 to-emerald-200 text-emerald-600",
-  word_spelling_quiz:
-    "crayon-texture bg-gradient-to-b from-amber-100 to-amber-200 text-amber-600",
-  word_cloze_quiz:
-    "crayon-texture bg-gradient-to-b from-pink-100 to-pink-200 text-pink-600",
-};
-
 export default function StudentAssignmentList() {
   const { t } = useTranslation();
+  // 標籤集中由 @/lib/practiceMode 推導（classroomDetail.contentTypes，含三種小考）
+  const getPracticeModeLabel = (mode?: string) => {
+    const key = practiceModeLabelKey(mode);
+    return key ? t(key) : mode || "—";
+  };
   const navigate = useNavigate();
   const { token, user } = useStudentAuthStore();
   const [searchParams] = useSearchParams();
@@ -345,10 +313,8 @@ export default function StudentAssignmentList() {
     const dueDateInfo = formatDueDate(assignment.due_date);
     const practiceMode = assignment.practice_mode || "reading";
     const scoreCategory = assignment.score_category;
-    const modeIcon = PRACTICE_MODE_ICONS[practiceMode] || (
-      <BookOpen className="h-5 w-5" />
-    );
-    const modeBg = PRACTICE_MODE_BG[practiceMode] || "bg-gray-50 text-gray-600";
+    const ModeIcon = practiceModeIcon(practiceMode);
+    const modeBg = practiceModeCrayonBg(practiceMode);
     const categoryColor = scoreCategory
       ? SCORE_CATEGORY_COLORS[scoreCategory] || "bg-gray-100 text-gray-600"
       : null;
@@ -365,7 +331,7 @@ export default function StudentAssignmentList() {
             <div
               className={`flex items-center justify-center w-16 sm:w-20 flex-shrink-0 rounded-l-lg ${modeBg}`}
             >
-              {modeIcon}
+              <ModeIcon className="h-7 w-7 sm:h-8 sm:w-8" />
             </div>
 
             {/* Right: Content */}
@@ -395,7 +361,7 @@ export default function StudentAssignmentList() {
 
               {/* Practice mode label */}
               <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
-                {t(`studentAssignmentList.practiceMode.${practiceMode}`)}
+                {getPracticeModeLabel(practiceMode)}
               </p>
 
               {/* Bottom row: due date + score + action */}
@@ -549,15 +515,6 @@ export default function StudentAssignmentList() {
     );
   }
 
-  const practiceModes = [
-    "reading",
-    "rearrangement",
-    "word_selection",
-    "word_reading",
-    "word_spelling",
-    "word_cloze",
-  ];
-
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       {/* Assignment Flow Status — full width */}
@@ -701,33 +658,30 @@ export default function StudentAssignmentList() {
             </Select>
           </div>
 
-          {/* Practice mode filter */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Button
-              variant={filterMode === null ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs px-2.5"
-              onClick={() => {
-                setFilterMode(null);
+          {/* Practice mode filter（含三種小考，選項由 @/lib/practiceMode 產生） */}
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-gray-500" />
+            <Select
+              value={filterMode ?? "all"}
+              onValueChange={(v) => {
+                setFilterMode(v === "all" ? null : v);
                 setCurrentPage(1);
               }}
             >
-              {t("studentAssignmentList.practiceMode.all")}
-            </Button>
-            {practiceModes.map((mode) => (
-              <Button
-                key={mode}
-                variant={filterMode === mode ? "default" : "outline"}
-                size="sm"
-                className="h-7 text-xs px-2.5"
-                onClick={() => {
-                  setFilterMode(filterMode === mode ? null : mode);
-                  setCurrentPage(1);
-                }}
-              >
-                {t(`studentAssignmentList.practiceMode.${mode}`)}
-              </Button>
-            ))}
+              <SelectTrigger className="w-[200px] h-8 text-xs sm:text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  {t("studentAssignmentList.practiceMode.all")}
+                </SelectItem>
+                {practiceModeFilterOptions().map((opt) => (
+                  <SelectItem key={opt.mode} value={opt.mode}>
+                    {t(opt.labelKey)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

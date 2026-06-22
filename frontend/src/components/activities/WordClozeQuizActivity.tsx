@@ -36,6 +36,7 @@ import CountdownRing from "./shared/CountdownRing";
 import QuizAnswerInput, {
   type QuizAnswerInputHandle,
 } from "./shared/QuizAnswerInput";
+import ClozeBlankText from "./shared/ClozeBlankText";
 import VirtualKeyboard from "./shared/VirtualKeyboard";
 import CardNavArrow from "./shared/CardNavArrow";
 import QuizReviewView, {
@@ -515,7 +516,7 @@ export default function WordClozeQuizActivity({
                 </span>
               )}
               <p className="quiz-question-font leading-relaxed text-gray-800 font-semibold tracking-wide">
-                {blanked}
+                <ClozeBlankText text={blanked} />
               </p>
               {w.example_sentence_translation && (
                 <p className="quiz-translation-font text-gray-500">
@@ -555,7 +556,7 @@ export default function WordClozeQuizActivity({
         {t("wordQuiz.questionNav") || "題號"}
       </span>
       {/* #844：題號多時不換行，改水平捲動；標題／計數／計時器留在外面不被推走 */}
-      <div className="flex gap-1 sm:gap-1.5 items-center overflow-x-auto min-w-0 flex-1 py-0.5">
+      <div className="flex gap-1 sm:gap-1.5 items-center overflow-x-auto min-w-0 flex-1 py-1">
         {words.map((w, idx) => {
           const answered = (typedByItem[w.content_item_id] || "").trim() !== "";
           const isCurrent = idx === currentIndex;
@@ -565,7 +566,7 @@ export default function WordClozeQuizActivity({
               type="button"
               onClick={() => goTo(idx)}
               className={cn(
-                "h-7 min-w-[28px] px-2 rounded text-xs font-medium border transition",
+                "h-8 min-w-8 shrink-0 inline-flex items-center justify-center rounded text-sm font-medium border transition",
                 isCurrent
                   ? "bg-pink-500 text-white border-pink-500"
                   : !answered
@@ -703,7 +704,7 @@ export default function WordClozeQuizActivity({
                     </div>
                   )}
                   <p className="quiz-question-font leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
-                    {blanked}
+                    <ClozeBlankText text={blanked} />
                   </p>
                   {settings.show_translation &&
                     currentWord.example_sentence_translation && (

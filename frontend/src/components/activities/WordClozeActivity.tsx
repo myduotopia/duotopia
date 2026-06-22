@@ -46,6 +46,7 @@ import VirtualKeyboard from "./shared/VirtualKeyboard";
 import QuizAnswerInput, {
   type QuizAnswerInputHandle,
 } from "./shared/QuizAnswerInput";
+import ClozeBlankText from "./shared/ClozeBlankText";
 import { WordCard } from "./shared/WordCard";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
@@ -140,10 +141,9 @@ export default function WordClozeActivity({
 
   const [showTranslation, setShowTranslation] = useState(true);
   const [audioOnlyMode, setAudioOnlyMode] = useState(false);
-  // Issue #828: placeholder 提示移除；setter 保留以維持載入時 effect 相容。
-  const [, setShowAnswerOnWrong] = useState(false);
-  // Issue #716: 答錯後改用 placeholder 顯示正解，需要記錄上一次是否答錯
-  const [, setLastAttemptWrong] = useState(false);
+  // Issue #867: 老師開「答錯顯示答案」(或播放音檔模式強制) 時，答錯後以紅色
+  // placeholder 在 input 顯示正解；學生再次輸入即消失（#828 重構時誤刪，此處還原）。
+  const [showAnswerOnWrong, setShowAnswerOnWrong] = useState(false);
 
   const [proficiency, setProficiency] = useState<ProficiencyStatus>({
     current_mastery: 0,
@@ -459,12 +459,10 @@ export default function WordClozeActivity({
       setShowResult(true);
       if (correct) {
         setCorrectCount((prev) => prev + 1);
-        setLastAttemptWrong(false);
         // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
         setCardFace("front");
       } else {
-        setLastAttemptWrong(true);
-        // Issue #716: 清空 input 讓正解 placeholder 露出來
+        // Issue #716/#867: 清空 input 讓正解 placeholder 露出來
         setTypedAnswer("");
       }
       recordPreviewAnswer(currentQ.content_item_id, correct);
@@ -489,12 +487,10 @@ export default function WordClozeActivity({
       setShowResult(true);
       if (correct) {
         setCorrectCount((prev) => prev + 1);
-        setLastAttemptWrong(false);
         // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
         setCardFace("front");
       } else {
-        setLastAttemptWrong(true);
-        // Issue #716: 清空 input 讓正解 placeholder 露出來
+        // Issue #716/#867: 清空 input 讓正解 placeholder 露出來
         setTypedAnswer("");
       }
       await fetchProficiency();
@@ -527,7 +523,6 @@ export default function WordClozeActivity({
     setCardFace("back");
     setShowResult(false);
     setTypedAnswer("");
-    setLastAttemptWrong(false);
     if (timeLimit) setTimeRemaining(timeLimit);
 
     if (currentIndex < questions.length - 1) {
@@ -901,7 +896,7 @@ export default function WordClozeActivity({
                     </div>
                   )}
                   <p className="quiz-question-font leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
-                    {currentQ.blanked_sentence}
+                    <ClozeBlankText text={currentQ.blanked_sentence} />
                   </p>
                   {showTranslation && currentQ.sentence_translation && (
                     <p className="quiz-translation-font text-gray-500">
@@ -923,6 +918,7 @@ export default function WordClozeActivity({
                   disabled={showResult && isCorrect}
                   useVirtualKeyboard={useVirtualKeyboard}
                   hideSubmitButton={showResult && isCorrect}
+                  revealAnswer={showResult && !isCorrect && showAnswerOnWrong}
                   state={
                     showResult && isCorrect
                       ? "correct"

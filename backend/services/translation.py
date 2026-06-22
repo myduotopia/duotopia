@@ -791,6 +791,7 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
                     max_tokens=dynamic_max_tokens,
                     temperature=0.7,  # Match GPT temperature for consistent quality
                     system_instruction=system_prompt,
+                    disable_thinking=True,
                 )
             else:
                 response = await self.client.chat.completions.create(
@@ -828,6 +829,35 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
             for i, sentence in enumerate(sentences):
                 if "word" not in sentence:
                     sentence["word"] = words[i]
+
+            # Issue #873: 有要求翻譯時，確保每個句子都帶 translation。
+            # AI 偶爾會漏掉某些句子的 translation 欄位（魔術貼上時觀察到第一個
+            # 單字最常缺漏），導致前端例句翻譯空白。對缺漏者用 translate_text 補齊
+            # （與例句翻譯按鈕走同一條 /translate 路徑，行為一致）。
+            if translate_to:
+                missing = [
+                    i
+                    for i, s in enumerate(sentences)
+                    if s.get("sentence") and not (s.get("translation") or "").strip()
+                ]
+                if missing:
+                    fallback = await asyncio.gather(
+                        *[
+                            self.translate_text(sentences[i]["sentence"], translate_to)
+                            for i in missing
+                        ],
+                        return_exceptions=True,
+                    )
+                    for i, result in zip(missing, fallback):
+                        if isinstance(result, Exception):
+                            logger.warning(
+                                "Fallback translation failed for '%s': %s",
+                                sentences[i].get("sentence"),
+                                result,
+                            )
+                            sentences[i]["translation"] = ""
+                        else:
+                            sentences[i]["translation"] = result
 
             return sentences
 
@@ -927,6 +957,7 @@ JSON 陣列，只包含 {count} 個干擾項：
                     max_tokens=200,
                     temperature=0.2,  # Very low temperature to strictly follow prompt rules
                     system_instruction=system_instruction,
+                    disable_thinking=True,
                 )
             else:
                 response = await self.client.chat.completions.create(
@@ -1058,6 +1089,7 @@ JSON 陣列，每個元素是一個包含 {count} 個干擾項的陣列。
                     max_tokens=1000,
                     temperature=0.2,  # Very low temperature to strictly follow prompt rules
                     system_instruction=system_instruction,
+                    disable_thinking=True,
                 )
             else:
                 response = await self.client.chat.completions.create(

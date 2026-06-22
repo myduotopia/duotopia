@@ -395,11 +395,18 @@ function TeacherLayoutInner({
         return true;
       })
       .map((group) => {
-        // 個人模式下過濾掉「機構教材」item
-        if (mode === "personal" && group.id === "class-management") {
+        // 依視圖過濾教材 item，避免在錯的視圖選錯目的地：
+        // 個人視圖隱藏「機構教材」，機構視圖隱藏「我的教材」
+        if (group.id === "class-management") {
           return {
             ...group,
-            items: group.items.filter((item) => item.id !== "org-materials"),
+            items: group.items.filter((item) => {
+              if (mode === "personal" && item.id === "org-materials")
+                return false;
+              if (mode === "organization" && item.id === "programs")
+                return false;
+              return true;
+            }),
           };
         }
         return group;

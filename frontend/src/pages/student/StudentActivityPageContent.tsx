@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { isQuizMode as resolveIsQuizMode } from "@/lib/practiceMode";
 import { QuizNavSlotContext } from "@/contexts/QuizNavSlotContext";
 import ReadingAssessmentTemplate from "@/components/activities/ReadingAssessmentTemplate";
 import ListeningClozeTemplate from "@/components/activities/ListeningClozeTemplate";
@@ -332,10 +333,7 @@ export default function StudentActivityPageContent({
   const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
   // Quiz 題號 bar 的 Portal slot — Page 保留 DOM，Activity 投放 nav JSX
   const [quizNavSlot, setQuizNavSlot] = useState<HTMLDivElement | null>(null);
-  const isQuizMode =
-    practiceMode === "word_selection_quiz" ||
-    practiceMode === "word_spelling_quiz" ||
-    practiceMode === "word_cloze_quiz";
+  const isQuizMode = resolveIsQuizMode(practiceMode);
   const [currentSubQuestionIndex, setCurrentSubQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Map<number, Answer>>(new Map());
   const [saving] = useState(false);
@@ -2840,7 +2838,10 @@ export default function StudentActivityPageContent({
               </CardHeader>
             )}
 
-            <CardContent className="p-2 sm:p-3">
+            {/* #867: select-none 禁止反白選取作答內容（題目/翻譯/單字卡），
+                防學生反白後搜尋/翻譯查字。此容器涵蓋所有 practice_mode，
+                未來新模式自動繼承；input 答案另在 QuizAnswerInput 處理。 */}
+            <CardContent className="p-2 sm:p-3 select-none">
               {renderActivityContent(currentActivity)}
 
               {/* Navigation buttons */}

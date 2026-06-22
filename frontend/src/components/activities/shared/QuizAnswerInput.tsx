@@ -11,9 +11,13 @@
  *   - VirtualKeyboard Space 鍵 → 跳到下一個 slot（#844，見 appendChar）。
  *   - 過濾允許字元：英文字母、連字號、撇號、句號、逗號、問號、驚嘆號。
  *     （單字 slot 內不允許空格 — 空格是分隔，不該由學生輸入）
- *   - 完整支援標準編輯（Backspace、刪除、游標移動、選取重打）。
+ *   - 支援標準編輯（Backspace、刪除、游標移動、中間插入/刪改、可全選清除）。
+ *   - #867 防查字：允許選取，但禁止複製/剪下/右鍵/拖曳帶出（全裝置）；
+ *     每格 maxLength = 答案長度 + 2；寬度加長（+6 ch）。
  *   - 透過 ref 暴露 VirtualKeyboard 整合：appendChar / backspace / submit /
  *     focusFirst 由父元件的 VK 觸發，作用在當前 focused slot 上。
+ *   - revealAnswer（#867）：艾賓浩斯答錯且老師開「答錯顯示答案」時，以紅色
+ *     placeholder 在每個 slot 顯示正解；學生一打字該 slot placeholder 即消失。
  */
 
 import {
@@ -61,6 +65,10 @@ interface Props {
   useVirtualKeyboard?: boolean;
   /** Hide the inline Send button (parent might trigger submit elsewhere). */
   hideSubmitButton?: boolean;
+  /** #867: show the correct answer as a (red) placeholder per slot — used by
+   * Ebbinghaus modes when the student answers wrong and the teacher enabled
+   * "show answer on wrong". Disappears as soon as the student types. */
+  revealAnswer?: boolean;
   onChange: (next: string) => void;
   /** Called when student presses Enter or clicks the Send button. */
   onSubmit?: () => void;
@@ -84,6 +92,7 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
       autoFocus = false,
       useVirtualKeyboard = false,
       hideSubmitButton = false,
+      revealAnswer = false,
       onChange,
       onSubmit,
     },
@@ -205,7 +214,7 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
       state === "correct"
         ? "border-green-500 text-green-700"
         : state === "wrong"
-          ? "border-red-500 text-red-600"
+          ? "border-red-500 text-red-600 placeholder:text-red-400"
           : "border-gray-300 focus:border-indigo-500";
 
     const showSubmit = !hideSubmitButton && !!onSubmit;
@@ -226,6 +235,8 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
                   type="text"
                   inputMode={useVirtualKeyboard ? "none" : "text"}
                   value={currentSlots[idx] || ""}
+                  // #867: 答錯時以 placeholder 顯示該 slot 的正解，學生打字即消失
+                  placeholder={revealAnswer ? slotExpected : undefined}
                   onChange={(e) => writeSlot(idx, e.target.value)}
                   onKeyDown={handleKeyDown(idx)}
                   onFocus={() => setFocusedIdx(idx)}
@@ -237,17 +248,26 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
                   }}
                   onPaste={(e) => e.preventDefault()}
                   onDrop={(e) => e.preventDefault()}
+                  // #867: 允許選取（方便全選清除重打），但全裝置禁止複製/帶出，
+                  //   避免學生把答案複製/右鍵搜尋/拖去搜尋列查字。
+                  onCopy={(e) => e.preventDefault()}
+                  onCut={(e) => e.preventDefault()}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onDragStart={(e) => e.preventDefault()}
+                  // #867: 限制每格字母數 = 該格答案長度 + 2 緩衝
+                  maxLength={slotExpected.length + 2}
                   disabled={disabled}
                   autoComplete="off"
                   autoCapitalize="off"
                   autoCorrect="off"
                   spellCheck={false}
-                  // Issue #828: 寬度依答案長度自適應，+4 ch 預留 padding + 較寬字元
+                  // Issue #828: 寬度依答案長度自適應，預留 padding + 較寬字元
                   // #844: 末格內含送出鍵時右側多留 padding，避免文字被圖示蓋住
+                  // #867: 加長寬度（+6 ch），輸入更從容
                   style={
                     multi
-                      ? { width: `${Math.max(slotExpected.length + 4, 6)}ch` }
-                      : { width: `${Math.max(slotExpected.length + 4, 8)}ch` }
+                      ? { width: `${Math.max(slotExpected.length + 6, 8)}ch` }
+                      : { width: `${Math.max(slotExpected.length + 6, 10)}ch` }
                   }
                   className={cn(
                     "text-center quiz-input-font h-14 bg-transparent shadow-none rounded-none border-0 border-b-2 transition-colors",

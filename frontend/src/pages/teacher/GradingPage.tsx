@@ -22,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { Assignment } from "@/types";
+import type { PracticeMode } from "@/lib/practiceMode";
 import {
   GradingHeader,
   StudentListPanel,
@@ -122,15 +123,9 @@ export interface SubmissionItem {
   time_spent_seconds?: number;
 }
 
-export type PracticeMode =
-  | "reading"
-  | "rearrangement"
-  | "word_reading"
-  | "word_selection"
-  // Issue #830: 小考變體（自動判分，批改頁走 QuizGradingPanel 顯示逐題對錯）
-  | "word_selection_quiz"
-  | "word_spelling_quiz"
-  | "word_cloze_quiz";
+// Issue #843: practice_mode 型別統一由 @/lib/practiceMode 提供（含全部模式與三種小考），
+// 不再各頁硬寫發散的 union（此頁原本缺 word_spelling / word_cloze / tug_of_war）。
+export type { PracticeMode };
 
 export interface StudentSubmission {
   student_number: number;

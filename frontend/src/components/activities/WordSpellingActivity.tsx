@@ -140,11 +140,9 @@ export default function WordSpellingActivity({
   // True when teacher chose "播放音檔" mode — translation is hidden and the
   // audio button becomes the primary hint, so make it visually prominent.
   const [audioOnlyMode, setAudioOnlyMode] = useState(false);
-  // Issue #828: show-answer-on-wrong placeholder 移除（不再以 placeholder 顯示
-  // 正解；setter 保留為 no-op 以維持載入時設定相容性）。
-  const [, setShowAnswerOnWrong] = useState(false);
-  // Issue #828: placeholder 提示移除，setter 保留以最小變動現有呼叫點。
-  const [, setLastAttemptWrong] = useState(false);
+  // Issue #867: 老師開「答錯顯示答案」(或播放音檔模式強制) 時，答錯後以紅色
+  // placeholder 在 input 顯示正解；學生再次輸入即消失（#828 重構時誤刪，此處還原）。
+  const [showAnswerOnWrong, setShowAnswerOnWrong] = useState(false);
 
   // Proficiency
   const [proficiency, setProficiency] = useState<ProficiencyStatus>({
@@ -465,12 +463,10 @@ export default function WordSpellingActivity({
     setSubmitting(true);
 
     if (correct) {
-      setLastAttemptWrong(false);
       // Issue #715: 答對 → 翻面（不立刻顯示 ScoreOverlay）→ onFlipped 後才顯示
       setCardFace("front");
     } else {
-      setLastAttemptWrong(true);
-      // Issue #716: 清空 input 讓正解 placeholder 露出來
+      // Issue #716/#867: 清空 input 讓正解 placeholder 露出來
       setTypedAnswer("");
     }
 
@@ -521,7 +517,6 @@ export default function WordSpellingActivity({
     setCardFace("back");
     setShowResult(false);
     setTypedAnswer("");
-    setLastAttemptWrong(false);
     if (timeLimit) setTimeRemaining(timeLimit);
 
     if (currentIndex < words.length - 1) {
@@ -917,6 +912,7 @@ export default function WordSpellingActivity({
                   disabled={showResult && isCorrect}
                   useVirtualKeyboard={useVirtualKeyboard}
                   hideSubmitButton={showResult && isCorrect}
+                  revealAnswer={showResult && !isCorrect && showAnswerOnWrong}
                   state={
                     showResult && isCorrect
                       ? "correct"

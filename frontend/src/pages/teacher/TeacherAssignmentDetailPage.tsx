@@ -18,6 +18,7 @@ import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
 import VocabularySetPanel from "@/components/VocabularySetPanel";
 import BatchGradingModal from "@/components/BatchGradingModal";
 import { apiClient } from "@/lib/api";
+import type { PracticeMode } from "@/lib/practiceMode";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -64,17 +65,7 @@ interface AssignmentDetail extends Assignment {
   content_id: number;
   assigned_date?: string; // Alternative field name
   students?: number[]; // Alternative field name
-  practice_mode?:
-    | "reading"
-    | "rearrangement"
-    | "word_reading"
-    | "word_selection"
-    | "word_selection_quiz"
-    | "word_spelling"
-    | "word_spelling_quiz"
-    | "word_cloze"
-    | "word_cloze_quiz"
-    | "tug_of_war"; // 練習模式
+  practice_mode?: PracticeMode; // 練習模式（型別統一由 @/lib/practiceMode 提供）
   content?: {
     title: string;
     type: string;
