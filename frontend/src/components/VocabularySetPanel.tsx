@@ -1775,6 +1775,7 @@ function SortableRowInner({
         />
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
           <button
+            type="button"
             onClick={() => handleGenerateExampleTranslation(index)}
             className="text-xs text-gray-400 hover:text-blue-500 hover:underline cursor-pointer transition-colors"
             title={t("vocabularySet.tooltips.generateExampleTranslation", {

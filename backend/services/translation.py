@@ -854,7 +854,7 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
                                 sentences[i].get("sentence"),
                                 result,
                             )
-                            sentences[i].setdefault("translation", "")
+                            sentences[i]["translation"] = ""
                         else:
                             sentences[i]["translation"] = result
 
