@@ -180,9 +180,10 @@ describe("listModesForDataset", () => {
 
 describe("applyModeDefaults", () => {
   it("帶出 chip onClick 既有的 per-mode 預設", () => {
+    // #878：reading 預設 20 秒（10/20/30 選單）
     expect(applyModeDefaults("reading")).toEqual({
       practice_mode: "reading",
-      time_limit_per_question: 30,
+      time_limit_per_question: 20,
     });
     expect(applyModeDefaults("word_reading")).toEqual({
       practice_mode: "word_reading",
@@ -192,10 +193,10 @@ describe("applyModeDefaults", () => {
     expect(applyModeDefaults("rearrangement")).toEqual({
       practice_mode: "rearrangement",
     });
-    // 完整覆寫（艾賓浩斯拼寫）
+    // 完整覆寫（艾賓浩斯拼寫；#878：打字作答預設不限時 0）
     expect(applyModeDefaults("word_spelling")).toEqual({
       practice_mode: "word_spelling",
-      time_limit_per_question: 30,
+      time_limit_per_question: 0,
       show_translation: true,
       play_audio: false,
       show_answer: false,

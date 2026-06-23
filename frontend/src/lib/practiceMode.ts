@@ -97,6 +97,8 @@ interface SegmentedOption {
   value: SettingValue;
   labelKey: string;
   descKey?: string;
+  /** 按鈕前綴 emoji（沿用現有外觀，如 🔊/🔇/👁️）。 */
+  emoji?: string;
   /** 此按鈕額外連動設定的其他 key（多 key 耦合，如「播放音檔」同時關 show_word）。 */
   patch?: SettingPatch;
 }
@@ -206,12 +208,46 @@ const NUMBER_TARGET_PROFICIENCY: SettingSpec = {
   max: 100,
   step: 5,
 };
-const SELECT_TIME_LIMIT: SettingSpec = {
+// 每個模式的單題時間選單選項不同（依作答方式調整）：
+/** 例句重組：0(不限)/10/20/30/40，預設 30。 */
+const SELECT_TIME_REARRANGEMENT: SettingSpec = {
   kind: "select",
   key: "time_limit_per_question",
   options: [
     { value: 0, labelKey: `${PM}.unlimited` },
     { value: 10, labelKey: `${PM}.seconds` },
+    { value: 20, labelKey: `${PM}.seconds` },
+    { value: 30, labelKey: `${PM}.seconds` },
+    { value: 40, labelKey: `${PM}.seconds` },
+  ],
+};
+/** 例句朗讀：10/20/30（無不限時），預設 20。 */
+const SELECT_TIME_READING: SettingSpec = {
+  kind: "select",
+  key: "time_limit_per_question",
+  options: [
+    { value: 10, labelKey: `${PM}.seconds` },
+    { value: 20, labelKey: `${PM}.seconds` },
+    { value: 30, labelKey: `${PM}.seconds` },
+  ],
+};
+/** 單字選擇：0(不限)/10/20/30，預設 10。 */
+const SELECT_TIME_SELECTION: SettingSpec = {
+  kind: "select",
+  key: "time_limit_per_question",
+  options: [
+    { value: 0, labelKey: `${PM}.unlimited` },
+    { value: 10, labelKey: `${PM}.seconds` },
+    { value: 20, labelKey: `${PM}.seconds` },
+    { value: 30, labelKey: `${PM}.seconds` },
+  ],
+};
+/** 單字拼寫 / 克漏字（打字作答，給較長時間）：0(不限)/20/30/40，預設 不限時 0。 */
+const SELECT_TIME_SPELLING_CLOZE: SettingSpec = {
+  kind: "select",
+  key: "time_limit_per_question",
+  options: [
+    { value: 0, labelKey: `${PM}.unlimited` },
     { value: 20, labelKey: `${PM}.seconds` },
     { value: 30, labelKey: `${PM}.seconds` },
     { value: 40, labelKey: `${PM}.seconds` },
@@ -236,44 +272,46 @@ const SEGMENTED_PLAY_AUDIO: SettingSpec = {
   key: "play_audio",
   scoreHint: true,
   options: [
-    { value: true, labelKey: `${PM}.playAudioYes` },
-    { value: false, labelKey: `${PM}.playAudioNo` },
+    { value: true, emoji: "🔊", labelKey: `${PM}.playAudioYes` },
+    { value: false, emoji: "🔇", labelKey: `${PM}.playAudioNo` },
   ],
 };
-/** 單字選擇家族「題目呈現方式」：顯示單字 ↔ 播放音檔（連動 play_audio）。 */
+/** 單字選擇家族「題目呈現方式」：顯示單字 ↔ 播放音檔（連動 play_audio；按鈕底下顯示描述而非 score）。 */
 const SEGMENTED_DISPLAY_SELECTION: SettingSpec = {
   kind: "segmented",
   key: "show_word",
-  scoreHint: true,
   options: [
     {
       value: true,
+      emoji: "👁️",
       labelKey: `${PM}.displayWord`,
       descKey: `${PM}.displayWordDesc`,
       patch: { play_audio: false },
     },
     {
       value: false,
+      emoji: "🔊",
       labelKey: `${PM}.playAudioWord`,
       descKey: `${PM}.playAudioWordDesc`,
       patch: { play_audio: true },
     },
   ],
 };
-/** 拼寫/克漏字家族「題目呈現方式」：顯示翻譯 ↔ 播放音檔（連動 play_audio；播音強制 show_answer）。 */
+/** 拼寫/克漏字家族「題目呈現方式」：顯示翻譯 ↔ 播放音檔（連動 play_audio；播音強制 show_answer；按鈕底下顯示描述而非 score）。 */
 const SEGMENTED_DISPLAY_TEXT: SettingSpec = {
   kind: "segmented",
   key: "show_translation",
-  scoreHint: true,
   options: [
     {
       value: true,
+      emoji: "👁️",
       labelKey: `${PM}.displayTranslation`,
       descKey: `${PM}.displayTranslationDesc`,
       patch: { play_audio: false },
     },
     {
       value: false,
+      emoji: "🔊",
       labelKey: `${PM}.playAudioWord`,
       descKey: `${PM}.playAudioFillDesc`,
       patch: { play_audio: true, show_answer: true },
@@ -307,8 +345,8 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     burnsTokens: true,
     autoGraded: false,
     gradable: true,
-    settings: [TOGGLE_SHUFFLE], // 時間固定 30 秒，不顯示選擇器
-    defaults: { time_limit_per_question: 30 },
+    settings: [SELECT_TIME_READING, TOGGLE_SHUFFLE], // 時間選單 10/20/30，預設 20
+    defaults: { time_limit_per_question: 20 },
     chipTitleKey: `${PM}.reading`,
     chipDescKey: `${PM}.readingDesc`,
     chipSelectedClass: "border-orange-500 bg-orange-50 text-orange-700",
@@ -335,7 +373,7 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     autoGraded: true,
     gradable: true,
     settings: [
-      SELECT_TIME_LIMIT,
+      SELECT_TIME_REARRANGEMENT,
       TOGGLE_SHUFFLE,
       TOGGLE_SHOW_ANSWER,
       SEGMENTED_PLAY_AUDIO,
@@ -393,12 +431,12 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     settings: [
       NUMBER_TARGET_PROFICIENCY,
       SEGMENTED_DISPLAY_SELECTION,
-      SELECT_TIME_LIMIT,
+      SELECT_TIME_SELECTION,
       TOGGLE_SHOW_ANSWER,
       TOGGLE_SHOW_IMAGE,
       TOGGLE_SHOW_OPTION_IMAGES,
     ],
-    defaults: { time_limit_per_question: 30 },
+    defaults: { time_limit_per_question: 10 },
     chipTitleKey: `${PM}.wordSelection`,
     chipDescKey: `${PM}.wordSelectionDesc`,
     chipSelectedClass: "border-emerald-500 bg-emerald-50 text-emerald-700",
@@ -425,14 +463,14 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     burnsTokens: false,
     autoGraded: true,
     gradable: false,
+    // #878：移除「顯示答案」—— 小考最終整卷顯示答案，此單題開關無作用
     settings: [
       SEGMENTED_DISPLAY_SELECTION,
       SELECT_QUIZ_TIME,
-      TOGGLE_SHOW_ANSWER,
       TOGGLE_SHOW_IMAGE,
       TOGGLE_SHOW_OPTION_IMAGES,
     ],
-    defaults: { time_limit_per_question: 30 },
+    defaults: { time_limit_per_question: 0 },
     chipTitleKey: `${PM}.wordSelectionQuiz`,
     chipDescKey: `${PM}.wordSelectionQuizDesc`,
     chipSelectedClass: "border-emerald-500 bg-emerald-50 text-emerald-700",
@@ -461,12 +499,12 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     settings: [
       NUMBER_TARGET_PROFICIENCY,
       SEGMENTED_DISPLAY_TEXT,
-      SELECT_TIME_LIMIT,
+      SELECT_TIME_SPELLING_CLOZE,
       TOGGLE_SHOW_ANSWER, // play_audio 時鎖定 = runtime，由 Panel context 處理
       TOGGLE_SHOW_IMAGE,
     ],
     defaults: {
-      time_limit_per_question: 30,
+      time_limit_per_question: 0,
       show_translation: true,
       play_audio: false,
       show_answer: false,
@@ -505,7 +543,7 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
       TOGGLE_SHOW_IMAGE,
     ],
     defaults: {
-      time_limit_per_question: 30,
+      time_limit_per_question: 0,
       show_translation: true,
       play_audio: false,
       show_answer: false,
@@ -537,15 +575,15 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     burnsTokens: false,
     autoGraded: true,
     gradable: false,
+    // #878：移除「顯示答案」—— 克漏字最終整卷顯示答案，此單題開關無作用
     settings: [
       NUMBER_TARGET_PROFICIENCY,
       SEGMENTED_DISPLAY_TEXT,
-      SELECT_TIME_LIMIT,
-      TOGGLE_SHOW_ANSWER,
+      SELECT_TIME_SPELLING_CLOZE,
       TOGGLE_SHOW_IMAGE,
     ],
     defaults: {
-      time_limit_per_question: 30,
+      time_limit_per_question: 0,
       show_translation: true,
       play_audio: false,
       show_answer: false,
@@ -578,14 +616,10 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     burnsTokens: false,
     autoGraded: true,
     gradable: false,
-    settings: [
-      SEGMENTED_DISPLAY_TEXT,
-      SELECT_QUIZ_TIME,
-      TOGGLE_SHOW_ANSWER,
-      TOGGLE_SHOW_IMAGE,
-    ],
+    // #878：移除「顯示答案」—— 小考最終整卷顯示答案，此單題開關無作用
+    settings: [SEGMENTED_DISPLAY_TEXT, SELECT_QUIZ_TIME, TOGGLE_SHOW_IMAGE],
     defaults: {
-      time_limit_per_question: 30,
+      time_limit_per_question: 0,
       show_translation: true,
       play_audio: false,
       show_answer: false,
