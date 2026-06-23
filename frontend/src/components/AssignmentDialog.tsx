@@ -40,13 +40,7 @@ import {
   Globe,
   Building2,
   Settings,
-  Mic,
-  Shuffle,
-  MousePointerClick,
-  Volume2,
-  Keyboard,
   Brain,
-  type LucideIcon,
 } from "lucide-react";
 import {
   DndContext,
@@ -69,6 +63,12 @@ import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { PracticeMode } from "@/lib/practiceMode";
+import {
+  listModesForDataset,
+  applyModeDefaults,
+  getModeConfig,
+} from "@/lib/practiceMode";
+import { PracticeModeSettingsPanel } from "./assignment/PracticeModeSettingsPanel";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceSafe } from "@/contexts/WorkspaceContext";
 import { getScoreCategory, type ScoreCategory } from "@/utils/scoreCategory";
@@ -2884,202 +2884,14 @@ export function AssignmentDialog({
           {/* Step 1: Practice Mode Settings */}
           {currentStep === 1 &&
             (() => {
-              const PRACTICE_MODES: Array<{
-                id:
-                  | "reading"
-                  | "rearrangement"
-                  | "word_reading"
-                  | "word_selection"
-                  | "word_spelling"
-                  | "word_cloze"
-                  | "word_selection_quiz"
-                  | "word_spelling_quiz"
-                  | "word_cloze_quiz";
-                Icon: LucideIcon;
-                titleKey: string;
-                descKey: string;
-                isMemoryBased?: boolean; // 採用艾賓浩斯記憶曲線
-                /**
-                 * 顏色與學生端 StudentAssignmentList.tsx 對齊。
-                 * chipSelected: chip 選中時的 border + bg + text
-                 * iconColor: Hero 區塊 icon 顏色
-                 */
-                chipSelected: string;
-                iconColor: string;
-                onClick: () => void;
-              }> = [
-                {
-                  id: "reading",
-                  Icon: Mic,
-                  titleKey: "dialogs.assignmentDialog.practiceMode.reading",
-                  descKey: "dialogs.assignmentDialog.practiceMode.readingDesc",
-                  chipSelected:
-                    "border-orange-500 bg-orange-50 text-orange-700",
-                  iconColor: "text-orange-600",
-                  onClick: () =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      practice_mode: "reading",
-                      time_limit_per_question: 30, // reading 固定 30 秒
-                    })),
-                },
-                {
-                  id: "rearrangement",
-                  Icon: Shuffle,
-                  titleKey:
-                    "dialogs.assignmentDialog.practiceMode.rearrangement",
-                  descKey:
-                    "dialogs.assignmentDialog.practiceMode.rearrangementDesc",
-                  chipSelected: "border-blue-500 bg-blue-50 text-blue-700",
-                  iconColor: "text-blue-600",
-                  onClick: () =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      practice_mode: "rearrangement",
-                    })),
-                },
-                {
-                  id: "word_reading",
-                  Icon: Volume2,
-                  titleKey: "dialogs.assignmentDialog.practiceMode.wordReading",
-                  descKey:
-                    "dialogs.assignmentDialog.practiceMode.wordReadingDesc",
-                  chipSelected:
-                    "border-purple-500 bg-purple-50 text-purple-700",
-                  iconColor: "text-purple-600",
-                  onClick: () =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      practice_mode: "word_reading",
-                      time_limit_per_question: 10,
-                    })),
-                },
-                {
-                  id: "word_selection",
-                  Icon: MousePointerClick,
-                  titleKey:
-                    "dialogs.assignmentDialog.practiceMode.wordSelection",
-                  descKey:
-                    "dialogs.assignmentDialog.practiceMode.wordSelectionDesc",
-                  isMemoryBased: true,
-                  chipSelected:
-                    "border-emerald-500 bg-emerald-50 text-emerald-700",
-                  iconColor: "text-emerald-600",
-                  onClick: () =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      practice_mode: "word_selection",
-                      time_limit_per_question: 30,
-                    })),
-                },
-                {
-                  id: "word_selection_quiz",
-                  Icon: MousePointerClick,
-                  titleKey:
-                    "dialogs.assignmentDialog.practiceMode.wordSelectionQuiz",
-                  descKey:
-                    "dialogs.assignmentDialog.practiceMode.wordSelectionQuizDesc",
-                  chipSelected:
-                    "border-emerald-500 bg-emerald-50 text-emerald-700",
-                  iconColor: "text-emerald-600",
-                  onClick: () =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      practice_mode: "word_selection_quiz",
-                      time_limit_per_question: 30,
-                    })),
-                },
-                {
-                  id: "word_spelling",
-                  Icon: Keyboard,
-                  titleKey:
-                    "dialogs.assignmentDialog.practiceMode.wordSpelling",
-                  descKey:
-                    "dialogs.assignmentDialog.practiceMode.wordSpellingDesc",
-                  isMemoryBased: true,
-                  chipSelected: "border-amber-500 bg-amber-50 text-amber-700",
-                  iconColor: "text-amber-600",
-                  onClick: () =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      practice_mode: "word_spelling",
-                      time_limit_per_question: 30,
-                      show_translation: true,
-                      play_audio: false,
-                      show_answer: false,
-                      target_proficiency: 80,
-                      shuffle_questions: false,
-                    })),
-                },
-                {
-                  id: "word_spelling_quiz",
-                  Icon: Keyboard,
-                  titleKey:
-                    "dialogs.assignmentDialog.practiceMode.wordSpellingQuiz",
-                  descKey:
-                    "dialogs.assignmentDialog.practiceMode.wordSpellingQuizDesc",
-                  chipSelected: "border-amber-500 bg-amber-50 text-amber-700",
-                  iconColor: "text-amber-600",
-                  onClick: () =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      practice_mode: "word_spelling_quiz",
-                      time_limit_per_question: 30,
-                      show_translation: true,
-                      play_audio: false,
-                      show_answer: false,
-                      shuffle_questions: false,
-                    })),
-                },
-                {
-                  id: "word_cloze",
-                  Icon: FileText,
-                  titleKey: "dialogs.assignmentDialog.practiceMode.wordCloze",
-                  descKey:
-                    "dialogs.assignmentDialog.practiceMode.wordClozeDesc",
-                  isMemoryBased: true,
-                  chipSelected: "border-pink-500 bg-pink-50 text-pink-700",
-                  iconColor: "text-pink-600",
-                  onClick: () =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      practice_mode: "word_cloze",
-                      time_limit_per_question: 30,
-                      show_translation: true,
-                      play_audio: false,
-                      show_answer: false,
-                      target_proficiency: 80,
-                      shuffle_questions: false,
-                    })),
-                },
-                {
-                  id: "word_cloze_quiz",
-                  Icon: FileText,
-                  titleKey:
-                    "dialogs.assignmentDialog.practiceMode.wordClozeQuiz",
-                  descKey:
-                    "dialogs.assignmentDialog.practiceMode.wordClozeQuizDesc",
-                  chipSelected: "border-pink-500 bg-pink-50 text-pink-700",
-                  iconColor: "text-pink-600",
-                  onClick: () =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      practice_mode: "word_cloze_quiz",
-                      time_limit_per_question: 30,
-                      show_translation: true,
-                      play_audio: false,
-                      show_answer: false,
-                      shuffle_questions: false,
-                    })),
-                },
-              ];
-              const currentMode = PRACTICE_MODES.find(
-                (m) => m.id === formData.practice_mode,
-              );
-              // word_selection 與其小考變體共用「顯示單字 vs 播放音檔」二選一切換器
-              const isSelectionFamily =
-                formData.practice_mode === "word_selection" ||
-                formData.practice_mode === "word_selection_quiz";
+              const dataset =
+                getCartContentTypeCategory() === "example_sentences"
+                  ? "example_sentences"
+                  : "vocabulary_set";
+              const modeList = listModesForDataset(dataset);
+              const currentConfig = formData.practice_mode
+                ? getModeConfig(formData.practice_mode)
+                : undefined;
               const currentCategory: ScoreCategory = getScoreCategory(
                 formData.practice_mode,
                 formData.play_audio,
@@ -3122,28 +2934,36 @@ export function AssignmentDialog({
                       className="flex gap-2 overflow-x-auto px-9 [&::-webkit-scrollbar]:hidden"
                       style={{ scrollbarWidth: "none" }}
                     >
-                      {(getCartContentTypeCategory() === "example_sentences"
-                        ? PRACTICE_MODES.filter(
-                            (m) => !m.id.startsWith("word_"),
-                          )
-                        : PRACTICE_MODES
-                      ).map((m) => {
-                        const selected = formData.practice_mode === m.id;
+                      {modeList.map((m) => {
+                        const cfg = getModeConfig(m);
+                        if (!cfg) return null;
+                        const ModeIcon = cfg.icon;
+                        const selected = formData.practice_mode === m;
                         return (
                           <button
-                            key={m.id}
+                            key={m}
                             type="button"
-                            onClick={m.onClick}
+                            onClick={() =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                ...(applyModeDefaults(m) as Partial<
+                                  typeof prev
+                                >),
+                              }))
+                            }
                             className={cn(
                               "shrink-0 flex items-center gap-2 px-3 py-2 rounded-full border text-sm transition-all",
                               selected
-                                ? cn(m.chipSelected, "shadow-sm font-semibold")
+                                ? cn(
+                                    cfg.chipSelectedClass,
+                                    "shadow-sm font-semibold",
+                                  )
                                 : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50",
                             )}
                           >
-                            <m.Icon className="h-4 w-4 shrink-0" />
-                            <span>{t(m.titleKey)}</span>
-                            {m.isMemoryBased && (
+                            <ModeIcon className="h-4 w-4 shrink-0" />
+                            <span>{t(cfg.chipTitleKey ?? "")}</span>
+                            {cfg.isMemoryBased && (
                               <Brain
                                 className="h-3.5 w-3.5 shrink-0 opacity-70"
                                 aria-label="採用艾賓浩斯記憶曲線"
@@ -3158,17 +2978,22 @@ export function AssignmentDialog({
                   <div className="flex-1 min-h-0 w-full flex flex-col md:flex-row gap-4">
                     {/* 左：設定區（< 960px 全寬 / ≥ 960px 固定 320px） */}
                     <div className="w-full min-[960px]:w-80 min-[960px]:shrink-0 space-y-4 overflow-y-auto pr-1 h-full">
-                      {currentMode && (
+                      {currentConfig && (
                         <div className="p-4 rounded-xl bg-gray-50">
                           <div className="flex items-center gap-3">
-                            <currentMode.Icon
-                              className={cn(
-                                "h-8 w-8 shrink-0",
-                                currentMode.iconColor,
-                              )}
-                            />
+                            {(() => {
+                              const HeroIcon = currentConfig.icon;
+                              return (
+                                <HeroIcon
+                                  className={cn(
+                                    "h-8 w-8 shrink-0",
+                                    currentConfig.iconColorClass,
+                                  )}
+                                />
+                              );
+                            })()}
                             <div className="text-base font-semibold text-gray-900">
-                              {t(currentMode.titleKey)}
+                              {t(currentConfig.chipTitleKey ?? "")}
                             </div>
                             <span
                               className={cn(
@@ -3182,679 +3007,25 @@ export function AssignmentDialog({
                             </span>
                           </div>
                           <div className="text-sm text-gray-600 mt-2">
-                            {t(currentMode.descKey)}
+                            {t(currentConfig.chipDescKey ?? "")}
                           </div>
                         </div>
                       )}
 
-                      {/* ===== 例句集細節設定 (reading / rearrangement) ===== */}
-                      {(formData.practice_mode === "reading" ||
-                        formData.practice_mode === "rearrangement") && (
-                        <Card className="p-3 border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.advancedSettings",
-                            )}
-                          </h4>
-                          <div className="grid grid-cols-1 gap-y-2">
-                            {/* 時間限制 — reading 固定 30 秒，不顯示選擇器 */}
-                            {formData.practice_mode !== "reading" && (
-                              <div className="space-y-1.5">
-                                <Label className="text-xs text-gray-600">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.timeLimit",
-                                  )}
-                                </Label>
-                                <select
-                                  value={formData.time_limit_per_question}
-                                  onChange={(e) =>
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      time_limit_per_question: Number(
-                                        e.target.value,
-                                      ) as 0 | 10 | 20 | 30 | 40,
-                                    }))
-                                  }
-                                  className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm"
-                                >
-                                  <option value={0}>
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.unlimited",
-                                    )}
-                                  </option>
-                                  <option value={10}>
-                                    10{" "}
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.seconds",
-                                    )}
-                                  </option>
-                                  <option value={20}>
-                                    20{" "}
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.seconds",
-                                    )}
-                                  </option>
-                                  <option value={30}>
-                                    30{" "}
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.seconds",
-                                    )}{" "}
-                                    (
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.default",
-                                    )}
-                                    )
-                                  </option>
-                                  <option value={40}>
-                                    40{" "}
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.seconds",
-                                    )}
-                                  </option>
-                                </select>
-                              </div>
-                            )}
-
-                            {/* 打亂順序 */}
-                            <div className="space-y-1.5">
-                              <Label className="text-xs text-gray-600">
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.shuffleQuestions",
-                                )}
-                              </Label>
-                              <div className="flex items-center h-9">
-                                <input
-                                  type="checkbox"
-                                  checked={formData.shuffle_questions}
-                                  onChange={(e) =>
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      shuffle_questions: e.target.checked,
-                                    }))
-                                  }
-                                  className="h-4 w-4 rounded border-gray-300"
-                                />
-                                <span className="ml-2 text-sm text-gray-600">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.shuffleQuestionsDesc",
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* 例句重組專用選項 - 顯示答案 */}
-                            {formData.practice_mode === "rearrangement" && (
-                              <div className="space-y-1.5">
-                                <Label className="text-xs text-gray-600">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.showAnswer",
-                                  )}
-                                </Label>
-                                <div className="flex items-center h-9">
-                                  <input
-                                    type="checkbox"
-                                    checked={formData.show_answer}
-                                    onChange={(e) =>
-                                      setFormData((prev) => ({
-                                        ...prev,
-                                        show_answer: e.target.checked,
-                                      }))
-                                    }
-                                    className="h-4 w-4 rounded border-gray-300"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-600">
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.showAnswerDesc",
-                                    )}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* 例句重組專用選項 - 播放音檔 */}
-                          {formData.practice_mode === "rearrangement" && (
-                            <div className="mt-4 pt-4 border-t">
-                              <Label className="text-xs text-gray-600 mb-2 block">
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.playAudio",
-                                )}
-                              </Label>
-                              <div className="flex gap-3">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      play_audio: true,
-                                    }))
-                                  }
-                                  className={`flex-1 p-3 rounded-lg border text-sm ${
-                                    formData.play_audio
-                                      ? "border-blue-500 bg-blue-50 text-blue-700"
-                                      : "border-gray-200 hover:border-gray-300"
-                                  }`}
-                                >
-                                  🔊{" "}
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.playAudioYes",
-                                  )}
-                                  <span className="block text-xs text-gray-500 mt-0.5">
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.scoreListening",
-                                    )}
-                                  </span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      play_audio: false,
-                                    }))
-                                  }
-                                  className={`flex-1 p-3 rounded-lg border text-sm ${
-                                    !formData.play_audio
-                                      ? "border-blue-500 bg-blue-50 text-blue-700"
-                                      : "border-gray-200 hover:border-gray-300"
-                                  }`}
-                                >
-                                  🔇{" "}
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.playAudioNo",
-                                  )}
-                                  <span className="block text-xs text-gray-500 mt-0.5">
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.scoreWriting",
-                                    )}
-                                  </span>
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </Card>
-                      )}
-
-                      {/* ===== 單字集細節設定 (word_reading / word_selection / word_spelling / word_cloze 及小考變體) ===== */}
-                      {(formData.practice_mode === "word_reading" ||
-                        formData.practice_mode === "word_selection" ||
-                        formData.practice_mode === "word_spelling" ||
-                        formData.practice_mode === "word_cloze" ||
-                        formData.practice_mode === "word_selection_quiz" ||
-                        formData.practice_mode === "word_spelling_quiz" ||
-                        formData.practice_mode === "word_cloze_quiz") && (
-                        <Card className="p-3 border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.advancedSettings",
-                            )}
-                          </h4>
-
-                          {/* 達標熟悉度（word_selection / word_spelling / word_cloze 共用） */}
-                          {(formData.practice_mode === "word_selection" ||
-                            formData.practice_mode === "word_spelling" ||
-                            formData.practice_mode === "word_cloze") && (
-                            <div className="mb-3 pb-3 border-b">
-                              <div className="flex items-center justify-between mb-2">
-                                <Label className="text-xs text-gray-600">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.targetProficiency",
-                                  )}
-                                </Label>
-                                <span className="text-sm font-medium text-blue-600">
-                                  {formData.target_proficiency}%
-                                </span>
-                              </div>
-                              <input
-                                type="range"
-                                min={50}
-                                max={100}
-                                step={5}
-                                value={formData.target_proficiency}
-                                onChange={(e) =>
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    target_proficiency: Number(e.target.value),
-                                  }))
-                                }
-                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                              />
-                              <p className="text-xs text-gray-500 mt-1">
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.targetProficiencyDesc",
-                                )}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* 題目呈現方式：word_selection 用 show_word；spelling/cloze 用 show_translation */}
-                          {(formData.practice_mode === "word_selection" ||
-                            formData.practice_mode === "word_spelling" ||
-                            formData.practice_mode === "word_cloze" ||
-                            formData.practice_mode === "word_selection_quiz" ||
-                            formData.practice_mode === "word_spelling_quiz" ||
-                            formData.practice_mode === "word_cloze_quiz") && (
-                            <div className="mb-3 pb-3 border-b">
-                              <Label className="text-xs text-gray-600 mb-2 block">
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.questionDisplay",
-                                )}
-                              </Label>
-                              <div className="flex gap-3">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (isSelectionFamily) {
-                                      setFormData((prev) => ({
-                                        ...prev,
-                                        show_word: true,
-                                        play_audio: false,
-                                      }));
-                                    } else {
-                                      // spelling / cloze: 顯示翻譯
-                                      setFormData((prev) => ({
-                                        ...prev,
-                                        show_translation: true,
-                                        play_audio: false,
-                                      }));
-                                    }
-                                  }}
-                                  className={`flex-1 p-3 rounded-lg border text-sm ${
-                                    (
-                                      isSelectionFamily
-                                        ? formData.show_word &&
-                                          !formData.play_audio
-                                        : formData.show_translation &&
-                                          !formData.play_audio
-                                    )
-                                      ? "border-blue-500 bg-blue-50 text-blue-700"
-                                      : "border-gray-200 hover:border-gray-300"
-                                  }`}
-                                >
-                                  👁️{" "}
-                                  {isSelectionFamily
-                                    ? t(
-                                        "dialogs.assignmentDialog.practiceMode.displayWord",
-                                      )
-                                    : t(
-                                        "dialogs.assignmentDialog.practiceMode.displayTranslation",
-                                      )}
-                                  <span className="block text-xs text-gray-500 mt-0.5">
-                                    {isSelectionFamily
-                                      ? t(
-                                          "dialogs.assignmentDialog.practiceMode.displayWordDesc",
-                                        )
-                                      : t(
-                                          "dialogs.assignmentDialog.practiceMode.displayTranslationDesc",
-                                        )}
-                                  </span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (isSelectionFamily) {
-                                      setFormData((prev) => ({
-                                        ...prev,
-                                        show_word: false,
-                                        play_audio: true,
-                                      }));
-                                    } else {
-                                      // spelling / cloze: 切到播放音檔 → 強制 show_answer=true
-                                      setFormData((prev) => ({
-                                        ...prev,
-                                        show_translation: false,
-                                        play_audio: true,
-                                        show_answer: true,
-                                      }));
-                                    }
-                                  }}
-                                  className={`flex-1 p-3 rounded-lg border text-sm ${
-                                    (
-                                      isSelectionFamily
-                                        ? !formData.show_word &&
-                                          formData.play_audio
-                                        : !formData.show_translation &&
-                                          formData.play_audio
-                                    )
-                                      ? "border-blue-500 bg-blue-50 text-blue-700"
-                                      : "border-gray-200 hover:border-gray-300"
-                                  }`}
-                                >
-                                  🔊{" "}
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.playAudioWord",
-                                  )}
-                                  <span className="block text-xs text-gray-500 mt-0.5">
-                                    {isSelectionFamily
-                                      ? t(
-                                          "dialogs.assignmentDialog.practiceMode.playAudioWordDesc",
-                                        )
-                                      : t(
-                                          "dialogs.assignmentDialog.practiceMode.playAudioFillDesc",
-                                        )}
-                                  </span>
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="grid grid-cols-1 gap-y-2">
-                            {/* Issue #828: 小考模式改用整卷分鐘限時，到時自動提交 */}
-                            {formData.practice_mode?.endsWith("_quiz") ? (
-                              <div className="space-y-1.5">
-                                <Label className="text-xs text-gray-600">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.quizTimeLimit",
-                                  ) || "整卷時間限制（時間到自動提交）"}
-                                </Label>
-                                <select
-                                  value={formData.quiz_time_limit_seconds}
-                                  onChange={(e) =>
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      quiz_time_limit_seconds: Number(
-                                        e.target.value,
-                                      ) as
-                                        | 0
-                                        | 180
-                                        | 300
-                                        | 600
-                                        | 900
-                                        | 1200
-                                        | 1800,
-                                    }))
-                                  }
-                                  className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm"
-                                >
-                                  <option value={0}>
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.unlimited",
-                                    )}
-                                  </option>
-                                  <option value={180}>3 分鐘</option>
-                                  <option value={300}>5 分鐘</option>
-                                  <option value={600}>10 分鐘</option>
-                                  <option value={900}>15 分鐘</option>
-                                  <option value={1200}>20 分鐘</option>
-                                  <option value={1800}>30 分鐘</option>
-                                </select>
-                              </div>
-                            ) : formData.practice_mode !== "word_reading" ? (
-                              <div className="space-y-1.5">
-                                <Label className="text-xs text-gray-600">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.timeLimit",
-                                  )}
-                                </Label>
-                                <select
-                                  value={formData.time_limit_per_question}
-                                  onChange={(e) =>
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      time_limit_per_question: Number(
-                                        e.target.value,
-                                      ) as 0 | 10 | 20 | 30 | 40,
-                                    }))
-                                  }
-                                  className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm"
-                                >
-                                  <option value={0}>
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.unlimited",
-                                    )}
-                                    {(formData.practice_mode ===
-                                      "word_spelling" ||
-                                      formData.practice_mode ===
-                                        "word_cloze") &&
-                                      ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
-                                  </option>
-                                  <option value={10}>
-                                    10{" "}
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.seconds",
-                                    )}
-                                  </option>
-                                  <option value={20}>
-                                    20{" "}
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.seconds",
-                                    )}
-                                  </option>
-                                  <option value={30}>
-                                    30{" "}
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.seconds",
-                                    )}
-                                    {formData.practice_mode ===
-                                      "word_selection" &&
-                                      ` (${t("dialogs.assignmentDialog.practiceMode.default")})`}
-                                  </option>
-                                  <option value={40}>
-                                    40{" "}
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.seconds",
-                                    )}
-                                  </option>
-                                </select>
-                              </div>
-                            ) : (
-                              <></>
-                            )}
-
-                            {/* 打亂順序 — word_reading 保留；word_selection/spelling/cloze 移除（艾賓浩斯每輪自選） */}
-                            {formData.practice_mode === "word_reading" && (
-                              <div className="space-y-1.5">
-                                <Label className="text-xs text-gray-600">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.shuffleQuestions",
-                                  )}
-                                </Label>
-                                <div className="flex items-center h-9">
-                                  <input
-                                    type="checkbox"
-                                    checked={formData.shuffle_questions}
-                                    onChange={(e) =>
-                                      setFormData((prev) => ({
-                                        ...prev,
-                                        shuffle_questions: e.target.checked,
-                                      }))
-                                    }
-                                    className="h-4 w-4 rounded border-gray-300"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-600">
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.shuffleQuestionsDesc",
-                                    )}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* 顯示答案 — word_selection / word_spelling / word_cloze 共用（含小考變體）
-                            spelling/cloze 在 play_audio=true 時強制勾選 + 反灰 */}
-                            {(formData.practice_mode === "word_selection" ||
-                              formData.practice_mode === "word_spelling" ||
-                              formData.practice_mode === "word_cloze" ||
-                              formData.practice_mode ===
-                                "word_selection_quiz" ||
-                              formData.practice_mode === "word_spelling_quiz" ||
-                              formData.practice_mode === "word_cloze_quiz") && (
-                              <div className="space-y-1.5">
-                                <Label className="text-xs text-gray-600">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.showAnswer",
-                                  )}
-                                </Label>
-                                <div className="flex items-center h-9">
-                                  <input
-                                    type="checkbox"
-                                    checked={formData.show_answer}
-                                    disabled={
-                                      (formData.practice_mode ===
-                                        "word_spelling" ||
-                                        formData.practice_mode ===
-                                          "word_cloze" ||
-                                        formData.practice_mode ===
-                                          "word_spelling_quiz" ||
-                                        formData.practice_mode ===
-                                          "word_cloze_quiz") &&
-                                      formData.play_audio
-                                    }
-                                    onChange={(e) =>
-                                      setFormData((prev) => ({
-                                        ...prev,
-                                        show_answer: e.target.checked,
-                                      }))
-                                    }
-                                    className="h-4 w-4 rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-600">
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.wordSelectionShowAnswerDesc",
-                                    )}
-                                  </span>
-                                </div>
-                                {(formData.practice_mode === "word_spelling" ||
-                                  formData.practice_mode === "word_cloze" ||
-                                  formData.practice_mode ===
-                                    "word_spelling_quiz" ||
-                                  formData.practice_mode ===
-                                    "word_cloze_quiz") &&
-                                  formData.play_audio && (
-                                    <p className="text-xs text-red-600">
-                                      {t(
-                                        "dialogs.assignmentDialog.practiceMode.showAnswerLockedByAudio",
-                                      )}
-                                    </p>
-                                  )}
-                              </div>
-                            )}
-
-                            {/* 單字朗讀 - 顯示翻譯（spelling/cloze 已移到上方 toggle） */}
-                            {formData.practice_mode === "word_reading" && (
-                              <div className="space-y-1.5">
-                                <Label className="text-xs text-gray-600">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.showTranslation",
-                                  )}
-                                </Label>
-                                <div className="flex items-center h-9">
-                                  <input
-                                    type="checkbox"
-                                    checked={formData.show_translation}
-                                    onChange={(e) =>
-                                      setFormData((prev) => ({
-                                        ...prev,
-                                        show_translation: e.target.checked,
-                                      }))
-                                    }
-                                    className="h-4 w-4 rounded border-gray-300"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-600">
-                                    {t(
-                                      "dialogs.assignmentDialog.practiceMode.showTranslationDesc",
-                                    )}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* 顯示題目圖片 */}
-                            <div className="space-y-1.5">
-                              <Label className="text-xs text-gray-600">
-                                {t(
-                                  "dialogs.assignmentDialog.practiceMode.showImage",
-                                )}
-                              </Label>
-                              <div className="flex items-center h-9">
-                                <input
-                                  type="checkbox"
-                                  checked={formData.show_image}
-                                  onChange={(e) =>
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      show_image: e.target.checked,
-                                      // Issue #631: show_image 與 show_option_images 互斥
-                                      show_option_images: e.target.checked
-                                        ? false
-                                        : prev.show_option_images,
-                                    }))
-                                  }
-                                  className="h-4 w-4 rounded border-gray-300"
-                                />
-                                <span className="ml-2 text-sm text-gray-600">
-                                  {t(
-                                    "dialogs.assignmentDialog.practiceMode.showImageDesc",
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* 顯示選項圖片（單字選擇與小考變體專用，與顯示題目圖片互斥）Issue #631 */}
-                            {isSelectionFamily &&
-                              (() => {
-                                const hasMissingImage = cartItems.some(
-                                  (i) => i.hasMissingImage,
-                                );
-                                const disabled =
-                                  hasMissingImage &&
-                                  !formData.show_option_images;
-                                return (
-                                  <div className="space-y-1.5">
-                                    <Label className="text-xs text-gray-600">
-                                      {t(
-                                        "dialogs.assignmentDialog.practiceMode.showOptionImages",
-                                      )}
-                                    </Label>
-                                    <div className="flex items-center h-9">
-                                      <input
-                                        type="checkbox"
-                                        checked={formData.show_option_images}
-                                        disabled={disabled}
-                                        onChange={(e) =>
-                                          setFormData((prev) => ({
-                                            ...prev,
-                                            show_option_images:
-                                              e.target.checked,
-                                            show_image: e.target.checked
-                                              ? false
-                                              : prev.show_image,
-                                          }))
-                                        }
-                                        className="h-4 w-4 rounded border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
-                                      />
-                                      <span
-                                        className={cn(
-                                          "ml-2 text-sm",
-                                          disabled
-                                            ? "text-gray-400"
-                                            : "text-gray-600",
-                                        )}
-                                        title={
-                                          disabled
-                                            ? t(
-                                                "dialogs.assignmentDialog.practiceMode.showOptionImagesMissing",
-                                              )
-                                            : undefined
-                                        }
-                                      >
-                                        {t(
-                                          "dialogs.assignmentDialog.practiceMode.showOptionImagesDesc",
-                                        )}
-                                      </span>
-                                    </div>
-                                    {disabled && (
-                                      <p className="text-xs text-amber-600 mt-1">
-                                        {t(
-                                          "dialogs.assignmentDialog.practiceMode.showOptionImagesMissing",
-                                        )}
-                                      </p>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-                          </div>
-                        </Card>
+                      {formData.practice_mode && (
+                        <PracticeModeSettingsPanel
+                          mode={formData.practice_mode}
+                          value={formData}
+                          onChange={(next) =>
+                            setFormData((prev) => ({ ...prev, ...next }))
+                          }
+                          context={{
+                            // Issue #631：購物車有缺題目圖片的項目時，禁止開啟「顯示選項圖片」
+                            hasMissingImage: cartItems.some(
+                              (i) => i.hasMissingImage,
+                            ),
+                          }}
+                        />
                       )}
                     </div>
 
@@ -4060,7 +3231,7 @@ export function AssignmentDialog({
                         </Card>
                       ) : (
                         <div className="h-full flex items-center justify-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">
-                          {currentMode
+                          {currentConfig
                             ? "此模式預覽尚未實作"
                             : "選擇一個模式查看預覽"}
                         </div>
