@@ -147,7 +147,7 @@ export function PracticeModeSettingsPanel({
       <select
         value={Number(v[spec.key])}
         onChange={(e) => apply(spec, Number(e.target.value))}
-        className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm"
+        className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm dark:border-gray-600 dark:bg-gray-800"
       >
         {spec.options.map((opt) => {
           const label =

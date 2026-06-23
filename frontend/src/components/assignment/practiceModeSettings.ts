@@ -33,6 +33,42 @@ export interface PracticeModeSettings {
 
 type MutableSettings = Record<SettingKey, SettingValue>;
 
+// 合法時間選項（鏡射 PracticeModeSettings 的 literal union）。API 回傳的時間值必須落在這些
+// 選項上，<select> 才有對應 option 高亮；否則畫面會出現「無選中項」。
+const TIME_PER_QUESTION_OPTIONS = [0, 10, 20, 30, 40] as const;
+const QUIZ_TIME_OPTIONS = [0, 180, 300, 600, 900, 1200, 1800] as const;
+
+function snapToNearest<T extends number>(
+  value: unknown,
+  options: readonly T[],
+  fallback: T,
+): T {
+  if (value == null) return fallback; // null/undefined → fallback（保留舊 `?? 30` 行為，Number(null)=0 會誤判）
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return options.reduce(
+    (best, opt) => (Math.abs(opt - n) < Math.abs(best - n) ? opt : best),
+    options[0],
+  );
+}
+
+/**
+ * 把 API 回傳的 time_limit_per_question 夾到最接近的合法選項（非數字→fallback 30）。
+ * 防禦髒資料（如 15）讓 <select> 渲染不出高亮 option。
+ */
+export function clampPerQuestionTime(
+  value: unknown,
+): PracticeModeSettings["time_limit_per_question"] {
+  return snapToNearest(value, TIME_PER_QUESTION_OPTIONS, 30);
+}
+
+/** 把 API 回傳的 quiz_time_limit_seconds 夾到最接近的合法選項（非數字→fallback 0）。 */
+export function clampQuizTime(
+  value: unknown,
+): PracticeModeSettings["quiz_time_limit_seconds"] {
+  return snapToNearest(value, QUIZ_TIME_OPTIONS, 0);
+}
+
 /**
  * 套用一次設定變更，回傳新的 value（純函式、不 mutate 入參）。
  * - toggle 開啟（true）時，連動關閉 `excludes` 列的 key（如 show_image ↔ show_option_images）。

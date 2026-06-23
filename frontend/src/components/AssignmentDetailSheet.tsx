@@ -24,7 +24,11 @@ import {
   isAutoScoredMode,
 } from "@/lib/practiceMode";
 import { PracticeModeSettingsPanel } from "@/components/assignment/PracticeModeSettingsPanel";
-import type { PracticeModeSettings } from "@/components/assignment/practiceModeSettings";
+import {
+  clampPerQuestionTime,
+  clampQuizTime,
+  type PracticeModeSettings,
+} from "@/components/assignment/practiceModeSettings";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -172,10 +176,10 @@ export function AssignmentDetailSheet({
 
       // Initialize advanced settings from detail
       setEditAdvanced({
-        time_limit_per_question: ((detail.time_limit_per_question as number) ??
-          30) as AdvancedSettings["time_limit_per_question"],
-        quiz_time_limit_seconds: ((detail.quiz_time_limit_seconds as number) ??
-          0) as AdvancedSettings["quiz_time_limit_seconds"],
+        time_limit_per_question: clampPerQuestionTime(
+          detail.time_limit_per_question,
+        ),
+        quiz_time_limit_seconds: clampQuizTime(detail.quiz_time_limit_seconds),
         shuffle_questions: (detail.shuffle_questions as boolean) ?? false,
         show_answer: (detail.show_answer as boolean) ?? false,
         play_audio: (detail.play_audio as boolean) ?? false,
@@ -340,12 +344,10 @@ export function AssignmentDetailSheet({
     const startDateStr = detailData.start_date as string | null;
     setEditStartDate(startDateStr ? startDateStr.split("T")[0] : "");
     setEditAdvanced({
-      time_limit_per_question:
-        ((detailData.time_limit_per_question as number) ??
-          30) as AdvancedSettings["time_limit_per_question"],
-      quiz_time_limit_seconds:
-        ((detailData.quiz_time_limit_seconds as number) ??
-          0) as AdvancedSettings["quiz_time_limit_seconds"],
+      time_limit_per_question: clampPerQuestionTime(
+        detailData.time_limit_per_question,
+      ),
+      quiz_time_limit_seconds: clampQuizTime(detailData.quiz_time_limit_seconds),
       shuffle_questions: (detailData.shuffle_questions as boolean) ?? false,
       show_answer: (detailData.show_answer as boolean) ?? false,
       play_audio: (detailData.play_audio as boolean) ?? false,

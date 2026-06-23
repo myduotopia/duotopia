@@ -8,6 +8,8 @@ import { describe, it, expect } from "vitest";
 import type { SettingSpec } from "@/lib/practiceMode";
 import {
   applySettingChange,
+  clampPerQuestionTime,
+  clampQuizTime,
   isSegmentedOptionActive,
   isShowAnswerLockedByAudio,
   segmentedScoreCategory,
@@ -191,5 +193,27 @@ describe("segmentedScoreCategory — 播放音檔 segmented 由規則推導", ()
     expect(
       segmentedScoreCategory("rearrangement", PLAY_AUDIO as never, no!, base),
     ).toBe("reading");
+  });
+});
+
+describe("clampPerQuestionTime / clampQuizTime — API 時間值夾到合法選項（#879 review）", () => {
+  it("合法值原樣保留", () => {
+    expect(clampPerQuestionTime(20)).toBe(20);
+    expect(clampQuizTime(300)).toBe(300);
+  });
+
+  it("非選項值夾到最近的合法選項", () => {
+    expect(clampPerQuestionTime(15)).toBe(10); // 15 → 10 與 20 等距，reduce 嚴格小於保留先到的 10
+    expect(clampPerQuestionTime(13)).toBe(10);
+    expect(clampPerQuestionTime(26)).toBe(30);
+    expect(clampQuizTime(200)).toBe(180);
+    expect(clampQuizTime(2000)).toBe(1800);
+  });
+
+  it("非數字 / null / undefined → fallback", () => {
+    expect(clampPerQuestionTime(undefined)).toBe(30);
+    expect(clampPerQuestionTime(null)).toBe(30);
+    expect(clampPerQuestionTime("abc")).toBe(30);
+    expect(clampQuizTime(undefined)).toBe(0);
   });
 });
