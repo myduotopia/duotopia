@@ -15,6 +15,7 @@
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   getModeConfig,
@@ -34,26 +35,13 @@ import {
 
 const PM = "dialogs.assignmentDialog.practiceMode";
 
-const TOGGLE_I18N: Partial<
-  Record<SettingKey, { labelKey: string; descKey: string }>
-> = {
-  shuffle_questions: {
-    labelKey: `${PM}.shuffleQuestions`,
-    descKey: `${PM}.shuffleQuestionsDesc`,
-  },
-  show_answer: {
-    labelKey: `${PM}.showAnswer`,
-    descKey: `${PM}.wordSelectionShowAnswerDesc`,
-  },
-  show_translation: {
-    labelKey: `${PM}.showTranslation`,
-    descKey: `${PM}.showTranslationDesc`,
-  },
-  show_image: { labelKey: `${PM}.showImage`, descKey: `${PM}.showImageDesc` },
-  show_option_images: {
-    labelKey: `${PM}.showOptionImages`,
-    descKey: `${PM}.showOptionImagesDesc`,
-  },
+// 開關只顯示「說明」一行（移除原本與說明重複的短標題）—— #878 review
+const TOGGLE_DESC: Partial<Record<SettingKey, string>> = {
+  shuffle_questions: `${PM}.shuffleQuestionsDesc`,
+  show_answer: `${PM}.wordSelectionShowAnswerDesc`,
+  show_translation: `${PM}.showTranslationDesc`,
+  show_image: `${PM}.showImageDesc`,
+  show_option_images: `${PM}.showOptionImagesDesc`,
 };
 
 const SELECT_LABEL: Partial<Record<SettingKey, string>> = {
@@ -102,28 +90,22 @@ export function PracticeModeSettingsPanel({
   const timeDefault = Number(config.defaults.time_limit_per_question ?? 30);
 
   const renderToggle = (spec: SettingSpec & { kind: "toggle" }) => {
-    const i18n = TOGGLE_I18N[spec.key];
     // show_answer 在例句重組用不同描述
     const descKey =
       spec.key === "show_answer" && mode === "rearrangement"
         ? `${PM}.showAnswerDesc`
-        : (i18n?.descKey ?? "");
+        : (TOGGLE_DESC[spec.key] ?? "");
     const locked =
       spec.key === "show_answer" && isShowAnswerLockedByAudio(mode, value);
     return (
       <div className="space-y-1.5">
-        <Label className="text-xs text-gray-600">
-          {t(i18n?.labelKey ?? "")}
-        </Label>
-        <div className="flex items-center h-9">
-          <input
-            type="checkbox"
+        <div className="flex items-center gap-2 h-9">
+          <Switch
             checked={Boolean(v[spec.key])}
             disabled={locked}
-            onChange={(e) => apply(spec, e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            onCheckedChange={(checked) => apply(spec, checked)}
           />
-          <span className="ml-2 text-sm text-gray-600">{t(descKey)}</span>
+          <span className="text-sm text-gray-600">{t(descKey)}</span>
         </div>
         {locked && (
           <p className="text-xs text-red-600">
