@@ -273,6 +273,9 @@ export function AssignmentDetailSheet({
 
   const handleSave = async () => {
     if (!assignment) return;
+    // 細節尚未載入完成就按儲存 → editAdvanced 仍是初始預設值（如 quiz_time_limit_seconds: 0），
+    // PATCH 的 `...editAdvanced` 會覆寫既有設定造成資料遺失。擋住直到 detailData 載入。
+    if (!detailData) return;
     // Validate date order
     if (editStartDate && editDueDate && editStartDate > editDueDate) {
       toast.error(
@@ -834,7 +837,7 @@ export function AssignmentDetailSheet({
                   <X className="h-4 w-4 mr-1.5" />
                   {t("common.cancel", "取消")}
                 </Button>
-                <Button onClick={handleSave} disabled={saving}>
+                <Button onClick={handleSave} disabled={saving || !detailData}>
                   {saving ? (
                     <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
                   ) : (

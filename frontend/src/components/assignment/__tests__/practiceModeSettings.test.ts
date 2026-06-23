@@ -203,11 +203,15 @@ describe("clampPerQuestionTime / clampQuizTime — API 時間值夾到合法選�
   });
 
   it("非選項值夾到最近的合法選項", () => {
-    expect(clampPerQuestionTime(15)).toBe(10); // 15 → 10 與 20 等距，reduce 嚴格小於保留先到的 10
     expect(clampPerQuestionTime(13)).toBe(10);
     expect(clampPerQuestionTime(26)).toBe(30);
     expect(clampQuizTime(200)).toBe(180);
     expect(clampQuizTime(2000)).toBe(1800);
+  });
+
+  it("等距時向上取整（避免夾成不限時）", () => {
+    expect(clampPerQuestionTime(15)).toBe(20); // 10 與 20 等距 → 取 20
+    expect(clampQuizTime(90)).toBe(180); // 0 與 180 等距 → 取 180（非 0=不限時）
   });
 
   it("非數字 / null / undefined → fallback", () => {

@@ -46,8 +46,9 @@ function snapToNearest<T extends number>(
   if (value == null) return fallback; // null/undefined → fallback（保留舊 `?? 30` 行為，Number(null)=0 會誤判）
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
+  // 等距時用 `<=` 取較大選項（向上取整），避免如 quiz 90 落在 0/180 中間卻夾成 0（不限時）。
   return options.reduce(
-    (best, opt) => (Math.abs(opt - n) < Math.abs(best - n) ? opt : best),
+    (best, opt) => (Math.abs(opt - n) <= Math.abs(best - n) ? opt : best),
     options[0],
   );
 }
