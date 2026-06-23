@@ -347,7 +347,9 @@ export function AssignmentDetailSheet({
       time_limit_per_question: clampPerQuestionTime(
         detailData.time_limit_per_question,
       ),
-      quiz_time_limit_seconds: clampQuizTime(detailData.quiz_time_limit_seconds),
+      quiz_time_limit_seconds: clampQuizTime(
+        detailData.quiz_time_limit_seconds,
+      ),
       shuffle_questions: (detailData.shuffle_questions as boolean) ?? false,
       show_answer: (detailData.show_answer as boolean) ?? false,
       play_audio: (detailData.play_audio as boolean) ?? false,

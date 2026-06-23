@@ -106,9 +106,7 @@ export function PracticeModeSettingsPanel({
       spec.key === "show_answer" && isShowAnswerLockedByAudio(mode, value);
     // Issue #631：缺題目圖片時禁止「開啟」顯示選項圖片（已開啟者可關閉）。
     const lockedByMissingImage =
-      spec.key === "show_option_images" &&
-      hasMissingImage &&
-      !v[spec.key];
+      spec.key === "show_option_images" && hasMissingImage && !v[spec.key];
     const disabled = lockedByAudio || lockedByMissingImage;
     return (
       <div className="space-y-1.5">
@@ -119,8 +117,15 @@ export function PracticeModeSettingsPanel({
             onCheckedChange={(checked) => apply(spec, checked)}
           />
           <span
-            className={cn("text-sm", disabled ? "text-gray-400" : "text-gray-600")}
-            title={lockedByMissingImage ? t(`${PM}.showOptionImagesMissing`) : undefined}
+            className={cn(
+              "text-sm",
+              disabled ? "text-gray-400" : "text-gray-600",
+            )}
+            title={
+              lockedByMissingImage
+                ? t(`${PM}.showOptionImagesMissing`)
+                : undefined
+            }
           >
             {t(descKey)}
           </span>
