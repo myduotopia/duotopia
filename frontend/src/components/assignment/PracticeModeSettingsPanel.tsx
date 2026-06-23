@@ -68,19 +68,26 @@ export interface PracticeModeSettingsPanelProps {
   onChange: (next: PracticeModeSettings) => void;
   /**
    * runtime 限制傳入口（registry 說「能調什麼」、context 說「現在能不能調」）。
-   * Stage 3（AssignmentDialog 派發）目前不需傳；保留給 Stage 3.5 接 `locked`（學生已開始）。
+   * - `locked`：學生已開始作答（Stage 3.5 AssignmentDetailSheet），鎖住影響計分的
+   *   segmented 控制（播放音檔 / 題目呈現方式），避免改動 score_category。
+   * - `hasMissingImage`：購物車有項目缺題目圖片時，禁止開啟「顯示選項圖片」（Issue #631），
+   *   否則學生會看到空白圖框。
    */
-  context?: { locked?: boolean };
+  context?: { locked?: boolean; hasMissingImage?: boolean };
 }
 
 export function PracticeModeSettingsPanel({
   mode,
   value,
   onChange,
+  context,
 }: PracticeModeSettingsPanelProps) {
   const { t } = useTranslation();
   const config = getModeConfig(mode);
   if (!config || config.settings.length === 0) return null;
+
+  const locked = Boolean(context?.locked);
+  const hasMissingImage = Boolean(context?.hasMissingImage);
 
   const v = value as unknown as Record<SettingKey, SettingValue>;
   const apply = (spec: SettingSpec, raw: SettingValue) =>
@@ -95,21 +102,37 @@ export function PracticeModeSettingsPanel({
       spec.key === "show_answer" && mode === "rearrangement"
         ? `${PM}.showAnswerDesc`
         : (TOGGLE_DESC[spec.key] ?? "");
-    const locked =
+    const lockedByAudio =
       spec.key === "show_answer" && isShowAnswerLockedByAudio(mode, value);
+    // Issue #631：缺題目圖片時禁止「開啟」顯示選項圖片（已開啟者可關閉）。
+    const lockedByMissingImage =
+      spec.key === "show_option_images" &&
+      hasMissingImage &&
+      !v[spec.key];
+    const disabled = lockedByAudio || lockedByMissingImage;
     return (
       <div className="space-y-1.5">
         <div className="flex items-center gap-2 h-9">
           <Switch
             checked={Boolean(v[spec.key])}
-            disabled={locked}
+            disabled={disabled}
             onCheckedChange={(checked) => apply(spec, checked)}
           />
-          <span className="text-sm text-gray-600">{t(descKey)}</span>
+          <span
+            className={cn("text-sm", disabled ? "text-gray-400" : "text-gray-600")}
+            title={lockedByMissingImage ? t(`${PM}.showOptionImagesMissing`) : undefined}
+          >
+            {t(descKey)}
+          </span>
         </div>
-        {locked && (
+        {lockedByAudio && (
           <p className="text-xs text-red-600">
             {t(`${PM}.showAnswerLockedByAudio`)}
+          </p>
+        )}
+        {lockedByMissingImage && (
+          <p className="text-xs text-amber-600">
+            {t(`${PM}.showOptionImagesMissing`)}
           </p>
         )}
       </div>
@@ -190,9 +213,11 @@ export function PracticeModeSettingsPanel({
             <button
               type="button"
               key={String(opt.value)}
+              disabled={locked}
               onClick={() => apply(spec, opt.value)}
               className={cn(
                 "flex-1 p-3 rounded-lg border text-sm",
+                locked && "opacity-50 cursor-not-allowed",
                 active
                   ? "border-blue-500 bg-blue-50 text-blue-700"
                   : "border-gray-200 hover:border-gray-300",
@@ -232,6 +257,11 @@ export function PracticeModeSettingsPanel({
       <h4 className="text-xs font-semibold mb-2 text-gray-700">
         {t(`${PM}.advancedSettings`)}
       </h4>
+      {locked && (
+        <p className="text-xs text-amber-600 mb-2">
+          {t("assignmentDetail.sheet.lockedSettingHint")}
+        </p>
+      )}
       <div className="space-y-3">
         {config.settings.map((spec, i) => (
           <div key={`${spec.kind}-${spec.key}-${i}`}>{renderSpec(spec)}</div>

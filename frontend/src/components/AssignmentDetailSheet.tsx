@@ -244,6 +244,12 @@ export function AssignmentDetailSheet({
     return `${avg.toFixed(1)}`;
   }, [studentProgress, assignment?.practice_mode]);
 
+  // 是否有學生已開始作答 — 鎖定影響計分的設定（播放音檔 / 題目呈現方式），避免改動 score_category
+  const hasStudentsStarted = useMemo(
+    () => studentProgress.some((sp) => sp.status !== "NOT_STARTED"),
+    [studentProgress],
+  );
+
   const loadContentDetail = async (contentId: number, forceReload = false) => {
     if (!forceReload && contentDetails[contentId]) return;
     if (loadingRef.current.has(contentId)) return;
@@ -552,6 +558,7 @@ export function AssignmentDetailSheet({
                     mode={assignment.practice_mode}
                     value={editAdvanced}
                     onChange={setEditAdvanced}
+                    context={{ locked: hasStudentsStarted }}
                   />
                 )}
               </div>

@@ -3019,6 +3019,12 @@ export function AssignmentDialog({
                           onChange={(next) =>
                             setFormData((prev) => ({ ...prev, ...next }))
                           }
+                          context={{
+                            // Issue #631：購物車有缺題目圖片的項目時，禁止開啟「顯示選項圖片」
+                            hasMissingImage: cartItems.some(
+                              (i) => i.hasMissingImage,
+                            ),
+                          }}
                         />
                       )}
                     </div>

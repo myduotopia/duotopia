@@ -54,7 +54,7 @@ export type PracticeDataset = "example_sentences" | "vocabulary_set";
  * `driverKey` 指出由哪個 setting 驅動，Panel 才能把 score 提示畫在對應控制項旁。
  */
 export type ScoreCategoryRule =
-  /** 永遠固定（reading/word_reading→speaking；word_cloze(_quiz)→reading）。 */
+  /** 永遠固定，不受 play_audio／作答方式影響（如 reading/word_reading→speaking）。 */
   | { kind: "static"; category: ScoreCategory }
   /** 看 play_audio：on→listening、off→whenSilent（rearrangement 的 whenSilent=reading，其餘=writing）。 */
   | { kind: "audio-based"; driverKey: "play_audio"; whenSilent: ScoreCategory }
