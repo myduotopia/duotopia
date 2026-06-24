@@ -93,6 +93,27 @@ def _ensure_distractors_for_content(db: Session, content_id: int) -> None:
             ]
 
 
+def _regenerate_word_selection_distractors_for_content(
+    db: Session, content_id: int, show_image: bool
+) -> None:
+    """word_selection：依 show_image 重生干擾項語言並覆寫。
+
+    show_image=true → 選項用英文單字（item.text）；false → 用定義（translation）+ image_url。
+    鏡射派發 PATCH 的 `regenerate_word_selection_distractors`（crud.py），讓即刻練習選項
+    語言與學生端/派發一致（#854：即刻練習選項顯示定義而非單字的 bug）。需覆寫（非補缺），
+    因為複製出的 item 可能帶著來源語言不符的舊干擾項。
+    """
+    from utils.distractors import regenerate_word_selection_distractors
+
+    items = (
+        db.query(ContentItem)
+        .filter(ContentItem.content_id == content_id)
+        .order_by(ContentItem.order_index)
+        .all()
+    )
+    regenerate_word_selection_distractors(items, show_image)
+
+
 @router.post("/instant-practice/create")
 async def create_instant_practice(
     request: InstantPracticeRequest,
@@ -195,9 +216,12 @@ async def create_instant_practice(
         db.add(item_copy)
         db.flush()
 
-    # word_selection / tug_of_war 模式：為缺少干擾項的 items 生成
-    # Issue #631: 干擾項升級為 list[{text, image_url}]
-    if request.practice_mode in ("word_selection", "tug_of_war"):
+    # 產生干擾項：word_selection 依 show_image 決定選項語言（#854）；tug_of_war 維持定義
+    if request.practice_mode == "word_selection":
+        _regenerate_word_selection_distractors_for_content(
+            db, content_copy.id, bool(request.show_image)
+        )
+    elif request.practice_mode == "tug_of_war":
         _ensure_distractors_for_content(db, content_copy.id)
 
     # 建立 Assignment
@@ -352,7 +376,8 @@ async def reconfigure_instant_practice(
         request.practice_mode, request.play_audio
     )
 
-    # 切到需要干擾項的模式時，為複製出的 content 補齊
+    # 重生/補齊干擾項：word_selection 依 show_image 決定選項語言（#854，含單純切
+    # show_image 不換模式的情況）；tug_of_war 維持定義。
     if request.practice_mode in ("word_selection", "tug_of_war"):
         content_ids = [
             ac.content_id
@@ -361,7 +386,12 @@ async def reconfigure_instant_practice(
             .all()
         ]
         for content_id in content_ids:
-            _ensure_distractors_for_content(db, content_id)
+            if request.practice_mode == "word_selection":
+                _regenerate_word_selection_distractors_for_content(
+                    db, content_id, bool(request.show_image)
+                )
+            else:
+                _ensure_distractors_for_content(db, content_id)
 
     # 從頭重練：重設進度狀態
     sa_ids = [
