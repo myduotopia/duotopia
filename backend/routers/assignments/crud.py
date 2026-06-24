@@ -361,6 +361,9 @@ async def create_assignment(
         answer_mode=sanitized_answer_mode,
         time_limit_per_question=request.time_limit_per_question,
         quiz_time_limit_seconds=request.quiz_time_limit_seconds,
+        # Issue #835: live 模式僅對小考有效；非小考一律 False
+        is_live_quiz=bool(getattr(request, "is_live_quiz", False))
+        and (request.practice_mode or "").endswith("_quiz"),
         shuffle_questions=request.shuffle_questions or False,
         show_answer=request.show_answer or False,
         play_audio=request.play_audio or False,
@@ -768,6 +771,18 @@ async def get_assignments(
                 "content_type": content_type,
                 "practice_mode": assignment.practice_mode,
                 "answer_mode": assignment.answer_mode,
+                # Issue #835: Live quiz mode — 老師端作業列 switch 狀態
+                "is_live_quiz": bool(getattr(assignment, "is_live_quiz", False)),
+                "quiz_opened_at": (
+                    assignment.quiz_opened_at.isoformat()
+                    if assignment.quiz_opened_at
+                    else None
+                ),
+                "quiz_closed_at": (
+                    assignment.quiz_closed_at.isoformat()
+                    if assignment.quiz_closed_at
+                    else None
+                ),
                 # 封存狀態
                 "is_archived": assignment.is_archived or False,
                 "archived_at": (
@@ -953,6 +968,7 @@ async def patch_assignment(
     advanced_fields = [
         "time_limit_per_question",
         "quiz_time_limit_seconds",  # Issue #828
+        "is_live_quiz",  # Issue #835
         "shuffle_questions",
         "show_answer",
         "play_audio",
@@ -966,6 +982,12 @@ async def patch_assignment(
     for field in advanced_fields:
         if field in provided:
             setattr(assignment, field, getattr(request, field))
+
+    # Issue #835: live 模式僅對小考有效（practice_mode 在 PATCH 不可變）
+    if "is_live_quiz" in provided and not (assignment.practice_mode or "").endswith(
+        "_quiz"
+    ):
+        assignment.is_live_quiz = False
 
     # If play_audio changed, recompute score_category (practice_mode is
     # immutable on PATCH so we only need to react to audio toggles).

@@ -203,6 +203,20 @@ async def get_student_assignments(
                 "score_category": score_category,
                 "practice_mode": p_mode,
                 "content_count": content_count,
+                # Issue #835: Live quiz — 作業卡依此切「等待老師開始/進入/已收卷」
+                "is_live_quiz": bool(getattr(parent, "is_live_quiz", False))
+                if parent
+                else False,
+                "quiz_opened_at": (
+                    parent.quiz_opened_at.isoformat()
+                    if parent and parent.quiz_opened_at
+                    else None
+                ),
+                "quiz_closed_at": (
+                    parent.quiz_closed_at.isoformat()
+                    if parent and parent.quiz_closed_at
+                    else None
+                ),
             }
         )
 

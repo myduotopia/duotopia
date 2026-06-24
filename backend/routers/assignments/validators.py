@@ -46,6 +46,8 @@ class CreateAssignmentRequest(BaseModel):
     time_limit_per_question: Optional[int] = None
     # Issue #828: 小考整卷限時（秒）；null 不限時
     quiz_time_limit_seconds: Optional[int] = None
+    # Issue #835: 老師主控 live 考試模式（同步開始/收卷，無倒數）
+    is_live_quiz: Optional[bool] = False
     shuffle_questions: Optional[bool] = False
     show_answer: Optional[bool] = False
     play_audio: Optional[bool] = False
@@ -82,6 +84,7 @@ class UpdateAssignmentRequest(BaseModel):
     # 進階設定
     time_limit_per_question: Optional[int] = None
     quiz_time_limit_seconds: Optional[int] = None
+    is_live_quiz: Optional[bool] = None  # Issue #835
     shuffle_questions: Optional[bool] = None
     show_answer: Optional[bool] = None
     play_audio: Optional[bool] = None

@@ -309,7 +309,7 @@ export function RequestRevisionModal({
                 status: "NOT_STARTED" as const,
                 score: undefined,
                 correct_count: null,
-                total_questions: null,
+                // total_questions 是整卷題數常數，還原不該清掉（否則 metric 變 —/—）
                 metrics: null,
                 is_interim_score: false,
               }
@@ -409,7 +409,7 @@ export function RequestRevisionModal({
                   status: "NOT_STARTED" as const,
                   score: undefined,
                   correct_count: null,
-                  total_questions: null,
+                  // total_questions 是整卷題數常數，還原不該清掉（否則 metric 變 —/—）
                   metrics: null,
                   is_interim_score: false,
                 }

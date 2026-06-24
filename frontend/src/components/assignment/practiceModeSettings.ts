@@ -21,6 +21,8 @@ import type { ScoreCategory } from "@/utils/scoreCategory";
 export interface PracticeModeSettings {
   time_limit_per_question: 0 | 10 | 20 | 30 | 40;
   quiz_time_limit_seconds: 0 | 180 | 300 | 600 | 900 | 1200 | 1800;
+  // Issue #835: 老師主控 live 考試模式（同步開始/收卷，無倒數）
+  is_live_quiz: boolean;
   shuffle_questions: boolean;
   show_answer: boolean;
   play_audio: boolean;

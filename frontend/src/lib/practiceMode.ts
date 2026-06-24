@@ -70,6 +70,7 @@ export type ScoreCategoryRule =
 export type SettingKey =
   | "time_limit_per_question"
   | "quiz_time_limit_seconds"
+  | "is_live_quiz"
   | "shuffle_questions"
   | "show_answer"
   | "play_audio"
@@ -120,7 +121,13 @@ export type SettingSpec =
       /** 各按鈕的 score 提示由 `resolveScoreCategoryFE` 推導（取代硬寫「→聽力/→寫作」）。 */
       scoreHint?: boolean;
     }
-  | { kind: "select"; key: SettingKey; options: SelectOption[] }
+  | {
+      kind: "select";
+      key: SettingKey;
+      options: SelectOption[];
+      /** Issue #835: 依另一個 setting 的值隱藏此控制項（如 is_live_quiz 開啟時隱藏整卷限時）。 */
+      hideWhen?: { key: SettingKey; equals: SettingValue };
+    }
   | { kind: "number"; key: SettingKey; min: number; max: number; step: number }
   | {
       kind: "ranked";
@@ -256,6 +263,8 @@ const SELECT_TIME_SPELLING_CLOZE: SettingSpec = {
 const SELECT_QUIZ_TIME: SettingSpec = {
   kind: "select",
   key: "quiz_time_limit_seconds",
+  // Issue #835: 老師主控 live 考試無倒數，由老師收卷結束 → 開啟時隱藏整卷限時。
+  hideWhen: { key: "is_live_quiz", equals: true },
   options: [
     { value: 0, labelKey: `${PM}.unlimited` },
     { value: 180, label: "3 分鐘" },
@@ -266,6 +275,8 @@ const SELECT_QUIZ_TIME: SettingSpec = {
     { value: 1800, label: "30 分鐘" },
   ],
 };
+/** Issue #835: 老師主控 live 考試模式（同步開始/收卷，無倒數）—— 只對三種小考顯示。 */
+const TOGGLE_LIVE_QUIZ: SettingSpec = { kind: "toggle", key: "is_live_quiz" };
 /** 例句重組「播放音檔」雙按鈕（score 提示由規則推導）。 */
 const SEGMENTED_PLAY_AUDIO: SettingSpec = {
   kind: "segmented",
@@ -466,6 +477,7 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     // #878：移除「顯示答案」—— 小考最終整卷顯示答案，此單題開關無作用
     settings: [
       SEGMENTED_DISPLAY_SELECTION,
+      TOGGLE_LIVE_QUIZ,
       SELECT_QUIZ_TIME,
       TOGGLE_SHOW_IMAGE,
       TOGGLE_SHOW_OPTION_IMAGES,
@@ -538,8 +550,9 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     gradable: false,
     settings: [
       SEGMENTED_DISPLAY_TEXT,
+      TOGGLE_LIVE_QUIZ,
       SELECT_QUIZ_TIME,
-      TOGGLE_SHOW_ANSWER,
+      // #878 修正：小考整卷結束才揭示答案，移除無作用的單題 show_answer 開關（與 word_selection_quiz 一致）
       TOGGLE_SHOW_IMAGE,
     ],
     defaults: {
@@ -580,6 +593,7 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
       NUMBER_TARGET_PROFICIENCY,
       SEGMENTED_DISPLAY_TEXT,
       SELECT_TIME_SPELLING_CLOZE,
+      TOGGLE_SHOW_ANSWER, // #878 修正：克漏字艾賓浩斯答錯時揭示正解；play_audio 時鎖定由 Panel runtime 處理
       TOGGLE_SHOW_IMAGE,
     ],
     defaults: {
@@ -617,7 +631,12 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     autoGraded: true,
     gradable: false,
     // #878：移除「顯示答案」—— 小考最終整卷顯示答案，此單題開關無作用
-    settings: [SEGMENTED_DISPLAY_TEXT, SELECT_QUIZ_TIME, TOGGLE_SHOW_IMAGE],
+    settings: [
+      SEGMENTED_DISPLAY_TEXT,
+      TOGGLE_LIVE_QUIZ,
+      SELECT_QUIZ_TIME,
+      TOGGLE_SHOW_IMAGE,
+    ],
     defaults: {
       time_limit_per_question: 0,
       show_translation: true,

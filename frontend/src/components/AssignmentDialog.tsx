@@ -488,6 +488,8 @@ export function AssignmentDialog({
     time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40, // 每題時間限制 (0 = 不限時)
     // Issue #828: 小考整卷限時（秒）；null/0 不限時，預設 0
     quiz_time_limit_seconds: 0 as 0 | 180 | 300 | 600 | 900 | 1200 | 1800,
+    // Issue #835: 老師主控 live 考試模式（同步開始/收卷，無倒數）
+    is_live_quiz: false,
     shuffle_questions: false, // 是否打亂順序
     show_answer: false, // 答題結束後是否顯示正確答案（例句重組專用）
     play_audio: false, // 是否播放音檔（例句重組/單字集專用）
@@ -691,6 +693,7 @@ export function AssignmentDialog({
         practice_mode: "word_selection",
         time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40,
         quiz_time_limit_seconds: 0 as 0 | 180 | 300 | 600 | 900 | 1200 | 1800,
+        is_live_quiz: false,
         shuffle_questions: false,
         show_answer: false,
         play_audio: false,
@@ -1258,7 +1261,14 @@ export function AssignmentDialog({
         answer_mode: answerMode,
         practice_mode: formData.practice_mode,
         time_limit_per_question: formData.time_limit_per_question,
-        quiz_time_limit_seconds: formData.quiz_time_limit_seconds || null,
+        // Issue #835: live 模式無倒數，整卷限時一律送 null
+        quiz_time_limit_seconds: formData.is_live_quiz
+          ? null
+          : formData.quiz_time_limit_seconds || null,
+        // 只有小考模式可開 live；其餘類型一律送 false
+        is_live_quiz: formData.practice_mode?.endsWith("_quiz")
+          ? formData.is_live_quiz
+          : false,
         shuffle_questions: formData.shuffle_questions,
         show_answer: formData.show_answer,
         play_audio: formData.play_audio,
@@ -1446,6 +1456,7 @@ export function AssignmentDialog({
       practice_mode: "word_selection",
       time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40,
       quiz_time_limit_seconds: 0 as 0 | 180 | 300 | 600 | 900 | 1200 | 1800,
+      is_live_quiz: false,
       shuffle_questions: false,
       show_answer: false,
       play_audio: false,

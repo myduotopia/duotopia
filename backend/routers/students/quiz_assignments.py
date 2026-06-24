@@ -301,12 +301,37 @@ def _get_quiz_session(
     return session
 
 
+def _guard_live_gate(assignment: Assignment) -> None:
+    """Issue #835: live quiz 由老師主控開放/收卷。
+
+    - 未開放（quiz_opened_at null）→ 403：學生還不能進考卷。
+    - 已收卷（quiz_closed_at 非 null）→ 409：考試已結束（前端應導向 review）。
+    self-paced（is_live_quiz=False）不受任何影響。
+    """
+    if not getattr(assignment, "is_live_quiz", False):
+        return
+    if assignment.quiz_opened_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "QUIZ_NOT_OPENED"},
+        )
+    if assignment.quiz_closed_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "QUIZ_CLOSED"},
+        )
+
+
 def _time_remaining(assignment: Assignment, session: PracticeSession) -> Optional[int]:
     """Compute seconds left for a quiz session.
 
     None ⇒ no whole-paper limit. Negative results clamp to 0 so the
     frontend can immediately auto-submit on next user interaction.
+
+    Issue #835: live quiz 無倒數 — 由老師按收卷統一結束，故一律回 None。
     """
+    if getattr(assignment, "is_live_quiz", False):
+        return None
     total = assignment.quiz_time_limit_seconds
     if not total:
         return None
@@ -349,6 +374,47 @@ def _attach_question_numbers(items: List[ContentItem], builder) -> List[Dict[str
         record["question_number"] = idx
         out.append(record)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Live quiz status (Issue #835) — lightweight polling for students
+# ---------------------------------------------------------------------------
+
+
+@router.get("/assignments/{assignment_id}/quiz/status")
+async def get_quiz_live_status(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """學生端輕量輪詢（每 3–5 秒）：只回開放/收卷閘門，不含題目。
+
+    前端據此切作業卡狀態、進入考卷 route guard、以及偵測「老師已收卷」後跳離。
+    ``assignment_id`` 為 StudentAssignment.id（與其餘 quiz 端點一致）。
+    """
+    student_id = int(current_student.get("sub"))
+    sa = _get_student_assignment_or_404(db, assignment_id, student_id)
+    # 注意：path 的 assignment_id 是 StudentAssignment.id；真正的 Assignment 要靠 sa.assignment_id 反查。
+    assignment = (
+        db.query(Assignment).filter(Assignment.id == sa.assignment_id).first()
+        if sa.assignment_id
+        else None
+    )
+    if assignment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found"
+        )
+
+    opened_at = assignment.quiz_opened_at
+    closed_at = assignment.quiz_closed_at
+    return {
+        "is_live_quiz": bool(getattr(assignment, "is_live_quiz", False)),
+        "opened_at": opened_at.isoformat() if opened_at else None,
+        "closed_at": closed_at.isoformat() if closed_at else None,
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        # SUBMITTED/RESUBMITTED/GRADED ⇒ 前端可導向 review 批改檢視
+        "status": sa.status.value if sa.status else None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +478,8 @@ async def start_word_selection_quiz(
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
     assignment = _get_assignment_or_400(db, sa, "word_selection_quiz")
     _block_if_submitted(sa)
+
+    _guard_live_gate(assignment)
 
     session = _start_quiz_session(db, student_id, sa, "word_selection_quiz")
     items = _load_quiz_items(
@@ -525,6 +593,8 @@ async def start_word_spelling_quiz(
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
     assignment = _get_assignment_or_400(db, sa, "word_spelling_quiz")
     _block_if_submitted(sa)
+
+    _guard_live_gate(assignment)
 
     session = _start_quiz_session(db, student_id, sa, "word_spelling_quiz")
     items = _load_quiz_items(
@@ -644,6 +714,8 @@ async def start_word_cloze_quiz(
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
     assignment = _get_assignment_or_400(db, sa, "word_cloze_quiz")
     _block_if_submitted(sa)
+
+    _guard_live_gate(assignment)
 
     session = _start_quiz_session(db, student_id, sa, "word_cloze_quiz")
     items = _load_quiz_items(

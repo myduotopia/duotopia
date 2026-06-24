@@ -54,6 +54,8 @@ import WordSelectionQuizActivity from "@/components/activities/WordSelectionQuiz
 import WordSpellingQuizPreview from "@/components/activities/WordSpellingQuizPreview";
 import WordClozeQuizPreview from "@/components/activities/WordClozeQuizPreview";
 import WordSelectionQuizPreview from "@/components/activities/WordSelectionQuizPreview";
+import { useQuizStatusPolling } from "@/components/activities/shared/useQuizStatusPolling";
+import { apiClient } from "@/lib/api";
 import {
   ChevronLeft,
   ChevronRight,
@@ -341,6 +343,47 @@ export default function StudentActivityPageContent({
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [incompleteItems, setIncompleteItems] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
+
+  // Issue #835: Live quiz — 進入 guard + 收卷輪詢
+  // liveQuizOpen = 進入時是 live 且「正在開放中」(opened 且未 closed)。
+  // 只有此情況才輪詢偵測收卷 → 作答中被收卷會踢回；進來時已收卷(看 review)不輪詢、不踢人。
+  const [liveQuizOpen, setLiveQuizOpen] = useState(false);
+  const liveQuizActive = isQuizMode && !isPreviewMode && !isDemoMode;
+  useEffect(() => {
+    if (!liveQuizActive || !assignmentId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await apiClient.getStudentQuizStatus(assignmentId);
+        if (cancelled) return;
+        setLiveQuizOpen(s.is_live_quiz && !!s.opened_at && !s.closed_at);
+        // 老師尚未開始（未開放且未收卷）→ 不該進來，導回作業列表
+        if (s.is_live_quiz && !s.opened_at && !s.closed_at) {
+          toast.info(
+            t("studentActivityPage.liveQuiz.waitingTeacher") ||
+              "老師尚未開始考試",
+          );
+          onBack?.();
+        }
+      } catch {
+        // 非 live quiz 或暫態錯誤：忽略，照常渲染
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [liveQuizActive, assignmentId, onBack, t]);
+
+  useQuizStatusPolling({
+    // 此處 assignmentId 實為 StudentAssignment.id（路由 param），符合 /quiz/status 端點約定
+    studentAssignmentId: assignmentId,
+    enabled: liveQuizActive && liveQuizOpen,
+    intervalMs: 3000,
+    onClosed: () => {
+      toast.info(t("studentActivityPage.liveQuiz.collected") || "老師已收卷");
+      onBack?.();
+    },
+  });
 
   // 任何題目未錄音 / 錄音未上傳到 GCS 時，禁用提交按鈕
   const isSubmitBlockedByRecording = useMemo(
