@@ -52,6 +52,10 @@ class Settings:
     # Supabase (optional)
     SUPABASE_URL: Optional[str] = os.getenv("SUPABASE_URL")
     SUPABASE_KEY: Optional[str] = os.getenv("SUPABASE_KEY")
+    # Realtime broadcast 用（#835 live quiz 收卷推播）。優先 service role；
+    # 缺則退回 SUPABASE_KEY / SUPABASE_ANON_KEY。三者皆無 → broadcast 靜默略過（fallback polling 接手）。
+    SUPABASE_SERVICE_KEY: Optional[str] = os.getenv("SUPABASE_SERVICE_KEY")
+    SUPABASE_ANON_KEY: Optional[str] = os.getenv("SUPABASE_ANON_KEY")
 
     # Google OAuth (optional)
     GOOGLE_CLIENT_ID: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")

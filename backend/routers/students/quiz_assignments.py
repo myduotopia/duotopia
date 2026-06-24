@@ -408,6 +408,9 @@ async def get_quiz_live_status(
     opened_at = assignment.quiz_opened_at
     closed_at = assignment.quiz_closed_at
     return {
+        # teacher 端 Assignment.id（非 path 的 StudentAssignment.id）：供前端訂閱
+        # Supabase Realtime 收卷頻道 live-quiz:{assignment_id}（#835 / PR #881 點 1）。
+        "assignment_id": assignment.id,
         "is_live_quiz": bool(getattr(assignment, "is_live_quiz", False)),
         "opened_at": opened_at.isoformat() if opened_at else None,
         "closed_at": closed_at.isoformat() if closed_at else None,

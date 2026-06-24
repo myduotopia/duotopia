@@ -49,7 +49,9 @@ export default function LiveQuizMonitorModal({
   practiceMode,
   title,
   onClosed,
-  intervalMs = 2000,
+  // 監考看板無需 2 秒級即時刷新；放寬到 3.5s 以降低 /quiz/live-progress
+  // 聚合查詢與 Cloud Run 並發壓力（多班同時考時更明顯）。詳見 PR #881 後續優化建議。
+  intervalMs = 3500,
 }: Props) {
   const { t } = useTranslation();
   const [progress, setProgress] = useState<LiveQuizProgress | null>(null);

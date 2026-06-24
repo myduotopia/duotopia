@@ -220,6 +220,8 @@ export interface LiveQuizProgress extends LiveQuizStatus {
 }
 
 export interface StudentQuizStatus {
+  /** teacher 端 Assignment.id（非 StudentAssignment.id），用於訂閱 Realtime 收卷頻道 */
+  assignment_id: number;
   is_live_quiz: boolean;
   opened_at: string | null;
   closed_at: string | null;

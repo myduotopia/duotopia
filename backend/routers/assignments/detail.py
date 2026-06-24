@@ -712,6 +712,15 @@ async def close_live_quiz(
     db.commit()
     db.refresh(assignment)
 
+    # Issue #835 點 1：收卷後推播 Realtime broadcast，讓全班學生即時跳離考卷頁。
+    # broadcast_quiz_closed 永不拋例外；未設定 Supabase 或失敗時，學生端 polling fallback 接手。
+    from services.realtime_broadcast import broadcast_quiz_closed
+
+    if assignment.quiz_closed_at is not None:
+        await broadcast_quiz_closed(
+            assignment.id, assignment.quiz_closed_at.isoformat()
+        )
+
     result = _quiz_control_status(assignment)
     result["force_completed_count"] = forced
     return result
