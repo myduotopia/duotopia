@@ -179,6 +179,7 @@ export default function TeacherAssignmentPreviewPage() {
           {
             practice_mode: mode,
             time_limit_per_question: settings.time_limit_per_question,
+            quiz_time_limit_seconds: settings.quiz_time_limit_seconds,
             shuffle_questions: settings.shuffle_questions,
             show_answer: settings.show_answer,
             play_audio: settings.play_audio,

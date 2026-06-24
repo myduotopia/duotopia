@@ -311,9 +311,19 @@ class InstantPracticeReconfigureRequest(BaseModel):
     """即刻練習練習畫面即時調整設定（改完從頭重練）"""
 
     practice_mode: Literal[
-        "reading", "rearrangement", "word_reading", "word_selection", "tug_of_war"
+        "reading",
+        "rearrangement",
+        "word_reading",
+        "word_selection",
+        "word_selection_quiz",
+        "word_spelling",
+        "word_spelling_quiz",
+        "word_cloze",
+        "word_cloze_quiz",
+        "tug_of_war",
     ]
     time_limit_per_question: Optional[int] = None
+    quiz_time_limit_seconds: Optional[int] = None  # 小考整卷限時
     shuffle_questions: bool = False
     show_answer: bool = False
     play_audio: bool = False
@@ -341,7 +351,7 @@ async def reconfigure_instant_practice(
 
     僅限本人建立的即刻練習作業：
     - 更新進階設定，依 (practice_mode, play_audio) 重算 score_category
-    - 切到 word_selection / tug_of_war 時，為複製出的 content 補齊干擾項
+    - word_selection(含小考)依 show_image 重生選項語言；tug_of_war 補定義干擾項
     - 重設 StudentAssignment / StudentContentProgress / StudentItemProgress
       狀態為 NOT_STARTED，達成「從頭重練」
     """
@@ -363,6 +373,7 @@ async def reconfigure_instant_practice(
     # 更新進階設定
     assignment.practice_mode = request.practice_mode
     assignment.time_limit_per_question = request.time_limit_per_question
+    assignment.quiz_time_limit_seconds = request.quiz_time_limit_seconds
     assignment.shuffle_questions = request.shuffle_questions
     assignment.show_answer = request.show_answer
     assignment.play_audio = request.play_audio
@@ -376,9 +387,13 @@ async def reconfigure_instant_practice(
         request.practice_mode, request.play_audio
     )
 
-    # 重生/補齊干擾項：word_selection 依 show_image 決定選項語言（#854，含單純切
-    # show_image 不換模式的情況）；tug_of_war 維持定義。
-    if request.practice_mode in ("word_selection", "tug_of_war"):
+    # 重生/補齊干擾項：word_selection(含小考)依 show_image 決定選項語言（#854，含單純切
+    # show_image 不換模式的情況）；tug_of_war 維持定義；spelling/cloze(含小考)不需干擾項。
+    if request.practice_mode in (
+        "word_selection",
+        "word_selection_quiz",
+        "tug_of_war",
+    ):
         content_ids = [
             ac.content_id
             for ac in db.query(AssignmentContent)
@@ -386,7 +401,7 @@ async def reconfigure_instant_practice(
             .all()
         ]
         for content_id in content_ids:
-            if request.practice_mode == "word_selection":
+            if request.practice_mode in ("word_selection", "word_selection_quiz"):
                 _regenerate_word_selection_distractors_for_content(
                     db, content_id, bool(request.show_image)
                 )

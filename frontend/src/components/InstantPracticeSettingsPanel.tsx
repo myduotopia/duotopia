@@ -14,23 +14,15 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { SlidersHorizontal, ChevronDown, Loader2 } from "lucide-react";
+import { SlidersHorizontal, ChevronDown, Loader2, Brain } from "lucide-react";
 import {
   applyModeDefaults,
+  getModeConfig,
   instantPracticeModesForContentType,
   type PracticeMode,
 } from "@/lib/practiceMode";
 import PracticeModeSettingsPanel from "@/components/assignment/PracticeModeSettingsPanel";
 import type { PracticeModeSettings } from "@/components/assignment/practiceModeSettings";
-
-/** 模式 chip 顯示文字（沿用 InstantPracticeDialog 既有 i18n key，保持與啟動清單一致）。 */
-const MODE_LABEL_KEY: Record<string, string> = {
-  reading: "instantPractice.modes.reading.label",
-  rearrangement: "instantPractice.modes.rearrangement.label",
-  word_reading: "instantPractice.modes.wordReading.label",
-  word_selection: "instantPractice.modes.wordSelection.label",
-  tug_of_war: "instantPractice.modes.tugOfWar.label",
-};
 
 interface InstantPracticeSettingsPanelProps {
   mode: PracticeMode;
@@ -78,9 +70,8 @@ export default function InstantPracticeSettingsPanel({
       <Button
         type="button"
         size="sm"
-        variant="outline"
         onClick={() => (open ? setOpen(false) : handleOpen())}
-        className="px-2 sm:px-3 border-amber-300 text-amber-700 hover:bg-amber-50"
+        className="btn-amber-shine px-2 sm:px-3 bg-amber-500 text-white hover:bg-amber-600"
       >
         <SlidersHorizontal className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
         <span className="hidden sm:inline">
@@ -111,6 +102,9 @@ export default function InstantPracticeSettingsPanel({
                 </span>
                 <div className="flex flex-wrap gap-2">
                   {modes.map((m) => {
+                    const cfg = getModeConfig(m);
+                    if (!cfg) return null;
+                    const ModeIcon = cfg.icon;
                     const active = m === draftMode;
                     return (
                       <button
@@ -118,13 +112,20 @@ export default function InstantPracticeSettingsPanel({
                         key={m}
                         onClick={() => pickMode(m)}
                         className={cn(
-                          "rounded-full border px-3 py-1 text-xs",
+                          "shrink-0 flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-all",
                           active
-                            ? "border-amber-500 bg-amber-100 text-amber-800 dark:bg-amber-900/30"
-                            : "border-gray-200 text-gray-600 hover:border-gray-300",
+                            ? cn(cfg.chipSelectedClass, "shadow-sm font-semibold")
+                            : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50",
                         )}
                       >
-                        {t(MODE_LABEL_KEY[m] ?? m)}
+                        <ModeIcon className="h-4 w-4 shrink-0" />
+                        <span>{t(cfg.chipTitleKey ?? cfg.labelKey)}</span>
+                        {cfg.isMemoryBased && (
+                          <Brain
+                            className="h-3.5 w-3.5 shrink-0 opacity-70"
+                            aria-label="採用艾賓浩斯記憶曲線"
+                          />
+                        )}
                       </button>
                     );
                   })}

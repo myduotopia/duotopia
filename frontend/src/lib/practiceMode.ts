@@ -714,25 +714,17 @@ export function contentTypeToDataset(
 }
 
 /**
- * 即刻練習可選的模式（依資料集），與 InstantPracticeDialog 啟動清單一致：
- * 例句集 → reading / rearrangement；單字集 → word_reading / word_selection / tug_of_war。
- * 注意：刻意「不等於」listModesForDataset（派發用）—— 即刻練習含 tug_of_war、
- * 不含小考 / 拼寫 / 克漏字。
+ * 即刻練習練習畫面可切換的模式 chip 列。與派發 sheet 同源（`listModesForDataset`）以
+ * 保持 chip 名稱/順序一致，另在單字集補上 `tug_of_war`（listModesForDataset 不含它，
+ * 因為它不經 AssignmentDialog 派發，但即刻練習要提供）。
  */
-export const INSTANT_PRACTICE_MODES_BY_DATASET: Record<
-  PracticeDataset,
-  PracticeMode[]
-> = {
-  example_sentences: ["reading", "rearrangement"],
-  vocabulary_set: ["word_reading", "word_selection", "tug_of_war"],
-};
-
-/** 依 content.type 回傳即刻練習可切換的模式 chip 列。 */
 export function instantPracticeModesForContentType(
   type?: string | null,
 ): PracticeMode[] {
   const dataset = contentTypeToDataset(type);
-  return dataset ? INSTANT_PRACTICE_MODES_BY_DATASET[dataset] : [];
+  if (!dataset) return [];
+  const modes = listModesForDataset(dataset);
+  return dataset === "vocabulary_set" ? [...modes, "tug_of_war"] : modes;
 }
 
 /**

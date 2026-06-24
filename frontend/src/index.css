@@ -287,3 +287,41 @@ body {
     animation: none;
   }
 }
+
+/* #854: 即刻練習「進階設定」橘色按鈕 — 金屬光澤掃光（整塊橘底，白色高光由左掃到右） */
+@keyframes amber-sheen {
+  0% {
+    transform: translateX(-160%) skewX(-18deg);
+  }
+  60%,
+  100% {
+    transform: translateX(260%) skewX(-18deg);
+  }
+}
+.btn-amber-shine {
+  position: relative;
+  overflow: hidden;
+}
+.btn-amber-shine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 45%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  transform: translateX(-160%) skewX(-18deg);
+  animation: amber-sheen 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-amber-shine::after {
+    animation: none;
+    opacity: 0;
+  }
+}
