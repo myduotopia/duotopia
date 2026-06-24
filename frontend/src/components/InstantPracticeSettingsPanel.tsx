@@ -14,7 +14,14 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { SlidersHorizontal, ChevronDown, Loader2, Brain } from "lucide-react";
+import {
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Brain,
+} from "lucide-react";
 import {
   applyModeDefaults,
   getModeConfig,
@@ -48,7 +55,36 @@ export default function InstantPracticeSettingsPanel({
   const modes = instantPracticeModesForContentType(contentType);
   const activeChipRef = useRef<HTMLButtonElement>(null);
 
-  // 展開時把目前選中的模式 chip 捲到可見位置（單行橫向捲動，避免它落在捲動區外看不到）
+  // 模式 chip 列橫向捲動 + 左右箭頭/邊緣漸層（鏡射 AssignmentDialog 派發 sheet）
+  const chipRowRef = useRef<HTMLDivElement>(null);
+  const [chipCanScrollLeft, setChipCanScrollLeft] = useState(false);
+  const [chipCanScrollRight, setChipCanScrollRight] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const el = chipRowRef.current;
+    if (!el) return;
+    const update = () => {
+      setChipCanScrollLeft(el.scrollLeft > 0);
+      setChipCanScrollRight(
+        el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
+      );
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [open]);
+  const scrollChips = (dir: "left" | "right") => {
+    const el = chipRowRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === "left" ? -200 : 200, behavior: "smooth" });
+  };
+
+  // 展開時把目前選中的模式 chip 捲到可見位置（避免它落在捲動區外看不到）
   useEffect(() => {
     if (open) {
       activeChipRef.current?.scrollIntoView({
@@ -105,42 +141,74 @@ export default function InstantPracticeSettingsPanel({
             aria-hidden
           />
           {/* 向下下拉浮層：蓋在練習內容上，不推開題目 */}
-          <div className="absolute right-0 top-full z-50 mt-2 flex max-h-[70vh] w-[min(92vw,360px)] flex-col overflow-hidden rounded-lg border border-amber-200 bg-white shadow-xl dark:bg-gray-900">
+          <div className="absolute right-0 top-full z-50 mt-2 flex max-h-[70vh] w-[min(92vw,720px)] flex-col overflow-hidden rounded-lg border border-amber-200 bg-white shadow-xl dark:bg-gray-900">
             <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
               <div className="space-y-1.5">
                 <span className="text-xs text-gray-600">
                   {t("instantPractice.modeLabel")}
                 </span>
-                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-                  {modes.map((m) => {
-                    const cfg = getModeConfig(m);
-                    if (!cfg) return null;
-                    const ModeIcon = cfg.icon;
-                    const active = m === draftMode;
-                    return (
-                      <button
-                        type="button"
-                        key={m}
-                        ref={active ? activeChipRef : undefined}
-                        onClick={() => pickMode(m)}
-                        className={cn(
-                          "shrink-0 flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-all",
-                          active
-                            ? cn(cfg.chipSelectedClass, "shadow-sm font-semibold")
-                            : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50",
-                        )}
-                      >
-                        <ModeIcon className="h-4 w-4 shrink-0" />
-                        <span>{t(cfg.chipTitleKey ?? cfg.labelKey)}</span>
-                        {cfg.isMemoryBased && (
-                          <Brain
-                            className="h-3.5 w-3.5 shrink-0 opacity-70"
-                            aria-label="採用艾賓浩斯記憶曲線"
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
+                {/* 模式 chip 列：橫向捲 + 左右箭頭（永遠顯示）+ 邊緣漸層（可捲才顯示） */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => scrollChips("left")}
+                    className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-7 w-7 flex items-center justify-center rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50"
+                    aria-label="向左滑動"
+                  >
+                    <ChevronLeft className="h-4 w-4 text-gray-600" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollChips("right")}
+                    className="absolute right-0 top-1/2 -translate-y-1/2 z-20 h-7 w-7 flex items-center justify-center rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50"
+                    aria-label="向右滑動"
+                  >
+                    <ChevronRight className="h-4 w-4 text-gray-600" />
+                  </button>
+                  {chipCanScrollLeft && (
+                    <div className="pointer-events-none absolute left-7 top-0 bottom-0 z-10 w-6 bg-gradient-to-r from-white to-transparent" />
+                  )}
+                  {chipCanScrollRight && (
+                    <div className="pointer-events-none absolute right-7 top-0 bottom-0 z-10 w-6 bg-gradient-to-l from-white to-transparent" />
+                  )}
+                  <div
+                    ref={chipRowRef}
+                    className="flex gap-2 overflow-x-auto px-9 pb-1 [&::-webkit-scrollbar]:hidden"
+                    style={{ scrollbarWidth: "none" }}
+                  >
+                    {modes.map((m) => {
+                      const cfg = getModeConfig(m);
+                      if (!cfg) return null;
+                      const ModeIcon = cfg.icon;
+                      const active = m === draftMode;
+                      return (
+                        <button
+                          type="button"
+                          key={m}
+                          ref={active ? activeChipRef : undefined}
+                          onClick={() => pickMode(m)}
+                          className={cn(
+                            "shrink-0 flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-all",
+                            active
+                              ? cn(
+                                  cfg.chipSelectedClass,
+                                  "shadow-sm font-semibold",
+                                )
+                              : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50",
+                          )}
+                        >
+                          <ModeIcon className="h-4 w-4 shrink-0" />
+                          <span>{t(cfg.chipTitleKey ?? cfg.labelKey)}</span>
+                          {cfg.isMemoryBased && (
+                            <Brain
+                              className="h-3.5 w-3.5 shrink-0 opacity-70"
+                              aria-label="採用艾賓浩斯記憶曲線"
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
