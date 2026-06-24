@@ -190,6 +190,23 @@ jobs:
           echo "ENABLE_GROUP_BUY=true" >> $GITHUB_OUTPUT
         fi
 
+    - name: Resolve Supabase Realtime values per environment
+      id: supabase
+      run: |
+        # Issue #835 — 學生端用 Supabase Realtime Broadcast 即時偵測收卷。
+        # 重用後端既有的同一組 secret（同一個 Supabase project）。
+        # 缺值時前端 isRealtimeEnabled=false，自動退回 polling，不影響功能。
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "URL=${{ secrets.PRODUCTION_SUPABASE_URL }}" >> $GITHUB_OUTPUT
+          echo "ANON_KEY=${{ secrets.PRODUCTION_SUPABASE_ANON_KEY }}" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          echo "URL=${{ secrets.DEVELOP_SUPABASE_URL }}" >> $GITHUB_OUTPUT
+          echo "ANON_KEY=${{ secrets.DEVELOP_SUPABASE_ANON_KEY }}" >> $GITHUB_OUTPUT
+        else
+          echo "URL=${{ secrets.STAGING_SUPABASE_URL }}" >> $GITHUB_OUTPUT
+          echo "ANON_KEY=${{ secrets.STAGING_SUPABASE_ANON_KEY }}" >> $GITHUB_OUTPUT
+        fi
+
     - name: Create .env file
       working-directory: ./frontend
       run: |
@@ -225,6 +242,8 @@ jobs:
           --build-arg VITE_TAPPAY_PRODUCTION_APP_KEY=$TAPPAY_PRODUCTION_APP_KEY \
           --build-arg VITE_GA_MEASUREMENT_ID=${{ secrets.VITE_GA_MEASUREMENT_ID }} \
           --build-arg VITE_META_PIXEL_ID=${{ secrets.VITE_META_PIXEL_ID }} \
+          --build-arg VITE_SUPABASE_URL=${{ steps.supabase.outputs.URL }} \
+          --build-arg VITE_SUPABASE_ANON_KEY=${{ steps.supabase.outputs.ANON_KEY }} \
           -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/${{ steps.env_vars.outputs.FRONTEND_SERVICE }}:$GITHUB_SHA .
 
         docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/${{ steps.env_vars.outputs.FRONTEND_SERVICE }}:$GITHUB_SHA
