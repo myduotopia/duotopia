@@ -5260,6 +5260,11 @@
     "creating": "建立中...",
     "start": "開始練習",
     "error": "建立即刻練習失敗",
+    "advancedSettings": "進階設定",
+    "applyAndRestart": "套用並重新開始",
+    "applying": "套用中...",
+    "reconfigured": "已套用新設定，從頭開始練習",
+    "reconfigureError": "套用設定失敗",
     "modes": {
       "reading": {
         "label": "例句朗讀",

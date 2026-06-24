@@ -5216,6 +5216,11 @@
     "creating": "Creating...",
     "start": "Start Practice",
     "error": "Failed to create instant practice",
+    "advancedSettings": "Advanced Settings",
+    "applyAndRestart": "Apply & Restart",
+    "applying": "Applying...",
+    "reconfigured": "New settings applied, restarting practice",
+    "reconfigureError": "Failed to apply settings",
     "modes": {
       "reading": {
         "label": "Sentence Reading",

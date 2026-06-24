@@ -702,6 +702,39 @@ export function listModesForDataset(dataset: PracticeDataset): PracticeMode[] {
   );
 }
 
+/** content.type（大寫 enum 或舊小寫）對應到 PracticeDataset；未知回 null。 */
+export function contentTypeToDataset(
+  type?: string | null,
+): PracticeDataset | null {
+  const t = (type ?? "").toUpperCase();
+  if (["READING_ASSESSMENT", "EXAMPLE_SENTENCES"].includes(t))
+    return "example_sentences";
+  if (["SENTENCE_MAKING", "VOCABULARY_SET"].includes(t)) return "vocabulary_set";
+  return null;
+}
+
+/**
+ * 即刻練習可選的模式（依資料集），與 InstantPracticeDialog 啟動清單一致：
+ * 例句集 → reading / rearrangement；單字集 → word_reading / word_selection / tug_of_war。
+ * 注意：刻意「不等於」listModesForDataset（派發用）—— 即刻練習含 tug_of_war、
+ * 不含小考 / 拼寫 / 克漏字。
+ */
+export const INSTANT_PRACTICE_MODES_BY_DATASET: Record<
+  PracticeDataset,
+  PracticeMode[]
+> = {
+  example_sentences: ["reading", "rearrangement"],
+  vocabulary_set: ["word_reading", "word_selection", "tug_of_war"],
+};
+
+/** 依 content.type 回傳即刻練習可切換的模式 chip 列。 */
+export function instantPracticeModesForContentType(
+  type?: string | null,
+): PracticeMode[] {
+  const dataset = contentTypeToDataset(type);
+  return dataset ? INSTANT_PRACTICE_MODES_BY_DATASET[dataset] : [];
+}
+
 /**
  * 前端版成績類別解析，鏡射後端 `resolve_score_category`（唯一真相仍在後端）。
  * 僅用於派發 UI 的 score 提示預覽；測試斷言與後端對照表逐格等價。

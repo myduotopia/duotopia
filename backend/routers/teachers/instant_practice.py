@@ -63,6 +63,36 @@ class InstantPracticeRequest(BaseModel):
         return self
 
 
+def _ensure_distractors_for_content(db: Session, content_id: int) -> None:
+    """為指定 content 下缺少干擾項的 items 生成干擾項。
+
+    word_selection / tug_of_war 模式需要干擾項。Issue #631：干擾項為
+    list[{text, image_url}]。建立即刻練習與練習畫面即時切到這兩種模式時共用。
+    """
+    from utils.distractors import make_distractor
+
+    all_items = (
+        db.query(ContentItem)
+        .filter(ContentItem.content_id == content_id)
+        .filter(ContentItem.translation.isnot(None))
+        .filter(ContentItem.translation != "")
+        .order_by(ContentItem.order_index)
+        .all()
+    )
+    all_candidates = [(item.translation, item.image_url) for item in all_items]
+
+    for item in all_items:
+        if not isinstance(item.distractors, list) or len(item.distractors) == 0:
+            target = item.translation.lower().strip()
+            pool = [
+                (t, img) for (t, img) in all_candidates if t.lower().strip() != target
+            ]
+            random.shuffle(pool)
+            item.distractors = [
+                make_distractor(text=t, image_url=img) for (t, img) in pool[:3]
+            ]
+
+
 @router.post("/instant-practice/create")
 async def create_instant_practice(
     request: InstantPracticeRequest,
@@ -168,30 +198,7 @@ async def create_instant_practice(
     # word_selection / tug_of_war 模式：為缺少干擾項的 items 生成
     # Issue #631: 干擾項升級為 list[{text, image_url}]
     if request.practice_mode in ("word_selection", "tug_of_war"):
-        from utils.distractors import make_distractor
-
-        all_items = (
-            db.query(ContentItem)
-            .filter(ContentItem.content_id == content_copy.id)
-            .filter(ContentItem.translation.isnot(None))
-            .filter(ContentItem.translation != "")
-            .order_by(ContentItem.order_index)
-            .all()
-        )
-        all_candidates = [(item.translation, item.image_url) for item in all_items]
-
-        for item in all_items:
-            if not isinstance(item.distractors, list) or len(item.distractors) == 0:
-                target = item.translation.lower().strip()
-                pool = [
-                    (t, img)
-                    for (t, img) in all_candidates
-                    if t.lower().strip() != target
-                ]
-                random.shuffle(pool)
-                item.distractors = [
-                    make_distractor(text=t, image_url=img) for (t, img) in pool[:3]
-                ]
+        _ensure_distractors_for_content(db, content_copy.id)
 
     # 建立 Assignment
     assignment = Assignment(
@@ -273,4 +280,116 @@ async def create_instant_practice(
         "student_assignment_id": student_assignment.id,
         "content_title": content.title,
         "practice_mode": request.practice_mode,
+    }
+
+
+class InstantPracticeReconfigureRequest(BaseModel):
+    """即刻練習練習畫面即時調整設定（改完從頭重練）"""
+
+    practice_mode: Literal[
+        "reading", "rearrangement", "word_reading", "word_selection", "tug_of_war"
+    ]
+    time_limit_per_question: Optional[int] = None
+    shuffle_questions: bool = False
+    show_answer: bool = False
+    play_audio: bool = False
+    show_translation: Optional[bool] = True
+    show_word: Optional[bool] = True
+    show_image: Optional[bool] = True
+    show_option_images: Optional[bool] = False  # Issue #631
+    target_proficiency: Optional[int] = None
+
+    @model_validator(mode="after")
+    def _option_images_xor_image(self) -> "InstantPracticeReconfigureRequest":
+        if self.show_image and self.show_option_images:
+            raise ValueError("show_image and show_option_images are mutually exclusive")
+        return self
+
+
+@router.patch("/instant-practice/{assignment_id}/reconfigure")
+async def reconfigure_instant_practice(
+    assignment_id: int,
+    request: InstantPracticeReconfigureRequest,
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """即時調整即刻練習設定，並把進度重設為從頭重練。
+
+    僅限本人建立的即刻練習作業：
+    - 更新進階設定，依 (practice_mode, play_audio) 重算 score_category
+    - 切到 word_selection / tug_of_war 時，為複製出的 content 補齊干擾項
+    - 重設 StudentAssignment / StudentContentProgress / StudentItemProgress
+      狀態為 NOT_STARTED，達成「從頭重練」
+    """
+    assignment = (
+        db.query(Assignment)
+        .filter(
+            Assignment.id == assignment_id,
+            Assignment.is_instant_practice.is_(True),
+        )
+        .first()
+    )
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Instant practice not found")
+    if assignment.teacher_id != current_teacher.id:
+        raise HTTPException(
+            status_code=403, detail="You don't have permission for this practice"
+        )
+
+    # 更新進階設定
+    assignment.practice_mode = request.practice_mode
+    assignment.time_limit_per_question = request.time_limit_per_question
+    assignment.shuffle_questions = request.shuffle_questions
+    assignment.show_answer = request.show_answer
+    assignment.play_audio = request.play_audio
+    assignment.show_translation = request.show_translation
+    assignment.show_word = request.show_word
+    assignment.show_image = request.show_image
+    assignment.show_option_images = bool(request.show_option_images)  # Issue #631
+    if request.target_proficiency is not None:
+        assignment.target_proficiency = request.target_proficiency
+    assignment.score_category = resolve_score_category(
+        request.practice_mode, request.play_audio
+    )
+
+    # 切到需要干擾項的模式時，為複製出的 content 補齊
+    if request.practice_mode in ("word_selection", "tug_of_war"):
+        content_ids = [
+            ac.content_id
+            for ac in db.query(AssignmentContent)
+            .filter(AssignmentContent.assignment_id == assignment.id)
+            .all()
+        ]
+        for content_id in content_ids:
+            _ensure_distractors_for_content(db, content_id)
+
+    # 從頭重練：重設進度狀態
+    sa_ids = [
+        sa.id
+        for sa in db.query(StudentAssignment)
+        .filter(StudentAssignment.assignment_id == assignment.id)
+        .all()
+    ]
+    if sa_ids:
+        db.query(StudentAssignment).filter(
+            StudentAssignment.id.in_(sa_ids)
+        ).update(
+            {"status": AssignmentStatus.NOT_STARTED}, synchronize_session=False
+        )
+        db.query(StudentContentProgress).filter(
+            StudentContentProgress.student_assignment_id.in_(sa_ids)
+        ).update(
+            {"status": AssignmentStatus.NOT_STARTED}, synchronize_session=False
+        )
+        db.query(StudentItemProgress).filter(
+            StudentItemProgress.student_assignment_id.in_(sa_ids)
+        ).update({"status": "NOT_STARTED"}, synchronize_session=False)
+
+    db.commit()
+
+    return {
+        "success": True,
+        "assignment_id": assignment.id,
+        "practice_mode": assignment.practice_mode,
+        "score_category": assignment.score_category,
     }

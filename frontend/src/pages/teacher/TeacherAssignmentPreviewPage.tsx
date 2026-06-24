@@ -29,6 +29,14 @@ import StudentActivityPageContent, {
 import QuestionStatBar, {
   type StudentRef,
 } from "@/components/grading/QuestionStatBar";
+// #854: 即刻練習練習畫面上的可收合進階設定
+import InstantPracticeSettingsPanel from "@/components/InstantPracticeSettingsPanel";
+import type { PracticeMode } from "@/lib/practiceMode";
+import {
+  clampPerQuestionTime,
+  clampQuizTime,
+  type PracticeModeSettings,
+} from "@/components/assignment/practiceModeSettings";
 
 interface QuizStatQuestion {
   content_item_id: number;
@@ -56,8 +64,31 @@ interface ActivityResponse {
   show_word?: boolean;
   show_image?: boolean;
   show_option_images?: boolean;
+  // #854: 即刻練習進階設定面板初值 + 顯示判斷
+  quiz_time_limit_seconds?: number | null;
+  shuffle_questions?: boolean;
+  target_proficiency?: number | null;
+  is_instant_practice?: boolean;
+  student_assignment_id?: number;
   total_activities: number;
   activities: Activity[];
+}
+
+/** 由 preview 回傳組出進階設定面板初值（缺項用合理預設）。 */
+function buildSettings(d: ActivityResponse): PracticeModeSettings {
+  return {
+    time_limit_per_question: clampPerQuestionTime(d.time_limit_per_question),
+    quiz_time_limit_seconds: clampQuizTime(d.quiz_time_limit_seconds),
+    is_live_quiz: false,
+    shuffle_questions: Boolean(d.shuffle_questions),
+    show_answer: Boolean(d.show_answer),
+    play_audio: Boolean(d.play_audio),
+    target_proficiency: d.target_proficiency ?? 80,
+    show_translation: d.show_translation ?? true,
+    show_word: d.show_word ?? true,
+    show_image: d.show_image ?? true,
+    show_option_images: Boolean(d.show_option_images),
+  };
 }
 
 export default function TeacherAssignmentPreviewPage() {
@@ -82,6 +113,9 @@ export default function TeacherAssignmentPreviewPage() {
   );
   const [loading, setLoading] = useState(true);
   const [showBanner, setShowBanner] = useState(true);
+  // #854: 套用即刻練習新設定後 +1，用來重掛 StudentActivityPageContent → 從第 1 題重練
+  const [reloadKey, setReloadKey] = useState(0);
+  const [applyingSettings, setApplyingSettings] = useState(false);
   // #830: 小考每題班級表現（已提交學生第一次作答那筆）。非小考時為 null。
   const [quizStats, setQuizStats] = useState<{
     total: number;
@@ -135,6 +169,40 @@ export default function TeacherAssignmentPreviewPage() {
     fetchPreviewData();
   }, [fetchPreviewData]);
 
+  // #854: 即時調整即刻練習設定 → 後端重設進度 → 重載並從第 1 題重練
+  const handleApplySettings = useCallback(
+    async (mode: PracticeMode, settings: PracticeModeSettings) => {
+      if (applyingSettings) return;
+      setApplyingSettings(true);
+      try {
+        await apiClient.patch(
+          `/api/teachers/instant-practice/${assignmentId}/reconfigure`,
+          {
+            practice_mode: mode,
+            time_limit_per_question: settings.time_limit_per_question,
+            shuffle_questions: settings.shuffle_questions,
+            show_answer: settings.show_answer,
+            play_audio: settings.play_audio,
+            show_translation: settings.show_translation,
+            show_word: settings.show_word,
+            show_image: settings.show_image,
+            show_option_images: settings.show_option_images,
+            target_proficiency: settings.target_proficiency,
+          },
+        );
+        await fetchPreviewData();
+        setReloadKey((k) => k + 1);
+        toast.success(t("instantPractice.reconfigured"));
+      } catch (error) {
+        console.error("Failed to reconfigure instant practice:", error);
+        toast.error(t("instantPractice.reconfigureError"));
+      } finally {
+        setApplyingSettings(false);
+      }
+    },
+    [applyingSettings, assignmentId, fetchPreviewData, t],
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
@@ -181,8 +249,20 @@ export default function TeacherAssignmentPreviewPage() {
         </DialogContent>
       </Dialog>
 
+      {/* #854: 即刻練習 → 練習畫面上的可收合進階設定（即時調整、從頭重練） */}
+      {activityData.is_instant_practice && (
+        <InstantPracticeSettingsPanel
+          mode={(activityData.practice_mode || "reading") as PracticeMode}
+          contentType={activityData.activities[0]?.type ?? ""}
+          initialSettings={buildSettings(activityData)}
+          applying={applyingSettings}
+          onApply={handleApplySettings}
+        />
+      )}
+
       {/* 使用學生的完整 Activity Page 內容 */}
       <StudentActivityPageContent
+        key={reloadKey}
         activities={activityData.activities}
         assignmentTitle={activityData.title}
         assignmentId={parseInt(assignmentId!)}
