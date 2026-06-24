@@ -248,20 +248,21 @@ export default function TeacherAssignmentPreviewPage() {
         </DialogContent>
       </Dialog>
 
-      {/* #854: 即刻練習 → 練習畫面上的可收合進階設定（即時調整、從頭重練） */}
-      {activityData.is_instant_practice && (
-        <InstantPracticeSettingsPanel
-          mode={(activityData.practice_mode || "reading") as PracticeMode}
-          contentType={activityData.activities[0]?.type ?? ""}
-          initialSettings={buildSettings(activityData)}
-          applying={applyingSettings}
-          onApply={handleApplySettings}
-        />
-      )}
-
       {/* 使用學生的完整 Activity Page 內容 */}
       <StudentActivityPageContent
         key={reloadKey}
+        // #854: 即刻練習 → 把「⚡ 進階設定」觸發鈕放進頂部 header 列右側（向下下拉浮層）
+        headerActions={
+          activityData.is_instant_practice ? (
+            <InstantPracticeSettingsPanel
+              mode={(activityData.practice_mode || "reading") as PracticeMode}
+              contentType={activityData.activities[0]?.type ?? ""}
+              initialSettings={buildSettings(activityData)}
+              applying={applyingSettings}
+              onApply={handleApplySettings}
+            />
+          ) : undefined
+        }
         activities={activityData.activities}
         assignmentTitle={activityData.title}
         assignmentId={parseInt(assignmentId!)}
