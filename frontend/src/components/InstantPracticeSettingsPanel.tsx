@@ -10,7 +10,7 @@
  * - 進階設定本體：`<PracticeModeSettingsPanel>`(registry 驅動)。
  * - 變更耦合：`applySettingChange` 純函式；切模式套 `applyModeDefaults`。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -46,6 +46,17 @@ export default function InstantPracticeSettingsPanel({
     useState<PracticeModeSettings>(initialSettings);
 
   const modes = instantPracticeModesForContentType(contentType);
+  const activeChipRef = useRef<HTMLButtonElement>(null);
+
+  // 展開時把目前選中的模式 chip 捲到可見位置（單行橫向捲動，避免它落在捲動區外看不到）
+  useEffect(() => {
+    if (open) {
+      activeChipRef.current?.scrollIntoView({
+        inline: "center",
+        block: "nearest",
+      });
+    }
+  }, [open, draftMode]);
 
   const handleOpen = () => {
     // 每次展開都以目前實際設定為初值，避免沿用上次未套用的草稿
@@ -100,7 +111,7 @@ export default function InstantPracticeSettingsPanel({
                 <span className="text-xs text-gray-600">
                   {t("instantPractice.modeLabel")}
                 </span>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
                   {modes.map((m) => {
                     const cfg = getModeConfig(m);
                     if (!cfg) return null;
@@ -110,6 +121,7 @@ export default function InstantPracticeSettingsPanel({
                       <button
                         type="button"
                         key={m}
+                        ref={active ? activeChipRef : undefined}
                         onClick={() => pickMode(m)}
                         className={cn(
                           "shrink-0 flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-all",
