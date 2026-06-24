@@ -9,7 +9,7 @@ code are affected by this refactoring.
 import logging
 import random
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List
 
 from fastapi import HTTPException, UploadFile
 from pydantic import BaseModel

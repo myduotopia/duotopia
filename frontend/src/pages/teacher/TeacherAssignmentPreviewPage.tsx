@@ -79,7 +79,6 @@ function buildSettings(d: ActivityResponse): PracticeModeSettings {
   return {
     time_limit_per_question: clampPerQuestionTime(d.time_limit_per_question),
     quiz_time_limit_seconds: clampQuizTime(d.quiz_time_limit_seconds),
-    is_live_quiz: false,
     shuffle_questions: Boolean(d.shuffle_questions),
     show_answer: Boolean(d.show_answer),
     play_audio: Boolean(d.play_audio),

@@ -371,16 +371,12 @@ async def reconfigure_instant_practice(
         .all()
     ]
     if sa_ids:
-        db.query(StudentAssignment).filter(
-            StudentAssignment.id.in_(sa_ids)
-        ).update(
+        db.query(StudentAssignment).filter(StudentAssignment.id.in_(sa_ids)).update(
             {"status": AssignmentStatus.NOT_STARTED}, synchronize_session=False
         )
         db.query(StudentContentProgress).filter(
             StudentContentProgress.student_assignment_id.in_(sa_ids)
-        ).update(
-            {"status": AssignmentStatus.NOT_STARTED}, synchronize_session=False
-        )
+        ).update({"status": AssignmentStatus.NOT_STARTED}, synchronize_session=False)
         db.query(StudentItemProgress).filter(
             StudentItemProgress.student_assignment_id.in_(sa_ids)
         ).update({"status": "NOT_STARTED"}, synchronize_session=False)
