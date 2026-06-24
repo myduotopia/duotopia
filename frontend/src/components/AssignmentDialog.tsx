@@ -72,15 +72,9 @@ import { PracticeModeSettingsPanel } from "./assignment/PracticeModeSettingsPane
 import { useTranslation } from "react-i18next";
 import { useWorkspaceSafe } from "@/contexts/WorkspaceContext";
 import { getScoreCategory, type ScoreCategory } from "@/utils/scoreCategory";
-import WordReadingPreview from "@/components/activities/WordReadingPreview";
-import WordSelectionPreview from "@/components/activities/WordSelectionPreview";
-import WordSpellingPreview from "@/components/activities/WordSpellingPreview";
-import WordClozeContextPreview from "@/components/activities/WordClozeContextPreview";
-import WordSelectionQuizPreview from "@/components/activities/WordSelectionQuizPreview";
-import WordSpellingQuizPreview from "@/components/activities/WordSpellingQuizPreview";
-import WordClozeQuizPreview from "@/components/activities/WordClozeQuizPreview";
-import RearrangementPreview from "@/components/activities/RearrangementPreview";
-import ReadingPreview from "@/components/activities/ReadingPreview";
+// #854 B2-a: 派發預覽改吃單一 registry（消除手寫 ternary 鏈），各 *Preview 元件
+// 已移入 activityRegistry。
+import { DISPATCH_PREVIEW } from "@/lib/activityRegistry";
 
 // Issue #752 PoC: 預覽固定使用 contact@duotopia.co 的官方公開單字集
 // production 用 id 2212（"RPG" VOCABULARY_SET）；其他環境（staging / develop /
@@ -3049,204 +3043,36 @@ export function AssignmentDialog({
                           )}
                         </div>
                       )}
-                      {formData.practice_mode === "word_reading" ? (
-                        <Card className="p-3 border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.studentPreview",
-                            )}
-                          </h4>
-                          <WordReadingPreview
-                            contentId={
-                              cartItems[0]?.contentId ??
-                              PREVIEW_VOCAB_CONTENT_ID
-                            }
-                            settings={{
-                              time_limit_per_question:
-                                formData.time_limit_per_question,
-                              show_image: formData.show_image,
-                              show_translation: formData.show_translation,
-                              shuffle_questions: formData.shuffle_questions,
-                            }}
-                          />
-                        </Card>
-                      ) : formData.practice_mode === "word_selection_quiz" ? (
-                        <Card className="p-3 border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.studentPreview",
-                            )}
-                          </h4>
-                          <WordSelectionQuizPreview
-                            contentId={
-                              cartItems[0]?.contentId ??
-                              PREVIEW_VOCAB_CONTENT_ID
-                            }
-                            settings={{
-                              show_word: formData.show_word,
-                              show_image: formData.show_image,
-                              show_option_images: formData.show_option_images,
-                              play_audio: formData.play_audio,
-                              show_answer: formData.show_answer,
-                              time_limit_per_question:
-                                formData.time_limit_per_question,
-                              shuffle_questions: formData.shuffle_questions,
-                            }}
-                          />
-                        </Card>
-                      ) : formData.practice_mode === "word_selection" ? (
-                        <Card className="p-3 border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.studentPreview",
-                            )}
-                          </h4>
-                          <WordSelectionPreview
-                            contentId={
-                              cartItems[0]?.contentId ??
-                              PREVIEW_VOCAB_CONTENT_ID
-                            }
-                            settings={{
-                              show_image: formData.show_image,
-                              show_option_images: formData.show_option_images,
-                              play_audio: formData.play_audio,
-                              target_proficiency: formData.target_proficiency,
-                              time_limit_per_question:
-                                formData.time_limit_per_question,
-                              shuffle_questions: formData.shuffle_questions,
-                            }}
-                          />
-                        </Card>
-                      ) : formData.practice_mode === "word_spelling_quiz" ? (
-                        <Card className="p-3 border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.studentPreview",
-                            )}
-                          </h4>
-                          <WordSpellingQuizPreview
-                            contentId={
-                              cartItems[0]?.contentId ??
-                              PREVIEW_VOCAB_CONTENT_ID
-                            }
-                            settings={{
-                              show_translation: formData.show_translation,
-                              show_image: formData.show_image,
-                              play_audio: formData.play_audio,
-                              show_answer: formData.show_answer,
-                              time_limit_per_question:
-                                formData.time_limit_per_question,
-                              shuffle_questions: formData.shuffle_questions,
-                            }}
-                          />
-                        </Card>
-                      ) : formData.practice_mode === "word_spelling" ? (
-                        <Card className="p-3 border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.studentPreview",
-                            )}
-                          </h4>
-                          <WordSpellingPreview
-                            contentId={
-                              cartItems[0]?.contentId ??
-                              PREVIEW_VOCAB_CONTENT_ID
-                            }
-                            settings={{
-                              show_translation: formData.show_translation,
-                              show_image: formData.show_image,
-                              play_audio: formData.play_audio,
-                              show_answer: formData.show_answer,
-                              target_proficiency: formData.target_proficiency,
-                              time_limit_per_question:
-                                formData.time_limit_per_question,
-                              shuffle_questions: formData.shuffle_questions,
-                            }}
-                          />
-                        </Card>
-                      ) : formData.practice_mode === "word_cloze_quiz" ? (
-                        <Card className="p-3 border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.studentPreview",
-                            )}
-                          </h4>
-                          <WordClozeQuizPreview
-                            contentId={
-                              cartItems[0]?.contentId ??
-                              PREVIEW_VOCAB_CONTENT_ID
-                            }
-                            settings={{
-                              show_translation: formData.show_translation,
-                              play_audio: formData.play_audio,
-                              show_answer: formData.show_answer,
-                              time_limit_per_question:
-                                formData.time_limit_per_question,
-                              shuffle_questions: formData.shuffle_questions,
-                            }}
-                          />
-                        </Card>
-                      ) : formData.practice_mode === "word_cloze" ? (
-                        <Card className="p-3 border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.studentPreview",
-                            )}
-                          </h4>
-                          <WordClozeContextPreview
-                            contentId={
-                              cartItems[0]?.contentId ??
-                              PREVIEW_VOCAB_CONTENT_ID
-                            }
-                            settings={{
-                              show_translation: formData.show_translation,
-                              play_audio: formData.play_audio,
-                              show_answer: formData.show_answer,
-                              target_proficiency: formData.target_proficiency,
-                              time_limit_per_question:
-                                formData.time_limit_per_question,
-                              shuffle_questions: formData.shuffle_questions,
-                            }}
-                          />
-                        </Card>
-                      ) : formData.practice_mode === "rearrangement" ? (
-                        <Card className="p-3 border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.studentPreview",
-                            )}
-                          </h4>
-                          <RearrangementPreview
-                            contentId={cartItems[0]?.contentId}
-                            shuffleQuestions={formData.shuffle_questions}
-                            timeLimitPerQuestion={
-                              formData.time_limit_per_question
-                            }
-                            playAudio={formData.play_audio}
-                          />
-                        </Card>
-                      ) : formData.practice_mode === "reading" ? (
-                        <Card className="p-3 border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700">
-                            {t(
-                              "dialogs.assignmentDialog.practiceMode.studentPreview",
-                            )}
-                          </h4>
-                          <ReadingPreview
-                            contentId={cartItems[0]?.contentId}
-                            shuffleQuestions={formData.shuffle_questions}
-                            timeLimitPerQuestion={
-                              formData.time_limit_per_question
-                            }
-                          />
-                        </Card>
-                      ) : (
-                        <div className="h-full flex items-center justify-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">
-                          {currentConfig
-                            ? "此模式預覽尚未實作"
-                            : "選擇一個模式查看預覽"}
-                        </div>
-                      )}
+                      {(() => {
+                        // #854 B2-a: 單一 registry 取代手寫 ternary 鏈
+                        const render =
+                          DISPATCH_PREVIEW[
+                            formData.practice_mode as PracticeMode
+                          ];
+                        if (!render) {
+                          return (
+                            <div className="h-full flex items-center justify-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">
+                              {currentConfig
+                                ? "此模式預覽尚未實作"
+                                : "選擇一個模式查看預覽"}
+                            </div>
+                          );
+                        }
+                        return (
+                          <Card className="p-3 border-gray-200">
+                            <h4 className="text-xs font-semibold mb-2 text-gray-700">
+                              {t(
+                                "dialogs.assignmentDialog.practiceMode.studentPreview",
+                              )}
+                            </h4>
+                            {render({
+                              contentId: cartItems[0]?.contentId,
+                              vocabFallbackContentId: PREVIEW_VOCAB_CONTENT_ID,
+                              settings: formData,
+                            })}
+                          </Card>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
