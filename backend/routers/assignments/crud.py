@@ -362,8 +362,10 @@ async def create_assignment(
         time_limit_per_question=request.time_limit_per_question,
         quiz_time_limit_seconds=request.quiz_time_limit_seconds,
         # Issue #835: live 模式僅對小考有效；非小考一律 False
-        is_live_quiz=bool(getattr(request, "is_live_quiz", False))
-        and (request.practice_mode or "").endswith("_quiz"),
+        is_live_quiz=bool(
+            getattr(request, "is_live_quiz", False)
+            and (request.practice_mode or "").endswith("_quiz")
+        ),
         shuffle_questions=request.shuffle_questions or False,
         show_answer=request.show_answer or False,
         play_audio=request.play_audio or False,

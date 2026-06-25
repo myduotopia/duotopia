@@ -697,15 +697,16 @@ async def close_live_quiz(
     # 先 commit 關閘門：個別學生計分失敗不該 rollback 整筆收卷（否則閘門被退回、
     # 老師拿到 500、學生繼續作答）；且 closed_at 一落地，answer 端的
     # _guard_live_gate 立即回 409，server-side 即時止血。
-    if assignment.quiz_closed_at is None:
+    was_already_closed = assignment.quiz_closed_at is not None
+    if not was_already_closed:
         assignment.quiz_closed_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(assignment)
 
-    # Issue #835 點 1：閘門一關就先推 Realtime broadcast，讓全班即時跳離考卷頁。
-    # 刻意放在逐生計分迴圈「之前」→ 大班級不會被數十次 DB round-trip 拖過推播時機。
-    # broadcast_quiz_closed 永不拋例外；未設定/失敗時學生端 polling fallback 接手。
-    if assignment.quiz_closed_at is not None:
+        # Issue #835 點 1：閘門一關就先推 Realtime broadcast，讓全班即時跳離考卷頁。
+        # 刻意放在逐生計分迴圈「之前」→ 大班級不會被數十次 DB round-trip 拖過推播時機。
+        # 只在「本次真的關閉」時推播，重複收卷不重發 broadcast（避免混亂 log）。
+        # broadcast_quiz_closed 永不拋例外；未設定/失敗時學生端 polling fallback 接手。
         await broadcast_quiz_closed(
             assignment.id, assignment.quiz_closed_at.isoformat()
         )
