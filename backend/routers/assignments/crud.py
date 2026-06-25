@@ -989,6 +989,20 @@ async def patch_assignment(
     ):
         assignment.is_live_quiz = False
 
+    # Issue #835: 不允許在 live quiz「開啟中」(已開放、未收卷) 把 is_live_quiz 關掉，
+    # 否則閘門欄位仍是「開」但 flag 變「非 live」→ _guard_live_gate 失效、監考端 400。
+    # 老師要關閉 live 必須先「收卷」。
+    if (
+        "is_live_quiz" in provided
+        and not request.is_live_quiz
+        and assignment.quiz_opened_at is not None
+        and assignment.quiz_closed_at is None
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot disable live quiz while it is open; collect (close) it first.",
+        )
+
     # If play_audio changed, recompute score_category (practice_mode is
     # immutable on PATCH so we only need to react to audio toggles).
     # See docs/design/score-category-mapping.md

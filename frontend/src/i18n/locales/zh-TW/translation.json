@@ -5480,5 +5480,17 @@
   "recordingAttempts": {
     "remaining": "還剩 {{n}} 次分析機會",
     "lockedTooltip": "已達分析上限，老師退回後可重新錄音"
+  },
+  "liveQuizMonitor": {
+    "stateOpen": "考試進行中",
+    "stateClosed": "已收卷",
+    "submittedCount": "已交",
+    "start": "開始考試",
+    "restart": "再次開始",
+    "collect": "收卷",
+    "monitoring": "監考中",
+    "collected": "已收卷，全班成績已結算",
+    "collectFailed": "收卷失敗，請重試",
+    "startFailed": "開始考試失敗，請重試"
   }
 }

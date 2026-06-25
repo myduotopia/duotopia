@@ -5436,5 +5436,17 @@
   "recordingAttempts": {
     "remaining": "{{n}} analysis attempt(s) remaining",
     "lockedTooltip": "Analysis limit reached. Re-record after the teacher returns this item."
+  },
+  "liveQuizMonitor": {
+    "stateOpen": "In progress",
+    "stateClosed": "Collected",
+    "submittedCount": "Submitted",
+    "start": "Start quiz",
+    "restart": "Restart",
+    "collect": "Collect",
+    "monitoring": "Monitoring",
+    "collected": "Quiz collected. Scores finalized.",
+    "collectFailed": "Failed to collect quiz. Please try again.",
+    "startFailed": "Failed to start quiz. Please try again."
   }
 }

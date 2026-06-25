@@ -692,8 +692,12 @@ async def close_live_quiz(
     practice_mode = assignment.practice_mode
 
     # 重複收卷 idempotent：closed_at 已設則不覆寫時間，僅再收尾殘留 IN_PROGRESS。
+    # 先 commit 關閘門，再逐生計分：個別學生計分失敗不該 rollback 整筆收卷，
+    # 否則閘門被退回、老師拿到 500、學生繼續作答（review 指出的 Medium 風險）。
     if assignment.quiz_closed_at is None:
         assignment.quiz_closed_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(assignment)
 
     in_progress = (
         db.query(StudentAssignment)
@@ -706,10 +710,16 @@ async def close_live_quiz(
     )
     forced = 0
     # IN_PROGRESS 但無 session/答案者，compute_quiz_score 安全回 0 分，仍正常收卷。
+    # 逐生 commit + best-effort：單生失敗只 rollback 該生（閘門已先 commit 不受影響），
+    # 記錄後續查，其餘學生照常收尾。
     for sa in in_progress:
-        score_and_finalize_quiz(db, sa, practice_mode)
-        forced += 1
-    db.commit()
+        try:
+            score_and_finalize_quiz(db, sa, practice_mode)
+            db.commit()
+            forced += 1
+        except Exception:
+            db.rollback()
+            logger.exception("收卷 force-complete 失敗，跳過 sa=%s", sa.id)
     db.refresh(assignment)
 
     # Issue #835 點 1：收卷後推播 Realtime broadcast，讓全班學生即時跳離考卷頁。
