@@ -66,6 +66,7 @@ interface ActivityResponse {
   show_option_images?: boolean;
   // #854: 即刻練習進階設定面板初值 + 顯示判斷
   quiz_time_limit_seconds?: number | null;
+  is_live_quiz?: boolean;
   shuffle_questions?: boolean;
   target_proficiency?: number | null;
   is_instant_practice?: boolean;
@@ -79,6 +80,7 @@ function buildSettings(d: ActivityResponse): PracticeModeSettings {
   return {
     time_limit_per_question: clampPerQuestionTime(d.time_limit_per_question),
     quiz_time_limit_seconds: clampQuizTime(d.quiz_time_limit_seconds),
+    is_live_quiz: Boolean(d.is_live_quiz),
     shuffle_questions: Boolean(d.shuffle_questions),
     show_answer: Boolean(d.show_answer),
     play_audio: Boolean(d.play_audio),
