@@ -59,6 +59,15 @@ class Assignment(Base):
     # 分鐘，前端換算成秒寫入；時間到由前端自動呼叫 complete endpoint。
     quiz_time_limit_seconds = Column(Integer, nullable=True)
 
+    # Issue #835: Live quiz mode — 老師主控開始/收卷，全班同步。
+    # is_live_quiz=True 時改走老師主控（無倒數，由老師按收卷結束）；False 維持 #828
+    # per-student self-paced 行為。quiz_opened_at 為開放閘門，quiz_closed_at 為收卷閘門。
+    is_live_quiz = Column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    quiz_opened_at = Column(DateTime(timezone=True), nullable=True)
+    quiz_closed_at = Column(DateTime(timezone=True), nullable=True)
+
     # 是否打亂題目順序
     shuffle_questions = Column(Boolean, default=False)
 

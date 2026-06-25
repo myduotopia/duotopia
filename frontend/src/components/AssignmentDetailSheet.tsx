@@ -144,6 +144,7 @@ export function AssignmentDetailSheet({
   const [editAdvanced, setEditAdvanced] = useState<AdvancedSettings>({
     time_limit_per_question: 30,
     quiz_time_limit_seconds: 0,
+    is_live_quiz: false,
     shuffle_questions: false,
     show_answer: false,
     play_audio: false,
@@ -180,6 +181,7 @@ export function AssignmentDetailSheet({
           detail.time_limit_per_question,
         ),
         quiz_time_limit_seconds: clampQuizTime(detail.quiz_time_limit_seconds),
+        is_live_quiz: (detail.is_live_quiz as boolean) ?? false,
         shuffle_questions: (detail.shuffle_questions as boolean) ?? false,
         show_answer: (detail.show_answer as boolean) ?? false,
         play_audio: (detail.play_audio as boolean) ?? false,
@@ -353,6 +355,7 @@ export function AssignmentDetailSheet({
       quiz_time_limit_seconds: clampQuizTime(
         detailData.quiz_time_limit_seconds,
       ),
+      is_live_quiz: (detailData.is_live_quiz as boolean) ?? false,
       shuffle_questions: (detailData.shuffle_questions as boolean) ?? false,
       show_answer: (detailData.show_answer as boolean) ?? false,
       play_audio: (detailData.play_audio as boolean) ?? false,

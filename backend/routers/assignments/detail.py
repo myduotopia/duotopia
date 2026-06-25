@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 
-from sqlalchemy import text, func
+from sqlalchemy import text, func, case
 
 from database import get_db
 from models import (
@@ -377,6 +377,9 @@ async def get_assignment_detail(
         "show_word": assignment.show_word,
         "show_image": assignment.show_image,
         "show_option_images": bool(getattr(assignment, "show_option_images", False)),
+        # Issue #835: 編輯 sheet 讀回 live 模式原始值
+        "quiz_time_limit_seconds": assignment.quiz_time_limit_seconds,
+        "is_live_quiz": bool(getattr(assignment, "is_live_quiz", False)),
     }
 
 
@@ -584,6 +587,263 @@ async def get_assignment_progress(
         )
 
     return progress_list
+
+
+# ---------------------------------------------------------------------------
+# Live quiz teacher controls (Issue #835)
+# ---------------------------------------------------------------------------
+
+
+def _get_owned_live_quiz_or_404(
+    assignment_id: int, db: Session, teacher: Teacher
+) -> Assignment:
+    """取得老師擁有、且為 live quiz 的作業，否則 404/400。"""
+    assignment = (
+        db.query(Assignment)
+        .filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == teacher.id,
+            Assignment.is_active.is_(True),
+        )
+        .first()
+    )
+    if not assignment:
+        raise HTTPException(
+            status_code=404, detail="Assignment not found or you don't have permission"
+        )
+    practice_mode = assignment.practice_mode or ""
+    if not practice_mode.endswith("_quiz") or not getattr(
+        assignment, "is_live_quiz", False
+    ):
+        raise HTTPException(
+            status_code=400, detail="This is not a live quiz assignment"
+        )
+    return assignment
+
+
+def _quiz_control_status(assignment: Assignment) -> dict:
+    """老師端 open/close/狀態查詢共用的回應。"""
+    opened_at = assignment.quiz_opened_at
+    closed_at = assignment.quiz_closed_at
+    if closed_at is not None:
+        state = "closed"
+    elif opened_at is not None:
+        state = "open"
+    else:
+        state = "not_started"
+    return {
+        "assignment_id": assignment.id,
+        "is_live_quiz": bool(getattr(assignment, "is_live_quiz", False)),
+        "state": state,
+        "opened_at": opened_at.isoformat() if opened_at else None,
+        "closed_at": closed_at.isoformat() if closed_at else None,
+        "server_time": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post("/{assignment_id}/quiz/open")
+async def open_live_quiz(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """老師按「開始考試 / 再次開始」：開放 live 考卷的閘門。
+
+    Issue #835：不做「破壞性 reset」(不清空任何答案/進度)。三態：
+    - 已收卷 (quiz_closed_at 非 null) → 「再次開始」(補考)：非破壞性重開 —— 清掉收卷
+      閘門、刷新 quiz_opened_at(新一輪錨點)，但不動任何 student_assignment/答案，
+      已交學生仍 SUBMITTED 由 _block_if_submitted 擋重考，缺考(NOT_STARTED)學生可進。
+    - 尚未開始 (quiz_opened_at 為 null) → 第一次開始。
+    - 已開放中 → idempotent no-op。
+    """
+    assignment = _get_owned_live_quiz_or_404(assignment_id, db, current_teacher)
+    now = datetime.now(timezone.utc)
+    if assignment.quiz_closed_at is not None:
+        assignment.quiz_closed_at = None
+        assignment.quiz_opened_at = now
+        db.commit()
+        db.refresh(assignment)
+    elif assignment.quiz_opened_at is None:
+        assignment.quiz_opened_at = now
+        db.commit()
+        db.refresh(assignment)
+    return _quiz_control_status(assignment)
+
+
+@router.post("/{assignment_id}/quiz/close")
+async def close_live_quiz(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """老師按「收卷」：設 quiz_closed_at，並強制收尾所有 IN_PROGRESS 學生。
+
+    - force-complete 走學生端同一條 score_and_finalize_quiz（#830 single source
+      of truth），依學生「目前已有答案」計分。
+    - NOT_STARTED 的學生維持未開始、不計分（缺席不算 0 分）。
+    - 已 SUBMITTED/RESUBMITTED/GRADED 的學生（提早交卷）不動。
+    """
+    # Issue #835: 重用學生端同一條計分路徑（#830 single source of truth）。
+    # 與 routers/teachers/assignment_ops.py 一致採函式內 lazy import：detail.py 在 import 期
+    # 已被 quiz_assignments 鏈間接載入，top-level import 會 circular（students/assignments.py 無此鏈故可 top-level）。
+    from routers.students.quiz_assignments import score_and_finalize_quiz
+
+    assignment = _get_owned_live_quiz_or_404(assignment_id, db, current_teacher)
+    practice_mode = assignment.practice_mode
+
+    from services.realtime_broadcast import broadcast_quiz_closed
+
+    # 重複收卷 idempotent：closed_at 已設則不覆寫時間，僅再收尾殘留 IN_PROGRESS。
+    # 先 commit 關閘門：個別學生計分失敗不該 rollback 整筆收卷（否則閘門被退回、
+    # 老師拿到 500、學生繼續作答）；且 closed_at 一落地，answer 端的
+    # _guard_live_gate 立即回 409，server-side 即時止血。
+    was_already_closed = assignment.quiz_closed_at is not None
+    if not was_already_closed:
+        assignment.quiz_closed_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(assignment)
+
+        # Issue #835 點 1：閘門一關就先推 Realtime broadcast，讓全班即時跳離考卷頁。
+        # 刻意放在逐生計分迴圈「之前」→ 大班級不會被數十次 DB round-trip 拖過推播時機。
+        # 只在「本次真的關閉」時推播，重複收卷不重發 broadcast（避免混亂 log）。
+        # broadcast_quiz_closed 永不拋例外；未設定/失敗時學生端 polling fallback 接手。
+        await broadcast_quiz_closed(
+            assignment.id, assignment.quiz_closed_at.isoformat()
+        )
+
+    in_progress = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.assignment_id == assignment.id,
+            StudentAssignment.is_active.is_(True),
+            StudentAssignment.status == AssignmentStatus.IN_PROGRESS,
+        )
+        .all()
+    )
+    forced = 0
+    # IN_PROGRESS 但無 session/答案者，compute_quiz_score 安全回 0 分，仍正常收卷。
+    # 逐生 commit + best-effort：單生失敗只 rollback 該生（閘門已先 commit 不受影響），
+    # 記錄後續查，其餘學生照常收尾。
+    for sa in in_progress:
+        try:
+            score_and_finalize_quiz(db, sa, practice_mode)
+            db.commit()
+            forced += 1
+        except Exception:
+            db.rollback()
+            logger.exception("收卷 force-complete 失敗，跳過 sa=%s", sa.id)
+    db.refresh(assignment)
+
+    result = _quiz_control_status(assignment)
+    result["force_completed_count"] = forced
+    return result
+
+
+@router.get("/{assignment_id}/quiz/live-progress")
+async def get_quiz_live_progress(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """監考即時看板用：每位學生狀態 + 進行中暫定答對/已答題數，供即時排行。
+
+    與 ``/progress`` 不同：correct_count 取「最新 session（含未完成）」的即時答對數，
+    而非批改 hub 那筆「第一次 completed」凍結值，這樣考試進行中就看得到排行變化。
+    回應 students 形狀對齊 StudentStatusPanel 期望的欄位。
+    """
+    assignment = _get_owned_live_quiz_or_404(assignment_id, db, current_teacher)
+    practice_mode = assignment.practice_mode
+
+    student_assignments = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.assignment_id == assignment.id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .all()
+    )
+    all_students = (
+        db.query(Student)
+        .join(ClassroomStudent, Student.id == ClassroomStudent.student_id)
+        .filter(
+            ClassroomStudent.classroom_id == assignment.classroom_id,
+            ClassroomStudent.is_active.is_(True),
+            Student.is_active.is_(True),
+        )
+        .order_by(Student.student_number)
+        .all()
+    )
+    sa_by_student = {sa.student_id: sa for sa in student_assignments}
+    sa_ids = [sa.id for sa in student_assignments]
+    total_items = _get_total_item_count(assignment.id, db)
+
+    # 每生最新 session（含未完成）的答對/已答數 — 即時排行依此。
+    # 取每生 id 最大的 session：進行中 completed_at 仍為 null，靠遞增 id 鎖定「最新一輪」。
+    # 與 latest_quiz_session() 同義，但此處需一次 batch 多名學生，故獨立子查詢。
+    answered_by_sa: dict = {}
+    correct_by_sa: dict = {}
+    if sa_ids:
+        latest_session = (
+            db.query(
+                PracticeSession.student_assignment_id.label("sa_id"),
+                func.max(PracticeSession.id).label("sid"),
+            )
+            .filter(
+                PracticeSession.student_assignment_id.in_(sa_ids),
+                PracticeSession.practice_mode == practice_mode,
+            )
+            .group_by(PracticeSession.student_assignment_id)
+            .subquery()
+        )
+        for sa_id, answered, correct in (
+            db.query(
+                latest_session.c.sa_id,
+                func.count(PracticeAnswer.id),
+                func.coalesce(
+                    func.sum(case((PracticeAnswer.is_correct.is_(True), 1), else_=0)),
+                    0,
+                ),
+            )
+            .select_from(latest_session)
+            .outerjoin(
+                PracticeAnswer,
+                PracticeAnswer.practice_session_id == latest_session.c.sid,
+            )
+            .group_by(latest_session.c.sa_id)
+            .all()
+        ):
+            answered_by_sa[sa_id] = int(answered or 0)
+            correct_by_sa[sa_id] = int(correct or 0)
+
+    students = []
+    for student in all_students:
+        sa = sa_by_student.get(student.id)
+        is_assigned = sa is not None
+        students.append(
+            {
+                "student_id": student.id,
+                "student_name": student.name,
+                "student_number": student.student_number,
+                "is_assigned": is_assigned,
+                "status": (
+                    sa.status.value
+                    if sa and sa.status
+                    else ("NOT_STARTED" if is_assigned else "unassigned")
+                ),
+                "score": sa.score if sa and sa.score is not None else None,
+                "correct_count": correct_by_sa.get(sa.id) if sa else None,
+                "answered_count": answered_by_sa.get(sa.id) if sa else None,
+                "total_questions": total_items,
+            }
+        )
+
+    result = _quiz_control_status(assignment)
+    result["total_students"] = len(all_students)
+    result["submitted_count"] = sum(
+        1 for s in students if s["status"] in ("SUBMITTED", "RESUBMITTED", "GRADED")
+    )
+    result["students"] = students
+    return result
 
 
 @router.get("/{assignment_id}/quiz-question-stats")

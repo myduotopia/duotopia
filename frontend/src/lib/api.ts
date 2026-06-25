@@ -188,6 +188,47 @@ export interface ReferralReportRow {
   total_points_awarded: number;
 }
 
+// ============ Live Quiz (Issue #835) ============
+export type LiveQuizState = "not_started" | "open" | "closed";
+
+export interface LiveQuizStatus {
+  assignment_id: number;
+  is_live_quiz: boolean;
+  state: LiveQuizState;
+  opened_at: string | null;
+  closed_at: string | null;
+  server_time: string;
+  force_completed_count?: number;
+}
+
+export interface LiveQuizProgressStudent {
+  student_id: number;
+  student_name: string;
+  student_number: number;
+  is_assigned: boolean;
+  status: string;
+  score: number | null;
+  correct_count: number | null;
+  answered_count: number | null;
+  total_questions: number | null;
+}
+
+export interface LiveQuizProgress extends LiveQuizStatus {
+  total_students: number;
+  submitted_count: number;
+  students: LiveQuizProgressStudent[];
+}
+
+export interface StudentQuizStatus {
+  /** teacher 端 Assignment.id（非 StudentAssignment.id），用於訂閱 Realtime 收卷頻道 */
+  assignment_id: number;
+  is_live_quiz: boolean;
+  opened_at: string | null;
+  closed_at: string | null;
+  server_time: string;
+  status: string | null;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -1469,6 +1510,35 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify(data),
     });
+  }
+
+  // ============ Live Quiz (Issue #835) ============
+  // assignmentId = Assignment.id（老師端）
+  async openLiveQuiz(assignmentId: number) {
+    return this.request<LiveQuizStatus>(
+      `/api/teachers/assignments/${assignmentId}/quiz/open`,
+      { method: "POST" },
+    );
+  }
+
+  async closeLiveQuiz(assignmentId: number) {
+    return this.request<LiveQuizStatus>(
+      `/api/teachers/assignments/${assignmentId}/quiz/close`,
+      { method: "POST" },
+    );
+  }
+
+  async getLiveQuizProgress(assignmentId: number) {
+    return this.request<LiveQuizProgress>(
+      `/api/teachers/assignments/${assignmentId}/quiz/live-progress`,
+    );
+  }
+
+  // studentAssignmentId = StudentAssignment.id（學生端，與其餘 quiz 端點一致）
+  async getStudentQuizStatus(studentAssignmentId: number) {
+    return this.request<StudentQuizStatus>(
+      `/api/students/assignments/${studentAssignmentId}/quiz/status`,
+    );
   }
 
   // ============ Assignment & Submission Methods ============

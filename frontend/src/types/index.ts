@@ -179,6 +179,10 @@ export interface Assignment {
     | "word_cloze"
     | "word_cloze_quiz"
     | "tug_of_war";
+  // Issue #835: Live quiz mode（老師主控開始/收卷，全班同步）
+  is_live_quiz?: boolean;
+  quiz_opened_at?: string | null;
+  quiz_closed_at?: string | null;
   // 封存狀態
   is_archived?: boolean;
   archived_at?: string;
@@ -244,6 +248,10 @@ export interface StudentAssignmentCard {
   teacher_name?: string;
   score?: number;
   is_overdue?: boolean;
+  // Issue #835: Live quiz mode — 學生作業卡依此切「等待老師開始/進入考卷/已收卷」
+  is_live_quiz?: boolean;
+  quiz_opened_at?: string | null;
+  quiz_closed_at?: string | null;
 }
 
 // Student Dashboard specific data

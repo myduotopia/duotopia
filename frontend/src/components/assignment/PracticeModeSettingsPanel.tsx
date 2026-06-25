@@ -42,6 +42,7 @@ const TOGGLE_DESC: Partial<Record<SettingKey, string>> = {
   show_translation: `${PM}.showTranslationDesc`,
   show_image: `${PM}.showImageDesc`,
   show_option_images: `${PM}.showOptionImagesDesc`,
+  is_live_quiz: `${PM}.liveQuizHint`,
 };
 
 const SELECT_LABEL: Partial<Record<SettingKey, string>> = {
@@ -243,6 +244,14 @@ export function PracticeModeSettingsPanel({
   );
 
   const renderSpec = (spec: SettingSpec) => {
+    // Issue #835: 依另一個 setting 的值條件隱藏（如 is_live_quiz 開啟時隱藏整卷限時）。
+    if (
+      spec.kind === "select" &&
+      spec.hideWhen &&
+      v[spec.hideWhen.key] === spec.hideWhen.equals
+    ) {
+      return null;
+    }
     switch (spec.kind) {
       case "toggle":
         return renderToggle(spec);

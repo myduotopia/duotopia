@@ -19,6 +19,7 @@ import {
 const base: PracticeModeSettings = {
   time_limit_per_question: 30,
   quiz_time_limit_seconds: 0,
+  is_live_quiz: false,
   shuffle_questions: false,
   show_answer: false,
   play_audio: false,
