@@ -1,4 +1,52 @@
 {
+  "practiceMode": {
+    "reading": {
+      "label": "Sentence Reading",
+      "desc": "Students read sentences aloud, system scores pronunciation"
+    },
+    "rearrangement": {
+      "label": "Sentence Rearrangement",
+      "desc": "Students rearrange shuffled words into correct sentences"
+    },
+    "word_reading": {
+      "label": "Word Reading",
+      "desc": "Students read words aloud, system scores pronunciation"
+    },
+    "word_selection": {
+      "label": "Word Selection",
+      "desc": "View words or listen to audio, select the correct translation (Ebbinghaus item selection)"
+    },
+    "word_selection_quiz": {
+      "label": "Word Selection (Quiz)",
+      "desc": "Answer all items in order with question numbers; locks on submit"
+    },
+    "word_spelling": {
+      "label": "Word Spelling",
+      "desc": "View translation or listen to audio, type the correct spelling (Ebbinghaus item selection)"
+    },
+    "word_spelling_quiz": {
+      "label": "Word Spelling (Quiz)",
+      "desc": "Answer all items in order with question numbers; locks on submit"
+    },
+    "word_cloze": {
+      "label": "Word Cloze",
+      "desc": "Fill in the blank in the example sentence with the correct word form (Ebbinghaus item selection)"
+    },
+    "word_cloze_quiz": {
+      "label": "Word Cloze (Quiz)",
+      "desc": "Answer all items in order with question numbers; locks on submit"
+    },
+    "tug_of_war": {
+      "label": "Tug of War",
+      "desc": "Tug of War: compete on word mastery"
+    },
+    "scoreCategory": {
+      "speaking": "Speaking",
+      "listening": "Listening",
+      "reading": "Reading",
+      "writing": "Writing"
+    }
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -898,12 +946,14 @@
       "enterQuiz": "Enter quiz"
     },
     "scoreCategory": {
+      "_deprecated": "Stage 6 #854: superseded by practiceMode.scoreCategory.*; remove after zero-ref audit",
       "speaking": "Speaking",
       "listening": "Listening",
       "writing": "Writing",
       "reading": "Reading"
     },
     "practiceMode": {
+      "_deprecated": "Stage 6 #854: per-mode labels superseded by practiceMode.<mode>.label; keep .all; remove rest after zero-ref audit",
       "reading": "Sentence Reading",
       "rearrangement": "Sentence Rearrangement",
       "word_selection": "Word Selection",
@@ -1783,6 +1833,7 @@
         "description": "Select the practice mode and related settings for students",
         "advancedSettings": "Advanced Settings",
         "scoreCategory": {
+          "_deprecated": "Stage 6 #854: superseded by practiceMode.scoreCategory.*; remove after zero-ref audit",
           "speaking": "Speaking",
           "listening": "Listening",
           "reading": "Reading",
@@ -5332,6 +5383,7 @@
   "analysisDialog": {
     "title": "Assignment Analysis",
     "practiceMode": {
+      "_deprecated": "Stage 6 #854: superseded by practiceMode.<mode>.label; remove after zero-ref audit",
       "rearrangement": "Sentence Rearrangement",
       "reading": "Sentence Reading",
       "word_selection": "Word Selection",

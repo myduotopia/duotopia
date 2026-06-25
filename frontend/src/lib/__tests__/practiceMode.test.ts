@@ -8,6 +8,7 @@ import { describe, it, expect } from "vitest";
 import {
   isQuizMode,
   practiceModeLabelKey,
+  practiceModeDescKey,
   practiceModeBadgeClass,
   QUIZ_PRACTICE_MODES,
   PRACTICE_MODE_REGISTRY,
@@ -58,18 +59,18 @@ describe("QUIZ_PRACTICE_MODES", () => {
 });
 
 describe("practiceModeLabelKey", () => {
-  it("已知模式回傳對應的 classroomDetail.contentTypes.* key", () => {
+  it("已知模式回傳對應的 practiceMode.<mode>.label key", () => {
     const cases: Record<PracticeMode, string> = {
-      reading: "classroomDetail.contentTypes.SPEAKING",
-      rearrangement: "classroomDetail.contentTypes.REARRANGEMENT",
-      word_reading: "classroomDetail.contentTypes.WORD_READING",
-      word_selection: "classroomDetail.contentTypes.WORD_SELECTION",
-      word_selection_quiz: "classroomDetail.contentTypes.WORD_SELECTION_QUIZ",
-      word_spelling: "classroomDetail.contentTypes.WORD_SPELLING",
-      word_spelling_quiz: "classroomDetail.contentTypes.WORD_SPELLING_QUIZ",
-      word_cloze: "classroomDetail.contentTypes.WORD_CLOZE",
-      word_cloze_quiz: "classroomDetail.contentTypes.WORD_CLOZE_QUIZ",
-      tug_of_war: "classroomDetail.contentTypes.TUG_OF_WAR",
+      reading: "practiceMode.reading.label",
+      rearrangement: "practiceMode.rearrangement.label",
+      word_reading: "practiceMode.word_reading.label",
+      word_selection: "practiceMode.word_selection.label",
+      word_selection_quiz: "practiceMode.word_selection_quiz.label",
+      word_spelling: "practiceMode.word_spelling.label",
+      word_spelling_quiz: "practiceMode.word_spelling_quiz.label",
+      word_cloze: "practiceMode.word_cloze.label",
+      word_cloze_quiz: "practiceMode.word_cloze_quiz.label",
+      tug_of_war: "practiceMode.tug_of_war.label",
     };
     (Object.keys(cases) as PracticeMode[]).forEach((mode) => {
       expect(practiceModeLabelKey(mode)).toBe(cases[mode]);
@@ -80,6 +81,20 @@ describe("practiceModeLabelKey", () => {
     expect(practiceModeLabelKey("unknown_mode")).toBe("");
     expect(practiceModeLabelKey(null)).toBe("");
     expect(practiceModeLabelKey(undefined)).toBe("");
+  });
+});
+
+describe("practiceModeDescKey", () => {
+  it("已知模式回傳對應的 practiceMode.<mode>.desc key", () => {
+    (Object.keys(PRACTICE_MODE_REGISTRY) as PracticeMode[]).forEach((mode) => {
+      expect(practiceModeDescKey(mode)).toBe(`practiceMode.${mode}.desc`);
+    });
+  });
+
+  it("未知模式 / null 回空字串", () => {
+    expect(practiceModeDescKey("unknown_mode")).toBe("");
+    expect(practiceModeDescKey(null)).toBe("");
+    expect(practiceModeDescKey(undefined)).toBe("");
   });
 });
 

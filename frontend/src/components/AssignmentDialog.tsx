@@ -62,7 +62,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { PracticeMode } from "@/lib/practiceMode";
+import { practiceModeLabelKey, type PracticeMode } from "@/lib/practiceMode";
 import {
   listModesForDataset,
   applyModeDefaults,
@@ -1370,7 +1370,7 @@ export function AssignmentDialog({
       if (isExampleSentenceRequiredError(error)) {
         const detail = getExampleSentenceErrorDetail(error);
         const modeKey = detail?.practice_mode
-          ? `assignment.practiceMode.${detail.practice_mode}`
+          ? practiceModeLabelKey(detail.practice_mode)
           : "";
         const modeLabel = modeKey
           ? t(modeKey, { defaultValue: detail?.practice_mode || "" })
@@ -3007,7 +3007,7 @@ export function AssignmentDialog({
                               )}
                             >
                               {t(
-                                `dialogs.assignmentDialog.practiceMode.scoreCategory.${currentCategory}`,
+                                `practiceMode.scoreCategory.${currentCategory}`,
                               )}
                             </span>
                           </div>
