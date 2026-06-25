@@ -203,6 +203,8 @@ jobs:
           echo "URL=${{ secrets.DEVELOP_SUPABASE_URL }}" >> $GITHUB_OUTPUT
           echo "ANON_KEY=${{ secrets.DEVELOP_SUPABASE_ANON_KEY }}" >> $GITHUB_OUTPUT
         else
+          # 預設分支（staging 及其他非 main/develop）一律用 staging 憑證，
+          # 與本檔其他步驟（backend URL / Dockerfile 選擇）的 else 分支一致。
           echo "URL=${{ secrets.STAGING_SUPABASE_URL }}" >> $GITHUB_OUTPUT
           echo "ANON_KEY=${{ secrets.STAGING_SUPABASE_ANON_KEY }}" >> $GITHUB_OUTPUT
         fi

@@ -691,13 +691,24 @@ async def close_live_quiz(
     assignment = _get_owned_live_quiz_or_404(assignment_id, db, current_teacher)
     practice_mode = assignment.practice_mode
 
+    from services.realtime_broadcast import broadcast_quiz_closed
+
     # 重複收卷 idempotent：closed_at 已設則不覆寫時間，僅再收尾殘留 IN_PROGRESS。
-    # 先 commit 關閘門，再逐生計分：個別學生計分失敗不該 rollback 整筆收卷，
-    # 否則閘門被退回、老師拿到 500、學生繼續作答（review 指出的 Medium 風險）。
+    # 先 commit 關閘門：個別學生計分失敗不該 rollback 整筆收卷（否則閘門被退回、
+    # 老師拿到 500、學生繼續作答）；且 closed_at 一落地，answer 端的
+    # _guard_live_gate 立即回 409，server-side 即時止血。
     if assignment.quiz_closed_at is None:
         assignment.quiz_closed_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(assignment)
+
+    # Issue #835 點 1：閘門一關就先推 Realtime broadcast，讓全班即時跳離考卷頁。
+    # 刻意放在逐生計分迴圈「之前」→ 大班級不會被數十次 DB round-trip 拖過推播時機。
+    # broadcast_quiz_closed 永不拋例外；未設定/失敗時學生端 polling fallback 接手。
+    if assignment.quiz_closed_at is not None:
+        await broadcast_quiz_closed(
+            assignment.id, assignment.quiz_closed_at.isoformat()
+        )
 
     in_progress = (
         db.query(StudentAssignment)
@@ -721,15 +732,6 @@ async def close_live_quiz(
             db.rollback()
             logger.exception("收卷 force-complete 失敗，跳過 sa=%s", sa.id)
     db.refresh(assignment)
-
-    # Issue #835 點 1：收卷後推播 Realtime broadcast，讓全班學生即時跳離考卷頁。
-    # broadcast_quiz_closed 永不拋例外；未設定 Supabase 或失敗時，學生端 polling fallback 接手。
-    from services.realtime_broadcast import broadcast_quiz_closed
-
-    if assignment.quiz_closed_at is not None:
-        await broadcast_quiz_closed(
-            assignment.id, assignment.quiz_closed_at.isoformat()
-        )
 
     result = _quiz_control_status(assignment)
     result["force_completed_count"] = forced

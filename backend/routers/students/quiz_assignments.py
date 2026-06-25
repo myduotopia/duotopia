@@ -307,6 +307,10 @@ def _guard_live_gate(assignment: Assignment) -> None:
     - 未開放（quiz_opened_at null）→ 403：學生還不能進考卷。
     - 已收卷（quiz_closed_at 非 null）→ 409：考試已結束（前端應導向 review）。
     self-paced（is_live_quiz=False）不受任何影響。
+
+    TODO(#835): is_live_quiz 驗證用 endswith('_quiz')，speaking_quiz 也算 live，
+    但目前 quiz_assignments.py 無 start/answer_speaking_quiz 端點 → speaking live
+    quiz 上線時學生端不會經過本守衛，屆時需在對應端點補上 _guard_live_gate。
     """
     if not getattr(assignment, "is_live_quiz", False):
         return
@@ -539,6 +543,10 @@ async def submit_word_selection_quiz_answer(
     student_id = int(current_student.get("sub"))
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
     assignment = _get_assignment_or_400(db, sa, "word_selection_quiz")
+    # Issue #835: 收卷後（quiz_closed_at 已設）即拒收答案 → 409 QUIZ_CLOSED。
+    # 與 start 端一致，且 closed_at 在 close 端原子先 commit，精準關閉
+    # 「閘門已關但該生 force-complete 尚未跑到」的 race window。
+    _guard_live_gate(assignment)
     _block_if_submitted(sa)
 
     if request.session_id is None:
@@ -648,7 +656,9 @@ async def submit_word_spelling_quiz_answer(
 ):
     student_id = int(current_student.get("sub"))
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
-    _get_assignment_or_400(db, sa, "word_spelling_quiz")
+    assignment = _get_assignment_or_400(db, sa, "word_spelling_quiz")
+    # Issue #835: 收卷後拒收答案（同 selection answer，閘門 closed_at 為準）。
+    _guard_live_gate(assignment)
     _block_if_submitted(sa)
 
     if request.session_id is None:
@@ -771,7 +781,9 @@ async def submit_word_cloze_quiz_answer(
 ):
     student_id = int(current_student.get("sub"))
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
-    _get_assignment_or_400(db, sa, "word_cloze_quiz")
+    assignment = _get_assignment_or_400(db, sa, "word_cloze_quiz")
+    # Issue #835: 收卷後拒收答案（同 selection answer，閘門 closed_at 為準）。
+    _guard_live_gate(assignment)
     _block_if_submitted(sa)
 
     if request.session_id is None:
