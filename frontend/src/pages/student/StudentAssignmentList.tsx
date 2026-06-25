@@ -201,7 +201,9 @@ export default function StudentAssignmentList() {
       a.is_live_quiz &&
       a.status !== "SUBMITTED" &&
       a.status !== "RESUBMITTED" &&
-      a.status !== "GRADED",
+      a.status !== "GRADED" &&
+      // RETURNED（退回訂正）已脫離 live 同步流程，否則收卷後該生會無限 2.5s 輪詢。
+      a.status !== "RETURNED",
   );
   useEffect(() => {
     if (!hasPendingLiveQuiz) return;

@@ -55,7 +55,9 @@ export function useQuizStatusPolling({
       if (!cancelled) timer = setTimeout(poll, intervalMs);
     };
 
-    timer = setTimeout(poll, intervalMs);
+    // 立即跑首輪（poll() 內部會自排下一輪）：當 Realtime 連線、intervalMs=15s 時，
+    // 若 broadcast 漏接，fallback 不必等滿一個間隔（最長 15s）才偵測到收卷。
+    poll();
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);

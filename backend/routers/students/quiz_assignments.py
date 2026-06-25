@@ -944,7 +944,11 @@ def _complete_quiz(
     session_id: Optional[int],
 ) -> Tuple[float, int, int]:
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
-    _get_assignment_or_400(db, sa, expected_mode)
+    assignment = _get_assignment_or_400(db, sa, expected_mode)
+    # Issue #835: 收卷後（quiz_closed_at 已設）禁止學生自行 /complete → 409 QUIZ_CLOSED。
+    # 與 start/answer 端一致，補上「NOT_STARTED 學生在收卷後自送 0 分 SUBMITTED、
+    # 繞過缺考不計分」與「收卷 race window 內自我提交」的漏洞。
+    _guard_live_gate(assignment)
 
     # 曾被退回過（returned_at 有值）＝本次完成屬「訂正再提交」。改用 returned_at 而非
     # 當下 status 判定（robust）：避免 status 被別路徑改動成非 RETURNED 時，誤把訂正
