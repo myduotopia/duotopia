@@ -727,7 +727,8 @@ export function contentTypeToDataset(
   const t = (type ?? "").toUpperCase();
   if (["READING_ASSESSMENT", "EXAMPLE_SENTENCES"].includes(t))
     return "example_sentences";
-  if (["SENTENCE_MAKING", "VOCABULARY_SET"].includes(t)) return "vocabulary_set";
+  if (["SENTENCE_MAKING", "VOCABULARY_SET"].includes(t))
+    return "vocabulary_set";
   return null;
 }
 
