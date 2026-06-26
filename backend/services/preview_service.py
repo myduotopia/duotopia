@@ -9,7 +9,7 @@ code are affected by this refactoring.
 import logging
 import random
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List
 
 from fastapi import HTTPException, UploadFile
 from pydantic import BaseModel
@@ -345,6 +345,9 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
         ),
         "show_option_images": bool(getattr(assignment, "show_option_images", False)),
         "quiz_time_limit_seconds": assignment.quiz_time_limit_seconds,
+        # #854: 即刻練習練習畫面進階設定面板的初值需要這兩個欄位
+        "shuffle_questions": bool(getattr(assignment, "shuffle_questions", False)),
+        "target_proficiency": getattr(assignment, "target_proficiency", None),
         "total_activities": len(activities),
         "activities": activities,
     }

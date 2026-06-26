@@ -6,6 +6,8 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, model_validator, field_validator
 
+from utils.practice_mode import validate_practice_mode
+
 # Issue #828: 整卷限時上限守衛（10 小時），擋掉負數/超大值；
 # 不用精確 allow-list 以免日後 UI 新增選項就壞掉
 _MAX_QUIZ_TIME_LIMIT_SECONDS = 36000
@@ -36,9 +38,8 @@ class CreateAssignmentRequest(BaseModel):
     # 機構模式：傳遞機構/學校 ID 以供後端授權驗證
     organization_id: Optional[str] = None
     school_id: Optional[str] = None
-    # 作答模式設定
-    # reading, rearrangement, word_reading, word_selection, word_spelling,
-    # word_cloze, word_selection_quiz, word_spelling_quiz, word_cloze_quiz
+    # 作答模式設定 — 合法值見 utils.practice_mode.ALLOWED_PRACTICE_MODES（含 tug_of_war）；
+    # 由下方 _check_practice_mode 驗證。
     practice_mode: Optional[str] = None
     answer_mode: Optional[
         str
@@ -63,6 +64,12 @@ class CreateAssignmentRequest(BaseModel):
     @classmethod
     def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
         return _validate_quiz_time_limit(v)
+
+    @field_validator("practice_mode")
+    @classmethod
+    def _check_practice_mode(cls, v: Optional[str]) -> Optional[str]:
+        # #854: 單一真相源驗證（先前完全不檢查，任意字串都會寫進 DB）
+        return validate_practice_mode(v)
 
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "CreateAssignmentRequest":

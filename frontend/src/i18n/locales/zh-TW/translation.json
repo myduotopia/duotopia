@@ -1,4 +1,52 @@
 {
+  "practiceMode": {
+    "reading": {
+      "label": "例句朗讀",
+      "desc": "學生朗讀例句，系統評分發音"
+    },
+    "rearrangement": {
+      "label": "例句重組",
+      "desc": "學生將打散的單字重新排列成正確句子"
+    },
+    "word_reading": {
+      "label": "單字朗讀",
+      "desc": "學生朗讀單字，系統評分發音"
+    },
+    "word_selection": {
+      "label": "單字選擇",
+      "desc": "看單字或聽音檔，選擇正確的翻譯（艾賓浩斯記憶曲線選題）"
+    },
+    "word_selection_quiz": {
+      "label": "單字選擇·小考",
+      "desc": "依教材題目順序作答，有題號，提交即鎖定"
+    },
+    "word_spelling": {
+      "label": "單字拼寫",
+      "desc": "看翻譯或聽音檔，拼寫正確的單字（艾賓浩斯記憶曲線選題）"
+    },
+    "word_spelling_quiz": {
+      "label": "單字拼寫·小考",
+      "desc": "依教材題目順序作答，有題號，提交即鎖定"
+    },
+    "word_cloze": {
+      "label": "單字克漏字",
+      "desc": "看例句填空，輸入正確的單字變形（艾賓浩斯記憶曲線選題）"
+    },
+    "word_cloze_quiz": {
+      "label": "單字克漏字·小考",
+      "desc": "依教材題目順序作答，有題號，提交即鎖定"
+    },
+    "tug_of_war": {
+      "label": "拔河遊戲",
+      "desc": "拔河遊戲：與同學比拚單字熟練度"
+    },
+    "scoreCategory": {
+      "speaking": "口說",
+      "listening": "聽力",
+      "reading": "閱讀",
+      "writing": "寫作"
+    }
+  },
   "common": {
     "save": "儲存",
     "cancel": "取消",
@@ -1043,12 +1091,14 @@
       "enterQuiz": "進入考卷"
     },
     "scoreCategory": {
+      "_deprecated": "Stage 6 #854: superseded by practiceMode.scoreCategory.*; remove after zero-ref audit",
       "speaking": "口說",
       "listening": "聽力",
       "writing": "寫作",
       "reading": "閱讀"
     },
     "practiceMode": {
+      "_deprecated": "Stage 6 #854: per-mode labels superseded by practiceMode.<mode>.label; keep .all; remove rest after zero-ref audit",
       "reading": "例句朗讀",
       "rearrangement": "例句重組",
       "word_selection": "單字選擇",
@@ -1925,6 +1975,7 @@
         "description": "選擇學生練習的模式和相關設定",
         "advancedSettings": "進階設定",
         "scoreCategory": {
+          "_deprecated": "Stage 6 #854: superseded by practiceMode.scoreCategory.*; remove after zero-ref audit",
           "speaking": "口說",
           "listening": "聽力",
           "reading": "閱讀",
@@ -1942,6 +1993,8 @@
         "shuffleQuestionsDesc": "每次練習時隨機排列題目順序",
         "studentPreview": "學生畫面預覽（demo 教材）",
         "studentPreviewDisclaimer": "預覽使用範例教材，部分模式（例句朗讀、例句重組）的時間／音檔等設定以示範作業為準，不會跟著左側設定變動。",
+        "previewNotImplemented": "此模式預覽尚未實作",
+        "selectModePrompt": "選擇一個模式查看預覽",
         "showAnswer": "顯示答案",
         "showAnswerDesc": "答題結束後顯示正確答案",
         "wordSelectionShowAnswerDesc": "學生答錯後揭示正確答案",
@@ -5260,6 +5313,11 @@
     "creating": "建立中...",
     "start": "開始練習",
     "error": "建立即刻練習失敗",
+    "advancedSettings": "進階設定",
+    "applyAndRestart": "套用並重新開始",
+    "applying": "套用中...",
+    "reconfigured": "已套用新設定，從頭開始練習",
+    "reconfigureError": "套用設定失敗",
     "modes": {
       "reading": {
         "label": "例句朗讀",
@@ -5371,6 +5429,7 @@
   "analysisDialog": {
     "title": "作業分析",
     "practiceMode": {
+      "_deprecated": "Stage 6 #854: superseded by practiceMode.<mode>.label; remove after zero-ref audit",
       "rearrangement": "例句重組",
       "reading": "例句朗讀",
       "word_selection": "單字選擇",

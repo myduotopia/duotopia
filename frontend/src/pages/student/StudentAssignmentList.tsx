@@ -428,7 +428,7 @@ export default function StudentAssignmentList() {
                     variant="outline"
                     className={`${categoryColor} text-[10px] sm:text-xs px-1.5 sm:px-2 py-0 sm:py-0.5 border`}
                   >
-                    {t(`studentAssignmentList.scoreCategory.${scoreCategory}`)}
+                    {t(`practiceMode.scoreCategory.${scoreCategory}`)}
                   </Badge>
                 )}
               </div>

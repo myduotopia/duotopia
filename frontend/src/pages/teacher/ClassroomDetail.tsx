@@ -266,7 +266,7 @@ export default function ClassroomDetail({
         return { label: t(key), color: practiceModeBadgeClass(practiceMode) };
       }
       return {
-        label: t("classroomDetail.contentTypes.WORD_READING"),
+        label: t("practiceMode.word_reading.label"),
         color:
           "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
       };
@@ -278,13 +278,13 @@ export default function ClassroomDetail({
     ) {
       if (practiceMode === "rearrangement") {
         return {
-          label: t("classroomDetail.contentTypes.REARRANGEMENT"),
+          label: t("practiceMode.rearrangement.label"),
           color:
             "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
         };
       }
       return {
-        label: t("classroomDetail.contentTypes.SPEAKING"),
+        label: t("practiceMode.reading.label"),
         color:
           "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
       };

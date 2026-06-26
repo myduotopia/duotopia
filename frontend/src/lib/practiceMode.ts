@@ -13,6 +13,12 @@
  *   `supportedDatasets`，以及 helper `getModeConfig` / `listModesForDataset` /
  *   `resolveScoreCategoryFE` / `applyModeDefaults`。
  *
+ * - #854 Stage 6：把 label/desc 的 i18n 收斂到單一 `practiceMode.<mode>.{label,desc}`
+ *   命名空間（取代寄生在 `classroomDetail.contentTypes` 的 UPPER enum label，以及散落的
+ *   `studentAssignmentList.practiceMode.*` / `analysisDialog.practiceMode.*`）；scoreCategory
+ *   文案統一 `practiceMode.scoreCategory.*`。registry `labelKey`/`descKey` 指新 key，舊 key
+ *   暫留標 `_deprecated`、零引用後另 PR 刪。只做 zh-TW/en（ja/ko 本就 fallback 到 zh-TW）。
+ *
  * 設計原則：純加法，既有 export 簽名不變、改由 registry 算出，對 10 個 consumer 無感。
  *
  * 成績類別（聽說讀寫 score_category）改以**規則**（`ScoreCategoryRule`）存放，鏡射後端
@@ -138,9 +144,11 @@ export type SettingSpec =
 
 /** 單一作業類型的完整 metadata（單一真相來源）。 */
 export interface ModeConfig {
-  // ---- 顯示（backs practiceModeLabelKey / BadgeClass / Icon / CrayonBg）----
-  /** 完整 i18n key（`classroomDetail.contentTypes.*`）。 */
+  // ---- 顯示（backs practiceModeLabelKey / DescKey / BadgeClass / Icon / CrayonBg）----
+  /** 模式名稱 i18n key（`practiceMode.<mode>.label`）。 */
   labelKey: string;
+  /** 模式描述 i18n key（`practiceMode.<mode>.desc`）。 */
+  descKey: string;
   /** badge className。 */
   badgeClass: string;
   /** 學生卡 lucide icon component。 */
@@ -341,7 +349,8 @@ const CRAYON_BG_DEFAULT = "bg-gray-50 text-gray-600";
  */
 export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
   reading: {
-    labelKey: "classroomDetail.contentTypes.SPEAKING",
+    labelKey: "practiceMode.reading.label",
+    descKey: "practiceMode.reading.desc",
     badgeClass:
       "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
     icon: Mic,
@@ -364,7 +373,8 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     iconColorClass: "text-orange-600",
   },
   rearrangement: {
-    labelKey: "classroomDetail.contentTypes.REARRANGEMENT",
+    labelKey: "practiceMode.rearrangement.label",
+    descKey: "practiceMode.rearrangement.desc",
     badgeClass:
       "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
     icon: Shuffle,
@@ -396,7 +406,8 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     iconColorClass: "text-blue-600",
   },
   word_reading: {
-    labelKey: "classroomDetail.contentTypes.WORD_READING",
+    labelKey: "practiceMode.word_reading.label",
+    descKey: "practiceMode.word_reading.desc",
     badgeClass:
       "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
     icon: Volume2,
@@ -419,7 +430,8 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     iconColorClass: "text-purple-600",
   },
   word_selection: {
-    labelKey: "classroomDetail.contentTypes.WORD_SELECTION",
+    labelKey: "practiceMode.word_selection.label",
+    descKey: "practiceMode.word_selection.desc",
     badgeClass:
       "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
     icon: MousePointerClick,
@@ -454,7 +466,8 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     iconColorClass: "text-emerald-600",
   },
   word_selection_quiz: {
-    labelKey: "classroomDetail.contentTypes.WORD_SELECTION_QUIZ",
+    labelKey: "practiceMode.word_selection_quiz.label",
+    descKey: "practiceMode.word_selection_quiz.desc",
     badgeClass:
       "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
     icon: MousePointerClick,
@@ -489,7 +502,8 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     iconColorClass: "text-emerald-600",
   },
   word_spelling: {
-    labelKey: "classroomDetail.contentTypes.WORD_SPELLING",
+    labelKey: "practiceMode.word_spelling.label",
+    descKey: "practiceMode.word_spelling.desc",
     badgeClass:
       "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
     icon: Keyboard,
@@ -529,7 +543,8 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     iconColorClass: "text-amber-600",
   },
   word_spelling_quiz: {
-    labelKey: "classroomDetail.contentTypes.WORD_SPELLING_QUIZ",
+    labelKey: "practiceMode.word_spelling_quiz.label",
+    descKey: "practiceMode.word_spelling_quiz.desc",
     badgeClass:
       "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
     icon: Keyboard,
@@ -568,7 +583,8 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     iconColorClass: "text-amber-600",
   },
   word_cloze: {
-    labelKey: "classroomDetail.contentTypes.WORD_CLOZE",
+    labelKey: "practiceMode.word_cloze.label",
+    descKey: "practiceMode.word_cloze.desc",
     badgeClass:
       "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300",
     icon: FileText,
@@ -610,7 +626,8 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     iconColorClass: "text-pink-600",
   },
   word_cloze_quiz: {
-    labelKey: "classroomDetail.contentTypes.WORD_CLOZE_QUIZ",
+    labelKey: "practiceMode.word_cloze_quiz.label",
+    descKey: "practiceMode.word_cloze_quiz.desc",
     badgeClass:
       "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300",
     icon: FileText,
@@ -650,7 +667,8 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     iconColorClass: "text-pink-600",
   },
   tug_of_war: {
-    labelKey: "classroomDetail.contentTypes.TUG_OF_WAR",
+    labelKey: "practiceMode.tug_of_war.label",
+    descKey: "practiceMode.tug_of_war.desc",
     badgeClass:
       "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
     icon: BookOpen, // 目前無專屬圖示，沿用 fallback
@@ -702,6 +720,32 @@ export function listModesForDataset(dataset: PracticeDataset): PracticeMode[] {
   );
 }
 
+/** content.type（大寫 enum 或舊小寫）對應到 PracticeDataset；未知回 null。 */
+export function contentTypeToDataset(
+  type?: string | null,
+): PracticeDataset | null {
+  const t = (type ?? "").toUpperCase();
+  if (["READING_ASSESSMENT", "EXAMPLE_SENTENCES"].includes(t))
+    return "example_sentences";
+  if (["SENTENCE_MAKING", "VOCABULARY_SET"].includes(t))
+    return "vocabulary_set";
+  return null;
+}
+
+/**
+ * 即刻練習練習畫面可切換的模式 chip 列。與派發 sheet 同源（`listModesForDataset`）以
+ * 保持 chip 名稱/順序一致，另在單字集補上 `tug_of_war`（listModesForDataset 不含它，
+ * 因為它不經 AssignmentDialog 派發，但即刻練習要提供）。
+ */
+export function instantPracticeModesForContentType(
+  type?: string | null,
+): PracticeMode[] {
+  const dataset = contentTypeToDataset(type);
+  if (!dataset) return [];
+  const modes = listModesForDataset(dataset);
+  return dataset === "vocabulary_set" ? [...modes, "tug_of_war"] : modes;
+}
+
 /**
  * 前端版成績類別解析，鏡射後端 `resolve_score_category`（唯一真相仍在後端）。
  * 僅用於派發 UI 的 score 提示預覽；測試斷言與後端對照表逐格等價。
@@ -747,11 +791,19 @@ export function isQuizMode(mode?: string | null): boolean {
 }
 
 /**
- * 回傳該 practice_mode 的完整 i18n key（`classroomDetail.contentTypes.*`）。
+ * 回傳該 practice_mode 的名稱 i18n key（`practiceMode.<mode>.label`）。
  * 未知模式回傳空字串，讓呼叫端自行決定 fallback。
  */
 export function practiceModeLabelKey(mode?: string | null): string {
   return getModeConfig(mode)?.labelKey ?? "";
+}
+
+/**
+ * 回傳該 practice_mode 的描述 i18n key（`practiceMode.<mode>.desc`）。
+ * 未知模式回傳空字串，讓呼叫端自行決定 fallback。
+ */
+export function practiceModeDescKey(mode?: string | null): string {
+  return getModeConfig(mode)?.descKey ?? "";
 }
 
 /** 回傳該 practice_mode 的 badge className（未知回中性灰）。 */
@@ -792,7 +844,7 @@ export const PRACTICE_MODE_ORDER: PracticeMode[] = [
 export interface PracticeModeFilterOption {
   /** 原始 practice_mode 值（作為 select value / 後端 query 參數） */
   mode: PracticeMode;
-  /** i18n key（`classroomDetail.contentTypes.*`） */
+  /** i18n key（`practiceMode.<mode>.label`） */
   labelKey: string;
 }
 

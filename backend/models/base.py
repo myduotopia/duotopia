@@ -8,7 +8,7 @@ from sqlalchemy import (
     TypeDecorator,
 )
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQL_UUID, JSONB
-from database import Base
+from database import Base  # noqa: F401  # 經 models/__init__ 再匯出供各處 import
 import enum
 import uuid
 
@@ -142,6 +142,7 @@ class PracticeMode(str, enum.Enum):
     WORD_CLOZE = "word_cloze"  # 單字克漏字 -> 艾賓浩斯
     WORD_SPELLING_QUIZ = "word_spelling_quiz"  # 單字拼寫 -> 小考
     WORD_CLOZE_QUIZ = "word_cloze_quiz"  # 單字克漏字 -> 小考
+    TUG_OF_WAR = "tug_of_war"  # 拔河對戰（雙人搶答；不經派發 dialog，由即刻練習提供）
 
 
 class ScoreCategory(str, enum.Enum):

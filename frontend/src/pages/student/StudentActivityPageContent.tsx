@@ -203,6 +203,9 @@ interface StudentActivityPageContentProps {
   };
   // #830: 老師預覽小考時，注入每張卡底部「該題班級表現」%條（學生作答頁不傳）。
   renderCardFooter?: (contentItemId: number) => ReactNode;
+  // #854: 注入頂部 sticky header 右側的動作區（即刻練習用來放「⚡ 進階設定」觸發鈕）。
+  // 學生作答 / demo 不傳，對其無影響。
+  headerActions?: ReactNode;
 }
 
 // =============================================================================
@@ -310,6 +313,7 @@ export default function StudentActivityPageContent({
   timeLimitPerQuestion = 0,
   previewSettings,
   renderCardFooter,
+  headerActions,
 }: StudentActivityPageContentProps) {
   const { t } = useTranslation();
 
@@ -2554,6 +2558,8 @@ export default function StudentActivityPageContent({
               </div>
 
               <div className="flex items-center gap-2 sm:gap-3 justify-end flex-shrink-0">
+                {/* #854: 即刻練習「⚡ 進階設定」觸發鈕（向下下拉浮層）注入點 */}
+                {headerActions}
                 {saving && (
                   <div className="flex items-center gap-1 sm:gap-2 text-xs text-gray-600">
                     <Loader2 className="h-3 w-3 animate-spin" />
