@@ -31,8 +31,12 @@ export class AzureSpeechService {
 
   // 🎯 Issue #118: localStorage key for pending uploads
   private readonly STORAGE_KEY = "duotopia_pending_uploads";
+  // 🎯 Issue #138: optimistic-locking version counter for the queue
+  private readonly VERSION_KEY = "duotopia_pending_uploads_version";
   private readonly MAX_QUEUE_SIZE = 10 * 1024 * 1024; // 10MB limit
   private readonly MAX_RETRIES = 2;
+  // 🎯 Issue #138: max attempts to commit a queue mutation under contention
+  private readonly QUEUE_MUTATION_RETRIES = 3;
 
   /**
    * 获取 Azure Speech Token（带缓存，提前1分钟过期）
@@ -394,42 +398,83 @@ export class AzureSpeechService {
   // ===== localStorage Management =====
 
   /**
+   * 🎯 Issue #138: Atomically read-modify-write the queue with optimistic
+   * locking. The mutator runs against a fresh snapshot; if another context
+   * (e.g. a second browser tab) bumped the version between our read and our
+   * write, we re-read and retry instead of clobbering their change.
+   *
+   * @param mutator Returns the next queue, or null to abort the write.
+   * @returns true if the mutation was committed, false otherwise.
+   */
+  private mutateQueue(
+    mutator: (queue: PendingUpload[]) => PendingUpload[] | null,
+  ): boolean {
+    for (let attempt = 0; attempt < this.QUEUE_MUTATION_RETRIES; attempt++) {
+      try {
+        const versionBefore = localStorage.getItem(this.VERSION_KEY) || "0";
+        const current = this.getPendingUploads();
+
+        const next = mutator(current);
+        if (next === null) {
+          return false; // mutator chose to abort (e.g. item too large)
+        }
+
+        // Optimistic lock: bail to a retry if anyone wrote since our read.
+        const versionNow = localStorage.getItem(this.VERSION_KEY) || "0";
+        if (versionNow !== versionBefore) {
+          continue;
+        }
+
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(
+          this.VERSION_KEY,
+          String(parseInt(versionBefore, 10) + 1),
+        );
+        return true;
+      } catch (error) {
+        console.error("Failed to mutate pending upload queue:", error);
+        return false;
+      }
+    }
+
+    console.warn("Queue mutation gave up after version conflicts");
+    return false;
+  }
+
+  /**
    * 🎯 Issue #118: Save pending upload to localStorage
+   * 🎯 Issue #138: now goes through mutateQueue for concurrency safety
    */
   private async savePendingUpload(upload: PendingUpload): Promise<boolean> {
-    try {
-      const existing = this.getPendingUploads();
-      const itemSize = new Blob([JSON.stringify(upload)]).size;
+    const itemSize = new Blob([JSON.stringify(upload)]).size;
 
-      // Check queue size limit
-      let currentSize = this.getQueueSize();
+    // If single item is too large, reject (independent of queue state).
+    if (itemSize > this.MAX_QUEUE_SIZE) {
+      console.warn("Audio file too large for retry queue");
+      return false;
+    }
 
-      // Prune oldest items if over limit
-      while (
-        currentSize + itemSize > this.MAX_QUEUE_SIZE &&
-        existing.length > 0
-      ) {
-        const removed = existing.shift();
+    const saved = this.mutateQueue((existing) => {
+      const queue = [...existing];
+
+      // Prune oldest items until the new item fits under the size limit.
+      let currentSize = new Blob([JSON.stringify(queue)]).size;
+      while (currentSize + itemSize > this.MAX_QUEUE_SIZE && queue.length > 0) {
+        const removed = queue.shift();
         if (removed) {
           console.warn(`Pruning old upload ${removed.id} to make space`);
         }
-        currentSize = new Blob([JSON.stringify(existing)]).size;
+        currentSize = new Blob([JSON.stringify(queue)]).size;
       }
 
-      // If single item is too large, reject
-      if (itemSize > this.MAX_QUEUE_SIZE) {
-        console.warn("Audio file too large for retry queue");
-        return false;
-      }
+      queue.push(upload);
+      return queue;
+    });
 
-      existing.push(upload);
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(existing));
+    if (saved) {
       console.log(`Saved pending upload ${upload.id} for retry`);
-      return true;
-    } catch (error) {
-      console.error("Failed to save pending upload:", error);
-      return false;
     }
+    return saved;
   }
 
   /**
@@ -448,32 +493,25 @@ export class AzureSpeechService {
    * 🎯 Issue #118: Remove a pending upload from localStorage
    */
   private removePendingUpload(id: string): void {
-    const pending = this.getPendingUploads().filter((u) => u.id !== id);
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(pending));
+    // 🎯 Issue #138: concurrency-safe removal via mutateQueue
+    this.mutateQueue((pending) => pending.filter((u) => u.id !== id));
   }
 
   /**
    * 🎯 Issue #118: Update a pending upload in localStorage
    */
   private updatePendingUpload(upload: PendingUpload): void {
-    const pending = this.getPendingUploads();
-    const index = pending.findIndex((u) => u.id === upload.id);
-    if (index >= 0) {
-      pending[index] = upload;
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(pending));
-    }
-  }
-
-  /**
-   * 🎯 Issue #118: Get current queue size in bytes
-   */
-  private getQueueSize(): number {
-    try {
-      const data = localStorage.getItem(this.STORAGE_KEY);
-      return data ? new Blob([data]).size : 0;
-    } catch {
-      return 0;
-    }
+    // 🎯 Issue #138: concurrency-safe update via mutateQueue
+    this.mutateQueue((pending) => {
+      const index = pending.findIndex((u) => u.id === upload.id);
+      if (index < 0) {
+        // Entry was concurrently removed elsewhere; don't resurrect it.
+        return null;
+      }
+      const next = [...pending];
+      next[index] = upload;
+      return next;
+    });
   }
 
   // ===== Utility Methods =====
