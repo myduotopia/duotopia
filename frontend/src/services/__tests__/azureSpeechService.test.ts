@@ -141,6 +141,51 @@ describe("AzureSpeechService", () => {
       expect(axios.post).toHaveBeenCalledTimes(2);
     });
 
+    it("should cache with a 120s safety buffer (Issue #136)", async () => {
+      vi.mocked(axios.post).mockResolvedValueOnce({
+        data: { token: "buffer-token", region: "eastasia", expires_in: 600 },
+      });
+
+      const before = Date.now();
+      await service["getToken"]();
+      const after = Date.now();
+
+      const cache = service["tokenCache"];
+      expect(cache).not.toBeNull();
+      const expiresAt = cache!.expiresAt.getTime();
+
+      // expiresAt 应为 now + (600 - 120) = now + 480s（含调用耗时的容差窗口）
+      expect(expiresAt).toBeGreaterThanOrEqual(before + 480 * 1000);
+      expect(expiresAt).toBeLessThanOrEqual(after + 480 * 1000);
+    });
+
+    it("should clamp to a non-negative buffer for small expires_in (Issue #136)", async () => {
+      // 后端 cache 命中时可能回传很小的剩余秒数（如 100s）
+      vi.mocked(axios.post)
+        .mockResolvedValueOnce({
+          data: { token: "small-token", region: "eastasia", expires_in: 100 },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            token: "refetched-token",
+            region: "eastasia",
+            expires_in: 600,
+          },
+        });
+
+      const before = Date.now();
+      await service["getToken"]();
+
+      const cache = service["tokenCache"];
+      // Math.max(0, 100 - 120) = 0 → expiresAt 落在「现在」，绝不落在过去
+      expect(cache!.expiresAt.getTime()).toBeGreaterThanOrEqual(before);
+
+      // 由于已立即过期，下一次调用应重新向 API 取 token，而非用 cache
+      const result = await service["getToken"]();
+      expect(result.token).toBe("refetched-token");
+      expect(axios.post).toHaveBeenCalledTimes(2);
+    });
+
     it("should handle token fetch error gracefully", async () => {
       vi.mocked(axios.post).mockRejectedValueOnce(new Error("Network error"));
 
@@ -200,7 +245,7 @@ describe("AzureSpeechService", () => {
       await service.uploadAnalysisInBackground(mockBlob, {}, 1000);
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        "Background upload failed:",
+        "First upload attempt failed:",
         expect.any(Error),
       );
 
