@@ -3053,8 +3053,12 @@ export function AssignmentDialog({
                           return (
                             <div className="h-full flex items-center justify-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">
                               {currentConfig
-                                ? "此模式預覽尚未實作"
-                                : "選擇一個模式查看預覽"}
+                                ? t(
+                                    "dialogs.assignmentDialog.practiceMode.previewNotImplemented",
+                                  )
+                                : t(
+                                    "dialogs.assignmentDialog.practiceMode.selectModePrompt",
+                                  )}
                             </div>
                           );
                         }
