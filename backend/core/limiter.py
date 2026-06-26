@@ -50,5 +50,29 @@ def get_user_identifier(request: Request) -> str:
     return f"ip:{get_remote_address(request)}"
 
 
+def get_authenticated_user_identifier(request: Request) -> str:
+    """
+    以「登入身分」為基準的 rate-limit key。
+
+    從 Authorization: Bearer header 解析 JWT，回傳 user:<sub>，
+    讓單一帳號的請求數受限，無法靠輪換 IP/proxy 繞過（Issue #139）。
+
+    無有效 token 時 fallback 到 get_user_identifier（最後到 IP），
+    確保未驗證的請求不會被歸到同一個 user 桶互相干擾。
+    """
+    # 延遲 import 避免 circular import（auth 依賴其他模組）
+    from auth import verify_token
+
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[len("Bearer ") :]
+        payload = verify_token(token)
+        if payload and payload.get("sub"):
+            return f"user:{payload['sub']}"
+
+    # 無有效 token → 回到既有識別策略（body email/id 或 IP）
+    return get_user_identifier(request)
+
+
 # 🔐 Create limiter with smart identifier
 limiter = Limiter(key_func=get_user_identifier)
