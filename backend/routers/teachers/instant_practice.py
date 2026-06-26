@@ -14,7 +14,7 @@ import random
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
@@ -31,6 +31,7 @@ from models import (
     AssignmentStatus,
 )
 from utils.permissions import check_content_access
+from utils.practice_mode import validate_practice_mode
 from utils.score_category import resolve_score_category
 from .dependencies import get_current_teacher
 
@@ -310,18 +311,7 @@ async def create_instant_practice(
 class InstantPracticeReconfigureRequest(BaseModel):
     """即刻練習練習畫面即時調整設定（改完從頭重練）"""
 
-    practice_mode: Literal[
-        "reading",
-        "rearrangement",
-        "word_reading",
-        "word_selection",
-        "word_selection_quiz",
-        "word_spelling",
-        "word_spelling_quiz",
-        "word_cloze",
-        "word_cloze_quiz",
-        "tug_of_war",
-    ]
+    practice_mode: str
     time_limit_per_question: Optional[int] = None
     quiz_time_limit_seconds: Optional[int] = None  # 小考整卷限時
     shuffle_questions: bool = False
@@ -332,6 +322,12 @@ class InstantPracticeReconfigureRequest(BaseModel):
     show_image: Optional[bool] = True
     show_option_images: Optional[bool] = False  # Issue #631
     target_proficiency: Optional[int] = None
+
+    @field_validator("practice_mode")
+    @classmethod
+    def _check_practice_mode(cls, v: str) -> str:
+        # #854: 單一真相源驗證（取代手寫 Literal，避免與 allowlist 漂移）
+        return validate_practice_mode(v)
 
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "InstantPracticeReconfigureRequest":
