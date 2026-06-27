@@ -228,19 +228,22 @@ describe("AzureSpeechService", () => {
 
     beforeEach(() => {
       localStorage.clear();
+      // Finding 5: restore any localStorage spies left by previous tests so
+      // later tests get the real implementation, not a stale wrapper.
+      vi.restoreAllMocks();
     });
 
-    it("increments the version counter on each successful save", async () => {
-      await service["savePendingUpload"](mkUpload("A"));
+    it("increments the version counter on each successful save", () => {
+      service["savePendingUpload"](mkUpload("A"));
       expect(localStorage.getItem(VERSION_KEY)).toBe("1");
 
-      await service["savePendingUpload"](mkUpload("B"));
+      service["savePendingUpload"](mkUpload("B"));
       expect(localStorage.getItem(VERSION_KEY)).toBe("2");
 
       expect(readQueue().map((u: { id: string }) => u.id)).toEqual(["A", "B"]);
     });
 
-    it("retries on a concurrent version bump and keeps both entries (no data loss)", async () => {
+    it("retries on a concurrent version bump and keeps both entries (no data loss)", () => {
       const orig = localStorage.getItem.bind(localStorage);
       let versionReads = 0;
       let injected = false;
@@ -260,7 +263,7 @@ describe("AzureSpeechService", () => {
         return orig(key);
       });
 
-      const result = await service["savePendingUpload"](mkUpload("A"));
+      const result = service["savePendingUpload"](mkUpload("A"));
 
       expect(result).toBe(true);
       const ids = readQueue()
@@ -301,22 +304,22 @@ describe("AzureSpeechService", () => {
       expect(ids).toEqual(["C"]); // A removed, concurrently-added C kept
     });
 
-    it("still prunes oldest entries when over the size limit", async () => {
+    it("still prunes oldest entries when over the size limit", () => {
       // Each item ~3MB of base64; MAX_QUEUE_SIZE is 10MB → only newest fit
       const big = "x".repeat(3 * 1024 * 1024);
-      await service["savePendingUpload"](mkUpload("A", { audioBase64: big }));
-      await service["savePendingUpload"](mkUpload("B", { audioBase64: big }));
-      await service["savePendingUpload"](mkUpload("C", { audioBase64: big }));
-      await service["savePendingUpload"](mkUpload("D", { audioBase64: big }));
+      service["savePendingUpload"](mkUpload("A", { audioBase64: big }));
+      service["savePendingUpload"](mkUpload("B", { audioBase64: big }));
+      service["savePendingUpload"](mkUpload("C", { audioBase64: big }));
+      service["savePendingUpload"](mkUpload("D", { audioBase64: big }));
 
       const ids = readQueue().map((u: { id: string }) => u.id);
       expect(ids).not.toContain("A"); // oldest pruned
       expect(ids).toContain("D"); // newest kept
     });
 
-    it("rejects a single item larger than the queue limit", async () => {
+    it("rejects a single item larger than the queue limit", () => {
       const tooBig = "x".repeat(11 * 1024 * 1024); // > 10MB
-      const result = await service["savePendingUpload"](
+      const result = service["savePendingUpload"](
         mkUpload("HUGE", { audioBase64: tooBig }),
       );
       expect(result).toBe(false);
