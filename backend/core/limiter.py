@@ -50,5 +50,43 @@ def get_user_identifier(request: Request) -> str:
     return f"ip:{get_remote_address(request)}"
 
 
+def get_authenticated_user_identifier(request: Request) -> str:
+    """
+    以「登入身分」為基準的 rate-limit key。
+
+    從 Authorization: Bearer header 解析 JWT，回傳 user:<sub>，
+    讓單一帳號的請求數受限，無法靠輪換 IP/proxy 繞過（Issue #139）。
+
+    無有效 token 時 fallback 到 get_user_identifier（最後到 IP），
+    確保未驗證的請求不會被歸到同一個 user 桶互相干擾。
+    """
+    # 延遲 import 以避免 import limiter 時就 eager-load 整個 ORM stack
+    # （auth → models → database），同時讓單元測試與啟動更輕量
+    from auth import verify_token
+
+    # 兩個 @limiter.limit 裝飾器會對同一 request 都呼叫本函式，
+    # 用 request.state 快取結果，避免重複解碼 JWT
+    if hasattr(request.state, "_duotopia_rate_limit_user_key"):
+        return request.state._duotopia_rate_limit_user_key
+
+    auth_header = request.headers.get("Authorization", "")
+    # RFC 7235：auth-scheme 不分大小寫，bearer/BEARER 都合法
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header[len("bearer ") :]
+        payload = verify_token(token)
+        if payload:
+            sub = payload.get("sub")
+            # sub 只要存在就用 user 桶；空字串也是合法 sub，不可掉進 IP 桶
+            if sub is not None:
+                key = f"user:{sub}"
+                request.state._duotopia_rate_limit_user_key = key
+                return key
+
+    # 無有效 token → 回到既有識別策略（body email/id 或 IP）
+    key = get_user_identifier(request)
+    request.state._duotopia_rate_limit_user_key = key
+    return key
+
+
 # 🔐 Create limiter with smart identifier
 limiter = Limiter(key_func=get_user_identifier)
