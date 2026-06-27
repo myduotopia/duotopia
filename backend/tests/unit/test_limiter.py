@@ -47,6 +47,14 @@ class TestAuthenticatedUserIdentifier:
         assert key_b == "user:2"
         assert key_a != key_b
 
+    def test_lowercase_bearer_still_uses_user_bucket(self):
+        """RFC 7235：scheme 不分大小寫，bearer/BEARER 仍要走 user 桶"""
+        token = create_access_token(data={"sub": "42", "type": "teacher"})
+
+        for scheme in ("bearer", "BEARER", "BeArEr"):
+            request = _make_request({"Authorization": f"{scheme} {token}"})
+            assert get_authenticated_user_identifier(request) == "user:42"
+
     def test_cache_hit_reuses_request_state_key(self):
         """同一 request 第二次呼叫 → 直接讀 request.state 快取，不再重新解碼"""
         token = create_access_token(data={"sub": "7", "type": "teacher"})

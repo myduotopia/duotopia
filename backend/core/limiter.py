@@ -70,8 +70,9 @@ def get_authenticated_user_identifier(request: Request) -> str:
         return request.state._duotopia_rate_limit_user_key
 
     auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header[len("Bearer ") :]
+    # RFC 7235：auth-scheme 不分大小寫，bearer/BEARER 都合法
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header[len("bearer ") :]
         payload = verify_token(token)
         if payload:
             sub = payload.get("sub")
