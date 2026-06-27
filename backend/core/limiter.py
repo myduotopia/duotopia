@@ -60,18 +60,31 @@ def get_authenticated_user_identifier(request: Request) -> str:
     無有效 token 時 fallback 到 get_user_identifier（最後到 IP），
     確保未驗證的請求不會被歸到同一個 user 桶互相干擾。
     """
-    # 延遲 import 避免 circular import（auth 依賴其他模組）
+    # 延遲 import 以避免 import limiter 時就 eager-load 整個 ORM stack
+    # （auth → models → database），同時讓單元測試與啟動更輕量
     from auth import verify_token
+
+    # 兩個 @limiter.limit 裝飾器會對同一 request 都呼叫本函式，
+    # 用 request.state 快取結果，避免重複解碼 JWT
+    if hasattr(request.state, "_rate_limit_user_key"):
+        return request.state._rate_limit_user_key
 
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[len("Bearer ") :]
         payload = verify_token(token)
-        if payload and payload.get("sub"):
-            return f"user:{payload['sub']}"
+        if payload:
+            sub = payload.get("sub")
+            # sub 只要存在就用 user 桶；空字串也是合法 sub，不可掉進 IP 桶
+            if sub is not None:
+                key = f"user:{sub}"
+                request.state._rate_limit_user_key = key
+                return key
 
     # 無有效 token → 回到既有識別策略（body email/id 或 IP）
-    return get_user_identifier(request)
+    key = get_user_identifier(request)
+    request.state._rate_limit_user_key = key
+    return key
 
 
 # 🔐 Create limiter with smart identifier

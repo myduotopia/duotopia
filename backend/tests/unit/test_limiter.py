@@ -47,6 +47,13 @@ class TestAuthenticatedUserIdentifier:
         assert key_b == "user:2"
         assert key_a != key_b
 
+    def test_empty_string_sub_still_uses_user_bucket(self):
+        """sub 為空字串也是合法身分 → 仍走 user 桶，不可掉進共用 IP 桶"""
+        token = create_access_token(data={"sub": "", "type": "teacher"})
+        request = _make_request({"Authorization": f"Bearer {token}"})
+
+        assert get_authenticated_user_identifier(request) == "user:"
+
     def test_no_auth_header_falls_back_to_ip(self):
         """沒有 Authorization header → fallback 到 IP，不可是 user 桶"""
         request = _make_request(client_host="5.6.7.8")
