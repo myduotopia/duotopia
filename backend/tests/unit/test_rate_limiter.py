@@ -5,7 +5,7 @@
 2. request body 的 email / id（登入端點，尚未持有 token）
 3. Fallback 到 client IP
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from jose import jwt
 
@@ -17,6 +17,9 @@ class MockRequest:
     """模擬 FastAPI Request"""
 
     def __init__(self, body=None, client_ip="127.0.0.1", headers=None):
+        # 故意只在有 body 時才設 _json，模擬 FastAPI 在無 pydantic body
+        # 參數的端點上不會 cache _json 的情況（_identifier_from_body 以
+        # getattr(..., None) 處理屬性缺席）。
         if body is not None:
             self._json = body
         self.client = type("Client", (), {"host": client_ip})()
@@ -114,7 +117,11 @@ def test_get_user_identifier_forged_token_does_not_trust_sub():
 def test_get_user_identifier_expired_token_falls_through():
     """測試：過期 token 驗證失敗 → 落到下一層（此處 IP）"""
     expired = _make_token(
-        {"sub": "42", "type": "teacher", "exp": datetime.utcnow() - timedelta(hours=1)}
+        {
+            "sub": "42",
+            "type": "teacher",
+            "exp": datetime.now(timezone.utc) - timedelta(hours=1),
+        }
     )
     request = MockRequest(
         headers={"Authorization": f"Bearer {expired}"}, client_ip="8.8.8.8"
