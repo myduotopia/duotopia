@@ -8,6 +8,7 @@
 from datetime import datetime, timedelta, timezone
 
 from jose import jwt
+from starlette.datastructures import Headers
 
 from core.config import settings
 from core.limiter import get_user_identifier
@@ -23,10 +24,16 @@ class MockRequest:
         if body is not None:
             self._json = body
         self.client = type("Client", (), {"host": client_ip})()
-        self.headers = headers or {}
+        # 用 Starlette Headers（大小寫不敏感）而非 dict，貼近 production
+        # Request.headers 的行為，避免測試對 header 大小寫產生偽綠燈。
+        self.headers = Headers(headers=headers or {})
 
 
 def _make_token(payload: dict, secret: str = None, algorithm: str = None) -> str:
+    # 直接用 settings.JWT_SECRET 簽 token —— 與「受測對象」core.limiter 讀取的
+    # 來源相同（而非 auth.create_access_token 走 os.getenv）。這樣金鑰來源若改變，
+    # 測試與限流器會一起改變、不會出現假覆蓋。forged / expired / 缺 sub 等案例
+    # 也必須用 raw jwt.encode 才能構造，故不沿用 create_access_token helper。
     return jwt.encode(
         payload,
         secret or settings.JWT_SECRET,
@@ -140,12 +147,34 @@ def test_get_user_identifier_token_without_sub_falls_through():
     assert result == "ip:1.2.3.4"
 
 
-def test_get_user_identifier_jwt_default_type_when_missing():
-    """測試：JWT 有 sub 但缺 type → 使用通用前綴 user:<sub>"""
-    token = _make_token({"sub": "99"})
-    request = MockRequest(headers={"Authorization": f"Bearer {token}"})
+def test_get_user_identifier_jwt_unlisted_type_falls_through():
+    """測試：JWT 有 sub 但 type 不在白名單（缺 type）→ 不採用，落到下一層"""
+    token = _make_token({"sub": "99"})  # no type
+    request = MockRequest(
+        headers={"Authorization": f"Bearer {token}"}, client_ip="5.6.7.8"
+    )
     result = get_user_identifier(request)
-    assert result == "user:99"
+    assert result == "ip:5.6.7.8"
+
+
+def test_get_user_identifier_refresh_token_falls_through():
+    """安全性：refresh token 不可當限流身分，避免取得額外的獨立 bucket"""
+    token = _make_token({"sub": "42", "type": "refresh"})
+    request = MockRequest(
+        body={"email": "real@user.com"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    result = get_user_identifier(request)
+    # type 不在白名單 → 落到 body
+    assert result == "email:real@user.com"
+
+
+def test_get_user_identifier_lowercase_authorization_header():
+    """測試：header 大小寫不敏感（Starlette Headers）→ 仍能解出 JWT 身分"""
+    token = _make_token({"sub": "42", "type": "teacher"})
+    request = MockRequest(headers={"authorization": f"Bearer {token}"})
+    result = get_user_identifier(request)
+    assert result == "teacher:42"
 
 
 def test_get_user_identifier_malformed_auth_header_falls_through():

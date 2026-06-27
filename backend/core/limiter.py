@@ -17,6 +17,7 @@ Cloud Run 上那是 load balancer 的共用 egress IP，導致同校所有使用
 分散到大量 bucket 來繞過限制。
 """
 import json
+import logging
 
 from fastapi import Request
 from jose import JWTError, jwt
@@ -24,6 +25,19 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# 與 auth.py 一致：硬寫死 HS256，不讀 settings.JWT_ALGORITHM。
+# auth.py 簽 token 時固定用 HS256（並註明「prevent 'none' algorithm attack」），
+# 解 token 的這側也必須鎖死同一演算法，否則若有人把 JWT_ALGORITHM 設成別的
+# 值，限流器可能接受非預期簽章的 token 而破壞 per-user bucket 隔離。
+_JWT_ALGORITHM = "HS256"
+
+# 只有真正的「使用者存取權杖」才拿來當限流身分。
+# refresh token（type="refresh"）等其他權杖不算數，避免同一使用者用不同
+# 權杖型別取得額外的獨立 bucket。
+_RATE_LIMIT_IDENTITY_TYPES = {"teacher", "student"}
 
 
 def _identifier_from_jwt(request: Request) -> str | None:
@@ -39,18 +53,17 @@ def _identifier_from_jwt(request: Request) -> str | None:
         return None
 
     try:
-        payload = jwt.decode(
-            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
-        )
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[_JWT_ALGORITHM])
     except JWTError:
         # 簽章錯誤 / 過期 / 格式不符 → 不信任，落到下一層
         return None
 
     sub = payload.get("sub")
-    if sub is None:
+    user_type = payload.get("type")
+    if sub is None or user_type not in _RATE_LIMIT_IDENTITY_TYPES:
+        # 缺 sub、或不是存取權杖（如 refresh token）→ 不採用，落到下一層
         return None
 
-    user_type = payload.get("type") or "user"
     return f"{user_type}:{sub}"
 
 
@@ -69,7 +82,11 @@ def _identifier_from_body(request: Request) -> str | None:
                 return f"email:{body['email']}"
             if "id" in body:
                 return f"student:{body['id']}"
-    except Exception:
+    except Exception as exc:
+        # request._json / _body 是 Starlette 內部屬性；若未來版本改名導致
+        # 解析失敗，登流會悄悄從 per-email 降級成 per-IP。記一筆 warning
+        # 以便察覺，但仍 fallback 不擋住請求。
+        logger.warning("Rate-limit body identifier parse failed: %s", exc)
         return None
 
     return None
