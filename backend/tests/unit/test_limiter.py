@@ -47,6 +47,18 @@ class TestAuthenticatedUserIdentifier:
         assert key_b == "user:2"
         assert key_a != key_b
 
+    def test_cache_hit_reuses_request_state_key(self):
+        """同一 request 第二次呼叫 → 直接讀 request.state 快取，不再重新解碼"""
+        token = create_access_token(data={"sub": "7", "type": "teacher"})
+        request = _make_request({"Authorization": f"Bearer {token}"})
+
+        # 第一次呼叫會把 key 寫進 request.state
+        assert get_authenticated_user_identifier(request) == "user:7"
+
+        # 竄改快取值；若第二次有讀快取，就會回傳竄改後的值
+        request.state._duotopia_rate_limit_user_key = "user:cached"
+        assert get_authenticated_user_identifier(request) == "user:cached"
+
     def test_empty_string_sub_still_uses_user_bucket(self):
         """sub 為空字串也是合法身分 → 仍走 user 桶，不可掉進共用 IP 桶"""
         token = create_access_token(data={"sub": "", "type": "teacher"})

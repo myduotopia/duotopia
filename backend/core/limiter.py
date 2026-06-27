@@ -66,8 +66,8 @@ def get_authenticated_user_identifier(request: Request) -> str:
 
     # 兩個 @limiter.limit 裝飾器會對同一 request 都呼叫本函式，
     # 用 request.state 快取結果，避免重複解碼 JWT
-    if hasattr(request.state, "_rate_limit_user_key"):
-        return request.state._rate_limit_user_key
+    if hasattr(request.state, "_duotopia_rate_limit_user_key"):
+        return request.state._duotopia_rate_limit_user_key
 
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
@@ -78,12 +78,12 @@ def get_authenticated_user_identifier(request: Request) -> str:
             # sub 只要存在就用 user 桶；空字串也是合法 sub，不可掉進 IP 桶
             if sub is not None:
                 key = f"user:{sub}"
-                request.state._rate_limit_user_key = key
+                request.state._duotopia_rate_limit_user_key = key
                 return key
 
     # 無有效 token → 回到既有識別策略（body email/id 或 IP）
     key = get_user_identifier(request)
-    request.state._rate_limit_user_key = key
+    request.state._duotopia_rate_limit_user_key = key
     return key
 
 
