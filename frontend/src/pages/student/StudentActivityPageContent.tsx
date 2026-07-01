@@ -2622,20 +2622,132 @@ export default function StudentActivityPageContent({
               </div>
             </div>
 
-            {/* 小考模式題號 bar slot — 三個 QuizActivity 用 Portal 投放 nav 到這
-              詳見 docs/design 與 frontend/src/contexts/QuizNavSlotContext.tsx */}
-            {isQuizMode && (
+            {/* 題號 bar slot — 小考 (word_*_quiz) 與 word_reading 由 Activity 元件
+              Portal nav 進來。詳見 docs/design 與
+              frontend/src/contexts/QuizNavSlotContext.tsx */}
+            {(isQuizMode || practiceMode === "word_reading") && (
               <div
                 ref={setQuizNavSlot}
                 className="flex gap-1 sm:gap-1.5 items-center pt-2"
               />
             )}
 
+            {/* #892 後續：例句朗讀 (reading) 題號列直接在 page 層 inline render
+              （nav 資料就在此元件內，不繞 portal）。格式同 QuizNavSlot 樣式：
+              題號 + 方塊 + X/Y 計數。 */}
+            {practiceMode === "reading" &&
+              (() => {
+                const readingActivity = currentActivity;
+                if (
+                  !readingActivity ||
+                  !readingActivity.items ||
+                  readingActivity.items.length === 0
+                )
+                  return null;
+                const items = readingActivity.items;
+                const completedCount = items.filter(
+                  (it) =>
+                    ("recording_url" in it && (it as { recording_url?: string }).recording_url) ||
+                    readingActivity.answers?.[items.indexOf(it)],
+                ).length;
+                return (
+                  <div className="flex gap-1 sm:gap-1.5 items-center pt-2">
+                    <span className="text-xs text-gray-500 mr-1 shrink-0">
+                      {t("wordQuiz.questionNav") || "題號"}
+                    </span>
+                    <div className="flex gap-1 sm:gap-1.5 items-center overflow-x-auto min-w-0 flex-1 py-1">
+                      {items.map((item, itemIndex) => {
+                        const isActive = currentSubQuestionIndex === itemIndex;
+                        const isCompleted =
+                          ("recording_url" in item &&
+                            (item as { recording_url?: string }).recording_url) ||
+                          readingActivity.answers?.[itemIndex];
+                        const teacherPassed =
+                          "teacher_passed" in item
+                            ? ((item as { teacher_passed?: boolean | null })
+                                .teacher_passed ?? null)
+                            : null;
+                        const hasAssessment = !!(item as { ai_assessment?: unknown })
+                          .ai_assessment;
+                        const aiAssessmentObj = (
+                          item as {
+                            ai_assessment?: {
+                              pronunciation_score?: number;
+                              accuracy_score?: number;
+                            };
+                          }
+                        ).ai_assessment;
+                        const aiScore =
+                          aiAssessmentObj?.pronunciation_score ??
+                          aiAssessmentObj?.accuracy_score ??
+                          null;
+                        const {
+                          passed: passedByScore,
+                          failed: failedByScore,
+                        } = getItemPassFailStatus({
+                          teacherPassed,
+                          aiScore,
+                          assignmentStatus: assignmentStatus ?? null,
+                        });
+                        return (
+                          <button
+                            key={itemIndex}
+                            type="button"
+                            onClick={async () => {
+                              if (isAnalyzing || isAutoAnalyzing || isRecording)
+                                return;
+                              await handleQuestionJump(
+                                currentActivityIndex,
+                                itemIndex,
+                              );
+                            }}
+                            disabled={
+                              isAnalyzing || isAutoAnalyzing || isRecording
+                            }
+                            title={
+                              passedByScore
+                                ? "通過"
+                                : failedByScore
+                                  ? "未通過"
+                                  : hasAssessment
+                                    ? `第 ${itemIndex + 1} 題 (已分析)`
+                                    : isCompleted
+                                      ? "已錄音"
+                                      : "未做"
+                            }
+                            className={cn(
+                              "h-8 min-w-8 shrink-0 inline-flex items-center justify-center rounded text-sm font-medium border transition",
+                              isActive
+                                ? "bg-emerald-500 text-white border-emerald-500"
+                                : passedByScore
+                                  ? "bg-green-100 text-green-800 border-green-400 hover:border-emerald-400"
+                                  : failedByScore
+                                    ? "bg-red-100 text-red-800 border-red-400 hover:border-emerald-400"
+                                    : hasAssessment || isCompleted
+                                      ? "bg-yellow-100 text-yellow-800 border-yellow-400 hover:border-emerald-400"
+                                      : "bg-white text-gray-500 border-gray-300 hover:border-emerald-400",
+                            )}
+                          >
+                            {itemIndex + 1}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span className="text-xs text-gray-400 ml-2 shrink-0">
+                      {completedCount} / {items.length}
+                    </span>
+                  </div>
+                );
+              })()}
+
             {/* Activity navigation - 單字選擇 / 拼寫 / 克漏字模式不顯示此區塊
-              （這些模式使用艾賓浩斯記憶曲線，每輪選不熟單字，不允許跳題） */}
+              （這些模式使用艾賓浩斯記憶曲線，每輪選不熟單字，不允許跳題）
+              #892 後續：reading / word_reading 改用 QuizNavSlot（上方 slot），
+              此區塊對此二模式一併跳過 */}
             {(!isVocabularySetType(currentActivity?.type || "") ||
-              practiceMode === "reading" ||
-              practiceMode === "rearrangement") && (
+              practiceMode === "rearrangement") &&
+              practiceMode !== "reading" &&
+              practiceMode !== "word_reading" && (
               <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 scrollbar-hide">
                 {/* 例句重組模式：所有題目合併顯示，不分 activity */}
                 {practiceMode === "rearrangement" &&

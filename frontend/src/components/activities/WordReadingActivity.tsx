@@ -15,21 +15,21 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   ChevronLeft,
   ChevronRight,
   Loader2,
   Send,
-  CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import WordReadingTemplate from "./WordReadingTemplate";
 import RecordingAttemptsIndicator from "./RecordingAttemptsIndicator";
 import { useTranslation } from "react-i18next";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
+import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { cn } from "@/lib/utils";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import {
@@ -111,6 +111,7 @@ export default function WordReadingActivity({
   const isLivePreview = !!previewItems;
   const { t } = useTranslation();
   const { token: studentToken } = useStudentAuthStore();
+  const navSlot = useQuizNavSlot();
   // 預覽模式使用傳入的 authToken（老師 token），否則使用學生 token
   const token = isPreviewMode && authToken ? authToken : studentToken;
 
@@ -547,84 +548,77 @@ export default function WordReadingActivity({
   const isLastItem = currentIndex === items.length - 1;
   const allCompleted = completedCount === items.length;
 
+  // #892 後續：題號 bar 移到頁面級 QuizNavSlot（返回鈕下方）
+  // Page 提供 slot 時 portal 上去；否則 inline render（fallback）
+  const navBar = (
+    <>
+      <span className="text-xs text-gray-500 mr-1 shrink-0">
+        {t("wordQuiz.questionNav") || "題號"}
+      </span>
+      <div className="flex gap-1 sm:gap-1.5 items-center overflow-x-auto min-w-0 flex-1 py-1">
+        {items.map((item, index) => {
+          const isActive = index === currentIndex;
+          const isCompleted = !!item.recording_url;
+          const hasAssessment = !!item.ai_assessment;
+          // Issue #689 後續：點點顏色委派 getItemPassFailStatus 統一處理。
+          // RETURNED 模式下純看 teacher_passed；其他狀態才用 AI 分數 fallback。
+          const aiScore =
+            item.ai_assessment?.pronunciation_score ??
+            item.ai_assessment?.accuracy_score ??
+            null;
+          const { passed: passedByScore, failed: failedByScore } =
+            getItemPassFailStatus({
+              teacherPassed: item.teacher_passed ?? null,
+              aiScore,
+              assignmentStatus: assignmentStatus ?? null,
+            });
+          const titleText = passedByScore
+            ? t("wordReading.passed") || "通過"
+            : failedByScore
+              ? t("wordReading.notPassed") || "未通過"
+              : hasAssessment
+                ? t("wordReading.assessed") || "Assessed"
+                : isCompleted
+                  ? t("wordReading.recorded") || "Recorded"
+                  : t("wordReading.notRecorded") || "Not recorded";
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setCurrentIndex(index)}
+              className={cn(
+                "h-8 min-w-8 shrink-0 inline-flex items-center justify-center rounded text-sm font-medium border transition",
+                isActive
+                  ? "bg-emerald-500 text-white border-emerald-500"
+                  : passedByScore
+                    ? "bg-green-100 text-green-800 border-green-400 hover:border-emerald-400"
+                    : failedByScore
+                      ? "bg-red-100 text-red-800 border-red-400 hover:border-emerald-400"
+                      : hasAssessment || isCompleted
+                        ? "bg-yellow-100 text-yellow-800 border-yellow-400 hover:border-emerald-400"
+                        : "bg-white text-gray-500 border-gray-300 hover:border-emerald-400",
+              )}
+              title={titleText}
+            >
+              {index + 1}
+            </button>
+          );
+        })}
+      </div>
+      <span className="text-xs text-gray-400 ml-2 shrink-0">
+        {completedCount} / {items.length}
+      </span>
+    </>
+  );
+
   return (
     <div className="space-y-6">
-      {/* Header group (status + progress + nav dots) — 內距壓縮 */}
-      <div className="space-y-2">
-        {/* Progress Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs">
-              {t("wordReading.wordReading") || "Word Reading"}
-            </Badge>
-            <span className="text-xs text-gray-600">
-              {t("wordReading.itemProgress", {
-                current: currentIndex + 1,
-                total: items.length,
-              }) || `${currentIndex + 1} / ${items.length}`}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-600">
-            <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-            <span>
-              {t("wordReading.completedCount", { count: completedCount }) ||
-                `${completedCount} completed`}
-            </span>
-          </div>
-        </div>
-
-        {/* Item Navigation Dots */}
-        <div className="flex gap-1 overflow-x-auto pb-1 mx-auto w-fit max-w-full">
-          {items.map((item, index) => {
-            const isActive = index === currentIndex;
-            const isCompleted = !!item.recording_url;
-            const hasAssessment = !!item.ai_assessment;
-            // Issue #689 後續：點點顏色委派 getItemPassFailStatus 統一處理。
-            // RETURNED 模式下純看 teacher_passed；其他狀態才用 AI 分數 fallback。
-            const aiScore =
-              item.ai_assessment?.pronunciation_score ??
-              item.ai_assessment?.accuracy_score ??
-              null;
-            const { passed: passedByScore, failed: failedByScore } =
-              getItemPassFailStatus({
-                teacherPassed: item.teacher_passed ?? null,
-                aiScore,
-                assignmentStatus: assignmentStatus ?? null,
-              });
-            const colorClass = passedByScore
-              ? "bg-green-100 text-green-800 border-green-400"
-              : failedByScore
-                ? "bg-red-100 text-red-800 border-red-400"
-                : hasAssessment || isCompleted
-                  ? "bg-yellow-100 text-yellow-800 border-yellow-400"
-                  : "bg-white text-gray-600 border-gray-300 hover:border-blue-400";
-            const titleText = passedByScore
-              ? t("wordReading.passed") || "通過"
-              : failedByScore
-                ? t("wordReading.notPassed") || "未通過"
-                : hasAssessment
-                  ? t("wordReading.assessed") || "Assessed"
-                  : isCompleted
-                    ? t("wordReading.recorded") || "Recorded"
-                    : t("wordReading.notRecorded") || "Not recorded";
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => setCurrentIndex(index)}
-                className={cn(
-                  "w-8 h-8 rounded border transition-all flex items-center justify-center text-xs font-medium flex-shrink-0",
-                  isActive && "border-2 border-blue-600",
-                  colorClass,
-                )}
-                title={titleText}
-              >
-                {index + 1}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {navSlot ? (
+        createPortal(navBar, navSlot)
+      ) : (
+        <div className="flex gap-1 sm:gap-1.5 items-center">{navBar}</div>
+      )}
 
       {/* Word Reading Template */}
       <WordReadingTemplate

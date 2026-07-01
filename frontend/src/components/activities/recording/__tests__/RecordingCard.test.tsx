@@ -24,9 +24,20 @@ describe("RecordingCard — state → controls", () => {
     expect(screen.getByTestId("recording-timer").textContent).toBe("0:12");
   });
 
-  it("recorded shows analyze", () => {
-    render(<RecordingCard {...baseProps} state="recorded" />);
-    expect(screen.getByTestId("center-analyze")).toBeInTheDocument();
+  it("recorded shows mic in center + analyze-btn enabled", () => {
+    render(
+      <RecordingCard
+        {...baseProps}
+        state="recorded"
+        canUseAiAnalysis
+        onAnalyze={() => {}}
+      />,
+    );
+    // 中央鈕拿掉「分析上傳」狀態，改回 mic（可重新錄音）
+    expect(screen.getByTestId("center-record")).toBeInTheDocument();
+    expect(screen.queryByTestId("center-analyze")).toBeNull();
+    // 上傳分析改成獨立小鈕，此時應可按
+    expect(screen.getByTestId("analyze-btn")).not.toBeDisabled();
   });
 
   it("assessed shows re-record and dims the translation", () => {

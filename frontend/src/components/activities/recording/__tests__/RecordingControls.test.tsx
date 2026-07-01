@@ -17,23 +17,15 @@ describe("RecordingControls — center state machine", () => {
     expect(fn).toHaveBeenCalled();
   });
 
-  it("recorded shows analyze (✨) and fires onAnalyze", () => {
+  it("recorded shows mic (not sparkles) and fires onRecordStart to re-record", () => {
     const fn = vi.fn();
-    render(<RecordingControls state="recorded" onAnalyze={fn} />);
-    fireEvent.click(screen.getByTestId("center-analyze"));
-    expect(fn).toHaveBeenCalled();
-  });
-
-  it("recorded without AI analysis hides analyze and shows recorded state", () => {
-    render(
-      <RecordingControls
-        state="recorded"
-        canUseAiAnalysis={false}
-        onAnalyze={() => {}}
-      />,
-    );
+    render(<RecordingControls state="recorded" onRecordStart={fn} />);
+    // 中央鈕在 recorded 狀態應顯示 mic，跟 idle 一樣：按下等同重新錄音
+    expect(screen.getByTestId("center-record")).toBeInTheDocument();
     expect(screen.queryByTestId("center-analyze")).toBeNull();
-    expect(screen.getByTestId("center-recorded")).toBeInTheDocument();
+    expect(screen.queryByTestId("center-recorded")).toBeNull();
+    fireEvent.click(screen.getByTestId("center-record"));
+    expect(fn).toHaveBeenCalled();
   });
 
   it("assessed shows re-record (↻) and fires onReRecord", () => {
@@ -56,10 +48,91 @@ describe("RecordingControls — center state machine", () => {
   });
 });
 
+describe("RecordingControls — analyze button (independent ✨)", () => {
+  it("is disabled when state is idle (no recording yet)", () => {
+    render(
+      <RecordingControls state="idle" onAnalyze={() => {}} canUseAiAnalysis />,
+    );
+    expect(screen.getByTestId("analyze-btn")).toBeDisabled();
+  });
+
+  it("is disabled while recording", () => {
+    render(
+      <RecordingControls
+        state="recording"
+        onAnalyze={() => {}}
+        canUseAiAnalysis
+      />,
+    );
+    expect(screen.getByTestId("analyze-btn")).toBeDisabled();
+  });
+
+  it("is enabled in recorded state with AI analysis available", () => {
+    const fn = vi.fn();
+    render(
+      <RecordingControls state="recorded" onAnalyze={fn} canUseAiAnalysis />,
+    );
+    const btn = screen.getByTestId("analyze-btn");
+    expect(btn).not.toBeDisabled();
+    fireEvent.click(btn);
+    expect(fn).toHaveBeenCalled();
+  });
+
+  it("is disabled in recorded state when canUseAiAnalysis is false", () => {
+    render(
+      <RecordingControls
+        state="recorded"
+        onAnalyze={() => {}}
+        canUseAiAnalysis={false}
+      />,
+    );
+    expect(screen.getByTestId("analyze-btn")).toBeDisabled();
+  });
+
+  it("is enabled in assessed state with AI analysis available", () => {
+    const fn = vi.fn();
+    render(
+      <RecordingControls state="assessed" onAnalyze={fn} canUseAiAnalysis />,
+    );
+    const btn = screen.getByTestId("analyze-btn");
+    expect(btn).not.toBeDisabled();
+    fireEvent.click(btn);
+    expect(fn).toHaveBeenCalled();
+  });
+
+  it("is disabled when recordingDisabled is true even if state is recorded", () => {
+    render(
+      <RecordingControls
+        state="recorded"
+        onAnalyze={() => {}}
+        canUseAiAnalysis
+        disabled
+      />,
+    );
+    expect(screen.getByTestId("analyze-btn")).toBeDisabled();
+  });
+
+  it("is not rendered when showAnalyzeButton is false", () => {
+    render(
+      <RecordingControls
+        state="recorded"
+        onAnalyze={() => {}}
+        canUseAiAnalysis
+        showAnalyzeButton={false}
+      />,
+    );
+    expect(screen.queryByTestId("analyze-btn")).toBeNull();
+  });
+});
+
 describe("RecordingControls — side buttons", () => {
   it("disables playback when canPlayback is false", () => {
     render(
-      <RecordingControls state="idle" canPlayback={false} onPlayback={() => {}} />,
+      <RecordingControls
+        state="idle"
+        canPlayback={false}
+        onPlayback={() => {}}
+      />,
     );
     expect(screen.getByTestId("playback-btn")).toBeDisabled();
   });
