@@ -7,6 +7,26 @@ export default {
   ],
   theme: {
     extend: {
+      colors: {
+        // Issue #892 朗讀作答畫面改版 — design tokens（來源：issue 視覺語言表，
+        // 非 .pen 檔殘留的 accent/primary 變數）。朗讀作答頁屬固定米色場景，
+        // 不隨全站 dark mode 切換，故用固定 hex 而非 shadcn HSL 變數。
+        recording: {
+          bg: "#F5F1EA", // 米色頁面背景
+          card: "#FFFFFF", // 白色卡片
+          "card-soft": "#FFF8EE", // 卡片柔和變體
+          accent: "#F97316", // 橘 — 錄音強調
+          rerecord: "#2563EB", // 藍 — 評測後重錄
+          upload: "#8B5CF6", // 紫 — 上傳分析
+          danger: "#EF4444", // 紅 — 錄音中 / 未通過 / 紅字
+          pass: "#10B981", // 綠 — 通過
+          warn: "#F59E0B", // 黃 — 提醒
+          "text-primary": "#1F2937",
+          "text-secondary": "#6B7280",
+          "text-translation": "#9CA3AF",
+          border: "#E5E0D5",
+        },
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },
