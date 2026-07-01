@@ -1,11 +1,11 @@
 /**
- * RecordingAttemptsIndicator — issue #689 Phase 1.
+ * RecordingAttemptsIndicator — issue #689 Phase 1（#892 愛心 → 閃電改版）。
  *
- * Renders a fixed row of `max` heart slots. Filled (red, solid) hearts represent
+ * Renders a fixed row of `max` zap (⚡) slots. Filled (orange, solid) zaps represent
  * remaining AI-analysis attempts; the rest are hollow gray placeholders that stay
  * in place so the UI doesn't shift width as attempts are consumed.
  */
-import { Heart } from "lucide-react";
+import { Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
@@ -41,15 +41,15 @@ export const RecordingAttemptsIndicator = ({
       {Array.from({ length: max }).map((_, i) => {
         const filled = i < remaining;
         return (
-          <Heart
+          <Zap
             key={i}
             className={cn(
               "h-4 w-4 transition-all duration-300 ease-out",
-              filled ? "text-red-500" : "text-gray-300",
+              filled ? "text-recording-accent" : "text-gray-300",
             )}
             fill="currentColor"
             style={{ fillOpacity: filled ? 1 : 0 }}
-            data-testid={filled ? "heart-filled" : "heart-empty"}
+            data-testid={filled ? "zap-filled" : "zap-empty"}
           />
         );
       })}

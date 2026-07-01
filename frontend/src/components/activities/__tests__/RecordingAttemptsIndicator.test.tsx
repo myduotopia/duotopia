@@ -16,38 +16,38 @@ vi.mock("react-i18next", () => ({
 describe("RecordingAttemptsIndicator", () => {
   it("renders 3 filled hearts when no attempts used", () => {
     render(<RecordingAttemptsIndicator attemptsUsed={0} />);
-    expect(screen.getAllByTestId("heart-filled")).toHaveLength(3);
-    expect(screen.queryAllByTestId("heart-empty")).toHaveLength(0);
+    expect(screen.getAllByTestId("zap-filled")).toHaveLength(3);
+    expect(screen.queryAllByTestId("zap-empty")).toHaveLength(0);
   });
 
   it("renders 2 filled + 1 empty when 1 attempt used", () => {
     render(<RecordingAttemptsIndicator attemptsUsed={1} />);
-    expect(screen.getAllByTestId("heart-filled")).toHaveLength(2);
-    expect(screen.getAllByTestId("heart-empty")).toHaveLength(1);
+    expect(screen.getAllByTestId("zap-filled")).toHaveLength(2);
+    expect(screen.getAllByTestId("zap-empty")).toHaveLength(1);
   });
 
   it("renders 1 filled + 2 empty when 2 attempts used", () => {
     render(<RecordingAttemptsIndicator attemptsUsed={2} />);
-    expect(screen.getAllByTestId("heart-filled")).toHaveLength(1);
-    expect(screen.getAllByTestId("heart-empty")).toHaveLength(2);
+    expect(screen.getAllByTestId("zap-filled")).toHaveLength(1);
+    expect(screen.getAllByTestId("zap-empty")).toHaveLength(2);
   });
 
   it("renders 0 filled + 3 empty when fully exhausted", () => {
     render(<RecordingAttemptsIndicator attemptsUsed={3} />);
-    expect(screen.queryAllByTestId("heart-filled")).toHaveLength(0);
-    expect(screen.getAllByTestId("heart-empty")).toHaveLength(3);
+    expect(screen.queryAllByTestId("zap-filled")).toHaveLength(0);
+    expect(screen.getAllByTestId("zap-empty")).toHaveLength(3);
   });
 
   it("clamps when attemptsUsed exceeds max (defensive)", () => {
     render(<RecordingAttemptsIndicator attemptsUsed={10} />);
-    expect(screen.queryAllByTestId("heart-filled")).toHaveLength(0);
-    expect(screen.getAllByTestId("heart-empty")).toHaveLength(3);
+    expect(screen.queryAllByTestId("zap-filled")).toHaveLength(0);
+    expect(screen.getAllByTestId("zap-empty")).toHaveLength(3);
   });
 
   it("respects custom max", () => {
     render(<RecordingAttemptsIndicator attemptsUsed={1} max={5} />);
-    expect(screen.getAllByTestId("heart-filled")).toHaveLength(4);
-    expect(screen.getAllByTestId("heart-empty")).toHaveLength(1);
+    expect(screen.getAllByTestId("zap-filled")).toHaveLength(4);
+    expect(screen.getAllByTestId("zap-empty")).toHaveLength(1);
   });
 
   it("uses locked tooltip when fully exhausted", () => {

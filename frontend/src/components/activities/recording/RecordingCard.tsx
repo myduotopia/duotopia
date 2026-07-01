@@ -57,6 +57,8 @@ export interface RecordingCardProps {
   recordingDisabled?: boolean;
   canUseAiAnalysis?: boolean;
   recordingSeconds?: number;
+  /** 卡片內是否顯示下一題（容器自帶導覽時設 false） */
+  showNext?: boolean;
 
   // ---- 評測（Stage 4 注入）----
   coloredText?: ReactNode;
@@ -97,6 +99,7 @@ export const RecordingCard = ({
   recordingDisabled = false,
   canUseAiAnalysis = true,
   recordingSeconds = 0,
+  showNext = true,
   coloredText,
   scoreBadge,
   teacherPassed = null,
@@ -128,6 +131,7 @@ export const RecordingCard = ({
           disabled={recordingDisabled}
           canUseAiAnalysis={canUseAiAnalysis}
           recordingSeconds={recordingSeconds}
+          showNext={showNext}
         />
       }
     >

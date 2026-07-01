@@ -44,6 +44,10 @@ export interface RecordingControlsProps {
   canUseAiAnalysis?: boolean;
   /** 錄音中計時（秒），顯示於中央鈕下方 */
   recordingSeconds?: number;
+  /** 是否顯示右側「下一題」；容器自帶導覽時設 false */
+  showNext?: boolean;
+  /** 是否顯示左側「我的錄音回放」 */
+  showPlayback?: boolean;
   className?: string;
 }
 
@@ -79,6 +83,8 @@ export const RecordingControls = ({
   disabled = false,
   canUseAiAnalysis = true,
   recordingSeconds = 0,
+  showNext = true,
+  showPlayback = true,
   className,
 }: RecordingControlsProps) => {
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -145,19 +151,21 @@ export const RecordingControls = ({
       className={cn("flex items-center justify-center gap-8", className)}
     >
       {/* 左：我的錄音回放 */}
+      {showPlayback && (
       <button
         type="button"
         data-testid="playback-btn"
         onClick={onPlayback}
-        disabled={disabled || !canPlayback}
+        disabled={!canPlayback}
         title="播放我的錄音"
         className={cn(
           "flex h-[72px] w-[72px] items-center justify-center rounded-full bg-recording-card text-recording-text-primary shadow transition-all",
-          (disabled || !canPlayback) && "opacity-40",
+          !canPlayback && "opacity-40",
         )}
       >
         <Volume2 className="h-7 w-7" />
       </button>
+      )}
 
       {/* 中央：狀態機 */}
       <div className="relative flex flex-col items-center">
@@ -217,20 +225,22 @@ export const RecordingControls = ({
         )}
       </div>
 
-      {/* 右：下一題 */}
-      <button
-        type="button"
-        data-testid="next-btn"
-        onClick={onNext}
-        disabled={disabled || !canNext}
-        title="下一題"
-        className={cn(
-          "flex h-[72px] w-[72px] items-center justify-center rounded-full bg-recording-card text-recording-text-primary shadow transition-all",
-          (disabled || !canNext) && "opacity-40",
-        )}
-      >
-        <ArrowRight className="h-7 w-7" />
-      </button>
+      {/* 右：下一題（容器自帶導覽時可隱藏） */}
+      {showNext && (
+        <button
+          type="button"
+          data-testid="next-btn"
+          onClick={onNext}
+          disabled={!canNext}
+          title="下一題"
+          className={cn(
+            "flex h-[72px] w-[72px] items-center justify-center rounded-full bg-recording-card text-recording-text-primary shadow transition-all",
+            !canNext && "opacity-40",
+          )}
+        >
+          <ArrowRight className="h-7 w-7" />
+        </button>
+      )}
     </div>
   );
 };
