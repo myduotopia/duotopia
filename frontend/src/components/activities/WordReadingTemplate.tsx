@@ -241,21 +241,26 @@ export default function WordReadingTemplate({
 
   const handlePlayExample = useCallback(() => {
     if (!currentItem.audio_url) return;
-    if (isPlayingExample && exampleAudioRef.current) {
-      exampleAudioRef.current.pause();
+    // 用實際播放狀態判斷 toggle（避免自動播放被瀏覽器擋下時 isPlayingExample
+    // 殘留 true，導致首次點擊誤走 pause 分支而沒聲音）
+    const current = exampleAudioRef.current;
+    if (current && !current.paused) {
+      current.pause();
       setIsPlayingExample(false);
-    } else {
-      if (!exampleAudioRef.current) {
-        const audio = new Audio(currentItem.audio_url);
-        audio.addEventListener("ended", () => setIsPlayingExample(false));
-        exampleAudioRef.current = audio;
-      }
-      exampleAudioRef.current.playbackRate = playbackRate;
-      exampleAudioRef.current.currentTime = 0;
-      exampleAudioRef.current.play();
-      setIsPlayingExample(true);
+      return;
     }
-  }, [currentItem.audio_url, isPlayingExample, playbackRate]);
+    if (!exampleAudioRef.current) {
+      const audio = new Audio(currentItem.audio_url);
+      audio.addEventListener("ended", () => setIsPlayingExample(false));
+      exampleAudioRef.current = audio;
+    }
+    exampleAudioRef.current.playbackRate = playbackRate;
+    exampleAudioRef.current.currentTime = 0;
+    exampleAudioRef.current
+      .play()
+      .then(() => setIsPlayingExample(true))
+      .catch(() => setIsPlayingExample(false));
+  }, [currentItem.audio_url, playbackRate]);
 
   const updatePlaybackRate = useCallback(
     (rate: number) => {
@@ -281,22 +286,6 @@ export default function WordReadingTemplate({
     audio.currentTime = 0;
     audio.play().catch(() => {});
   }, [audioUrl]);
-
-  const handleFileUpload = useCallback(
-    (file: File) => {
-      if (audioUrl && audioUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(audioUrl);
-      }
-      const url = URL.createObjectURL(file);
-      setAudioUrl(url);
-      file.arrayBuffer().then((buffer) => {
-        const blob = new Blob([buffer], { type: file.type });
-        onRecordingComplete?.(blob, url);
-      });
-      toast.success(t("wordReading.toast.uploaded") || "音檔已上傳");
-    },
-    [audioUrl, onRecordingComplete, t],
-  );
 
   const clearRecording = useCallback(() => {
     if (recordedAudioRef.current) recordedAudioRef.current.pause();
@@ -519,7 +508,6 @@ export default function WordReadingTemplate({
         onAnalyze={handleAssessment}
         onReRecord={clearRecording}
         onPlayback={togglePlaybackRecorded}
-        onUpload={handleFileUpload}
         canPlayback={!!audioUrl}
         recordingDisabled={recordingDisabled || readOnly}
         canUseAiAnalysis={canUseAiAnalysis}

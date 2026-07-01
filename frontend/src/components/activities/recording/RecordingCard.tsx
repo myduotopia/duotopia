@@ -51,7 +51,6 @@ export interface RecordingCardProps {
   onReRecord?: () => void;
   onPlayback?: () => void;
   onNext?: () => void;
-  onUpload?: (file: File) => void;
   canPlayback?: boolean;
   canNext?: boolean;
   recordingDisabled?: boolean;
@@ -93,7 +92,6 @@ export const RecordingCard = ({
   onReRecord,
   onPlayback,
   onNext,
-  onUpload,
   canPlayback = false,
   canNext = false,
   recordingDisabled = false,
@@ -125,7 +123,6 @@ export const RecordingCard = ({
           onReRecord={onReRecord}
           onPlayback={onPlayback}
           onNext={onNext}
-          onUpload={onUpload}
           canPlayback={canPlayback}
           canNext={canNext}
           disabled={recordingDisabled}

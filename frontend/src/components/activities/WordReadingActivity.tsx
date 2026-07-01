@@ -18,7 +18,6 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   ChevronLeft,
   ChevronRight,
@@ -545,7 +544,6 @@ export default function WordReadingActivity({
 
   const currentItem = items[currentIndex];
   const completedCount = items.filter((item) => item.recording_url).length;
-  const progress = (completedCount / items.length) * 100;
   const isLastItem = currentIndex === items.length - 1;
   const allCompleted = completedCount === items.length;
 
@@ -574,9 +572,6 @@ export default function WordReadingActivity({
             </span>
           </div>
         </div>
-
-        {/* Progress Bar */}
-        <Progress value={progress} className="h-1.5" />
 
         {/* Item Navigation Dots */}
         <div className="flex gap-1 overflow-x-auto pb-1 mx-auto w-fit max-w-full">

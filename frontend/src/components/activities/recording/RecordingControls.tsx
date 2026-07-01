@@ -2,7 +2,6 @@
  * RecordingControls — issue #892 底部 3 顆按鈕 + 中央狀態機。
  *
  * 左 🔊 我的錄音回放 / 中央（狀態變色）/ 右 ➡️ 下一題。
- * 麥克風鈕旁附「上傳音檔」次要入口（替代錄音來源，非上傳分析；僅 idle 顯示）。
  *
  * 中央按鈕依 state 變色 / 換 icon：
  * - idle      橘 🎙️  → onRecordStart
@@ -11,7 +10,6 @@
  * - assessed  藍 ↻  → onReRecord
  * disabled（recordingDisabled）鎖定整組。扣次數語義由呼叫端在「分析成功」時處理。
  */
-import { useRef } from "react";
 import {
   Mic,
   Square,
@@ -19,7 +17,6 @@ import {
   RotateCcw,
   Volume2,
   ArrowRight,
-  Upload,
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,8 +31,6 @@ export interface RecordingControlsProps {
   onReRecord?: () => void;
   onPlayback?: () => void;
   onNext?: () => void;
-  /** 上傳音檔（替代麥克風錄音來源） */
-  onUpload?: (file: File) => void;
   canPlayback?: boolean;
   canNext?: boolean;
   /** recordingDisabled：3/3 用完或訂正鎖定時，整組停用 */
@@ -50,8 +45,6 @@ export interface RecordingControlsProps {
   showPlayback?: boolean;
   className?: string;
 }
-
-const ACCEPT_AUDIO = "audio/*,.mp3,.m4a,.mp4,.wav,.webm,.ogg,.aac";
 
 const formatTime = (s: number) => {
   const m = Math.floor(s / 60);
@@ -77,7 +70,6 @@ export const RecordingControls = ({
   onReRecord,
   onPlayback,
   onNext,
-  onUpload,
   canPlayback = false,
   canNext = false,
   disabled = false,
@@ -87,8 +79,6 @@ export const RecordingControls = ({
   showPlayback = true,
   className,
 }: RecordingControlsProps) => {
-  const uploadInputRef = useRef<HTMLInputElement>(null);
-
   const center: CenterConfig = (() => {
     switch (state) {
       case "recording":
@@ -142,7 +132,6 @@ export const RecordingControls = ({
   })();
 
   const centerDisabled = disabled || center.forceDisabled;
-  const showUpload = state === "idle" && !!onUpload && !disabled;
   const CenterIcon = center.Icon;
 
   return (
@@ -199,32 +188,6 @@ export const RecordingControls = ({
           >
             {formatTime(recordingSeconds)}
           </span>
-        )}
-
-        {/* 上傳音檔次要入口（idle only） */}
-        {showUpload && (
-          <>
-            <button
-              type="button"
-              data-testid="upload-audio"
-              onClick={() => uploadInputRef.current?.click()}
-              title="上傳音檔"
-              className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full bg-recording-upload text-white shadow-md transition-colors hover:brightness-110"
-            >
-              <Upload className="h-4 w-4" />
-            </button>
-            <input
-              ref={uploadInputRef}
-              data-testid="upload-input"
-              type="file"
-              accept={ACCEPT_AUDIO}
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) onUpload?.(file);
-              }}
-            />
-          </>
         )}
       </div>
 

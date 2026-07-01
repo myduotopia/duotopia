@@ -56,7 +56,7 @@ describe("RecordingControls — center state machine", () => {
   });
 });
 
-describe("RecordingControls — side buttons + upload", () => {
+describe("RecordingControls — side buttons", () => {
   it("disables playback when canPlayback is false", () => {
     render(
       <RecordingControls state="idle" canPlayback={false} onPlayback={() => {}} />,
@@ -80,22 +80,5 @@ describe("RecordingControls — side buttons + upload", () => {
     fireEvent.click(screen.getByTestId("next-btn"));
     expect(p).toHaveBeenCalled();
     expect(n).toHaveBeenCalled();
-  });
-
-  it("shows upload entry only in idle and fires onUpload with the file", () => {
-    const up = vi.fn();
-    const { rerender } = render(
-      <RecordingControls state="idle" onUpload={up} />,
-    );
-    expect(screen.getByTestId("upload-audio")).toBeInTheDocument();
-
-    const file = new File(["x"], "a.mp3", { type: "audio/mpeg" });
-    fireEvent.change(screen.getByTestId("upload-input"), {
-      target: { files: [file] },
-    });
-    expect(up).toHaveBeenCalledWith(file);
-
-    rerender(<RecordingControls state="recording" onUpload={up} />);
-    expect(screen.queryByTestId("upload-audio")).toBeNull();
   });
 });

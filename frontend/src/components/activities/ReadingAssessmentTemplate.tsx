@@ -118,8 +118,10 @@ export default function ReadingAssessmentTemplate({
 
   const handlePlayExample = useCallback(() => {
     if (!exampleAudioUrl) return;
-    if (isPlayingExample && exampleAudioRef.current) {
-      exampleAudioRef.current.pause();
+    // 用實際播放狀態判斷 toggle（避免殘留 isPlayingExample 讓首次點擊誤 pause）
+    const current = exampleAudioRef.current;
+    if (current && !current.paused) {
+      current.pause();
       setIsPlayingExample(false);
       return;
     }
@@ -130,9 +132,11 @@ export default function ReadingAssessmentTemplate({
     }
     exampleAudioRef.current.playbackRate = playbackRate;
     exampleAudioRef.current.currentTime = 0;
-    exampleAudioRef.current.play().catch(() => setIsPlayingExample(false));
-    setIsPlayingExample(true);
-  }, [exampleAudioUrl, isPlayingExample, playbackRate]);
+    exampleAudioRef.current
+      .play()
+      .then(() => setIsPlayingExample(true))
+      .catch(() => setIsPlayingExample(false));
+  }, [exampleAudioUrl, playbackRate]);
 
   const updatePlaybackRate = useCallback(
     (rate: number) => {
@@ -157,22 +161,6 @@ export default function ReadingAssessmentTemplate({
     audio.currentTime = 0;
     audio.play().catch(() => {});
   }, [audioUrl]);
-
-  const handleFileUpload = useCallback(
-    (file: File) => {
-      if (audioUrl && audioUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(audioUrl);
-      }
-      const url = URL.createObjectURL(file);
-      setAudioUrl(url);
-      file.arrayBuffer().then((buffer) => {
-        const blob = new Blob([buffer], { type: file.type });
-        onRecordingComplete?.(blob, url);
-      });
-      toast.success(t("wordReading.toast.uploaded") || "音檔已上傳");
-    },
-    [audioUrl, onRecordingComplete, t],
-  );
 
   const clearRecording = useCallback(() => {
     if (recordedAudioRef.current) recordedAudioRef.current.pause();
@@ -355,7 +343,6 @@ export default function ReadingAssessmentTemplate({
         onAnalyze={handleAssessment}
         onReRecord={clearRecording}
         onPlayback={togglePlaybackRecorded}
-        onUpload={handleFileUpload}
         canPlayback={!!audioUrl}
         recordingDisabled={recordingDisabled || readOnly}
         canUseAiAnalysis={canUseAiAnalysis}
