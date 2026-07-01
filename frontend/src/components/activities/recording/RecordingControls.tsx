@@ -148,7 +148,10 @@ export const RecordingControls = ({
   return (
     <div
       data-testid="recording-controls"
-      className={cn("flex items-center justify-center gap-8", className)}
+      className={cn(
+        "flex items-center justify-center gap-6 sm:gap-8",
+        className,
+      )}
     >
       {/* 左：我的錄音回放 */}
       {showPlayback && (
@@ -159,11 +162,11 @@ export const RecordingControls = ({
         disabled={!canPlayback}
         title="播放我的錄音"
         className={cn(
-          "flex h-[72px] w-[72px] items-center justify-center rounded-full bg-recording-card text-recording-text-primary shadow transition-all",
+          "flex h-14 w-14 items-center justify-center rounded-full bg-recording-card text-recording-text-primary shadow transition-all sm:h-[72px] sm:w-[72px]",
           !canPlayback && "opacity-40",
         )}
       >
-        <Volume2 className="h-7 w-7" />
+        <Volume2 className="h-6 w-6 sm:h-7 sm:w-7" />
       </button>
       )}
 
@@ -175,7 +178,7 @@ export const RecordingControls = ({
           onClick={center.onClick}
           disabled={centerDisabled}
           className={cn(
-            "flex h-[120px] w-[120px] items-center justify-center rounded-full text-white transition-all",
+            "flex h-[88px] w-[88px] items-center justify-center rounded-full text-white transition-all sm:h-[120px] sm:w-[120px]",
             center.bg,
             center.shadow,
             centerDisabled && "opacity-60",
@@ -186,7 +189,7 @@ export const RecordingControls = ({
               : undefined
           }
         >
-          <CenterIcon className="h-14 w-14" />
+          <CenterIcon className="h-10 w-10 sm:h-14 sm:w-14" />
         </button>
 
         {state === "recording" && (
@@ -234,11 +237,11 @@ export const RecordingControls = ({
           disabled={!canNext}
           title="下一題"
           className={cn(
-            "flex h-[72px] w-[72px] items-center justify-center rounded-full bg-recording-card text-recording-text-primary shadow transition-all",
+            "flex h-14 w-14 items-center justify-center rounded-full bg-recording-card text-recording-text-primary shadow transition-all sm:h-[72px] sm:w-[72px]",
             !canNext && "opacity-40",
           )}
         >
-          <ArrowRight className="h-7 w-7" />
+          <ArrowRight className="h-6 w-6 sm:h-7 sm:w-7" />
         </button>
       )}
     </div>
