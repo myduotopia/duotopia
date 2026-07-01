@@ -16,6 +16,8 @@ export default {
           card: "#FFFFFF", // 白色卡片
           "card-soft": "#FFF8EE", // 卡片柔和變體
           accent: "#F97316", // 橘 — 錄音強調
+          "accent-soft": "#FFE7D1", // 橘 — POS 徽章底
+          "accent-deep": "#C2410C", // 橘 — POS 徽章字
           rerecord: "#2563EB", // 藍 — 評測後重錄
           upload: "#8B5CF6", // 紫 — 上傳分析
           danger: "#EF4444", // 紅 — 錄音中 / 未通過 / 紅字
