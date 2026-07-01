@@ -29,6 +29,8 @@ export interface CardContentProps {
   ipa?: string | null;
   /** word variant：詞性 */
   partOfSpeech?: string | null;
+  /** 卡片頂部列（句子上方音檔列 AudioPlaybackBar：喇叭 + 倍速） */
+  headerSlot?: ReactNode;
   /** 覆寫渲染的朗讀本體（Stage 4 傳入 WordWithScoreColor 染色版） */
   textSlot?: ReactNode;
   /** 卡片右上角分數徽章（Stage 4 傳入 ScoreBadge） */
@@ -57,6 +59,7 @@ export const CardContent = ({
   showImage = true,
   ipa,
   partOfSpeech,
+  headerSlot,
   textSlot,
   scoreBadge,
   translationDimmed = false,
@@ -81,7 +84,7 @@ export const CardContent = ({
       data-variant={variant}
       data-has-image={hasImage}
       className={cn(
-        "relative mx-auto flex min-h-[360px] w-full max-w-[960px] rounded-[32px] bg-recording-card p-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)] sm:min-h-[440px] sm:p-10",
+        "relative mx-auto flex min-h-[360px] w-full max-w-[960px] flex-col rounded-[32px] bg-recording-card p-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)] sm:min-h-[440px] sm:p-10",
         className,
       )}
     >
@@ -89,9 +92,18 @@ export const CardContent = ({
         <div className="absolute -top-3 right-6 z-10">{scoreBadge}</div>
       )}
 
+      {headerSlot && (
+        <div
+          data-testid="card-header-slot"
+          className="mb-5 flex w-full justify-center sm:justify-start"
+        >
+          {headerSlot}
+        </div>
+      )}
+
       <div
         className={cn(
-          "flex w-full gap-6 sm:gap-10",
+          "flex w-full flex-1 gap-6 sm:gap-10",
           hasImage
             ? "flex-col items-center sm:flex-row"
             : "flex-col items-center justify-center",
