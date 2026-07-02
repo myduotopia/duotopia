@@ -1,7 +1,7 @@
 """Add institution billing invoice tables (issue #838 data layer)
 
 Revision ID: 20260626_1000
-Revises: 20260608_1000
+Revises: 20260624_1000
 Create Date: 2026-06-26 10:00:00
 
 Creates the two tables backing the manual 請款 / 收款 workflow that follows
@@ -17,6 +17,10 @@ Idempotent (per專案 migration 鐵則):
   - CREATE TABLE IF NOT EXISTS — constraints + PK declared inline so they are
     created atomically with the (brand-new) table; re-running is a no-op.
   - CREATE INDEX IF NOT EXISTS for every index.
+  - updated_at trigger uses CREATE OR REPLACE FUNCTION + DROP TRIGGER IF
+    EXISTS before CREATE TRIGGER (mirrors 20260518_1000), so re-running is
+    safe and raw-SQL UPDATEs (e.g. the Phase D overdue cron) refresh
+    updated_at without relying on the ORM onupdate hook.
   - No DROP / RENAME / ALTER TYPE on existing tables; FKs reference existing
     organizations(id) (UUID) and teachers(id) (INTEGER).
 """
@@ -27,7 +31,7 @@ from alembic import op
 
 
 revision: str = "20260626_1000"
-down_revision: Union[str, None] = "20260608_1000"
+down_revision: Union[str, None] = "20260624_1000"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -50,13 +54,15 @@ def upgrade() -> None:
                 REFERENCES teachers(id) ON DELETE SET NULL,
             payment_note TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-            updated_at TIMESTAMP WITH TIME ZONE,
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
             CONSTRAINT uq_institution_invoices_org_year_month
                 UNIQUE (organization_id, year, month),
             CONSTRAINT ck_institution_invoices_status_valid
                 CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
             CONSTRAINT ck_institution_invoices_month_valid
                 CHECK (month BETWEEN 1 AND 12),
+            CONSTRAINT ck_institution_invoices_year_valid
+                CHECK (year BETWEEN 2000 AND 2099),
             CONSTRAINT ck_institution_invoices_amount_nonneg
                 CHECK (amount >= 0)
         );
@@ -75,6 +81,35 @@ def upgrade() -> None:
         "ON institution_invoices (due_date);"
     )
 
+    # DB-level trigger to refresh updated_at on every UPDATE, including
+    # raw-SQL writes that bypass SQLAlchemy's ORM-only onupdate=func.now()
+    # — notably the Phase D overdue cron that bulk-UPDATEs status. Function
+    # uses CREATE OR REPLACE; trigger is dropped + re-created so the
+    # migration stays idempotent (mirrors 20260518_1000).
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION set_institution_invoices_updated_at()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            NEW.updated_at = now();
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        """
+    )
+    op.execute(
+        "DROP TRIGGER IF EXISTS trg_institution_invoices_updated_at "
+        "ON institution_invoices"
+    )
+    op.execute(
+        """
+        CREATE TRIGGER trg_institution_invoices_updated_at
+        BEFORE UPDATE ON institution_invoices
+        FOR EACH ROW
+        EXECUTE FUNCTION set_institution_invoices_updated_at();
+        """
+    )
+
     # ---- institution_invoice_emails (append-only audit trail) -----------
     op.execute(
         """
@@ -85,13 +120,15 @@ def upgrade() -> None:
             year INTEGER NOT NULL,
             month INTEGER NOT NULL,
             recipient VARCHAR(200) NOT NULL,
-            cc TEXT,
+            cc JSONB,
             sent_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
             sent_by_admin_id INTEGER
                 REFERENCES teachers(id) ON DELETE SET NULL,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
             CONSTRAINT ck_institution_invoice_emails_month_valid
-                CHECK (month BETWEEN 1 AND 12)
+                CHECK (month BETWEEN 1 AND 12),
+            CONSTRAINT ck_institution_invoice_emails_year_valid
+                CHECK (year BETWEEN 2000 AND 2099)
         );
         """
     )
@@ -103,6 +140,12 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Both tables are brand-new in this revision and hold no pre-existing
-    # business data, so dropping them on downgrade is safe.
+    # business data, so dropping them (and the trigger/function) on
+    # downgrade is safe.
+    op.execute(
+        "DROP TRIGGER IF EXISTS trg_institution_invoices_updated_at "
+        "ON institution_invoices"
+    )
+    op.execute("DROP FUNCTION IF EXISTS set_institution_invoices_updated_at();")
     op.execute("DROP TABLE IF EXISTS institution_invoice_emails;")
     op.execute("DROP TABLE IF EXISTS institution_invoices;")

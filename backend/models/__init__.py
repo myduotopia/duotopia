@@ -64,6 +64,7 @@ from .student_status_history import StudentStatusHistory
 from .institution_invoice import (
     InstitutionInvoice,
     InstitutionInvoiceEmail,
+    INVOICE_STATUSES,
 )
 
 # Classroom models
@@ -144,6 +145,7 @@ __all__ = [
     # Institution billing invoices
     "InstitutionInvoice",
     "InstitutionInvoiceEmail",
+    "INVOICE_STATUSES",
     # Classrooms
     "Classroom",
     "ClassroomStudent",
