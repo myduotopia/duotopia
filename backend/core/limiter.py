@@ -20,19 +20,12 @@ import json
 import logging
 
 from fastapi import Request
-from jose import JWTError, jwt
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from core.config import settings
+from auth import verify_token
 
 logger = logging.getLogger(__name__)
-
-# 與 auth.py 一致：硬寫死 HS256，不讀 settings.JWT_ALGORITHM。
-# auth.py 簽 token 時固定用 HS256（並註明「prevent 'none' algorithm attack」），
-# 解 token 的這側也必須鎖死同一演算法，否則若有人把 JWT_ALGORITHM 設成別的
-# 值，限流器可能接受非預期簽章的 token 而破壞 per-user bucket 隔離。
-_JWT_ALGORITHM = "HS256"
 
 # 只有真正的「使用者存取權杖」才拿來當限流身分。
 # refresh token（type="refresh"）等其他權杖不算數，避免同一使用者用不同
@@ -42,9 +35,7 @@ _RATE_LIMIT_IDENTITY_TYPES = {"teacher", "student"}
 
 def _identifier_from_jwt(request: Request) -> str | None:
     """從已驗證的 Bearer JWT 推導 per-user key，失敗回傳 None。"""
-    auth_header = (
-        request.headers.get("Authorization", "") if hasattr(request, "headers") else ""
-    )
+    auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return None
 
@@ -52,9 +43,11 @@ def _identifier_from_jwt(request: Request) -> str | None:
     if not token:
         return None
 
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[_JWT_ALGORITHM])
-    except JWTError:
+    # 委派給 auth.verify_token —— 與其餘 routers 走同一條驗證路徑（同 secret、
+    # 硬寫死 HS256 以防 'none' algorithm 攻擊）。未來若在 verify_token 加入
+    # jti 撤銷或 audience 檢查，限流器也會自動套用，不會悄悄走樣。
+    payload = verify_token(token)
+    if payload is None:
         # 簽章錯誤 / 過期 / 格式不符 → 不信任，落到下一層
         return None
 

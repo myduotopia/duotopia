@@ -5,12 +5,12 @@
 2. request body 的 email / id（登入端點，尚未持有 token）
 3. Fallback 到 client IP
 """
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from jose import jwt
 from starlette.datastructures import Headers
 
-from core.config import settings
+from auth import create_access_token
 from core.limiter import get_user_identifier
 
 
@@ -29,16 +29,16 @@ class MockRequest:
         self.headers = Headers(headers=headers or {})
 
 
-def _make_token(payload: dict, secret: str = None, algorithm: str = None) -> str:
-    # 直接用 settings.JWT_SECRET 簽 token —— 與「受測對象」core.limiter 讀取的
-    # 來源相同（而非 auth.create_access_token 走 os.getenv）。這樣金鑰來源若改變，
-    # 測試與限流器會一起改變、不會出現假覆蓋。forged / expired / 缺 sub 等案例
-    # 也必須用 raw jwt.encode 才能構造，故不沿用 create_access_token helper。
-    return jwt.encode(
-        payload,
-        secret or settings.JWT_SECRET,
-        algorithm=algorithm or settings.JWT_ALGORITHM,
-    )
+def _token(payload: dict, expires_delta: timedelta = None) -> str:
+    # 用 production 的簽發路徑 auth.create_access_token 產生 token，確保與
+    # 受測對象 core.limiter（內部委派 auth.verify_token）的簽章 / 演算法完全
+    # 對齊；金鑰來源若改變，測試與限流器會一起改變、不會出現假綠燈。
+    return create_access_token(payload, expires_delta=expires_delta)
+
+
+def _forged_token(payload: dict) -> str:
+    # 以錯誤的 secret 簽發，模擬偽造 token（簽章驗證必定失敗）。
+    return jwt.encode(payload, "wrong-secret", algorithm="HS256")
 
 
 # ---------- Tier 2: body (login endpoints) ----------
@@ -84,7 +84,7 @@ def test_get_user_identifier_no_body_no_token_fallback_to_ip():
 
 def test_get_user_identifier_by_valid_jwt_teacher():
     """測試：已驗證的 teacher JWT → teacher:<sub>，不受共用 IP 影響"""
-    token = _make_token({"sub": "42", "type": "teacher"})
+    token = _token({"sub": "42", "type": "teacher"})
     request = MockRequest(headers={"Authorization": f"Bearer {token}"})
     result = get_user_identifier(request)
     assert result == "teacher:42"
@@ -92,7 +92,7 @@ def test_get_user_identifier_by_valid_jwt_teacher():
 
 def test_get_user_identifier_by_valid_jwt_student():
     """測試：已驗證的 student JWT → student:<sub>"""
-    token = _make_token({"sub": "777", "type": "student"})
+    token = _token({"sub": "777", "type": "student"})
     request = MockRequest(headers={"Authorization": f"Bearer {token}"})
     result = get_user_identifier(request)
     assert result == "student:777"
@@ -100,7 +100,7 @@ def test_get_user_identifier_by_valid_jwt_student():
 
 def test_get_user_identifier_jwt_takes_priority_over_body():
     """測試：同時有 token 與 body 時，以驗證過的 JWT 為準"""
-    token = _make_token({"sub": "42", "type": "teacher"})
+    token = _token({"sub": "42", "type": "teacher"})
     request = MockRequest(
         body={"email": "someone@else.com"},
         headers={"Authorization": f"Bearer {token}"},
@@ -111,7 +111,7 @@ def test_get_user_identifier_jwt_takes_priority_over_body():
 
 def test_get_user_identifier_forged_token_does_not_trust_sub():
     """安全性：偽造（簽章錯誤）的 token 不可被信任，避免攻擊者竄改 sub 繞過限制"""
-    forged = _make_token({"sub": "victim", "type": "teacher"}, secret="wrong-secret")
+    forged = _forged_token({"sub": "victim", "type": "teacher"})
     request = MockRequest(
         body={"email": "real@user.com"},
         headers={"Authorization": f"Bearer {forged}"},
@@ -123,12 +123,8 @@ def test_get_user_identifier_forged_token_does_not_trust_sub():
 
 def test_get_user_identifier_expired_token_falls_through():
     """測試：過期 token 驗證失敗 → 落到下一層（此處 IP）"""
-    expired = _make_token(
-        {
-            "sub": "42",
-            "type": "teacher",
-            "exp": datetime.now(timezone.utc) - timedelta(hours=1),
-        }
+    expired = _token(
+        {"sub": "42", "type": "teacher"}, expires_delta=timedelta(hours=-1)
     )
     request = MockRequest(
         headers={"Authorization": f"Bearer {expired}"}, client_ip="8.8.8.8"
@@ -139,7 +135,7 @@ def test_get_user_identifier_expired_token_falls_through():
 
 def test_get_user_identifier_token_without_sub_falls_through():
     """測試：JWT 缺少 sub → 落到下一層"""
-    token = _make_token({"type": "teacher"})  # no sub
+    token = _token({"type": "teacher"})  # no sub
     request = MockRequest(
         headers={"Authorization": f"Bearer {token}"}, client_ip="1.2.3.4"
     )
@@ -149,7 +145,7 @@ def test_get_user_identifier_token_without_sub_falls_through():
 
 def test_get_user_identifier_jwt_unlisted_type_falls_through():
     """測試：JWT 有 sub 但 type 不在白名單（缺 type）→ 不採用，落到下一層"""
-    token = _make_token({"sub": "99"})  # no type
+    token = _token({"sub": "99"})  # no type
     request = MockRequest(
         headers={"Authorization": f"Bearer {token}"}, client_ip="5.6.7.8"
     )
@@ -159,7 +155,7 @@ def test_get_user_identifier_jwt_unlisted_type_falls_through():
 
 def test_get_user_identifier_refresh_token_falls_through():
     """安全性：refresh token 不可當限流身分，避免取得額外的獨立 bucket"""
-    token = _make_token({"sub": "42", "type": "refresh"})
+    token = _token({"sub": "42", "type": "refresh"})
     request = MockRequest(
         body={"email": "real@user.com"},
         headers={"Authorization": f"Bearer {token}"},
@@ -171,7 +167,7 @@ def test_get_user_identifier_refresh_token_falls_through():
 
 def test_get_user_identifier_lowercase_authorization_header():
     """測試：header 大小寫不敏感（Starlette Headers）→ 仍能解出 JWT 身分"""
-    token = _make_token({"sub": "42", "type": "teacher"})
+    token = _token({"sub": "42", "type": "teacher"})
     request = MockRequest(headers={"authorization": f"Bearer {token}"})
     result = get_user_identifier(request)
     assert result == "teacher:42"
