@@ -141,6 +141,22 @@ export default function PrivacyPolicy() {
                   <p>{t("privacyPolicy.section10.item2")}</p>
                 </div>
               </section>
+
+              <section>
+                <h2 className="text-xl font-semibold mb-3">
+                  {t("privacyPolicy.section11.title")}
+                </h2>
+                <div className="space-y-2 text-sm">
+                  <p>{t("privacyPolicy.section11.item1")}</p>
+                  <ul className="list-disc pl-6 space-y-1">
+                    <li>{t("privacyPolicy.section11.list.item1")}</li>
+                    <li>{t("privacyPolicy.section11.list.item2")}</li>
+                    <li>{t("privacyPolicy.section11.list.item3")}</li>
+                  </ul>
+                  <p>{t("privacyPolicy.section11.item2")}</p>
+                  <p>{t("privacyPolicy.section11.item3")}</p>
+                </div>
+              </section>
             </div>
           </ScrollArea>
         </Card>
