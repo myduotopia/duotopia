@@ -6,6 +6,7 @@
 3. Fallback 到 client IP
 """
 from datetime import timedelta
+from types import SimpleNamespace
 
 from jose import jwt
 from starlette.datastructures import Headers
@@ -27,6 +28,8 @@ class MockRequest:
         # 用 Starlette Headers（大小寫不敏感）而非 dict，貼近 production
         # Request.headers 的行為，避免測試對 header 大小寫產生偽綠燈。
         self.headers = Headers(headers=headers or {})
+        # get_user_identifier 會把結果快取在 request.state，比照真實 Request。
+        self.state = SimpleNamespace()
 
 
 def _token(payload: dict, expires_delta: timedelta = None) -> str:
@@ -180,3 +183,39 @@ def test_get_user_identifier_malformed_auth_header_falls_through():
     )
     result = get_user_identifier(request)
     assert result == "email:a@b.com"
+
+
+# ---------- 併入自 #139（原 test_limiter.py）----------
+
+
+def test_get_user_identifier_different_users_get_different_keys():
+    """不同使用者 → 不同 key（即使同 IP），防輪換 IP 繞過（#139）"""
+    token_a = _token({"sub": "1", "type": "student"})
+    token_b = _token({"sub": "2", "type": "student"})
+    key_a = get_user_identifier(
+        MockRequest(headers={"Authorization": f"Bearer {token_a}"}, client_ip="9.9.9.9")
+    )
+    key_b = get_user_identifier(
+        MockRequest(headers={"Authorization": f"Bearer {token_b}"}, client_ip="9.9.9.9")
+    )
+    assert key_a == "student:1"
+    assert key_b == "student:2"
+    assert key_a != key_b
+
+
+def test_get_user_identifier_caches_result_on_request_state():
+    """同一 request 第二次呼叫 → 直接讀 request.state 快取，不再重新解碼（#139）"""
+    token = _token({"sub": "7", "type": "teacher"})
+    request = MockRequest(headers={"Authorization": f"Bearer {token}"})
+    assert get_user_identifier(request) == "teacher:7"
+
+    # 竄改快取值；若第二次有讀快取，就會回傳竄改後的值
+    request.state._duotopia_rate_limit_key = "teacher:cached"
+    assert get_user_identifier(request) == "teacher:cached"
+
+
+def test_get_user_identifier_empty_string_sub_still_uses_user_bucket():
+    """sub 為空字串也是合法身分 → 仍走 user 桶，不可掉進共用 IP 桶（#139）"""
+    token = _token({"sub": "", "type": "teacher"})
+    request = MockRequest(headers={"Authorization": f"Bearer {token}"})
+    assert get_user_identifier(request) == "teacher:"
