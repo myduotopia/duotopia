@@ -112,6 +112,22 @@ export interface LoginRequest {
   password: string;
 }
 
+/** Institution accounts-receivable invoice (issue #838 Phase D). */
+export interface InstitutionInvoiceDto {
+  id: number;
+  organization_id: string;
+  organization_name: string | null;
+  year: number;
+  month: number;
+  amount: number;
+  status: "pending" | "paid" | "overdue" | "cancelled";
+  due_date: string | null;
+  paid_at: string | null;
+  paid_by_admin_id: number | null;
+  payment_note: string | null;
+  created_at: string | null;
+}
+
 export interface LoginResponse {
   access_token: string;
   token_type: string;
@@ -1773,6 +1789,58 @@ class ApiClient {
     }>(
       `/api/organizations/${orgId}/billing/monthly/email-history?year=${year}&month=${month}`,
       { method: "GET" },
+    );
+  }
+
+  // ===== issue #838 Phase D: institution accounts-receivable ledger =====
+
+  /** Lock the (org, year, month) accounts-receivable invoice (amount is
+   * computed server-side). Idempotent. Admin only. */
+  async createInstitutionInvoice(orgId: string, year: number, month: number) {
+    return this.request<InstitutionInvoiceDto>(
+      `/api/admin/institution-invoices`,
+      {
+        method: "POST",
+        body: JSON.stringify({ organization_id: orgId, year, month }),
+      },
+    );
+  }
+
+  /** List AR invoices with optional filters (admin only). */
+  async listInstitutionInvoices(
+    params: {
+      status?: string;
+      overdue?: boolean;
+      year?: number;
+      month?: number;
+      organizationId?: string;
+    } = {},
+  ) {
+    const q = new URLSearchParams();
+    if (params.status) q.set("status", params.status);
+    if (params.overdue) q.set("overdue", "true");
+    if (params.year) q.set("year", String(params.year));
+    if (params.month) q.set("month", String(params.month));
+    if (params.organizationId) q.set("organization_id", params.organizationId);
+    const qs = q.toString();
+    return this.request<InstitutionInvoiceDto[]>(
+      `/api/admin/institution-invoices${qs ? `?${qs}` : ""}`,
+      { method: "GET" },
+    );
+  }
+
+  /** Mark an AR invoice paid / cancelled (admin only). */
+  async updateInstitutionInvoice(
+    id: number,
+    status: "paid" | "cancelled",
+    paymentNote?: string,
+  ) {
+    return this.request<InstitutionInvoiceDto>(
+      `/api/admin/institution-invoices/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status, payment_note: paymentNote ?? null }),
+      },
     );
   }
 

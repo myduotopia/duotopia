@@ -43,6 +43,7 @@ import AdminMonitoringPage from "./pages/admin/AdminMonitoringPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import CreateOrganization from "./pages/admin/CreateOrganization";
 import AdminOrgMonthlyBilling from "./pages/admin/AdminOrgMonthlyBilling";
+import AdminInstitutionInvoices from "./pages/admin/AdminInstitutionInvoices";
 import GroupBuyOpenPage from "./pages/teacher/GroupBuyOpenPage";
 import { ENABLE_GROUP_BUY } from "./config/featureFlags";
 import BlogListPage from "./pages/BlogListPage";
@@ -372,6 +373,16 @@ function App() {
             element={
               <ProtectedRoute requireAdmin>
                 <AdminOrgMonthlyBilling />
+              </ProtectedRoute>
+            }
+          />
+        )}
+        {ENABLE_GROUP_BUY && (
+          <Route
+            path="/admin/billing/institutions"
+            element={
+              <ProtectedRoute requireAdmin>
+                <AdminInstitutionInvoices />
               </ProtectedRoute>
             }
           />

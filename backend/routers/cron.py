@@ -25,6 +25,7 @@ from models import (
 from services.email_service import email_service
 from services.tappay_service import TapPayService
 from services.group_buy import grant_monthly_for_group_buy
+from services.institution_invoice_ledger import mark_overdue_invoices
 from google.cloud import bigquery
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
@@ -1269,6 +1270,36 @@ async def expire_credit_packages_cron(
     except Exception as e:
         db.rollback()
         logger.error(f"Credit package expiry cron failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Cron job failed: {str(e)}")
+
+
+@router.post("/billing-overdue-check")
+async def billing_overdue_check_cron(
+    x_cron_secret: str = Header(None),
+    db: Session = Depends(get_db),
+):
+    """機構應收帳款逾期掃描（issue #838 Phase D）。
+
+    執行時間：每日一次（由 Cloud Scheduler 觸發，建議 09:00 Asia/Taipei）。
+    功能：把所有 status='pending' 且 due_date < 今日（Taipei）的
+    institution_invoices 標記為 'overdue'。冪等 — 同日重跑不會重複處理。
+
+    安全性：需帶正確的 X-Cron-Secret header。
+    """
+    if x_cron_secret != CRON_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        updated = mark_overdue_invoices(db)
+        logger.info(f"Billing overdue check: marked {updated} invoice(s) overdue")
+        return {
+            "success": True,
+            "marked_overdue": updated,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Billing overdue check cron failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Cron job failed: {str(e)}")
 
 
