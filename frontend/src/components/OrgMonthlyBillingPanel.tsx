@@ -73,7 +73,9 @@ export default function OrgMonthlyBillingPanel({
           month,
         );
         setLastSentAt(hist.last_sent_at);
-      } catch {
+      } catch (histErr) {
+        // Informational-only; a transient failure shouldn't block the query.
+        console.warn("Failed to load invoice email history", histErr);
         setLastSentAt(null);
       }
     } catch (e) {

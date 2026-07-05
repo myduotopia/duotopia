@@ -401,3 +401,18 @@ def test_send_email_success_writes_audit_and_history(
     hist = h.json()
     assert hist["last_sent_at"]
     assert len(hist["history"]) == 1
+
+
+def test_send_email_422_on_malformed_cc(
+    test_client, admin, institution_org_with_one_active_student
+):
+    """cc is EmailStr-validated → a malformed address is rejected at the
+    request boundary (422), never reaching the raw Cc header."""
+    org, _, _ = institution_org_with_one_active_student
+    org.contact_email = "finance@acme.example"
+    r = test_client.post(
+        f"/api/organizations/{org.id}/billing/monthly/send-email",
+        json={"year": 2026, "month": 6, "cc": ["not-an-email"]},
+        headers=_bearer(admin.id),
+    )
+    assert r.status_code == 422

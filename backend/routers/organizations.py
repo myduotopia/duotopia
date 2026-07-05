@@ -11,7 +11,7 @@ from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import func, distinct, union, select
 from sqlalchemy.orm import Session, joinedload, selectinload, load_only
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from datetime import datetime
 import logging
@@ -1634,7 +1634,12 @@ async def get_monthly_billing_pdf(
 class SendInvoiceEmailRequest(BaseModel):
     year: int = Field(..., ge=1, le=9998, description="Calendar year (Taipei)")
     month: int = Field(..., ge=1, le=12, description="Calendar month (1-12)")
-    cc: Optional[List[str]] = Field(default=None, description="Optional CC emails")
+    # EmailStr (not str) so malformed addresses fail with a 422 up front and,
+    # critically, cannot inject CRLF into the raw Cc header built in
+    # email_service._build_message. Capped to avoid a fat-fingered huge list.
+    cc: Optional[List[EmailStr]] = Field(
+        default=None, max_length=50, description="Optional CC emails"
+    )
 
 
 @router.post("/{org_id}/billing/monthly/send-email")
