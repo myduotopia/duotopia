@@ -13,6 +13,7 @@ correctly.
 import os
 from datetime import date, datetime
 from io import BytesIO
+from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo
 
 from reportlab.lib import colors
@@ -72,6 +73,15 @@ def get_bank_info() -> dict:
 
 def _fmt_amount(amount: int, currency: str) -> str:
     return f"{currency} {amount:,}"
+
+
+def _esc(value) -> str:
+    """XML-escape a DB/user-sourced value before it is interpolated into a
+    ReportLab ``Paragraph`` (which parses its input as XML-like markup, so a
+    literal ``&``/``<``/``>`` in an org name, address or student name would
+    otherwise raise a parse error and 500 the PDF endpoint). Static labels
+    and the ``<br/>``/``<b>`` tags we add ourselves stay unescaped."""
+    return escape("" if value is None else str(value))
 
 
 def build_invoice_pdf(
@@ -136,10 +146,10 @@ def build_invoice_pdf(
         f"請款期間 Period：{year} 年 {month:02d} 月",
     ]
     org_lines = [
-        f"機構名稱：{org_display}",
-        f"統一編號：{org.tax_id or '—'}",
-        f"聯絡 Email：{org.contact_email or '—'}",
-        f"地址：{org.address or '—'}",
+        f"機構名稱：{_esc(org_display)}",
+        f"統一編號：{_esc(org.tax_id or '—')}",
+        f"聯絡 Email：{_esc(org.contact_email or '—')}",
+        f"地址：{_esc(org.address or '—')}",
     ]
     header_tbl = Table(
         [
@@ -180,8 +190,8 @@ def build_invoice_pdf(
             unit = _fmt_amount(per_price, currency) if billable else "—"
             rows.append(
                 [
-                    Paragraph(str(s.get("student_id", "")), cell_c),
-                    Paragraph(str(s.get("name", "")), cell),
+                    Paragraph(_esc(s.get("student_id", "")), cell_c),
+                    Paragraph(_esc(s.get("name", "")), cell),
                     Paragraph("是" if billable else "否", cell_c),
                     Paragraph(unit, cell_c),
                 ]
@@ -227,9 +237,9 @@ def build_invoice_pdf(
     # ---- remittance + notes ----
     bank_lines = [
         "匯款資訊 Remittance",
-        f"銀行 Bank：{bank['bank_name']}",
-        f"帳號 Account：{bank['account']}",
-        f"戶名 Account Holder：{bank['holder']}",
+        f"銀行 Bank：{_esc(bank['bank_name'])}",
+        f"帳號 Account：{_esc(bank['account'])}",
+        f"戶名 Account Holder：{_esc(bank['holder'])}",
     ]
     story.append(Paragraph("<br/>".join(bank_lines), normal))
     story.append(Spacer(1, 4 * mm))

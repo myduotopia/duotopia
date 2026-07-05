@@ -101,6 +101,25 @@ def test_pdf_renders_with_zero_students():
     assert data[:4] == b"%PDF"
 
 
+def test_pdf_handles_xml_special_chars_in_free_text():
+    """Regression: ReportLab Paragraph parses XML-like markup, so a literal
+    &/</> in an org name, address, or student name must be escaped or PDF
+    generation raises a parse error (500)."""
+    org = _org(
+        name="Fun & Learn <Institute>",
+        display_name="Fun & Learn <機構>",
+        address="3F, No. 5 <Building B> & Co.",
+    )
+    students = [
+        {"student_id": 1, "name": "A & B <script>", "billable": True},
+        {"student_id": 2, "name": "李 <四> & 王", "billable": False},
+    ]
+    data = build_invoice_pdf(
+        org, 2026, 6, _billing(students), issued_date=date(2026, 7, 1)
+    )
+    assert data[:4] == b"%PDF"
+
+
 def test_pdf_handles_missing_org_optional_fields():
     org = _org(display_name=None, tax_id=None, contact_email=None, address=None)
     data = build_invoice_pdf(
