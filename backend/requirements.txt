@@ -49,6 +49,10 @@ tenacity==8.2.3
 # Excel export (issue #708 — class & student grade reports)
 openpyxl==3.1.5
 
+# PDF generation (issue #838 — institution monthly 請款單; Chinese via
+# built-in STSong-Light CID font, no TTF shipped)
+reportlab==5.0.0
+
 # =============================================
 # Development Dependencies
 # =============================================

@@ -7,6 +7,7 @@ Note: Per-issue deploy now includes database migrations (2026-01-11 v4 - upgrade
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import func, distinct, union, select
 from sqlalchemy.orm import Session, joinedload, selectinload, load_only
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 import logging
+import re
 import uuid
 
 from database import get_db
@@ -29,6 +31,7 @@ from auth import verify_token, get_password_hash
 from services.casbin_service import get_casbin_service
 from services.email_service import email_service
 from services.institution_billing import compute_monthly_billing
+from services.institution_invoice_pdf import build_invoice_pdf
 import secrets
 
 
@@ -1517,28 +1520,14 @@ class MonthlyBillingResponse(BaseModel):
     students: List[StudentBillingBreakdown]
 
 
-@router.get("/{org_id}/billing/monthly", response_model=MonthlyBillingResponse)
-async def get_monthly_billing(
-    org_id: uuid.UUID,
-    year: int = Query(..., ge=1, le=9998, description="Calendar year (Taipei)"),
-    month: int = Query(..., ge=1, le=12, description="Calendar month (1-12)"),
-    db: Session = Depends(get_db),
-    current_teacher: Teacher = Depends(get_current_teacher),
-):
-    """Compute the institution's monthly invoice for a given (year, month).
-
-    Auth: platform admin OR an org_owner of this org.
-    Validation: org must be `org_type='institution'` with `per_student_price`
-    set. 400 otherwise.
-
-    Billing rule (issue #768 五.5): a student is billable for the month iff
-    they were 'active' at any moment during the Taipei month window. See
-    `services.institution_billing` for the detailed derivation.
+def _load_billing_org_or_error(
+    org_id: uuid.UUID, current_teacher: Teacher, db: Session
+) -> Organization:
+    """Load an active org and enforce billing auth: platform admin OR the
+    org's `org_owner` specifically. Billing exposes PII (student names +
+    billable status) so org_admin / teacher roles are excluded. Shared by
+    the JSON and PDF billing endpoints. Raises 404 / 403.
     """
-    # Auth: admin bypasses org-membership check; otherwise must be the
-    # org's `org_owner` specifically (NOT just any member). Billing exposes
-    # PII (student names + billable status) so org_admin / teacher roles
-    # are explicitly excluded.
     org = (
         db.query(Organization)
         .filter(Organization.id == org_id, Organization.is_active.is_(True))
@@ -1566,6 +1555,36 @@ async def get_monthly_billing(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only org_owner can query monthly billing.",
             )
+    return org
+
+
+def _billing_filename_slug(org: Organization) -> str:
+    """ASCII slug of the org name for the download filename (Content-
+    Disposition needs ASCII). Chinese-only names collapse to 'invoice'."""
+    base = org.name or org.display_name or "invoice"
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", base).strip("-").lower()
+    return slug or "invoice"
+
+
+@router.get("/{org_id}/billing/monthly", response_model=MonthlyBillingResponse)
+async def get_monthly_billing(
+    org_id: uuid.UUID,
+    year: int = Query(..., ge=1, le=9998, description="Calendar year (Taipei)"),
+    month: int = Query(..., ge=1, le=12, description="Calendar month (1-12)"),
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """Compute the institution's monthly invoice for a given (year, month).
+
+    Auth: platform admin OR an org_owner of this org.
+    Validation: org must be `org_type='institution'` with `per_student_price`
+    set. 400 otherwise.
+
+    Billing rule (issue #768 五.5): a student is billable for the month iff
+    they were 'active' at any moment during the Taipei month window. See
+    `services.institution_billing` for the detailed derivation.
+    """
+    org = _load_billing_org_or_error(org_id, current_teacher, db)
 
     try:
         result = compute_monthly_billing(org, year, month, db)
@@ -1577,3 +1596,34 @@ async def get_monthly_billing(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return result
+
+
+@router.get("/{org_id}/billing/monthly.pdf")
+async def get_monthly_billing_pdf(
+    org_id: uuid.UUID,
+    year: int = Query(..., ge=1, le=9998, description="Calendar year (Taipei)"),
+    month: int = Query(..., ge=1, le=12, description="Calendar month (1-12)"),
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """Render the monthly 請款單 as a downloadable PDF (issue #838 Phase B).
+
+    Same auth + validation as the JSON endpoint (admin OR org_owner). Reuses
+    `compute_monthly_billing`; the PDF is presentation-only (no DB writes).
+    Deterministic 請款單編號 (INV-{org 前8碼}-{YYYYMM}); remittance account
+    comes from env config so it differs per environment.
+    """
+    org = _load_billing_org_or_error(org_id, current_teacher, db)
+
+    try:
+        billing = compute_monthly_billing(org, year, month, db)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    pdf_bytes = build_invoice_pdf(org, year, month, billing)
+    filename = f"{_billing_filename_slug(org)}-{year:04d}-{month:02d}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

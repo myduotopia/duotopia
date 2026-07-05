@@ -1700,6 +1700,42 @@ class ApiClient {
     );
   }
 
+  /**
+   * Download the monthly 請款單 PDF (issue #838 Phase B). Returns the raw
+   * Blob so the caller can trigger a browser download; the filename is taken
+   * from the server's Content-Disposition when present.
+   */
+  async downloadOrganizationMonthlyInvoicePdf(
+    orgId: string,
+    year: number,
+    month: number,
+  ): Promise<{ blob: Blob; filename: string }> {
+    const currentToken = this.getToken();
+    const headers: Record<string, string> = {};
+    if (currentToken) {
+      headers["Authorization"] = `Bearer ${currentToken}`;
+    }
+    const response = await fetch(
+      `${this.baseUrl}/api/organizations/${orgId}/billing/monthly.pdf?year=${year}&month=${month}`,
+      { method: "GET", headers },
+    );
+    if (!response.ok) {
+      let detail = `下載 PDF 失敗 (${response.status})`;
+      try {
+        const body = await response.json();
+        if (body?.detail) detail = body.detail;
+      } catch {
+        // non-JSON error body; keep the default message
+      }
+      throw new ApiError(response.status, detail);
+    }
+    const blob = await response.blob();
+    const cd = response.headers.get("content-disposition") || "";
+    const match = cd.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : `invoice-${year}-${month}.pdf`;
+    return { blob, filename };
+  }
+
   // ===== Phase 5-2 (issue #768): group-buy plans listing =====
   async listGroupBuyPlans() {
     return this.request<
