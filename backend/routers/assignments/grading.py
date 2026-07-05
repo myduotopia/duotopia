@@ -4,6 +4,7 @@ Grading operations (AI and manual)
 
 import json
 import logging
+from collections import defaultdict
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
@@ -37,6 +38,10 @@ from .validators import (
     StudentBatchGradingResult,
     BatchGradeFinalizeRequest,
     BatchGradeFinalizeResponse,
+    GradeStudentAssignmentRequest,
+    SetAssignmentInProgressRequest,
+    ReturnForRevisionRequest,
+    ManualGradeAssignmentRequest,
 )
 from .dependencies import get_current_teacher
 from .detail import (
@@ -135,10 +140,7 @@ async def ai_grade_assignment(
             )
         perf.checkpoint("Status Validation")
 
-    # 3. 簡化版 - 不查詢 Content
-    content = None
-
-    # 4. 取得提交資料（新架構從 StudentContentProgress 取得）
+    # 3. 取得提交資料（新架構從 StudentContentProgress 取得）
     # 暫時簡化處理
 
     try:
@@ -151,12 +153,11 @@ async def ai_grade_assignment(
         else:
             # 準備預期文字
             with start_span("Prepare Expected Texts"):
+                # This simplified path intentionally does not load Content, so
+                # there are no expected texts to prepare. (Issue #335 item 6:
+                # removed dead `hasattr(content, ...)` block that was always
+                # False because content was unconditionally None.)
                 expected_texts = []
-                if hasattr(content, "content_items"):
-                    for item in content.content_items:
-                        expected_texts.append(
-                            item.text if hasattr(item, "text") else ""
-                        )
                 perf.checkpoint("Text Preparation")
 
             # 呼叫 Whisper API（這裡最可能慢）
@@ -317,8 +318,6 @@ async def get_assignment_submissions(
     }
 
     submission_ids = [sub.id for sub in submissions]
-    from collections import defaultdict
-
     progress_dict = defaultdict(list)
     for progress in (
         db.query(StudentContentProgress)
@@ -770,12 +769,14 @@ def _is_quiz_assignment(
 @router.post("/{assignment_id}/grade")
 async def grade_student_assignment(
     assignment_id: int,
-    grade_data: dict,
+    payload: GradeStudentAssignmentRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """教師批改學生作業"""
-    import logging
+    # Issue #335 item 5: validated body bridged to the existing dict logic
+    # (exclude_none keeps the original ``"key" in grade_data`` semantics).
+    grade_data = payload.model_dump(exclude_none=True)
 
     # 獲取學生ID
     student_id = grade_data.get("student_id")
@@ -976,11 +977,13 @@ async def grade_student_assignment(
 @router.post("/{assignment_id}/set-in-progress")
 async def set_assignment_in_progress(
     assignment_id: int,
-    data: dict,
+    payload: SetAssignmentInProgressRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """設定為批改中狀態"""
+    # Issue #335 item 5: validated body bridged to the existing dict logic.
+    data = payload.model_dump(exclude_none=True)
     # 獲取學生ID
     student_id = data.get("student_id")
     if not student_id:
@@ -1156,11 +1159,13 @@ def _do_return_for_revision(
 @router.post("/{assignment_id}/return-for-revision")
 async def return_for_revision(
     assignment_id: int,
-    data: dict,
+    payload: ReturnForRevisionRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """要求訂正 - 要求學生修改作業（單筆）"""
+    # Issue #335 item 5: validated body bridged to the existing dict logic.
+    data = payload.model_dump(exclude_none=True)
     student_id = data.get("student_id")
     if not student_id:
         raise HTTPException(status_code=400, detail="Student ID is required")
@@ -1377,11 +1382,13 @@ async def batch_reset_not_started(
 @router.post("/{assignment_id}/manual-grade")
 async def manual_grade_assignment(
     assignment_id: int,
-    grade_data: dict,
+    payload: ManualGradeAssignmentRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """手動評分（教師用）"""
+    # Issue #335 item 5: validated body bridged to the existing dict logic.
+    grade_data = payload.model_dump(exclude_none=True)
     # 獲取作業
     assignment = (
         db.query(StudentAssignment)
@@ -1420,7 +1427,7 @@ async def manual_grade_assignment(
     if "detailed_scores" in grade_data:
         progress_records = (
             db.query(StudentContentProgress)
-            .filter(StudentContentProgress.student_assignment_id == assignment_id)
+            .filter(StudentContentProgress.student_assignment_id == assignment.id)
             .all()
         )
 
