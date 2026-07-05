@@ -1736,6 +1736,46 @@ class ApiClient {
     return { blob, filename };
   }
 
+  /** Email the monthly 請款單 (PDF attached) to the org's contact email
+   * and record an audit row (issue #838 Phase C). */
+  async sendMonthlyInvoiceEmail(
+    orgId: string,
+    year: number,
+    month: number,
+    cc?: string[],
+  ) {
+    return this.request<{
+      success: boolean;
+      recipient: string;
+      cc: string[];
+      sent_at: string | null;
+    }>(`/api/organizations/${orgId}/billing/monthly/send-email`, {
+      method: "POST",
+      body: JSON.stringify({ year, month, cc: cc ?? null }),
+    });
+  }
+
+  /** Prior 請款 email sends for (org, year, month), newest first, so the UI
+   * can show the last-sent time. */
+  async getMonthlyInvoiceEmailHistory(
+    orgId: string,
+    year: number,
+    month: number,
+  ) {
+    return this.request<{
+      last_sent_at: string | null;
+      history: Array<{
+        recipient: string;
+        cc: string[];
+        sent_at: string | null;
+        sent_by_admin_id: number | null;
+      }>;
+    }>(
+      `/api/organizations/${orgId}/billing/monthly/email-history?year=${year}&month=${month}`,
+      { method: "GET" },
+    );
+  }
+
   // ===== Phase 5-2 (issue #768): group-buy plans listing =====
   async listGroupBuyPlans() {
     return this.request<
