@@ -34,6 +34,7 @@ from services.email_service import email_service
 from services.institution_billing import compute_monthly_billing
 from services.institution_invoice_pdf import build_invoice_pdf
 from services.institution_invoice_email import send_monthly_invoice_email
+from services.institution_invoice_ledger import upsert_invoice
 import secrets
 
 
@@ -1687,6 +1688,20 @@ async def send_monthly_billing_email(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="請款 Email 發送失敗，請稍後再試。",
+        )
+
+    # issue #838 Phase D — sending the 請款 email also locks a pending
+    # accounts-receivable invoice (idempotent on (org, year, month); a repeat
+    # send does not disturb an already-paid invoice). The email has ALREADY
+    # been sent and audited at this point, so a lock failure must NOT surface
+    # as a request failure (that would wrongly prompt the admin to re-send a
+    # duplicate email) — log and continue.
+    try:
+        upsert_invoice(db, org.id, body.year, body.month, billing["total_amount"])
+    except Exception:  # pragma: no cover - defensive
+        logging.getLogger(__name__).exception(
+            "Invoice lock after send-email failed (email already sent) "
+            f"org={org.id} {body.year}-{body.month:02d}"
         )
 
     return {

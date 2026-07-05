@@ -357,13 +357,25 @@ export default function AdminOrganizations() {
               <Building className="h-6 w-6 text-blue-600" />
               <CardTitle className="text-2xl font-bold">組織管理</CardTitle>
             </div>
-            <Button
-              onClick={() => navigate("/admin/organizations/create")}
-              className="flex items-center gap-2"
-            >
-              <Building className="h-4 w-4" />
-              創建組織
-            </Button>
+            <div className="flex items-center gap-2">
+              {ENABLE_GROUP_BUY && (
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/admin/billing/institutions")}
+                  className="flex items-center gap-2"
+                  title="機構應收帳款管理"
+                >
+                  機構應收帳款
+                </Button>
+              )}
+              <Button
+                onClick={() => navigate("/admin/organizations/create")}
+                className="flex items-center gap-2"
+              >
+                <Building className="h-4 w-4" />
+                創建組織
+              </Button>
+            </div>
           </div>
         </CardHeader>
 

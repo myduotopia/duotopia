@@ -51,6 +51,7 @@ export default function OrgMonthlyBillingPanel({
   const [loading, setLoading] = React.useState(false);
   const [downloading, setDownloading] = React.useState(false);
   const [sendingEmail, setSendingEmail] = React.useState(false);
+  const [creatingInvoice, setCreatingInvoice] = React.useState(false);
   const [lastSentAt, setLastSentAt] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<MonthlyBilling | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -149,6 +150,26 @@ export default function OrgMonthlyBillingPanel({
     }
   };
 
+  const createInvoice = async () => {
+    setCreatingInvoice(true);
+    try {
+      const inv = await apiClient.createInstitutionInvoice(orgId, year, month);
+      toast.success(
+        `已建立/更新應收帳款：${inv.year} 年 ${inv.month} 月，金額 ${inv.amount.toLocaleString()}`,
+      );
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? typeof e.detail === "string"
+            ? e.detail
+            : e.message
+          : "建立應收帳款失敗";
+      toast.error(msg);
+    } finally {
+      setCreatingInvoice(false);
+    }
+  };
+
   return (
     <Card className="w-full max-w-3xl">
       <CardHeader>
@@ -192,6 +213,13 @@ export default function OrgMonthlyBillingPanel({
           </Button>
           <Button onClick={sendEmail} disabled={sendingEmail} variant="outline">
             {sendingEmail ? "寄送中…" : "寄送請款 Email"}
+          </Button>
+          <Button
+            onClick={createInvoice}
+            disabled={creatingInvoice}
+            variant="outline"
+          >
+            {creatingInvoice ? "建立中…" : "建立應收帳款"}
           </Button>
         </div>
 
