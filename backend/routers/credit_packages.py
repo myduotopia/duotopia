@@ -1109,20 +1109,23 @@ async def open_group_buy(
     )
 
     # F2 — Race-safe concurrent-request guard: acquire a Postgres advisory
-    # xact-lock keyed on (teacher_id, plan_name) BEFORE the recent-transaction
-    # lookup so two concurrent requests (mobile retry, double-tap) can't both
-    # pass the check and double-charge. Lock auto-releases at request end.
+    # xact-lock keyed on teacher_id BEFORE the recent-transaction lookup so
+    # two concurrent requests (mobile retry, double-tap) can't both pass the
+    # check and double-charge. Lock auto-releases at request end.
     # SQLite tests are single-threaded; the dialect guard is a no-op there.
     # Use db.get_bind() (SQLAlchemy 2.x idiom) instead of db.bind.
     #
-    # NOTE: lock key intentionally scopes by (teacher_id, plan_name) only.
-    # Two concurrent requests for DIFFERENT plans from the same teacher
-    # would not serialise on this lock. That edge is covered by the
-    # R2-F2 single-org-per-teacher guard below: the first request to
-    # commit creates the TeacherOrganization, and the second request's
-    # R2-F2 check finds it and returns 409.
+    # issue #838 — The lock key is scoped by teacher_id ONLY (previously
+    # (teacher_id, plan_name)). Now that a repeat open accretes a new 分校
+    # onto the teacher's single group-buy org, ALL of a teacher's concurrent
+    # opens must serialise — otherwise two different-plan requests could race
+    # `find_owned_group_buy_org` and either create two orphaned orgs or lose
+    # an `org.teacher_limit` read-modify-write update. Serialising per-teacher
+    # replaces the old R2-F2 409 guard that used to cover this edge. The 60s
+    # idempotency shortcut below (keyed on teacher+plan) still prevents a
+    # same-plan double-tap from double-charging once the lock is held.
     if db.get_bind().dialect.name == "postgresql":
-        lock_key = f"group_buy_open:{current_teacher.id}:{plan.name}"
+        lock_key = f"group_buy_open:{current_teacher.id}"
         locked = db.execute(
             text("SELECT pg_try_advisory_xact_lock(hashtext(:k))"),
             {"k": lock_key},
@@ -1140,8 +1143,9 @@ async def open_group_buy(
     # Instead it is treated as 新增一個分校: the provisioning block below
     # reuses the teacher's existing group-buy org and adds a new School.
     # Double-charge on an accidental double-submit is still prevented by the
-    # advisory xact-lock above (same plan) plus the 60s idempotency shortcut
-    # below (returns the original transaction without re-charging).
+    # per-teacher advisory xact-lock above (serialises all of a teacher's
+    # concurrent opens) plus the 60s idempotency shortcut below (returns the
+    # original transaction without re-charging).
 
     # Idempotency (post-lock): a recent SUCCESS transaction for this
     # (teacher, plan) within 60s means the previous request already opened

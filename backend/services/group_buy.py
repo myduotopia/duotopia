@@ -217,9 +217,13 @@ def add_group_buy_school_to_org(
     owner/member SubscriptionPeriods and roster bindings against the
     returned school, mirroring the fresh-org path.
     """
+    # Ordinal suffix so repeated 分校 are distinguishable in the admin UI
+    # (the fresh-org path names its first school "{org.name} School"; the
+    # 2nd/3rd accretions become "... School 2", "... School 3", ...).
+    existing_count = db.query(School).filter(School.organization_id == org.id).count()
     school = School(
         organization_id=org.id,
-        name=f"{org.name} School",
+        name=f"{org.name} School {existing_count + 1}",
         plan_id=plan.id,
         teacher_seat_limit=plan.teacher_seats,
         is_active=True,

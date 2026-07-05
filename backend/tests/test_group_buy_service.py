@@ -238,9 +238,11 @@ def test_add_group_buy_school_adds_branch_and_aggregates(shared_test_session, ow
     )
     shared_test_session.commit()
 
-    # New 分校 distinct from the first, both under the same org.
+    # New 分校 distinct from the first, both under the same org, and named
+    # with an ordinal suffix so admins can tell 分校 apart.
     assert school2.id != first_school.id
     assert school2.organization_id == org.id
+    assert school2.name == f"{org.name} School 2"
     schools = (
         shared_test_session.query(School).filter(School.organization_id == org.id).all()
     )
