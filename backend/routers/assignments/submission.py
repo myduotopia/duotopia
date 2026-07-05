@@ -176,6 +176,6 @@ async def submit_assignment(
     return {
         "success": True,
         "message": "作業提交成功" + ("（遲交）" if is_late else ""),
-        "submission_time": datetime.now().isoformat(),
+        "submission_time": datetime.now(timezone.utc).isoformat(),
         "is_late": is_late,
     }

@@ -102,7 +102,7 @@ async def ai_grade_assignment(
     AI 自動批改作業
     只有教師可以觸發批改
     """
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
     perf = PerformanceSnapshot(f"AI_Grade_Assignment_{assignment_id}")
 
     # 1. 取得作業並驗證權限
@@ -253,7 +253,7 @@ async def ai_grade_assignment(
             perf.checkpoint("Database Update Complete")
 
         # 8. 計算處理時間
-        processing_time = (datetime.now() - start_time).total_seconds()
+        processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
         perf.finish()
 
         return AIGradingResponse(
@@ -262,7 +262,7 @@ async def ai_grade_assignment(
             overall_score=overall_score,
             feedback=feedback,
             detailed_feedback=detailed_results,
-            graded_at=datetime.now(),
+            graded_at=datetime.now(timezone.utc),
             processing_time_seconds=round(processing_time, 2),
         )
 
@@ -279,22 +279,33 @@ async def get_assignment_submissions(
     db: Session = Depends(get_db),
 ):
     """獲取作業的所有提交（教師用）"""
-    # 獲取基礎作業資訊
+    # 獲取基礎作業資訊，並驗證此作業屬於登入教師（避免跨班級枚舉）
     base_assignment = (
         db.query(StudentAssignment)
-        .filter(StudentAssignment.id == assignment_id)
+        .join(Classroom)
+        .filter(
+            and_(
+                StudentAssignment.id == assignment_id,
+                Classroom.teacher_id == current_teacher.id,
+            )
+        )
         .first()
     )
 
     if not base_assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Assignment not found or you don't have permission",
+        )
 
-    # 獲取同一內容的所有學生作業
+    # 獲取「同一份作業」的所有學生提交
+    # 需同時過濾 classroom_id 與 assignment_id，否則會回傳整個班級其他作業的提交
     submissions = (
         db.query(StudentAssignment)
         .join(Student)
         .filter(
             StudentAssignment.classroom_id == base_assignment.classroom_id,
+            StudentAssignment.assignment_id == base_assignment.assignment_id,
         )
         .all()
     )
