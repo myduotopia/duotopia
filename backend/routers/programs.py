@@ -1301,7 +1301,7 @@ async def copy_program(
             detail="Failed to copy program. Please try again later.",
         )
 
-    program_data = ProgramResponse.from_orm(new_program)
+    program_data = ProgramResponse.model_validate(new_program)
     program_data.lessons = []
 
     for lesson in sorted(new_program.lessons, key=lambda x: x.order_index):
@@ -1388,7 +1388,7 @@ async def create_program(
             school_id=sch_uuid,
         )
 
-        return ProgramResponse.from_orm(program)
+        return ProgramResponse.model_validate(program)
 
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
@@ -1508,7 +1508,7 @@ async def update_program(
             db=db,
         )
 
-        return ProgramResponse.from_orm(program)
+        return ProgramResponse.model_validate(program)
 
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
@@ -1617,7 +1617,7 @@ async def update_lesson(
             db=db,
         )
 
-        return LessonResponse.from_orm(lesson)
+        return LessonResponse.model_validate(lesson)
 
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
