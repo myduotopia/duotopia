@@ -28,9 +28,11 @@ from models import (
 )
 from services.group_buy import (
     GROUP_BUY_MONTHLY_QUOTA,
+    add_group_buy_school_to_org,
     compute_group_buy_total,
     create_group_buy_org_and_school,
     create_group_buy_period,
+    find_owned_group_buy_org,
     grant_monthly_for_group_buy,
     month_end_taipei,
     validate_group_buy_plan,
@@ -189,6 +191,92 @@ def test_open_creates_org_school_and_owner_binding(shared_test_session, owner):
     owner_label = owner.name or owner.email
     assert org.display_name == f"{owner_label}'s 團購-{plan.teacher_seats}位"
     assert org.teacher_limit == plan.teacher_seats
+
+
+# ---------- issue #838: 發起人 contact + repeat-open 分校 ----------
+
+
+def test_open_persists_initiator_contact_email_and_phone(shared_test_session, owner):
+    """Bug 1 — the create flow persists the 發起人's email onto the org's
+    contact_email, and leader_phone onto contact_phone (were NULL before)."""
+    plan = _make_group_buy_plan(shared_test_session)
+    now = datetime.now(timezone.utc)
+    org, _, _, _ = create_group_buy_org_and_school(
+        owner, plan, shared_test_session, now=now, leader_phone="0912345678"
+    )
+    shared_test_session.commit()
+    assert org.contact_email == owner.email
+    assert org.contact_phone == "0912345678"
+
+
+def test_find_owned_group_buy_org_returns_owned_or_none(shared_test_session, owner):
+    plan = _make_group_buy_plan(shared_test_session)
+    # No org yet.
+    assert find_owned_group_buy_org(owner, shared_test_session) is None
+    org, _, _, _ = create_group_buy_org_and_school(
+        owner, plan, shared_test_session, now=datetime.now(timezone.utc)
+    )
+    shared_test_session.commit()
+    found = find_owned_group_buy_org(owner, shared_test_session)
+    assert found is not None and found.id == org.id
+
+
+def test_add_group_buy_school_adds_branch_and_aggregates(shared_test_session, owner):
+    """Bug 2 — a repeat open adds a new 分校 under the existing org:
+    aggregates teacher_limit, extends subscription, binds owner as
+    school_admin, and backfills contact info."""
+    plan = _make_group_buy_plan(shared_test_session, seats=30)
+    now = datetime.now(timezone.utc)
+    org, first_school, _, _ = create_group_buy_org_and_school(
+        owner, plan, shared_test_session, now=now - relativedelta(days=10)
+    )
+    shared_test_session.commit()
+    original_end = org.subscription_end_date
+
+    school2, ts2 = add_group_buy_school_to_org(
+        owner, org, plan, shared_test_session, now=now, leader_phone="0900111222"
+    )
+    shared_test_session.commit()
+
+    # New 分校 distinct from the first, both under the same org.
+    assert school2.id != first_school.id
+    assert school2.organization_id == org.id
+    schools = (
+        shared_test_session.query(School).filter(School.organization_id == org.id).all()
+    )
+    assert len(schools) == 2
+    # Seat cap aggregates across 分校.
+    assert org.teacher_limit == 30 * 2
+    # Subscription extended to cover the newest cohort's year.
+    assert _naive(org.subscription_end_date) == _naive(now + relativedelta(years=1))
+    assert org.subscription_end_date >= original_end
+    # Owner bound as school_admin of the new 分校.
+    assert ts2.teacher_id == owner.id
+    assert ts2.school_id == school2.id
+    assert ts2.roles == ["school_admin"]
+    # Contact info backfilled to latest.
+    assert org.contact_email == owner.email
+    assert org.contact_phone == "0900111222"
+
+
+def test_add_group_buy_school_does_not_shorten_later_subscription(
+    shared_test_session, owner
+):
+    """Extending the org subscription must never shorten an existing later
+    end date (keep the max)."""
+    plan = _make_group_buy_plan(shared_test_session)
+    now = datetime.now(timezone.utc)
+    org, _, _, _ = create_group_buy_org_and_school(
+        owner, plan, shared_test_session, now=now
+    )
+    # Force a far-future end date, then add a school "now".
+    far_future = now + relativedelta(years=5)
+    org.subscription_end_date = far_future
+    shared_test_session.commit()
+
+    add_group_buy_school_to_org(owner, org, plan, shared_test_session, now=now)
+    shared_test_session.commit()
+    assert _naive(org.subscription_end_date) == _naive(far_future)
 
 
 # ---------- create_group_buy_period ----------

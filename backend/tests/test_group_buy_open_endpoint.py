@@ -150,6 +150,9 @@ def test_happy_path_creates_org_school_binding_period(
         .one()
     )
     assert org.org_type == "group_buy"
+    # issue #838 Bug 1 — the 發起人's email is persisted onto the org so
+    # admins can identify/contact the initiator (was previously NULL).
+    assert org.contact_email == teacher.email
     school = (
         shared_test_session.query(School).filter(School.id == body["school_id"]).one()
     )
@@ -196,25 +199,37 @@ def test_happy_path_creates_org_school_binding_period(
     assert txn.subscription_type == gb_plan.name
 
 
-def test_rejects_when_teacher_already_owns_a_group_buy_org(
+def test_repeat_open_adds_school_to_existing_org(
     test_client, auth_header, teacher, gb_plan, shared_test_session
 ):
-    """R2-F2 — A teacher who already owns a group-buy organization (older
-    than the 60s retry window) must not be able to open another (would
-    result in a second NT$X charge and 2x monthly grants)."""
+    """issue #838 Bug 2 — A repeat open by the same 發起人 is no longer
+    rejected: it reuses the teacher's existing group-buy org and adds a new
+    分校 (School) under it, charging normally. Seat cap aggregates across
+    分校 and the 發起人 contact info is backfilled onto the org."""
     from datetime import datetime, timedelta, timezone
 
-    # Seed an existing owned group-buy org for this teacher, created
-    # well outside the 60s same-submission window.
+    now = datetime.now(timezone.utc)
+    # Seed an existing owned group-buy org + its first school, created well
+    # outside the 60s retry window (no recent SUCCESS txn ⇒ not idempotent).
     org = Organization(
         name="Pre-existing 團",
         org_type="group_buy",
+        teacher_limit=gb_plan.teacher_seats,
+        subscription_start_date=now - timedelta(days=10),
+        subscription_end_date=now + timedelta(days=355),
         is_active=True,
-        created_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        created_at=now - timedelta(hours=1),
     )
     shared_test_session.add(org)
-    shared_test_session.commit()
-    shared_test_session.refresh(org)
+    shared_test_session.flush()
+    first_school = School(
+        organization_id=org.id,
+        name="Pre-existing 團 School",
+        plan_id=gb_plan.id,
+        teacher_seat_limit=gb_plan.teacher_seats,
+        is_active=True,
+    )
+    shared_test_session.add(first_school)
     shared_test_session.add(
         TeacherOrganization(
             teacher_id=teacher.id,
@@ -224,20 +239,76 @@ def test_rejects_when_teacher_already_owns_a_group_buy_org(
         )
     )
     shared_test_session.commit()
+    org_id = org.id
+    first_school_id = first_school.id
 
+    mock_tappay = Mock()
+    mock_tappay.process_payment.return_value = {
+        "status": 0,
+        "rec_trade_id": "REC-OPEN-2ND",
+        "card_secret": {},
+    }
     with patch("routers.credit_packages.ENABLE_PAYMENT", True), patch(
-        "routers.credit_packages.TapPayService"
-    ) as mock_tappay_class:
+        "routers.credit_packages.TapPayService", return_value=mock_tappay
+    ):
         r = test_client.post(
             "/api/credit-packages/group-buy-open",
-            json={"prime": "prime-x", "plan_name": gb_plan.name},
+            json={
+                "prime": "prime-x",
+                "plan_name": gb_plan.name,
+                "leader_phone": "0912345678",
+            },
             headers=auth_header,
         )
 
-    assert r.status_code == 409
-    assert "團購方案" in r.json()["detail"]
-    # TapPay must NOT be charged
-    mock_tappay_class.assert_not_called()
+    assert r.status_code == 200, r.json()
+    body = r.json()
+    assert body["success"] is True
+    # Charged again (repeat open is a real purchase).
+    mock_tappay.process_payment.assert_called_once()
+
+    # Reused the SAME org, but created a NEW 分校.
+    assert body["organization_id"] == str(org_id)
+    assert body["school_id"] != str(first_school_id)
+
+    shared_test_session.expire_all()
+    schools = (
+        shared_test_session.query(School).filter(School.organization_id == org_id).all()
+    )
+    assert len(schools) == 2, "a new 分校 should be added under the existing org"
+
+    reused_org = (
+        shared_test_session.query(Organization).filter(Organization.id == org_id).one()
+    )
+    # Seat cap aggregates across 分校.
+    assert reused_org.teacher_limit == gb_plan.teacher_seats * 2
+    # 發起人 contact info backfilled onto the org.
+    assert reused_org.contact_email == teacher.email
+    assert reused_org.contact_phone == "0912345678"
+
+    # Owner bound as school_admin of the new 分校.
+    new_school_id = body["school_id"]
+    ts = (
+        shared_test_session.query(TeacherSchool)
+        .filter(
+            TeacherSchool.teacher_id == teacher.id,
+            TeacherSchool.school_id == new_school_id,
+        )
+        .one()
+    )
+    assert ts.roles == ["school_admin"]
+
+    # Only ONE org owned by this teacher — repeat opens accrete 分校, they
+    # do not spawn a second org.
+    owned_orgs = (
+        shared_test_session.query(TeacherOrganization)
+        .filter(
+            TeacherOrganization.teacher_id == teacher.id,
+            TeacherOrganization.role == "org_owner",
+        )
+        .count()
+    )
+    assert owned_orgs == 1
 
 
 def test_idempotent_within_60s_returns_existing_transaction(

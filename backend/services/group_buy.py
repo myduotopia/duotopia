@@ -7,7 +7,7 @@ All amount/quota computations are server-side from the Plan row — never
 trust the frontend.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from zoneinfo import ZoneInfo
 
@@ -32,6 +32,13 @@ GROUP_BUY_MONTHLY_QUOTA = 1000
 
 
 # ---------- pure helpers ----------
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Normalise a datetime to tz-aware UTC. SQLite strips tzinfo on
+    TIMESTAMPTZ load (naive), Postgres preserves it (aware); coercing both
+    sides before comparison avoids a naive/aware TypeError."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def validate_group_buy_plan(plan_name: str, db: Session) -> Plan:
@@ -93,6 +100,7 @@ def create_group_buy_org_and_school(
     db: Session,
     *,
     now: datetime,
+    leader_phone: str | None = None,
 ) -> Tuple[Organization, School, TeacherSchool, TeacherOrganization]:
     """Atomically create the Organization, School, owner TeacherSchool, AND
     owner TeacherOrganization (role='org_owner') for a new group-buy
@@ -101,6 +109,11 @@ def create_group_buy_org_and_school(
     TeacherOrganization is required so the opener can use the existing
     /org-purchase and /org-renew endpoints, both of which gate on
     `TeacherOrganization.role == 'org_owner'`.
+
+    issue #838 comment — the initiator's contact info is persisted onto the
+    org (`contact_email` = the opener's email, `contact_phone` =
+    `leader_phone`) so admins can identify/contact the 發起人 instead of the
+    field being left NULL.
     """
     owner_label = owner.name or owner.email
     org = Organization(
@@ -111,6 +124,9 @@ def create_group_buy_org_and_school(
         display_name=f"{owner_label}'s 團購-{plan.teacher_seats}位",
         org_type="group_buy",
         teacher_limit=plan.teacher_seats,
+        # issue #838 — persist 發起人 contact info (was previously NULL).
+        contact_email=owner.email,
+        contact_phone=leader_phone,
         subscription_start_date=now,
         # relativedelta(years=1) handles Feb 29 → Feb 28 edge correctly;
         # `timedelta(days=365)` would produce an off-by-one in leap years.
@@ -148,6 +164,97 @@ def create_group_buy_org_and_school(
     db.flush()
 
     return org, school, teacher_school, teacher_org
+
+
+def find_owned_group_buy_org(owner: Teacher, db: Session) -> Organization | None:
+    """Return the active group-buy Organization this teacher owns
+    (role='org_owner'), or None. Earliest-created wins so repeat opens keep
+    accreting 分校 under the teacher's first org rather than spawning new
+    orgs. Used by the open endpoint to decide reuse-vs-create (issue #838).
+    """
+    return (
+        db.query(Organization)
+        .join(
+            TeacherOrganization,
+            TeacherOrganization.organization_id == Organization.id,
+        )
+        .filter(
+            TeacherOrganization.teacher_id == owner.id,
+            TeacherOrganization.role == "org_owner",
+            TeacherOrganization.is_active.is_(True),
+            Organization.org_type == "group_buy",
+            Organization.is_active.is_(True),
+        )
+        .order_by(Organization.created_at.asc())
+        .first()
+    )
+
+
+def add_group_buy_school_to_org(
+    owner: Teacher,
+    org: Organization,
+    plan: Plan,
+    db: Session,
+    *,
+    now: datetime,
+    leader_phone: str | None = None,
+) -> Tuple[School, TeacherSchool]:
+    """Add a new 分校 (School) under an EXISTING group-buy org for a repeat
+    open by the same 發起人 (issue #838).
+
+    Per product decision, a repeat open is equivalent to 新增一個分校:
+      - a new School (its own Plan / seat limit) is created under `org`;
+      - the owner is bound to it as school_admin (they already have the
+        org-level org_owner TeacherOrganization, so no new one is made);
+      - the org's teacher_limit grows by this plan's seats (aggregate cap
+        across all 分校);
+      - the org subscription is extended to cover the new cohort's year
+        (keep the later end date so the newest purchase never shortens an
+        existing cohort's grant window);
+      - contact info is refreshed to the latest 發起人 email/phone.
+
+    Returns the new (School, owner TeacherSchool). The caller creates the
+    owner/member SubscriptionPeriods and roster bindings against the
+    returned school, mirroring the fresh-org path.
+    """
+    school = School(
+        organization_id=org.id,
+        name=f"{org.name} School",
+        plan_id=plan.id,
+        teacher_seat_limit=plan.teacher_seats,
+        is_active=True,
+    )
+    db.add(school)
+    db.flush()  # need school.id for FK
+
+    teacher_school = TeacherSchool(
+        teacher_id=owner.id,
+        school_id=school.id,
+        roles=["school_admin"],
+        is_active=True,
+    )
+    db.add(teacher_school)
+
+    # Aggregate the seat cap across all 分校.
+    org.teacher_limit = (org.teacher_limit or 0) + int(plan.teacher_seats)
+
+    # Extend the org subscription to cover this cohort's year, but never
+    # shorten an existing later end date. SQLite strips tzinfo on
+    # TIMESTAMPTZ load while Postgres preserves it, so normalise both sides
+    # to tz-aware UTC before comparing to avoid a naive/aware TypeError.
+    new_end = now + relativedelta(years=1)
+    existing_end = org.subscription_end_date
+    if existing_end is None or _as_utc(existing_end) < _as_utc(new_end):
+        org.subscription_end_date = new_end
+
+    # Refresh 發起人 contact info (latest wins); backfills orgs opened before
+    # the issue #838 fix that still have NULL contact_email.
+    org.contact_email = owner.email
+    if leader_phone:
+        org.contact_phone = leader_phone
+
+    db.flush()
+    return school, teacher_school
 
 
 def create_group_buy_period(
