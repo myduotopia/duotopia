@@ -94,75 +94,24 @@ def _tier_counts(mastery_result) -> Dict[str, int]:
     }
 
 
-@router.get("/assignments")
-async def get_student_assignments(
-    sort_by: Literal[
-        "due_date_asc", "due_date_desc", "assigned_at_desc", "status"
-    ] = Query("due_date_asc"),
-    practice_mode: Optional[
-        Literal[
-            "reading",
-            "rearrangement",
-            "word_selection",
-            "word_reading",
-            "word_spelling",
-            "word_cloze",
-            # Issue #843: 對齊前端 registry（含三種小考與 tug_of_war），
-            # 否則學生端篩選這些模式會 422，前端誤跳「載入失敗」。
-            # 無對應作業時回空陣列，前端顯示空狀態而非報錯。
-            "word_selection_quiz",
-            "word_spelling_quiz",
-            "word_cloze_quiz",
-            "tug_of_war",
-        ]
-    ] = None,
-    current_student: Dict[str, Any] = Depends(get_current_student),
-    db: Session = Depends(get_db),
-):
-    """取得學生作業列表"""
-    student_id = current_student.get("sub")
+# Issue #330: student assignment-list tab keys → StudentAssignment status groups,
+# used for optional server-side filtering + pagination of the list endpoint.
+_STATUS_TAB_MAP = {
+    "todo": [AssignmentStatus.NOT_STARTED, AssignmentStatus.IN_PROGRESS],
+    "submitted": [AssignmentStatus.SUBMITTED],
+    "returned": [AssignmentStatus.RETURNED],
+    "resubmitted": [AssignmentStatus.RESUBMITTED],
+    "graded": [AssignmentStatus.GRADED],
+}
 
-    # Base query: always join Assignment to filter archived and eager-load
-    query = (
-        db.query(StudentAssignment)
-        .join(Assignment, StudentAssignment.assignment_id == Assignment.id)
-        .options(contains_eager(StudentAssignment.assignment))
-        .filter(
-            StudentAssignment.student_id == int(student_id),
-            Assignment.is_archived.is_(False),
-        )
-    )
 
-    # Filter by practice_mode
-    if practice_mode:
-        query = query.filter(Assignment.practice_mode == practice_mode)
+def _serialize_student_assignments(
+    db: Session, assignments: List[StudentAssignment]
+) -> List[Dict[str, Any]]:
+    """Serialize StudentAssignment rows into the student-facing card shape.
 
-    # Sorting
-    if sort_by == "due_date_desc":
-        query = query.order_by(StudentAssignment.due_date.desc().nullslast())
-    elif sort_by == "assigned_at_desc":
-        query = query.order_by(StudentAssignment.assigned_at.desc().nullslast())
-    elif sort_by == "status":
-        # Priority: returned > in_progress > not_started > submitted > resubmitted > graded
-        status_order = case(
-            (StudentAssignment.status == AssignmentStatus.RETURNED, 0),
-            (StudentAssignment.status == AssignmentStatus.IN_PROGRESS, 1),
-            (StudentAssignment.status == AssignmentStatus.NOT_STARTED, 2),
-            (StudentAssignment.status == AssignmentStatus.SUBMITTED, 3),
-            (StudentAssignment.status == AssignmentStatus.RESUBMITTED, 4),
-            (StudentAssignment.status == AssignmentStatus.GRADED, 5),
-            else_=6,
-        )
-        query = query.order_by(
-            status_order, StudentAssignment.due_date.asc().nullslast()
-        )
-    else:
-        # Default: due_date_asc (nearest deadline first)
-        query = query.order_by(StudentAssignment.due_date.asc().nullslast())
-
-    assignments = query.all()
-
-    # Batch query: count content items per assignment to avoid N+1
+    Batches the content-item count query to avoid N+1.
+    """
     parent_ids = [sa.assignment_id for sa in assignments if sa.assignment_id]
     count_map: Dict[int, int] = {}
     if parent_ids:
@@ -219,8 +168,139 @@ async def get_student_assignments(
                 ),
             }
         )
-
     return result
+
+
+def _compute_status_tab_stats(
+    db: Session, student_id: int, practice_mode: Optional[str]
+) -> Dict[str, int]:
+    """Per-tab assignment counts for the student, independent of the active tab.
+
+    Keeps every tab badge populated when the list is served page-by-page.
+    Respects the same student + not-archived (+ practice_mode) scope as the list.
+    """
+    stats_query = (
+        db.query(StudentAssignment.status, func.count(StudentAssignment.id))
+        .join(Assignment, StudentAssignment.assignment_id == Assignment.id)
+        .filter(
+            StudentAssignment.student_id == student_id,
+            Assignment.is_archived.is_(False),
+        )
+    )
+    if practice_mode:
+        stats_query = stats_query.filter(Assignment.practice_mode == practice_mode)
+
+    counts = {
+        row[0]: row[1] for row in stats_query.group_by(StudentAssignment.status).all()
+    }
+    return {
+        "todo": counts.get(AssignmentStatus.NOT_STARTED, 0)
+        + counts.get(AssignmentStatus.IN_PROGRESS, 0),
+        "submitted": counts.get(AssignmentStatus.SUBMITTED, 0),
+        "returned": counts.get(AssignmentStatus.RETURNED, 0),
+        "resubmitted": counts.get(AssignmentStatus.RESUBMITTED, 0),
+        "graded": counts.get(AssignmentStatus.GRADED, 0),
+    }
+
+
+@router.get("/assignments")
+async def get_student_assignments(
+    sort_by: Literal[
+        "due_date_asc", "due_date_desc", "assigned_at_desc", "status"
+    ] = Query("due_date_asc"),
+    practice_mode: Optional[
+        Literal[
+            "reading",
+            "rearrangement",
+            "word_selection",
+            "word_reading",
+            "word_spelling",
+            "word_cloze",
+            # Issue #843: 對齊前端 registry（含三種小考與 tug_of_war），
+            # 否則學生端篩選這些模式會 422，前端誤跳「載入失敗」。
+            # 無對應作業時回空陣列，前端顯示空狀態而非報錯。
+            "word_selection_quiz",
+            "word_spelling_quiz",
+            "word_cloze_quiz",
+            "tug_of_war",
+        ]
+    ] = None,
+    # Issue #330: optional server-side status filtering + pagination. When
+    # page_size is omitted the endpoint stays backward-compatible and returns a
+    # bare list (StudentDashboard and StudentAssignmentDetail rely on that).
+    status_tab: Optional[
+        Literal["todo", "submitted", "returned", "resubmitted", "graded"]
+    ] = Query(None, alias="status"),
+    page: int = Query(1, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """取得學生作業列表
+
+    - 不帶 ``page_size``：回傳完整 list（向後相容，Dashboard/Detail 使用）。
+    - 帶 ``page_size``：回傳 ``{items, total, page, page_size, stats}``，
+      status 分頁與 tab 計數都在後端完成。
+    """
+    student_id = current_student.get("sub")
+
+    # Base query: always join Assignment to filter archived and eager-load
+    query = (
+        db.query(StudentAssignment)
+        .join(Assignment, StudentAssignment.assignment_id == Assignment.id)
+        .options(contains_eager(StudentAssignment.assignment))
+        .filter(
+            StudentAssignment.student_id == int(student_id),
+            Assignment.is_archived.is_(False),
+        )
+    )
+
+    # Filter by practice_mode
+    if practice_mode:
+        query = query.filter(Assignment.practice_mode == practice_mode)
+
+    # Issue #330: optional server-side status-tab filter
+    if status_tab:
+        query = query.filter(StudentAssignment.status.in_(_STATUS_TAB_MAP[status_tab]))
+
+    # Sorting
+    if sort_by == "due_date_desc":
+        query = query.order_by(StudentAssignment.due_date.desc().nullslast())
+    elif sort_by == "assigned_at_desc":
+        query = query.order_by(StudentAssignment.assigned_at.desc().nullslast())
+    elif sort_by == "status":
+        # Priority: returned > in_progress > not_started > submitted > resubmitted > graded
+        status_order = case(
+            (StudentAssignment.status == AssignmentStatus.RETURNED, 0),
+            (StudentAssignment.status == AssignmentStatus.IN_PROGRESS, 1),
+            (StudentAssignment.status == AssignmentStatus.NOT_STARTED, 2),
+            (StudentAssignment.status == AssignmentStatus.SUBMITTED, 3),
+            (StudentAssignment.status == AssignmentStatus.RESUBMITTED, 4),
+            (StudentAssignment.status == AssignmentStatus.GRADED, 5),
+            else_=6,
+        )
+        query = query.order_by(
+            status_order, StudentAssignment.due_date.asc().nullslast()
+        )
+    else:
+        # Default: due_date_asc (nearest deadline first)
+        query = query.order_by(StudentAssignment.due_date.asc().nullslast())
+
+    # Issue #330: paginate on the server only when page_size is provided;
+    # otherwise return the full list (backward-compatible).
+    if page_size is None:
+        return _serialize_student_assignments(db, query.all())
+
+    total = query.count()
+    stats = _compute_status_tab_stats(db, int(student_id), practice_mode)
+    page_assignments = query.offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": _serialize_student_assignments(db, page_assignments),
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "stats": stats,
+    }
 
 
 @router.get("/assignments/{assignment_id}/activities")
