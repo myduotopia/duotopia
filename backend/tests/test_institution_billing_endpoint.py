@@ -10,6 +10,7 @@ import pytest
 
 from auth import create_access_token, get_password_hash
 from models import (
+    InstitutionInvoiceEmail,
     Organization,
     School,
     Student,
@@ -332,3 +333,71 @@ def test_pdf_400_when_org_is_not_institution(test_client, admin, shared_test_ses
         headers=_bearer(admin.id),
     )
     assert r.status_code == 400
+
+
+# ---------- send-email endpoint (issue #838 Phase C) ----------
+
+
+def test_send_email_400_when_no_contact_email(
+    test_client, admin, institution_org_with_one_active_student
+):
+    """The fixture org has no contact_email → 400 with a 'set email' hint."""
+    org, _, _ = institution_org_with_one_active_student
+    r = test_client.post(
+        f"/api/organizations/{org.id}/billing/monthly/send-email",
+        json={"year": 2026, "month": 6},
+        headers=_bearer(admin.id),
+    )
+    assert r.status_code == 400
+    assert "email" in r.json()["detail"].lower() or "聯絡" in r.json()["detail"]
+
+
+def test_send_email_outsider_gets_403(
+    test_client, outsider, institution_org_with_one_active_student
+):
+    org, _, _ = institution_org_with_one_active_student
+    r = test_client.post(
+        f"/api/organizations/{org.id}/billing/monthly/send-email",
+        json={"year": 2026, "month": 6},
+        headers=_bearer(outsider.id),
+    )
+    assert r.status_code == 403
+
+
+def test_send_email_success_writes_audit_and_history(
+    test_client, admin, shared_test_session, institution_org_with_one_active_student
+):
+    org, _, _ = institution_org_with_one_active_student
+    org.contact_email = "finance@acme.example"
+    shared_test_session.commit()
+
+    r = test_client.post(
+        f"/api/organizations/{org.id}/billing/monthly/send-email",
+        json={"year": 2026, "month": 6, "cc": ["cc@acme.example"]},
+        headers=_bearer(admin.id),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["success"] is True
+    assert body["recipient"] == "finance@acme.example"
+    assert body["cc"] == ["cc@acme.example"]
+    assert body["sent_at"]
+
+    rows = (
+        shared_test_session.query(InstitutionInvoiceEmail)
+        .filter(InstitutionInvoiceEmail.organization_id == org.id)
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].recipient == "finance@acme.example"
+
+    # History endpoint surfaces the last-sent time.
+    h = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly/email-history"
+        "?year=2026&month=6",
+        headers=_bearer(admin.id),
+    )
+    assert h.status_code == 200
+    hist = h.json()
+    assert hist["last_sent_at"]
+    assert len(hist["history"]) == 1

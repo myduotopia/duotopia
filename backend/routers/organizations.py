@@ -26,12 +26,14 @@ from models import (
     TeacherSchool,
     School,
     StudentSchool,
+    InstitutionInvoiceEmail,
 )
 from auth import verify_token, get_password_hash
 from services.casbin_service import get_casbin_service
 from services.email_service import email_service
 from services.institution_billing import compute_monthly_billing
 from services.institution_invoice_pdf import build_invoice_pdf
+from services.institution_invoice_email import send_monthly_invoice_email
 import secrets
 
 
@@ -1627,3 +1629,103 @@ async def get_monthly_billing_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+class SendInvoiceEmailRequest(BaseModel):
+    year: int = Field(..., ge=1, le=9998, description="Calendar year (Taipei)")
+    month: int = Field(..., ge=1, le=12, description="Calendar month (1-12)")
+    cc: Optional[List[str]] = Field(default=None, description="Optional CC emails")
+
+
+@router.post("/{org_id}/billing/monthly/send-email")
+async def send_monthly_billing_email(
+    org_id: uuid.UUID,
+    body: SendInvoiceEmailRequest,
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """Email the monthly 請款單 (PDF attached) to the org's contact_email and
+    record an append-only audit row (issue #838 Phase C).
+
+    Auth: admin OR org_owner (same as the query/PDF endpoints). 400 if the
+    org has no contact_email set. Repeat sends accumulate audit history and
+    never delete prior rows.
+    """
+    org = _load_billing_org_or_error(org_id, current_teacher, db)
+
+    if not org.contact_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="此機構尚未設定聯絡 email，請先於機構設定填寫聯絡 email 後再寄送。",
+        )
+
+    try:
+        billing = compute_monthly_billing(org, body.year, body.month, db)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    try:
+        record = send_monthly_invoice_email(
+            db,
+            org,
+            body.year,
+            body.month,
+            billing,
+            org.contact_email,
+            cc=body.cc,
+            sent_by_id=current_teacher.id,
+            email_service=email_service,
+        )
+    except RuntimeError:
+        # Email transport failed — no audit row written; surface a retryable
+        # error rather than a phantom success.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="請款 Email 發送失敗，請稍後再試。",
+        )
+
+    return {
+        "success": True,
+        "recipient": record.recipient,
+        "cc": record.cc or [],
+        "sent_at": record.sent_at.isoformat() if record.sent_at else None,
+    }
+
+
+@router.get("/{org_id}/billing/monthly/email-history")
+async def get_monthly_billing_email_history(
+    org_id: uuid.UUID,
+    year: int = Query(..., ge=1, le=9998),
+    month: int = Query(..., ge=1, le=12),
+    db: Session = Depends(get_db),
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """List prior 請款 email sends for (org, year, month), newest first, so
+    the UI can show the last-sent time. Same auth as the billing endpoints.
+    """
+    _load_billing_org_or_error(org_id, current_teacher, db)
+
+    rows = (
+        db.query(InstitutionInvoiceEmail)
+        .filter(
+            InstitutionInvoiceEmail.organization_id == org_id,
+            InstitutionInvoiceEmail.year == year,
+            InstitutionInvoiceEmail.month == month,
+        )
+        .order_by(InstitutionInvoiceEmail.sent_at.desc())
+        .all()
+    )
+    return {
+        "last_sent_at": (
+            rows[0].sent_at.isoformat() if rows and rows[0].sent_at else None
+        ),
+        "history": [
+            {
+                "recipient": r.recipient,
+                "cc": r.cc or [],
+                "sent_at": r.sent_at.isoformat() if r.sent_at else None,
+                "sent_by_admin_id": r.sent_by_admin_id,
+            }
+            for r in rows
+        ],
+    }
