@@ -24,6 +24,7 @@ import {
   StudentAssignment,
   StudentContentProgress,
   AssignmentStatusEnum,
+  AssignmentData,
 } from "@/types";
 import { useTranslation } from "react-i18next";
 
@@ -63,21 +64,6 @@ export default function StudentAssignmentDetail() {
         throw new Error(`HTTP error! status: ${assignmentsResponse.status}`);
       }
 
-      interface AssignmentData {
-        id: number;
-        assignment_id?: number;
-        student_number: number;
-        classroom_id: number;
-        title: string;
-        status?: string;
-        score?: number;
-        feedback?: string;
-        is_active?: boolean;
-        assigned_at?: string;
-        created_at?: string;
-        due_date?: string;
-        submitted_at?: string;
-      }
       const assignments = await assignmentsResponse.json();
       const foundAssignment = assignments.find(
         (a: AssignmentData) => a.id === parseInt(id!),

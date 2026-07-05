@@ -254,6 +254,32 @@ export interface StudentAssignmentCard {
   quiz_closed_at?: string | null;
 }
 
+// Raw assignment row as returned by the student assignments API.
+// Shared by StudentAssignmentList and StudentAssignmentDetail (Issue #331).
+// Superset of both call sites — fields that only one page uses are optional.
+export interface AssignmentData {
+  id: number;
+  assignment_id?: number;
+  title: string;
+  status?: string;
+  score?: number;
+  feedback?: string;
+  classroom_id: number;
+  student_number?: number;
+  is_active?: boolean;
+  assigned_at?: string;
+  created_at?: string;
+  due_date?: string;
+  submitted_at?: string;
+  content_type?: string;
+  practice_mode?: string;
+  score_category?: string;
+  content_count?: number;
+  is_live_quiz?: boolean;
+  quiz_opened_at?: string | null;
+  quiz_closed_at?: string | null;
+}
+
 // Student Dashboard specific data
 export interface StudentDashboard {
   active_assignments: StudentAssignmentCard[];

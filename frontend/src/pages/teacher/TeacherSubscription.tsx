@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PLAN_NAMES } from "@/constants/plans";
@@ -260,27 +260,7 @@ export default function TeacherSubscription() {
 
   const currentPlanId = getCurrentPlanId();
 
-  useEffect(() => {
-    fetchSubscriptionData();
-
-    const handleSubscriptionChanged = () => {
-      fetchSubscriptionData();
-    };
-
-    window.addEventListener(
-      "subscriptionStatusChanged",
-      handleSubscriptionChanged,
-    );
-
-    return () => {
-      window.removeEventListener(
-        "subscriptionStatusChanged",
-        handleSubscriptionChanged,
-      );
-    };
-  }, []);
-
-  const fetchSubscriptionData = async () => {
+  const fetchSubscriptionData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -321,7 +301,27 @@ export default function TeacherSubscription() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
+
+  useEffect(() => {
+    fetchSubscriptionData();
+
+    const handleSubscriptionChanged = () => {
+      fetchSubscriptionData();
+    };
+
+    window.addEventListener(
+      "subscriptionStatusChanged",
+      handleSubscriptionChanged,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "subscriptionStatusChanged",
+        handleSubscriptionChanged,
+      );
+    };
+  }, [fetchSubscriptionData]);
 
   const fetchAnalytics = async () => {
     try {

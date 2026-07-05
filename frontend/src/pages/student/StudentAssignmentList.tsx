@@ -25,7 +25,11 @@ import {
   ArrowUpDown,
   Filter,
 } from "lucide-react";
-import { StudentAssignmentCard, AssignmentStatusEnum } from "@/types";
+import {
+  StudentAssignmentCard,
+  AssignmentStatusEnum,
+  AssignmentData,
+} from "@/types";
 import { useTranslation } from "react-i18next";
 import {
   practiceModeIcon,
@@ -42,6 +46,18 @@ const SCORE_CATEGORY_COLORS: Record<string, string> = {
   writing: "bg-blue-100 text-blue-700 border-blue-200",
   reading: "bg-pink-100 text-pink-700 border-pink-200",
 };
+
+// Issue #332: statuses for which the assignment action button stays enabled.
+// Whitelist instead of a negated AND chain, so a newly-added status doesn't
+// silently disable the button.
+const ACTIONABLE_STATUSES = new Set<string>([
+  "NOT_STARTED",
+  "IN_PROGRESS",
+  "SUBMITTED",
+  "GRADED",
+  "RETURNED",
+  "RESUBMITTED",
+]);
 
 export default function StudentAssignmentList() {
   const { t } = useTranslation();
@@ -104,25 +120,6 @@ export default function StudentAssignmentList() {
         }
 
         const data = await response.json();
-
-        interface AssignmentData {
-          id: number;
-          title: string;
-          status?: string;
-          due_date?: string;
-          assigned_at?: string;
-          submitted_at?: string;
-          score?: number;
-          feedback?: string;
-          classroom_id: number;
-          content_type?: string;
-          practice_mode?: string;
-          score_category?: string;
-          content_count?: number;
-          is_live_quiz?: boolean;
-          quiz_opened_at?: string | null;
-          quiz_closed_at?: string | null;
-        }
 
         const assignmentCards: StudentAssignmentCard[] = data.map(
           (a: AssignmentData) => ({
@@ -363,13 +360,7 @@ export default function StudentAssignmentList() {
     return (
       <Button
         onClick={() => handleStartAssignment(assignment.id)}
-        disabled={
-          !canStart &&
-          assignment.status !== "GRADED" &&
-          assignment.status !== "SUBMITTED" &&
-          assignment.status !== "RETURNED" &&
-          assignment.status !== "RESUBMITTED"
-        }
+        disabled={!ACTIONABLE_STATUSES.has(assignment.status)}
         size="sm"
         className={`crayon-texture text-xs sm:text-sm font-medium ${
           canStart || assignment.status === "RETURNED"
