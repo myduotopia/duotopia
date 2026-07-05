@@ -159,6 +159,22 @@ def test_mark_cancelled_leaves_paid_fields_null(shared_test_session):
     assert out.payment_note == "作廢"
 
 
+def test_cancel_after_paid_clears_paid_fields(shared_test_session):
+    """Invariant: paid_* set iff status='paid'. Cancelling a previously-paid
+    invoice must clear paid_at / paid_by_admin_id (regression for the
+    cancel-after-paid path)."""
+    org = _org(shared_test_session)
+    admin = _admin(shared_test_session, "cancel-after-paid@test.com")
+    inv, _ = upsert_invoice(shared_test_session, org.id, 2026, 11, 300)
+    mark_invoice_paid(shared_test_session, inv, admin.id, "paid then cancelled")
+    assert inv.paid_at is not None and inv.paid_by_admin_id == admin.id
+
+    out = apply_status_change(shared_test_session, inv, "cancelled", admin.id, "退團")
+    assert out.status == "cancelled"
+    assert out.paid_at is None
+    assert out.paid_by_admin_id is None
+
+
 def test_apply_status_change_rejects_unsupported(shared_test_session):
     org = _org(shared_test_session)
     admin = _admin(shared_test_session, "reject-admin@test.com")

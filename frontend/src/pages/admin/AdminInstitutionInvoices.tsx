@@ -66,11 +66,13 @@ export default function AdminInstitutionInvoices() {
   ) => {
     const verb = next === "paid" ? "標記已收款" : "作廢";
     if (!window.confirm(`確定要將此帳款${verb}嗎？`)) return;
-    const note =
-      window.prompt(`備註（選填）：`, inv.payment_note ?? "") ?? undefined;
+    // null = prompt cancelled → keep the existing note (send undefined);
+    // "" = admin cleared it on purpose → clear the note (send "").
+    const raw = window.prompt(`備註（選填）：`, inv.payment_note ?? "");
+    const note = raw === null ? undefined : raw;
     setBusyId(inv.id);
     try {
-      await apiClient.updateInstitutionInvoice(inv.id, next, note || undefined);
+      await apiClient.updateInstitutionInvoice(inv.id, next, note);
       toast.success(`已${verb}`);
       await load();
     } catch (e) {

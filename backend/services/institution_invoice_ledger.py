@@ -125,8 +125,12 @@ def mark_invoice_cancelled(
     invoice: InstitutionInvoice,
     payment_note: Optional[str] = None,
 ) -> InstitutionInvoice:
-    """Cancel an invoice. paid_* stay NULL (never paid)."""
+    """Cancel an invoice. Clears paid_at / paid_by_admin_id so the documented
+    invariant (paid_* set iff status='paid') holds even when cancelling an
+    invoice that had previously been marked paid."""
     invoice.status = "cancelled"
+    invoice.paid_at = None
+    invoice.paid_by_admin_id = None
     if payment_note is not None:
         invoice.payment_note = payment_note
     db.commit()
