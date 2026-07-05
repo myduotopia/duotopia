@@ -1692,8 +1692,17 @@ async def send_monthly_billing_email(
 
     # issue #838 Phase D — sending the 請款 email also locks a pending
     # accounts-receivable invoice (idempotent on (org, year, month); a repeat
-    # send does not disturb an already-paid invoice).
-    upsert_invoice(db, org.id, body.year, body.month, billing["total_amount"])
+    # send does not disturb an already-paid invoice). The email has ALREADY
+    # been sent and audited at this point, so a lock failure must NOT surface
+    # as a request failure (that would wrongly prompt the admin to re-send a
+    # duplicate email) — log and continue.
+    try:
+        upsert_invoice(db, org.id, body.year, body.month, billing["total_amount"])
+    except Exception:  # pragma: no cover - defensive
+        logging.getLogger(__name__).exception(
+            "Invoice lock after send-email failed (email already sent) "
+            f"org={org.id} {body.year}-{body.month:02d}"
+        )
 
     return {
         "success": True,

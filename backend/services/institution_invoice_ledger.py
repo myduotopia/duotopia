@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional, Tuple
 from zoneinfo import ZoneInfo
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models import InstitutionInvoice
@@ -50,22 +51,30 @@ def upsert_invoice(
     if due_date is None:
         due_date = default_due_date(now)
 
-    existing = (
-        db.query(InstitutionInvoice)
-        .filter(
-            InstitutionInvoice.organization_id == organization_id,
-            InstitutionInvoice.year == year,
-            InstitutionInvoice.month == month,
+    def _find():
+        return (
+            db.query(InstitutionInvoice)
+            .filter(
+                InstitutionInvoice.organization_id == organization_id,
+                InstitutionInvoice.year == year,
+                InstitutionInvoice.month == month,
+            )
+            .first()
         )
-        .first()
-    )
-    if existing is not None:
-        if existing.status == "pending":
-            existing.amount = amount
-            existing.due_date = due_date
+
+    def _relock_if_pending(inv):
+        # Only refresh the snapshot while unsettled; never revert a
+        # paid/cancelled/overdue invoice.
+        if inv.status == "pending":
+            inv.amount = amount
+            inv.due_date = due_date
             db.commit()
-            db.refresh(existing)
-        return existing, False
+            db.refresh(inv)
+        return inv
+
+    existing = _find()
+    if existing is not None:
+        return _relock_if_pending(existing), False
 
     invoice = InstitutionInvoice(
         organization_id=organization_id,
@@ -76,7 +85,18 @@ def upsert_invoice(
         due_date=due_date,
     )
     db.add(invoice)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # TOCTOU race: a concurrent call inserted the same (org, year, month)
+        # between our SELECT and INSERT. The UNIQUE constraint rejected us —
+        # roll back and treat it as an idempotent re-lock of the winner's row
+        # instead of surfacing a 500.
+        db.rollback()
+        raced = _find()
+        if raced is None:
+            raise  # not the unique-key race we expected — re-raise
+        return _relock_if_pending(raced), False
     db.refresh(invoice)
     return invoice, True
 

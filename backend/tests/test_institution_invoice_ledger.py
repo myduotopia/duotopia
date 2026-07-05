@@ -82,6 +82,54 @@ def test_upsert_does_not_disturb_a_paid_invoice(shared_test_session):
     assert inv2.amount == 500
 
 
+def test_upsert_survives_unique_race(shared_test_session):
+    """If a concurrent insert wins the (org, year, month) UNIQUE key between
+    our SELECT and INSERT, upsert must recover (re-lock the winner) instead
+    of surfacing the IntegrityError as a 500."""
+    org = _org(shared_test_session)
+    # Simulate the race: a row already committed for this period, but our
+    # in-flight call still "sees None" — emulate by pre-inserting then forcing
+    # the insert path via a patched _find that returns None on the first look.
+    from services import institution_invoice_ledger as mod
+
+    pre = InstitutionInvoice(
+        organization_id=org.id, year=2026, month=6, amount=100, status="pending"
+    )
+    shared_test_session.add(pre)
+    shared_test_session.commit()
+
+    calls = {"n": 0}
+    real_query = shared_test_session.query
+
+    def _fake_query(*a, **k):
+        # First .first() in upsert returns None (pretend we didn't see the
+        # winner); subsequent lookups behave normally so the recovery path
+        # re-fetches the real row.
+        q = real_query(*a, **k)
+        if a and a[0] is InstitutionInvoice and calls["n"] == 0:
+            calls["n"] += 1
+
+            class _Wrap:
+                def filter(self, *fa, **fk):
+                    return self
+
+                def first(self):
+                    return None
+
+            return _Wrap()
+        return q
+
+    import unittest.mock as mock
+
+    with mock.patch.object(shared_test_session, "query", _fake_query):
+        inv, created = upsert_invoice(shared_test_session, org.id, 2026, 6, 777)
+
+    assert created is False
+    assert inv.id == pre.id
+    # recovered row re-locked to the new amount (was pending)
+    assert inv.amount == 777
+
+
 def test_default_due_date_is_30_days_out():
     now = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
     assert default_due_date(now) == date(2026, 7, 1)

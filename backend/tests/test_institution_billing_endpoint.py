@@ -391,6 +391,21 @@ def test_send_email_success_writes_audit_and_history(
     assert len(rows) == 1
     assert rows[0].recipient == "finance@acme.example"
 
+    # Phase D — sending the email also locks a pending AR invoice.
+    from models import InstitutionInvoice
+
+    inv = (
+        shared_test_session.query(InstitutionInvoice)
+        .filter(
+            InstitutionInvoice.organization_id == org.id,
+            InstitutionInvoice.year == 2026,
+            InstitutionInvoice.month == 6,
+        )
+        .one()
+    )
+    assert inv.status == "pending"
+    assert inv.amount == 150  # 1 billable student × 150
+
     # History endpoint surfaces the last-sent time.
     h = test_client.get(
         f"/api/organizations/{org.id}/billing/monthly/email-history"

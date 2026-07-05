@@ -122,10 +122,12 @@ async def list_institution_invoices(
     q = db.query(InstitutionInvoice, Organization).join(
         Organization, Organization.id == InstitutionInvoice.organization_id
     )
-    if status_filter:
-        q = q.filter(InstitutionInvoice.status == status_filter)
+    # `overdue=true` is a shorthand for status='overdue' and takes precedence
+    # over `status` so passing both never AND-collapses to an empty result.
     if overdue:
         q = q.filter(InstitutionInvoice.status == "overdue")
+    elif status_filter:
+        q = q.filter(InstitutionInvoice.status == status_filter)
     if year is not None:
         q = q.filter(InstitutionInvoice.year == year)
     if month is not None:
