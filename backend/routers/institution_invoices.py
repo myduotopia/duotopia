@@ -27,7 +27,10 @@ router = APIRouter(prefix="/api/admin", tags=["admin-institution-invoices"])
 
 class CreateInvoiceRequest(BaseModel):
     organization_id: uuid.UUID
-    year: int = Field(..., ge=1, le=9998)
+    # Bounds match the institution_invoices.year DB CHECK (2000..2099) so an
+    # out-of-range year is a clean 422 up front rather than an IntegrityError
+    # → 500 when upsert_invoice INSERTs.
+    year: int = Field(..., ge=2000, le=2099)
     month: int = Field(..., ge=1, le=12)
 
 
@@ -112,7 +115,7 @@ async def list_institution_invoices(
         default=None, alias="status", description="pending/paid/overdue/cancelled"
     ),
     overdue: Optional[bool] = Query(default=None),
-    year: Optional[int] = Query(default=None, ge=1, le=9998),
+    year: Optional[int] = Query(default=None, ge=2000, le=2099),
     month: Optional[int] = Query(default=None, ge=1, le=12),
     organization_id: Optional[uuid.UUID] = Query(default=None),
     db: Session = Depends(get_db),
@@ -158,8 +161,15 @@ async def update_institution_invoice(
 ):
     """Mark an invoice paid / cancelled (records admin id + timestamp for
     'paid'). 'pending'/'overdue' are system-managed and rejected with 400."""
+    # Row-lock the invoice for the read-modify-write so two concurrent PATCHes
+    # (e.g. one marking paid, one cancelled) serialise instead of last-write-
+    # wins silently dropping an admin's action. No-op on SQLite (tests);
+    # SELECT ... FOR UPDATE on Postgres.
     invoice = (
-        db.query(InstitutionInvoice).filter(InstitutionInvoice.id == invoice_id).first()
+        db.query(InstitutionInvoice)
+        .filter(InstitutionInvoice.id == invoice_id)
+        .with_for_update()
+        .first()
     )
     if invoice is None:
         raise HTTPException(

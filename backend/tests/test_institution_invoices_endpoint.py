@@ -235,6 +235,18 @@ def test_list_rejects_invalid_status(test_client, admin):
     assert r.status_code == 400
 
 
+def test_create_rejects_out_of_range_year(test_client, admin, institution_with_student):
+    """year is bounded to the DB CHECK (2000..2099) so an out-of-range value
+    is a clean 422, not an IntegrityError → 500."""
+    org = institution_with_student
+    r = test_client.post(
+        "/api/admin/institution-invoices",
+        json={"organization_id": str(org.id), "year": 1999, "month": 6},
+        headers=_bearer(admin.id),
+    )
+    assert r.status_code == 422
+
+
 # ---------- overdue cron ----------
 
 
