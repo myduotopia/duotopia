@@ -49,6 +49,7 @@ export default function OrgMonthlyBillingPanel({
     defaultMonth ?? today.getMonth() + 1,
   );
   const [loading, setLoading] = React.useState(false);
+  const [downloading, setDownloading] = React.useState(false);
   const [result, setResult] = React.useState<MonthlyBilling | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -74,6 +75,36 @@ export default function OrgMonthlyBillingPanel({
       toast.error(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const downloadPdf = async () => {
+    setDownloading(true);
+    try {
+      const { blob, filename } =
+        await apiClient.downloadOrganizationMonthlyInvoicePdf(
+          orgId,
+          year,
+          month,
+        );
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? typeof e.detail === "string"
+            ? e.detail
+            : e.message
+          : "下載 PDF 請款單失敗";
+      toast.error(msg);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -110,6 +141,13 @@ export default function OrgMonthlyBillingPanel({
           </div>
           <Button onClick={fetchBilling} disabled={loading}>
             {loading ? "查詢中…" : "查詢"}
+          </Button>
+          <Button
+            onClick={downloadPdf}
+            disabled={downloading}
+            variant="outline"
+          >
+            {downloading ? "產生中…" : "下載 PDF 請款單"}
           </Button>
         </div>
 

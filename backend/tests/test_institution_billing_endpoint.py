@@ -278,3 +278,57 @@ def test_happy_path_full_response(
     assert body["students"][0]["student_id"] == student.id
     assert body["students"][0]["name"] == "Alice"
     assert body["students"][0]["billable"] is True
+
+
+# ---------- PDF endpoint (issue #838 Phase B) ----------
+
+
+def test_pdf_outsider_teacher_gets_403(
+    test_client, outsider, institution_org_with_one_active_student
+):
+    org, _, _ = institution_org_with_one_active_student
+    r = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly.pdf?year=2026&month=6",
+        headers=_bearer(outsider.id),
+    )
+    assert r.status_code == 403
+
+
+def test_pdf_owner_downloads_valid_pdf(
+    test_client, owner, institution_org_with_one_active_student
+):
+    org, _, _ = institution_org_with_one_active_student
+    r = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly.pdf?year=2026&month=6",
+        headers=_bearer(owner.id),
+    )
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/pdf"
+    # Valid PDF payload + attachment disposition with the org-slug filename.
+    assert r.content[:4] == b"%PDF"
+    cd = r.headers.get("content-disposition", "")
+    assert "attachment" in cd
+    assert "acme-institution-2026-06.pdf" in cd
+
+
+def test_pdf_admin_can_download_any_org(
+    test_client, admin, institution_org_with_one_active_student
+):
+    org, _, _ = institution_org_with_one_active_student
+    r = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly.pdf?year=2026&month=6",
+        headers=_bearer(admin.id),
+    )
+    assert r.status_code == 200
+    assert r.content[:4] == b"%PDF"
+
+
+def test_pdf_400_when_org_is_not_institution(test_client, admin, shared_test_session):
+    org = Organization(name="Group Buy", org_type="group_buy", is_active=True)
+    shared_test_session.add(org)
+    shared_test_session.commit()
+    r = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly.pdf?year=2026&month=6",
+        headers=_bearer(admin.id),
+    )
+    assert r.status_code == 400
