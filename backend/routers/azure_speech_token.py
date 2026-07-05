@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from auth import get_current_user
-from core.limiter import limiter, get_authenticated_user_identifier
+from core.limiter import limiter
 from services.azure_speech_token import get_azure_speech_token_service
 
 logger = logging.getLogger(__name__)
@@ -35,10 +35,10 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/token", response_model=TokenResponse)
-@limiter.limit("10/minute")  # 每 IP 每分鐘最多 10 次（防爆量）
-@limiter.limit(
-    "60/hour", key_func=get_authenticated_user_identifier
-)  # 每使用者每小時最多 60 次（防輪換 IP 繞過，Issue #139）
+# 兩段皆用預設 key_func（get_user_identifier）：已登入端點會以 JWT 推導出
+# per-user key（teacher:/student:），天生防輪換 IP/proxy 繞過（Issue #137 / #139）。
+@limiter.limit("10/minute")  # 每使用者每分鐘最多 10 次（防爆量）
+@limiter.limit("60/hour")  # 每使用者每小時最多 60 次
 async def get_speech_token(
     request: Request, current_user: dict = Depends(get_current_user)
 ):
