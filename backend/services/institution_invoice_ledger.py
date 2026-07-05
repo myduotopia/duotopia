@@ -145,10 +145,24 @@ def apply_status_change(
     admin_id: int,
     payment_note: Optional[str] = None,
 ) -> InstitutionInvoice:
-    """Route a PATCH status change to the right helper. Only 'paid' and
-    'cancelled' are admin-settable; 'pending'/'overdue' are system-managed.
-    Raises ValueError on an unsupported target status.
+    """Route a PATCH status change to the right helper.
+
+    Guards, in order:
+      - only 'pending'/'overdue' invoices may be transitioned. 'paid' and
+        'cancelled' are terminal — re-marking them would silently overwrite
+        the original payment audit stamp (who/when paid) with no history, so
+        the endpoint refuses. This matches the admin UI, which only offers
+        actions on pending/overdue rows.
+      - the only admin-settable targets are 'paid' and 'cancelled'
+        ('pending'/'overdue' are system-managed).
+
+    Raises ValueError (→ 400) on either violation.
     """
+    if invoice.status not in ("pending", "overdue"):
+        raise ValueError(
+            f"invoice is already {invoice.status!r} (settled); only "
+            "'pending'/'overdue' invoices can be marked paid/cancelled."
+        )
     if new_status == "paid":
         return mark_invoice_paid(db, invoice, admin_id, payment_note)
     if new_status == "cancelled":

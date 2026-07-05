@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import InstitutionInvoice, Organization, Teacher
+from models.institution_invoice import INVOICE_STATUSES
 from routers.admin import get_current_admin
 from services.institution_billing import compute_monthly_billing
 from services.institution_invoice_ledger import apply_status_change, upsert_invoice
@@ -119,6 +120,11 @@ async def list_institution_invoices(
 ):
     """List invoices with optional filters, newest period first. `overdue=true`
     is shorthand for status='overdue'."""
+    if status_filter and status_filter not in INVOICE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"status must be one of {INVOICE_STATUSES}",
+        )
     q = db.query(InstitutionInvoice, Organization).join(
         Organization, Organization.id == InstitutionInvoice.organization_id
     )

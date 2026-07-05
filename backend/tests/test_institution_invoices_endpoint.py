@@ -204,6 +204,37 @@ def test_patch_rejects_invalid_status(test_client, admin, institution_with_stude
     assert r.status_code == 400
 
 
+def test_patch_rejects_settled_invoice(test_client, admin, institution_with_student):
+    """A paid invoice is terminal — a second PATCH must be rejected (400)
+    rather than silently overwriting the payment stamp."""
+    org = institution_with_student
+    created = test_client.post(
+        "/api/admin/institution-invoices",
+        json={"organization_id": str(org.id), "year": 2026, "month": 6},
+        headers=_bearer(admin.id),
+    ).json()
+    paid = test_client.patch(
+        f"/api/admin/institution-invoices/{created['id']}",
+        json={"status": "paid"},
+        headers=_bearer(admin.id),
+    )
+    assert paid.status_code == 200
+    # Second transition on a settled invoice → 400.
+    again = test_client.patch(
+        f"/api/admin/institution-invoices/{created['id']}",
+        json={"status": "cancelled"},
+        headers=_bearer(admin.id),
+    )
+    assert again.status_code == 400
+
+
+def test_list_rejects_invalid_status(test_client, admin):
+    r = test_client.get(
+        "/api/admin/institution-invoices?status=bogus", headers=_bearer(admin.id)
+    )
+    assert r.status_code == 400
+
+
 # ---------- overdue cron ----------
 
 

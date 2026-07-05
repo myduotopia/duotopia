@@ -159,17 +159,34 @@ def test_mark_cancelled_leaves_paid_fields_null(shared_test_session):
     assert out.payment_note == "作廢"
 
 
-def test_cancel_after_paid_clears_paid_fields(shared_test_session):
-    """Invariant: paid_* set iff status='paid'. Cancelling a previously-paid
-    invoice must clear paid_at / paid_by_admin_id (regression for the
-    cancel-after-paid path)."""
+def test_apply_status_change_rejects_settled_invoice(shared_test_session):
+    """Settled invoices are terminal: a paid/cancelled invoice cannot be
+    transitioned again via the endpoint (would overwrite the payment audit
+    stamp with no history)."""
     org = _org(shared_test_session)
-    admin = _admin(shared_test_session, "cancel-after-paid@test.com")
-    inv, _ = upsert_invoice(shared_test_session, org.id, 2026, 11, 300)
-    mark_invoice_paid(shared_test_session, inv, admin.id, "paid then cancelled")
-    assert inv.paid_at is not None and inv.paid_by_admin_id == admin.id
+    admin = _admin(shared_test_session, "settled-admin@test.com")
 
-    out = apply_status_change(shared_test_session, inv, "cancelled", admin.id, "退團")
+    paid, _ = upsert_invoice(shared_test_session, org.id, 2026, 11, 300)
+    mark_invoice_paid(shared_test_session, paid, admin.id)
+    with pytest.raises(ValueError, match="settled"):
+        apply_status_change(shared_test_session, paid, "cancelled", admin.id)
+
+    cancelled, _ = upsert_invoice(shared_test_session, org.id, 2026, 12, 300)
+    mark_invoice_cancelled(shared_test_session, cancelled)
+    with pytest.raises(ValueError, match="settled"):
+        apply_status_change(shared_test_session, cancelled, "paid", admin.id)
+
+
+def test_mark_cancelled_direct_clears_paid_fields(shared_test_session):
+    """Defensive: the low-level mark_invoice_cancelled clears paid_* so the
+    'paid_* set iff status=paid' invariant holds even if a paid invoice is
+    cancelled through a direct service call (the endpoint blocks this, but
+    the helper stays self-consistent)."""
+    org = _org(shared_test_session)
+    admin = _admin(shared_test_session, "direct-cancel-admin@test.com")
+    inv, _ = upsert_invoice(shared_test_session, org.id, 2026, 11, 300)
+    mark_invoice_paid(shared_test_session, inv, admin.id)
+    out = mark_invoice_cancelled(shared_test_session, inv, "退團")
     assert out.status == "cancelled"
     assert out.paid_at is None
     assert out.paid_by_admin_id is None
