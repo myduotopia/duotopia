@@ -8,6 +8,14 @@ from pydantic import BaseModel, Field, model_validator, field_validator
 
 from utils.practice_mode import validate_practice_mode
 
+# Issue #884 item 1: the only practice modes that have student-side live-gate
+# endpoints (_guard_live_gate on start/answer). is_live_quiz is restricted to
+# these on create/patch so e.g. speaking_quiz can't be marked live without a
+# gate protecting students.
+LIVE_QUIZ_MODES = frozenset(
+    {"word_selection_quiz", "word_spelling_quiz", "word_cloze_quiz"}
+)
+
 # Issue #828: 整卷限時上限守衛（10 小時），擋掉負數/超大值；
 # 不用精確 allow-list 以免日後 UI 新增選項就壞掉
 _MAX_QUIZ_TIME_LIMIT_SECONDS = 36000

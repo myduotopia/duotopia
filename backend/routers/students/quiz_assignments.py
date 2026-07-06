@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 from models import (
@@ -397,13 +397,26 @@ async def get_quiz_live_status(
     ``assignment_id`` 為 StudentAssignment.id（與其餘 quiz 端點一致）。
     """
     student_id = int(current_student.get("sub"))
-    sa = _get_student_assignment_or_404(db, assignment_id, student_id)
-    # 注意：path 的 assignment_id 是 StudentAssignment.id；真正的 Assignment 要靠 sa.assignment_id 反查。
-    assignment = (
-        db.query(Assignment).filter(Assignment.id == sa.assignment_id).first()
-        if sa.assignment_id
-        else None
+    # Issue #884 item 3: this endpoint is polled every 3–15s per student, so
+    # load StudentAssignment + its Assignment in ONE round-trip via joinedload
+    # instead of two separate queries.
+    # 注意：path 的 assignment_id 是 StudentAssignment.id；Assignment 由關聯載入。
+    sa = (
+        db.query(StudentAssignment)
+        .options(joinedload(StudentAssignment.assignment))
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
     )
+    if not sa:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+    assignment = sa.assignment
     if assignment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found"
