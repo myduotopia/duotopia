@@ -295,6 +295,8 @@ jobs:
               'user_word_progress', 'practice_sessions', 'practice_answers',
               'organizations', 'schools', 'teacher_organizations', 'teacher_schools', 'classroom_schools', 'student_schools',
               'organization_points_log',
+              -- 機構請款（#838，JWT auth 業務表，比照 invoice_status_history）
+              'institution_invoices', 'institution_invoice_emails',
               'program_copy_logs',
               'demo_config',
               'identities',
