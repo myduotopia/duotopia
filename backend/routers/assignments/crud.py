@@ -39,6 +39,7 @@ from .validators import (
     UpdateAssignmentRequest,
     StudentResponse,
     ContentResponse,
+    LIVE_QUIZ_MODES,
 )
 from .dependencies import get_current_teacher
 from services.preview_service import _VOCABULARY_CONTENT_TYPES
@@ -361,10 +362,11 @@ async def create_assignment(
         answer_mode=sanitized_answer_mode,
         time_limit_per_question=request.time_limit_per_question,
         quiz_time_limit_seconds=request.quiz_time_limit_seconds,
-        # Issue #835: live 模式僅對小考有效；非小考一律 False
+        # Issue #835 / #884 item 1: live 模式僅對「有學生端 gate 的小考」有效
+        # （whitelist），其餘 practice_mode（含 speaking_quiz）一律 False。
         is_live_quiz=bool(
             getattr(request, "is_live_quiz", False)
-            and (request.practice_mode or "").endswith("_quiz")
+            and (request.practice_mode or "") in LIVE_QUIZ_MODES
         ),
         shuffle_questions=request.shuffle_questions or False,
         show_answer=request.show_answer or False,
@@ -985,9 +987,11 @@ async def patch_assignment(
         if field in provided:
             setattr(assignment, field, getattr(request, field))
 
-    # Issue #835: live 模式僅對小考有效（practice_mode 在 PATCH 不可變）
-    if "is_live_quiz" in provided and not (assignment.practice_mode or "").endswith(
-        "_quiz"
+    # Issue #835 / #884 item 1: live 模式僅對 whitelist 的小考有效
+    # （practice_mode 在 PATCH 不可變）
+    if (
+        "is_live_quiz" in provided
+        and (assignment.practice_mode or "") not in LIVE_QUIZ_MODES
     ):
         assignment.is_live_quiz = False
 
