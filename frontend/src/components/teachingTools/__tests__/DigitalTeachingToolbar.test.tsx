@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DigitalTeachingToolbar from "../DigitalTeachingToolbar";
 
@@ -138,6 +144,95 @@ describe("DigitalTeachingToolbar", () => {
       await user.click(closeButton);
 
       expect(screen.queryByLabelText("Close dice")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("RPS Tool", () => {
+    it("should open RPS when clicked", () => {
+      render(<DigitalTeachingToolbar />);
+      fireEvent.click(screen.getByLabelText("Rock Paper Scissors"));
+
+      expect(screen.getByLabelText("Spin")).toBeInTheDocument();
+      expect(screen.getByLabelText("Close RPS")).toBeInTheDocument();
+    });
+
+    it("should disable Spin while spinning and re-enable after it settles", () => {
+      vi.useFakeTimers();
+      try {
+        render(<DigitalTeachingToolbar />);
+        fireEvent.click(screen.getByLabelText("Rock Paper Scissors"));
+
+        const spinButton = screen.getByLabelText("Spin");
+        expect(spinButton).not.toBeDisabled();
+
+        fireEvent.click(spinButton);
+        expect(spinButton).toBeDisabled(); // isSpinning = true
+
+        // Spin animation settles after 1900ms
+        act(() => {
+          vi.advanceTimersByTime(1900);
+        });
+        expect(spinButton).not.toBeDisabled();
+
+        // Flush the two 50ms reel-reset timers
+        act(() => {
+          vi.advanceTimersByTime(100);
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should ignore a second spin while one is in progress", () => {
+      vi.useFakeTimers();
+      const randomSpy = vi.spyOn(Math, "random");
+      try {
+        render(<DigitalTeachingToolbar />);
+        fireEvent.click(screen.getByLabelText("Rock Paper Scissors"));
+
+        const spinButton = screen.getByLabelText("Spin");
+        fireEvent.click(spinButton); // first spin runs
+        const callsAfterFirstSpin = randomSpy.mock.calls.length;
+
+        // Button is disabled + spin() guards on isSpinning → no second spin
+        fireEvent.click(spinButton);
+        expect(randomSpy.mock.calls.length).toBe(callsAfterFirstSpin);
+
+        act(() => {
+          vi.advanceTimersByTime(2000);
+        });
+      } finally {
+        randomSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it("should close RPS when close button clicked", () => {
+      render(<DigitalTeachingToolbar />);
+      fireEvent.click(screen.getByLabelText("Rock Paper Scissors"));
+
+      fireEvent.click(screen.getByLabelText("Close RPS"));
+
+      expect(screen.queryByLabelText("Spin")).not.toBeInTheDocument();
+    });
+
+    it("should clear pending spin timers on unmount", () => {
+      vi.useFakeTimers();
+      const clearTimeoutSpy = vi.spyOn(global, "clearTimeout");
+      try {
+        const { unmount } = render(<DigitalTeachingToolbar />);
+        fireEvent.click(screen.getByLabelText("Rock Paper Scissors"));
+        fireEvent.click(screen.getByLabelText("Spin")); // schedules spinTimerRef
+
+        clearTimeoutSpy.mockClear();
+        unmount();
+
+        // RpsTool's unmount cleanup clears its pending spin/reset timers.
+        expect(clearTimeoutSpy).toHaveBeenCalled();
+      } finally {
+        clearTimeoutSpy.mockRestore();
+        vi.useRealTimers();
+      }
     });
   });
 
