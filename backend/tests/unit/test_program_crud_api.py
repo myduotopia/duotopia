@@ -1,89 +1,51 @@
 """
 Unit Tests for Program CRUD API Endpoints
 測試 Program 的 Create, Read, Update, Delete API 端點
+
+Issue #314: uses the shared conftest test_client/db_session fixtures instead of
+a module-level TestClient + app.dependency_overrides. The old pattern set the
+get_db override at import time; the conftest test_client fixture clears
+app.dependency_overrides between tests, which wiped this file's override mid
+run and made these tests hit the real DB in the full suite.
 """
 
 import pytest
 from fastapi.testclient import TestClient
-from main import app
-from database import get_db
+from sqlalchemy.orm import Session
+
+from auth import create_access_token
 from models import Teacher, Classroom
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from passlib.context import CryptContext
-
-# 密碼雜湊
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# 測試資料庫連接
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_program_crud.db"
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-client = TestClient(app)
-
-
-def override_get_db():
-    """Override database dependency for testing"""
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-
-
-@pytest.fixture(scope="module", autouse=True)
-def setup_database():
-    """Setup test database before tests"""
-    from models import Base
-
-    Base.metadata.create_all(bind=engine)
-
-    # 創建測試老師
-    db = TestingSessionLocal()
-    teacher = Teacher(
-        email="test@teacher.com",
-        name="Test Teacher",
-        password_hash=pwd_context.hash("test123"),
-        email_verified=True,
-    )
-    db.add(teacher)
-
-    # 創建測試班級
-    classroom = Classroom(name="Test Classroom", teacher_id=1, grade="Grade 1")
-    db.add(classroom)
-
-    db.commit()
-    db.close()
-
-    yield
-
-    # Cleanup
-    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
-def auth_token():
-    """Get authentication token for testing"""
-    response = client.post(
-        "/api/auth/teacher/login",
-        json={"email": "test@teacher.com", "password": "test123"},
+def auth_token(db_session: Session):
+    """Seed a teacher + classroom and return a teacher access token.
+
+    conftest cleans every table between tests, so the seeded rows get id=1
+    (the ids the request bodies below reference).
+    """
+    teacher = Teacher(
+        email="test@teacher.com",
+        name="Test Teacher",
+        password_hash="x",
+        email_verified=True,
     )
-    assert response.status_code == 200
-    return response.json()["access_token"]
+    db_session.add(teacher)
+    db_session.commit()
+
+    classroom = Classroom(name="Test Classroom", teacher_id=teacher.id, grade="Grade 1")
+    db_session.add(classroom)
+    db_session.commit()
+
+    return create_access_token({"sub": str(teacher.id), "type": "teacher"})
 
 
 class TestProgramCRUD:
     """測試 Program CRUD API"""
 
-    def test_create_program(self, auth_token):
+    def test_create_program(self, test_client: TestClient, auth_token):
         """測試創建 Program (CREATE)"""
-        response = client.post(
+        response = test_client.post(
             "/api/teachers/programs",
             headers={"Authorization": f"Bearer {auth_token}"},
             json={
@@ -99,13 +61,10 @@ class TestProgramCRUD:
         assert data["description"] == "Test Description"
         assert "id" in data
 
-        # 保存 program_id for後續測試
-        return data["id"]
-
-    def test_read_program(self, auth_token):
+    def test_read_program(self, test_client: TestClient, auth_token):
         """測試讀取 Program (READ)"""
         # 先創建一個 program
-        create_response = client.post(
+        create_response = test_client.post(
             "/api/teachers/programs",
             headers={"Authorization": f"Bearer {auth_token}"},
             json={
@@ -117,7 +76,7 @@ class TestProgramCRUD:
         program_id = create_response.json()["id"]
 
         # 讀取 program
-        response = client.get(
+        response = test_client.get(
             f"/api/teachers/programs/{program_id}",
             headers={"Authorization": f"Bearer {auth_token}"},
         )
@@ -127,10 +86,10 @@ class TestProgramCRUD:
         assert data["id"] == program_id
         assert data["name"] == "Read Test Program"
 
-    def test_update_program(self, auth_token):
+    def test_update_program(self, test_client: TestClient, auth_token):
         """測試更新 Program (UPDATE)"""
         # 先創建一個 program
-        create_response = client.post(
+        create_response = test_client.post(
             "/api/teachers/programs",
             headers={"Authorization": f"Bearer {auth_token}"},
             json={
@@ -142,7 +101,7 @@ class TestProgramCRUD:
         program_id = create_response.json()["id"]
 
         # 更新 program
-        response = client.put(
+        response = test_client.put(
             f"/api/teachers/programs/{program_id}",
             headers={"Authorization": f"Bearer {auth_token}"},
             json={
@@ -158,10 +117,10 @@ class TestProgramCRUD:
         assert data["description"] == "Updated Description"
         assert data["estimated_hours"] == 20
 
-    def test_update_program_level_and_tags(self, auth_token):
+    def test_update_program_level_and_tags(self, test_client: TestClient, auth_token):
         """測試更新 Program 的 level 和 tags"""
         # 先創建一個 program
-        create_response = client.post(
+        create_response = test_client.post(
             "/api/teachers/programs",
             headers={"Authorization": f"Bearer {auth_token}"},
             json={
@@ -173,7 +132,7 @@ class TestProgramCRUD:
         program_id = create_response.json()["id"]
 
         # 更新 level 和 tags
-        response = client.put(
+        response = test_client.put(
             f"/api/teachers/programs/{program_id}",
             headers={"Authorization": f"Bearer {auth_token}"},
             json={
@@ -185,9 +144,6 @@ class TestProgramCRUD:
             },
         )
 
-        print(f"\n📊 Response status: {response.status_code}")
-        print(f"📊 Response body: {response.json()}")
-
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "Updated Program"
@@ -196,10 +152,10 @@ class TestProgramCRUD:
         assert data["estimated_hours"] == 35
         assert data["tags"] == ["英語", "基礎"]
 
-    def test_delete_program(self, auth_token):
+    def test_delete_program(self, test_client: TestClient, auth_token):
         """測試刪除 Program (DELETE)"""
         # 先創建一個 program
-        create_response = client.post(
+        create_response = test_client.post(
             "/api/teachers/programs",
             headers={"Authorization": f"Bearer {auth_token}"},
             json={
@@ -211,7 +167,7 @@ class TestProgramCRUD:
         program_id = create_response.json()["id"]
 
         # 刪除 program
-        response = client.delete(
+        response = test_client.delete(
             f"/api/teachers/programs/{program_id}",
             headers={"Authorization": f"Bearer {auth_token}"},
         )
@@ -219,17 +175,17 @@ class TestProgramCRUD:
         assert response.status_code == 200
 
         # 驗證已刪除（應該 404）
-        get_response = client.get(
+        get_response = test_client.get(
             f"/api/teachers/programs/{program_id}",
             headers={"Authorization": f"Bearer {auth_token}"},
         )
         assert get_response.status_code == 404
 
-    def test_list_programs(self, auth_token):
+    def test_list_programs(self, test_client: TestClient, auth_token):
         """測試列出所有 Programs"""
         # 創建幾個 programs
         for i in range(3):
-            client.post(
+            test_client.post(
                 "/api/teachers/programs",
                 headers={"Authorization": f"Bearer {auth_token}"},
                 json={
@@ -240,8 +196,9 @@ class TestProgramCRUD:
             )
 
         # 列出所有 programs
-        response = client.get(
-            "/api/teachers/programs", headers={"Authorization": f"Bearer {auth_token}"}
+        response = test_client.get(
+            "/api/teachers/programs",
+            headers={"Authorization": f"Bearer {auth_token}"},
         )
 
         assert response.status_code == 200
@@ -249,18 +206,15 @@ class TestProgramCRUD:
         assert isinstance(data, list)
         assert len(data) >= 3
 
-    def test_unauthorized_access(self):
+    def test_unauthorized_access(self, test_client: TestClient):
         """測試未授權存取"""
         # 沒有 token
-        response = client.get("/api/teachers/programs")
+        response = test_client.get("/api/teachers/programs")
         assert response.status_code == 401
 
         # 錯誤的 token
-        response = client.get(
-            "/api/teachers/programs", headers={"Authorization": "Bearer invalid_token"}
+        response = test_client.get(
+            "/api/teachers/programs",
+            headers={"Authorization": "Bearer invalid_token"},
         )
         assert response.status_code == 401
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
