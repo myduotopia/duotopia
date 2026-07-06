@@ -1438,7 +1438,8 @@
     "viewLabel": "選擇分享視圖",
     "personal": "個人班級",
     "orgPrefix": "機構：",
-    "schoolPrefix": "學校："
+    "schoolPrefix": "學校：",
+    "copyFailed": "複製失敗，請手動選取連結複製"
   },
   "studentLogin": {
     "header": {

@@ -1296,7 +1296,8 @@
     "viewLabel": "Select share view",
     "personal": "Personal",
     "orgPrefix": "Org: ",
-    "schoolPrefix": "School: "
+    "schoolPrefix": "School: ",
+    "copyFailed": "Copy failed. Please select and copy the link manually."
   },
   "studentLogin": {
     "header": {
