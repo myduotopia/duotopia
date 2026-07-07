@@ -1613,7 +1613,7 @@
   "privacyPolicy": {
     "header": {
       "title": "Privacy Policy",
-      "lastUpdated": "Last updated: February 14, 2026"
+      "lastUpdated": "Last updated: July 7, 2026"
     },
     "section1": {
       "title": "1. General",
@@ -1682,6 +1682,17 @@
       "title": "10. Policy Changes",
       "item1": "10.1 The Company reserves the right to modify this Privacy Policy at any time. Changes will be posted on this page.",
       "item2": "10.2 Continued use of the Service constitutes your agreement to the revised Privacy Policy."
+    },
+    "section11": {
+      "title": "11. AI Usage Disclosure",
+      "item1": "11.1 To provide the core features of this Service, we use the following AI services and send the necessary audio or text data to the respective providers for real-time processing:",
+      "list": {
+        "item1": "Generative AI: Google Vertex AI (Gemini family), used for Chinese-English translation, teaching-content assistance, and learning-outcome analysis.",
+        "item2": "Speech recognition and pronunciation assessment: Microsoft Azure Speech Service, used to transcribe student recordings and evaluate pronunciation accuracy.",
+        "item3": "Text-to-Speech (TTS): Microsoft Azure Neural Voices, used to generate model-reading audio for teaching materials."
+      },
+      "item2": "11.2 Such AI processing is used solely to deliver the features of this Service. We do not provide your audio or personal data to these providers for training their AI models.",
+      "item3": "11.3 We may adjust the AI providers or models we use for technical optimization, and will update this disclosure on this page accordingly."
     }
   },
   "dialogs": {
