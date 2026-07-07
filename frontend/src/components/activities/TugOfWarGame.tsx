@@ -215,7 +215,8 @@ export function TugOfWarGame({
   const isClozeMode = mode === "cloze_to_english";
   const isImageMode = mode === "image_to_english";
   const audioOnly = isAudioOnlyMode(mode);
-  const effectiveShowImages = showImages && !isImageMode;
+  // 圖片題自身用圖當題目、克漏字要讀例句 → 這兩種選項恆用文字（不套選項圖片）
+  const effectiveShowImages = showImages && !isImageMode && !isClozeMode;
   const useHandwriteFont = HANDWRITE_MODES.includes(mode);
   // 克漏字 + 兩隊題目相異：音檔停用，強制在題目下方顯示例句翻譯補償
   const showClozeTranslation =
@@ -466,13 +467,20 @@ export function TugOfWarGame({
           </label>
         )}
 
-        {/* 克漏字：顯示例句翻譯 */}
+        {/* 克漏字：顯示例句翻譯。不同題時音檔停用 → 強制勾選且鎖定（不可取消） */}
         {isClozeMode && (
-          <label className="flex items-center gap-1.5 text-xs text-white/80 cursor-pointer select-none">
+          <label
+            className={`flex items-center gap-1.5 text-xs text-white/80 select-none ${
+              gameState.diffMode
+                ? "opacity-60 cursor-not-allowed"
+                : "cursor-pointer"
+            }`}
+          >
             <input
               type="checkbox"
-              checked={gameState.showSentenceTranslation}
+              checked={gameState.showSentenceTranslation || gameState.diffMode}
               onChange={toggleSentenceTranslation}
+              disabled={gameState.diffMode}
               className="rounded border-gray-300"
             />
             {t("tugOfWar.showSentenceTranslation", "顯示例句翻譯")}
