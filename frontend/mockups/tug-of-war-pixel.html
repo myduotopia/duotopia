@@ -199,7 +199,8 @@ body {
   cursor: pointer;
   display: none;
 }
-.mode-audio #sign { display: block; }
+/* 有音檔的題型（聽音檔×2、克漏字同題）都顯示懸掛看板 */
+#game.has-sign #sign { display: block; }
 @keyframes swing {
   0%, 100% { transform: translateX(-50%) rotate(-1.6deg); }
   50%      { transform: translateX(-50%) rotate(1.6deg); }
@@ -1131,11 +1132,11 @@ function renderSide(team) {
     } else if (game.mode === "chinese_to_english") {
       p.innerHTML = `<div class="qzh">${word.zh}</div>`;
     } else if (game.mode === "cloze_to_english") {
-      // 克漏字：例句挖空。（正式版：同題時循環播例句音檔＋靜音鈕；不同題時禁播音檔）
-      const audioTag = clozeAudioAllowed()
-        ? `<div style="font-size:.55em;color:#966c6c;margin-top:4px">&#128266; 例句音檔循環播放（正式版）</div>`
+      // 克漏字：例句挖空。音檔鈕統一在場景中央懸掛看板（同題才有）；不同題禁播音檔
+      const muteTag = clozeAudioAllowed()
+        ? ""
         : `<div style="font-size:.55em;color:#b8ab8e;margin-top:4px">&#128263; 不同題模式：音檔停用</div>`;
-      p.innerHTML = `<div class="qcloze">${word.cloze.replace("____", '<span class="blank">____</span>')}${audioTag}</div>`;
+      p.innerHTML = `<div class="qcloze">${word.cloze.replace("____", '<span class="blank">____</span>')}${muteTag}</div>`;
     }
   }
   // 選項
@@ -1163,7 +1164,9 @@ function renderQuestion() {
   renderSide("a");
   renderSide("b");
   updateProgress();
-  if (isAudioMode() && !game.winner) { sfx.word(); setSign(true); setTimeout(() => setSign(false), 900); }
+  if ((isAudioMode() || clozeAudioAllowed()) && !game.winner) {
+    sfx.word(); setSign(true); setTimeout(() => setSign(false), 900);
+  }
 }
 
 function answer(team, correct, btn) {
@@ -1274,10 +1277,15 @@ function setMode(mode) {
   if (isAudioMode()) { game.diff = false; diffBtn.style.display = "none"; }
   else diffBtn.style.display = "";
   syncDiffBtn();
-  const g = document.getElementById("game");
-  g.className = isAudioMode() ? "mode-audio" : isImageMode() ? "mode-image" : "mode-visual";
+  applyGameClass();
   resetGame();
   fitStage();
+}
+function applyGameClass() {
+  const g = document.getElementById("game");
+  const base = isAudioMode() ? "mode-audio" : isImageMode() ? "mode-image" : "mode-visual";
+  const hasSign = isAudioMode() || clozeAudioAllowed();
+  g.className = base + (hasSign ? " has-sign" : "");
 }
 function syncDiffBtn() {
   const b = document.getElementById("diffBtn");
@@ -1292,6 +1300,7 @@ document.getElementById("modeSel").addEventListener("change", e => setMode(e.tar
 document.getElementById("diffBtn").addEventListener("click", () => {
   game.diff = !game.diff;
   syncDiffBtn();
+  applyGameClass(); // 克漏字切不同題 → 懸掛看板收起
   resetGame(); // 切換出題方式重新開局，避免進行中的題目狀態混亂
 });
 document.getElementById("simA").addEventListener("click", () => simCorrect("a"));
