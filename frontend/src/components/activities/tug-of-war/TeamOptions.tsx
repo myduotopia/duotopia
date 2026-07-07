@@ -12,6 +12,15 @@ import type { Team, VocabItem } from "./types";
 import { TEAM_A_KEYS, TEAM_B_KEYS, OPTION_LABELS } from "./types";
 import { useShrinkToFit } from "../shared/useShrinkToFit";
 
+/**
+ * 選項是否「長」→ 觸發單欄（一行一選項）與選項帶加高。
+ * 以「詞數」為主（≥5 詞的多字釋義），另用字元數兜底無空格的超長字/CJK 長句。
+ * 一般英文單字（1 詞，即使字母多如 strawberry）與短翻譯 → 非長 → 維持 2×2。
+ */
+export function isLongOption(o: string): boolean {
+  return o.trim().split(/\s+/).length >= 5 || o.length >= 18;
+}
+
 interface OptionButtonProps {
   team: Team;
   option: string;
@@ -85,12 +94,15 @@ function OptionButton({
     onSelect(team, option);
   };
 
+  // 顯示圖片且有圖 → 只顯示圖片（不顯示文字）；無圖 fallback 顯示文字
+  const imageOnly = showImages && !!imageUrl;
+
   return (
     <button
       onClick={handleClick}
       disabled={disabled || isCooldown}
       className={`
-        relative grid ${showImages ? "grid-rows-[auto_1fr_auto]" : "grid-rows-[1fr]"} min-h-0 gap-1 px-2 py-1 sm:px-3 sm:py-2 rounded-lg border-[3px] text-center overflow-hidden
+        relative flex items-center justify-center min-h-0 px-2 py-1 sm:px-3 sm:py-2 rounded-lg border-[3px] text-center overflow-hidden
         transition-all duration-150 active:translate-y-[2px]
         ${stateClass}
       `}
@@ -118,23 +130,25 @@ function OptionButton({
           )}
         </span>
       )}
-      {showImages && imageUrl && (
+      {imageOnly ? (
+        // 圖片雙向受限 + object-contain → 完整顯示不裁；key/icon 用 absolute 疊上不佔位
         <img
           src={imageUrl}
           alt=""
-          className="row-start-2 min-h-0 w-full rounded object-contain"
+          className="h-auto w-auto max-h-full max-w-full rounded object-contain"
         />
+      ) : (
+        // 量測文字：block、max-h/max-w-full + overflow-hidden 讓 hook 量得到 overflow
+        <span
+          ref={textRef}
+          style={{ fontSize: `${fontSize}px` }}
+          className={`flex items-center justify-center min-h-0 min-w-0 max-h-full max-w-full overflow-hidden break-words leading-tight font-medium ${
+            useHandwriteFont ? "handwrite-font" : ""
+          } ${ready ? "" : "opacity-0"}`}
+        >
+          {option}
+        </span>
       )}
-      {/* 量測文字：block、max-h/max-w-full + overflow-hidden 讓 hook 量得到 overflow */}
-      <span
-        ref={textRef}
-        style={{ fontSize: `${fontSize}px` }}
-        className={`flex items-center justify-center min-h-0 min-w-0 max-h-full max-w-full overflow-hidden break-words leading-tight font-medium ${
-          useHandwriteFont ? "handwrite-font" : ""
-        } ${ready ? "" : "opacity-0"}`}
-      >
-        {option}
-      </span>
     </button>
   );
 }
@@ -216,9 +230,8 @@ export function TeamOptions({
     ? Math.max(0, (cooldownMs * (1 - cooldownProgress)) / 1000).toFixed(1)
     : null;
 
-  // 只有極短選項（≤3 字元）維持 2×2；其餘一行一選項，每格拿滿半邊寬度、縮字更輕
-  const maxLen = Math.max(...options.map((o) => o.length));
-  const useVertical = !showImages && maxLen > 3;
+  // 一般單字/短詞 2×2；只有長句釋義（詞數判定）才一行一選項，給足寬度、縮字更輕
+  const useVertical = !showImages && options.some(isLongOption);
 
   return (
     <div className="flex flex-col gap-2 relative w-full h-full min-h-0">

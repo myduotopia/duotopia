@@ -31,7 +31,7 @@ import { apiClient } from "@/lib/api";
 import { useGameLogic, isAudioOnlyMode } from "./tug-of-war/useGameLogic";
 import { useQuestionAudio } from "./tug-of-war/useQuestionAudio";
 import { QuestionDisplay } from "./tug-of-war/QuestionDisplay";
-import { TeamOptions } from "./tug-of-war/TeamOptions";
+import { TeamOptions, isLongOption } from "./tug-of-war/TeamOptions";
 import { PixelTugStage } from "./tug-of-war/pixel/PixelTugStage";
 import { RotateOverlay } from "./tug-of-war/pixel/RotateOverlay";
 import type { VocabItem, QuestionMode, Team, Question } from "./tug-of-war/types";
@@ -220,12 +220,11 @@ export function TugOfWarGame({
   // 克漏字 + 兩隊題目相異：音檔停用，強制在題目下方顯示例句翻譯補償
   const showClozeTranslation =
     gameState.showSentenceTranslation || (isClozeMode && gameState.diffMode);
-  // 長選項（如英英釋義）→ 給選項帶更多高度（整局為準，換題型才變，避免每題跳動）
-  const maxOptionLen = gameState.questions.reduce((mx, q) => {
-    const local = q.options.reduce((m, o) => Math.max(m, o.length), 0);
-    return Math.max(mx, local);
-  }, 0);
-  const hasLongOption = maxOptionLen > 14;
+  // 長選項（多詞英英釋義）→ 給選項帶更多高度（整局為準，換題型才變，避免每題跳動）；
+  // 與 TeamOptions 的欄數判定共用 isLongOption（詞數為主），確保一致。
+  const hasLongOption = gameState.questions.some((q) =>
+    q.options.some(isLongOption),
+  );
 
   // Auto-start when vocab loads
   useEffect(() => {
