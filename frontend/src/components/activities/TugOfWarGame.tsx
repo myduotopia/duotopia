@@ -331,6 +331,8 @@ export function TugOfWarGame({
           showImages={effectiveShowImages}
           vocabItems={vocabItems}
           useHandwriteFont={useHandwriteFont}
+          correctAnswer={question.correctAnswer}
+          reveal={disabled}
         />
       );
     }

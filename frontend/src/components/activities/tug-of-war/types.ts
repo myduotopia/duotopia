@@ -79,7 +79,8 @@ export interface GameConfig {
 
 export const DEFAULT_GAME_CONFIG: GameConfig = {
   cooldownMs: 2000,
-  transitionMs: 1200,
+  // 答對後停留時間：讓學生看清正解揭示（尤其音檔題無題目帶），落在 1-2 秒
+  transitionMs: 1800,
 };
 
 // Keyboard mappings

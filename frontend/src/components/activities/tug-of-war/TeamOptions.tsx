@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useState, useRef } from "react";
+import { CheckCircle, XCircle } from "lucide-react";
 import type { Team, VocabItem } from "./types";
 import { TEAM_A_KEYS, TEAM_B_KEYS, OPTION_LABELS } from "./types";
 import { useShrinkToFit } from "../shared/useShrinkToFit";
@@ -21,6 +22,10 @@ interface OptionButtonProps {
   showImages: boolean;
   imageUrl?: string;
   useHandwriteFont: boolean;
+  /** 該題正解文字（用於答對揭示）。 */
+  correctAnswer: string;
+  /** 該側已答對 → 揭示正解（綠標其餘淡化）。 */
+  reveal: boolean;
 }
 
 function OptionButton({
@@ -33,9 +38,19 @@ function OptionButton({
   showImages,
   imageUrl,
   useHandwriteFont,
+  correctAnswer,
+  reveal,
 }: OptionButtonProps) {
   const teamColor = team === "a" ? "red" : "blue";
   const textRef = useRef<HTMLSpanElement>(null);
+  const isCorrect = option === correctAnswer;
+  // 選錯即時回饋：點到非正解 → 短暫紅標（隨後冷卻覆蓋層接手）
+  const [wrongFlash, setWrongFlash] = useState(false);
+  const wrongTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (wrongTimer.current) clearTimeout(wrongTimer.current);
+  }, []);
+
   // 手寫字型較細長 → 上限給大一點；量測框把長字縮到塞得下、完整不截斷
   const { fontSize, ready } = useShrinkToFit(textRef, {
     maxFontSize: useHandwriteFont ? 34 : 28,
@@ -44,20 +59,40 @@ function OptionButton({
     deps: [option, useHandwriteFont, showImages],
   });
 
+  const showCorrect = reveal && isCorrect;
+  const showWrong = wrongFlash && !isCorrect;
+
+  // 狀態優先序：揭示正解 > 選錯紅閃 > 揭示時其餘淡化 > 冷卻/已答灰 > 隊色
+  const stateClass = showCorrect
+    ? "border-green-500 bg-green-100 text-green-800 shadow-[0_4px_0_#16a34a] scale-[1.02]"
+    : showWrong
+      ? "border-red-500 bg-red-100 text-red-800 shadow-[0_4px_0_#dc2626]"
+      : reveal
+        ? "opacity-50 border-gray-300 bg-gray-100 dark:bg-gray-800 dark:border-gray-600"
+        : disabled || isCooldown
+          ? "opacity-50 cursor-not-allowed border-gray-300 bg-gray-100 dark:bg-gray-800 dark:border-gray-600"
+          : teamColor === "blue"
+            ? "bg-white border-[#4d9be6] shadow-[0_4px_0_#4d65b4] hover:bg-blue-50 active:bg-blue-100 dark:bg-gray-900"
+            : "bg-white border-[#e83b3b] shadow-[0_4px_0_#ae2334] hover:bg-red-50 active:bg-red-100 dark:bg-gray-900";
+
+  const handleClick = () => {
+    if (disabled || isCooldown) return;
+    if (!isCorrect) {
+      setWrongFlash(true);
+      if (wrongTimer.current) clearTimeout(wrongTimer.current);
+      wrongTimer.current = setTimeout(() => setWrongFlash(false), 500);
+    }
+    onSelect(team, option);
+  };
+
   return (
     <button
-      onClick={() => !disabled && !isCooldown && onSelect(team, option)}
+      onClick={handleClick}
       disabled={disabled || isCooldown}
       className={`
         relative grid ${showImages ? "grid-rows-[auto_1fr_auto]" : "grid-rows-[1fr]"} min-h-0 gap-1 px-2 py-1 sm:px-3 sm:py-2 rounded-lg border-[3px] text-center overflow-hidden
         transition-all duration-150 active:translate-y-[2px]
-        ${
-          disabled || isCooldown
-            ? "opacity-50 cursor-not-allowed border-gray-300 bg-gray-100 dark:bg-gray-800 dark:border-gray-600"
-            : teamColor === "blue"
-              ? "bg-white border-[#4d9be6] shadow-[0_4px_0_#4d65b4] hover:bg-blue-50 active:bg-blue-100 dark:bg-gray-900"
-              : "bg-white border-[#e83b3b] shadow-[0_4px_0_#ae2334] hover:bg-red-50 active:bg-red-100 dark:bg-gray-900"
-        }
+        ${stateClass}
       `}
     >
       {/* Key hint */}
@@ -73,6 +108,16 @@ function OptionButton({
       >
         {keyLabel}
       </span>
+      {/* 揭示 icon：正解打勾、選錯打叉 */}
+      {(showCorrect || showWrong) && (
+        <span className="pointer-events-none absolute right-1 top-1 z-[1] animate-in zoom-in-50 fade-in duration-300">
+          {showCorrect ? (
+            <CheckCircle className="h-5 w-5 text-green-600" />
+          ) : (
+            <XCircle className="h-5 w-5 text-red-600" />
+          )}
+        </span>
+      )}
       {showImages && imageUrl && (
         <img
           src={imageUrl}
@@ -105,6 +150,9 @@ interface TeamOptionsProps {
   showImages?: boolean;
   vocabItems?: VocabItem[];
   useHandwriteFont?: boolean;
+  correctAnswer: string;
+  /** 該側已答對 → 揭示正解（綠標其餘淡化）。 */
+  reveal?: boolean;
 }
 
 export function TeamOptions({
@@ -118,6 +166,8 @@ export function TeamOptions({
   showImages = false,
   vocabItems = [],
   useHandwriteFont = false,
+  correctAnswer,
+  reveal = false,
 }: TeamOptionsProps) {
   const keys = team === "a" ? TEAM_A_KEYS : TEAM_B_KEYS;
   const [cooldownProgress, setCooldownProgress] = useState(0);
@@ -194,6 +244,8 @@ export function TeamOptions({
               showImages={showImages}
               imageUrl={item?.image_url}
               useHandwriteFont={useHandwriteFont}
+              correctAnswer={correctAnswer}
+              reveal={reveal}
             />
           );
         })}
