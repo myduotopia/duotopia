@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拔河 Pixel Mockup — issue #920</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   拔河像素風 Mockup — 驗收用互動預覽
+   調色盤：Resurrect 64 子集
+   動畫：CSS steps() + spritesheet dataURI（runtime 由 pixel matrix 產生）
+   ============================================================ */
+:root {
+  --ink: #2e222f;
+  --ink2: #3e3546;
+  --red: #e83b3b;
+  --red-dk: #ae2334;
+  --red-lt: #f68181;
+  --blue: #4d9be6;
+  --blue-dk: #4d65b4;
+  --blue-lt: #8fd3ff;
+  --gold: #f9c22b;
+  --gold-dk: #f79617;
+  --grass: #1ebc73;
+  --grass-lt: #91db69;
+  --grass-dk: #239063;
+  --paper: #fdf6e3;
+  --cloud: #c7dcd0;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #3e3546;
+  font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+  color: #fff;
+  min-height: 100vh;
+}
+.pxfont { font-family: "Silkscreen", monospace; }
+
+/* ---------- mockup 控制列（非遊戲本體） ---------- */
+#ctrl {
+  padding: 10px 14px;
+  background: #2e222f;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  font-size: 13px;
+  border-bottom: 2px solid #625565;
+}
+#ctrl .grp { display: flex; gap: 4px; align-items: center; margin-right: 10px; }
+#ctrl .lbl { color: #9babb2; font-size: 11px; margin-right: 2px; }
+#ctrl button {
+  background: #625565; color: #fff; border: none; padding: 5px 9px;
+  cursor: pointer; font-size: 12px; border-radius: 3px;
+  font-family: inherit;
+}
+#ctrl button:hover { background: #7f708a; }
+#ctrl button.on { background: var(--gold); color: var(--ink); font-weight: bold; }
+#ctrl button.sim-a { background: var(--red-dk); }
+#ctrl button.sim-b { background: var(--blue-dk); }
+#ctrl button.sim-a:hover { background: var(--red); }
+#ctrl button.sim-b:hover { background: var(--blue); }
+
+/* ---------- viewport frame ---------- */
+#frameWrap { display: flex; justify-content: center; padding: 16px; }
+#frame {
+  position: relative;
+  background: #000;
+  box-shadow: 0 0 0 2px #625565, 0 12px 40px rgba(0,0,0,.5);
+  overflow: hidden;
+  width: 1280px; height: 720px;
+  max-width: calc(100vw - 32px);
+}
+#frameSize {
+  position: absolute; z-index: 60; right: 4px; bottom: 2px;
+  font-size: 10px; color: rgba(255,255,255,.45); pointer-events: none;
+  font-family: monospace;
+}
+
+/* ============================================================
+   遊戲本體（#game）— 之後搬進 React 的版面
+   全寬三帶：場景 / 題目 / 選項，比例依題型 class 切換
+   ============================================================ */
+#game {
+  position: absolute; inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr 1fr 1fr;   /* header + 三帶 */
+  background: linear-gradient(#8fd3ff 0%, #c7ecff 100%);
+}
+#game.mode-image  { grid-template-rows: auto 0.66fr 1.35fr 1fr; }  /* 22/45/33 */
+/* 音檔題：題目帶收起（display:none 會移出 grid flow，rows 改 3 列） */
+#game.mode-audio  { grid-template-rows: auto 1fr 1fr; }
+#game.mode-audio #qband { display: none; }
+
+/* ---------- Header ---------- */
+#hdr {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px;
+  background: var(--ink);
+  border-bottom: 3px solid var(--ink2);
+  min-height: 44px;
+}
+.pxbtn {
+  font-family: "Silkscreen", monospace;
+  background: #625565; color: #fff;
+  border: none;
+  border-bottom: 3px solid #3e3546;
+  padding: 6px 10px; font-size: 13px; cursor: pointer;
+  image-rendering: pixelated;
+}
+.pxbtn:active { transform: translateY(2px); border-bottom-width: 1px; }
+#hdr select {
+  font-family: inherit; font-size: 13px;
+  background: #625565; color: #fff; border: none;
+  border-bottom: 3px solid #3e3546;
+  padding: 6px 8px; cursor: pointer;
+}
+#score {
+  flex: 1; text-align: center;
+  font-family: "Silkscreen", monospace;
+  font-size: clamp(16px, 3.2vh, 26px);
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  letter-spacing: 1px;
+}
+#score .sa { color: var(--red-lt); }
+#score .sb { color: var(--blue-lt); }
+#score .vs { color: #9babb2; font-size: .6em; }
+#prog { font-family: "Silkscreen", monospace; font-size: 12px; color: #9babb2; white-space: nowrap; }
+#sndBtn { min-width: 40px; }
+
+/* ---------- 場景帶 ---------- */
+#scene { position: relative; overflow: hidden; }
+#stage {
+  position: absolute; left: 50%; top: 50%;
+  width: 960px; height: 280px;
+  transform-origin: center center;
+}
+#stage .abs { position: absolute; image-rendering: pixelated; }
+#ground {
+  /* 大幅外擴：stage 縮小時草地仍鋪滿整個場景帶 */
+  position: absolute; left: -2000px; right: -2000px; bottom: 0; height: 52px;
+  image-rendering: pixelated;
+}
+.cloud { opacity: .95; }
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-1160px); } }
+
+/* 繩子 + 兩隊 一起位移的 wrapper */
+#tug {
+  position: absolute; inset: 0;
+  transition: transform .5s cubic-bezier(0.2, 0, 0, 1);
+}
+.spr { position: absolute; image-rendering: pixelated; background-repeat: no-repeat; }
+.flipx { transform: scaleX(-1); }
+
+/* sprite 逐格動畫：background-position 由 steps() 切換 */
+@keyframes playX { from { background-position-x: 0; } to { background-position-x: var(--endx); } }
+.anim { animation: playX var(--dur) steps(var(--n)) infinite; }
+
+/* 勝利彩帶 */
+.confetti {
+  position: absolute; width: 12px; height: 12px; top: -20px;
+  image-rendering: pixelated;
+  animation: confFall linear forwards;
+}
+@keyframes confFall {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(340px) rotate(540deg); opacity: .9; }
+}
+
+/* 勝利 banner */
+#banner {
+  /* 靠上置中，不遮住場景中的勝負角色 */
+  position: absolute; inset: 0; z-index: 30;
+  display: none; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding-top: 2.5%; gap: 8px;
+  background: rgba(46,34,47,.22);
+}
+#banner.show { display: flex; }
+#bannerTxt {
+  font-family: "Silkscreen", "Microsoft JhengHei", monospace;
+  font-weight: 700;
+  font-size: clamp(22px, 6vh, 46px);
+  color: #fff; text-align: center;
+  padding: 14px 30px;
+  background: var(--ink);
+  border: 4px solid #fff;
+  box-shadow: 0 6px 0 rgba(0,0,0,.4);
+  animation: pop .35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+#bannerTxt.reda { border-color: var(--red-lt); color: var(--red-lt); }
+#bannerTxt.blueb { border-color: var(--blue-lt); color: var(--blue-lt); }
+@keyframes pop { 0% { transform: scale(.3); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+/* ---------- 音檔懸掛看板 ---------- */
+#sign {
+  position: absolute; left: 50%; top: -6px; z-index: 5;
+  transform-origin: top center;
+  animation: swing 3.4s ease-in-out infinite;
+  cursor: pointer;
+  display: none;
+}
+.mode-audio #sign { display: block; }
+@keyframes swing {
+  0%, 100% { transform: translateX(-50%) rotate(-1.6deg); }
+  50%      { transform: translateX(-50%) rotate(1.6deg); }
+}
+#sign:active { animation-play-state: paused; }
+
+/* ---------- 題目帶（兩隊鏡像各一份） ---------- */
+#qband {
+  display: grid; grid-template-columns: 1fr 1fr;
+  border-top: 4px solid var(--ink);
+  background: var(--paper);
+  min-height: 0;
+}
+.qpanel {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; padding: 8px 12px; min-height: 0; overflow: hidden;
+  color: var(--ink);
+}
+.qpanel.qa { border-right: 2px dashed #b8ab8e; box-shadow: inset 0 6px 0 rgba(232,59,59,.14); }
+.qpanel.qb { box-shadow: inset 0 6px 0 rgba(77,155,230,.14); }
+.qword {
+  font-family: "Silkscreen", "Microsoft JhengHei", monospace; font-weight: 700;
+  font-size: clamp(20px, 6.5vh, 52px);
+  text-align: center; line-height: 1.1;
+}
+.qzh { font-size: clamp(20px, 6vh, 48px); font-weight: 700; font-family: "Microsoft JhengHei", sans-serif; }
+.qcloze { font-size: clamp(15px, 3.6vh, 30px); font-weight: 600; text-align: center; line-height: 1.4; }
+.qcloze .blank { color: var(--red-dk); letter-spacing: 2px; }
+.qimg { image-rendering: pixelated; height: 100%; width: auto; }
+.qimgbox {
+  height: 88%; aspect-ratio: 1.15;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; border: 4px solid var(--ink); box-shadow: 4px 4px 0 rgba(46,34,47,.25);
+  padding: 10px 16px;
+}
+
+/* ---------- 選項帶 ---------- */
+#optband {
+  display: grid; grid-template-columns: 1fr 1fr;
+  border-top: 4px solid var(--ink);
+  min-height: 0;
+}
+.side { position: relative; display: flex; flex-direction: column; min-height: 0; }
+.side.sa { background: linear-gradient(#f9d9d3, #f6c3bc); }
+.side.sb { background: linear-gradient(#d3e8f9, #bcd9f6); border-left: 4px solid var(--ink); }
+.sideTag {
+  position: absolute; top: 4px; left: 8px; z-index: 2;
+  font-family: "Silkscreen", monospace; font-size: 11px; letter-spacing: 1px;
+  padding: 2px 8px; color: #fff;
+}
+.sa .sideTag { background: var(--red); }
+.sb .sideTag { background: var(--blue); }
+.opts {
+  flex: 1; display: grid;
+  grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr;
+  gap: clamp(6px, 1.2vh, 12px);
+  padding: clamp(8px, 1.6vh, 16px);
+  padding-top: clamp(18px, 3vh, 26px);
+  min-height: 0;
+}
+.opts.v4 { grid-template-columns: repeat(4, 1fr); }
+.opt {
+  position: relative;
+  font-family: "Microsoft JhengHei", sans-serif;
+  font-weight: 700;
+  font-size: clamp(14px, 3.4vh, 30px);
+  background: #fff; color: var(--ink);
+  border: 3px solid var(--ink);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; padding: 4px 8px;
+  min-height: 0; overflow: hidden;
+}
+.sa .opt { box-shadow: 0 4px 0 var(--red-dk); }
+.sb .opt { box-shadow: 0 4px 0 var(--blue-dk); }
+.opt:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink) !important; }
+.opt .key {
+  font-family: "Silkscreen", monospace; font-size: .55em;
+  color: #fff; padding: 2px 6px; flex: none;
+}
+.sa .opt .key { background: var(--red); }
+.sb .opt .key { background: var(--blue); }
+.opt.correctFlash { background: #d2f8c8; border-color: var(--grass-dk); }
+.opt.wrongFlash { animation: shake .35s ease-in-out; background: #ffd9d9; }
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); } 50% { transform: translateX(8px); } 75% { transform: translateX(-5px); }
+}
+
+/* 冷卻遮罩 */
+.cool {
+  position: absolute; inset: 0; z-index: 5;
+  display: none; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: rgba(46,34,47,.68);
+  color: #fff; font-weight: 700;
+}
+.cool.show { display: flex; }
+.cool .big { font-family: "Silkscreen", monospace; font-size: clamp(24px, 6vh, 44px); }
+.cool .sub { font-size: clamp(12px, 2.4vh, 16px); color: #c7dcd0; }
+
+/* ---------- 直向提示遮罩 ---------- */
+#rotate {
+  position: absolute; inset: 0; z-index: 50;
+  display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: var(--ink);
+  text-align: center;
+}
+#rotate.show { display: flex; }
+#rotate .ph { image-rendering: pixelated; animation: phoneTilt 1.8s ease-in-out infinite; }
+@keyframes phoneTilt {
+  0%, 35% { transform: rotate(0); }
+  60%, 100% { transform: rotate(-90deg); }
+}
+#rotate h2 { font-family: "Silkscreen", "Microsoft JhengHei", monospace; font-size: 20px; color: var(--gold); }
+#rotate p { font-size: 14px; color: #9babb2; }
+
+/* ---------- Sprite 圖鑑（驗收用） ---------- */
+#gallery {
+  display: none; padding: 18px; gap: 14px;
+  flex-wrap: wrap; justify-content: center;
+  background: #2e222f;
+}
+#gallery.show { display: flex; }
+.gcard {
+  background: #3e3546; padding: 10px 12px; text-align: center;
+  border: 1px solid #625565; border-radius: 4px;
+}
+.gcard .nm { font-size: 12px; color: #c7dcd0; margin-top: 6px; }
+.gcard .fr { font-size: 10px; color: #7f708a; }
+.gcard .sp { margin: auto; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ Mockup 控制列 ═══════════ -->
+<div id="ctrl">
+  <div class="grp"><span class="lbl">視口</span>
+    <button data-vp="667,375">667×375</button>
+    <button data-vp="812,375">812×375</button>
+    <button data-vp="932,430">932×430</button>
+    <button data-vp="1024,600">1024×600</button>
+    <button data-vp="1280,720" class="on">1280×720</button>
+    <button data-vp="1920,975">1920×1080</button>
+    <button data-vp="375,667">直向 375×667</button>
+  </div>
+  <div class="grp"><span class="lbl">模擬</span>
+    <button class="sim-a" id="simA">A 答對</button>
+    <button class="sim-b" id="simB">B 答對</button>
+    <button class="sim-a" id="simAW">A 答錯</button>
+    <button class="sim-b" id="simBW">B 答錯</button>
+    <button id="simWinA">A 直接獲勝</button>
+    <button id="simWinB">B 直接獲勝</button>
+    <button id="simReset">重置</button>
+  </div>
+  <div class="grp"><span class="lbl">繩位</span>
+    <input type="range" id="ropeSlider" min="-5" max="5" value="0" step="1">
+  </div>
+  <div class="grp">
+    <button id="galBtn">Sprite 圖鑑</button>
+  </div>
+</div>
+
+<!-- ═══════════ 視口 frame ═══════════ -->
+<div id="frameWrap">
+  <div id="frame">
+    <div id="game" class="mode-audio">
+
+      <!-- Header：back + 題型 + 比分 + 進度 -->
+      <div id="hdr">
+        <button class="pxbtn" id="backBtn">&#9664; BACK</button>
+        <select id="modeSel">
+          <option value="audio_to_english">聽音檔 → 選英文</option>
+          <option value="audio_to_chinese">聽音檔 → 選中文</option>
+          <option value="english_to_chinese">看英文 → 選中文</option>
+          <option value="chinese_to_english">看中文 → 選英文</option>
+          <option value="image_to_english">看圖 → 選英文</option>
+          <option value="cloze_to_english">例句克漏字 → 選英文</option>
+        </select>
+        <div id="score"><span class="sa" id="scoreA">0</span><span class="vs">VS</span><span class="sb" id="scoreB">0</span></div>
+        <div id="prog"><span id="progNow">1</span>/<span id="progAll">10</span></div>
+        <button class="pxbtn" id="sndBtn" title="音效開關">&#9835;</button>
+      </div>
+
+      <!-- 場景帶 -->
+      <div id="scene">
+        <div id="stage">
+          <!-- 由 JS 填入：雲、地面、勝利線、繩、旗、角色、看板 -->
+        </div>
+        <div id="banner"><div id="bannerTxt"></div><button class="pxbtn" id="againBtn">&#8635; 再玩一次</button></div>
+      </div>
+
+      <!-- 題目帶（兩隊鏡像） -->
+      <div id="qband">
+        <div class="qpanel qa" id="qpa"></div>
+        <div class="qpanel qb" id="qpb"></div>
+      </div>
+
+      <!-- 選項帶 -->
+      <div id="optband">
+        <div class="side sa">
+          <div class="sideTag">TEAM A</div>
+          <div class="opts" id="optsA"></div>
+          <div class="cool" id="coolA"><div class="big" id="coolAn">2</div><div class="sub">答錯冷卻中…</div></div>
+        </div>
+        <div class="side sb">
+          <div class="sideTag">TEAM B</div>
+          <div class="opts" id="optsB"></div>
+          <div class="cool" id="coolB"><div class="big" id="coolBn">2</div><div class="sub">答錯冷卻中…</div></div>
+        </div>
+      </div>
+
+      <!-- 直向提示 -->
+      <div id="rotate">
+        <canvas class="ph" id="phoneCv"></canvas>
+        <h2>請將裝置轉成橫向</h2>
+        <p>拔河對戰需要兩位同學左右分邊進行</p>
+        <button class="pxbtn" id="skipRotate">仍要繼續</button>
+      </div>
+
+    </div>
+    <div id="frameSize">1280×720</div>
+  </div>
+</div>
+
+<!-- ═══════════ Sprite 圖鑑 ═══════════ -->
+<div id="gallery"></div>
+
+<script>
+/* ============================================================
+   1. 調色盤（Resurrect 64 子集）
+   ============================================================ */
+const PAL = {
+  o: "#2e222f",  // 描邊 / 深色
+  h: "#3e3546",  // 頭髮
+  s: "#fdcbb0",  // 膚色
+  d: "#fca790",  // 膚色暗 / 腮紅 / 拳頭
+  w: "#ffffff",  // 白
+  u: "#625565",  // 短褲
+  y: "#f9c22b",  // 金
+  g: "#f79617",  // 金暗
+  R: "#cd683d",  // 繩
+  q: "#9e4539",  // 繩暗 / 木頭暗
+  b: "#ab947a",  // 木頭亮
+  B: "#966c6c",  // 木頭中
+  G: "#1ebc73",  // 草
+  L: "#91db69",  // 草亮
+  D: "#239063",  // 草暗
+  W: "#c7dcd0",  // 雲影
+  c: "#8fd3ff",  // 淚滴 / 天藍
+  // 隊色（渲染時依隊伍替換）
+  T: "__TEAM__",
+  t: "__TEAM_DK__",
+  // 旗色（依領先方替換）
+  F: "__FLAG__",
+  f: "__FLAG_DK__",
+};
+const TEAM = {
+  a: { T: "#e83b3b", t: "#ae2334" },
+  b: { T: "#4d9be6", t: "#4d65b4" },
+  neutral: { T: "#f9c22b", t: "#f79617" },
+};
+
+/* ============================================================
+   2. Pixel 工具：矩陣建立 / 蓋章 / 畫線 / spritesheet
+   ============================================================ */
+const CW = 24, CH = 32; // 角色 canvas 尺寸
+
+function blank(w = CW, h = CH) {
+  return Array.from({ length: h }, () => Array(w).fill("."));
+}
+function fromRows(rows) { // 字串列 → 矩陣（自動補齊/截斷，防手滑）
+  const w = Math.max(...rows.map(r => r.length));
+  return rows.map(r => (r + ".".repeat(w)).slice(0, w).split(""));
+}
+function stamp(m, part, ox, oy) {
+  for (let y = 0; y < part.length; y++)
+    for (let x = 0; x < part[y].length; x++) {
+      const ch = part[y][x];
+      if (ch === "." ) continue;
+      const ty = oy + y, tx = ox + x;
+      if (ty >= 0 && ty < m.length && tx >= 0 && tx < m[0].length) m[ty][tx] = ch;
+    }
+  return m;
+}
+function px(m, x, y, ch) { if (m[y] && m[y][x] !== undefined) m[y][x] = ch; }
+function line(m, x0, y0, x1, y1, ch, thick = 1) { // 粗略 Bresenham，畫手臂用
+  const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+  for (let i = 0; i <= steps; i++) {
+    const x = Math.round(x0 + (x1 - x0) * i / steps);
+    const y = Math.round(y0 + (y1 - y0) * i / steps);
+    for (let t = 0; t < thick; t++) px(m, x, y + t, ch);
+  }
+}
+
+// matrix → spritesheet dataURI（各幀水平排列）
+const sheetCache = new Map();
+function makeSheet(frames, overrides = {}, key = "") {
+  const ck = key + JSON.stringify(Object.keys(overrides).map(k => overrides[k]));
+  if (key && sheetCache.has(ck)) return sheetCache.get(ck);
+  const fw = frames[0][0].length, fh = frames[0].length, n = frames.length;
+  const cv = document.createElement("canvas");
+  cv.width = fw * n; cv.height = fh;
+  const ctx = cv.getContext("2d");
+  frames.forEach((f, i) => {
+    for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) {
+      const ch = f[y][x];
+      if (ch === ".") continue;
+      ctx.fillStyle = overrides[ch] || PAL[ch] || "#f0f";
+      ctx.fillRect(i * fw + x, y, 1, 1);
+    }
+  });
+  const out = { url: cv.toDataURL(), fw, fh, n };
+  if (key) sheetCache.set(ck, out);
+  return out;
+}
+
+// 建立會動的 sprite DOM 元素
+function sprEl(sheet, scale, durMs, cls = "") {
+  const el = document.createElement("div");
+  el.className = "spr " + cls + (sheet.n > 1 ? " anim" : "");
+  el.style.width = sheet.fw * scale + "px";
+  el.style.height = sheet.fh * scale + "px";
+  el.style.backgroundImage = `url(${sheet.url})`;
+  el.style.backgroundSize = `${sheet.fw * sheet.n * scale}px ${sheet.fh * scale}px`;
+  if (sheet.n > 1) {
+    el.style.setProperty("--n", sheet.n);
+    el.style.setProperty("--dur", durMs + "ms");
+    el.style.setProperty("--endx", -(sheet.fw * sheet.n * scale) + "px");
+  }
+  return el;
+}
+
+/* ============================================================
+   3. 角色部件（24×32 畫布，側面朝右；B 隊用 scaleX(-1)）
+   ============================================================ */
+// --- 側面頭（18×15）：後腦勺在左、臉朝右 ---
+const HEAD_SIDE = fromRows([
+  ".....oooooooo.....",
+  "...oohhhhhhhhoo...",
+  "..ohhhhhhhhhhhho..",
+  ".ohhhhhhhhhhhhhho.",
+  "oTTTTTTTTTTTTTTTTo",
+  "oTTTTTTTTTTTTTTTTo",
+  "ohhsssssssssssssso",
+  "ohhssssswosssswoso",
+  "ohhsssssoossssooso",
+  "ohhsssssoossssooso",
+  "ohhsddsssssssssddo",
+  "ohhssssssssoosssso",
+  ".ohssssssssssssso.",
+  "..osssssssssssso..",
+  "...ooooosssoooo...",
+]);
+// --- 正面頭（18×15）：勝利 / 落敗用 ---
+const HEAD_FRONT = fromRows([
+  ".....oooooooo.....",
+  "...oohhhhhhhhoo...",
+  "..ohhhhhhhhhhhho..",
+  ".ohhhhhhhhhhhhhho.",
+  "oTTTTTTTTTTTTTTTTo",
+  "oTTTTTTTTTTTTTTTTo",
+  "ohssssssssssssssho",
+  "ohsswosssssswossho",
+  "ohssoossssssoossho",
+  "ohssoossssssoossho",
+  "ohddssssoossssddho",
+  "ohssssssddssssssho",
+  ".ohssssssssssssho.",
+  "..osssssssssssso..",
+  "...ooooosssoooo...",
+]);
+
+// 眼睛/嘴巴替換（相對頭部的座標）
+function eyesEffort(head) { // 出力瞇眼 >_<
+  const m = head.map(r => r.slice());
+  for (const y of [7,8,9]) for (const x of [8,9,14,15]) px(m,x,y,"s");
+  [[8,8],[9,8],[14,8],[15,8]].forEach(([x,y]) => px(m,x,y,"o"));
+  // 咬牙嘴
+  [[10,11],[11,11],[12,11],[13,11]].forEach(([x,y]) => px(m,x,y,"o"));
+  return m;
+}
+function eyesX(head) { // 暈眩 X X
+  const m = head.map(r => r.slice());
+  // 清空原本眼睛
+  for (const y of [7,8,9]) for (const x of [8,9,14,15]) px(m,x,y,"s");
+  [[7,7],[9,7],[8,8],[7,9],[9,9]].forEach(([x,y]) => px(m,x,y,"o"));
+  [[13,7],[15,7],[14,8],[13,9],[15,9]].forEach(([x,y]) => px(m,x,y,"o"));
+  return m;
+}
+function eyesHappy(head) { // 勝利 ^ ^（正面頭用）
+  const m = head.map(r => r.slice());
+  for (const y of [7,8,9]) for (const x of [4,5,12,13]) px(m,x,y,"s");
+  [[3,8],[4,7],[5,8],[11,8],[12,7],[13,8]].forEach(([x,y]) => px(m,x,y,"o"));
+  return m;
+}
+function eyesSad(head) { // 落敗閉眼（正面頭用）
+  const m = head.map(r => r.slice());
+  for (const y of [7,8,9]) for (const x of [4,5,12,13]) px(m,x,y,"s");
+  [[3,8],[4,8],[5,8],[11,8],[12,8],[13,8]].forEach(([x,y]) => px(m,x,y,"o"));
+  // 嘴：小小的難過
+  px(m,8,10,"s"); px(m,9,10,"s"); px(m,8,11,"o"); px(m,9,11,"o");
+  return m;
+}
+
+// --- 身體（10×7）---
+const TORSO = fromRows([
+  "oTTTTTTTTo",
+  "oTTTTTTTTo",
+  "oTTTTTTTTo",
+  "oTTTTTTTTo",
+  "oTTTTTTTTo",
+  "oTTTTtttto",
+  "oTTTTtttto",
+]);
+// --- 站姿腿（10×7）：短褲 2 列 + 腿 + 鞋 ---
+const LEGS_STAND = fromRows([
+  "ouuuuuuuuo",
+  "ouuuuuuuuo",
+  "..ss..ss..",
+  "..ss..ss..",
+  "..ss..ss..",
+  ".oooo.oooo",
+  ".oooo.oooo",
+]);
+// --- 拉繩弓步腿（12×7）：後腳蹬地、前腳踏出 ---
+const LEGS_BRACE = fromRows([
+  "ouuuuuuuuo..",
+  "ouuuuuuuuo..",
+  ".ss.....ss..",
+  ".ss......ss.",
+  "ss........ss",
+  "ooo......ooo",
+  "ooo......ooo",
+]);
+// --- 蹲姿（10×4）：勝利起跳/落地/空中收腿 ---
+const LEGS_CROUCH = fromRows([
+  "ouuuuuuuuo",
+  "ouuuuuuuuo",
+  ".oooo.oooo",
+  ".oooo.oooo",
+]);
+
+// 手臂（直接畫進畫布）
+function armsHold(m) {   // 平持繩：拳頭在 x18-21, y20-21
+  line(m, 14, 20, 17, 20, "s", 2);
+  line(m, 18, 20, 21, 20, "d", 2);
+}
+function armsStretch(m) { // 拉伸（身體後傾、手臂拉直）
+  line(m, 11, 19, 17, 20, "s", 2);
+  line(m, 18, 20, 21, 20, "d", 2);
+}
+function armsPullIn(m) { // 猛拉收回：拳頭拉近 x16-19
+  line(m, 12, 21, 13, 19, "s", 2);
+  line(m, 14, 19, 15, 19, "s", 2);
+  line(m, 16, 19, 19, 19, "d", 2);
+}
+function armsUp(m, oy) { // 勝利舉手（oy = 肩膀高度）
+  line(m, 4, oy, 2, oy - 4, "s", 2);
+  line(m, 15, oy, 17, oy - 4, "s", 2);
+  px(m, 1, oy - 6, "d"); px(m, 2, oy - 6, "d"); px(m, 1, oy - 5, "d"); px(m, 2, oy - 5, "d");
+  px(m, 17, oy - 6, "d"); px(m, 18, oy - 6, "d"); px(m, 17, oy - 5, "d"); px(m, 18, oy - 5, "d");
+}
+function armsDroop(m, oy) { // 落敗垂手
+  line(m, 4, oy, 2, oy + 4, "s", 2);
+  line(m, 15, oy, 17, oy + 4, "s", 2);
+  px(m, 2, oy + 5, "d"); px(m, 3, oy + 5, "d");
+  px(m, 16, oy + 5, "d"); px(m, 17, oy + 5, "d");
+}
+const STAR = fromRows([".y.", "yyy", ".y."]);
+
+/* ---------- 組裝各姿勢幀 ---------- */
+function frameIdle(breath) {
+  const m = blank();
+  stamp(m, TORSO, 5, 17);
+  stamp(m, LEGS_STAND, 5, 24);
+  armsHold(m);
+  stamp(m, HEAD_SIDE, 2, 2 + breath);
+  return m;
+}
+function framePull(step) { // step: 0 微傾 / 1 深蹲後仰 / 2 猛拉
+  const m = blank();
+  if (step === 0) {
+    stamp(m, TORSO, 4, 17);
+    stamp(m, LEGS_BRACE, 4, 24);
+    armsStretch(m);
+    stamp(m, HEAD_SIDE, 1, 2);
+  } else if (step === 1) {
+    stamp(m, TORSO, 3, 18);
+    stamp(m, LEGS_BRACE, 4, 24);
+    line(m, 10, 19, 17, 20, "s", 2);
+    line(m, 18, 20, 21, 20, "d", 2);
+    stamp(m, eyesEffort(HEAD_SIDE), 0, 4);
+  } else {
+    stamp(m, TORSO, 5, 17);
+    stamp(m, LEGS_BRACE, 5, 24);
+    armsPullIn(m);
+    stamp(m, eyesEffort(HEAD_SIDE), 2, 2);
+  }
+  return m;
+}
+function frameVictory(step) { // 0 蹲 / 1 起跳 / 2 空中 / 3 落地
+  const m = blank();
+  const happy = eyesHappy(HEAD_FRONT);
+  if (step === 0) {
+    stamp(m, TORSO, 5, 21);
+    stamp(m, LEGS_CROUCH, 5, 26);
+    armsUp(m, 22);
+    stamp(m, happy, 2, 8);
+  } else if (step === 1) {
+    stamp(m, TORSO, 5, 15);
+    stamp(m, LEGS_STAND, 5, 22);
+    armsUp(m, 16);
+    stamp(m, happy, 2, 1);
+  } else if (step === 2) {
+    stamp(m, TORSO, 5, 14);
+    stamp(m, LEGS_CROUCH, 5, 20);
+    armsUp(m, 15);
+    stamp(m, happy, 2, 0);
+  } else {
+    stamp(m, TORSO, 5, 19);
+    stamp(m, LEGS_CROUCH, 5, 25);
+    armsUp(m, 20);
+    stamp(m, happy, 2, 5);
+  }
+  return m;
+}
+// 註：勝利循環 蹲(手舉)→起跳→空中→落地，手全程舉高＝節奏彈跳歡呼
+function frameDefeat(step) { // 癱坐哭泣，2 幀
+  const m = blank();
+  stamp(m, TORSO, 5, 20);
+  // 癱坐：腿往前攤
+  stamp(m, fromRows([
+    "ouuuuuuuuo",
+    "ouuuuuuuuo",
+    "oss....sso",
+    "sss....sss",
+    "ooo....ooo",
+  ]), 5, 25);
+  armsDroop(m, 21 + step);
+  stamp(m, eyesSad(HEAD_FRONT), 2, 8 + step);
+  // 淚滴（眼下臉頰）
+  px(m, 6, 19 + step * 2, "c");
+  px(m, 15, 20 + step * 2, "c");
+  return m;
+}
+function frameDizzy(step) {
+  const m = blank();
+  stamp(m, TORSO, 5, 17);
+  stamp(m, LEGS_STAND, 5, 24);
+  armsHold(m);
+  stamp(m, eyesX(HEAD_SIDE), 2, 2 + step);
+  stamp(m, STAR, step ? 14 : 4, step ? 1 : 0);
+  return m;
+}
+
+const CHAR_ANIMS = {
+  idle:    { frames: [frameIdle(0), frameIdle(1)], dur: 800 },
+  pull:    { frames: [framePull(0), framePull(1), framePull(2)], dur: 450 },
+  victory: { frames: [frameVictory(0), frameVictory(1), frameVictory(2), frameVictory(3)], dur: 640 },
+  defeat:  { frames: [frameDefeat(0), frameDefeat(1)], dur: 1200 },
+  dizzy:   { frames: [frameDizzy(0), frameDizzy(1)], dur: 500 },
+};
+
+/* ============================================================
+   4. 場景素材
+   ============================================================ */
+// 繩子 tile（8×6，3px 粗 + 斜紋）
+const ROPE_TILE = fromRows([
+  "........",
+  "RRqRRRqR",
+  "RRRRRRRR",
+  "qRRqRRqR",
+  "qqqqqqqq",
+  "........",
+]);
+// 中央結 + 三角旗（12×11，旗色 F/f 可替換）
+const FLAG = fromRows([
+  "...qRRq.....",
+  "..qRRRRq....",
+  "..qRRRRq....",
+  "...qRRq.....",
+  ".oFFFFFFFFo.",
+  ".oFFFFFFffo.",
+  "..oFFFFFfo..",
+  "..oFFFFFfo..",
+  "...oFFFfo...",
+  "....oFfo....",
+  ".....oo.....",
+]);
+// 雲（16×8 / 22×9 兩款）
+const CLOUD1 = fromRows([
+  "....wwwww.......",
+  "..wwwwwwwww.....",
+  ".wwwwwwwwwwwww..",
+  "wwwwwwwwwwwwwww.",
+  "wwwwwwwwwwwwwwww",
+  ".WWwwwwwwwwwWWW.",
+]);
+const CLOUD2 = fromRows([
+  "......wwwwww........",
+  "...wwwwwwwwwww......",
+  ".wwwwwwwwwwwwwwww...",
+  "wwwwwwwwwwwwwwwwwww.",
+  "wwwwwwwwwwwwwwwwwwww",
+  ".WWWwwwwwwwwwwwWWW..",
+]);
+// 草叢（10×6）
+const BUSH = fromRows([
+  "...GG.....",
+  ".GGGGGG...",
+  "GGLGGGGG..",
+  "GGGGGLGGG.",
+  "DGGGGGGGD.",
+]);
+
+// 勝利線標桿（10×46）：高過角色頭頂的木桿 + 隊色三角旗
+function makePole() {
+  const m = blank(10, 46);
+  for (let y = 2; y < 46; y++) { px(m, 3, y, "b"); px(m, 4, y, "q"); }
+  px(m, 3, 1, "o"); px(m, 4, 1, "o");
+  // 隊色三角旗（桿頂）
+  for (let r = 0; r < 4; r++) for (let x = 5; x < 10 - r; x++) px(m, x, 2 + r, "T");
+  px(m, 5, 6, "t");
+  return [m];
+}
+// 草地 tile（16×12）
+function makeGrass() {
+  const m = blank(16, 12);
+  for (let y = 2; y < 12; y++) for (let x = 0; x < 16; x++) px(m, x, y, "G");
+  for (let x = 0; x < 16; x++) if (x % 2 === 0) px(m, x, 1, "L");
+  [[1,3],[6,4],[11,3],[14,5],[3,7],[9,8],[13,9],[5,10]].forEach(([x,y]) => px(m, x, y, "D"));
+  [[4,3],[10,5],[2,6],[8,7],[15,8],[12,10]].forEach(([x,y]) => px(m, x, y, "L"));
+  return [m];
+}
+// 音檔懸掛看板（44×30，2 幀：靜止 / 播放中音波）
+function makeSign(playing) {
+  const m = blank(44, 30);
+  // 吊繩
+  line(m, 8, 0, 8, 5, "q"); line(m, 35, 0, 35, 5, "q");
+  // 木板
+  for (let y = 6; y < 27; y++) for (let x = 2; x < 42; x++) {
+    const edge = y === 6 || y === 26 || x === 2 || x === 41;
+    px(m, x, y, edge ? "o" : (y >= 23 ? "B" : "b"));
+  }
+  // 木紋
+  [9, 15].forEach(gy => { for (let x = 5; x < 39; x += 7) { px(m, x, gy, "B"); px(m, x + 1, gy, "B"); } });
+  // 釘子
+  [[4,8],[39,8],[4,24],[39,24]].forEach(([x,y]) => px(m, x, y, "u"));
+  // 喇叭 icon（置中偏左）
+  for (let y = 13; y < 19; y++) for (let x = 13; x < 17; x++) px(m, x, y, "o");
+  line(m, 17, 12, 20, 9, "o"); line(m, 17, 13, 20, 11, "o");
+  for (let y = 9; y < 23; y++) if (y > 8 && y < 23) { px(m, 20, y, "o"); px(m, 21, y, "o"); }
+  line(m, 17, 18, 20, 21, "o"); line(m, 17, 19, 20, 22, "o");
+  if (playing) { // 音波
+    [[25,13],[25,14],[25,17],[25,18],[28,11],[28,12],[28,15],[28,16],[28,19],[28,20],[31,9],[31,10],[31,13],[31,14],[31,17],[31,18],[31,21],[31,22]]
+      .forEach(([x,y]) => px(m, x, y, "y"));
+  } else {
+    [[25,14],[25,17],[28,12],[28,15],[28,19]].forEach(([x,y]) => px(m, x, y, "B"));
+  }
+  return m;
+}
+// 直向提示手機（20×32）
+function makePhone() {
+  const m = blank(20, 32);
+  for (let y = 2; y < 30; y++) for (let x = 4; x < 16; x++) {
+    const edge = y === 2 || y === 29 || x === 4 || x === 15;
+    px(m, x, y, edge ? "w" : "c");
+  }
+  for (let x = 8; x < 12; x++) px(m, x, 27, "w");
+  return [m];
+}
+// 示範圖片：蘋果 / 香蕉（14×14）
+const IMG_APPLE = fromRows([
+  ".......q......",
+  "......q.......",
+  "....GGq.......",
+  "..oGGGoo......",
+  ".oTTToTTTo....",
+  "oTTTTTTTTTo...",
+  "oTTwTTTTTTo...",
+  "oTwTTTTTTTo...",
+  "oTTTTTTTTTo...",
+  "oTTTTTTTTto...",
+  ".oTTTTTTto....",
+  "..oTTTTto.....",
+  "...ooooo......",
+]);
+const IMG_BANANA = fromRows([
+  "..........qq..",
+  ".........qyy..",
+  ".......yyyyg..",
+  ".....yyyyyg...",
+  "...yyyyyyg....",
+  "..yyyyyyg.....",
+  ".yyyyyyg......",
+  ".yyyyyg.......",
+  ".oyyyg........",
+  "..ooo.........",
+]);
+
+/* ============================================================
+   5. 音效（WebAudio 8-bit 風）
+   ============================================================ */
+let soundOn = true;
+let actx = null;
+function beep(freq, dur, delay = 0, type = "square", vol = 0.12) {
+  if (!soundOn) return;
+  actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+  const o = actx.createOscillator(), gn = actx.createGain();
+  o.type = type; o.frequency.value = freq;
+  gn.gain.setValueAtTime(vol, actx.currentTime + delay);
+  gn.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + delay + dur);
+  o.connect(gn); gn.connect(actx.destination);
+  o.start(actx.currentTime + delay); o.stop(actx.currentTime + delay + dur);
+}
+const sfx = {
+  word()    { beep(523, .12); beep(659, .12, .14); beep(784, .18, .28); },
+  correct() { beep(659, .09); beep(880, .09, .09); beep(1175, .16, .18); },
+  wrong()   { beep(196, .22, 0, "sawtooth"); beep(147, .3, .1, "sawtooth"); },
+  win()     { [523,659,784,1047].forEach((f,i) => beep(f, .16, i * .13)); beep(1319, .4, .55); },
+};
+
+/* ============================================================
+   6. 舞台組裝（960×280 邏輯座標，transform scale 適配）
+   ============================================================ */
+const S = 5;                 // 1 sprite px = 5 stage px
+const STAGE_W = 960, STAGE_H = 280;
+const GROUND_Y = 232;        // 地面頂
+const CHAR_TOP = GROUND_Y - 30 * S / 32 * 32; // 角色 y30 為腳底
+const WIN_SCORE = 5;
+const MAX_OFFSET = 240;      // 旗子到勝利線的位移
+
+const stage = document.getElementById("stage");
+const charEls = { a: [], b: [] };
+let flagEl = null, tugEl = null, signEl = null;
+
+function buildStage() {
+  stage.innerHTML = "";
+  // 雲（三朵，drift 動畫錯開）
+  [[CLOUD1, 60, 26, 4, 90], [CLOUD2, 420, 12, 4, 120], [CLOUD1, 760, 44, 3, 75]].forEach(([mtx, x, y, sc, spd], i) => {
+    const el = sprEl(makeSheet([mtx]), sc, 0, "cloud");
+    el.style.left = x + "px"; el.style.top = y + "px";
+    el.style.animation = `drift ${spd}s linear infinite`;
+    el.style.animationDelay = -(i * 22) + "s";
+    stage.appendChild(el);
+  });
+  // 地面
+  const g = document.createElement("div");
+  g.id = "ground";
+  const gt = makeSheet(makeGrass());
+  g.style.backgroundImage = `url(${gt.url})`;
+  g.style.backgroundSize = `${16 * 4}px ${12 * 4}px`;
+  g.style.backgroundRepeat = "repeat-x";
+  stage.appendChild(g);
+  // 草叢
+  [[30, 0], [880, 0], [200, 4], [700, 4]].forEach(([x, dy]) => {
+    const el = sprEl(makeSheet([BUSH]), 4, 0);
+    el.style.left = x + "px"; el.style.top = (GROUND_Y - 14 + dy) + "px";
+    stage.appendChild(el);
+  });
+  // 勝利線標桿（左紅右藍，高過角色頭頂）
+  const poleL = sprEl(makeSheet(makePole(), TEAM.a, "poleA"), 4, 0);
+  poleL.style.left = (480 - MAX_OFFSET - 16) + "px"; poleL.style.top = (GROUND_Y - 176) + "px";
+  stage.appendChild(poleL);
+  const poleR = sprEl(makeSheet(makePole(), TEAM.b, "poleB"), 4, 0, "flipx");
+  poleR.style.left = (480 + MAX_OFFSET - 16) + "px"; poleR.style.top = (GROUND_Y - 176) + "px";
+  stage.appendChild(poleR);
+
+  // 繩子 + 旗 + 角色的位移 wrapper
+  tugEl = document.createElement("div");
+  tugEl.id = "tug";
+  stage.appendChild(tugEl);
+
+  // 繩（tile repeat-x，貫穿全寬）
+  const ropeSheet = makeSheet([ROPE_TILE]);
+  const rope = document.createElement("div");
+  rope.className = "spr";
+  rope.style.cssText = `left:-2000px;right:-2000px;width:auto;top:${GROUND_Y - 56}px;height:${6 * S}px;` +
+    `background-image:url(${ropeSheet.url});background-size:${8 * S}px ${6 * S}px;background-repeat:repeat-x;`;
+  tugEl.appendChild(rope);
+
+  // 中央旗（結蓋在繩上，旗尾下垂）
+  flagEl = document.createElement("div");
+  flagEl.className = "spr";
+  flagEl.style.left = (480 - 6 * S) + "px";
+  flagEl.style.top = (GROUND_Y - 56) + "px";
+  flagEl.style.zIndex = 5;
+  setFlag("neutral");
+  tugEl.appendChild(flagEl);
+
+  // 角色：每隊 3 人
+  charEls.a = []; charEls.b = [];
+  [46, 138, 230].forEach((x, i) => {
+    const el = makeChar("a", "idle", i);
+    el.style.left = x + "px";
+    tugEl.appendChild(el); charEls.a.push(el);
+  });
+  [46, 138, 230].forEach((x, i) => {
+    const el = makeChar("b", "idle", i);
+    el.style.left = (STAGE_W - x - CW * S) + "px";
+    tugEl.appendChild(el); charEls.b.push(el);
+  });
+
+  // 音檔懸掛看板
+  signEl = document.createElement("div");
+  signEl.id = "sign";
+  setSign(false);
+  signEl.addEventListener("click", () => { sfx.word(); setSign(true); setTimeout(() => setSign(false), 900); });
+  stage.appendChild(signEl);
+}
+
+function makeChar(team, pose, idx) {
+  const anim = CHAR_ANIMS[pose];
+  const sh = makeSheet(anim.frames, TEAM[team], "char-" + pose);
+  const el = sprEl(sh, S, anim.dur, team === "b" ? "flipx" : "");
+  el.style.top = (GROUND_Y - 31 * S + S) + "px";
+  el.style.zIndex = 10 + idx;
+  el.style.animationDelay = -(idx * 130) + "ms"; // 三人動作錯開，較自然
+  el.dataset.team = team; el.dataset.idx = idx;
+  return el;
+}
+function setPose(team, pose) {
+  charEls[team].forEach((old, i) => {
+    const el = makeChar(team, pose, i);
+    el.style.left = old.style.left;
+    old.replaceWith(el);
+    charEls[team][i] = el;
+  });
+}
+function setFlag(lead) { // lead: 'a' | 'b' | 'neutral'
+  const c = TEAM[lead] || TEAM.neutral;
+  const sh = makeSheet([FLAG], { F: c.T, f: c.t }, "flag-" + lead);
+  flagEl.style.width = sh.fw * S + "px";
+  flagEl.style.height = sh.fh * S + "px";
+  flagEl.style.backgroundImage = `url(${sh.url})`;
+  flagEl.style.backgroundSize = `${sh.fw * S}px ${sh.fh * S}px`;
+}
+function setSign(playing) {
+  const sh = makeSheet([makeSign(playing)], {}, "sign-" + playing);
+  signEl.style.width = 44 * 4 + "px"; signEl.style.height = 30 * 4 + "px";
+  signEl.style.backgroundImage = `url(${sh.url})`;
+  signEl.style.backgroundSize = `${44 * 4}px ${30 * 4}px`;
+  signEl.style.backgroundRepeat = "no-repeat";
+  signEl.style.imageRendering = "pixelated";
+}
+
+// 舞台縮放：等比塞進場景帶
+function fitStage() {
+  const scene = document.getElementById("scene");
+  const sc = Math.min(scene.clientWidth / STAGE_W, scene.clientHeight / STAGE_H);
+  stage.style.transform = `translate(-50%,-50%) scale(${sc})`;
+}
+new ResizeObserver(fitStage).observe(document.getElementById("scene"));
+
+/* ============================================================
+   7. 遊戲模擬（簡化版 useGameLogic — 驗收動畫與版面用）
+   ============================================================ */
+const WORDS = [
+  { en: "apple", zh: "蘋果", img: IMG_APPLE, cloze: "I eat an ____ every morning." },
+  { en: "banana", zh: "香蕉", img: IMG_BANANA, cloze: "The monkey loves this yellow ____." },
+  { en: "watermelon", zh: "西瓜", cloze: "We share a big ____ in summer." },
+  { en: "grape", zh: "葡萄", cloze: "She picked a purple ____ from the vine." },
+  { en: "orange", zh: "橘子", cloze: "This ____ is juicy and sweet." },
+  { en: "peach", zh: "桃子", cloze: "Grandma's ____ pie smells great." },
+  { en: "lemon", zh: "檸檬", cloze: "Add some ____ to your tea." },
+  { en: "cherry", zh: "櫻桃", cloze: "There is a red ____ on the cake." },
+  { en: "mango", zh: "芒果", cloze: "The ____ shake is my favorite." },
+  { en: "strawberry", zh: "草莓", cloze: "Dip the ____ in chocolate." },
+];
+const game = {
+  mode: "audio_to_english",
+  qIndex: 0,
+  rope: 0,           // 負 = A 領先
+  scores: { a: 0, b: 0 },
+  cooldown: { a: false, b: false },
+  winner: null,
+  locked: false,     // 答對後過場鎖定
+};
+
+function wordPool() { // 圖片題只出有像素圖的單字
+  return isImageMode() ? WORDS.filter(w => w.img) : WORDS;
+}
+function currentWord() { const p = wordPool(); return p[game.qIndex % p.length]; }
+function isAudioMode() { return game.mode.startsWith("audio"); }
+function isImageMode() { return game.mode === "image_to_english"; }
+
+function optionsFor(word) { // 1 正解 + 3 干擾，兩隊各自洗牌
+  const useZh = game.mode.endsWith("chinese");
+  const pool = WORDS.filter(w => w !== word);
+  const distractors = [];
+  let seed = game.qIndex * 7 + 3;
+  while (distractors.length < 3) {
+    seed = (seed * 31 + 17) % pool.length;
+    if (!distractors.includes(pool[seed])) distractors.push(pool[seed]);
+  }
+  const all = [word, ...distractors].map(w => useZh ? w.zh : w.en);
+  const correct = useZh ? word.zh : word.en;
+  const shuf = (arr, s) => arr.map((v, i) => [((i + 1) * (s + 3) * 2654435761) % 1000, v])
+    .sort((a, b) => a[0] - b[0]).map(p => p[1]);
+  return { correct, a: shuf(all, game.qIndex), b: shuf(all, game.qIndex + 5) };
+}
+
+function renderQuestion() {
+  const word = currentWord();
+  const opts = optionsFor(word);
+  // 題目帶（兩隊鏡像同內容）
+  ["qpa", "qpb"].forEach(id => {
+    const p = document.getElementById(id);
+    p.innerHTML = "";
+    if (isAudioMode()) return; // 音檔題：題目帶收起（CSS 已隱藏）
+    if (isImageMode()) {
+      const box = document.createElement("div");
+      box.className = "qimgbox";
+      const sh = makeSheet([word.img || IMG_APPLE], {T: "#e83b3b", t: "#ae2334"}, "img-" + word.en);
+      const im = document.createElement("img");
+      im.src = sh.url;
+      im.className = "qimg";
+      box.appendChild(im);
+      p.appendChild(box);
+    } else if (game.mode === "english_to_chinese") {
+      p.innerHTML = `<div class="qword">${word.en}</div>`;
+    } else if (game.mode === "chinese_to_english") {
+      p.innerHTML = `<div class="qzh">${word.zh}</div>`;
+    } else if (game.mode === "cloze_to_english") {
+      p.innerHTML = `<div class="qcloze">${word.cloze.replace("____", '<span class="blank">____</span>')}</div>`;
+    }
+  });
+  // 選項
+  [["optsA", "a"], ["optsB", "b"]].forEach(([id, team]) => {
+    const box = document.getElementById(id);
+    box.innerHTML = "";
+    opts[team].forEach((txt, i) => {
+      const btn = document.createElement("button");
+      btn.className = "opt";
+      const keys = team === "a" ? ["1","2","3","4"] : ["7","8","9","0"];
+      btn.innerHTML = `<span class="key">${keys[i]}</span><span>${txt}</span>`;
+      btn.addEventListener("click", () => answer(team, txt === opts.correct, btn));
+      box.appendChild(btn);
+    });
+  });
+  document.getElementById("progNow").textContent = (game.qIndex % wordPool().length) + 1;
+  document.getElementById("progAll").textContent = wordPool().length;
+  if (isAudioMode() && !game.winner) { sfx.word(); setSign(true); setTimeout(() => setSign(false), 900); }
+}
+
+function answer(team, correct, btn) {
+  if (game.winner || game.locked || game.cooldown[team]) return;
+  if (correct) {
+    game.locked = true;
+    btn.classList.add("correctFlash");
+    sfx.correct();
+    game.scores[team]++;
+    game.rope += team === "a" ? -1 : 1;
+    updateScore(); moveRope();
+    setPose(team, "pull");
+    if (Math.abs(game.rope) >= WIN_SCORE) { setTimeout(() => declareWin(team), 700); return; }
+    setTimeout(() => {
+      setPose(team, game.cooldown[team] ? "dizzy" : "idle");
+      game.qIndex++; game.locked = false;
+      renderQuestion();
+    }, 1200);
+  } else {
+    btn.classList.add("wrongFlash");
+    sfx.wrong();
+    startCooldown(team);
+  }
+}
+
+function startCooldown(team) {
+  game.cooldown[team] = true;
+  setPose(team, "dizzy");
+  const el = document.getElementById(team === "a" ? "coolA" : "coolB");
+  const num = document.getElementById(team === "a" ? "coolAn" : "coolBn");
+  el.classList.add("show");
+  let left = 2;
+  num.textContent = left;
+  const iv = setInterval(() => {
+    left--;
+    if (left <= 0) {
+      clearInterval(iv);
+      el.classList.remove("show");
+      game.cooldown[team] = false;
+      if (!game.winner && !game.locked) setPose(team, "idle");
+    } else num.textContent = left;
+  }, 1000);
+}
+
+function moveRope() {
+  const off = (game.rope / WIN_SCORE) * MAX_OFFSET;
+  tugEl.style.transform = `translateX(${off}px)`;
+  setFlag(game.rope < 0 ? "a" : game.rope > 0 ? "b" : "neutral");
+  document.getElementById("ropeSlider").value = game.rope;
+}
+
+function updateScore() {
+  document.getElementById("scoreA").textContent = game.scores.a;
+  document.getElementById("scoreB").textContent = game.scores.b;
+}
+
+function declareWin(team) {
+  game.winner = team;
+  sfx.win();
+  setPose(team, "victory");
+  setPose(team === "a" ? "b" : "a", "defeat");
+  const bn = document.getElementById("banner");
+  const tx = document.getElementById("bannerTxt");
+  tx.textContent = team === "a" ? "紅隊獲勝！" : "藍隊獲勝！";
+  tx.className = team === "a" ? "reda" : "blueb";
+  bn.classList.add("show");
+  // 彩帶
+  const scene = document.getElementById("scene");
+  const colors = ["#e83b3b", "#4d9be6", "#f9c22b", "#1ebc73", "#f68181"];
+  for (let i = 0; i < 26; i++) {
+    const c = document.createElement("div");
+    c.className = "confetti";
+    c.style.left = (4 + ((i * 37) % 92)) + "%";
+    c.style.background = colors[i % colors.length];
+    c.style.animationDuration = (1.3 + (i % 5) * .22) + "s";
+    c.style.animationDelay = ((i % 7) * .12) + "s";
+    if (i % 3 === 0) c.style.width = c.style.height = "8px";
+    scene.appendChild(c);
+    setTimeout(() => c.remove(), 3600);
+  }
+}
+
+function resetGame(keepMode = true) {
+  game.qIndex = 0; game.rope = 0;
+  game.scores = { a: 0, b: 0 };
+  game.cooldown = { a: false, b: false };
+  game.winner = null; game.locked = false;
+  document.getElementById("banner").classList.remove("show");
+  document.getElementById("coolA").classList.remove("show");
+  document.getElementById("coolB").classList.remove("show");
+  setPose("a", "idle"); setPose("b", "idle");
+  moveRope(); updateScore(); renderQuestion();
+}
+
+function setMode(mode) {
+  game.mode = mode;
+  document.getElementById("modeSel").value = mode;
+  const g = document.getElementById("game");
+  g.className = isAudioMode() ? "mode-audio" : isImageMode() ? "mode-image" : "mode-visual";
+  resetGame();
+  fitStage();
+}
+
+/* ============================================================
+   8. Mockup 控制 & 事件
+   ============================================================ */
+document.getElementById("modeSel").addEventListener("change", e => setMode(e.target.value));
+document.getElementById("simA").addEventListener("click", () => simCorrect("a"));
+document.getElementById("simB").addEventListener("click", () => simCorrect("b"));
+document.getElementById("simAW").addEventListener("click", () => simWrong("a"));
+document.getElementById("simBW").addEventListener("click", () => simWrong("b"));
+document.getElementById("simWinA").addEventListener("click", () => { if (!game.winner) declareWin("a"); });
+document.getElementById("simWinB").addEventListener("click", () => { if (!game.winner) declareWin("b"); });
+document.getElementById("simReset").addEventListener("click", () => resetGame());
+document.getElementById("againBtn").addEventListener("click", () => resetGame());
+document.getElementById("backBtn").addEventListener("click", () => alert("(mockup) 返回上一頁"));
+document.getElementById("sndBtn").addEventListener("click", e => {
+  soundOn = !soundOn;
+  e.target.textContent = soundOn ? "♫" : "✕";
+});
+document.getElementById("ropeSlider").addEventListener("input", e => {
+  game.rope = +e.target.value; moveRope();
+});
+function simCorrect(team) {
+  const box = document.getElementById(team === "a" ? "optsA" : "optsB");
+  const word = currentWord();
+  const correct = game.mode.endsWith("chinese") ? word.zh : word.en;
+  const btn = [...box.querySelectorAll(".opt")].find(b => b.textContent.includes(correct));
+  if (btn) btn.click();
+}
+function simWrong(team) {
+  const box = document.getElementById(team === "a" ? "optsA" : "optsB");
+  const word = currentWord();
+  const correct = game.mode.endsWith("chinese") ? word.zh : word.en;
+  const btn = [...box.querySelectorAll(".opt")].find(b => !b.textContent.includes(correct));
+  if (btn) btn.click();
+}
+// 鍵盤：1-4 A隊、7890 B隊（同正式遊戲）
+document.addEventListener("keydown", e => {
+  const ka = ["1","2","3","4"], kb = ["7","8","9","0"];
+  let team = null, idx = -1;
+  if (ka.includes(e.key)) { team = "a"; idx = ka.indexOf(e.key); }
+  if (kb.includes(e.key)) { team = "b"; idx = kb.indexOf(e.key); }
+  if (!team) return;
+  const box = document.getElementById(team === "a" ? "optsA" : "optsB");
+  const btn = box.querySelectorAll(".opt")[idx];
+  if (btn) btn.click();
+});
+
+// 視口模擬
+document.querySelectorAll("[data-vp]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-vp]").forEach(b => b.classList.remove("on"));
+    btn.classList.add("on");
+    const [w, h] = btn.dataset.vp.split(",").map(Number);
+    const f = document.getElementById("frame");
+    f.style.width = w + "px"; f.style.height = h + "px";
+    document.getElementById("frameSize").textContent = `${w}×${h}`;
+    document.getElementById("rotate").classList.toggle("show", h > w);
+    requestAnimationFrame(fitStage);
+  });
+});
+document.getElementById("skipRotate").addEventListener("click", () => {
+  document.getElementById("rotate").classList.remove("show");
+});
+
+// Sprite 圖鑑
+document.getElementById("galBtn").addEventListener("click", e => {
+  const gal = document.getElementById("gallery");
+  gal.classList.toggle("show");
+  e.target.classList.toggle("on");
+  if (gal.classList.contains("show") && !gal.dataset.built) buildGallery(gal);
+});
+function buildGallery(gal) {
+  gal.dataset.built = "1";
+  const items = [];
+  for (const [name, anim] of Object.entries(CHAR_ANIMS)) {
+    items.push([`角色 ${name}（紅隊）`, makeSheet(anim.frames, TEAM.a), anim.dur, anim.frames.length]);
+  }
+  items.push(["角色 idle（藍隊·鏡像）", makeSheet(CHAR_ANIMS.idle.frames, TEAM.b), 800, 2, true]);
+  items.push(["繩段 tile", makeSheet([ROPE_TILE]), 0, 1]);
+  items.push(["中央結＋旗（金）", makeSheet([FLAG], { F: TEAM.neutral.T, f: TEAM.neutral.t }), 0, 1]);
+  items.push(["中央結＋旗（紅）", makeSheet([FLAG], { F: TEAM.a.T, f: TEAM.a.t }), 0, 1]);
+  items.push(["勝利線標桿", makeSheet(makePole(), TEAM.a), 0, 1]);
+  items.push(["雲 1", makeSheet([CLOUD1]), 0, 1]);
+  items.push(["雲 2", makeSheet([CLOUD2]), 0, 1]);
+  items.push(["草叢", makeSheet([BUSH]), 0, 1]);
+  items.push(["草地 tile", makeSheet(makeGrass()), 0, 1]);
+  items.push(["懸掛看板（靜止/播放）", makeSheet([makeSign(false), makeSign(true)]), 1000, 2]);
+  items.push(["手機（直向提示）", makeSheet(makePhone()), 0, 1]);
+  items.push(["示範圖：apple", makeSheet([IMG_APPLE], {T: "#e83b3b", t: "#ae2334"}), 0, 1]);
+  items.push(["示範圖：banana", makeSheet([IMG_BANANA]), 0, 1]);
+  items.forEach(([name, sh, dur, n, flip]) => {
+    const card = document.createElement("div");
+    card.className = "gcard";
+    const sp = sprEl(sh, 6, dur, flip ? "flipx" : "");
+    sp.classList.add("sp");
+    sp.style.position = "relative";
+    card.appendChild(sp);
+    card.insertAdjacentHTML("beforeend", `<div class="nm">${name}</div><div class="fr">${sh.fw}×${sh.fh} · ${n} 幀</div>`);
+    gal.appendChild(card);
+  });
+}
+
+/* ============================================================
+   9. 啟動
+   ============================================================ */
+buildStage();
+// 直向提示手機 canvas
+(function () {
+  const sh = makeSheet(makePhone());
+  const cv = document.getElementById("phoneCv");
+  cv.width = 20 * 5; cv.height = 32 * 5;
+  const img = new Image();
+  img.onload = () => {
+    const ctx = cv.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+  };
+  img.src = sh.url;
+})();
+setMode("audio_to_english");
+fitStage();
+
+/* URL hash 參數（截圖/分享特定狀態用）
+   例：#mode=image_to_english&vp=667x375&rope=3&win=a&gallery=1 */
+(function () {
+  const hp = new URLSearchParams(location.hash.slice(1));
+  if (hp.get("mode")) setMode(hp.get("mode"));
+  if (hp.get("vp")) {
+    const btn = [...document.querySelectorAll("[data-vp]")].find(b => b.dataset.vp === hp.get("vp").replace("x", ","));
+    if (btn) btn.click();
+  }
+  if (hp.get("rope")) { game.rope = +hp.get("rope"); moveRope(); }
+  if (hp.get("win")) declareWin(hp.get("win"));
+  if (hp.get("pull")) { setPose(hp.get("pull"), "pull"); }
+  if (hp.get("cool")) { setPose(hp.get("cool"), "dizzy"); document.getElementById(hp.get("cool") === "a" ? "coolA" : "coolB").classList.add("show"); }
+  if (hp.get("gallery")) document.getElementById("galBtn").click();
+})();
+</script>
+</body>
+</html>
