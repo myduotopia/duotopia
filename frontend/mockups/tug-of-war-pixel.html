@@ -108,6 +108,7 @@ body {
   image-rendering: pixelated;
 }
 .pxbtn:active { transform: translateY(2px); border-bottom-width: 1px; }
+.pxbtn.on { background: var(--gold); color: var(--ink); border-bottom-color: var(--gold-dk); }
 #hdr select {
   font-family: inherit; font-size: 13px;
   background: #625565; color: #fff; border: none;
@@ -371,12 +372,13 @@ body {
         <button class="pxbtn" id="backBtn">&#9664; BACK</button>
         <select id="modeSel">
           <option value="audio_to_english">聽音檔 → 選英文</option>
-          <option value="audio_to_chinese">聽音檔 → 選中文</option>
-          <option value="english_to_chinese">看英文 → 選中文</option>
-          <option value="chinese_to_english">看中文 → 選英文</option>
+          <option value="audio_to_chinese">聽音檔 → 選翻譯</option>
+          <option value="english_to_chinese">看英文 → 選翻譯</option>
+          <option value="chinese_to_english">看翻譯 → 選英文</option>
           <option value="image_to_english">看圖 → 選英文</option>
           <option value="cloze_to_english">例句克漏字 → 選英文</option>
         </select>
+        <button class="pxbtn" id="diffBtn" title="兩隊各自出不同題目">同題</button>
         <div id="score"><span class="sa" id="scoreA">0</span><span class="vs">VS</span><span class="sb" id="scoreB">0</span></div>
         <div id="prog"><span id="progNow">1</span>/<span id="progAll">10</span></div>
         <button class="pxbtn" id="sndBtn" title="音效開關">&#9835;</button>
@@ -1070,26 +1072,33 @@ const WORDS = [
 ];
 const game = {
   mode: "audio_to_english",
-  qIndex: 0,
-  rope: 0,           // 負 = A 領先
+  diff: false,             // 兩隊不同題（音檔模式不可用）
+  qi: { a: 0, b: 0 },      // 各隊題目索引（同題模式共用 qi.a）
+  rope: 0,                 // 負 = A 領先
   scores: { a: 0, b: 0 },
   cooldown: { a: false, b: false },
   winner: null,
-  locked: false,     // 答對後過場鎖定
+  locked: { a: false, b: false }, // 答對後過場鎖定（同題模式兩邊一起鎖）
 };
 
 function wordPool() { // 圖片題只出有像素圖的單字
   return isImageMode() ? WORDS.filter(w => w.img) : WORDS;
 }
-function currentWord() { const p = wordPool(); return p[game.qIndex % p.length]; }
+function qiFor(team) { return game.qi[game.diff ? team : "a"]; }
+function wordFor(team) { const p = wordPool(); return p[qiFor(team) % p.length]; }
 function isAudioMode() { return game.mode.startsWith("audio"); }
 function isImageMode() { return game.mode === "image_to_english"; }
+function isClozeMode() { return game.mode === "cloze_to_english"; }
+// 克漏字＋不同題 → 兩句例句不同，音檔不可播（正式版同規則）
+function clozeAudioAllowed() { return isClozeMode() && !game.diff; }
 
-function optionsFor(word) { // 1 正解 + 3 干擾，兩隊各自洗牌
+function optionsFor(team) { // 1 正解 + 3 干擾，依該隊題目產生
+  const word = wordFor(team);
   const useZh = game.mode.endsWith("chinese");
   const pool = WORDS.filter(w => w !== word);
+  const qidx = qiFor(team);
   const distractors = [];
-  let seed = game.qIndex * 7 + 3;
+  let seed = qidx * 7 + 3;
   while (distractors.length < 3) {
     seed = (seed * 31 + 17) % pool.length;
     if (!distractors.includes(pool[seed])) distractors.push(pool[seed]);
@@ -1098,17 +1107,16 @@ function optionsFor(word) { // 1 正解 + 3 干擾，兩隊各自洗牌
   const correct = useZh ? word.zh : word.en;
   const shuf = (arr, s) => arr.map((v, i) => [((i + 1) * (s + 3) * 2654435761) % 1000, v])
     .sort((a, b) => a[0] - b[0]).map(p => p[1]);
-  return { correct, a: shuf(all, game.qIndex), b: shuf(all, game.qIndex + 5) };
+  return { correct, opts: shuf(all, qidx + (team === "b" ? 5 : 0)) };
 }
 
-function renderQuestion() {
-  const word = currentWord();
-  const opts = optionsFor(word);
-  // 題目帶（兩隊鏡像同內容）
-  ["qpa", "qpb"].forEach(id => {
-    const p = document.getElementById(id);
-    p.innerHTML = "";
-    if (isAudioMode()) return; // 音檔題：題目帶收起（CSS 已隱藏）
+function renderSide(team) {
+  const word = wordFor(team);
+  const { correct, opts } = optionsFor(team);
+  // 題目帶（各隊自己的題目；同題模式兩邊內容相同）
+  const p = document.getElementById(team === "a" ? "qpa" : "qpb");
+  p.innerHTML = "";
+  if (!isAudioMode()) {
     if (isImageMode()) {
       const box = document.createElement("div");
       box.className = "qimgbox";
@@ -1123,31 +1131,46 @@ function renderQuestion() {
     } else if (game.mode === "chinese_to_english") {
       p.innerHTML = `<div class="qzh">${word.zh}</div>`;
     } else if (game.mode === "cloze_to_english") {
-      p.innerHTML = `<div class="qcloze">${word.cloze.replace("____", '<span class="blank">____</span>')}</div>`;
+      // 克漏字：例句挖空。（正式版：同題時循環播例句音檔＋靜音鈕；不同題時禁播音檔）
+      const audioTag = clozeAudioAllowed()
+        ? `<div style="font-size:.55em;color:#966c6c;margin-top:4px">&#128266; 例句音檔循環播放（正式版）</div>`
+        : `<div style="font-size:.55em;color:#b8ab8e;margin-top:4px">&#128263; 不同題模式：音檔停用</div>`;
+      p.innerHTML = `<div class="qcloze">${word.cloze.replace("____", '<span class="blank">____</span>')}${audioTag}</div>`;
     }
-  });
+  }
   // 選項
-  [["optsA", "a"], ["optsB", "b"]].forEach(([id, team]) => {
-    const box = document.getElementById(id);
-    box.innerHTML = "";
-    opts[team].forEach((txt, i) => {
-      const btn = document.createElement("button");
-      btn.className = "opt";
-      const keys = team === "a" ? ["1","2","3","4"] : ["7","8","9","0"];
-      btn.innerHTML = `<span class="key">${keys[i]}</span><span>${txt}</span>`;
-      btn.addEventListener("click", () => answer(team, txt === opts.correct, btn));
-      box.appendChild(btn);
-    });
+  const box = document.getElementById(team === "a" ? "optsA" : "optsB");
+  box.innerHTML = "";
+  opts.forEach((txt, i) => {
+    const btn = document.createElement("button");
+    btn.className = "opt";
+    const keys = team === "a" ? ["1","2","3","4"] : ["7","8","9","0"];
+    btn.innerHTML = `<span class="key">${keys[i]}</span><span>${txt}</span>`;
+    btn.addEventListener("click", () => answer(team, txt === correct, btn));
+    box.appendChild(btn);
   });
-  document.getElementById("progNow").textContent = (game.qIndex % wordPool().length) + 1;
-  document.getElementById("progAll").textContent = wordPool().length;
+}
+function updateProgress() {
+  const len = wordPool().length;
+  if (game.diff) {
+    document.getElementById("progNow").textContent = `A${game.qi.a % len + 1}·B${game.qi.b % len + 1}`;
+  } else {
+    document.getElementById("progNow").textContent = game.qi.a % len + 1;
+  }
+  document.getElementById("progAll").textContent = len;
+}
+function renderQuestion() {
+  renderSide("a");
+  renderSide("b");
+  updateProgress();
   if (isAudioMode() && !game.winner) { sfx.word(); setSign(true); setTimeout(() => setSign(false), 900); }
 }
 
 function answer(team, correct, btn) {
-  if (game.winner || game.locked || game.cooldown[team]) return;
+  if (game.winner || game.locked[team] || game.cooldown[team]) return;
   if (correct) {
-    game.locked = true;
+    if (game.diff) game.locked[team] = true;         // 不同題：只鎖自己這邊
+    else game.locked = { a: true, b: true };          // 同題：搶答成功，兩邊一起鎖
     btn.classList.add("correctFlash");
     sfx.correct();
     game.scores[team]++;
@@ -1156,9 +1179,15 @@ function answer(team, correct, btn) {
     setPose(team, "pull");
     if (Math.abs(game.rope) >= WIN_SCORE) { setTimeout(() => declareWin(team), 700); return; }
     setTimeout(() => {
+      if (game.winner) return;
       setPose(team, game.cooldown[team] ? "dizzy" : "idle");
-      game.qIndex++; game.locked = false;
-      renderQuestion();
+      if (game.diff) {
+        game.qi[team]++; game.locked[team] = false;
+        renderSide(team); updateProgress();           // 只換自己的題，不打擾對面
+      } else {
+        game.qi.a++; game.locked = { a: false, b: false };
+        renderQuestion();
+      }
     }, 1200);
   } else {
     btn.classList.add("wrongFlash");
@@ -1181,7 +1210,7 @@ function startCooldown(team) {
       clearInterval(iv);
       el.classList.remove("show");
       game.cooldown[team] = false;
-      if (!game.winner && !game.locked) setPose(team, "idle");
+      if (!game.winner && !game.locked[team]) setPose(team, "idle");
     } else num.textContent = left;
   }, 1000);
 }
@@ -1225,10 +1254,11 @@ function declareWin(team) {
 }
 
 function resetGame(keepMode = true) {
-  game.qIndex = 0; game.rope = 0;
+  game.qi = { a: 0, b: game.diff ? Math.floor(wordPool().length / 2) : 0 };
+  game.rope = 0;
   game.scores = { a: 0, b: 0 };
   game.cooldown = { a: false, b: false };
-  game.winner = null; game.locked = false;
+  game.winner = null; game.locked = { a: false, b: false };
   document.getElementById("banner").classList.remove("show");
   document.getElementById("coolA").classList.remove("show");
   document.getElementById("coolB").classList.remove("show");
@@ -1239,16 +1269,31 @@ function resetGame(keepMode = true) {
 function setMode(mode) {
   game.mode = mode;
   document.getElementById("modeSel").value = mode;
+  // 音檔模式共用同一段聲音，無法兩隊不同題 → 強制關閉並隱藏 switch
+  const diffBtn = document.getElementById("diffBtn");
+  if (isAudioMode()) { game.diff = false; diffBtn.style.display = "none"; }
+  else diffBtn.style.display = "";
+  syncDiffBtn();
   const g = document.getElementById("game");
   g.className = isAudioMode() ? "mode-audio" : isImageMode() ? "mode-image" : "mode-visual";
   resetGame();
   fitStage();
+}
+function syncDiffBtn() {
+  const b = document.getElementById("diffBtn");
+  b.textContent = game.diff ? "不同題" : "同題";
+  b.classList.toggle("on", game.diff);
 }
 
 /* ============================================================
    8. Mockup 控制 & 事件
    ============================================================ */
 document.getElementById("modeSel").addEventListener("change", e => setMode(e.target.value));
+document.getElementById("diffBtn").addEventListener("click", () => {
+  game.diff = !game.diff;
+  syncDiffBtn();
+  resetGame(); // 切換出題方式重新開局，避免進行中的題目狀態混亂
+});
 document.getElementById("simA").addEventListener("click", () => simCorrect("a"));
 document.getElementById("simB").addEventListener("click", () => simCorrect("b"));
 document.getElementById("simAW").addEventListener("click", () => simWrong("a"));
@@ -1267,14 +1312,14 @@ document.getElementById("ropeSlider").addEventListener("input", e => {
 });
 function simCorrect(team) {
   const box = document.getElementById(team === "a" ? "optsA" : "optsB");
-  const word = currentWord();
+  const word = wordFor(team);
   const correct = game.mode.endsWith("chinese") ? word.zh : word.en;
   const btn = [...box.querySelectorAll(".opt")].find(b => b.textContent.includes(correct));
   if (btn) btn.click();
 }
 function simWrong(team) {
   const box = document.getElementById(team === "a" ? "optsA" : "optsB");
-  const word = currentWord();
+  const word = wordFor(team);
   const correct = game.mode.endsWith("chinese") ? word.zh : word.en;
   const btn = [...box.querySelectorAll(".opt")].find(b => !b.textContent.includes(correct));
   if (btn) btn.click();
@@ -1371,6 +1416,7 @@ fitStage();
 (function () {
   const hp = new URLSearchParams(location.hash.slice(1));
   if (hp.get("mode")) setMode(hp.get("mode"));
+  if (hp.get("diff") && !isAudioMode()) { game.diff = true; syncDiffBtn(); resetGame(); }
   if (hp.get("vp")) {
     const btn = [...document.querySelectorAll("[data-vp]")].find(b => b.dataset.vp === hp.get("vp").replace("x", ","));
     if (btn) btn.click();
