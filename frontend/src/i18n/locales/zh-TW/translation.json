@@ -5364,6 +5364,8 @@
     "diffModeOff": "兩隊題目相同",
     "diffModeOn": "兩隊題目相異",
     "diffModeHint": "開啟後兩隊各出不同題目（聽音檔模式不適用）",
+    "enterFullscreen": "全螢幕",
+    "exitFullscreen": "退出全螢幕",
     "error": {
       "loadFailed": "載入單字失敗",
       "notEnoughWords": "單字數量不足（至少需要 4 個）"

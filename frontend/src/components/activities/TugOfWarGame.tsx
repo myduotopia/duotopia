@@ -19,7 +19,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, ChevronDown, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Loader2, Maximize, Minimize } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -104,19 +104,22 @@ export function TugOfWarGame({
     };
   }, []);
 
-  // Attempt fullscreen + landscape lock on mount
-  useEffect(() => {
-    const requestLandscape = async () => {
-      try {
-        await document.documentElement.requestFullscreen?.();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (screen.orientation as any)?.lock?.("landscape");
-      } catch {
-        // Not supported — rely on rotate overlay
-      }
-    };
-    requestLandscape();
+  // 全螢幕狀態（供 header 切換鈕顯示 enter/exit icon）
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
+  const enterFullscreen = useCallback(async () => {
+    try {
+      await document.documentElement.requestFullscreen?.();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (screen.orientation as any)?.lock?.("landscape");
+    } catch {
+      // Not supported / rejected — fixed 100dvh overlay 仍滿版，靠 rotate overlay 提示轉向
+    }
+  }, []);
+
+  // Attempt fullscreen + landscape lock on mount（成功更好，失敗靠 fixed 覆蓋層 + 切換鈕）
+  useEffect(() => {
+    enterFullscreen();
     return () => {
       document.exitFullscreen?.().catch(() => {});
       try {
@@ -125,7 +128,23 @@ export function TugOfWarGame({
         // Ignore
       }
     };
+  }, [enterFullscreen]);
+
+  // 追蹤全螢幕變化（使用者按 Esc 退出後，切換鈕才能反映狀態並讓其一鍵重進）
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    onChange();
+    return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    } else {
+      enterFullscreen();
+    }
+  }, [enterFullscreen]);
 
   // Fetch vocabulary items
   useEffect(() => {
@@ -201,6 +220,12 @@ export function TugOfWarGame({
   // 克漏字 + 兩隊題目相異：音檔停用，強制在題目下方顯示例句翻譯補償
   const showClozeTranslation =
     gameState.showSentenceTranslation || (isClozeMode && gameState.diffMode);
+  // 長選項（如英英釋義）→ 給選項帶更多高度（整局為準，換題型才變，避免每題跳動）
+  const maxOptionLen = gameState.questions.reduce((mx, q) => {
+    const local = q.options.reduce((m, o) => Math.max(m, o.length), 0);
+    return Math.max(mx, local);
+  }, 0);
+  const hasLongOption = maxOptionLen > 14;
 
   // Auto-start when vocab loads
   useEffect(() => {
@@ -256,12 +281,25 @@ export function TugOfWarGame({
     );
   }
 
-  // Root grid rows：音檔題無題目帶（場景/選項各半）；圖片題題目帶加高；其餘三等分
+  // Root grid rows（第一列 auto = header，其後 場景/題目/選項）。依題型把空間讓給重點區塊；
+  // 靠 fixed 100dvh + overflow-hidden 保證三帶一屏可見、永不卷軸。
   const gridTemplateRows = audioOnly
-    ? "auto 1fr 1fr"
+    ? // 音檔題：無題目帶，選項帶較大
+      hasLongOption
+      ? "auto 0.8fr 1.4fr"
+      : "auto 1fr 1.2fr"
     : isImageMode
-      ? "auto 0.66fr 1.35fr 1fr"
-      : "auto 1fr 1fr 1fr";
+      ? // 圖片題：題目帶加高放圖
+        "auto 0.6fr 1.4fr 1fr"
+      : isClozeMode
+        ? // 克漏字：題目帶中等放例句，選項帶略大
+          hasLongOption
+          ? "auto 0.7fr 0.95fr 1.35fr"
+          : "auto 0.75fr 1fr 1.25fr"
+        : // 純單字題（看英文/看翻譯）：題目只有一個詞 → 選項帶加高
+          hasLongOption
+          ? "auto 0.8fr 0.65fr 1.55fr"
+          : "auto 0.85fr 0.7fr 1.45fr";
 
   // 遊戲結束後各隊答對的單字清單（去重）
   const historyFor = (team: Team) =>
@@ -326,7 +364,7 @@ export function TugOfWarGame({
 
   return (
     <div
-      className="grid h-full w-full overflow-hidden bg-[#c7ecff]"
+      className="fixed inset-0 z-50 grid h-[100dvh] w-screen overflow-hidden bg-[#c7ecff]"
       style={{ gridTemplateRows }}
     >
       {/* Fonts + shared pixel styles */}
@@ -457,6 +495,24 @@ export function TugOfWarGame({
             ? `A${progress}·B${progressB}/${totalQuestions}`
             : `${progress}/${totalQuestions}`}
         </div>
+
+        {/* 全螢幕切換（Esc 退出後可一鍵重進；瀏覽器限制需使用者手勢） */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={toggleFullscreen}
+          className="h-8 w-8 p-0 text-white hover:bg-white/10 hover:text-white"
+          title={t(
+            isFullscreen ? "tugOfWar.exitFullscreen" : "tugOfWar.enterFullscreen",
+            isFullscreen ? "退出全螢幕" : "全螢幕",
+          )}
+        >
+          {isFullscreen ? (
+            <Minimize className="h-4 w-4" />
+          ) : (
+            <Maximize className="h-4 w-4" />
+          )}
+        </Button>
       </div>
 
       {/* Band 1: 場景動畫（全寬） */}

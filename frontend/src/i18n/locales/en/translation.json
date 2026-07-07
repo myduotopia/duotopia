@@ -5320,6 +5320,8 @@
     "diffModeOff": "Same questions",
     "diffModeOn": "Different questions",
     "diffModeHint": "Each team gets different questions (not for audio modes)",
+    "enterFullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
     "error": {
       "loadFailed": "Failed to load vocabulary",
       "notEnoughWords": "Not enough words (minimum 4 required)"

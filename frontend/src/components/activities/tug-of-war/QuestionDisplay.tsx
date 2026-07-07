@@ -34,12 +34,13 @@ export function QuestionDisplay({
   if (question.hasImage) {
     const imageUrl = question.vocabItem.image_url;
     return (
-      <div className="flex h-full items-center justify-center px-2">
+      <div className="flex h-full items-center justify-center overflow-hidden p-1">
         {imageUrl ? (
+          // 無框；等比縮放、寬高雙向受限 → 不過大、寬度自動配合高度
           <img
             src={imageUrl}
             alt=""
-            className="h-full max-h-full w-auto rounded-lg border-4 border-[#2e222f] object-contain shadow-[4px_4px_0_rgba(46,34,47,0.25)]"
+            className="h-auto w-auto max-h-[92%] max-w-full object-contain"
           />
         ) : (
           <span className="handwrite-font text-3xl font-bold md:text-4xl">
