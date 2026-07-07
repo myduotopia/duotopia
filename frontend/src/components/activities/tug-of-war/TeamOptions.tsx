@@ -103,10 +103,10 @@ export function TeamOptions({
           : "handwrite-font text-xl sm:text-2xl";
 
   return (
-    <div className="flex flex-col gap-2 relative w-full">
-      {/* Options grid — 2x2 default, 1x4 when text is long */}
+    <div className="flex flex-col gap-2 relative w-full h-full min-h-0">
+      {/* Options grid — 2x2 default, 1x4 when text is long；填滿帶高 */}
       <div
-        className={`grid ${useVertical ? "grid-cols-1" : "grid-cols-2"} gap-2`}
+        className={`grid ${useVertical ? "grid-cols-1" : "grid-cols-2"} gap-2 flex-1 min-h-0 auto-rows-fr`}
       >
         {options.map((option, index) => (
           <button
@@ -114,14 +114,14 @@ export function TeamOptions({
             onClick={() => !disabled && !isCooldown && onSelect(team, option)}
             disabled={disabled || isCooldown}
             className={`
-              relative flex ${showImages ? "flex-col items-center" : "items-start"} gap-2 px-3 py-2 rounded-lg border-2 text-left
-              transition-all duration-150
+              relative flex ${showImages ? "flex-col items-center justify-center" : "items-center"} min-h-0 gap-2 px-2 py-1 sm:px-3 sm:py-2 rounded-lg border-[3px] text-center overflow-hidden
+              transition-all duration-150 active:translate-y-[2px]
               ${
                 disabled || isCooldown
                   ? "opacity-50 cursor-not-allowed border-gray-300 bg-gray-100 dark:bg-gray-800 dark:border-gray-600"
                   : teamColor === "blue"
-                    ? "bg-white border-blue-300 hover:border-blue-500 hover:bg-blue-50 active:bg-blue-100 dark:bg-gray-900 dark:border-blue-700 dark:hover:border-blue-500 dark:hover:bg-blue-950"
-                    : "bg-white border-red-300 hover:border-red-500 hover:bg-red-50 active:bg-red-100 dark:bg-gray-900 dark:border-red-700 dark:hover:border-red-500 dark:hover:bg-red-950"
+                    ? "bg-white border-[#4d9be6] shadow-[0_4px_0_#4d65b4] hover:bg-blue-50 active:bg-blue-100 dark:bg-gray-900"
+                    : "bg-white border-[#e83b3b] shadow-[0_4px_0_#ae2334] hover:bg-red-50 active:bg-red-100 dark:bg-gray-900"
               }
             `}
           >
@@ -147,7 +147,7 @@ export function TeamOptions({
                   <img
                     src={item.image_url}
                     alt=""
-                    className="w-full h-20 rounded object-cover"
+                    className="w-full min-h-0 flex-1 rounded object-contain"
                   />
                 ) : null;
               })()}

@@ -5317,6 +5317,9 @@
     "imagesModeRequirement": "Requires at least 4 words with images",
     "clozeModeRequirement": "Requires at least 4 words with example sentences",
     "showSentenceTranslation": "Show sentence translation",
+    "diffModeOff": "Same questions",
+    "diffModeOn": "Different questions",
+    "diffModeHint": "Each team gets different questions (not for audio modes)",
     "error": {
       "loadFailed": "Failed to load vocabulary",
       "notEnoughWords": "Not enough words (minimum 4 required)"

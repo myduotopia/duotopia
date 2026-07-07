@@ -97,16 +97,3 @@ vi.mock("lottie-react", () => ({
   default: () => null,
   useLottie: () => ({ View: null, play: vi.fn(), pause: vi.fn() }),
 }));
-
-// phaser 在 module load 時呼叫 canvas API，jsdom 不支援
-vi.mock("phaser", () => ({
-  default: {
-    Game: class {
-      destroy() {}
-    },
-    Scene: class {},
-    AUTO: 0,
-    Scale: { FIT: 0, CENTER_BOTH: 0 },
-    Math: { Between: () => 0 },
-  },
-}));

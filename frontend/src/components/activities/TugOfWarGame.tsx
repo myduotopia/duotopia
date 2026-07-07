@@ -1,8 +1,15 @@
 /**
- * TugOfWarGame - 拔河遊戲主元件
+ * TugOfWarGame - 拔河遊戲主元件（issue #920：像素風重繪 + 全寬三帶響應式版面）
  *
  * 2 人同螢幕對戰的單字選擇遊戲。純前端，不寫入資料庫。
- * 透過 assignment API 取得單字資料後，遊戲邏輯全在前端。
+ * 透過 assignment API 取得單字資料後，遊戲邏輯全在前端（useGameLogic）。
+ * 對戰動畫改用 DOM/CSS 像素 sprite（PixelTugStage，取代舊 Phaser 層）。
+ *
+ * 版面（強制橫向）：
+ *   Header（back / 題型 / 同題·不同題 / 比分 / 進度）
+ *   ├─ 場景帶：PixelTugStage（全寬，音檔題含中央懸掛看板）
+ *   ├─ 題目帶：兩隊各一份（聽音檔題收起，改由看板承載音檔）
+ *   └─ 選項帶：AB 兩隊
  *
  * Props:
  * - assignmentId: 用來 fetch 單字列表
@@ -10,9 +17,9 @@
  * - onComplete: 遊戲結束/關閉時的回調
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { X, ChevronDown, Loader2, RotateCcw, Smartphone } from "lucide-react";
+import { ArrowLeft, ChevronDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -21,12 +28,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { apiClient } from "@/lib/api";
-import { useGameLogic } from "./tug-of-war/useGameLogic";
+import { useGameLogic, isAudioOnlyMode } from "./tug-of-war/useGameLogic";
+import { useQuestionAudio } from "./tug-of-war/useQuestionAudio";
 import { QuestionDisplay } from "./tug-of-war/QuestionDisplay";
 import { TeamOptions } from "./tug-of-war/TeamOptions";
-import { TugOfWarScene } from "@/games/tug-of-war/TugOfWarScene";
-import type { TugOfWarState } from "@/games/tug-of-war/TugOfWarScene";
-import type { VocabItem, QuestionMode } from "./tug-of-war/types";
+import { PixelTugStage } from "./tug-of-war/pixel/PixelTugStage";
+import { RotateOverlay } from "./tug-of-war/pixel/RotateOverlay";
+import type { VocabItem, QuestionMode, Team, Question } from "./tug-of-war/types";
 import { DEFAULT_GAME_CONFIG } from "./tug-of-war/types";
 
 interface TugOfWarGameProps {
@@ -56,6 +64,14 @@ const QUESTION_MODES: { value: QuestionMode; labelKey: string }[] = [
   { value: "cloze_to_english", labelKey: "tugOfWar.modes.clozeToEnglish" },
 ];
 
+// 這些題型正解為英文 → 選項用手寫字體
+const HANDWRITE_MODES: QuestionMode[] = [
+  "audio_to_english",
+  "chinese_to_english",
+  "image_to_english",
+  "cloze_to_english",
+];
+
 export function TugOfWarGame({
   assignmentId,
   isPreviewMode = false,
@@ -71,8 +87,8 @@ export function TugOfWarGame({
     width: typeof window !== "undefined" ? window.innerWidth : 1024,
     height: typeof window !== "undefined" ? window.innerHeight : 768,
   });
-  // Show rotate prompt when portrait OR viewport too narrow for three-column layout
-  const isPortrait = viewport.height > viewport.width || viewport.width < 768;
+  // 兩人左右分邊對戰 → 純直向才提示轉向（版面已流動化，窄橫屏可直接玩）
+  const isPortrait = viewport.height > viewport.width;
   const [portraitDismissed, setPortraitDismissed] = useState(false);
 
   // Viewport size tracking
@@ -153,13 +169,21 @@ export function TugOfWarGame({
   const {
     gameState,
     currentQuestion,
+    currentQuestionA,
+    currentQuestionB,
+    answeredA,
+    answeredB,
+    pullA,
+    pullB,
     totalQuestions,
     winScore,
     progress,
+    progressB,
     winner,
     answerHistory,
     startGame,
     changeMode,
+    setDiffMode,
     handleAnswer,
     toggleSentenceTranslation,
     toggleAudioMute,
@@ -168,7 +192,15 @@ export function TugOfWarGame({
   const hasEnoughImages = vocabItems.filter((v) => !!v.image_url).length >= 4;
   const hasEnoughSentences =
     vocabItems.filter((v) => !!v.example_sentence).length >= 4;
-  const isClozeMode = gameState.questionMode === "cloze_to_english";
+  const mode = gameState.questionMode;
+  const isClozeMode = mode === "cloze_to_english";
+  const isImageMode = mode === "image_to_english";
+  const audioOnly = isAudioOnlyMode(mode);
+  const effectiveShowImages = showImages && !isImageMode;
+  const useHandwriteFont = HANDWRITE_MODES.includes(mode);
+  // 克漏字 + 兩隊題目相異：音檔停用，強制在題目下方顯示例句翻譯補償
+  const showClozeTranslation =
+    gameState.showSentenceTranslation || (isClozeMode && gameState.diffMode);
 
   // Auto-start when vocab loads
   useEffect(() => {
@@ -177,12 +209,12 @@ export function TugOfWarGame({
     }
   }, [vocabItems, gameState.gameStatus, startGame]);
 
-  const handleModeChange = useCallback(
-    (mode: QuestionMode) => {
-      changeMode(mode);
-    },
-    [changeMode],
-  );
+  // 音檔集中播放：只有同題（非 diffMode）且該題有音檔時啟用；由懸掛看板承載
+  const audioActive = !gameState.diffMode && !!currentQuestion?.hasAudio;
+  useQuestionAudio(currentQuestion, {
+    enabled: audioActive && !answeredA,
+    muted: gameState.audioMuted,
+  });
 
   const handleClose = useCallback(() => {
     document.exitFullscreen?.().catch(() => {});
@@ -197,68 +229,6 @@ export function TugOfWarGame({
   const handleRestart = useCallback(() => {
     startGame(gameState.questionMode);
   }, [startGame, gameState.questionMode]);
-
-  const isAnswered = gameState.answeredBy !== null;
-  const isImageMode = gameState.questionMode === "image_to_english";
-  const effectiveShowImages = showImages && !isImageMode;
-
-  // Phaser game instance - must be before any early returns
-  const phaserContainerRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const phaserGameRef = useRef<any>(null);
-
-  // Init Phaser (lazy-loaded to avoid ~1MB in main bundle)
-  useEffect(() => {
-    if (!phaserContainerRef.current || phaserGameRef.current) return;
-    if (loading || error) return;
-
-    let destroyed = false;
-    import("phaser").then(({ default: Phaser }) => {
-      if (destroyed || !phaserContainerRef.current) return;
-
-      const game = new Phaser.Game({
-        type: Phaser.AUTO,
-        width: 350,
-        height: 300,
-        parent: phaserContainerRef.current,
-        transparent: false,
-        scene: [TugOfWarScene],
-        scale: {
-          mode: Phaser.Scale.FIT,
-          autoCenter: Phaser.Scale.CENTER_BOTH,
-        },
-      });
-      phaserGameRef.current = game;
-    });
-
-    return () => {
-      destroyed = true;
-      if (phaserGameRef.current) {
-        phaserGameRef.current.destroy(true);
-        phaserGameRef.current = null;
-      }
-    };
-  }, [loading, error]);
-
-  // Sync React state → Phaser scene
-  useEffect(() => {
-    const game = phaserGameRef.current;
-    if (!game) return;
-    const scene = game.scene.getScene("TugOfWarScene");
-    if (!scene) return;
-
-    const state: TugOfWarState = {
-      ropePosition: gameState.ropePosition,
-      maxPosition: totalQuestions,
-      winScore,
-      lastCorrectTeam: gameState.lastCorrectTeam,
-      isPaused: isAnswered,
-      teamACooldown: gameState.teamACooldown,
-      teamBCooldown: gameState.teamBCooldown,
-      winner: winner,
-    };
-    scene.data.set("state", state);
-  }, [gameState, totalQuestions, isAnswered]);
 
   if (loading) {
     return (
@@ -286,69 +256,135 @@ export function TugOfWarGame({
     );
   }
 
-  return (
-    <div className="w-full h-full overflow-hidden px-2 py-2 flex flex-col gap-2">
-      {/* Portrait orientation overlay */}
-      {isPortrait && !portraitDismissed && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white">
-          <Smartphone className="h-16 w-16 mb-4 rotate-90" />
-          <p className="text-lg font-medium">{t("tugOfWar.rotateDevice")}</p>
-          <p className="text-sm text-white/60 mt-2">
-            {t("tugOfWar.rotateDeviceHint")}
-          </p>
-          <Button
-            variant="ghost"
-            className="mt-6 text-white/70 hover:text-white hover:bg-white/10"
-            onClick={() => setPortraitDismissed(true)}
-          >
-            {t("tugOfWar.continueAnyway", "繼續遊玩")}
-          </Button>
-        </div>
-      )}
+  // Root grid rows：音檔題無題目帶（場景/選項各半）；圖片題題目帶加高；其餘三等分
+  const gridTemplateRows = audioOnly
+    ? "auto 1fr 1fr"
+    : isImageMode
+      ? "auto 0.66fr 1.35fr 1fr"
+      : "auto 1fr 1fr 1fr";
 
-      {/* CSS for game fonts */}
+  // 遊戲結束後各隊答對的單字清單（去重）
+  const historyFor = (team: Team) =>
+    answerHistory
+      .filter((r) => r.team === team)
+      .filter(
+        (r, i, arr) =>
+          arr.findIndex(
+            (x) => x.question.vocabItem.id === r.question.vocabItem.id,
+          ) === i,
+      );
+
+  const renderSide = (
+    team: Team,
+    question: Question | null,
+    disabled: boolean,
+    isCooldown: boolean,
+  ) => {
+    if (question) {
+      return (
+        <TeamOptions
+          team={team}
+          options={team === "a" ? question.optionsA : question.optionsB}
+          onSelect={handleAnswer}
+          disabled={disabled}
+          isCooldown={isCooldown}
+          cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
+          teamLabel={t(team === "a" ? "tugOfWar.teamA" : "tugOfWar.teamB")}
+          showImages={effectiveShowImages}
+          vocabItems={vocabItems}
+          useHandwriteFont={useHandwriteFont}
+        />
+      );
+    }
+    if (winner) {
+      const isA = team === "a";
+      return (
+        <div className="grid grid-cols-1 gap-2 w-full overflow-y-auto content-start">
+          {historyFor(team).map((r, i) => (
+            <div
+              key={i}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${
+                isA ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"
+              }`}
+            >
+              <span
+                className={`font-bold ${isA ? "text-red-600" : "text-blue-600"}`}
+              >
+                {r.question.vocabItem.text}
+              </span>
+              <span className="text-gray-400">-</span>
+              <span className="text-gray-600">
+                {r.question.vocabItem.translation}
+              </span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div
+      className="grid h-full w-full overflow-hidden bg-[#c7ecff]"
+      style={{ gridTemplateRows }}
+    >
+      {/* Fonts + shared pixel styles */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Silkscreen&family=Patrick+Hand&display=swap');
         .pixel-font { font-family: 'Silkscreen', monospace; }
         .handwrite-font { font-family: 'Patrick Hand', cursive; letter-spacing: 0.05em; }
       `}</style>
 
+      {/* Portrait rotate overlay */}
+      {isPortrait && !portraitDismissed && (
+        <RotateOverlay
+          title={t("tugOfWar.rotateDevice")}
+          hint={t("tugOfWar.rotateDeviceHint")}
+          continueLabel={t("tugOfWar.continueAnyway", "繼續遊玩")}
+          onContinue={() => setPortraitDismissed(true)}
+        />
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2 flex-wrap bg-[#2e222f] px-2 py-1.5 min-h-[44px]">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleClose}
+          className="pixel-font gap-1 text-white hover:bg-white/10 hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {t("common.back")}
+        </Button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="gap-1 pixel-font">
               {t(
-                QUESTION_MODES.find((m) => m.value === gameState.questionMode)
-                  ?.labelKey || "",
+                QUESTION_MODES.find((m) => m.value === mode)?.labelKey || "",
               )}
               <ChevronDown className="h-3 w-3" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="bg-white dark:bg-gray-900 border shadow-lg">
-            {QUESTION_MODES.map((mode) => {
+            {QUESTION_MODES.map((m) => {
               const isDisabled =
-                (mode.value === "image_to_english" && !hasEnoughImages) ||
-                (mode.value === "cloze_to_english" && !hasEnoughSentences);
+                (m.value === "image_to_english" && !hasEnoughImages) ||
+                (m.value === "cloze_to_english" && !hasEnoughSentences);
               const disabledTitle =
-                mode.value === "image_to_english"
-                  ? t(
-                      "tugOfWar.imagesModeRequirement",
-                      "需要至少 4 個單字有圖片",
-                    )
-                  : mode.value === "cloze_to_english"
-                    ? t(
-                        "tugOfWar.clozeModeRequirement",
-                        "需要至少 4 個單字有例句",
-                      )
+                m.value === "image_to_english"
+                  ? t("tugOfWar.imagesModeRequirement", "需要至少 4 個單字有圖片")
+                  : m.value === "cloze_to_english"
+                    ? t("tugOfWar.clozeModeRequirement", "需要至少 4 個單字有例句")
                     : undefined;
               return (
                 <DropdownMenuItem
-                  key={mode.value}
-                  onClick={() => !isDisabled && handleModeChange(mode.value)}
+                  key={m.value}
+                  onClick={() => !isDisabled && changeMode(m.value)}
                   disabled={isDisabled}
                   className={
-                    mode.value === gameState.questionMode
+                    m.value === mode
                       ? "bg-amber-50"
                       : isDisabled
                         ? "opacity-40 cursor-not-allowed"
@@ -356,28 +392,44 @@ export function TugOfWarGame({
                   }
                   title={isDisabled ? disabledTitle : undefined}
                 >
-                  {t(mode.labelKey)}
+                  {t(m.labelKey)}
                 </DropdownMenuItem>
               );
             })}
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <label
-          className={`flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none ${isImageMode || isClozeMode ? "opacity-40 pointer-events-none" : ""}`}
-        >
-          <input
-            type="checkbox"
-            checked={showImages}
-            onChange={(e) => setShowImages(e.target.checked)}
-            disabled={isImageMode || isClozeMode}
-            className="rounded border-gray-300"
-          />
-          {t("tugOfWar.showImages")}
-        </label>
+        {/* 兩隊不同題 switch（聽音檔模式不提供） */}
+        {!audioOnly && (
+          <Button
+            variant={gameState.diffMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => setDiffMode(!gameState.diffMode)}
+            className={`pixel-font ${gameState.diffMode ? "bg-amber-400 text-[#2e222f] hover:bg-amber-500" : ""}`}
+            title={t("tugOfWar.diffModeHint", "開啟後兩隊各出不同題目")}
+          >
+            {gameState.diffMode
+              ? t("tugOfWar.diffModeOn", "不同題")
+              : t("tugOfWar.diffModeOff", "同題")}
+          </Button>
+        )}
 
+        {/* 顯示圖片（圖片題/克漏字停用） */}
+        {!isImageMode && !isClozeMode && (
+          <label className="flex items-center gap-1.5 text-xs text-white/80 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showImages}
+              onChange={(e) => setShowImages(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            {t("tugOfWar.showImages")}
+          </label>
+        )}
+
+        {/* 克漏字：顯示例句翻譯 */}
         {isClozeMode && (
-          <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-xs text-white/80 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={gameState.showSentenceTranslation}
@@ -388,184 +440,82 @@ export function TugOfWarGame({
           </label>
         )}
 
-        <div className="pixel-font text-sm text-gray-500">
-          {progress} / {totalQuestions}
-        </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleClose}
-          className="h-8 w-8 p-0"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {/* Score display */}
-      <div className="flex items-center justify-center gap-6">
-        <div className="text-center">
-          <span className="pixel-font text-sm text-red-500">
-            {t("tugOfWar.teamA")}
-          </span>
-          <span className="pixel-font text-2xl font-bold text-red-500 ml-2">
+        {/* 比分 */}
+        <div className="flex flex-1 items-center justify-center gap-3 pixel-font">
+          <span className="text-lg font-bold text-[#f68181]">
             {gameState.scores.a}
           </span>
-        </div>
-        <span className="text-gray-300 pixel-font">vs</span>
-        <div className="text-center">
-          <span className="pixel-font text-2xl font-bold text-blue-500 mr-2">
+          <span className="text-xs text-gray-400">VS</span>
+          <span className="text-lg font-bold text-[#8fd3ff]">
             {gameState.scores.b}
           </span>
-          <span className="pixel-font text-sm text-blue-500">
-            {t("tugOfWar.teamB")}
-          </span>
+        </div>
+
+        {/* 進度 */}
+        <div className="pixel-font text-xs text-gray-400 whitespace-nowrap">
+          {gameState.diffMode
+            ? `A${progress}·B${progressB}/${totalQuestions}`
+            : `${progress}/${totalQuestions}`}
         </div>
       </div>
 
-      {/* Cloze sentence banner — only shown in cloze mode, sits between score row and game area */}
-      {isClozeMode && currentQuestion && currentQuestion.hasCloze && (
-        <div className="flex flex-col items-center gap-1 px-4 py-2">
-          <span className="text-2xl md:text-3xl font-semibold leading-snug text-gray-800 text-center">
-            {currentQuestion.clozeSentence}
-          </span>
-          {gameState.showSentenceTranslation &&
-            currentQuestion.clozeTranslation && (
-              <span className="text-base md:text-lg text-gray-600 text-center">
-                {currentQuestion.clozeTranslation}
-              </span>
-            )}
-        </div>
-      )}
+      {/* Band 1: 場景動畫（全寬） */}
+      <div className="relative min-h-0">
+        <PixelTugStage
+          ropePosition={gameState.ropePosition}
+          winScore={winScore}
+          pullA={pullA}
+          pullB={pullB}
+          teamACooldown={gameState.teamACooldown}
+          teamBCooldown={gameState.teamBCooldown}
+          winner={winner}
+          showSign={audioActive}
+          onSignClick={toggleAudioMute}
+          onReplay={handleRestart}
+          teamAWinsLabel={t("tugOfWar.result.teamAWins")}
+          teamBWinsLabel={t("tugOfWar.result.teamBWins")}
+          drawLabel={t("tugOfWar.result.draw")}
+          replayLabel={t("tugOfWar.result.playAgain")}
+        />
+      </div>
 
-      {/* Game area: three-column layout, fills remaining parent space */}
-      <div className="flex gap-3 items-stretch flex-1 min-h-0">
-        {/* Team A — left */}
-        <div className="flex-1 min-w-[180px] p-2 flex items-center overflow-y-auto">
-          {currentQuestion ? (
-            <TeamOptions
-              team="a"
-              options={currentQuestion.optionsA}
-              onSelect={handleAnswer}
-              disabled={isAnswered}
-              isCooldown={gameState.teamACooldown}
-              cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
-              teamLabel={t("tugOfWar.teamA")}
-              showImages={effectiveShowImages}
-              vocabItems={vocabItems}
-              useHandwriteFont={
-                gameState.questionMode === "audio_to_english" ||
-                gameState.questionMode === "chinese_to_english" ||
-                gameState.questionMode === "image_to_english" ||
-                gameState.questionMode === "cloze_to_english"
-              }
-            />
-          ) : winner && answerHistory.length > 0 ? (
-            <div className="grid grid-cols-1 gap-2 w-full">
-              {answerHistory
-                .filter((r) => r.team === "a")
-                .filter(
-                  (r, i, arr) =>
-                    arr.findIndex(
-                      (x) =>
-                        x.question.vocabItem.id === r.question.vocabItem.id,
-                    ) === i,
-                )
-                .map((r, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm"
-                  >
-                    <span className="font-bold text-red-600">
-                      {r.question.vocabItem.text}
-                    </span>
-                    <span className="text-gray-400">-</span>
-                    <span className="text-gray-600">
-                      {r.question.vocabItem.translation}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          ) : null}
-        </div>
-
-        {/* Canvas center — question + animation */}
-        <div className="w-[350px] flex-shrink-0 self-stretch rounded-xl overflow-hidden bg-sky-100 flex flex-col items-center">
-          {/* Question — normal flow, pushes canvas down */}
-          {currentQuestion && (
-            <div className="py-2">
+      {/* Band 2: 題目帶（兩隊各一份；聽音檔題收起） */}
+      {!audioOnly && (
+        <div className="grid grid-cols-2 min-h-0 border-t-4 border-[#2e222f] bg-[#fdf6e3]">
+          <div className="min-h-0 border-r-2 border-dashed border-[#b8ab8e]">
+            {currentQuestionA && (
               <QuestionDisplay
-                question={currentQuestion}
-                showPrompt={!isAnswered}
-                audioMuted={gameState.audioMuted}
-                onToggleMute={toggleAudioMute}
+                question={currentQuestionA}
+                showPrompt={!answeredA}
+                showSentenceTranslation={showClozeTranslation}
               />
-            </div>
-          )}
-          {/* Phaser canvas + replay */}
-          <div className="relative w-full flex-1 flex items-center justify-center">
-            <div ref={phaserContainerRef} className="w-full" />
-            {winner && (
-              <button
-                onClick={handleRestart}
-                className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 p-2 rounded-full hover:scale-110 transition-transform cursor-pointer"
-              >
-                <RotateCcw
-                  className="h-10 w-10 text-white drop-shadow-md"
-                  strokeWidth={3}
-                />
-              </button>
+            )}
+          </div>
+          <div className="min-h-0">
+            {currentQuestionB && (
+              <QuestionDisplay
+                question={currentQuestionB}
+                showPrompt={!answeredB}
+                showSentenceTranslation={showClozeTranslation}
+              />
             )}
           </div>
         </div>
+      )}
 
-        {/* Team B — right */}
-        <div className="flex-1 min-w-[180px] p-2 flex items-center overflow-y-auto">
-          {currentQuestion ? (
-            <TeamOptions
-              team="b"
-              options={currentQuestion.optionsB}
-              onSelect={handleAnswer}
-              disabled={isAnswered}
-              isCooldown={gameState.teamBCooldown}
-              cooldownMs={DEFAULT_GAME_CONFIG.cooldownMs}
-              teamLabel={t("tugOfWar.teamB")}
-              showImages={effectiveShowImages}
-              vocabItems={vocabItems}
-              useHandwriteFont={
-                gameState.questionMode === "audio_to_english" ||
-                gameState.questionMode === "chinese_to_english" ||
-                gameState.questionMode === "image_to_english" ||
-                gameState.questionMode === "cloze_to_english"
-              }
-            />
-          ) : winner && answerHistory.length > 0 ? (
-            <div className="grid grid-cols-1 gap-2 w-full">
-              {answerHistory
-                .filter((r) => r.team === "b")
-                .filter(
-                  (r, i, arr) =>
-                    arr.findIndex(
-                      (x) =>
-                        x.question.vocabItem.id === r.question.vocabItem.id,
-                    ) === i,
-                )
-                .map((r, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-sm"
-                  >
-                    <span className="font-bold text-blue-600">
-                      {r.question.vocabItem.text}
-                    </span>
-                    <span className="text-gray-400">-</span>
-                    <span className="text-gray-600">
-                      {r.question.vocabItem.translation}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          ) : null}
+      {/* Band 3: 選項帶（AB 兩隊） */}
+      <div className="grid grid-cols-2 min-h-0 border-t-4 border-[#2e222f]">
+        <div className="relative flex min-h-0 flex-col bg-gradient-to-b from-[#f9d9d3] to-[#f6c3bc] p-2 pt-5">
+          <span className="pixel-font absolute left-2 top-1 z-[2] bg-[#e83b3b] px-2 py-0.5 text-[11px] tracking-wide text-white">
+            {t("tugOfWar.teamA")}
+          </span>
+          {renderSide("a", currentQuestionA, answeredA, gameState.teamACooldown)}
+        </div>
+        <div className="relative flex min-h-0 flex-col border-l-4 border-[#2e222f] bg-gradient-to-b from-[#d3e8f9] to-[#bcd9f6] p-2 pt-5">
+          <span className="pixel-font absolute left-2 top-1 z-[2] bg-[#4d9be6] px-2 py-0.5 text-[11px] tracking-wide text-white">
+            {t("tugOfWar.teamB")}
+          </span>
+          {renderSide("b", currentQuestionB, answeredB, gameState.teamBCooldown)}
         </div>
       </div>
     </div>
