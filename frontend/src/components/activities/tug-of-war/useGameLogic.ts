@@ -219,7 +219,12 @@ export function useGameLogic(
   const transitionTimerB = useRef<ReturnType<typeof setTimeout> | null>(null); // team B (diff mode)
 
   const clearAllTimers = useCallback(() => {
-    for (const t of [cooldownTimerA, cooldownTimerB, transitionTimer, transitionTimerB]) {
+    for (const t of [
+      cooldownTimerA,
+      cooldownTimerB,
+      transitionTimer,
+      transitionTimerB,
+    ]) {
       if (t.current) {
         clearTimeout(t.current);
         t.current = null;
@@ -233,7 +238,9 @@ export function useGameLogic(
   const startGame = useCallback(
     (mode: QuestionMode = "audio_to_english") => {
       clearAllTimers();
-      setGameState((prev) => buildGameState(prev, vocabItems, mode, prev.diffMode));
+      setGameState((prev) =>
+        buildGameState(prev, vocabItems, mode, prev.diffMode),
+      );
     },
     [vocabItems, clearAllTimers],
   );
@@ -241,7 +248,9 @@ export function useGameLogic(
   const changeMode = useCallback(
     (mode: QuestionMode) => {
       clearAllTimers();
-      setGameState((prev) => buildGameState(prev, vocabItems, mode, prev.diffMode));
+      setGameState((prev) =>
+        buildGameState(prev, vocabItems, mode, prev.diffMode),
+      );
     },
     [vocabItems, clearAllTimers],
   );

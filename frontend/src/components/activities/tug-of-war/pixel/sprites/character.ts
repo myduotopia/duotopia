@@ -64,28 +64,67 @@ function cloneMatrix(m: PixelMatrix): PixelMatrix {
 function eyesEffort(head: PixelMatrix): PixelMatrix {
   const m = cloneMatrix(head);
   for (const y of [7, 8, 9]) for (const x of [8, 9, 14, 15]) px(m, x, y, "s");
-  [[8, 8], [9, 8], [14, 8], [15, 8]].forEach(([x, y]) => px(m, x, y, "o"));
-  [[10, 11], [11, 11], [12, 11], [13, 11]].forEach(([x, y]) => px(m, x, y, "o")); // 咬牙
+  [
+    [8, 8],
+    [9, 8],
+    [14, 8],
+    [15, 8],
+  ].forEach(([x, y]) => px(m, x, y, "o"));
+  [
+    [10, 11],
+    [11, 11],
+    [12, 11],
+    [13, 11],
+  ].forEach(([x, y]) => px(m, x, y, "o")); // 咬牙
   return m;
 }
 function eyesX(head: PixelMatrix): PixelMatrix {
   const m = cloneMatrix(head);
   for (const y of [7, 8, 9]) for (const x of [8, 9, 14, 15]) px(m, x, y, "s");
-  [[7, 7], [9, 7], [8, 8], [7, 9], [9, 9]].forEach(([x, y]) => px(m, x, y, "o"));
-  [[13, 7], [15, 7], [14, 8], [13, 9], [15, 9]].forEach(([x, y]) => px(m, x, y, "o"));
+  [
+    [7, 7],
+    [9, 7],
+    [8, 8],
+    [7, 9],
+    [9, 9],
+  ].forEach(([x, y]) => px(m, x, y, "o"));
+  [
+    [13, 7],
+    [15, 7],
+    [14, 8],
+    [13, 9],
+    [15, 9],
+  ].forEach(([x, y]) => px(m, x, y, "o"));
   return m;
 }
 function eyesHappy(head: PixelMatrix): PixelMatrix {
   const m = cloneMatrix(head);
   for (const y of [7, 8, 9]) for (const x of [4, 5, 12, 13]) px(m, x, y, "s");
-  [[3, 8], [4, 7], [5, 8], [11, 8], [12, 7], [13, 8]].forEach(([x, y]) => px(m, x, y, "o"));
+  [
+    [3, 8],
+    [4, 7],
+    [5, 8],
+    [11, 8],
+    [12, 7],
+    [13, 8],
+  ].forEach(([x, y]) => px(m, x, y, "o"));
   return m;
 }
 function eyesSad(head: PixelMatrix): PixelMatrix {
   const m = cloneMatrix(head);
   for (const y of [7, 8, 9]) for (const x of [4, 5, 12, 13]) px(m, x, y, "s");
-  [[3, 8], [4, 8], [5, 8], [11, 8], [12, 8], [13, 8]].forEach(([x, y]) => px(m, x, y, "o"));
-  px(m, 8, 10, "s"); px(m, 9, 10, "s"); px(m, 8, 11, "o"); px(m, 9, 11, "o"); // 難過嘴
+  [
+    [3, 8],
+    [4, 8],
+    [5, 8],
+    [11, 8],
+    [12, 8],
+    [13, 8],
+  ].forEach(([x, y]) => px(m, x, y, "o"));
+  px(m, 8, 10, "s");
+  px(m, 9, 10, "s");
+  px(m, 8, 11, "o");
+  px(m, 9, 11, "o"); // 難過嘴
   return m;
 }
 
@@ -142,14 +181,22 @@ function armsPullIn(m: PixelMatrix): void {
 function armsUp(m: PixelMatrix, oy: number): void {
   line(m, 4, oy, 2, oy - 4, "s", 2);
   line(m, 15, oy, 17, oy - 4, "s", 2);
-  px(m, 1, oy - 6, "d"); px(m, 2, oy - 6, "d"); px(m, 1, oy - 5, "d"); px(m, 2, oy - 5, "d");
-  px(m, 17, oy - 6, "d"); px(m, 18, oy - 6, "d"); px(m, 17, oy - 5, "d"); px(m, 18, oy - 5, "d");
+  px(m, 1, oy - 6, "d");
+  px(m, 2, oy - 6, "d");
+  px(m, 1, oy - 5, "d");
+  px(m, 2, oy - 5, "d");
+  px(m, 17, oy - 6, "d");
+  px(m, 18, oy - 6, "d");
+  px(m, 17, oy - 5, "d");
+  px(m, 18, oy - 5, "d");
 }
 function armsDroop(m: PixelMatrix, oy: number): void {
   line(m, 4, oy, 2, oy + 4, "s", 2);
   line(m, 15, oy, 17, oy + 4, "s", 2);
-  px(m, 2, oy + 5, "d"); px(m, 3, oy + 5, "d");
-  px(m, 16, oy + 5, "d"); px(m, 17, oy + 5, "d");
+  px(m, 2, oy + 5, "d");
+  px(m, 3, oy + 5, "d");
+  px(m, 16, oy + 5, "d");
+  px(m, 17, oy + 5, "d");
 }
 
 // ---- 姿勢幀組裝 ----
@@ -246,7 +293,12 @@ export const CHAR_ANIMS: Record<CharPose, CharAnim> = {
   idle: { frames: [frameIdle(0), frameIdle(1)], dur: 800 },
   pull: { frames: [framePull(0), framePull(1), framePull(2)], dur: 450 },
   victory: {
-    frames: [frameVictory(0), frameVictory(1), frameVictory(2), frameVictory(3)],
+    frames: [
+      frameVictory(0),
+      frameVictory(1),
+      frameVictory(2),
+      frameVictory(3),
+    ],
     dur: 640,
   },
   defeat: { frames: [frameDefeat(0), frameDefeat(1)], dur: 1200 },

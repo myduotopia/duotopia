@@ -35,7 +35,8 @@ export function stamp(
       if (ch === ".") continue;
       const ty = oy + y;
       const tx = ox + x;
-      if (ty >= 0 && ty < m.length && tx >= 0 && tx < m[0].length) m[ty][tx] = ch;
+      if (ty >= 0 && ty < m.length && tx >= 0 && tx < m[0].length)
+        m[ty][tx] = ch;
     }
   }
   return m;

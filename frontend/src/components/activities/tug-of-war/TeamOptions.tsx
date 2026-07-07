@@ -56,9 +56,12 @@ function OptionButton({
   // 選錯即時回饋：點到非正解 → 短暫紅標（隨後冷卻覆蓋層接手）
   const [wrongFlash, setWrongFlash] = useState(false);
   const wrongTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (wrongTimer.current) clearTimeout(wrongTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (wrongTimer.current) clearTimeout(wrongTimer.current);
+    },
+    [],
+  );
 
   // 手寫字型較細長 → 上限給大一點；量測框把長字縮到塞得下、完整不截斷
   const { fontSize, ready } = useShrinkToFit(textRef, {

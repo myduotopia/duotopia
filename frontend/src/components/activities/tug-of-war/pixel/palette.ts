@@ -47,7 +47,10 @@ export const PAL: Record<string, string> = {
 };
 
 /** 隊色（渲染角色時套用；neutral 用於平手旗）。 */
-export const TEAM_COLORS: Record<"a" | "b" | "neutral", { T: string; t: string }> = {
+export const TEAM_COLORS: Record<
+  "a" | "b" | "neutral",
+  { T: string; t: string }
+> = {
   a: { T: "#e83b3b", t: "#ae2334" },
   b: { T: "#4d9be6", t: "#4d65b4" },
   neutral: { T: "#f9c22b", t: "#f79617" },

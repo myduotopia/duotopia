@@ -43,7 +43,8 @@ export function makePole(): PixelMatrix[] {
   }
   px(m, 3, 1, "o");
   px(m, 4, 1, "o");
-  for (let r = 0; r < 4; r++) for (let x = 5; x < 10 - r; x++) px(m, x, 2 + r, "T");
+  for (let r = 0; r < 4; r++)
+    for (let x = 5; x < 10 - r; x++) px(m, x, 2 + r, "T");
   px(m, 5, 6, "t");
   return [m];
 }
@@ -53,8 +54,24 @@ export function makeGrass(): PixelMatrix[] {
   const m = blank(16, 12);
   for (let y = 2; y < 12; y++) for (let x = 0; x < 16; x++) px(m, x, y, "G");
   for (let x = 0; x < 16; x++) if (x % 2 === 0) px(m, x, 1, "L");
-  [[1, 3], [6, 4], [11, 3], [14, 5], [3, 7], [9, 8], [13, 9], [5, 10]].forEach(([x, y]) => px(m, x, y, "D"));
-  [[4, 3], [10, 5], [2, 6], [8, 7], [15, 8], [12, 10]].forEach(([x, y]) => px(m, x, y, "L"));
+  [
+    [1, 3],
+    [6, 4],
+    [11, 3],
+    [14, 5],
+    [3, 7],
+    [9, 8],
+    [13, 9],
+    [5, 10],
+  ].forEach(([x, y]) => px(m, x, y, "D"));
+  [
+    [4, 3],
+    [10, 5],
+    [2, 6],
+    [8, 7],
+    [15, 8],
+    [12, 10],
+  ].forEach(([x, y]) => px(m, x, y, "L"));
   return [m];
 }
 

@@ -19,7 +19,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, ChevronDown, Loader2, Maximize, Minimize } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  Loader2,
+  Maximize,
+  Minimize,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -34,7 +40,12 @@ import { QuestionDisplay } from "./tug-of-war/QuestionDisplay";
 import { TeamOptions, isLongOption } from "./tug-of-war/TeamOptions";
 import { PixelTugStage } from "./tug-of-war/pixel/PixelTugStage";
 import { RotateOverlay } from "./tug-of-war/pixel/RotateOverlay";
-import type { VocabItem, QuestionMode, Team, Question } from "./tug-of-war/types";
+import type {
+  VocabItem,
+  QuestionMode,
+  Team,
+  Question,
+} from "./tug-of-war/types";
 import { DEFAULT_GAME_CONFIG } from "./tug-of-war/types";
 
 interface TugOfWarGameProps {
@@ -401,9 +412,7 @@ export function TugOfWarGame({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="gap-1 pixel-font">
-              {t(
-                QUESTION_MODES.find((m) => m.value === mode)?.labelKey || "",
-              )}
+              {t(QUESTION_MODES.find((m) => m.value === mode)?.labelKey || "")}
               <ChevronDown className="h-3 w-3" />
             </Button>
           </DropdownMenuTrigger>
@@ -414,9 +423,15 @@ export function TugOfWarGame({
                 (m.value === "cloze_to_english" && !hasEnoughSentences);
               const disabledTitle =
                 m.value === "image_to_english"
-                  ? t("tugOfWar.imagesModeRequirement", "需要至少 4 個單字有圖片")
+                  ? t(
+                      "tugOfWar.imagesModeRequirement",
+                      "需要至少 4 個單字有圖片",
+                    )
                   : m.value === "cloze_to_english"
-                    ? t("tugOfWar.clozeModeRequirement", "需要至少 4 個單字有例句")
+                    ? t(
+                        "tugOfWar.clozeModeRequirement",
+                        "需要至少 4 個單字有例句",
+                      )
                     : undefined;
               return (
                 <DropdownMenuItem
@@ -512,7 +527,9 @@ export function TugOfWarGame({
           onClick={toggleFullscreen}
           className="h-8 w-8 p-0 text-white hover:bg-white/10 hover:text-white"
           title={t(
-            isFullscreen ? "tugOfWar.exitFullscreen" : "tugOfWar.enterFullscreen",
+            isFullscreen
+              ? "tugOfWar.exitFullscreen"
+              : "tugOfWar.enterFullscreen",
             isFullscreen ? "退出全螢幕" : "全螢幕",
           )}
         >
@@ -574,13 +591,23 @@ export function TugOfWarGame({
           <span className="pixel-font absolute left-2 top-1 z-[2] bg-[#e83b3b] px-2 py-0.5 text-[11px] tracking-wide text-white">
             {t("tugOfWar.teamA")}
           </span>
-          {renderSide("a", currentQuestionA, answeredA, gameState.teamACooldown)}
+          {renderSide(
+            "a",
+            currentQuestionA,
+            answeredA,
+            gameState.teamACooldown,
+          )}
         </div>
         <div className="relative flex min-h-0 flex-col border-l-4 border-[#2e222f] bg-gradient-to-b from-[#d3e8f9] to-[#bcd9f6] p-2 pt-5">
           <span className="pixel-font absolute left-2 top-1 z-[2] bg-[#4d9be6] px-2 py-0.5 text-[11px] tracking-wide text-white">
             {t("tugOfWar.teamB")}
           </span>
-          {renderSide("b", currentQuestionB, answeredB, gameState.teamBCooldown)}
+          {renderSide(
+            "b",
+            currentQuestionB,
+            answeredB,
+            gameState.teamBCooldown,
+          )}
         </div>
       </div>
     </div>

@@ -22,7 +22,9 @@ export default function TugOfWarSample() {
 
   const pull = (team: Team) => {
     const next =
-      team === "a" ? Math.max(rope - 1, -WIN_SCORE) : Math.min(rope + 1, WIN_SCORE);
+      team === "a"
+        ? Math.max(rope - 1, -WIN_SCORE)
+        : Math.min(rope + 1, WIN_SCORE);
     setRope(next);
     if (team === "a") {
       setPullA(true);

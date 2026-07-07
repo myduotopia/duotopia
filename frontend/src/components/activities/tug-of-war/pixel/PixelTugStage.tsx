@@ -18,13 +18,7 @@ import { TEAM_COLORS } from "./palette";
 import { makeSheet, spriteStyle, PLAY_KEYFRAME } from "./renderSprite";
 import { CHAR_W, type CharPose } from "./sprites/character";
 import { PixelCharacter } from "./PixelCharacter";
-import {
-  CLOUD1,
-  CLOUD2,
-  BUSH,
-  makeGrass,
-  makePole,
-} from "./sprites/scenery";
+import { CLOUD1, CLOUD2, BUSH, makeGrass, makePole } from "./sprites/scenery";
 import { ROPE_TILE, FLAG } from "./sprites/ropeFlag";
 import { makeSign } from "./sprites/sign";
 
@@ -105,8 +99,16 @@ export function PixelTugStage(props: PixelTugStageProps) {
       poleA: makeSheet(makePole(), TEAM_COLORS.a, "poleA"),
       poleB: makeSheet(makePole(), TEAM_COLORS.b, "poleB"),
       rope: makeSheet([ROPE_TILE], {}, "rope"),
-      flagA: makeSheet([FLAG], { F: TEAM_COLORS.a.T, f: TEAM_COLORS.a.t }, "flagA"),
-      flagB: makeSheet([FLAG], { F: TEAM_COLORS.b.T, f: TEAM_COLORS.b.t }, "flagB"),
+      flagA: makeSheet(
+        [FLAG],
+        { F: TEAM_COLORS.a.T, f: TEAM_COLORS.a.t },
+        "flagA",
+      ),
+      flagB: makeSheet(
+        [FLAG],
+        { F: TEAM_COLORS.b.T, f: TEAM_COLORS.b.t },
+        "flagB",
+      ),
       flagN: makeSheet(
         [FLAG],
         { F: TEAM_COLORS.neutral.T, f: TEAM_COLORS.neutral.t },
@@ -191,14 +193,21 @@ export function PixelTugStage(props: PixelTugStageProps) {
             right: -2000,
             bottom: 0,
             height: 48,
-            backgroundImage: scenery.grass.url ? `url(${scenery.grass.url})` : undefined,
+            backgroundImage: scenery.grass.url
+              ? `url(${scenery.grass.url})`
+              : undefined,
             backgroundSize: `${16 * SCENE_S}px ${12 * SCENE_S}px`,
             backgroundRepeat: "repeat-x",
             imageRendering: "pixelated",
           }}
         />
         {/* 草叢 */}
-        {[[30, 0], [880, 0], [200, 4], [700, 4]].map(([x, dy], i) => (
+        {[
+          [30, 0],
+          [880, 0],
+          [200, 4],
+          [700, 4],
+        ].map(([x, dy], i) => (
           <div
             key={i}
             style={{
@@ -246,7 +255,9 @@ export function PixelTugStage(props: PixelTugStageProps) {
               right: -2000,
               top: GROUND_Y - 56,
               height: 6 * S,
-              backgroundImage: scenery.rope.url ? `url(${scenery.rope.url})` : undefined,
+              backgroundImage: scenery.rope.url
+                ? `url(${scenery.rope.url})`
+                : undefined,
               backgroundSize: `${8 * S}px ${6 * S}px`,
               backgroundRepeat: "repeat-x",
               imageRendering: "pixelated",
@@ -335,9 +346,16 @@ export function PixelTugStage(props: PixelTugStageProps) {
                     ? "border-[#8fd3ff] text-[#8fd3ff]"
                     : "border-white text-white"
               }`}
-              style={{ fontSize: "clamp(22px, 6vh, 46px)", boxShadow: "0 6px 0 rgba(0,0,0,.4)" }}
+              style={{
+                fontSize: "clamp(22px, 6vh, 46px)",
+                boxShadow: "0 6px 0 rgba(0,0,0,.4)",
+              }}
             >
-              {winner === "a" ? teamAWinsLabel : winner === "b" ? teamBWinsLabel : drawLabel}
+              {winner === "a"
+                ? teamAWinsLabel
+                : winner === "b"
+                  ? teamBWinsLabel
+                  : drawLabel}
             </div>
             {onReplay && (
               <button

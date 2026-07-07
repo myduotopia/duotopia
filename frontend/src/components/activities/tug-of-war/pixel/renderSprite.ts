@@ -25,7 +25,11 @@ export function makeSheet(
   cacheKey = "",
 ): SpriteSheet {
   const ck = cacheKey
-    ? cacheKey + "|" + Object.keys(overrides).map((k) => overrides[k]).join(",")
+    ? cacheKey +
+      "|" +
+      Object.keys(overrides)
+        .map((k) => overrides[k])
+        .join(",")
     : "";
   if (ck && sheetCache.has(ck)) return sheetCache.get(ck) as SpriteSheet;
 
@@ -87,7 +91,8 @@ export function spriteStyle(
   };
   if (sheet.n > 1 && durMs > 0) {
     style.animation = `${PLAY_KEYFRAME} ${durMs}ms steps(${sheet.n}) infinite`;
-    (style as Record<string, string | number>)["--tow-endx"] = `${-sheet.fw * sheet.n * scale}px`;
+    (style as Record<string, string | number>)["--tow-endx"] =
+      `${-sheet.fw * sheet.n * scale}px`;
   }
   return style;
 }
