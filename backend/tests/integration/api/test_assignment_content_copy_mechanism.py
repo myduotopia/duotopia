@@ -289,6 +289,88 @@ class TestAssignmentContentCopy:
 
         db.close()
 
+    def test_create_assignment_copies_program_id_for_program_direct_content(
+        self, test_data
+    ):
+        """Issue #917: 直接掛在 program 底下的頂層內容（lesson_id=NULL, program_id 有值）
+        建作業時，Content 副本必須帶上 program_id。
+
+        若漏帶 program_id，副本 lesson_id 與 program_id 皆為 NULL，違反 Postgres
+        CHECK 約束 ck_contents_lesson_or_program，正式站回 500（前端誤報為 CORS）。
+        SQLite 不強制該 CHECK，因此改以「副本是否帶上 program_id」的行為斷言把關。
+        """
+        db = TestingSessionLocal()
+
+        # 建立「頂層 program 內容」：lesson_id=None、program_id 指向 program
+        program_direct = Content(
+            id=2,
+            lesson_id=None,
+            program_id=1,
+            title="頂層單字集",
+            type=ContentType.EXAMPLE_SENTENCES,
+            order_index=1,
+            is_active=True,
+            is_assignment_copy=False,
+        )
+        db.add(program_direct)
+        db.commit()
+
+        db.add(
+            ContentItem(
+                id=2,
+                content_id=2,
+                order_index=1,
+                text="apple",
+                translation="蘋果",
+                audio_url="https://example.com/audio2.mp3",
+            )
+        )
+        db.commit()
+        db.close()
+
+        token = get_auth_token()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = client.post(
+            "/api/teachers/assignments/create",
+            headers=headers,
+            json={
+                "title": "頂層內容作業",
+                "description": "測試描述",
+                "classroom_id": 1,
+                "content_ids": [2],
+                "student_ids": [1],
+                "due_date": (datetime.now(timezone.utc).isoformat()),
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assignment_id = response.json()["assignment_id"]
+
+        db = TestingSessionLocal()
+        assignment_contents = (
+            db.query(AssignmentContent)
+            .filter(AssignmentContent.assignment_id == assignment_id)
+            .all()
+        )
+        content_ids = [ac.content_id for ac in assignment_contents]
+        copy_content = (
+            db.query(Content)
+            .filter(
+                Content.id.in_(content_ids),
+                Content.is_assignment_copy.is_(True),
+            )
+            .first()
+        )
+
+        assert copy_content is not None
+        assert copy_content.source_content_id == 2
+        # 核心斷言：副本帶上 program_id、lesson_id 維持 None
+        assert copy_content.program_id == 1
+        assert copy_content.lesson_id is None
+
+        db.close()
+
     def test_template_modification_does_not_affect_assignment(self, test_data):
         """測試：修改模板不會影響已派發的作業"""
         token = get_auth_token()

@@ -387,6 +387,11 @@ async def create_assignment(
         # 複製 Content
         content_copy = Content(
             lesson_id=original_content.lesson_id,
+            # Issue #587 / #917: carry program_id so program-direct content
+            # (lesson_id=NULL) doesn't violate the ck_contents_lesson_or_program
+            # CHECK constraint. Without this the copy has lesson_id=NULL AND
+            # program_id=NULL → 500 (surfaced in the browser as a CORS error).
+            program_id=original_content.program_id,
             type=original_content.type,
             title=original_content.title,
             order_index=original_content.order_index,
