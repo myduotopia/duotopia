@@ -6,7 +6,7 @@
  * 支援兩種出題方式（issue #920）：
  * - 同題模式（預設）：兩隊看同一題，搶答成功者得分、雙方一起進下一題。
  * - 不同題模式（diffMode）：兩隊各有獨立題目流，各自作答互不干擾。
- *   聽音檔模式強制關閉（共用聲音無法對應兩題）。
+ *   聽音檔（共用聲音）與圖片題（共用置中大圖）強制關閉，維持同題。
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
@@ -65,6 +65,11 @@ export function hasWordAudio(item: VocabItem): boolean {
 /** 聽音檔模式（強制同題；其餘模式可開不同題）。 */
 export function isAudioOnlyMode(mode: QuestionMode): boolean {
   return mode === "audio_to_english" || mode === "audio_to_chinese";
+}
+
+/** 強制兩隊同題的題型：聽音檔（共用聲音）、圖片題（共用置中大圖）。 */
+export function forcesSameQuestion(mode: QuestionMode): boolean {
+  return isAudioOnlyMode(mode) || mode === "image_to_english";
 }
 
 function generateQuestions(
@@ -181,8 +186,8 @@ function buildGameState(
   wantDiff: boolean,
 ): GameState {
   const questions = generateQuestions(vocabItems, mode);
-  // 聽音檔模式強制同題
-  const diffMode = wantDiff && !isAudioOnlyMode(mode);
+  // 聽音檔、圖片題強制同題
+  const diffMode = wantDiff && !forcesSameQuestion(mode);
   const questionsB = diffMode ? generateQuestions(vocabItems, mode) : questions;
   return {
     questions,

@@ -8,8 +8,8 @@
  * 版面（強制橫向）：
  *   Header（back / 題型 / 同題·不同題 / 比分 / 進度）
  *   ├─ 場景帶：PixelTugStage（全寬，音檔題含中央懸掛看板）
- *   ├─ 題目帶：兩隊各一份（聽音檔題收起，改由看板承載音檔）
- *   └─ 選項帶：AB 兩隊
+ *   ├─ 題目帶：兩隊各一份（聽音檔題、圖片題收起）
+ *   └─ 選項帶：AB 兩隊；圖片題改三欄「A 選項 ┃ 置中大圖 ┃ B 選項」（強制同題）
  *
  * Props:
  * - assignmentId: 用來 fetch 單字列表
@@ -37,6 +37,7 @@ import { apiClient } from "@/lib/api";
 import {
   useGameLogic,
   isAudioOnlyMode,
+  forcesSameQuestion,
   hasValidCloze,
   hasWordAudio,
 } from "./tug-of-war/useGameLogic";
@@ -310,8 +311,8 @@ export function TugOfWarGame({
     ? // 音檔題：無題目帶，選項帶吃剩餘
       "auto 1fr 1.2fr"
     : isImageMode
-      ? // 圖片題：題目帶（圖）多、選項帶少
-        "auto 1fr 0.75fr 0.45fr"
+      ? // 圖片題：無題目帶（圖移入選項帶中欄），場景 + 三欄選項帶
+        "auto 1fr 1.2fr"
       : isClozeMode
         ? // 克漏字：題目帶（例句）中等、選項帶略大
           hasLongOption
@@ -470,8 +471,8 @@ export function TugOfWarGame({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* 兩隊不同題 switch（聽音檔模式不提供） */}
-        {!audioOnly && (
+        {/* 兩隊不同題 switch（聽音檔、圖片題強制同題 → 不提供） */}
+        {!forcesSameQuestion(mode) && (
           <Button
             variant={gameState.diffMode ? "default" : "outline"}
             size="sm"
@@ -572,8 +573,8 @@ export function TugOfWarGame({
         />
       </div>
 
-      {/* Band 2: 題目帶（兩隊各一份；聽音檔題收起） */}
-      {!audioOnly && (
+      {/* Band 2: 題目帶（兩隊各一份；聽音檔題、圖片題收起） */}
+      {!audioOnly && !isImageMode && (
         <div className="grid grid-cols-2 min-h-0 border-t-4 border-[#2e222f] bg-[#fdf6e3]">
           <div className="min-h-0 border-r-2 border-dashed border-[#b8ab8e]">
             {currentQuestionA && (
@@ -596,8 +597,14 @@ export function TugOfWarGame({
         </div>
       )}
 
-      {/* Band 3: 選項帶（AB 兩隊） */}
-      <div className="grid grid-cols-2 min-h-0 border-t-4 border-[#2e222f]">
+      {/* Band 3: 選項帶（AB 兩隊）。圖片題插入置中大圖成三欄，其餘題型維持兩欄 */}
+      <div
+        className={`grid min-h-0 border-t-4 border-[#2e222f] ${
+          isImageMode
+            ? "grid-cols-[minmax(0,1fr)_minmax(160px,32%)_minmax(0,1fr)]"
+            : "grid-cols-2"
+        }`}
+      >
         <div className="relative flex min-h-0 flex-col bg-gradient-to-b from-[#f9d9d3] to-[#f6c3bc] p-2 pt-5">
           <span className="pixel-font absolute left-2 top-1 z-[2] bg-[#e83b3b] px-2 py-0.5 text-[11px] tracking-wide text-white">
             {t("tugOfWar.teamA")}
@@ -609,6 +616,24 @@ export function TugOfWarGame({
             gameState.teamACooldown,
           )}
         </div>
+
+        {/* 圖片題中欄：兩隊共用的置中大圖（無框、完整不裁；缺圖 fallback 顯示單字） */}
+        {isImageMode && (
+          <div className="flex min-h-0 items-center justify-center overflow-hidden bg-[#fdf6e3] p-2">
+            {currentQuestion?.vocabItem.image_url ? (
+              <img
+                src={currentQuestion.vocabItem.image_url}
+                alt=""
+                className="h-auto w-auto max-h-full max-w-full object-contain"
+              />
+            ) : (
+              <span className="handwrite-font text-center text-3xl text-[#2e222f]">
+                {currentQuestion?.vocabItem.text}
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="relative flex min-h-0 flex-col border-l-4 border-[#2e222f] bg-gradient-to-b from-[#d3e8f9] to-[#bcd9f6] p-2 pt-5">
           <span className="pixel-font absolute left-2 top-1 z-[2] bg-[#4d9be6] px-2 py-0.5 text-[11px] tracking-wide text-white">
             {t("tugOfWar.teamB")}
