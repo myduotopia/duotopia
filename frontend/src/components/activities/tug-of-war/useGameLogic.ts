@@ -54,7 +54,10 @@ function makeCloze(sentence: string, target: string): string {
 
 /** 有效克漏字：例句存在且含目標字（否則無答案，不出題）。 */
 export function hasValidCloze(item: VocabItem): boolean {
-  return !!item.example_sentence && sentenceContainsWord(item.example_sentence, item.text);
+  return (
+    !!item.example_sentence &&
+    sentenceContainsWord(item.example_sentence, item.text)
+  );
 }
 
 /** 音檔題有效：單字有錄音（audio→英/翻譯 需真音檔，不吃 TTS fallback）。 */
