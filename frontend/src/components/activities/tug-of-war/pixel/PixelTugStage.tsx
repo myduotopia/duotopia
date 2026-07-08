@@ -44,7 +44,12 @@ export interface PixelTugStageProps {
   winner: Team | "draw" | null;
   /** 顯示音檔懸掛看板（有音檔的題型）。 */
   showSign?: boolean;
+  /** 看板靜音狀態（靜音顯示紅斜線）。 */
+  audioMuted?: boolean;
   onSignClick?: () => void;
+  /** 隊伍分數（顯示於各隊旗桿正上方）。 */
+  scoreA?: number;
+  scoreB?: number;
   /** 勝負後的再玩一次。 */
   onReplay?: () => void;
   teamAWinsLabel?: string;
@@ -80,7 +85,10 @@ export function PixelTugStage(props: PixelTugStageProps) {
     teamBCooldown,
     winner,
     showSign = false,
+    audioMuted = false,
     onSignClick,
+    scoreA = 0,
+    scoreB = 0,
     onReplay,
     teamAWinsLabel = "Team A Wins!",
     teamBWinsLabel = "Team B Wins!",
@@ -117,8 +125,15 @@ export function PixelTugStage(props: PixelTugStageProps) {
     };
   }, []);
   const signSheet = useMemo(
-    () => (showSign ? makeSheet([makeSign(false)], {}, "sign") : null),
-    [showSign],
+    () =>
+      showSign
+        ? makeSheet(
+            [makeSign(audioMuted)],
+            { z: "#e83b3b" }, // 靜音紅斜線
+            `sign-${audioMuted ? "muted" : "on"}`,
+          )
+        : null,
+    [showSign, audioMuted],
   );
 
   // ---- 舞台縮放：等比塞進場景容器 ----
@@ -237,6 +252,32 @@ export function PixelTugStage(props: PixelTugStageProps) {
             ...spriteStyle(scenery.poleB, SCENE_S),
           }}
         />
+
+        {/* 分數：各隊旗桿正上方（紅隊左、藍隊右） */}
+        {[
+          { x: CENTER_X - MAX_OFFSET + 4, v: scoreA, color: "#e83b3b" },
+          { x: CENTER_X + MAX_OFFSET + 4, v: scoreB, color: "#4d9be6" },
+        ].map((s, i) => (
+          <div
+            key={i}
+            className="pixel-font"
+            style={{
+              position: "absolute",
+              left: s.x,
+              top: 6,
+              zIndex: 8,
+              transform: "translateX(-50%)",
+              fontSize: 40,
+              lineHeight: 1,
+              fontWeight: "bold",
+              color: s.color,
+              textShadow:
+                "2px 0 #fff, -2px 0 #fff, 0 2px #fff, 0 -2px #fff, 2px 2px #fff, -2px -2px #fff",
+            }}
+          >
+            {s.v}
+          </div>
+        ))}
 
         {/* 繩 + 旗 + 角色（一起位移） */}
         <div

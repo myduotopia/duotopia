@@ -2,14 +2,15 @@
  * sign.ts — 音檔懸掛看板（issue #920）
  *
  * 吊在場景天空中央、旗子正上方的像素木牌，承載共用音檔重播鈕。
- * 兩幀：靜止 / 播放中（音波亮起）。有音檔的題型（聽音檔×2、克漏字同題）顯示。
+ * 兩態：非靜音（喇叭+黃色音波）/ 靜音（喇叭 + 紅色斜線，標準 mute 圖示）。
+ * 有音檔的題型（聽音檔×2、克漏字同題）顯示。紅斜線用 char "z"，渲染時 override 成紅色。
  */
 
 import type { PixelMatrix } from "../palette";
 import { blank, px, line } from "../pixelUtils";
 
-/** 音檔看板（44×30）。@param playing 是否顯示音波。 */
-export function makeSign(playing: boolean): PixelMatrix {
+/** 音檔看板（44×30）。@param muted 靜音時劃紅斜線、非靜音顯示音波。 */
+export function makeSign(muted: boolean): PixelMatrix {
   const m = blank(44, 30);
   // 吊繩
   line(m, 8, 0, 8, 5, "q");
@@ -45,8 +46,8 @@ export function makeSign(playing: boolean): PixelMatrix {
     }
   line(m, 17, 18, 20, 21, "o");
   line(m, 17, 19, 20, 22, "o");
-  // 音波
-  if (playing) {
+  if (!muted) {
+    // 非靜音：黃色音波（有聲）
     [
       [25, 13],
       [25, 14],
@@ -68,6 +69,7 @@ export function makeSign(playing: boolean): PixelMatrix {
       [31, 22],
     ].forEach(([x, y]) => px(m, x, y, "y"));
   } else {
+    // 靜音：淡音波 + 紅色斜線劃過整個喇叭圖示（char "z" → 渲染 override 紅）
     [
       [25, 14],
       [25, 17],
@@ -75,6 +77,7 @@ export function makeSign(playing: boolean): PixelMatrix {
       [28, 15],
       [28, 19],
     ].forEach(([x, y]) => px(m, x, y, "B"));
+    line(m, 34, 8, 11, 24, "z", 2);
   }
   return m;
 }

@@ -34,7 +34,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { apiClient } from "@/lib/api";
-import { useGameLogic, isAudioOnlyMode } from "./tug-of-war/useGameLogic";
+import {
+  useGameLogic,
+  isAudioOnlyMode,
+  hasValidCloze,
+  hasWordAudio,
+} from "./tug-of-war/useGameLogic";
 import { useQuestionAudio } from "./tug-of-war/useQuestionAudio";
 import { QuestionDisplay } from "./tug-of-war/QuestionDisplay";
 import { TeamOptions, isLongOption } from "./tug-of-war/TeamOptions";
@@ -220,8 +225,9 @@ export function TugOfWarGame({
   } = useGameLogic(vocabItems);
 
   const hasEnoughImages = vocabItems.filter((v) => !!v.image_url).length >= 4;
-  const hasEnoughSentences =
-    vocabItems.filter((v) => !!v.example_sentence).length >= 4;
+  // 有效題門檻：克漏字需例句含目標字、音檔題需真錄音；整份 0 有效 → 該模式禁用
+  const hasAnyValidCloze = vocabItems.some(hasValidCloze);
+  const hasAnyWordAudio = vocabItems.some(hasWordAudio);
   const mode = gameState.questionMode;
   const isClozeMode = mode === "cloze_to_english";
   const isImageMode = mode === "image_to_english";
@@ -238,12 +244,17 @@ export function TugOfWarGame({
     q.options.some(isLongOption),
   );
 
+  // 預設題型：有錄音就開聽音檔選英文；否則退回「看英文→選翻譯」（純文字，恆可用）
+  const defaultMode: QuestionMode = hasAnyWordAudio
+    ? "audio_to_english"
+    : "english_to_chinese";
+
   // Auto-start when vocab loads
   useEffect(() => {
     if (vocabItems.length > 0 && gameState.gameStatus === "waiting") {
-      startGame("audio_to_english");
+      startGame(defaultMode);
     }
-  }, [vocabItems, gameState.gameStatus, startGame]);
+  }, [vocabItems, gameState.gameStatus, startGame, defaultMode]);
 
   // 音檔集中播放：只有同題（非 diffMode）且該題有音檔時啟用；由懸掛看板承載
   const audioActive = !gameState.diffMode && !!currentQuestion?.hasAudio;
@@ -292,25 +303,24 @@ export function TugOfWarGame({
     );
   }
 
-  // Root grid rows（第一列 auto = header，其後 場景/題目/選項）。依題型把空間讓給重點區塊；
-  // 靠 fixed 100dvh + overflow-hidden 保證三帶一屏可見、永不卷軸。
+  // Root grid rows（第一列 auto = header，其後 場景/題目/選項）。
+  // 場景帶固定為音檔題高度（場景恆 1fr、非 header 總 fr 恆 2.2 → 場景恆 ≈45%，不被題目擠壓）；
+  // 剩餘空間分給題目+選項。靠 fixed 100dvh + overflow-hidden 保證一屏可見、永不卷軸。
   const gridTemplateRows = audioOnly
-    ? // 音檔題：無題目帶，選項帶較大
-      hasLongOption
-      ? "auto 0.8fr 1.4fr"
-      : "auto 1fr 1.2fr"
+    ? // 音檔題：無題目帶，選項帶吃剩餘
+      "auto 1fr 1.2fr"
     : isImageMode
-      ? // 圖片題：題目帶加高放圖
-        "auto 0.6fr 1.4fr 1fr"
+      ? // 圖片題：題目帶（圖）多、選項帶少
+        "auto 1fr 0.75fr 0.45fr"
       : isClozeMode
-        ? // 克漏字：題目帶中等放例句，選項帶略大
+        ? // 克漏字：題目帶（例句）中等、選項帶略大
           hasLongOption
-          ? "auto 0.7fr 0.95fr 1.35fr"
-          : "auto 0.75fr 1fr 1.25fr"
-        : // 純單字題（看英文/看翻譯）：題目只有一個詞 → 選項帶加高
+          ? "auto 1fr 0.45fr 0.75fr"
+          : "auto 1fr 0.55fr 0.65fr"
+        : // 純單字題（看英文/看翻譯）：題目只有一個詞 → 選項帶較大
           hasLongOption
-          ? "auto 0.8fr 0.65fr 1.55fr"
-          : "auto 0.85fr 0.7fr 1.45fr";
+          ? "auto 1fr 0.3fr 0.9fr"
+          : "auto 1fr 0.4fr 0.8fr";
 
   // 遊戲結束後各隊答對的單字清單（去重）
   const historyFor = (team: Team) =>
@@ -418,9 +428,13 @@ export function TugOfWarGame({
           </DropdownMenuTrigger>
           <DropdownMenuContent className="bg-white dark:bg-gray-900 border shadow-lg">
             {QUESTION_MODES.map((m) => {
+              const isAudioMode =
+                m.value === "audio_to_english" ||
+                m.value === "audio_to_chinese";
               const isDisabled =
                 (m.value === "image_to_english" && !hasEnoughImages) ||
-                (m.value === "cloze_to_english" && !hasEnoughSentences);
+                (m.value === "cloze_to_english" && !hasAnyValidCloze) ||
+                (isAudioMode && !hasAnyWordAudio);
               const disabledTitle =
                 m.value === "image_to_english"
                   ? t(
@@ -430,9 +444,11 @@ export function TugOfWarGame({
                   : m.value === "cloze_to_english"
                     ? t(
                         "tugOfWar.clozeModeRequirement",
-                        "需要至少 4 個單字有例句",
+                        "此教材沒有可用的克漏字例句（例句需含該單字）",
                       )
-                    : undefined;
+                    : isAudioMode
+                      ? t("tugOfWar.audioModeRequirement", "此教材沒有單字錄音")
+                      : undefined;
               return (
                 <DropdownMenuItem
                   key={m.value}
@@ -502,16 +518,8 @@ export function TugOfWarGame({
           </label>
         )}
 
-        {/* 比分 */}
-        <div className="flex flex-1 items-center justify-center gap-3 pixel-font">
-          <span className="text-lg font-bold text-[#f68181]">
-            {gameState.scores.a}
-          </span>
-          <span className="text-xs text-gray-400">VS</span>
-          <span className="text-lg font-bold text-[#8fd3ff]">
-            {gameState.scores.b}
-          </span>
-        </div>
+        {/* 比分已移到場景中（各隊旗桿上方）→ 此處留 spacer 讓進度/全螢幕靠右 */}
+        <div className="flex-1" />
 
         {/* 進度 */}
         <div className="pixel-font text-xs text-gray-400 whitespace-nowrap">
@@ -552,7 +560,10 @@ export function TugOfWarGame({
           teamBCooldown={gameState.teamBCooldown}
           winner={winner}
           showSign={audioActive}
+          audioMuted={gameState.audioMuted}
           onSignClick={toggleAudioMute}
+          scoreA={gameState.scores.a}
+          scoreB={gameState.scores.b}
           onReplay={handleRestart}
           teamAWinsLabel={t("tugOfWar.result.teamAWins")}
           teamBWinsLabel={t("tugOfWar.result.teamBWins")}

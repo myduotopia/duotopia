@@ -35,6 +35,12 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** 例句是否含目標字（word-boundary、大小寫不敏感）→ 決定 cloze 有效。 */
+function sentenceContainsWord(sentence: string, target: string): boolean {
+  if (!sentence || !target) return false;
+  return new RegExp(`\\b${escapeRegex(target)}\\b`, "i").test(sentence);
+}
+
 function makeCloze(sentence: string, target: string): string {
   if (!sentence) return CLOZE_BLANK;
   if (!target) return sentence;
@@ -42,8 +48,18 @@ function makeCloze(sentence: string, target: string): string {
   if (re.test(sentence)) {
     return sentence.replace(re, CLOZE_BLANK);
   }
-  // Fallback: append a blank at the end so question still works
-  return `${sentence} ${CLOZE_BLANK}`;
+  // 例句不含目標字 → 原樣回傳（不硬補空格）；正常情況已由 hasValidCloze 過濾掉，防禦性
+  return sentence;
+}
+
+/** 有效克漏字：例句存在且含目標字（否則無答案，不出題）。 */
+export function hasValidCloze(item: VocabItem): boolean {
+  return !!item.example_sentence && sentenceContainsWord(item.example_sentence, item.text);
+}
+
+/** 音檔題有效：單字有錄音（audio→英/翻譯 需真音檔，不吃 TTS fallback）。 */
+export function hasWordAudio(item: VocabItem): boolean {
+  return !!item.audio_url;
 }
 
 /** 聽音檔模式（強制同題；其餘模式可開不同題）。 */
@@ -65,12 +81,14 @@ function generateQuestions(
     }
   }
 
-  // Cloze mode: require example_sentence (fallback to all if < 4)
+  // 音檔題：只保留有錄音的字（沒音檔不出題）
+  if (mode === "audio_to_english" || mode === "audio_to_chinese") {
+    items = items.filter(hasWordAudio);
+  }
+
+  // 克漏字：只保留「例句含目標字」的有效題（沒答案不出題）
   if (mode === "cloze_to_english") {
-    const withSentence = items.filter((i) => i.example_sentence);
-    if (withSentence.length >= 4) {
-      items = withSentence;
-    }
+    items = items.filter(hasValidCloze);
   }
 
   return items.map((item) => {
