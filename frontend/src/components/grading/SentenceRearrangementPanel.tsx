@@ -113,11 +113,7 @@ export function SentenceRearrangementPanel({
     let attempts: RearrangementAttempt[] = rd?.attempts ?? [];
 
     // 優雅降級：舊資料只有 selections（無 attempts）→ 當成單一「完成 / 超時」attempt
-    if (
-      attempts.length === 0 &&
-      rd?.selections &&
-      rd.selections.length > 0
-    ) {
+    if (attempts.length === 0 && rd?.selections && rd.selections.length > 0) {
       attempts = [
         {
           selections: rd.selections,
@@ -186,10 +182,7 @@ export function SentenceRearrangementPanel({
             const formattedTime = formatCompletedAt(attempt.ended_at);
             const selections = attempt.selections ?? [];
             return (
-              <div
-                key={idx}
-                className="flex flex-wrap items-center gap-2.5"
-              >
+              <div key={idx} className="flex flex-wrap items-center gap-2.5">
                 {formattedTime && (
                   <span className="text-xs font-semibold text-gray-700 font-mono whitespace-nowrap">
                     {formattedTime}
