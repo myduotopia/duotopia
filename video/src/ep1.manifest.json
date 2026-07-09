@@ -1,0 +1,336 @@
+{
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "episode": 1,
+  "episodesTotal": 7,
+  "bgm": "bgm/candidate_Carefree.mp3",
+  "scenes": [
+    {
+      "id": "title_in",
+      "kind": "title",
+      "audio": "ep1/tts/s01.wav",
+      "durationSec": 8.13,
+      "narration": "歡迎使用 Duotopia。這一集，我們從零開始，建立你的第一個班級，並加入學生。",
+      "title": "第一集",
+      "subtitle": "建立班級與學生"
+    },
+    {
+      "id": "steps",
+      "kind": "steps",
+      "audio": "ep1/tts/s02.wav",
+      "durationSec": 8.27,
+      "narration": "這一集只有三步：建立班級、新增學生，然後搞懂學生的帳號密碼是怎麼來的。",
+      "title": "本集 3 個步驟",
+      "steps": [
+        "建立班級",
+        "新增學生",
+        "帳密規則"
+      ]
+    },
+    {
+      "id": "classrooms",
+      "kind": "shot",
+      "audio": "ep1/tts/s03.wav",
+      "durationSec": 5.158,
+      "narration": "先到左邊的「我的班級」，點右上角的「新增班級」。",
+      "shot": "ep1/shots/03_classrooms.png",
+      "caption": "① 到「我的班級」，點右上角「新增班級」",
+      "highlights": [
+        {
+          "x": 1792,
+          "y": 24,
+          "w": 104,
+          "h": 36
+        }
+      ],
+      "page": "我的班級",
+      "step": {
+        "index": 1,
+        "total": 3,
+        "label": "建立班級"
+      },
+      "spotlight": {
+        "x": 1792,
+        "y": 24,
+        "w": 104,
+        "h": 36
+      },
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep1/clips/classrooms.mp4",
+      "clipDurationSec": 2.891,
+      "freezeShot": "ep1/clips/classrooms_last.png"
+    },
+    {
+      "id": "create",
+      "kind": "shot",
+      "audio": "ep1/tts/s04.wav",
+      "durationSec": 14.8,
+      "narration": "填入班級名稱，選擇程度，按「建立」。看，第一個班級完成了。",
+      "shot": "ep1/shots/05_class_name_filled.png",
+      "caption": "② 填班級名稱、選程度 → 建立",
+      "highlights": [],
+      "page": "我的班級",
+      "step": {
+        "index": 1,
+        "total": 3,
+        "label": "建立班級"
+      },
+      "stepDone": true,
+      "sameScreen": true,
+      "clip": "ep1/clips/create.mp4",
+      "clipDurationSec": 14.0,
+      "freezeShot": "ep1/clips/create_last.png",
+      "sfx": [
+        {
+          "t": 2.046,
+          "type": "click"
+        },
+        {
+          "t": 5.64,
+          "type": "click"
+        },
+        {
+          "t": 9.14,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "students",
+      "kind": "shot",
+      "audio": "ep1/tts/s05.wav",
+      "durationSec": 11.565,
+      "narration": "接著點進剛建立的班級，切到「學生列表」。",
+      "shot": "ep1/shots/07_students_tab.png",
+      "caption": "③ 進入班級 → 學生列表",
+      "highlights": [],
+      "page": "班級管理 › 指定班級",
+      "step": {
+        "index": 2,
+        "total": 3,
+        "label": "新增學生"
+      },
+      "sameScreen": true,
+      "clip": "ep1/clips/students.mp4",
+      "clipDurationSec": 10.765,
+      "freezeShot": "ep1/clips/students_last.png",
+      "sfx": [
+        {
+          "t": 3.906,
+          "type": "click"
+        },
+        {
+          "t": 8.421,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "addstudent",
+      "kind": "shot",
+      "audio": "ep1/tts/s06.wav",
+      "durationSec": 10.406,
+      "narration": "點「新增學生」，輸入學生姓名，這是唯一必填的。建議把學號也填成班級座號，之後排序、對照都更方便。",
+      "shot": "ep1/shots/09_student_name_filled.png",
+      "caption": "④ 姓名必填；建議「學號」也填班級座號",
+      "highlights": [],
+      "page": "班級管理 › 指定班級",
+      "step": {
+        "index": 2,
+        "total": 3,
+        "label": "新增學生"
+      },
+      "sameScreen": true,
+      "clip": "ep1/clips/addstudent.mp4",
+      "clipDurationSec": 6.922,
+      "freezeShot": "ep1/clips/addstudent_last.png",
+      "sfx": [
+        {
+          "t": 1.828,
+          "type": "click"
+        },
+        {
+          "t": 5.375,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "password",
+      "kind": "shot",
+      "audio": "ep1/tts/s07.wav",
+      "durationSec": 8.191,
+      "narration": "按「新增」。看重點來了，系統立刻顯示這位學生的預設密碼。",
+      "shot": "ep1/shots/10_student_created_password_toast.png",
+      "caption": "⑤ 新增後，系統立刻顯示預設密碼",
+      "highlights": [
+        {
+          "x": 780,
+          "y": 14,
+          "w": 362,
+          "h": 98
+        }
+      ],
+      "page": "班級管理 › 指定班級",
+      "step": {
+        "index": 2,
+        "total": 3,
+        "label": "新增學生"
+      },
+      "stepDone": true,
+      "sameScreen": true,
+      "clip": "ep1/clips/password.mp4",
+      "clipDurationSec": 7.391,
+      "freezeShot": "ep1/clips/password_last.png",
+      "sfx": [
+        {
+          "t": 1.922,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "passrule",
+      "kind": "shot",
+      "audio": "ep1/tts/s08.wav",
+      "durationSec": 9.291,
+      "narration": "密碼就是加入班級當天的日期，八碼數字。注意，不是生日喔。全班同一天建立，就是同一組密碼。",
+      "shot": "ep1/shots/11_students_list.png",
+      "caption": "密碼 = 加入班級「當天日期」YYYYMMDD（不是生日！）",
+      "highlights": [
+        {
+          "x": 1190,
+          "y": 409,
+          "w": 106,
+          "h": 32
+        }
+      ],
+      "page": "班級管理 › 指定班級",
+      "step": {
+        "index": 3,
+        "total": 3,
+        "label": "帳密規則"
+      },
+      "sameScreen": true
+    },
+    {
+      "id": "pwmanage",
+      "kind": "shot",
+      "audio": "ep1/tts/s09.wav",
+      "durationSec": 8.27,
+      "narration": "這組密碼會一直顯示在「密碼狀態」欄位，老師隨時可以查看，或一鍵複製給學生。",
+      "shot": "ep1/shots/11_students_list.png",
+      "caption": "密碼一直顯示在「密碼狀態」，可隨時查看、一鍵複製",
+      "highlights": [
+        {
+          "x": 1190,
+          "y": 409,
+          "w": 106,
+          "h": 32
+        }
+      ],
+      "page": "班級管理 › 指定班級",
+      "step": {
+        "index": 3,
+        "total": 3,
+        "label": "帳密規則"
+      },
+      "sameScreen": true
+    },
+    {
+      "id": "pwchange",
+      "kind": "shot",
+      "audio": "ep1/tts/s10.wav",
+      "durationSec": 7.248,
+      "narration": "最後提醒一下，記得請學生第一次登入之後，自己改一組新的密碼，會更安全。",
+      "shot": "ep1/shots/11_students_list.png",
+      "caption": "提醒學生：第一次登入後，自己改一組新密碼更安全",
+      "highlights": [
+        {
+          "x": 1190,
+          "y": 409,
+          "w": 106,
+          "h": 32
+        }
+      ],
+      "page": "班級管理 › 指定班級",
+      "step": {
+        "index": 3,
+        "total": 3,
+        "label": "帳密規則"
+      },
+      "sameScreen": true
+    },
+    {
+      "id": "resetpw",
+      "kind": "shot",
+      "audio": "ep1/tts/s11.wav",
+      "durationSec": 9.802,
+      "narration": "萬一學生忘記自己改過的密碼，也不用擔心，老師可以在「所有學生」頁，把他的密碼一鍵重設回預設。",
+      "shot": "ep1/shots/13_all_students.png",
+      "caption": "學生忘記改過的密碼？老師可在「所有學生」一鍵重設回預設",
+      "highlights": [
+        {
+          "x": 1313,
+          "y": 322,
+          "w": 28,
+          "h": 28
+        }
+      ],
+      "zoom": 1.5,
+      "page": "所有學生",
+      "step": {
+        "index": 3,
+        "total": 3,
+        "label": "帳密規則"
+      }
+    },
+    {
+      "id": "batchimport",
+      "kind": "shot",
+      "audio": "ep1/tts/s12.wav",
+      "durationSec": 6.969,
+      "narration": "如果要一次加一整班，就到「所有學生」頁，用「批次匯入」上傳名單。",
+      "shot": "ep1/shots/13_all_students.png",
+      "caption": "大量學生？到「所有學生」用「批次匯入」上傳整班",
+      "highlights": [
+        {
+          "x": 1678,
+          "y": 76,
+          "w": 106,
+          "h": 36
+        }
+      ],
+      "page": "所有學生",
+      "step": {
+        "index": 3,
+        "total": 3,
+        "label": "帳密規則"
+      },
+      "stepDone": true,
+      "spotlight": {
+        "x": 1678,
+        "y": 76,
+        "w": 106,
+        "h": 36
+      },
+      "sameScreen": true
+    },
+    {
+      "id": "title_out",
+      "kind": "title",
+      "audio": "ep1/tts/s13.wav",
+      "durationSec": 6.041,
+      "narration": "班級和學生都準備好了。下一集，我們來準備上課要用的教材。",
+      "title": "下一集",
+      "subtitle": "建立教材",
+      "progressDots": true
+    }
+  ]
+}
