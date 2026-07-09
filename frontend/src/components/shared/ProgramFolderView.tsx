@@ -186,10 +186,12 @@ function ProgramCard({
 }) {
   const { t } = useTranslation();
   const lessons = program.lessons ?? [];
-  const contentCount = lessons.reduce(
-    (sum, l) => sum + (l.contents?.length ?? 0),
-    0,
-  );
+  // Issue #847: include program-direct contents (lesson_id IS NULL, Issue #587)
+  // in the card count — previously only lesson.contents were summed, so the
+  // badge stayed stale after adding content directly under the program.
+  const contentCount =
+    lessons.reduce((sum, l) => sum + (l.contents?.length ?? 0), 0) +
+    (program.contents?.length ?? 0);
 
   return (
     <div

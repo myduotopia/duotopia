@@ -667,6 +667,9 @@ async def get_teacher_programs(
             selectinload(Program.lessons)
             .selectinload(Lesson.contents)
             .selectinload(Content.content_items),
+            # Issue #587/#847: eager-load program-direct contents (lesson_id NULL)
+            # so the material card count includes them
+            selectinload(Program.contents).selectinload(Content.content_items),
         )
     )
 
@@ -799,6 +802,41 @@ async def get_teacher_programs(
                     }
                 )
 
+        # Issue #587/#847: program-direct contents (no lesson). Program.contents
+        # is a viewonly relationship filtered to lesson_id IS NULL.
+        program_contents_data = []
+        for content in sorted(program.contents, key=lambda x: x.order_index):
+            if not content.is_active or content.is_assignment_copy:
+                continue
+            items_data = []
+            if content.content_items:
+                for item in sorted(content.content_items, key=lambda x: x.order_index):
+                    items_data.append(
+                        {
+                            "id": item.id,
+                            "text": item.text,
+                            "translation": item.translation,
+                            "audio_url": item.audio_url,
+                            "example_sentence": item.example_sentence,
+                            "example_sentence_translation": item.example_sentence_translation,
+                            "order_index": item.order_index,
+                        }
+                    )
+            program_contents_data.append(
+                {
+                    "id": content.id,
+                    "title": content.title,
+                    "type": content.type,
+                    "lesson_id": None,
+                    "program_id": program.id,
+                    "items": items_data,
+                    "items_count": len(items_data),
+                    "order_index": content.order_index,
+                    "level": content.level,
+                    "tags": content.tags or [],
+                }
+            )
+
         result.append(
             {
                 "id": program.id,
@@ -822,6 +860,8 @@ async def get_teacher_programs(
                 "tags": program.tags or [],
                 "visibility": program.visibility,
                 "lessons": lessons_data,
+                # Issue #587/#847: contents directly under the program (no lesson)
+                "contents": program_contents_data,
             }
         )
 
