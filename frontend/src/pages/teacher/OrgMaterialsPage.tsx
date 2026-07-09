@@ -744,11 +744,19 @@ export default function OrgMaterialsPage() {
                 });
                 setShowInstantPractice(true);
               }}
-              onAssignContent={(content, lessonId) => {
-                const program = programs.find((p) =>
-                  p.lessons?.some((l) => l.id === lessonId),
-                );
-                const lesson = program?.lessons?.find((l) => l.id === lessonId);
+              onAssignContent={(content, lessonId, programId) => {
+                // Issue #847: program-direct content (lessonId === 0) is looked
+                // up by programId, not by lesson.
+                const program =
+                  lessonId === 0
+                    ? programs.find((p) => p.id === programId)
+                    : programs.find((p) =>
+                        p.lessons?.some((l) => l.id === lessonId),
+                      );
+                const lesson =
+                  lessonId === 0
+                    ? undefined
+                    : program?.lessons?.find((l) => l.id === lessonId);
                 const cartItem: CartItem = {
                   contentId: content.id,
                   programName: program?.name || "",

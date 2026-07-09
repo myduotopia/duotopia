@@ -13,7 +13,7 @@ Endpoints:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from pydantic import BaseModel, Field, computed_field, field_serializer, model_validator
 from typing import List, Optional
 import uuid
@@ -313,8 +313,10 @@ async def list_organization_materials(
             joinedload(Program.lessons)
             .joinedload(Lesson.contents)
             .joinedload(Content.content_items),
-            # Issue #587/#847: eager-load program-direct contents (lesson_id NULL)
-            joinedload(Program.contents).joinedload(Content.content_items),
+            # Issue #587/#847: eager-load program-direct contents (lesson_id NULL).
+            # Use selectinload (separate query) to avoid a cartesian-product row
+            # explosion with the joinedload on the Program.lessons collection.
+            selectinload(Program.contents).selectinload(Content.content_items),
         )
         .filter(
             Program.is_template.is_(True),
@@ -384,8 +386,10 @@ async def get_organization_material_details(
             joinedload(Program.lessons)
             .joinedload(Lesson.contents)
             .joinedload(Content.content_items),
-            # Issue #587/#847: eager-load program-direct contents (lesson_id NULL)
-            joinedload(Program.contents).joinedload(Content.content_items),
+            # Issue #587/#847: eager-load program-direct contents (lesson_id NULL).
+            # Use selectinload (separate query) to avoid a cartesian-product row
+            # explosion with the joinedload on the Program.lessons collection.
+            selectinload(Program.contents).selectinload(Content.content_items),
         )
         .filter(Program.id == program_id)
         .first()
