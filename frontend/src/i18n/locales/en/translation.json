@@ -3386,7 +3386,12 @@
       "errorsSuffix": "error(s) — see logs",
       "notLinked": "Your account is not linked to 1Campus. Log in via 1Campus first.",
       "rateLimited": "Sync was triggered recently — please wait a minute and try again.",
-      "failed": "Failed to start 1Campus sync. Please try again."
+      "failed": "Failed to start 1Campus sync. Please try again.",
+      "confirm": {
+        "title": "Sync into your personal account?",
+        "message": "AI point usage for classes under your personal account will be deducted from your personal points. If the students belong to an organization, please import the class within the organization instead.",
+        "confirmButton": "Sync anyway"
+      }
     }
   },
   "teacherStudents": {
