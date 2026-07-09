@@ -483,8 +483,16 @@ async def get_word_selection_start(
     assignment: Assignment,
     db: Session,
     exclude_ids: str = "",
+    ignore_stored_distractors: bool = False,
 ) -> dict:
-    """Return word-selection practice data with options/distractors."""
+    """Return word-selection practice data with options/distractors.
+
+    ``ignore_stored_distractors`` (#923 demo): when the display language is
+    overridden at runtime (e.g. a demo visitor flips ``show_image``), the
+    stored distractors — generated for the assignment's original language —
+    would mismatch the correct answer's language. Passing True forces the
+    same-language runtime fallback below instead of reusing stored ones.
+    """
     if assignment.practice_mode not in ("word_selection", "tug_of_war"):
         raise HTTPException(
             status_code=400,
@@ -547,7 +555,7 @@ async def get_word_selection_start(
 
         # Use stored distractors if available (≥3), else fallback to other words
         stored = normalize_distractors(item.distractors)
-        if len(stored) >= 3:
+        if not ignore_stored_distractors and len(stored) >= 3:
             final_distractors = list(stored[:3])
         else:
             target = correct_answer.lower().strip()

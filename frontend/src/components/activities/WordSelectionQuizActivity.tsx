@@ -29,6 +29,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
+import { withDemoOverrides } from "@/lib/demoOverrides";
 import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
@@ -163,6 +164,30 @@ export default function WordSelectionQuizActivity({
     const run = async () => {
       setLoading(true);
       try {
+        if (isDemoMode) {
+          // #923: public demo mirrors the teacher-preview quiz-start (正解/選項,
+          // non-live). No session / prior answers; answer & complete are
+          // short-circuited elsewhere so nothing is persisted.
+          const demo = (await apiClient.get(
+            withDemoOverrides(
+              `/api/demo/assignments/${assignmentId}/preview/selection-quiz-start`,
+            ),
+          )) as StartResponse;
+          if (cancelled) return;
+          setWords(demo.words);
+          setSessionId(null);
+          setQuizStatus(null);
+          setSettings({
+            show_word: demo.show_word,
+            show_image: demo.show_image,
+            show_option_images: demo.show_option_images,
+            play_audio: demo.play_audio,
+            show_answer: demo.show_answer,
+          });
+          setInitialRemaining(null);
+          setTimerTotal(demo.quiz_time_limit_seconds ?? null);
+          return;
+        }
         const data = (await apiClient.get(
           `/api/students/assignments/${assignmentId}/vocabulary/selection_quiz/start`,
         )) as StartResponse;
@@ -218,7 +243,14 @@ export default function WordSelectionQuizActivity({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId, isLivePreview, previewSettings, previewWords, t]);
+  }, [
+    assignmentId,
+    isDemoMode,
+    isLivePreview,
+    previewSettings,
+    previewWords,
+    t,
+  ]);
 
   const currentWord = words[currentIndex];
 

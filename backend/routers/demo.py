@@ -56,6 +56,8 @@ from services.preview_service import (
     RearrangementAnswerRequest,
     RearrangementCompleteRequest,
 )
+from utils.practice_mode import validate_practice_mode
+from utils.score_category import resolve_score_category
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +105,99 @@ def get_demo_assignment(assignment_id: int, db: Session) -> Assignment:
         )
 
     return assignment
+
+
+# ============================================================================
+# Stateless settings overlay (#923)
+# ============================================================================
+#
+# The demo assignment is a SINGLE row shared by every anonymous visitor. To let
+# a visitor try the same material with different settings / practice modes via
+# the advanced-settings panel WITHOUT persisting anything, demo read endpoints
+# accept the settings as optional query params and wrap the real row in a
+# read-only overlay. The overlay is not a SQLAlchemy instance and is never added
+# to the session, so a visitor's choices can never leak into the shared row.
+
+
+class _AssignmentOverlay:
+    """Read-only overlay: returns overridden settings where provided, else falls
+    through to the real Assignment row. Never enters the DB session (#923)."""
+
+    __slots__ = ("_assignment", "_overrides")
+
+    def __init__(self, assignment: Assignment, overrides: dict):
+        object.__setattr__(self, "_assignment", assignment)
+        object.__setattr__(self, "_overrides", overrides)
+
+    def __getattr__(self, name):
+        overrides = object.__getattribute__(self, "_overrides")
+        if name in overrides:
+            return overrides[name]
+        return getattr(object.__getattribute__(self, "_assignment"), name)
+
+
+def demo_overrides(
+    practice_mode: Optional[str] = Query(None),
+    show_answer: Optional[bool] = Query(None),
+    play_audio: Optional[bool] = Query(None),
+    show_translation: Optional[bool] = Query(None),
+    show_word: Optional[bool] = Query(None),
+    show_image: Optional[bool] = Query(None),
+    show_option_images: Optional[bool] = Query(None),
+    shuffle_questions: Optional[bool] = Query(None),
+    time_limit_per_question: Optional[int] = Query(None),
+    quiz_time_limit_seconds: Optional[int] = Query(None),
+    target_proficiency: Optional[int] = Query(None),
+) -> dict:
+    """Collect optional demo settings overrides from the query string (#923).
+
+    Absent params stay absent (the real row's value is used). ``practice_mode``
+    is whitelist-validated; an invalid value is a 422.
+    """
+    if practice_mode is not None:
+        try:
+            validate_practice_mode(practice_mode)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            )
+    provided = {
+        "practice_mode": practice_mode,
+        "show_answer": show_answer,
+        "play_audio": play_audio,
+        "show_translation": show_translation,
+        "show_word": show_word,
+        "show_image": show_image,
+        "show_option_images": show_option_images,
+        "shuffle_questions": shuffle_questions,
+        "time_limit_per_question": time_limit_per_question,
+        "quiz_time_limit_seconds": quiz_time_limit_seconds,
+        "target_proficiency": target_proficiency,
+    }
+    return {k: v for k, v in provided.items() if v is not None}
+
+
+def _apply_overrides(assignment: Assignment, overrides: dict) -> Assignment:
+    """Wrap ``assignment`` with visitor ``overrides`` (no-op if empty).
+
+    Recomputes ``score_category`` from the effective (practice_mode, play_audio)
+    — the frontend must not send score_category — and enforces the
+    ``show_image`` / ``show_option_images`` XOR invariant.
+    """
+    if not overrides:
+        return assignment
+
+    effective = dict(overrides)
+    practice_mode = effective.get("practice_mode", assignment.practice_mode)
+    play_audio = effective.get("play_audio", bool(assignment.play_audio))
+    if effective.get("show_image") and effective.get("show_option_images"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="show_image and show_option_images are mutually exclusive",
+        )
+    effective["score_category"] = resolve_score_category(practice_mode, play_audio)
+    # type: ignore[return-value] — overlay quacks like Assignment for readers.
+    return _AssignmentOverlay(assignment, effective)
 
 
 # ============================================================================
@@ -295,10 +390,15 @@ async def get_demo_config(request: Request, db: Session = Depends(get_db)):
 async def get_demo_preview(
     request: Request,
     assignment_id: int,
+    ov: dict = Depends(demo_overrides),
     db: Session = Depends(get_db),
 ):
-    """Get demo assignment preview (no authentication required)."""
-    assignment = get_demo_assignment(assignment_id, db)
+    """Get demo assignment preview (no authentication required).
+
+    Optional settings overrides (#923) let the advanced-settings panel preview
+    the same material in a different mode/config without persisting.
+    """
+    assignment = _apply_overrides(get_demo_assignment(assignment_id, db), ov)
     return build_assignment_preview(assignment, db)
 
 
@@ -323,10 +423,11 @@ async def demo_assess_speech(
 async def demo_vocabulary_activities(
     request: Request,
     assignment_id: int,
+    ov: dict = Depends(demo_overrides),
     db: Session = Depends(get_db),
 ):
     """Demo mode: Get vocabulary word reading practice data."""
-    assignment = get_demo_assignment(assignment_id, db)
+    assignment = _apply_overrides(get_demo_assignment(assignment_id, db), ov)
     return get_vocabulary_activities(assignment, db)
 
 
@@ -338,11 +439,17 @@ async def demo_word_selection_start(
     exclude_ids: str = Query(
         default="", description="Already-practiced content_item_ids, comma-separated"
     ),
+    ov: dict = Depends(demo_overrides),
     db: Session = Depends(get_db),
 ):
     """Demo mode: Start word selection practice."""
-    assignment = get_demo_assignment(assignment_id, db)
-    return await get_word_selection_start(assignment, db, exclude_ids)
+    assignment = _apply_overrides(get_demo_assignment(assignment_id, db), ov)
+    # When show_image is overridden the answer language flips, so stored
+    # distractors (built for the original language) would mismatch — force the
+    # same-language runtime fallback in that case (#923).
+    return await get_word_selection_start(
+        assignment, db, exclude_ids, ignore_stored_distractors="show_image" in ov
+    )
 
 
 @router.get("/assignments/{assignment_id}/preview/word-spelling-start")
@@ -353,10 +460,11 @@ async def demo_word_spelling_start(
     exclude_ids: str = Query(
         default="", description="Already-practiced content_item_ids, comma-separated"
     ),
+    ov: dict = Depends(demo_overrides),
     db: Session = Depends(get_db),
 ):
     """Demo mode: Start word spelling practice."""
-    assignment = get_demo_assignment(assignment_id, db)
+    assignment = _apply_overrides(get_demo_assignment(assignment_id, db), ov)
     return await get_word_spelling_start(assignment, db, exclude_ids)
 
 
@@ -368,11 +476,81 @@ async def demo_word_cloze_start(
     exclude_ids: str = Query(
         default="", description="Already-practiced content_item_ids, comma-separated"
     ),
+    ov: dict = Depends(demo_overrides),
     db: Session = Depends(get_db),
 ):
     """Demo mode: Start word cloze practice."""
-    assignment = get_demo_assignment(assignment_id, db)
+    assignment = _apply_overrides(get_demo_assignment(assignment_id, db), ov)
     return await get_word_cloze_start(assignment, db, exclude_ids)
+
+
+# ----------------------------------------------------------------------------
+# Demo quiz-start endpoints (#923) — public, unauthenticated mirrors of the
+# teacher-preview quiz-start endpoints. They share the same builders so the
+# visitor sees exactly the teacher-preview screen (正解/選項, non-live, no
+# scoring). answer/complete are short-circuited on the frontend in demo mode,
+# so no submission endpoints are needed.
+# ----------------------------------------------------------------------------
+
+
+@router.get("/assignments/{assignment_id}/preview/selection-quiz-start")
+@limiter.limit("60/minute")
+async def demo_selection_quiz_start(
+    request: Request,
+    assignment_id: int,
+    ov: dict = Depends(demo_overrides),
+    db: Session = Depends(get_db),
+):
+    """Demo mode: Start word selection quiz."""
+    assignment = _apply_overrides(get_demo_assignment(assignment_id, db), ov)
+    if assignment.practice_mode != "word_selection_quiz":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This assignment is not a word_selection_quiz",
+        )
+    from routers.students.quiz_assignments import build_selection_quiz_payload
+
+    return build_selection_quiz_payload(assignment, db)
+
+
+@router.get("/assignments/{assignment_id}/preview/spelling-quiz-start")
+@limiter.limit("60/minute")
+async def demo_spelling_quiz_start(
+    request: Request,
+    assignment_id: int,
+    ov: dict = Depends(demo_overrides),
+    db: Session = Depends(get_db),
+):
+    """Demo mode: Start word spelling quiz."""
+    assignment = _apply_overrides(get_demo_assignment(assignment_id, db), ov)
+    if assignment.practice_mode != "word_spelling_quiz":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This assignment is not a word_spelling_quiz",
+        )
+    from routers.students.quiz_assignments import build_spelling_quiz_payload
+
+    return build_spelling_quiz_payload(assignment, db)
+
+
+@router.get("/assignments/{assignment_id}/preview/cloze-quiz-start")
+@limiter.limit("60/minute")
+async def demo_cloze_quiz_start(
+    request: Request,
+    assignment_id: int,
+    ov: dict = Depends(demo_overrides),
+    db: Session = Depends(get_db),
+):
+    """Demo mode: Start word cloze quiz."""
+    assignment = _apply_overrides(get_demo_assignment(assignment_id, db), ov)
+    if assignment.practice_mode != "word_cloze_quiz":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This assignment is not a word_cloze_quiz",
+        )
+    from routers.students.quiz_assignments import build_cloze_quiz_payload
+
+    return build_cloze_quiz_payload(assignment, db)
 
 
 @router.post("/assignments/{assignment_id}/preview/word-selection-answer")
@@ -395,10 +573,11 @@ async def demo_word_selection_answer(
 async def demo_rearrangement_questions(
     request: Request,
     assignment_id: int,
+    ov: dict = Depends(demo_overrides),
     db: Session = Depends(get_db),
 ):
     """Demo mode: Get rearrangement practice questions."""
-    assignment = get_demo_assignment(assignment_id, db)
+    assignment = _apply_overrides(get_demo_assignment(assignment_id, db), ov)
     return get_rearrangement_questions(assignment, db)
 
 
