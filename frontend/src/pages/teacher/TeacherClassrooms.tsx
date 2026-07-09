@@ -68,7 +68,8 @@ type SortDirection = "asc" | "desc";
 
 export default function TeacherClassrooms() {
   const { t } = useTranslation();
-  const { selectedSchool, selectedOrganization, mode } = useWorkspace();
+  const { selectedSchool, selectedOrganization, mode, organizations } =
+    useWorkspace();
   const [classrooms, setClassrooms] = useState<ClassroomDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingClassroom, setEditingClassroom] =
@@ -103,6 +104,28 @@ export default function TeacherClassrooms() {
 
   // 1Campus class sync (#635)
   const [syncingOneCampus, setSyncingOneCampus] = useState(false);
+  // Foolproof confirmation before syncing into a personal account when the
+  // teacher also belongs to an organization (#761). Personal-account syncs
+  // deduct AI points from the teacher's personal balance, which is usually
+  // not what an org teacher intends for org-owned students.
+  const [showSyncConfirm, setShowSyncConfirm] = useState(false);
+  const hasOrganization = organizations.length > 0;
+
+  // Gate the Sync button: org teachers see a warning dialog first; personal-
+  // only teachers sync immediately (unchanged behavior).
+  const handleSyncOneCampusClick = () => {
+    if (syncingOneCampus) return;
+    if (hasOrganization) {
+      setShowSyncConfirm(true);
+    } else {
+      handleSyncOneCampusClasses();
+    }
+  };
+
+  const handleConfirmSyncOneCampus = () => {
+    setShowSyncConfirm(false);
+    handleSyncOneCampusClasses();
+  };
 
   const handleSyncOneCampusClasses = async () => {
     if (syncingOneCampus) return;
@@ -473,7 +496,7 @@ export default function TeacherClassrooms() {
             </span>
           </Button>
           <Button
-            onClick={handleSyncOneCampusClasses}
+            onClick={handleSyncOneCampusClick}
             variant="outline"
             size="sm"
             className="flex-1 sm:flex-none"
@@ -1057,6 +1080,48 @@ export default function TeacherClassrooms() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
+      {/* 1Campus Sync Confirmation Dialog (#761) */}
+      <Dialog open={showSyncConfirm} onOpenChange={setShowSyncConfirm}>
+        <DialogContent
+          className="bg-white"
+          style={{ backgroundColor: "white" }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              <span>
+                {t("teacherClassrooms.oneCampusSync.confirm.title", {
+                  defaultValue: "Sync into your personal account?",
+                })}
+              </span>
+            </DialogTitle>
+            <DialogDescription>
+              {t("teacherClassrooms.oneCampusSync.confirm.message", {
+                defaultValue:
+                  "AI point usage for classes under your personal account will be deducted from your personal points. If the students belong to an organization, please import the class within the organization instead.",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowSyncConfirm(false)}
+              className="w-full sm:w-auto"
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              onClick={handleConfirmSyncOneCampus}
+              className="w-full sm:w-auto"
+            >
+              {t("teacherClassrooms.oneCampusSync.confirm.confirmButton", {
+                defaultValue: "Sync anyway",
+              })}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={!!deleteConfirmId}
         onOpenChange={(open) => !open && setDeleteConfirmId(null)}

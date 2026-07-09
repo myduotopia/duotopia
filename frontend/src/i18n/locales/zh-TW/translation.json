@@ -3385,7 +3385,12 @@
       "errorsSuffix": "個錯誤——請查看伺服器記錄",
       "notLinked": "您的帳號尚未綁定 1Campus，請先以 1Campus 方式登入",
       "rateLimited": "剛剛已觸發過同步，請稍候片刻再試",
-      "failed": "1Campus 同步失敗，請稍後再試"
+      "failed": "1Campus 同步失敗，請稍後再試",
+      "confirm": {
+        "title": "確定要同步到個人帳號嗎？",
+        "message": "個人帳號下，班級使用 AI 點數將從老師個人點數扣除；如果學生屬於機構，請於機構內匯入班級。",
+        "confirmButton": "仍要同步"
+      }
     }
   },
   "teacherStudents": {
