@@ -5370,8 +5370,14 @@
     "rotateDeviceHint": "此遊戲適合橫向遊玩",
     "continueAnyway": "繼續遊玩",
     "imagesModeRequirement": "需要至少 4 個單字有圖片",
-    "clozeModeRequirement": "需要至少 4 個單字有例句",
+    "clozeModeRequirement": "此教材沒有可用的克漏字例句（例句需含該單字）",
+    "audioModeRequirement": "此教材沒有單字錄音",
     "showSentenceTranslation": "顯示例句翻譯",
+    "diffModeOff": "兩隊題目相同",
+    "diffModeOn": "兩隊題目相異",
+    "diffModeHint": "開啟後兩隊各出不同題目（聽音檔模式不適用）",
+    "enterFullscreen": "全螢幕",
+    "exitFullscreen": "退出全螢幕",
     "error": {
       "loadFailed": "載入單字失敗",
       "notEnoughWords": "單字數量不足（至少需要 4 個）"
