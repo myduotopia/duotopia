@@ -3081,7 +3081,6 @@
     "rearrangement": {
       "labels": {
         "errors": "Errors",
-        "correctWords": "Correct Words",
         "retryCount": "Retries",
         "expectedScore": "Score",
         "timedOut": "Timed Out",
@@ -3089,7 +3088,6 @@
         "selected": "Selected",
         "expected": "Expected",
         "completedAt": "Completed at",
-        "detailedHistoryComingSoon": "Detailed answer history Coming Soon",
         "scorePoints": "{{score}} pts",
         "attemptCount": "{{count}} attempts",
         "totalErrors": "{{count}} errors total",

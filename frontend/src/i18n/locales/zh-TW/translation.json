@@ -3224,7 +3224,6 @@
     "rearrangement": {
       "labels": {
         "errors": "錯誤",
-        "correctWords": "正確選字",
         "retryCount": "重試",
         "expectedScore": "分數",
         "timedOut": "超時結束",
@@ -3232,7 +3231,6 @@
         "selected": "選擇",
         "expected": "應選",
         "completedAt": "完成時間",
-        "detailedHistoryComingSoon": "更詳細的作答紀錄 Coming Soon",
         "scorePoints": "{{score}} 分",
         "attemptCount": "{{count}} 次嘗試",
         "totalErrors": "共 {{count}} 次錯誤",
