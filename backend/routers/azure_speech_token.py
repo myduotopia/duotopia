@@ -35,7 +35,10 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/token", response_model=TokenResponse)
-@limiter.limit("10/minute")  # 每分鐘最多 10 次請求
+# 兩段皆用預設 key_func（get_user_identifier）：已登入端點會以 JWT 推導出
+# per-user key（teacher:/student:），天生防輪換 IP/proxy 繞過（Issue #137 / #139）。
+@limiter.limit("10/minute")  # 每使用者每分鐘最多 10 次（防爆量）
+@limiter.limit("60/hour")  # 每使用者每小時最多 60 次
 async def get_speech_token(
     request: Request, current_user: dict = Depends(get_current_user)
 ):
@@ -44,7 +47,7 @@ async def get_speech_token(
 
     安全措施：
     - ✅ 需要用戶身份驗證（get_current_user dependency）
-    - ✅ Rate limiting（每分鐘最多 10 次請求）
+    - ✅ Rate limiting（每 IP 每分鐘 10 次 + 每使用者每小時 60 次）
     - ✅ Token server-side cache（減少 Azure API 調用）
     - ✅ Subscription Key 不外泄（只在後端使用）
 

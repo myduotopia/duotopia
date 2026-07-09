@@ -49,6 +49,10 @@ export default function OrgMonthlyBillingPanel({
     defaultMonth ?? today.getMonth() + 1,
   );
   const [loading, setLoading] = React.useState(false);
+  const [downloading, setDownloading] = React.useState(false);
+  const [sendingEmail, setSendingEmail] = React.useState(false);
+  const [creatingInvoice, setCreatingInvoice] = React.useState(false);
+  const [lastSentAt, setLastSentAt] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<MonthlyBilling | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -62,6 +66,19 @@ export default function OrgMonthlyBillingPanel({
         month,
       );
       setResult(data);
+      // Surface the last time a 請款 email was sent for this period.
+      try {
+        const hist = await apiClient.getMonthlyInvoiceEmailHistory(
+          orgId,
+          year,
+          month,
+        );
+        setLastSentAt(hist.last_sent_at);
+      } catch (histErr) {
+        // Informational-only; a transient failure shouldn't block the query.
+        console.warn("Failed to load invoice email history", histErr);
+        setLastSentAt(null);
+      }
     } catch (e) {
       const msg =
         e instanceof ApiError
@@ -74,6 +91,82 @@ export default function OrgMonthlyBillingPanel({
       toast.error(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const downloadPdf = async () => {
+    setDownloading(true);
+    try {
+      const { blob, filename } =
+        await apiClient.downloadOrganizationMonthlyInvoicePdf(
+          orgId,
+          year,
+          month,
+        );
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? typeof e.detail === "string"
+            ? e.detail
+            : e.message
+          : "下載 PDF 請款單失敗";
+      toast.error(msg);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const sendEmail = async () => {
+    const confirmed = window.confirm(
+      `確定要將 ${year} 年 ${month} 月的請款單 Email 寄送給機構聯絡人嗎？` +
+        (lastSentAt
+          ? `\n\n（上次寄送時間：${new Date(lastSentAt).toLocaleString()}）`
+          : ""),
+    );
+    if (!confirmed) return;
+    setSendingEmail(true);
+    try {
+      const res = await apiClient.sendMonthlyInvoiceEmail(orgId, year, month);
+      setLastSentAt(res.sent_at);
+      toast.success(`已寄送請款 Email 至 ${res.recipient}`);
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? typeof e.detail === "string"
+            ? e.detail
+            : e.message
+          : "寄送請款 Email 失敗";
+      toast.error(msg);
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  const createInvoice = async () => {
+    setCreatingInvoice(true);
+    try {
+      const inv = await apiClient.createInstitutionInvoice(orgId, year, month);
+      toast.success(
+        `已建立/更新應收帳款：${inv.year} 年 ${inv.month} 月，金額 ${inv.amount.toLocaleString()}`,
+      );
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? typeof e.detail === "string"
+            ? e.detail
+            : e.message
+          : "建立應收帳款失敗";
+      toast.error(msg);
+    } finally {
+      setCreatingInvoice(false);
     }
   };
 
@@ -111,7 +204,30 @@ export default function OrgMonthlyBillingPanel({
           <Button onClick={fetchBilling} disabled={loading}>
             {loading ? "查詢中…" : "查詢"}
           </Button>
+          <Button
+            onClick={downloadPdf}
+            disabled={downloading}
+            variant="outline"
+          >
+            {downloading ? "產生中…" : "下載 PDF 請款單"}
+          </Button>
+          <Button onClick={sendEmail} disabled={sendingEmail} variant="outline">
+            {sendingEmail ? "寄送中…" : "寄送請款 Email"}
+          </Button>
+          <Button
+            onClick={createInvoice}
+            disabled={creatingInvoice}
+            variant="outline"
+          >
+            {creatingInvoice ? "建立中…" : "建立應收帳款"}
+          </Button>
         </div>
+
+        {lastSentAt && (
+          <div className="text-xs text-gray-500">
+            上次寄送請款 Email：{new Date(lastSentAt).toLocaleString()}
+          </div>
+        )}
 
         {error && (
           <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">

@@ -4,9 +4,11 @@ import os
 import secrets
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional, Tuple
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 import smtplib
 
 from sqlalchemy.orm import Session
@@ -29,26 +31,74 @@ class EmailService:
         self.from_name = os.getenv("FROM_NAME", "Duotopia")
         self.frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-    def send_email(self, to_email: str, subject: str, html_content: str) -> bool:
+    def _build_message(
+        self,
+        to_email: str,
+        subject: str,
+        html_content: str,
+        cc: Optional[List[str]] = None,
+        attachments: Optional[List[Tuple[str, bytes, str]]] = None,
+    ) -> MIMEMultipart:
+        """Assemble the MIME message (pure — no SMTP). Split out so the
+        attachment/cc wiring is unit-testable without a live SMTP server.
+
+        ``attachments`` is a list of (filename, content_bytes, mime_subtype)
+        where mime_subtype is e.g. "pdf" (→ application/pdf).
         """
-        發送通用 HTML 郵件
+        html_part = MIMEText(html_content, "html", "utf-8")
+        if attachments:
+            # "mixed" wrapper carries the html body (as an "alternative"
+            # sub-part) plus the binary attachment parts.
+            msg = MIMEMultipart("mixed")
+            alt = MIMEMultipart("alternative")
+            alt.attach(html_part)
+            msg.attach(alt)
+            for filename, content, subtype in attachments:
+                part = MIMEBase("application", subtype)
+                part.set_payload(content)
+                encoders.encode_base64(part)
+                part.add_header(
+                    "Content-Disposition",
+                    f'attachment; filename="{filename}"',
+                )
+                msg.attach(part)
+        else:
+            msg = MIMEMultipart("alternative")
+            msg.attach(html_part)
+
+        msg["Subject"] = subject
+        msg["From"] = f"{self.from_name} <{self.from_email}>"
+        msg["To"] = to_email
+        if cc:
+            msg["Cc"] = ", ".join(cc)
+        return msg
+
+    def send_email(
+        self,
+        to_email: str,
+        subject: str,
+        html_content: str,
+        cc: Optional[List[str]] = None,
+        attachments: Optional[List[Tuple[str, bytes, str]]] = None,
+    ) -> bool:
+        """
+        發送通用 HTML 郵件（支援 CC 與附件）
 
         Args:
             to_email: 收件者 email
             subject: 郵件主旨
             html_content: HTML 格式的郵件內容
+            cc: 副本收件者 email 清單（可選）
+            attachments: (檔名, 內容 bytes, MIME subtype) 清單（可選），
+                例如 [("invoice.pdf", pdf_bytes, "pdf")]
 
         Returns:
             bool: 是否發送成功
         """
         try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = f"{self.from_name} <{self.from_email}>"
-            msg["To"] = to_email
-
-            html_part = MIMEText(html_content, "html", "utf-8")
-            msg.attach(html_part)
+            msg = self._build_message(
+                to_email, subject, html_content, cc=cc, attachments=attachments
+            )
 
             # 如果 SMTP 未設定，只記錄日誌（開發模式）
             if not self.smtp_user or not self.smtp_password:
@@ -60,6 +110,7 @@ class EmailService:
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
                 server.starttls()
                 server.login(self.smtp_user, self.smtp_password)
+                # send_message derives recipients from To/Cc headers.
                 server.send_message(msg)
 
             logger.info(f"Email sent successfully to {to_email}")

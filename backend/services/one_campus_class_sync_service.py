@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.classroom import Classroom, ClassroomStudent
@@ -310,25 +311,43 @@ def _upsert_student(db: Session, stu: dict) -> tuple[Student, bool, bool]:
     )
 
     if identity is None:
-        identity = Identity(
-            one_campus_student_id=one_campus_student_id,
-            email_verified=False,
-            is_active=True,
-        )
-        db.add(identity)
-        db.flush()
-
-        student = Student(
-            name=student_name or one_campus_student_id,
-            student_number=student_number,
-            password_hash=None,
-            identity_id=identity.id,
-            is_primary_account=True,
-            is_active=True,
-        )
-        db.add(student)
-        db.flush()
-        return student, True, False
+        try:
+            # Issue #730: isolate the INSERT in a SAVEPOINT so a unique-constraint
+            # conflict (a concurrent sync inserted the same one_campus_student_id
+            # first) rolls back only this insert, not the whole batch transaction.
+            with db.begin_nested():
+                identity = Identity(
+                    one_campus_student_id=one_campus_student_id,
+                    email_verified=False,
+                    is_active=True,
+                )
+                db.add(identity)
+                db.flush()
+        except IntegrityError:
+            # The concurrent sync won the race. Re-read the existing row (ignore
+            # is_active so a previously soft-deleted identity is reused and
+            # reactivated) and fall through to the existing-identity update path.
+            identity = (
+                db.query(Identity)
+                .filter(Identity.one_campus_student_id == one_campus_student_id)
+                .first()
+            )
+            if identity is None:
+                raise
+            if not identity.is_active:
+                identity.is_active = True
+        else:
+            student = Student(
+                name=student_name or one_campus_student_id,
+                student_number=student_number,
+                password_hash=None,
+                identity_id=identity.id,
+                is_primary_account=True,
+                is_active=True,
+            )
+            db.add(student)
+            db.flush()
+            return student, True, False
 
     linked_students = (
         db.query(Student)

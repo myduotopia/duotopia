@@ -141,6 +141,51 @@ describe("AzureSpeechService", () => {
       expect(axios.post).toHaveBeenCalledTimes(2);
     });
 
+    it("should cache with a 120s safety buffer (Issue #136)", async () => {
+      vi.mocked(axios.post).mockResolvedValueOnce({
+        data: { token: "buffer-token", region: "eastasia", expires_in: 600 },
+      });
+
+      const before = Date.now();
+      await service["getToken"]();
+      const after = Date.now();
+
+      const cache = service["tokenCache"];
+      expect(cache).not.toBeNull();
+      const expiresAt = cache!.expiresAt.getTime();
+
+      // expiresAt 应为 now + (600 - 120) = now + 480s（含调用耗时的容差窗口）
+      expect(expiresAt).toBeGreaterThanOrEqual(before + 480 * 1000);
+      expect(expiresAt).toBeLessThanOrEqual(after + 480 * 1000);
+    });
+
+    it("should clamp to a non-negative buffer for small expires_in (Issue #136)", async () => {
+      // 后端 cache 命中时可能回传很小的剩余秒数（如 100s）
+      vi.mocked(axios.post)
+        .mockResolvedValueOnce({
+          data: { token: "small-token", region: "eastasia", expires_in: 100 },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            token: "refetched-token",
+            region: "eastasia",
+            expires_in: 600,
+          },
+        });
+
+      const before = Date.now();
+      await service["getToken"]();
+
+      const cache = service["tokenCache"];
+      // Math.max(0, 100 - 120) = 0 → expiresAt 落在「现在」，绝不落在过去
+      expect(cache!.expiresAt.getTime()).toBeGreaterThanOrEqual(before);
+
+      // 由于已立即过期，下一次调用应重新向 API 取 token，而非用 cache
+      const result = await service["getToken"]();
+      expect(result.token).toBe("refetched-token");
+      expect(axios.post).toHaveBeenCalledTimes(2);
+    });
+
     it("should handle token fetch error gracefully", async () => {
       vi.mocked(axios.post).mockRejectedValueOnce(new Error("Network error"));
 
@@ -200,11 +245,130 @@ describe("AzureSpeechService", () => {
       await service.uploadAnalysisInBackground(mockBlob, {}, 1000);
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        "Background upload failed:",
+        "First upload attempt failed:",
         expect.any(Error),
       );
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  // 🎯 Issue #138: Race condition in localStorage queue
+  describe("localStorage Queue Concurrency (Issue #138)", () => {
+    const STORAGE_KEY = "duotopia_pending_uploads";
+    const VERSION_KEY = "duotopia_pending_uploads_version";
+
+    const mkUpload = (id: string, overrides = {}) => ({
+      id,
+      audioBase64: "data:audio/wav;base64,AAAA",
+      analysisResult: {},
+      latencyMs: 100,
+      timestamp: 1000,
+      retryCount: 0,
+      ...overrides,
+    });
+
+    const readQueue = () =>
+      JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+
+    beforeEach(() => {
+      localStorage.clear();
+      // Finding 5: restore any localStorage spies left by previous tests so
+      // later tests get the real implementation, not a stale wrapper.
+      vi.restoreAllMocks();
+    });
+
+    it("increments the version counter on each successful save", () => {
+      service["savePendingUpload"](mkUpload("A"));
+      expect(localStorage.getItem(VERSION_KEY)).toBe("1");
+
+      service["savePendingUpload"](mkUpload("B"));
+      expect(localStorage.getItem(VERSION_KEY)).toBe("2");
+
+      expect(readQueue().map((u: { id: string }) => u.id)).toEqual(["A", "B"]);
+    });
+
+    it("retries on a concurrent version bump and keeps both entries (no data loss)", () => {
+      const orig = localStorage.getItem.bind(localStorage);
+      let versionReads = 0;
+      let injected = false;
+
+      // Simulate another tab committing entry B + bumping the version
+      // right after this context first reads the version (the classic
+      // read-modify-write race window).
+      vi.spyOn(localStorage, "getItem").mockImplementation((key: string) => {
+        if (key === VERSION_KEY) {
+          versionReads++;
+          if (versionReads === 2 && !injected) {
+            injected = true;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify([mkUpload("B")]));
+            localStorage.setItem(VERSION_KEY, "1");
+          }
+        }
+        return orig(key);
+      });
+
+      const result = service["savePendingUpload"](mkUpload("A"));
+
+      expect(result).toBe(true);
+      const ids = readQueue()
+        .map((u: { id: string }) => u.id)
+        .sort();
+      expect(ids).toEqual(["A", "B"]); // B from the "other tab" survives
+    });
+
+    it("removePendingUpload only removes its target and preserves a concurrent add", async () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([mkUpload("A")]));
+      localStorage.setItem(VERSION_KEY, "1");
+
+      const orig = localStorage.getItem.bind(localStorage);
+      let versionReads = 0;
+      let injected = false;
+
+      vi.spyOn(localStorage, "getItem").mockImplementation((key: string) => {
+        if (key === VERSION_KEY) {
+          versionReads++;
+          if (versionReads === 2 && !injected) {
+            injected = true;
+            // Another tab adds C while we are removing A
+            localStorage.setItem(
+              STORAGE_KEY,
+              JSON.stringify([mkUpload("A"), mkUpload("C")]),
+            );
+            localStorage.setItem(VERSION_KEY, "2");
+          }
+        }
+        return orig(key);
+      });
+
+      service["removePendingUpload"]("A");
+
+      const ids = readQueue()
+        .map((u: { id: string }) => u.id)
+        .sort();
+      expect(ids).toEqual(["C"]); // A removed, concurrently-added C kept
+    });
+
+    it("still prunes oldest entries when over the size limit", () => {
+      // Each item ~3MB of base64; MAX_QUEUE_SIZE is 10MB → only newest fit
+      const big = "x".repeat(3 * 1024 * 1024);
+      service["savePendingUpload"](mkUpload("A", { audioBase64: big }));
+      service["savePendingUpload"](mkUpload("B", { audioBase64: big }));
+      service["savePendingUpload"](mkUpload("C", { audioBase64: big }));
+      service["savePendingUpload"](mkUpload("D", { audioBase64: big }));
+
+      const ids = readQueue().map((u: { id: string }) => u.id);
+      expect(ids).not.toContain("A"); // oldest pruned
+      expect(ids).toContain("D"); // newest kept
+    });
+
+    it("rejects a single item larger than the queue limit", () => {
+      const tooBig = "x".repeat(11 * 1024 * 1024); // > 10MB
+      const result = service["savePendingUpload"](
+        mkUpload("HUGE", { audioBase64: tooBig }),
+      );
+      expect(result).toBe(false);
+      expect(readQueue()).toEqual([]);
     });
   });
 });

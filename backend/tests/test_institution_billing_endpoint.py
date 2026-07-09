@@ -10,6 +10,7 @@ import pytest
 
 from auth import create_access_token, get_password_hash
 from models import (
+    InstitutionInvoiceEmail,
     Organization,
     School,
     Student,
@@ -278,3 +279,155 @@ def test_happy_path_full_response(
     assert body["students"][0]["student_id"] == student.id
     assert body["students"][0]["name"] == "Alice"
     assert body["students"][0]["billable"] is True
+
+
+# ---------- PDF endpoint (issue #838 Phase B) ----------
+
+
+def test_pdf_outsider_teacher_gets_403(
+    test_client, outsider, institution_org_with_one_active_student
+):
+    org, _, _ = institution_org_with_one_active_student
+    r = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly.pdf?year=2026&month=6",
+        headers=_bearer(outsider.id),
+    )
+    assert r.status_code == 403
+
+
+def test_pdf_owner_downloads_valid_pdf(
+    test_client, owner, institution_org_with_one_active_student
+):
+    org, _, _ = institution_org_with_one_active_student
+    r = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly.pdf?year=2026&month=6",
+        headers=_bearer(owner.id),
+    )
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/pdf"
+    # Valid PDF payload + attachment disposition with the org-slug filename.
+    assert r.content[:4] == b"%PDF"
+    cd = r.headers.get("content-disposition", "")
+    assert "attachment" in cd
+    assert "acme-institution-2026-06.pdf" in cd
+
+
+def test_pdf_admin_can_download_any_org(
+    test_client, admin, institution_org_with_one_active_student
+):
+    org, _, _ = institution_org_with_one_active_student
+    r = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly.pdf?year=2026&month=6",
+        headers=_bearer(admin.id),
+    )
+    assert r.status_code == 200
+    assert r.content[:4] == b"%PDF"
+
+
+def test_pdf_400_when_org_is_not_institution(test_client, admin, shared_test_session):
+    org = Organization(name="Group Buy", org_type="group_buy", is_active=True)
+    shared_test_session.add(org)
+    shared_test_session.commit()
+    r = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly.pdf?year=2026&month=6",
+        headers=_bearer(admin.id),
+    )
+    assert r.status_code == 400
+
+
+# ---------- send-email endpoint (issue #838 Phase C) ----------
+
+
+def test_send_email_400_when_no_contact_email(
+    test_client, admin, institution_org_with_one_active_student
+):
+    """The fixture org has no contact_email → 400 with a 'set email' hint."""
+    org, _, _ = institution_org_with_one_active_student
+    r = test_client.post(
+        f"/api/organizations/{org.id}/billing/monthly/send-email",
+        json={"year": 2026, "month": 6},
+        headers=_bearer(admin.id),
+    )
+    assert r.status_code == 400
+    assert "email" in r.json()["detail"].lower() or "聯絡" in r.json()["detail"]
+
+
+def test_send_email_outsider_gets_403(
+    test_client, outsider, institution_org_with_one_active_student
+):
+    org, _, _ = institution_org_with_one_active_student
+    r = test_client.post(
+        f"/api/organizations/{org.id}/billing/monthly/send-email",
+        json={"year": 2026, "month": 6},
+        headers=_bearer(outsider.id),
+    )
+    assert r.status_code == 403
+
+
+def test_send_email_success_writes_audit_and_history(
+    test_client, admin, shared_test_session, institution_org_with_one_active_student
+):
+    org, _, _ = institution_org_with_one_active_student
+    org.contact_email = "finance@acme.example"
+    shared_test_session.commit()
+
+    r = test_client.post(
+        f"/api/organizations/{org.id}/billing/monthly/send-email",
+        json={"year": 2026, "month": 6, "cc": ["cc@acme.example"]},
+        headers=_bearer(admin.id),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["success"] is True
+    assert body["recipient"] == "finance@acme.example"
+    assert body["cc"] == ["cc@acme.example"]
+    assert body["sent_at"]
+
+    rows = (
+        shared_test_session.query(InstitutionInvoiceEmail)
+        .filter(InstitutionInvoiceEmail.organization_id == org.id)
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].recipient == "finance@acme.example"
+
+    # Phase D — sending the email also locks a pending AR invoice.
+    from models import InstitutionInvoice
+
+    inv = (
+        shared_test_session.query(InstitutionInvoice)
+        .filter(
+            InstitutionInvoice.organization_id == org.id,
+            InstitutionInvoice.year == 2026,
+            InstitutionInvoice.month == 6,
+        )
+        .one()
+    )
+    assert inv.status == "pending"
+    assert inv.amount == 150  # 1 billable student × 150
+
+    # History endpoint surfaces the last-sent time.
+    h = test_client.get(
+        f"/api/organizations/{org.id}/billing/monthly/email-history"
+        "?year=2026&month=6",
+        headers=_bearer(admin.id),
+    )
+    assert h.status_code == 200
+    hist = h.json()
+    assert hist["last_sent_at"]
+    assert len(hist["history"]) == 1
+
+
+def test_send_email_422_on_malformed_cc(
+    test_client, admin, institution_org_with_one_active_student
+):
+    """cc is EmailStr-validated → a malformed address is rejected at the
+    request boundary (422), never reaching the raw Cc header."""
+    org, _, _ = institution_org_with_one_active_student
+    org.contact_email = "finance@acme.example"
+    r = test_client.post(
+        f"/api/organizations/{org.id}/billing/monthly/send-email",
+        json={"year": 2026, "month": 6, "cc": ["not-an-email"]},
+        headers=_bearer(admin.id),
+    )
+    assert r.status_code == 422

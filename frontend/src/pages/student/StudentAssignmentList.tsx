@@ -25,7 +25,11 @@ import {
   ArrowUpDown,
   Filter,
 } from "lucide-react";
-import { StudentAssignmentCard, AssignmentStatusEnum } from "@/types";
+import {
+  StudentAssignmentCard,
+  AssignmentStatusEnum,
+  AssignmentData,
+} from "@/types";
 import { useTranslation } from "react-i18next";
 import {
   practiceModeIcon,
@@ -42,6 +46,18 @@ const SCORE_CATEGORY_COLORS: Record<string, string> = {
   writing: "bg-blue-100 text-blue-700 border-blue-200",
   reading: "bg-pink-100 text-pink-700 border-pink-200",
 };
+
+// Issue #332: statuses for which the assignment action button stays enabled.
+// Whitelist instead of a negated AND chain, so a newly-added status doesn't
+// silently disable the button.
+const ACTIONABLE_STATUSES = new Set<string>([
+  "NOT_STARTED",
+  "IN_PROGRESS",
+  "SUBMITTED",
+  "GRADED",
+  "RETURNED",
+  "RESUBMITTED",
+]);
 
 export default function StudentAssignmentList() {
   const { t } = useTranslation();
@@ -65,6 +81,8 @@ export default function StudentAssignmentList() {
   const [filterMode, setFilterMode] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 8;
+  // Issue #330: total count for the active tab, from the server (drives paging).
+  const [totalCount, setTotalCount] = useState(0);
   const [stats, setStats] = useState({
     totalAssignments: 0,
     todo: 0,
@@ -74,105 +92,96 @@ export default function StudentAssignmentList() {
     resubmitted: 0,
   });
 
-  const loadAssignments = useCallback(async () => {
-    if (!token) return;
-    try {
-      setLoading(true);
-      const apiUrl = import.meta.env.VITE_API_URL || "";
+  const loadAssignments = useCallback(
+    async (silent = false) => {
+      if (!token) return;
+      try {
+        if (!silent) setLoading(true);
+        const apiUrl = import.meta.env.VITE_API_URL || "";
 
-      const params = new URLSearchParams({ sort_by: sortBy });
-      if (filterMode) {
-        params.set("practice_mode", filterMode);
-      }
+        // Issue #330: server-side pagination + status filtering. Request only
+        // the active tab's current page; the backend also returns per-tab
+        // counts so every tab badge stays populated.
+        const params = new URLSearchParams({
+          sort_by: sortBy,
+          status: activeTab,
+          page: String(currentPage),
+          page_size: String(PAGE_SIZE),
+        });
+        if (filterMode) {
+          params.set("practice_mode", filterMode);
+        }
 
-      const response = await fetch(
-        `${apiUrl}/api/students/assignments?${params}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
+        const response = await fetch(
+          `${apiUrl}/api/students/assignments?${params}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
           },
-        },
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          `HTTP error! status: ${response.status}, body: ${errorText}`,
         );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(
+            `HTTP error! status: ${response.status}, body: ${errorText}`,
+          );
+        }
+
+        const data = await response.json();
+
+        const assignmentCards: StudentAssignmentCard[] = data.items.map(
+          (a: AssignmentData) => ({
+            id: a.id,
+            title: a.title,
+            status: a.status || "NOT_STARTED",
+            due_date: a.due_date,
+            score: a.score,
+            content_type: a.content_type,
+            practice_mode: a.practice_mode,
+            score_category: a.score_category,
+            content_count: a.content_count || 0,
+            completed_count:
+              a.status === "GRADED" || a.status === "SUBMITTED"
+                ? a.content_count || 0
+                : 0,
+            progress_percentage: 0,
+            is_live_quiz: a.is_live_quiz,
+            quiz_opened_at: a.quiz_opened_at,
+            quiz_closed_at: a.quiz_closed_at,
+          }),
+        );
+
+        setAssignments(assignmentCards);
+        setTotalCount(data.total ?? assignmentCards.length);
+
+        // Stats are computed server-side over the full set (all tabs), so the
+        // badges stay correct even though only one page is fetched.
+        const s = data.stats || {};
+        setStats({
+          totalAssignments:
+            (s.todo || 0) +
+            (s.submitted || 0) +
+            (s.graded || 0) +
+            (s.returned || 0) +
+            (s.resubmitted || 0),
+          todo: s.todo || 0,
+          submitted: s.submitted || 0,
+          graded: s.graded || 0,
+          returned: s.returned || 0,
+          resubmitted: s.resubmitted || 0,
+        });
+      } catch (error) {
+        console.error("Failed to load assignments:", error);
+        // 靜默輪詢不彈錯誤 toast（避免暫態錯誤洗版）
+        if (!silent) toast.error(t("studentAssignmentList.errors.loadFailed"));
+      } finally {
+        if (!silent) setLoading(false);
       }
-
-      const data = await response.json();
-
-      interface AssignmentData {
-        id: number;
-        title: string;
-        status?: string;
-        due_date?: string;
-        assigned_at?: string;
-        submitted_at?: string;
-        score?: number;
-        feedback?: string;
-        classroom_id: number;
-        content_type?: string;
-        practice_mode?: string;
-        score_category?: string;
-        content_count?: number;
-      }
-
-      const assignmentCards: StudentAssignmentCard[] = data.map(
-        (a: AssignmentData) => ({
-          id: a.id,
-          title: a.title,
-          status: a.status || "NOT_STARTED",
-          due_date: a.due_date,
-          score: a.score,
-          content_type: a.content_type,
-          practice_mode: a.practice_mode,
-          score_category: a.score_category,
-          content_count: a.content_count || 0,
-          completed_count:
-            a.status === "GRADED" || a.status === "SUBMITTED"
-              ? a.content_count || 0
-              : 0,
-          progress_percentage: 0,
-        }),
-      );
-
-      setAssignments(assignmentCards);
-
-      // Calculate stats
-      const todo = assignmentCards.filter(
-        (a) => a.status === "NOT_STARTED" || a.status === "IN_PROGRESS",
-      ).length;
-      const submitted = assignmentCards.filter(
-        (a) => a.status === "SUBMITTED",
-      ).length;
-      const graded = assignmentCards.filter(
-        (a) => a.status === "GRADED",
-      ).length;
-      const returned = assignmentCards.filter(
-        (a) => a.status === "RETURNED",
-      ).length;
-      const resubmitted = assignmentCards.filter(
-        (a) => a.status === "RESUBMITTED",
-      ).length;
-
-      setStats({
-        totalAssignments: assignmentCards.length,
-        todo,
-        submitted,
-        graded,
-        returned,
-        resubmitted,
-      });
-    } catch (error) {
-      console.error("Failed to load assignments:", error);
-      toast.error(t("studentAssignmentList.errors.loadFailed"));
-    } finally {
-      setLoading(false);
-    }
-  }, [token, sortBy, filterMode, t]);
+    },
+    [token, sortBy, filterMode, activeTab, currentPage, t],
+  );
 
   useEffect(() => {
     if (!user || !token) {
@@ -181,6 +190,25 @@ export default function StudentAssignmentList() {
     }
     loadAssignments();
   }, [user, token, navigate, loadAssignments]);
+
+  // Issue #835: Live quiz — 老師開放/收卷/再次開放後，學生卡片不用刷新就自動翻狀態。
+  // 只要有「live 且該生尚未交完」的作業就每 2.5 秒靜默刷新（不閃 spinner）。用「未交完」
+  // 而非「未收卷」當條件，才能在收卷後仍輪詢，抓到老師「再次開始」(補考) 的重新開放；
+  // 已交完的學生不輪詢（卡片不會再變）。
+  const hasPendingLiveQuiz = assignments.some(
+    (a) =>
+      a.is_live_quiz &&
+      a.status !== "SUBMITTED" &&
+      a.status !== "RESUBMITTED" &&
+      a.status !== "GRADED" &&
+      // RETURNED（退回訂正）已脫離 live 同步流程，否則收卷後該生會無限 2.5s 輪詢。
+      a.status !== "RETURNED",
+  );
+  useEffect(() => {
+    if (!hasPendingLiveQuiz) return;
+    const id = setInterval(() => loadAssignments(true), 2500);
+    return () => clearInterval(id);
+  }, [hasPendingLiveQuiz, loadAssignments]);
 
   const getStatusDisplay = (status: AssignmentStatusEnum) => {
     switch (status) {
@@ -250,6 +278,56 @@ export default function StudentAssignmentList() {
   };
 
   const getActionButton = (assignment: StudentAssignmentCard) => {
+    // Issue #835: Live quiz — 卡片狀態由老師主控（開放/收卷）決定
+    if (assignment.is_live_quiz) {
+      const opened = !!assignment.quiz_opened_at;
+      const closed = !!assignment.quiz_closed_at;
+      // 「查看結果」只看本人是否真的有作答結果，不看考卷 closed —— 否則收卷後
+      // 連缺考(NOT_STARTED)的學生也會誤顯示「查看結果」(其實沒結果可看)。
+      const hasResult =
+        assignment.status === "SUBMITTED" ||
+        assignment.status === "RESUBMITTED" ||
+        assignment.status === "GRADED";
+      // 1. 本人有結果 → 查看批改結果（QuizActivity guard 會導向 review）
+      if (hasResult) {
+        return (
+          <Button
+            onClick={() => handleStartAssignment(assignment.id)}
+            size="sm"
+            className="crayon-texture text-xs sm:text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white"
+            data-testid="assignment-action-button"
+          >
+            {t("studentAssignmentList.buttons.viewResults")}
+          </Button>
+        );
+      }
+      // 2. 開放中、未收卷、本人未作答 → 進入考卷
+      if (opened && !closed) {
+        return (
+          <Button
+            onClick={() => handleStartAssignment(assignment.id)}
+            size="sm"
+            className="crayon-texture text-xs sm:text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white"
+            data-testid="assignment-action-button"
+          >
+            {t("studentAssignmentList.buttons.enterQuiz") || "進入考卷"}
+            <ChevronRight className="ml-1 h-3.5 w-3.5" />
+          </Button>
+        );
+      }
+      // 3. 其餘（未開放，或已收卷但本人缺考）→ 等待老師開始（disabled 灰卡）
+      return (
+        <Button
+          disabled
+          size="sm"
+          className="crayon-texture text-xs sm:text-sm font-medium bg-gradient-to-r from-gray-100 to-gray-200 text-gray-500"
+          data-testid="assignment-action-button"
+        >
+          {t("studentAssignmentList.buttons.waitingTeacher") || "等待老師開始"}
+        </Button>
+      );
+    }
+
     const canStart =
       assignment.status === "NOT_STARTED" ||
       assignment.status === "IN_PROGRESS";
@@ -284,13 +362,7 @@ export default function StudentAssignmentList() {
     return (
       <Button
         onClick={() => handleStartAssignment(assignment.id)}
-        disabled={
-          !canStart &&
-          assignment.status !== "GRADED" &&
-          assignment.status !== "SUBMITTED" &&
-          assignment.status !== "RETURNED" &&
-          assignment.status !== "RESUBMITTED"
-        }
+        disabled={!ACTIONABLE_STATUSES.has(assignment.status)}
         size="sm"
         className={`crayon-texture text-xs sm:text-sm font-medium ${
           canStart || assignment.status === "RETURNED"
@@ -349,7 +421,7 @@ export default function StudentAssignmentList() {
                     variant="outline"
                     className={`${categoryColor} text-[10px] sm:text-xs px-1.5 sm:px-2 py-0 sm:py-0.5 border`}
                   >
-                    {t(`studentAssignmentList.scoreCategory.${scoreCategory}`)}
+                    {t(`practiceMode.scoreCategory.${scoreCategory}`)}
                   </Badge>
                 )}
               </div>
@@ -405,25 +477,6 @@ export default function StudentAssignmentList() {
     );
   };
 
-  const filterAssignments = (statusFilter: string) => {
-    switch (statusFilter) {
-      case "todo":
-        return assignments.filter(
-          (a) => a.status === "NOT_STARTED" || a.status === "IN_PROGRESS",
-        );
-      case "submitted":
-        return assignments.filter((a) => a.status === "SUBMITTED");
-      case "graded":
-        return assignments.filter((a) => a.status === "GRADED");
-      case "returned":
-        return assignments.filter((a) => a.status === "RETURNED");
-      case "resubmitted":
-        return assignments.filter((a) => a.status === "RESUBMITTED");
-      default:
-        return assignments;
-    }
-  };
-
   const renderEmptyState = (tab: string) => {
     const iconMap: Record<string, React.ReactNode> = {
       todo: <Clock className="h-12 w-12 text-gray-300 mx-auto mb-3" />,
@@ -453,18 +506,18 @@ export default function StudentAssignmentList() {
   };
 
   const renderTabContent = (tab: string) => {
-    const filtered = filterAssignments(tab);
-    if (filtered.length === 0) return renderEmptyState(tab);
+    // Issue #330: the server already returns just this tab's current page and
+    // the tab's total count, so render `assignments` directly and derive the
+    // page count from totalCount.
+    if (assignments.length === 0) return renderEmptyState(tab);
 
-    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+    const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
     const safeCurrentPage = Math.min(currentPage, totalPages);
-    const startIdx = (safeCurrentPage - 1) * PAGE_SIZE;
-    const paged = filtered.slice(startIdx, startIdx + PAGE_SIZE);
 
     return (
       <>
         <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3 sm:gap-4">
-          {paged.map(renderAssignmentCard)}
+          {assignments.map(renderAssignmentCard)}
         </div>
         {totalPages > 1 && (
           <div className="flex items-center justify-center gap-3 mt-6">

@@ -4,7 +4,17 @@ Pydantic models and validators for assignments
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, model_validator, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
+
+from utils.practice_mode import validate_practice_mode
+
+# Issue #884 item 1: the only practice modes that have student-side live-gate
+# endpoints (_guard_live_gate on start/answer). is_live_quiz is restricted to
+# these on create/patch so e.g. speaking_quiz can't be marked live without a
+# gate protecting students.
+LIVE_QUIZ_MODES = frozenset(
+    {"word_selection_quiz", "word_spelling_quiz", "word_cloze_quiz"}
+)
 
 # Issue #828: 整卷限時上限守衛（10 小時），擋掉負數/超大值；
 # 不用精確 allow-list 以免日後 UI 新增選項就壞掉
@@ -36,9 +46,8 @@ class CreateAssignmentRequest(BaseModel):
     # 機構模式：傳遞機構/學校 ID 以供後端授權驗證
     organization_id: Optional[str] = None
     school_id: Optional[str] = None
-    # 作答模式設定
-    # reading, rearrangement, word_reading, word_selection, word_spelling,
-    # word_cloze, word_selection_quiz, word_spelling_quiz, word_cloze_quiz
+    # 作答模式設定 — 合法值見 utils.practice_mode.ALLOWED_PRACTICE_MODES（含 tug_of_war）；
+    # 由下方 _check_practice_mode 驗證。
     practice_mode: Optional[str] = None
     answer_mode: Optional[
         str
@@ -46,6 +55,8 @@ class CreateAssignmentRequest(BaseModel):
     time_limit_per_question: Optional[int] = None
     # Issue #828: 小考整卷限時（秒）；null 不限時
     quiz_time_limit_seconds: Optional[int] = None
+    # Issue #835: 老師主控 live 考試模式（同步開始/收卷，無倒數）
+    is_live_quiz: Optional[bool] = False
     shuffle_questions: Optional[bool] = False
     show_answer: Optional[bool] = False
     play_audio: Optional[bool] = False
@@ -61,6 +72,12 @@ class CreateAssignmentRequest(BaseModel):
     @classmethod
     def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
         return _validate_quiz_time_limit(v)
+
+    @field_validator("practice_mode")
+    @classmethod
+    def _check_practice_mode(cls, v: Optional[str]) -> Optional[str]:
+        # #854: 單一真相源驗證（先前完全不檢查，任意字串都會寫進 DB）
+        return validate_practice_mode(v)
 
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "CreateAssignmentRequest":
@@ -82,6 +99,7 @@ class UpdateAssignmentRequest(BaseModel):
     # 進階設定
     time_limit_per_question: Optional[int] = None
     quiz_time_limit_seconds: Optional[int] = None
+    is_live_quiz: Optional[bool] = None  # Issue #835
     shuffle_questions: Optional[bool] = None
     show_answer: Optional[bool] = None
     play_audio: Optional[bool] = None
@@ -252,3 +270,48 @@ class BatchGradeFinalizeResponse(BaseModel):
     graded_count: int
     unchanged_count: int
     total_count: int
+
+
+# Issue #335 item 5: typed request bodies for the manual/teacher grading
+# endpoints that previously accepted raw ``dict`` (no validation, no score
+# bounds). Endpoints bridge these back to a dict via
+# ``model_dump(exclude_none=True)`` so existing body logic is unchanged while
+# input is now validated at the boundary.
+class TeacherItemGradeResult(BaseModel):
+    """Per-item teacher grade inside GradeStudentAssignmentRequest."""
+
+    item_index: int
+    feedback: Optional[str] = None
+    passed: Optional[bool] = None
+    score: Optional[float] = Field(default=None, ge=0, le=100)
+
+
+class GradeStudentAssignmentRequest(BaseModel):
+    """Body for POST /{assignment_id}/grade."""
+
+    student_id: int
+    score: Optional[float] = Field(default=None, ge=0, le=100)
+    feedback: Optional[str] = None
+    update_status: bool = True
+    item_results: Optional[List[TeacherItemGradeResult]] = None
+
+
+class SetAssignmentInProgressRequest(BaseModel):
+    """Body for POST /{assignment_id}/set-in-progress."""
+
+    student_id: int
+
+
+class ReturnForRevisionRequest(BaseModel):
+    """Body for POST /{assignment_id}/return-for-revision."""
+
+    student_id: int
+    message: Optional[str] = None
+
+
+class ManualGradeAssignmentRequest(BaseModel):
+    """Body for POST /{assignment_id}/manual-grade."""
+
+    score: Optional[float] = Field(default=None, ge=0, le=100)
+    feedback: Optional[str] = None
+    detailed_scores: Optional[Dict[str, Any]] = None

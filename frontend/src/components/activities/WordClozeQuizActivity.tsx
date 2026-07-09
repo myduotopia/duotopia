@@ -235,8 +235,11 @@ export default function WordClozeQuizActivity({
         setTimerTotal(data.quiz_time_limit_seconds ?? remaining);
       } catch (err: unknown) {
         const code = (err as { detail?: { code?: string } })?.detail?.code;
-        if (code === "QUIZ_ALREADY_SUBMITTED") {
+        if (code === "QUIZ_ALREADY_SUBMITTED" || code === "QUIZ_CLOSED") {
+          // Issue #835: 已收卷/已交 → 顯示批改結果
           setAlreadySubmitted(true);
+        } else if (code === "QUIZ_NOT_OPENED") {
+          // Issue #835: live 尚未開放，由 StudentActivityPageContent guard 導回
         } else {
           toast.error(t("wordCloze.toast.loadFailed") || "Failed to load quiz");
         }

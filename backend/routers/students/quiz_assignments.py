@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 from models import (
@@ -301,12 +301,41 @@ def _get_quiz_session(
     return session
 
 
+def _guard_live_gate(assignment: Assignment) -> None:
+    """Issue #835: live quiz 由老師主控開放/收卷。
+
+    - 未開放（quiz_opened_at null）→ 403：學生還不能進考卷。
+    - 已收卷（quiz_closed_at 非 null）→ 409：考試已結束（前端應導向 review）。
+    self-paced（is_live_quiz=False）不受任何影響。
+
+    TODO(#835): is_live_quiz 驗證用 endswith('_quiz')，speaking_quiz 也算 live，
+    但目前 quiz_assignments.py 無 start/answer_speaking_quiz 端點 → speaking live
+    quiz 上線時學生端不會經過本守衛，屆時需在對應端點補上 _guard_live_gate。
+    """
+    if not getattr(assignment, "is_live_quiz", False):
+        return
+    if assignment.quiz_opened_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "QUIZ_NOT_OPENED"},
+        )
+    if assignment.quiz_closed_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "QUIZ_CLOSED"},
+        )
+
+
 def _time_remaining(assignment: Assignment, session: PracticeSession) -> Optional[int]:
     """Compute seconds left for a quiz session.
 
     None ⇒ no whole-paper limit. Negative results clamp to 0 so the
     frontend can immediately auto-submit on next user interaction.
+
+    Issue #835: live quiz 無倒數 — 由老師按收卷統一結束，故一律回 None。
     """
+    if getattr(assignment, "is_live_quiz", False):
+        return None
     total = assignment.quiz_time_limit_seconds
     if not total:
         return None
@@ -349,6 +378,63 @@ def _attach_question_numbers(items: List[ContentItem], builder) -> List[Dict[str
         record["question_number"] = idx
         out.append(record)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Live quiz status (Issue #835) — lightweight polling for students
+# ---------------------------------------------------------------------------
+
+
+@router.get("/assignments/{assignment_id}/quiz/status")
+async def get_quiz_live_status(
+    assignment_id: int,
+    current_student: Dict[str, Any] = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """學生端輕量輪詢（每 3–5 秒）：只回開放/收卷閘門，不含題目。
+
+    前端據此切作業卡狀態、進入考卷 route guard、以及偵測「老師已收卷」後跳離。
+    ``assignment_id`` 為 StudentAssignment.id（與其餘 quiz 端點一致）。
+    """
+    student_id = int(current_student.get("sub"))
+    # Issue #884 item 3: this endpoint is polled every 3–15s per student, so
+    # load StudentAssignment + its Assignment in ONE round-trip via joinedload
+    # instead of two separate queries.
+    # 注意：path 的 assignment_id 是 StudentAssignment.id；Assignment 由關聯載入。
+    sa = (
+        db.query(StudentAssignment)
+        .options(joinedload(StudentAssignment.assignment))
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
+    )
+    if not sa:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+    assignment = sa.assignment
+    if assignment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found"
+        )
+
+    opened_at = assignment.quiz_opened_at
+    closed_at = assignment.quiz_closed_at
+    return {
+        # teacher 端 Assignment.id（非 path 的 StudentAssignment.id）：供前端訂閱
+        # Supabase Realtime 收卷頻道 live-quiz:{assignment_id}（#835 / PR #881 點 1）。
+        "assignment_id": assignment.id,
+        "is_live_quiz": bool(getattr(assignment, "is_live_quiz", False)),
+        "opened_at": opened_at.isoformat() if opened_at else None,
+        "closed_at": closed_at.isoformat() if closed_at else None,
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        # SUBMITTED/RESUBMITTED/GRADED ⇒ 前端可導向 review 批改檢視
+        "status": sa.status.value if sa.status else None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +499,8 @@ async def start_word_selection_quiz(
     assignment = _get_assignment_or_400(db, sa, "word_selection_quiz")
     _block_if_submitted(sa)
 
+    _guard_live_gate(assignment)
+
     session = _start_quiz_session(db, student_id, sa, "word_selection_quiz")
     items = _load_quiz_items(
         db, assignment, assignment.shuffle_questions, seed=session.id
@@ -468,6 +556,10 @@ async def submit_word_selection_quiz_answer(
     student_id = int(current_student.get("sub"))
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
     assignment = _get_assignment_or_400(db, sa, "word_selection_quiz")
+    # Issue #835: 收卷後（quiz_closed_at 已設）即拒收答案 → 409 QUIZ_CLOSED。
+    # 與 start 端一致，且 closed_at 在 close 端原子先 commit，精準關閉
+    # 「閘門已關但該生 force-complete 尚未跑到」的 race window。
+    _guard_live_gate(assignment)
     _block_if_submitted(sa)
 
     if request.session_id is None:
@@ -526,6 +618,8 @@ async def start_word_spelling_quiz(
     assignment = _get_assignment_or_400(db, sa, "word_spelling_quiz")
     _block_if_submitted(sa)
 
+    _guard_live_gate(assignment)
+
     session = _start_quiz_session(db, student_id, sa, "word_spelling_quiz")
     items = _load_quiz_items(
         db, assignment, assignment.shuffle_questions, seed=session.id
@@ -575,7 +669,9 @@ async def submit_word_spelling_quiz_answer(
 ):
     student_id = int(current_student.get("sub"))
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
-    _get_assignment_or_400(db, sa, "word_spelling_quiz")
+    assignment = _get_assignment_or_400(db, sa, "word_spelling_quiz")
+    # Issue #835: 收卷後拒收答案（同 selection answer，閘門 closed_at 為準）。
+    _guard_live_gate(assignment)
     _block_if_submitted(sa)
 
     if request.session_id is None:
@@ -645,6 +741,8 @@ async def start_word_cloze_quiz(
     assignment = _get_assignment_or_400(db, sa, "word_cloze_quiz")
     _block_if_submitted(sa)
 
+    _guard_live_gate(assignment)
+
     session = _start_quiz_session(db, student_id, sa, "word_cloze_quiz")
     items = _load_quiz_items(
         db, assignment, assignment.shuffle_questions, seed=session.id
@@ -696,7 +794,9 @@ async def submit_word_cloze_quiz_answer(
 ):
     student_id = int(current_student.get("sub"))
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
-    _get_assignment_or_400(db, sa, "word_cloze_quiz")
+    assignment = _get_assignment_or_400(db, sa, "word_cloze_quiz")
+    # Issue #835: 收卷後拒收答案（同 selection answer，閘門 closed_at 為準）。
+    _guard_live_gate(assignment)
     _block_if_submitted(sa)
 
     if request.session_id is None:
@@ -857,7 +957,11 @@ def _complete_quiz(
     session_id: Optional[int],
 ) -> Tuple[float, int, int]:
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
-    _get_assignment_or_400(db, sa, expected_mode)
+    assignment = _get_assignment_or_400(db, sa, expected_mode)
+    # Issue #835: 收卷後（quiz_closed_at 已設）禁止學生自行 /complete → 409 QUIZ_CLOSED。
+    # 與 start/answer 端一致，補上「NOT_STARTED 學生在收卷後自送 0 分 SUBMITTED、
+    # 繞過缺考不計分」與「收卷 race window 內自我提交」的漏洞。
+    _guard_live_gate(assignment)
 
     # 曾被退回過（returned_at 有值）＝本次完成屬「訂正再提交」。改用 returned_at 而非
     # 當下 status 判定（robust）：避免 status 被別路徑改動成非 RETURNED 時，誤把訂正

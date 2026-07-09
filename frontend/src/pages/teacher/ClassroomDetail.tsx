@@ -6,7 +6,9 @@ import {
   practiceModeBadgeClass,
   practiceModeFilterOptions,
   isAutoScoredMode,
+  isQuizMode,
 } from "@/lib/practiceMode";
+import LiveQuizMonitorModal from "@/components/LiveQuizMonitorModal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -264,7 +266,7 @@ export default function ClassroomDetail({
         return { label: t(key), color: practiceModeBadgeClass(practiceMode) };
       }
       return {
-        label: t("classroomDetail.contentTypes.WORD_READING"),
+        label: t("practiceMode.word_reading.label"),
         color:
           "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
       };
@@ -276,13 +278,13 @@ export default function ClassroomDetail({
     ) {
       if (practiceMode === "rearrangement") {
         return {
-          label: t("classroomDetail.contentTypes.REARRANGEMENT"),
+          label: t("practiceMode.rearrangement.label"),
           color:
             "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
         };
       }
       return {
-        label: t("classroomDetail.contentTypes.SPEAKING"),
+        label: t("practiceMode.reading.label"),
         color:
           "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
       };
@@ -405,6 +407,104 @@ export default function ClassroomDetail({
       eligible.findIndex((a) => a.id === assignment.id),
     );
     setRevisionModal({ open: true, assignments: eligible, index });
+  };
+  // Issue #835: Live quiz 監考 modal + 開始考試
+  const [liveMonitor, setLiveMonitor] = useState<{
+    open: boolean;
+    assignment: Assignment | null;
+  }>({ open: false, assignment: null });
+  const [startingLiveQuiz, setStartingLiveQuiz] = useState<number | null>(null);
+  // Live quiz 同步機制：老師端只改 server 狀態並 fetchAssignments，不推播給學生。
+  // 學生端靠 StudentAssignmentList 靜默輪詢翻卡片、考卷頁 useQuizStatusPolling 偵測收卷踢回，自行同步。
+  const handleStartLiveQuiz = async (assignment: Assignment) => {
+    setStartingLiveQuiz(assignment.id);
+    try {
+      await apiClient.openLiveQuiz(assignment.id);
+      await fetchAssignments();
+      setLiveMonitor({ open: true, assignment });
+    } catch {
+      toast.error(t("liveQuizMonitor.startFailed", "開始考試失敗，請重試"));
+    } finally {
+      setStartingLiveQuiz(null);
+    }
+  };
+  const openLiveMonitor = (assignment: Assignment) =>
+    setLiveMonitor({ open: true, assignment });
+  // 收卷（不確認，直接收）—— 永遠掛在作業列的 switch 上，不依賴監考 modal，
+  // 老師關掉 modal / 重整後仍能收卷。
+  const handleCloseLiveQuiz = async (assignment: Assignment) => {
+    setStartingLiveQuiz(assignment.id);
+    try {
+      await apiClient.closeLiveQuiz(assignment.id);
+      await fetchAssignments();
+    } catch {
+      toast.error(t("liveQuizMonitor.collectFailed", "收卷失敗，請重試"));
+    } finally {
+      setStartingLiveQuiz(null);
+    }
+  };
+  // 作業列 live 控制：真正的 live/off switch（滑塊無字、軌道顯示「目標狀態」）。
+  // OFF(未開始/已收卷)→顯示 live、撥下去=開始/再次開放；ON(進行中)→顯示 off、撥下去=收卷。
+  // 進行中另放「監考」入口可重開 modal（撥 switch 是收卷，不是開 modal）。
+  const renderLiveQuizControl = (assignment: Assignment) => {
+    if (!isQuizMode(assignment.practice_mode) || !assignment.is_live_quiz) {
+      return null;
+    }
+    const isOn = !!assignment.quiz_opened_at && !assignment.quiz_closed_at;
+    const busy = startingLiveQuiz === assignment.id;
+    const title = isOn
+      ? t("liveQuizMonitor.collect", "收卷")
+      : assignment.quiz_closed_at
+        ? t("liveQuizMonitor.restart", "再次開始")
+        : t("liveQuizMonitor.start", "開始考試");
+    return (
+      <div className="flex items-center gap-2 h-10">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isOn}
+          aria-label={title}
+          title={title}
+          disabled={busy}
+          onClick={() =>
+            isOn
+              ? handleCloseLiveQuiz(assignment)
+              : handleStartLiveQuiz(assignment)
+          }
+          className={`relative inline-flex h-7 w-16 shrink-0 items-center rounded-full px-1 cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            isOn ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"
+          }`}
+        >
+          {/* 目標狀態文字（撥下去會變成的狀態），落在滑塊的反側 */}
+          <span
+            className={`pointer-events-none absolute text-[10px] font-bold uppercase tracking-wide ${
+              isOn
+                ? "left-2.5 text-white"
+                : "right-2.5 text-gray-700 dark:text-gray-200"
+            }`}
+          >
+            {isOn ? "off" : "live"}
+          </span>
+          {/* 滑塊：純圓鈕、不寫字 */}
+          <span
+            className={`pointer-events-none h-5 w-5 rounded-full bg-white shadow transition-transform ${
+              isOn ? "translate-x-[36px]" : "translate-x-0"
+            }`}
+          />
+        </button>
+        {isOn && (
+          <button
+            type="button"
+            onClick={() => openLiveMonitor(assignment)}
+            title={t("liveQuizMonitor.monitoring", "監考中")}
+            className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-700 dark:text-green-400"
+          >
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            {t("liveQuizMonitor.monitoring", "監考中")}
+          </button>
+        )}
+      </div>
+    );
   };
   // Sticky note modal state
   const [stickyNoteModal, setStickyNoteModal] = useState({
@@ -2429,6 +2529,9 @@ export default function ClassroomDetail({
                                   />
                                 </div>
 
+                                {/* Issue #835: Live quiz 控制（renderLiveQuizControl 自身回 null 時不渲染） */}
+                                {renderLiveQuizControl(assignment)}
+
                                 {/* Action Buttons */}
                                 <div className="flex gap-2">
                                   <Button
@@ -2662,7 +2765,8 @@ export default function ClassroomDetail({
                                       </div>
                                     </td>
                                     <td className="px-4 py-3">
-                                      <div className="flex gap-2">
+                                      <div className="flex gap-2 items-center">
+                                        {renderLiveQuizControl(assignment)}
                                         <Button
                                           variant="ghost"
                                           size="sm"
@@ -3577,6 +3681,19 @@ export default function ClassroomDetail({
         }}
         onAssignmentUpdated={() => fetchAssignments()}
       />
+
+      {/* Issue #835: Live quiz 監考 modal */}
+      {liveMonitor.assignment && (
+        <LiveQuizMonitorModal
+          open={liveMonitor.open}
+          onOpenChange={(open) => setLiveMonitor((prev) => ({ ...prev, open }))}
+          assignmentId={liveMonitor.assignment.id}
+          classroomId={id || ""}
+          practiceMode={liveMonitor.assignment.practice_mode || ""}
+          title={liveMonitor.assignment.title}
+          onClosed={() => fetchAssignments()}
+        />
+      )}
 
       {/* Batch Grading Modal */}
       <BatchGradingModal

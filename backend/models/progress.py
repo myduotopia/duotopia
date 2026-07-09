@@ -267,6 +267,13 @@ class PracticeSession(Base):
     __table_args__ = (
         Index("idx_practice_sessions_student", "student_id", "student_assignment_id"),
         Index("idx_practice_sessions_started", "started_at"),
+        # 監考看板 /quiz/live-progress 以 student_assignment_id + practice_mode 過濾
+        # （無 student_id），故需此複合索引；上面 student 前導索引服務不到。見 #835 / PR #881。
+        Index(
+            "idx_practice_sessions_sa_mode",
+            "student_assignment_id",
+            "practice_mode",
+        ),
     )
 
     def __repr__(self):

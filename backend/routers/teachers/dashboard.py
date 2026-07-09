@@ -262,7 +262,7 @@ async def get_teacher_dashboard(
     )
 
     return TeacherDashboard(
-        teacher=TeacherProfile.from_orm(current_teacher),
+        teacher=TeacherProfile.model_validate(current_teacher),
         classroom_count=len(classrooms),
         student_count=total_students,
         program_count=program_count,

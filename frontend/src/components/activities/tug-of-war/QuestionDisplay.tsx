@@ -1,146 +1,30 @@
 /**
- * QuestionDisplay - 題目顯示區
+ * QuestionDisplay - 題目顯示區（issue #920 起改為純顯示，每隊一份）
  *
- * 顯示在各隊選項上方。根據題型顯示文字或音檔播放按鈕。
- * 音檔模式：自動重複播放，間隔 1 秒。點擊可手動觸發。
+ * 顯示在各隊選項上方。依題型顯示圖片 / 英文 / 翻譯 / 克漏字例句。
+ * 音檔已上提由場景中央懸掛看板統一播放（見 useQuestionAudio），此元件不再處理音檔。
  */
 
-import { useRef, useCallback, useEffect, useState } from "react";
-import { Volume2, VolumeOff } from "lucide-react";
 import type { Question } from "./types";
 
 interface QuestionDisplayProps {
   question: Question;
-  showPrompt: boolean; // false when question is answered
-  audioMuted?: boolean;
-  onToggleMute?: () => void;
+  /** false 時（該題已被作答）顯示正解。 */
+  showPrompt: boolean;
+  /** 克漏字：是否顯示例句翻譯。 */
+  showSentenceTranslation?: boolean;
 }
 
 export function QuestionDisplay({
   question,
   showPrompt,
-  audioMuted = false,
-  onToggleMute,
+  showSentenceTranslation = false,
 }: QuestionDisplayProps) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const loopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isMountedRef = useRef(true);
-  const isPlayingRef = useRef(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-
-  const stopLoop = useCallback(() => {
-    if (loopTimerRef.current) {
-      clearTimeout(loopTimerRef.current);
-      loopTimerRef.current = null;
-    }
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-    speechSynthesis.cancel();
-    isPlayingRef.current = false;
-    setIsPlaying(false);
-  }, []);
-
-  const playOnce = useCallback(() => {
-    const isCloze = question.hasCloze;
-    const url = isCloze
-      ? question.vocabItem.example_sentence_audio_url
-      : question.vocabItem.audio_url;
-    const ttsText = isCloze
-      ? question.vocabItem.example_sentence || ""
-      : question.vocabItem.text;
-
-    if (!url) {
-      const utterance = new SpeechSynthesisUtterance(ttsText);
-      utterance.lang = "en-US";
-      utterance.rate = 0.9;
-      speechSynthesis.speak(utterance);
-      return utterance;
-    }
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-    const audio = new Audio(url);
-    audioRef.current = audio;
-    audio.play().catch(() => {
-      const utterance = new SpeechSynthesisUtterance(ttsText);
-      utterance.lang = "en-US";
-      utterance.rate = 0.9;
-      speechSynthesis.speak(utterance);
-    });
-    return audio;
-  }, [
-    question.hasCloze,
-    question.vocabItem.audio_url,
-    question.vocabItem.example_sentence_audio_url,
-    question.vocabItem.example_sentence,
-    question.vocabItem.text,
-  ]);
-
-  const startLoop = useCallback(() => {
-    if (!isMountedRef.current) return;
-    stopLoop();
-    isPlayingRef.current = true;
-    setIsPlaying(true);
-
-    const playAndSchedule = () => {
-      if (!isMountedRef.current || !isPlayingRef.current) return;
-      const result = playOnce();
-
-      const scheduleNext = () => {
-        if (!isMountedRef.current || !isPlayingRef.current) return;
-        loopTimerRef.current = setTimeout(playAndSchedule, 1500);
-      };
-
-      if (result instanceof HTMLAudioElement) {
-        result.addEventListener("ended", scheduleNext, { once: true });
-        result.addEventListener("error", scheduleNext, { once: true });
-      } else if (result instanceof SpeechSynthesisUtterance) {
-        result.addEventListener("end", scheduleNext, { once: true });
-      }
-    };
-
-    playAndSchedule();
-  }, [playOnce, stopLoop]);
-
-  // Auto-play loop for audio questions — skipped when user has muted
-  useEffect(() => {
-    isMountedRef.current = true;
-    if (question.hasAudio && showPrompt && !audioMuted) {
-      startLoop();
-    } else {
-      stopLoop();
-    }
-    return () => {
-      isMountedRef.current = false;
-      stopLoop();
-      speechSynthesis.cancel();
-    };
-  }, [
-    question.vocabItem.id,
-    showPrompt,
-    question.hasAudio,
-    audioMuted,
-    startLoop,
-    stopLoop,
-  ]);
-
-  // Fixed height for image mode to prevent container from jumping
-  const imageContainerClass =
-    "text-center py-2 h-72 flex items-center justify-center";
-  const defaultContainerClass =
-    "text-center py-2 h-16 flex items-end justify-center pb-4";
-
+  // Answered — reveal the correct answer
   if (!showPrompt) {
     return (
-      <div
-        className={
-          question.hasImage ? imageContainerClass : defaultContainerClass
-        }
-      >
-        <span className="text-4xl font-bold text-green-600 handwrite-font">
+      <div className="flex h-full items-center justify-center px-2 text-center">
+        <span className="handwrite-font text-3xl font-bold text-green-600 md:text-4xl">
           {question.correctAnswer}
         </span>
       </div>
@@ -150,15 +34,16 @@ export function QuestionDisplay({
   if (question.hasImage) {
     const imageUrl = question.vocabItem.image_url;
     return (
-      <div className={imageContainerClass}>
+      <div className="flex h-full items-center justify-center overflow-hidden p-1">
         {imageUrl ? (
+          // 無框；等比縮放、寬高雙向受限 → 不過大、寬度自動配合高度
           <img
             src={imageUrl}
             alt=""
-            className="h-64 w-64 rounded-lg object-cover shadow-md"
+            className="h-auto w-auto max-h-[92%] max-w-full object-contain"
           />
         ) : (
-          <span className="text-4xl font-bold handwrite-font">
+          <span className="handwrite-font text-3xl font-bold md:text-4xl">
             {question.vocabItem.text}
           </span>
         )}
@@ -166,34 +51,25 @@ export function QuestionDisplay({
     );
   }
 
-  if (question.hasAudio) {
+  if (question.hasCloze) {
     return (
-      <div className="text-center py-2 h-16 flex items-center justify-center">
-        <button
-          onClick={() => {
-            if (onToggleMute) {
-              onToggleMute();
-            } else if (isPlaying) {
-              stopLoop();
-            } else {
-              startLoop();
-            }
-          }}
-          className="p-3 rounded-full hover:bg-white/30 transition-colors cursor-pointer"
-        >
-          {audioMuted ? (
-            <VolumeOff className="h-10 w-10 text-gray-400" strokeWidth={2.5} />
-          ) : (
-            <Volume2 className="h-10 w-10 text-gray-700" strokeWidth={2.5} />
-          )}
-        </button>
+      <div className="flex h-full flex-col items-center justify-center gap-1 px-3 text-center">
+        <span className="text-xl font-semibold leading-snug text-gray-800 md:text-2xl lg:text-3xl">
+          {question.clozeSentence}
+        </span>
+        {showSentenceTranslation && question.clozeTranslation && (
+          <span className="text-sm text-gray-600 md:text-base">
+            {question.clozeTranslation}
+          </span>
+        )}
       </div>
     );
   }
 
+  // Text prompt (english_to_chinese / chinese_to_english)
   return (
-    <div className="text-center py-2 h-16 flex items-center justify-center">
-      <span className="text-4xl font-bold handwrite-font">
+    <div className="flex h-full items-center justify-center px-2 text-center">
+      <span className="handwrite-font text-3xl font-bold md:text-4xl lg:text-5xl">
         {question.prompt}
       </span>
     </div>

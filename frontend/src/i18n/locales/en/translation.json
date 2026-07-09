@@ -1,4 +1,52 @@
 {
+  "practiceMode": {
+    "reading": {
+      "label": "Sentence Reading",
+      "desc": "Students read sentences aloud, system scores pronunciation"
+    },
+    "rearrangement": {
+      "label": "Sentence Rearrangement",
+      "desc": "Students rearrange shuffled words into correct sentences"
+    },
+    "word_reading": {
+      "label": "Word Reading",
+      "desc": "Students read words aloud, system scores pronunciation"
+    },
+    "word_selection": {
+      "label": "Word Selection",
+      "desc": "View words or listen to audio, select the correct translation (Ebbinghaus item selection)"
+    },
+    "word_selection_quiz": {
+      "label": "Word Selection (Quiz)",
+      "desc": "Answer all items in order with question numbers; locks on submit"
+    },
+    "word_spelling": {
+      "label": "Word Spelling",
+      "desc": "View translation or listen to audio, type the correct spelling (Ebbinghaus item selection)"
+    },
+    "word_spelling_quiz": {
+      "label": "Word Spelling (Quiz)",
+      "desc": "Answer all items in order with question numbers; locks on submit"
+    },
+    "word_cloze": {
+      "label": "Word Cloze",
+      "desc": "Fill in the blank in the example sentence with the correct word form (Ebbinghaus item selection)"
+    },
+    "word_cloze_quiz": {
+      "label": "Word Cloze (Quiz)",
+      "desc": "Answer all items in order with question numbers; locks on submit"
+    },
+    "tug_of_war": {
+      "label": "Tug of War",
+      "desc": "Tug of War: compete on word mastery"
+    },
+    "scoreCategory": {
+      "speaking": "Speaking",
+      "listening": "Listening",
+      "reading": "Reading",
+      "writing": "Writing"
+    }
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -893,15 +941,19 @@
       "view": "View Assignment",
       "viewResults": "View Results",
       "resubmit": "Resubmit",
-      "practice": "Practice"
+      "practice": "Practice",
+      "waitingTeacher": "Waiting for teacher",
+      "enterQuiz": "Enter quiz"
     },
     "scoreCategory": {
+      "_deprecated": "Stage 6 #854: superseded by practiceMode.scoreCategory.*; remove after zero-ref audit",
       "speaking": "Speaking",
       "listening": "Listening",
       "writing": "Writing",
       "reading": "Reading"
     },
     "practiceMode": {
+      "_deprecated": "Stage 6 #854: per-mode labels superseded by practiceMode.<mode>.label; keep .all; remove rest after zero-ref audit",
       "reading": "Sentence Reading",
       "rearrangement": "Sentence Rearrangement",
       "word_selection": "Word Selection",
@@ -1005,6 +1057,10 @@
     }
   },
   "studentActivityPage": {
+    "liveQuiz": {
+      "waitingTeacher": "The teacher hasn't started the exam yet",
+      "collected": "The teacher has collected the papers"
+    },
     "loading": {
       "title": "Loading Assignment...",
       "subtitle": "Please wait while we prepare your learning content"
@@ -1240,7 +1296,8 @@
     "viewLabel": "Select share view",
     "personal": "Personal",
     "orgPrefix": "Org: ",
-    "schoolPrefix": "School: "
+    "schoolPrefix": "School: ",
+    "copyFailed": "Copy failed. Please select and copy the link manually."
   },
   "studentLogin": {
     "header": {
@@ -1556,7 +1613,7 @@
   "privacyPolicy": {
     "header": {
       "title": "Privacy Policy",
-      "lastUpdated": "Last updated: February 14, 2026"
+      "lastUpdated": "Last updated: July 7, 2026"
     },
     "section1": {
       "title": "1. General",
@@ -1625,6 +1682,17 @@
       "title": "10. Policy Changes",
       "item1": "10.1 The Company reserves the right to modify this Privacy Policy at any time. Changes will be posted on this page.",
       "item2": "10.2 Continued use of the Service constitutes your agreement to the revised Privacy Policy."
+    },
+    "section11": {
+      "title": "11. AI Usage Disclosure",
+      "item1": "11.1 To provide the core features of this Service, we use the following AI services and send the necessary audio or text data to the respective providers for real-time processing:",
+      "list": {
+        "item1": "Generative AI: Google Vertex AI (Gemini family), used for Chinese-English translation, teaching-content assistance, and learning-outcome analysis.",
+        "item2": "Speech recognition and pronunciation assessment: Microsoft Azure Speech Service, used to transcribe student recordings and evaluate pronunciation accuracy.",
+        "item3": "Text-to-Speech (TTS): Microsoft Azure Neural Voices, used to generate model-reading audio for teaching materials."
+      },
+      "item2": "11.2 Such AI processing is used solely to deliver the features of this Service. We do not provide your audio or personal data to these providers for training their AI models.",
+      "item3": "11.3 We may adjust the AI providers or models we use for technical optimization, and will update this disclosure on this page accordingly."
     }
   },
   "dialogs": {
@@ -1777,6 +1845,7 @@
         "description": "Select the practice mode and related settings for students",
         "advancedSettings": "Advanced Settings",
         "scoreCategory": {
+          "_deprecated": "Stage 6 #854: superseded by practiceMode.scoreCategory.*; remove after zero-ref audit",
           "speaking": "Speaking",
           "listening": "Listening",
           "reading": "Reading",
@@ -1794,14 +1863,17 @@
         "shuffleQuestionsDesc": "Randomize question order for each practice session",
         "studentPreview": "Student preview (demo content)",
         "studentPreviewDisclaimer": "Preview uses demo content. For some modes (Reading, Rearrangement) the timing / audio / shuffle settings come from the demo assignment and don't reflect your selections on the left.",
+        "previewNotImplemented": "Preview not implemented for this mode yet",
+        "selectModePrompt": "Select a mode to see the preview",
         "showAnswer": "Show Answer",
         "showAnswerDesc": "Show correct answer after completing each question",
         "wordSelectionShowAnswerDesc": "Reveal correct answer when student answers wrong",
         "playAudio": "Play Audio",
-        "playAudioYes": "Yes (Listening Practice)",
-        "playAudioNo": "No (Writing Practice)",
+        "playAudioYes": "Yes",
+        "playAudioNo": "No",
         "scoreListening": "Score Category: Listening",
         "scoreWriting": "Score Category: Writing",
+        "scoreReading": "Score Category: Reading",
         "scoreSpeaking": "Score Category: Speaking",
         "wordReading": "Word Reading",
         "wordReadingDesc": "Students read words aloud, system scores pronunciation",
@@ -1810,6 +1882,8 @@
         "wordSelectionQuiz": "Word Selection · Quiz",
         "wordSelectionQuizDesc": "Answer all items in order with question numbers; locks on submit",
         "quizTimeLimit": "Whole-quiz time limit (auto-submits when reached)",
+        "liveQuiz": "Teacher-controlled exam mode",
+        "liveQuizHint": "Teacher starts the whole class together and collects to end it (no countdown)",
         "wordSpelling": "Word Spelling · Ebbinghaus",
         "wordSpellingDesc": "View translation or listen to audio, type the correct spelling (Ebbinghaus item selection)",
         "wordCloze": "Word Cloze · Ebbinghaus",
@@ -4860,6 +4934,8 @@
   "studentStatusPanel": {
     "metric": {
       "selectAllStudents": "Select all students",
+      "answeredRate": "Answered",
+      "rank": "Rank",
       "correctRate": "Correct",
       "pronunciation": "Pron",
       "accuracy": "Acc",
@@ -5205,6 +5281,11 @@
     "creating": "Creating...",
     "start": "Start Practice",
     "error": "Failed to create instant practice",
+    "advancedSettings": "Advanced Settings",
+    "applyAndRestart": "Apply & Restart",
+    "applying": "Applying...",
+    "reconfigured": "New settings applied, restarting practice",
+    "reconfigureError": "Failed to apply settings",
     "modes": {
       "reading": {
         "label": "Sentence Reading",
@@ -5245,8 +5326,14 @@
     "rotateDeviceHint": "This game is best played in landscape mode",
     "continueAnyway": "Continue anyway",
     "imagesModeRequirement": "Requires at least 4 words with images",
-    "clozeModeRequirement": "Requires at least 4 words with example sentences",
+    "clozeModeRequirement": "No usable cloze sentences (each sentence must contain the word)",
+    "audioModeRequirement": "No word audio in this material",
     "showSentenceTranslation": "Show sentence translation",
+    "diffModeOff": "Same questions",
+    "diffModeOn": "Different questions",
+    "diffModeHint": "Each team gets different questions (not for audio modes)",
+    "enterFullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
     "error": {
       "loadFailed": "Failed to load vocabulary",
       "notEnoughWords": "Not enough words (minimum 4 required)"
@@ -5316,6 +5403,7 @@
   "analysisDialog": {
     "title": "Assignment Analysis",
     "practiceMode": {
+      "_deprecated": "Stage 6 #854: superseded by practiceMode.<mode>.label; remove after zero-ref audit",
       "rearrangement": "Sentence Rearrangement",
       "reading": "Sentence Reading",
       "word_selection": "Word Selection",
@@ -5425,5 +5513,17 @@
   "recordingAttempts": {
     "remaining": "{{n}} analysis attempt(s) remaining",
     "lockedTooltip": "Analysis limit reached. Re-record after the teacher returns this item."
+  },
+  "liveQuizMonitor": {
+    "stateOpen": "In progress",
+    "stateClosed": "Collected",
+    "submittedCount": "Submitted",
+    "start": "Start quiz",
+    "restart": "Restart",
+    "collect": "Collect",
+    "monitoring": "Monitoring",
+    "collected": "Quiz collected. Scores finalized.",
+    "collectFailed": "Failed to collect quiz. Please try again.",
+    "startFailed": "Failed to start quiz. Please try again."
   }
 }

@@ -23,21 +23,25 @@
 |---|--------------|---------------------|----------|------|
 | 1 | `word_reading`（單字朗讀） | 任意 | `speaking` | 口說 |
 | 2 | `reading`（例句朗讀） | 任意 | `speaking` | 口說 |
-| 3 | `word_cloze` / `word_cloze_quiz`（單字克漏字） | 任意 | `reading` | 閱讀 |
-| 4 | `rearrangement`（例句重組） | `false` | `reading` | 閱讀 |
-| 5 | 其他 practice_mode | `false` | `writing` | 寫作 |
-| 6 | 其他 practice_mode | `true` | `listening` | 聽力 |
+| 3 | `rearrangement`（例句重組）/ `word_selection`(`_quiz`)（單字選擇） | `false` | `reading` | 閱讀 |
+| 4 | 其他 practice_mode | `false` | `writing` | 寫作 |
+| 5 | 其他 practice_mode | `true` | `listening` | 聽力 |
 
 > Issue #828：小考變體（`word_selection_quiz` / `word_spelling_quiz` / `word_cloze_quiz`）與其艾賓浩斯版本共用同一個分類規則。
+>
+> Issue #878（兩項；皆**未做回填**——既有作業保留當初存的值，僅新建／更新的作業套新規則，接受新舊並存）：
+> 1. `word_selection` / `word_selection_quiz` 無音檔由 `writing` 改為 `reading`（看字選義＝閱讀理解）。
+> 2. `word_cloze` / `word_cloze_quiz` 由「恆 `reading`」改走通則（打字填空＝產出文字 → 無音檔 `writing`、有音檔 `listening`）。
 
 ### 規則邏輯（白話）
 
 1. **朗讀類**（單字朗讀／例句朗讀）→ 一律 **口說**，因為作答行為本身就是開口。
-2. **克漏字**（`word_cloze`）→ 一律 **閱讀**，因為主要靠看上下文判斷答案，即使搭配音檔也只是輔助。
-3. **例句重組**（`rearrangement`）無音檔 → **閱讀**；有音檔 → 落到通則 6，視為 **聽力**。
-4. **通則**：
-   - 沒有音檔 → **寫作**（靠打字／選字作答）
+2. **理解／選擇型**（`rearrangement` 例句重組／`word_selection`(`_quiz`) 單字選擇）無音檔 → **閱讀**（看文字理解、用選擇/排列作答，不產出文字）；有音檔 → 落到通則，視為 **聽力**。
+3. **通則**：
+   - 沒有音檔 → **寫作**（靠**打字產出文字**作答，如 `word_spelling` 拼寫、`word_cloze` 克漏字填空）
    - 有音檔 → **聽力**（需要靠聽辨輔助）
+
+> 關鍵分界（皆無音檔時）：「**理解既有文字**、用選擇/排列作答」→ 閱讀；「**打字產出文字**」→ 寫作。
 
 ### 衍生對照（常見 practice_mode 全展開）
 
@@ -45,11 +49,11 @@
 |---------------|-------------------|------------------|
 | `word_reading` | speaking | speaking |
 | `reading` | speaking | speaking |
-| `word_cloze` | reading | reading |
-| `word_cloze_quiz` | reading | reading |
+| `word_cloze` | writing | listening |
+| `word_cloze_quiz` | writing | listening |
 | `rearrangement` | reading | listening |
-| `word_selection` | writing | listening |
-| `word_selection_quiz` | writing | listening |
+| `word_selection` | reading | listening |
+| `word_selection_quiz` | reading | listening |
 | `word_spelling` | writing | listening |
 | `word_spelling_quiz` | writing | listening |
 | `tug_of_war` | writing | listening |

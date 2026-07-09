@@ -39,6 +39,7 @@ from .validators import (
     UpdateAssignmentRequest,
     StudentResponse,
     ContentResponse,
+    LIVE_QUIZ_MODES,
 )
 from .dependencies import get_current_teacher
 from services.preview_service import _VOCABULARY_CONTENT_TYPES
@@ -361,6 +362,12 @@ async def create_assignment(
         answer_mode=sanitized_answer_mode,
         time_limit_per_question=request.time_limit_per_question,
         quiz_time_limit_seconds=request.quiz_time_limit_seconds,
+        # Issue #835 / #884 item 1: live 模式僅對「有學生端 gate 的小考」有效
+        # （whitelist），其餘 practice_mode（含 speaking_quiz）一律 False。
+        is_live_quiz=bool(
+            getattr(request, "is_live_quiz", False)
+            and (request.practice_mode or "") in LIVE_QUIZ_MODES
+        ),
         shuffle_questions=request.shuffle_questions or False,
         show_answer=request.show_answer or False,
         play_audio=request.play_audio or False,
@@ -773,6 +780,18 @@ async def get_assignments(
                 "content_type": content_type,
                 "practice_mode": assignment.practice_mode,
                 "answer_mode": assignment.answer_mode,
+                # Issue #835: Live quiz mode — 老師端作業列 switch 狀態
+                "is_live_quiz": bool(getattr(assignment, "is_live_quiz", False)),
+                "quiz_opened_at": (
+                    assignment.quiz_opened_at.isoformat()
+                    if assignment.quiz_opened_at
+                    else None
+                ),
+                "quiz_closed_at": (
+                    assignment.quiz_closed_at.isoformat()
+                    if assignment.quiz_closed_at
+                    else None
+                ),
                 # 封存狀態
                 "is_archived": assignment.is_archived or False,
                 "archived_at": (
@@ -958,6 +977,7 @@ async def patch_assignment(
     advanced_fields = [
         "time_limit_per_question",
         "quiz_time_limit_seconds",  # Issue #828
+        "is_live_quiz",  # Issue #835
         "shuffle_questions",
         "show_answer",
         "play_audio",
@@ -971,6 +991,28 @@ async def patch_assignment(
     for field in advanced_fields:
         if field in provided:
             setattr(assignment, field, getattr(request, field))
+
+    # Issue #835 / #884 item 1: live 模式僅對 whitelist 的小考有效
+    # （practice_mode 在 PATCH 不可變）
+    if (
+        "is_live_quiz" in provided
+        and (assignment.practice_mode or "") not in LIVE_QUIZ_MODES
+    ):
+        assignment.is_live_quiz = False
+
+    # Issue #835: 不允許在 live quiz「開啟中」(已開放、未收卷) 把 is_live_quiz 關掉，
+    # 否則閘門欄位仍是「開」但 flag 變「非 live」→ _guard_live_gate 失效、監考端 400。
+    # 老師要關閉 live 必須先「收卷」。
+    if (
+        "is_live_quiz" in provided
+        and not request.is_live_quiz
+        and assignment.quiz_opened_at is not None
+        and assignment.quiz_closed_at is None
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot disable live quiz while it is open; collect (close) it first.",
+        )
 
     # If play_audio changed, recompute score_category (practice_mode is
     # immutable on PATCH so we only need to react to audio toggles).

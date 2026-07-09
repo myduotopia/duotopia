@@ -112,6 +112,22 @@ export interface LoginRequest {
   password: string;
 }
 
+/** Institution accounts-receivable invoice (issue #838 Phase D). */
+export interface InstitutionInvoiceDto {
+  id: number;
+  organization_id: string;
+  organization_name: string | null;
+  year: number;
+  month: number;
+  amount: number;
+  status: "pending" | "paid" | "overdue" | "cancelled";
+  due_date: string | null;
+  paid_at: string | null;
+  paid_by_admin_id: number | null;
+  payment_note: string | null;
+  created_at: string | null;
+}
+
 export interface LoginResponse {
   access_token: string;
   token_type: string;
@@ -186,6 +202,47 @@ export interface ReferralReportRow {
   verified_count: number;
   paid_count: number;
   total_points_awarded: number;
+}
+
+// ============ Live Quiz (Issue #835) ============
+export type LiveQuizState = "not_started" | "open" | "closed";
+
+export interface LiveQuizStatus {
+  assignment_id: number;
+  is_live_quiz: boolean;
+  state: LiveQuizState;
+  opened_at: string | null;
+  closed_at: string | null;
+  server_time: string;
+  force_completed_count?: number;
+}
+
+export interface LiveQuizProgressStudent {
+  student_id: number;
+  student_name: string;
+  student_number: number;
+  is_assigned: boolean;
+  status: string;
+  score: number | null;
+  correct_count: number | null;
+  answered_count: number | null;
+  total_questions: number | null;
+}
+
+export interface LiveQuizProgress extends LiveQuizStatus {
+  total_students: number;
+  submitted_count: number;
+  students: LiveQuizProgressStudent[];
+}
+
+export interface StudentQuizStatus {
+  /** teacher 端 Assignment.id（非 StudentAssignment.id），用於訂閱 Realtime 收卷頻道 */
+  assignment_id: number;
+  is_live_quiz: boolean;
+  opened_at: string | null;
+  closed_at: string | null;
+  server_time: string;
+  status: string | null;
 }
 
 class ApiClient {
@@ -1471,6 +1528,35 @@ class ApiClient {
     });
   }
 
+  // ============ Live Quiz (Issue #835) ============
+  // assignmentId = Assignment.id（老師端）
+  async openLiveQuiz(assignmentId: number) {
+    return this.request<LiveQuizStatus>(
+      `/api/teachers/assignments/${assignmentId}/quiz/open`,
+      { method: "POST" },
+    );
+  }
+
+  async closeLiveQuiz(assignmentId: number) {
+    return this.request<LiveQuizStatus>(
+      `/api/teachers/assignments/${assignmentId}/quiz/close`,
+      { method: "POST" },
+    );
+  }
+
+  async getLiveQuizProgress(assignmentId: number) {
+    return this.request<LiveQuizProgress>(
+      `/api/teachers/assignments/${assignmentId}/quiz/live-progress`,
+    );
+  }
+
+  // studentAssignmentId = StudentAssignment.id（學生端，與其餘 quiz 端點一致）
+  async getStudentQuizStatus(studentAssignmentId: number) {
+    return this.request<StudentQuizStatus>(
+      `/api/students/assignments/${studentAssignmentId}/quiz/status`,
+    );
+  }
+
   // ============ Assignment & Submission Methods ============
   async getSubmission(assignmentId: number, studentId: number) {
     return this.request(
@@ -1627,6 +1713,134 @@ class ApiClient {
     }>(
       `/api/organizations/${orgId}/billing/monthly?year=${year}&month=${month}`,
       { method: "GET" },
+    );
+  }
+
+  /**
+   * Download the monthly 請款單 PDF (issue #838 Phase B). Returns the raw
+   * Blob so the caller can trigger a browser download; the filename is taken
+   * from the server's Content-Disposition when present.
+   */
+  async downloadOrganizationMonthlyInvoicePdf(
+    orgId: string,
+    year: number,
+    month: number,
+  ): Promise<{ blob: Blob; filename: string }> {
+    const currentToken = this.getToken();
+    const headers: Record<string, string> = {};
+    if (currentToken) {
+      headers["Authorization"] = `Bearer ${currentToken}`;
+    }
+    const response = await fetch(
+      `${this.baseUrl}/api/organizations/${orgId}/billing/monthly.pdf?year=${year}&month=${month}`,
+      { method: "GET", headers },
+    );
+    if (!response.ok) {
+      let detail = `下載 PDF 失敗 (${response.status})`;
+      try {
+        const body = await response.json();
+        if (body?.detail) detail = body.detail;
+      } catch {
+        // non-JSON error body; keep the default message
+      }
+      throw new ApiError(response.status, detail);
+    }
+    const blob = await response.blob();
+    const cd = response.headers.get("content-disposition") || "";
+    const match = cd.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : `invoice-${year}-${month}.pdf`;
+    return { blob, filename };
+  }
+
+  /** Email the monthly 請款單 (PDF attached) to the org's contact email
+   * and record an audit row (issue #838 Phase C). */
+  async sendMonthlyInvoiceEmail(
+    orgId: string,
+    year: number,
+    month: number,
+    cc?: string[],
+  ) {
+    return this.request<{
+      success: boolean;
+      recipient: string;
+      cc: string[];
+      sent_at: string | null;
+    }>(`/api/organizations/${orgId}/billing/monthly/send-email`, {
+      method: "POST",
+      body: JSON.stringify({ year, month, cc: cc ?? null }),
+    });
+  }
+
+  /** Prior 請款 email sends for (org, year, month), newest first, so the UI
+   * can show the last-sent time. */
+  async getMonthlyInvoiceEmailHistory(
+    orgId: string,
+    year: number,
+    month: number,
+  ) {
+    return this.request<{
+      last_sent_at: string | null;
+      history: Array<{
+        recipient: string;
+        cc: string[];
+        sent_at: string | null;
+        sent_by_admin_id: number | null;
+      }>;
+    }>(
+      `/api/organizations/${orgId}/billing/monthly/email-history?year=${year}&month=${month}`,
+      { method: "GET" },
+    );
+  }
+
+  // ===== issue #838 Phase D: institution accounts-receivable ledger =====
+
+  /** Lock the (org, year, month) accounts-receivable invoice (amount is
+   * computed server-side). Idempotent. Admin only. */
+  async createInstitutionInvoice(orgId: string, year: number, month: number) {
+    return this.request<InstitutionInvoiceDto>(
+      `/api/admin/institution-invoices`,
+      {
+        method: "POST",
+        body: JSON.stringify({ organization_id: orgId, year, month }),
+      },
+    );
+  }
+
+  /** List AR invoices with optional filters (admin only). */
+  async listInstitutionInvoices(
+    params: {
+      status?: string;
+      overdue?: boolean;
+      year?: number;
+      month?: number;
+      organizationId?: string;
+    } = {},
+  ) {
+    const q = new URLSearchParams();
+    if (params.status) q.set("status", params.status);
+    if (params.overdue) q.set("overdue", "true");
+    if (params.year) q.set("year", String(params.year));
+    if (params.month) q.set("month", String(params.month));
+    if (params.organizationId) q.set("organization_id", params.organizationId);
+    const qs = q.toString();
+    return this.request<InstitutionInvoiceDto[]>(
+      `/api/admin/institution-invoices${qs ? `?${qs}` : ""}`,
+      { method: "GET" },
+    );
+  }
+
+  /** Mark an AR invoice paid / cancelled (admin only). */
+  async updateInstitutionInvoice(
+    id: number,
+    status: "paid" | "cancelled",
+    paymentNote?: string,
+  ) {
+    return this.request<InstitutionInvoiceDto>(
+      `/api/admin/institution-invoices/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status, payment_note: paymentNote ?? null }),
+      },
     );
   }
 

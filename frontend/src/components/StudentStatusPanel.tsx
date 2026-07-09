@@ -12,6 +12,7 @@
  */
 import { useState, useMemo, useEffect, useCallback, forwardRef } from "react";
 import { useTranslation } from "react-i18next";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { isQuizMode, isGradableMode } from "@/lib/practiceMode";
 import {
   LayoutGrid,
@@ -45,6 +46,8 @@ export interface StudentProgress {
   is_interim_score?: boolean;
   // 批改 hub 欄位（#830）：小考用 correct/total；朗讀用 metrics 三項平均
   correct_count?: number | null;
+  /** Issue #835 監考：已作答題數（答題率用）。 */
+  answered_count?: number | null;
   total_questions?: number | null;
   metrics?: {
     pronunciation: number | null;
@@ -79,6 +82,11 @@ export interface StudentStatusPanelProps {
    *   工具列換成「全選未達100 + 分數區間」、點姓名開批改頁、不跑派發流程。
    */
   mode?: "assign" | "revision";
+  /**
+   * Issue #835 監考純看模式：搭配 mode="revision" 沿用小考 metric 版面，但關閉所有
+   * 互動 — 隱藏 checkbox / 分數區間工具列 / 點姓名開批改 / grid 切換，並預設依答對數排序。
+   */
+  readOnly?: boolean;
   /** revision 模式:把目前勾選的 student_ids 回報給父層（modal）。 */
   onRevisionSelectionChange?: (studentIds: number[]) => void;
   /** revision/hub：單一學生列動作（還原 / 退回訂正 / 完成批改）。提供才顯示按鈕。 */
@@ -93,7 +101,68 @@ export interface StudentStatusPanelProps {
 
 type ViewMode = "grid" | "list";
 type TabValue = "all" | "assigned" | "unassigned";
-type SortMode = "number" | "name" | "score" | "status";
+type SortMode = "number" | "name" | "score" | "status" | "rank";
+
+// Issue #835 監考排序動畫：平滑滑動到新位置 + 名次上升（往上移）時背景閃綠。
+// auto-animate 自訂 plugin（只用於監考 readOnly 列表）。
+const proctorReorderAnimation = (
+  el: Element,
+  action: "add" | "remove" | "remain",
+  oldCoords?: { top: number; left: number },
+  newCoords?: { top: number; left: number },
+): KeyframeEffect => {
+  let keyframes: Keyframe[] = [];
+  if (action === "add") {
+    keyframes = [
+      { transform: "scale(0.98)", opacity: 0 },
+      { transform: "scale(1)", opacity: 1 },
+    ];
+  } else if (action === "remove") {
+    keyframes = [{ opacity: 1 }, { opacity: 0 }];
+  } else if (action === "remain" && oldCoords && newCoords) {
+    const deltaX = oldCoords.left - newCoords.left;
+    const deltaY = oldCoords.top - newCoords.top;
+    const start = `translate(${deltaX}px, ${deltaY}px)`;
+    if (deltaY > 0) {
+      // 名次上升 → 滑動 + 背景閃綠
+      keyframes = [
+        { transform: start, backgroundColor: "rgba(34,197,94,0)" },
+        { backgroundColor: "rgba(34,197,94,0.18)", offset: 0.35 },
+        { transform: "translate(0,0)", backgroundColor: "rgba(34,197,94,0)" },
+      ];
+    } else {
+      keyframes = [{ transform: start }, { transform: "translate(0,0)" }];
+    }
+  }
+  return new KeyframeEffect(el, keyframes, {
+    duration: 350,
+    easing: "ease-in-out",
+  });
+};
+
+// Issue #835 監考名次底色：金/銀/銅/淺紫(4-5 同色)。淺色 tint，含深色模式。
+function rankBgClass(rank?: number): string {
+  switch (rank) {
+    case 1:
+      return "bg-yellow-100 dark:bg-amber-900/30"; // 金
+    case 2:
+      return "bg-slate-200 dark:bg-slate-700/50"; // 銀
+    case 3:
+      return "bg-orange-100 dark:bg-orange-900/30"; // 銅
+    case 4:
+    case 5:
+      return "bg-purple-50 dark:bg-purple-900/20"; // 淺紫
+    default:
+      return "";
+  }
+}
+
+// Issue #835 監考名次：已提交(有分數)的學生一律排在前、組內依分數高低；未提交者(作答中)
+// 才依已作答題數排。1_000_000 基底確保「有分數」永遠勝過「無分數」——作答中答很多題、
+// 但提交後正確率低者，名次會被有分數者壓在後面。
+function proctorRankQuality(s: StudentProgress): number {
+  return s.score != null ? 1_000_000 + s.score : (s.answered_count ?? -1);
+}
 
 // 可由老師點姓名開批改頁的模式（isGradableMode）：reading / word_reading / rearrangement
 // revision 模式可被退回訂正的狀態（有作答可訂正）
@@ -302,6 +371,7 @@ export function StatusLegend({ columns = 2 }: { columns?: 1 | 2 } = {}) {
 
 interface MetricLabels {
   selectAllStudents: string;
+  answeredRate: string;
   correctRate: string;
   pronunciation: string;
   accuracy: string;
@@ -309,22 +379,45 @@ interface MetricLabels {
   total: string;
 }
 
-/** 小考答對/總題的文字（"17/20"）；無資料回 "-"。 */
-function quizScoreText(student: StudentProgress, hasScore: boolean): string {
+/**
+ * 小考正確率（答對/總題，"17/20"）；無資料回 "-"。
+ * Issue #835 監考(hideUntilSubmitted)：正確率只在已提交(有分數)後才顯示，
+ * 作答中不顯示，避免提前洩漏對錯。收卷 force-complete 後學生有分數即會顯示。
+ */
+function quizScoreText(
+  student: StudentProgress,
+  hasScore: boolean,
+  hideUntilSubmitted = false,
+): string {
   if (!hasScore) return "-";
+  if (hideUntilSubmitted && student.score == null) return "-";
   const correct = student.correct_count ?? "—";
   const total = student.total_questions ?? "—";
   return `${correct}/${total}`;
 }
 
-/** 表頭欄位標題（不含「學生」欄）— 依 metricMode。 */
+/** Issue #835 監考用：已做答題數/總題（"8/20"）；無資料回 "-"。未作答以 0 計。 */
+function quizAnsweredText(student: StudentProgress, hasScore: boolean): string {
+  if (!hasScore) return "-";
+  const answered = student.answered_count ?? 0;
+  const total = student.total_questions ?? "—";
+  return `${answered}/${total}`;
+}
+
+/**
+ * 表頭欄位標題（不含「學生」欄）— 依 metricMode。
+ * showAnswered（監考 readOnly）時，小考在「正確率」前多一欄「答題率」。
+ */
 function metricHeaderLabels(
   metricMode: MetricMode,
   labels: MetricLabels,
+  showAnswered = false,
 ): string[] {
   switch (metricMode) {
     case "quiz":
-      return [labels.correctRate, labels.total];
+      return showAnswered
+        ? [labels.answeredRate, labels.correctRate, labels.total]
+        : [labels.correctRate, labels.total];
     case "reading":
       return [
         labels.pronunciation,
@@ -343,15 +436,24 @@ function metricCellValues(
   metricMode: MetricMode,
   hasScore: boolean,
   scoreValue: number,
+  showAnswered = false,
 ): string[] {
   const m0 = (v: number | null | undefined) =>
     v == null ? "—" : String(Number(v).toFixed(0));
-  const total = hasScore
-    ? `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`
-    : "-";
+  // Issue #835 監考(showAnswered)：未提交(無分數)不顯示正確率/總分，只顯示答題率進度。
+  const total =
+    !hasScore || (showAnswered && student.score == null)
+      ? "-"
+      : `${student.is_interim_score ? "~" : ""}${Number(scoreValue).toFixed(1)}`;
   switch (metricMode) {
     case "quiz":
-      return [quizScoreText(student, hasScore), total];
+      return showAnswered
+        ? [
+            quizAnsweredText(student, hasScore),
+            quizScoreText(student, hasScore, showAnswered),
+            total,
+          ]
+        : [quizScoreText(student, hasScore), total];
     case "reading":
       return [
         m0(student.metrics?.pronunciation),
@@ -371,31 +473,40 @@ function ListHeader({
   hasActions,
   allSelected,
   onToggleAll,
+  readOnly = false,
 }: {
   metricMode: MetricMode;
   labels: MetricLabels;
   hasActions?: boolean;
   allSelected?: boolean;
   onToggleAll?: () => void;
+  /** Issue #835 監考純看：隱藏全選 checkbox，只保留欄位標題對齊。 */
+  readOnly?: boolean;
 }) {
   return (
     <div className="sticky top-0 z-10 flex items-center w-full gap-2 sm:gap-3 px-3 py-1.5 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[11px] font-medium text-gray-400 dark:text-gray-500">
-      {/* 全選 checkbox + 標題（點擊切換全選 / 取消全選） */}
-      <button
-        type="button"
-        onClick={onToggleAll}
-        className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-      >
-        {allSelected ? (
-          <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm bg-blue-500 text-white text-[9px] font-bold shrink-0">
-            ✓
-          </span>
-        ) : (
-          <span className="inline-block w-4 h-4 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700 shrink-0" />
-        )}
-        <span className="truncate">{labels.selectAllStudents}</span>
-      </button>
-      {metricHeaderLabels(metricMode, labels).map((lbl, i, arr) => (
+      {/* 全選 checkbox + 標題（點擊切換全選 / 取消全選）；readOnly 時只留標題 */}
+      {readOnly ? (
+        <span className="flex-1 min-w-0 truncate">
+          {labels.selectAllStudents}
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={onToggleAll}
+          className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        >
+          {allSelected ? (
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm bg-blue-500 text-white text-[9px] font-bold shrink-0">
+              ✓
+            </span>
+          ) : (
+            <span className="inline-block w-4 h-4 rounded-sm border-[1.5px] border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700 shrink-0" />
+          )}
+          <span className="truncate">{labels.selectAllStudents}</span>
+        </button>
+      )}
+      {metricHeaderLabels(metricMode, labels, readOnly).map((lbl, i, arr) => (
         <span
           key={i}
           className={`w-14 text-center shrink-0 ${
@@ -573,6 +684,8 @@ function StudentRow({
   returnLabel,
   gradeLabel,
   correctionLabel,
+  rankClass = "",
+  showAnswered = false,
 }: {
   student: StudentProgress;
   isEditing: boolean;
@@ -589,6 +702,10 @@ function StudentRow({
   returnLabel?: string;
   gradeLabel?: string;
   correctionLabel?: string;
+  /** Issue #835 監考名次底色（金/銀/銅/淺紫）；空字串＝不上色。 */
+  rankClass?: string;
+  /** Issue #835 監考：小考多顯示「答題率」欄（已做/總題）。 */
+  showAnswered?: boolean;
 }) {
   const isUnassigned = student.status === "unassigned";
   // 已是「未開始」/未派發 → 該列還原鈕 disable
@@ -616,6 +733,8 @@ function StudentRow({
       }}
       title={rowTooltip}
       className={`flex items-center w-full gap-2 sm:gap-3 py-2 px-3 rounded transition-colors ${
+        rankClass
+      } ${
         isClickable
           ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
           : "cursor-default"
@@ -669,26 +788,30 @@ function StudentRow({
       />
 
       {/* 數值欄（#830）：欄寬與表頭對齊，純數值無標籤；最後一欄為總分(粗體) */}
-      {metricCellValues(student, metricMode, hasScore, scoreValue).map(
-        (val, i, arr) => (
-          <span
-            key={i}
-            className={`w-14 text-center shrink-0 text-xs sm:text-sm ${
-              i === arr.length - 1 ? "font-bold" : ""
-            } ${
-              metricMode === "reading" && i !== arr.length - 1
-                ? "hidden sm:block"
-                : ""
-            } ${
-              hasScore
-                ? "text-gray-800 dark:text-gray-100"
-                : "text-gray-300 dark:text-gray-600"
-            }`}
-          >
-            {val}
-          </span>
-        ),
-      )}
+      {metricCellValues(
+        student,
+        metricMode,
+        hasScore,
+        scoreValue,
+        showAnswered,
+      ).map((val, i, arr) => (
+        <span
+          key={i}
+          className={`w-14 text-center shrink-0 text-xs sm:text-sm ${
+            i === arr.length - 1 ? "font-bold" : ""
+          } ${
+            metricMode === "reading" && i !== arr.length - 1
+              ? "hidden sm:block"
+              : ""
+          } ${
+            hasScore
+              ? "text-gray-800 dark:text-gray-100"
+              : "text-gray-300 dark:text-gray-600"
+          }`}
+        >
+          {val}
+        </span>
+      ))}
 
       {/* 單一學生操作（#830）：桌機顯示文字按鈕、手機只顯示 icon。
           固定欄寬，與表頭尾端 spacer 對齊，避免推移數值欄。 */}
@@ -764,6 +887,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       loading,
       scrollable = false,
       mode = "assign",
+      readOnly = false,
       onRevisionSelectionChange,
       onRowReset,
       onRowReturn,
@@ -791,6 +915,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
         "studentStatusPanel.metric.selectAllStudents",
         "全選學生",
       ),
+      answeredRate: t("studentStatusPanel.metric.answeredRate", "答題率"),
       correctRate: t("studentStatusPanel.metric.correctRate", "正確率"),
       pronunciation: t("studentStatusPanel.metric.pronunciation", "發音"),
       accuracy: t("studentStatusPanel.metric.accuracy", "準確"),
@@ -799,9 +924,16 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     };
 
     const [viewMode, setViewMode] = useState<ViewMode>("list");
+    // 監考排序動畫：掛在 list 容器，排名變動時平滑滑動 + 上升閃綠
+    const [listAnimateRef] = useAutoAnimate(proctorReorderAnimation);
     const [activeTab, setActiveTab] = useState<TabValue>("assigned");
-    const [sortMode, setSortMode] = useState<SortMode>("number");
-    const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+    // 監考純看模式預設依「名次」（有分數優先、組內依分數；無分數依答題率）由高到低
+    const [sortMode, setSortMode] = useState<SortMode>(
+      readOnly ? "rank" : "number",
+    );
+    const [sortDirection, setSortDirection] = useState<"asc" | "desc">(
+      readOnly ? "desc" : "asc",
+    );
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     // revision 工具列:分數區間快速勾選（預設 0~80）
     const [rangeMin, setRangeMin] = useState("0");
@@ -917,10 +1049,30 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
             cmp =
               (STATUS_ORDER[a.status] ?? -1) - (STATUS_ORDER[b.status] ?? -1);
             break;
+          case "rank":
+            // 名次：有分數優先、組內依分數；無分數依答題率（見 proctorRankQuality）
+            cmp = proctorRankQuality(a) - proctorRankQuality(b);
+            break;
         }
         return cmp * dir;
       });
     }, [filteredStudents, sortMode, sortDirection]);
+
+    // Issue #835 監考名次：只排「已開始作答」的學生（NOT_STARTED/未派發不入名次），
+    // 依 proctorRankQuality（有分數優先、組內依分數；無分數依答題率）由高到低取前 5
+    // → student_id ⇒ 名次(1..5)。名次與當前排序鍵無關。
+    const liveRankMap = useMemo(() => {
+      const m = new Map<number, number>();
+      if (!readOnly) return m;
+      const started = students.filter(
+        (s) => s.status !== "NOT_STARTED" && s.status !== "unassigned",
+      );
+      [...started]
+        .sort((a, b) => proctorRankQuality(b) - proctorRankQuality(a))
+        .slice(0, 5)
+        .forEach((s, i) => m.set(s.student_id, i + 1));
+      return m;
+    }, [readOnly, students]);
 
     // ---- Checkbox helpers ----
     // All tab: all disabled (display only)
@@ -1019,21 +1171,24 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     // revision 模式解除 isGradableMode 限制:任何可退回學生點姓名都能開批改頁
     const isClickableStudent = useCallback(
       (s: StudentProgress) =>
-        isRevision
-          ? RETURNABLE_STATUSES.has(String(s.status))
-          : isGradableStudent(s),
-      [isRevision, isGradableStudent],
+        readOnly
+          ? false
+          : isRevision
+            ? RETURNABLE_STATUSES.has(String(s.status))
+            : isGradableStudent(s),
+      [readOnly, isRevision, isGradableStudent],
     );
 
     const handleStudentClick = useCallback(
       (student: StudentProgress) => {
+        if (readOnly) return; // 監考純看：不開批改頁
         if (!isClickableStudent(student)) return;
         window.open(
           `/teacher/classroom/${classroomId}/assignment/${assignmentId}/grading?studentId=${student.student_id}`,
           "_blank",
         );
       },
-      [isClickableStudent, classroomId, assignmentId],
+      [readOnly, isClickableStudent, classroomId, assignmentId],
     );
 
     // ---- Tab counts ----
@@ -1054,6 +1209,15 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
 
     // ---- Sort buttons config ----
     const sortOptions: { value: SortMode; label: string }[] = [
+      // 監考純看：以「名次」（有分數優先、組內依分數；無分數依答題率）為主排序鍵
+      ...(readOnly
+        ? [
+            {
+              value: "rank" as SortMode,
+              label: t("studentStatusPanel.metric.rank", "名次"),
+            },
+          ]
+        : []),
       {
         value: "score",
         label: t("assignmentDetail.sheet.sortByScore", "成績"),
@@ -1092,7 +1256,8 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     ];
 
     // Whether checkboxes are interactive on current tab
-    const isCheckboxActive = isRevision || activeTab !== "all";
+    // 監考純看模式（readOnly）完全關閉 checkbox
+    const isCheckboxActive = !readOnly && (isRevision || activeTab !== "all");
 
     // ---- Select all checkbox state ----
     const selectAllState = useMemo(() => {
@@ -1111,7 +1276,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
       >
         {/* Header: (revision) 分數區間勾選 + 已選數在左；排序 + 檢視在右 */}
         <div className="flex items-center gap-2 mb-3">
-          {isRevision && (
+          {isRevision && !readOnly && (
             <div className="hidden sm:flex items-center gap-2 text-xs">
               <div className="flex items-center gap-1">
                 <input
@@ -1173,8 +1338,10 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
               })}
             </div>
 
-            {/* View mode toggle */}
-            <div className="flex items-center gap-1 shrink-0">
+            {/* View mode toggle（監考純看固定 list，不顯示切換） */}
+            <div
+              className={`flex items-center gap-1 shrink-0 ${readOnly ? "hidden" : ""}`}
+            >
               <button
                 type="button"
                 onClick={() => setViewMode("grid")}
@@ -1279,7 +1446,10 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
               ))}
             </div>
           ) : (
-            <div className="space-y-0.5">
+            <div
+              className="space-y-0.5"
+              ref={readOnly ? listAnimateRef : undefined}
+            >
               {/* 批改 hub 表頭：sticky 固定、欄寬對齊各列數值 */}
               {isRevision && (
                 <ListHeader
@@ -1288,6 +1458,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   hasActions={!!onRowReset || !!onRowReturn}
                   allSelected={allFilteredSelected}
                   onToggleAll={toggleSelectAll}
+                  readOnly={readOnly}
                 />
               )}
               {sortedStudents.map((student) => (
@@ -1300,6 +1471,8 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   onToggle={() => toggleStudent(student.student_id)}
                   onClick={() => handleStudentClick(student)}
                   metricMode={metricMode}
+                  rankClass={rankBgClass(liveRankMap.get(student.student_id))}
+                  showAnswered={readOnly}
                   onReset={
                     onRowReset
                       ? () => onRowReset(student.student_id)

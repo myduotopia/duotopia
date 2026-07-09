@@ -1,4 +1,52 @@
 {
+  "practiceMode": {
+    "reading": {
+      "label": "例句朗讀",
+      "desc": "學生朗讀例句，系統評分發音"
+    },
+    "rearrangement": {
+      "label": "例句重組",
+      "desc": "學生將打散的單字重新排列成正確句子"
+    },
+    "word_reading": {
+      "label": "單字朗讀",
+      "desc": "學生朗讀單字，系統評分發音"
+    },
+    "word_selection": {
+      "label": "單字選擇",
+      "desc": "看單字或聽音檔，選擇正確的翻譯（艾賓浩斯記憶曲線選題）"
+    },
+    "word_selection_quiz": {
+      "label": "單字選擇·小考",
+      "desc": "依教材題目順序作答，有題號，提交即鎖定"
+    },
+    "word_spelling": {
+      "label": "單字拼寫",
+      "desc": "看翻譯或聽音檔，拼寫正確的單字（艾賓浩斯記憶曲線選題）"
+    },
+    "word_spelling_quiz": {
+      "label": "單字拼寫·小考",
+      "desc": "依教材題目順序作答，有題號，提交即鎖定"
+    },
+    "word_cloze": {
+      "label": "單字克漏字",
+      "desc": "看例句填空，輸入正確的單字變形（艾賓浩斯記憶曲線選題）"
+    },
+    "word_cloze_quiz": {
+      "label": "單字克漏字·小考",
+      "desc": "依教材題目順序作答，有題號，提交即鎖定"
+    },
+    "tug_of_war": {
+      "label": "拔河遊戲",
+      "desc": "拔河遊戲：與同學比拚單字熟練度"
+    },
+    "scoreCategory": {
+      "speaking": "口說",
+      "listening": "聽力",
+      "reading": "閱讀",
+      "writing": "寫作"
+    }
+  },
   "common": {
     "save": "儲存",
     "cancel": "取消",
@@ -86,9 +134,98 @@
       "resubmitted": "已重交"
     },
     "messages": {
-      "updateSuccess": "已儲存變更",
+      "updateSuccess": "作業資訊已更新",
       "updateError": "儲存失敗",
-      "startDateAfterDueDate": "開始日期不可晚於截止日期"
+      "startDateAfterDueDate": "開始日期不可晚於截止日期",
+      "notFound": "找不到作業資料",
+      "loadError": "無法載入作業詳情",
+      "titleRequired": "請輸入作業標題",
+      "updateFailed": "更新失敗，請稍後再試",
+      "assignSuccess": "已成功指派給學生",
+      "assignFailed": "指派失敗，請稍後再試",
+      "unassignSuccess": "已取消指派學生「{{name}}」",
+      "unassignFailed": "取消指派失敗",
+      "unassignConfirm": "學生「{{name}}」已開始作業，確定要取消指派嗎？\n\n注意：學生的進度將會被保留，但無法繼續作業。",
+      "cannotUnassignCompleted": "學生「{{name}}」已完成作業，無法取消指派",
+      "noMatchingStudents": "沒有符合條件的學生"
+    },
+    "title": "作業詳情",
+    "buttons": {
+      "backToList": "返回作業列表",
+      "gradeAssignment": "批改作業",
+      "batchGrade": "AI批改",
+      "cancel": "取消",
+      "save": "儲存",
+      "edit": "編輯",
+      "assign": "指派",
+      "unassign": "取消指派",
+      "grade": "批改"
+    },
+    "noCredits": {
+      "message": "AI 點數已用完，請購買點數或升級方案",
+      "tooltip": "AI 點數不足，無法使用 AI 批改"
+    },
+    "labels": {
+      "contentType": "內容類型",
+      "assignedDate": "指派日期",
+      "dueDate": "截止日期",
+      "assignedStudents": "指派學生數",
+      "instructions": "作業說明",
+      "completionRate": "完成進度",
+      "contentDetails": "內容詳情",
+      "contentTitle": "內容標題：",
+      "itemCount": "項目數量：",
+      "items": "個項目",
+      "targetSpeed": "目標速度：",
+      "targetAccuracy": "目標準確度：",
+      "overallCompletionRate": "整體完成率",
+      "studentList": "學生列表",
+      "studentName": "學生姓名",
+      "assigned": "已指派",
+      "notStarted": "未開始",
+      "inProgress": "待完成",
+      "submitted": "已提交",
+      "returned": "待訂正",
+      "resubmitted": "已訂正",
+      "graded": "已完成",
+      "score": "分數",
+      "proficiency": "熟練度",
+      "actions": "操作",
+      "searchPlaceholder": "搜尋學生姓名...",
+      "allStatuses": "全部狀態",
+      "unassigned": "未指派",
+      "assignmentTitle": "作業標題",
+      "instructionsPlaceholder": "輸入作業說明...",
+      "noInstructions": "無說明",
+      "notSet": "未設定",
+      "people": "人",
+      "editContent": "編輯內容"
+    },
+    "contentTypes": {
+      "readingAssessment": "例句集",
+      "reading_assessment": "例句集",
+      "READING_ASSESSMENT": "例句集",
+      "EXAMPLE_SENTENCES": "例句集",
+      "speakingPractice": "口說練習",
+      "speaking_practice": "口說練習",
+      "SPEAKING_PRACTICE": "口說練習",
+      "speakingScenario": "情境對話",
+      "speaking_scenario": "情境對話",
+      "SPEAKING_SCENARIO": "情境對話",
+      "listeningCloze": "聽力填空",
+      "listening_cloze": "聽力填空",
+      "LISTENING_CLOZE": "聽力填空",
+      "sentenceMaking": "單字集",
+      "sentence_making": "單字集",
+      "SENTENCE_MAKING": "單字集",
+      "vocabularySet": "單字集",
+      "vocabulary_set": "單字集",
+      "VOCABULARY_SET": "單字集",
+      "speakingQuiz": "口說測驗",
+      "speaking_quiz": "口說測驗",
+      "SPEAKING_QUIZ": "口說測驗",
+      "MULTIPLE_CHOICE": "選擇題",
+      "SCENARIO_DIALOGUE": "情境對話"
     }
   },
   "demo": {
@@ -949,15 +1086,19 @@
       "view": "檢視作業",
       "viewResults": "查看結果",
       "resubmit": "開始訂正",
-      "practice": "自主練習"
+      "practice": "自主練習",
+      "waitingTeacher": "等待老師開始",
+      "enterQuiz": "進入考卷"
     },
     "scoreCategory": {
+      "_deprecated": "Stage 6 #854: superseded by practiceMode.scoreCategory.*; remove after zero-ref audit",
       "speaking": "口說",
       "listening": "聽力",
       "writing": "寫作",
       "reading": "閱讀"
     },
     "practiceMode": {
+      "_deprecated": "Stage 6 #854: per-mode labels superseded by practiceMode.<mode>.label; keep .all; remove rest after zero-ref audit",
       "reading": "例句朗讀",
       "rearrangement": "例句重組",
       "word_selection": "單字選擇",
@@ -1061,6 +1202,10 @@
     }
   },
   "studentActivityPage": {
+    "liveQuiz": {
+      "waitingTeacher": "老師尚未開始考試",
+      "collected": "老師已收卷"
+    },
     "loading": {
       "title": "載入作業中...",
       "subtitle": "請稍候，正在準備您的學習內容"
@@ -1293,7 +1438,8 @@
     "viewLabel": "選擇分享視圖",
     "personal": "個人班級",
     "orgPrefix": "機構：",
-    "schoolPrefix": "學校："
+    "schoolPrefix": "學校：",
+    "copyFailed": "複製失敗，請手動選取連結複製"
   },
   "studentLogin": {
     "header": {
@@ -1609,7 +1755,7 @@
   "privacyPolicy": {
     "header": {
       "title": "隱私權政策",
-      "lastUpdated": "最後更新日期：2026年2月14日"
+      "lastUpdated": "最後更新日期：2026年7月7日"
     },
     "section1": {
       "title": "1. 總則",
@@ -1678,6 +1824,17 @@
       "title": "10. 政策變更",
       "item1": "10.1 本公司保留隨時修改本隱私權政策的權利，修改後將於本頁面公告。",
       "item2": "10.2 繼續使用本服務即表示您同意修改後的隱私權政策。"
+    },
+    "section11": {
+      "title": "11. AI 使用揭露",
+      "item1": "11.1 為提供本服務的核心功能，我們使用下列 AI 服務，並將必要的語音或文字資料傳送給對應服務商進行即時處理：",
+      "list": {
+        "item1": "生成式 AI：Google Vertex AI（Gemini 系列），用於中英翻譯、教材內容輔助生成，以及學習成效分析。",
+        "item2": "語音辨識與發音評估：Microsoft Azure Speech Service，用於將學生錄音轉為文字並評估發音準確度。",
+        "item3": "語音合成（TTS）：Microsoft Azure Neural Voices，用於產生教材範讀語音。"
+      },
+      "item2": "11.2 上述 AI 處理僅用於提供本服務之功能。本公司不會將您的語音或個人資料提供予服務商用於訓練其 AI 模型。",
+      "item3": "11.3 我們可能因技術優化而調整所使用的 AI 服務商或模型，並將於本頁面更新揭露內容。"
     }
   },
   "dialogs": {
@@ -1830,6 +1987,7 @@
         "description": "選擇學生練習的模式和相關設定",
         "advancedSettings": "進階設定",
         "scoreCategory": {
+          "_deprecated": "Stage 6 #854: superseded by practiceMode.scoreCategory.*; remove after zero-ref audit",
           "speaking": "口說",
           "listening": "聽力",
           "reading": "閱讀",
@@ -1847,14 +2005,17 @@
         "shuffleQuestionsDesc": "每次練習時隨機排列題目順序",
         "studentPreview": "學生畫面預覽（demo 教材）",
         "studentPreviewDisclaimer": "預覽使用範例教材，部分模式（例句朗讀、例句重組）的時間／音檔等設定以示範作業為準，不會跟著左側設定變動。",
+        "previewNotImplemented": "此模式預覽尚未實作",
+        "selectModePrompt": "選擇一個模式查看預覽",
         "showAnswer": "顯示答案",
         "showAnswerDesc": "答題結束後顯示正確答案",
         "wordSelectionShowAnswerDesc": "學生答錯後揭示正確答案",
         "playAudio": "播放音檔",
-        "playAudioYes": "是（聽力練習）",
-        "playAudioNo": "否（寫作練習）",
+        "playAudioYes": "是",
+        "playAudioNo": "否",
         "scoreListening": "計分類別：聽力",
         "scoreWriting": "計分類別：寫作",
+        "scoreReading": "計分類別：閱讀",
         "scoreSpeaking": "計分類別：口說",
         "wordReading": "單字朗讀",
         "wordReadingDesc": "學生朗讀單字，系統評分發音",
@@ -1863,6 +2024,8 @@
         "wordSelectionQuiz": "單字選擇·小考",
         "wordSelectionQuizDesc": "依教材題目順序作答，有題號，提交即鎖定",
         "quizTimeLimit": "整卷時間限制（時間到自動提交）",
+        "liveQuiz": "老師主控考試模式",
+        "liveQuizHint": "老師按開始全班同步進入、按收卷全班結束（無倒數計時）",
         "wordSpelling": "單字拼寫·艾賓浩斯",
         "wordSpellingDesc": "看翻譯或聽音檔，拼寫正確的單字（艾賓浩斯記憶曲線選題）",
         "wordCloze": "單字克漏字·艾賓浩斯",
@@ -3076,100 +3239,6 @@
         "incomplete": "未達標",
         "notAnswered": "尚未作答"
       }
-    }
-  },
-  "assignmentDetail": {
-    "title": "作業詳情",
-    "messages": {
-      "notFound": "找不到作業資料",
-      "loadError": "無法載入作業詳情",
-      "titleRequired": "請輸入作業標題",
-      "updateSuccess": "作業資訊已更新",
-      "updateFailed": "更新失敗，請稍後再試",
-      "assignSuccess": "已成功指派給學生",
-      "assignFailed": "指派失敗，請稍後再試",
-      "unassignSuccess": "已取消指派學生「{{name}}」",
-      "unassignFailed": "取消指派失敗",
-      "unassignConfirm": "學生「{{name}}」已開始作業，確定要取消指派嗎？\n\n注意：學生的進度將會被保留，但無法繼續作業。",
-      "cannotUnassignCompleted": "學生「{{name}}」已完成作業，無法取消指派",
-      "noMatchingStudents": "沒有符合條件的學生"
-    },
-    "buttons": {
-      "backToList": "返回作業列表",
-      "gradeAssignment": "批改作業",
-      "batchGrade": "AI批改",
-      "cancel": "取消",
-      "save": "儲存",
-      "edit": "編輯",
-      "assign": "指派",
-      "unassign": "取消指派",
-      "grade": "批改"
-    },
-    "noCredits": {
-      "message": "AI 點數已用完，請購買點數或升級方案",
-      "tooltip": "AI 點數不足，無法使用 AI 批改"
-    },
-    "labels": {
-      "contentType": "內容類型",
-      "assignedDate": "指派日期",
-      "dueDate": "截止日期",
-      "assignedStudents": "指派學生數",
-      "instructions": "作業說明",
-      "completionRate": "完成進度",
-      "contentDetails": "內容詳情",
-      "contentTitle": "內容標題：",
-      "itemCount": "項目數量：",
-      "items": "個項目",
-      "targetSpeed": "目標速度：",
-      "targetAccuracy": "目標準確度：",
-      "overallCompletionRate": "整體完成率",
-      "studentList": "學生列表",
-      "studentName": "學生姓名",
-      "assigned": "已指派",
-      "notStarted": "未開始",
-      "inProgress": "待完成",
-      "submitted": "已提交",
-      "returned": "待訂正",
-      "resubmitted": "已訂正",
-      "graded": "已完成",
-      "score": "分數",
-      "proficiency": "熟練度",
-      "actions": "操作",
-      "searchPlaceholder": "搜尋學生姓名...",
-      "allStatuses": "全部狀態",
-      "unassigned": "未指派",
-      "assignmentTitle": "作業標題",
-      "instructionsPlaceholder": "輸入作業說明...",
-      "noInstructions": "無說明",
-      "notSet": "未設定",
-      "people": "人",
-      "editContent": "編輯內容"
-    },
-    "contentTypes": {
-      "readingAssessment": "例句集",
-      "reading_assessment": "例句集",
-      "READING_ASSESSMENT": "例句集",
-      "EXAMPLE_SENTENCES": "例句集",
-      "speakingPractice": "口說練習",
-      "speaking_practice": "口說練習",
-      "SPEAKING_PRACTICE": "口說練習",
-      "speakingScenario": "情境對話",
-      "speaking_scenario": "情境對話",
-      "SPEAKING_SCENARIO": "情境對話",
-      "listeningCloze": "聽力填空",
-      "listening_cloze": "聽力填空",
-      "LISTENING_CLOZE": "聽力填空",
-      "sentenceMaking": "單字集",
-      "sentence_making": "單字集",
-      "SENTENCE_MAKING": "單字集",
-      "vocabularySet": "單字集",
-      "vocabulary_set": "單字集",
-      "VOCABULARY_SET": "單字集",
-      "speakingQuiz": "口說測驗",
-      "speaking_quiz": "口說測驗",
-      "SPEAKING_QUIZ": "口說測驗",
-      "MULTIPLE_CHOICE": "選擇題",
-      "SCENARIO_DIALOGUE": "情境對話"
     }
   },
   "batchGrading": {
@@ -4893,6 +4962,8 @@
   "studentStatusPanel": {
     "metric": {
       "selectAllStudents": "全選學生",
+      "answeredRate": "答題率",
+      "rank": "名次",
       "correctRate": "正確率",
       "pronunciation": "發音",
       "accuracy": "準確",
@@ -5254,6 +5325,11 @@
     "creating": "建立中...",
     "start": "開始練習",
     "error": "建立即刻練習失敗",
+    "advancedSettings": "進階設定",
+    "applyAndRestart": "套用並重新開始",
+    "applying": "套用中...",
+    "reconfigured": "已套用新設定，從頭開始練習",
+    "reconfigureError": "套用設定失敗",
     "modes": {
       "reading": {
         "label": "例句朗讀",
@@ -5294,8 +5370,14 @@
     "rotateDeviceHint": "此遊戲適合橫向遊玩",
     "continueAnyway": "繼續遊玩",
     "imagesModeRequirement": "需要至少 4 個單字有圖片",
-    "clozeModeRequirement": "需要至少 4 個單字有例句",
+    "clozeModeRequirement": "此教材沒有可用的克漏字例句（例句需含該單字）",
+    "audioModeRequirement": "此教材沒有單字錄音",
     "showSentenceTranslation": "顯示例句翻譯",
+    "diffModeOff": "兩隊題目相同",
+    "diffModeOn": "兩隊題目相異",
+    "diffModeHint": "開啟後兩隊各出不同題目（聽音檔模式不適用）",
+    "enterFullscreen": "全螢幕",
+    "exitFullscreen": "退出全螢幕",
     "error": {
       "loadFailed": "載入單字失敗",
       "notEnoughWords": "單字數量不足（至少需要 4 個）"
@@ -5365,6 +5447,7 @@
   "analysisDialog": {
     "title": "作業分析",
     "practiceMode": {
+      "_deprecated": "Stage 6 #854: superseded by practiceMode.<mode>.label; remove after zero-ref audit",
       "rearrangement": "例句重組",
       "reading": "例句朗讀",
       "word_selection": "單字選擇",
@@ -5474,5 +5557,17 @@
   "recordingAttempts": {
     "remaining": "還剩 {{n}} 次分析機會",
     "lockedTooltip": "已達分析上限，老師退回後可重新錄音"
+  },
+  "liveQuizMonitor": {
+    "stateOpen": "考試進行中",
+    "stateClosed": "已收卷",
+    "submittedCount": "已交",
+    "start": "開始考試",
+    "restart": "再次開始",
+    "collect": "收卷",
+    "monitoring": "監考中",
+    "collected": "已收卷，全班成績已結算",
+    "collectFailed": "收卷失敗，請重試",
+    "startFailed": "開始考試失敗，請重試"
   }
 }

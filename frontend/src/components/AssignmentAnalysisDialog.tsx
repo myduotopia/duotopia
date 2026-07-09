@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, BarChart3, AlertCircle, CheckCircle2 } from "lucide-react";
 import { apiClient } from "@/lib/api";
+import { practiceModeLabelKey } from "@/lib/practiceMode";
 import { toast } from "sonner";
 
 interface AnalysisEstimate {
@@ -144,7 +145,8 @@ export function AssignmentAnalysisDialog({
   };
 
   const practiceModeName = (mode: string) => {
-    return t(`analysisDialog.practiceMode.${mode}`, mode);
+    const key = practiceModeLabelKey(mode);
+    return key ? t(key) : mode;
   };
 
   const renderReport = () => {

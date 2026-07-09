@@ -162,6 +162,64 @@ class TestAzureSpeechTokenService:
 
     @pytest.mark.asyncio
     @patch("services.azure_speech_token.get_http_client")
+    async def test_fresh_token_reports_full_expires_in(self, mock_get_client):
+        """Issue #136: 全新发放的 token 仍回传 expires_in == 600"""
+        from services.azure_speech_token import AzureSpeechTokenService
+
+        mock_response = AsyncMock()
+        mock_response.text = "fresh-token"
+        mock_response.raise_for_status = AsyncMock()
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+        mock_get_client.return_value = mock_client
+
+        with patch.dict("os.environ", {"AZURE_SPEECH_KEY": "test-key"}):
+            service = AzureSpeechTokenService()
+            result = await service.get_token()
+
+            assert result["expires_in"] == 600
+
+    @pytest.mark.asyncio
+    @patch("services.azure_speech_token.get_http_client")
+    async def test_cached_token_reports_real_remaining_life(self, mock_get_client):
+        """Issue #136: cache 命中时回传「实际剩余秒数」而非固定 600
+
+        避免前端依固定值 over-cache 一个即将到期的 token 而产生 401。
+        """
+        from services.azure_speech_token import AzureSpeechTokenService
+
+        mock_response = AsyncMock()
+        mock_response.text = "cached-token"
+        mock_response.raise_for_status = AsyncMock()
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+        mock_get_client.return_value = mock_client
+
+        with patch.dict("os.environ", {"AZURE_SPEECH_KEY": "test-key"}):
+            service = AzureSpeechTokenService()
+
+            # 第一次发放 → expires_in == 600
+            first = await service.get_token()
+            assert first["expires_in"] == 600
+
+            # 模拟时间已过去约 7.5 分钟（仍在 8 分钟 cache 窗口内，
+            # 真实剩余约 2.5 分钟），手动把到期时间往前挪
+            service._token_expires_at = datetime.now() + timedelta(seconds=150)
+
+            cached = await service.get_token()
+
+            # 仍是同一个 cached token，且未再呼叫 Azure
+            assert cached["token"] == "cached-token"
+            assert mock_client.post.call_count == 1
+
+            # 关键断言：回传的 expires_in 反映真实剩余寿命，远小于 600
+            assert cached["expires_in"] < 600
+            assert 140 <= cached["expires_in"] <= 150
+
+    @pytest.mark.asyncio
+    @patch("services.azure_speech_token.get_http_client")
     async def test_token_refresh_after_expiration(self, mock_get_client):
         """Test 9: Token 过期后重新获取"""
         from services.azure_speech_token import AzureSpeechTokenService

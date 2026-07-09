@@ -4,12 +4,11 @@ Assignment routers - modular structure
 This module aggregates all assignment-related routers:
 - CRUD operations
 - Assignment details and progress
-- Student submissions
 - Grading (AI and manual)
 """
 
 from fastapi import APIRouter
-from . import crud, detail, submission, grading, analysis
+from . import crud, detail, grading, analysis
 from .grading import get_student_submission  # noqa: E402
 
 # Main router with prefix - note: no trailing slash
@@ -29,9 +28,6 @@ router.add_api_route(
 
 # Include detail and progress endpoints
 router.include_router(detail.router, tags=["assignments-detail"])
-
-# Include student submission endpoints
-router.include_router(submission.router, tags=["assignments-submission"])
 
 # Include grading endpoints (AI and manual)
 router.include_router(grading.router, tags=["assignments-grading"])

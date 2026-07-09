@@ -54,6 +54,9 @@ import WordSelectionQuizActivity from "@/components/activities/WordSelectionQuiz
 import WordSpellingQuizPreview from "@/components/activities/WordSpellingQuizPreview";
 import WordClozeQuizPreview from "@/components/activities/WordClozeQuizPreview";
 import WordSelectionQuizPreview from "@/components/activities/WordSelectionQuizPreview";
+import { useQuizStatusPolling } from "@/components/activities/shared/useQuizStatusPolling";
+import { useQuizCloseRealtime } from "@/components/activities/shared/useQuizCloseRealtime";
+import { apiClient } from "@/lib/api";
 import {
   ChevronLeft,
   ChevronRight,
@@ -200,6 +203,9 @@ interface StudentActivityPageContentProps {
   };
   // #830: 老師預覽小考時，注入每張卡底部「該題班級表現」%條（學生作答頁不傳）。
   renderCardFooter?: (contentItemId: number) => ReactNode;
+  // #854: 注入頂部 sticky header 右側的動作區（即刻練習用來放「⚡ 進階設定」觸發鈕）。
+  // 學生作答 / demo 不傳，對其無影響。
+  headerActions?: ReactNode;
 }
 
 // =============================================================================
@@ -307,6 +313,7 @@ export default function StudentActivityPageContent({
   timeLimitPerQuestion = 0,
   previewSettings,
   renderCardFooter,
+  headerActions,
 }: StudentActivityPageContentProps) {
   const { t } = useTranslation();
 
@@ -341,6 +348,61 @@ export default function StudentActivityPageContent({
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [incompleteItems, setIncompleteItems] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
+
+  // Issue #835: Live quiz — 進入 guard + 收卷輪詢
+  // liveQuizOpen = 進入時是 live 且「正在開放中」(opened 且未 closed)。
+  // 只有此情況才輪詢偵測收卷 → 作答中被收卷會踢回；進來時已收卷(看 review)不輪詢、不踢人。
+  const [liveQuizOpen, setLiveQuizOpen] = useState(false);
+  // teacher 端 Assignment.id（取自 /quiz/status）：訂閱 Realtime 收卷頻道用。
+  const [liveAssignmentId, setLiveAssignmentId] = useState<number | null>(null);
+  const liveQuizActive = isQuizMode && !isPreviewMode && !isDemoMode;
+  useEffect(() => {
+    if (!liveQuizActive || !assignmentId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await apiClient.getStudentQuizStatus(assignmentId);
+        if (cancelled) return;
+        setLiveAssignmentId(s.assignment_id ?? null);
+        setLiveQuizOpen(s.is_live_quiz && !!s.opened_at && !s.closed_at);
+        // 老師尚未開始（未開放且未收卷）→ 不該進來，導回作業列表
+        if (s.is_live_quiz && !s.opened_at && !s.closed_at) {
+          toast.info(
+            t("studentActivityPage.liveQuiz.waitingTeacher") ||
+              "老師尚未開始考試",
+          );
+          onBack?.();
+        }
+      } catch {
+        // 非 live quiz 或暫態錯誤：忽略，照常渲染
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [liveQuizActive, assignmentId, onBack, t]);
+
+  // 收卷後一致的跳離處理（Realtime 與 polling fallback 共用）。
+  const handleQuizClosed = useCallback(() => {
+    toast.info(t("studentActivityPage.liveQuiz.collected") || "老師已收卷");
+    onBack?.();
+  }, [t, onBack]);
+
+  // 點 1：優先用 Realtime broadcast 偵測收卷（即時、零輪詢）。
+  const { connected: realtimeConnected } = useQuizCloseRealtime({
+    assignmentId: liveAssignmentId,
+    enabled: liveQuizActive && liveQuizOpen,
+    onClosed: handleQuizClosed,
+  });
+
+  useQuizStatusPolling({
+    // 此處 assignmentId 實為 StudentAssignment.id（路由 param），符合 /quiz/status 端點約定
+    studentAssignmentId: assignmentId,
+    enabled: liveQuizActive && liveQuizOpen,
+    // Realtime 已連線 → 拉長為慢速 fallback（防 broadcast 漏接）；否則維持 3s 主力輪詢。
+    intervalMs: realtimeConnected ? 15000 : 3000,
+    onClosed: handleQuizClosed,
+  });
 
   // 任何題目未錄音 / 錄音未上傳到 GCS 時，禁用提交按鈕
   const isSubmitBlockedByRecording = useMemo(
@@ -2496,6 +2558,8 @@ export default function StudentActivityPageContent({
               </div>
 
               <div className="flex items-center gap-2 sm:gap-3 justify-end flex-shrink-0">
+                {/* #854: 即刻練習「⚡ 進階設定」觸發鈕（向下下拉浮層）注入點 */}
+                {headerActions}
                 {saving && (
                   <div className="flex items-center gap-1 sm:gap-2 text-xs text-gray-600">
                     <Loader2 className="h-3 w-3 animate-spin" />

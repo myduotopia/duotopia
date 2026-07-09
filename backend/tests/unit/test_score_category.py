@@ -1,12 +1,11 @@
 """Unit tests for score_category resolution (Issue #708 PR-1).
 
 Mapping under test (see docs/design/score-category-mapping.md):
-  word_reading / reading           -> speaking (any audio)
-  word_cloze                       -> reading  (any audio)
-  rearrangement + audio off        -> reading
-  rearrangement + audio on         -> listening (falls through to general rule)
-  anything else + audio off        -> writing
-  anything else + audio on         -> listening
+  word_reading / reading                            -> speaking (any audio)
+  rearrangement / word_selection(_quiz) + audio off -> reading
+  rearrangement / word_selection(_quiz) + audio on  -> listening (general rule)
+  anything else + audio off                         -> writing
+  anything else + audio on                          -> listening
 """
 import pytest
 
@@ -25,36 +24,48 @@ class TestSpeakingModes:
         assert resolve_score_category("reading", audio) == "speaking"
 
 
-class TestAlwaysReading:
-    """word_cloze is 'reading' regardless of audio."""
+class TestReadingWhenSilent:
+    """rearrangement / word_selection(_quiz): reading when silent, listening with audio.
 
-    @pytest.mark.parametrize("audio", [False, True])
-    def test_word_cloze(self, audio):
-        assert resolve_score_category("word_cloze", audio) == "reading"
+    word_selection(_quiz) moved here in #878 (was writing-when-silent). No backfill
+    migration: existing rows keep their stored value, only new/updated assignments
+    follow the new rule.
+    """
 
+    @pytest.mark.parametrize(
+        "mode", ["rearrangement", "word_selection", "word_selection_quiz"]
+    )
+    def test_silent_is_reading(self, mode):
+        assert resolve_score_category(mode, False) == "reading"
 
-class TestRearrangement:
-    """rearrangement: reading when silent, listening when audio on."""
-
-    def test_silent(self):
-        assert resolve_score_category("rearrangement", False) == "reading"
-
-    def test_with_audio(self):
-        assert resolve_score_category("rearrangement", True) == "listening"
+    @pytest.mark.parametrize(
+        "mode", ["rearrangement", "word_selection", "word_selection_quiz"]
+    )
+    def test_audio_is_listening(self, mode):
+        assert resolve_score_category(mode, True) == "listening"
 
 
 class TestGeneralRule:
-    """Other modes: writing when silent, listening when audio on."""
+    """Typed-output / other modes: writing when silent, listening when audio on.
 
-    @pytest.mark.parametrize(
-        "mode", ["word_selection", "word_spelling", "tug_of_war", "future_mode"]
-    )
+    word_cloze(_quiz) moved here in #878 (was always-reading): typing to fill the
+    blank is producing text -> writing. No backfill; existing rows keep stored value.
+    """
+
+    _MODES = [
+        "word_cloze",
+        "word_cloze_quiz",
+        "word_spelling",
+        "word_spelling_quiz",
+        "tug_of_war",
+        "future_mode",
+    ]
+
+    @pytest.mark.parametrize("mode", _MODES)
     def test_silent_is_writing(self, mode):
         assert resolve_score_category(mode, False) == "writing"
 
-    @pytest.mark.parametrize(
-        "mode", ["word_selection", "word_spelling", "tug_of_war", "future_mode"]
-    )
+    @pytest.mark.parametrize("mode", _MODES)
     def test_audio_is_listening(self, mode):
         assert resolve_score_category(mode, True) == "listening"
 

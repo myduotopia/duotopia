@@ -60,6 +60,13 @@ from .organization import (
 # Student status history (issue #768 — per-head billing trail)
 from .student_status_history import StudentStatusHistory
 
+# Institution billing invoices (issue #838 — 請款 / 應收帳款 data layer)
+from .institution_invoice import (
+    InstitutionInvoice,
+    InstitutionInvoiceEmail,
+    INVOICE_STATUSES,
+)
+
 # Classroom models
 from .classroom import Classroom, ClassroomStudent
 
@@ -135,6 +142,10 @@ __all__ = [
     "StudentSchool",
     # Student status history
     "StudentStatusHistory",
+    # Institution billing invoices
+    "InstitutionInvoice",
+    "InstitutionInvoiceEmail",
+    "INVOICE_STATUSES",
     # Classrooms
     "Classroom",
     "ClassroomStudent",

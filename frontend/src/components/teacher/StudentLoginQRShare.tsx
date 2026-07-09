@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Copy } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,29 @@ interface ScopeOption {
 }
 
 const PERSONAL_VALUE = "personal";
+
+/**
+ * Legacy clipboard fallback for insecure contexts (HTTP) or browsers where
+ * navigator.clipboard is unavailable/blocked. Throws if the copy did not work.
+ */
+function legacyCopyToClipboard(text: string): void {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } finally {
+    document.body.removeChild(textarea);
+  }
+  if (!ok) {
+    throw new Error("execCommand('copy') returned false");
+  }
+}
 
 export default function StudentLoginQRShare({
   email,
@@ -103,12 +127,31 @@ export default function StudentLoginQRShare({
   );
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
+    const markCopied = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    };
+    try {
+      // Preferred path: async Clipboard API (secure contexts only).
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        // Insecure context / unsupported: use the legacy fallback.
+        legacyCopyToClipboard(url);
+      }
+      markCopied();
     } catch (err) {
-      console.error("Failed to copy URL:", err);
+      // Clipboard API rejected (permission denied / insecure context).
+      // Try the legacy fallback before giving up.
+      try {
+        legacyCopyToClipboard(url);
+        markCopied();
+      } catch (fallbackErr) {
+        // Issue #444: surface the failure instead of swallowing it, so the
+        // teacher knows to copy the link manually.
+        console.error("Failed to copy URL:", err, fallbackErr);
+        toast.error(t("studentLoginQR.copyFailed"));
+      }
     }
   };
 

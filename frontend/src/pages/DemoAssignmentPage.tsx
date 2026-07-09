@@ -24,6 +24,13 @@ interface DemoActivityResponse {
   practice_mode?: string | null;
   show_answer?: boolean;
   time_limit_per_question?: number;
+  // #854 B1: 後端 build_assignment_preview 本來就有回這些設定，先前 demo 漏接，
+  // 導致 demo 頁未照老師設定顯示（聲音/翻譯/圖片），與其他四畫面不一致。
+  play_audio?: boolean;
+  show_translation?: boolean;
+  show_word?: boolean;
+  show_image?: boolean;
+  show_option_images?: boolean;
   total_activities: number;
   activities: Activity[];
 }
@@ -130,6 +137,13 @@ export default function DemoAssignmentPage() {
         practiceMode={activityData.practice_mode || null}
         showAnswer={activityData.show_answer || false}
         timeLimitPerQuestion={activityData.time_limit_per_question ?? 0}
+        previewSettings={{
+          play_audio: activityData.play_audio,
+          show_translation: activityData.show_translation,
+          show_word: activityData.show_word,
+          show_image: activityData.show_image,
+          show_option_images: activityData.show_option_images,
+        }}
         isDemoMode={true}
         isPreviewMode={true}
         onBack={handleBack}

@@ -179,6 +179,10 @@ export interface Assignment {
     | "word_cloze"
     | "word_cloze_quiz"
     | "tug_of_war";
+  // Issue #835: Live quiz mode（老師主控開始/收卷，全班同步）
+  is_live_quiz?: boolean;
+  quiz_opened_at?: string | null;
+  quiz_closed_at?: string | null;
   // 封存狀態
   is_archived?: boolean;
   archived_at?: string;
@@ -244,6 +248,36 @@ export interface StudentAssignmentCard {
   teacher_name?: string;
   score?: number;
   is_overdue?: boolean;
+  // Issue #835: Live quiz mode — 學生作業卡依此切「等待老師開始/進入考卷/已收卷」
+  is_live_quiz?: boolean;
+  quiz_opened_at?: string | null;
+  quiz_closed_at?: string | null;
+}
+
+// Raw assignment row as returned by the student assignments API.
+// Shared by StudentAssignmentList and StudentAssignmentDetail (Issue #331).
+// Superset of both call sites — fields that only one page uses are optional.
+export interface AssignmentData {
+  id: number;
+  assignment_id?: number;
+  title: string;
+  status?: string;
+  score?: number;
+  feedback?: string;
+  classroom_id: number;
+  student_number?: number;
+  is_active?: boolean;
+  assigned_at?: string;
+  created_at?: string;
+  due_date?: string;
+  submitted_at?: string;
+  content_type?: string;
+  practice_mode?: string;
+  score_category?: string;
+  content_count?: number;
+  is_live_quiz?: boolean;
+  quiz_opened_at?: string | null;
+  quiz_closed_at?: string | null;
 }
 
 // Student Dashboard specific data
