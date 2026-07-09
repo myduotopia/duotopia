@@ -29,6 +29,7 @@ from models import (
 from services.preview_service import get_sentence_fields, _VOCABULARY_CONTENT_TYPES
 from services.quota_service import QuotaService
 from utils.cloze import extract_cloze_for_item
+from utils.rearrangement_history import archive_current_attempt
 from .dependencies import get_current_student
 from .quiz_assignments import score_and_finalize_quiz
 from .validators import (
@@ -3316,7 +3317,10 @@ async def submit_rearrangement_answer(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     )
-    progress.rearrangement_data = {"selections": selections}
+    # 合併寫回，保留既有 attempts / retries（不可整包覆蓋，否則會清掉封存的歷程）
+    data = dict(progress.rearrangement_data or {})
+    data["selections"] = selections
+    progress.rearrangement_data = data
 
     # 檢查是否達到錯誤上限
     challenge_failed = progress.error_count >= max_errors
@@ -3397,13 +3401,27 @@ async def retry_rearrangement(
     if not progress:
         raise HTTPException(status_code=404, detail="Progress not found")
 
+    # 封存當次選字歷程到 attempts[]（強制重來），再開新一輪
+    # 資料來源為後端逐字累積的 rearrangement_data，前端不需回傳
+    attempts = archive_current_attempt(
+        progress.rearrangement_data,
+        error_count=progress.error_count or 0,
+        expected_score=progress.expected_score or 0,
+        ended_reason="force_retry",
+        ended_at=datetime.now(timezone.utc).isoformat(),
+    )
+
     # 重置進度
     progress.error_count = 0
     progress.correct_word_count = 0
     progress.expected_score = 100.0
     progress.retry_count = (progress.retry_count or 0) + 1
     progress.status = "IN_PROGRESS"
-    progress.rearrangement_data = {"selections": [], "retries": progress.retry_count}
+    progress.rearrangement_data = {
+        "attempts": attempts,
+        "selections": [],
+        "retries": progress.retry_count,
+    }
 
     db.commit()
 
@@ -3447,15 +3465,28 @@ async def complete_rearrangement(
         .first()
     )
 
-    # 組裝 rearrangement_data（包含完整答題歷程）
-    rearrangement_data = {}
-    if request.selections:
-        rearrangement_data["selections"] = [s.model_dump() for s in request.selections]
-    rearrangement_data["completed_at"] = datetime.now(timezone.utc).isoformat()
-    rearrangement_data["timeout"] = request.timeout
+    now_iso = datetime.now(timezone.utc).isoformat()
+    ended_reason = "timeout" if request.timeout else "completed"
+    request_selections = (
+        [s.model_dump() for s in request.selections] if request.selections else None
+    )
 
     if not progress:
         # 防禦性：建立新記錄（正常情況下應該已存在）
+        attempt_selections = request_selections or []
+        rearrangement_data = {
+            "attempts": archive_current_attempt(
+                None,
+                error_count=request.error_count or 0,
+                expected_score=request.expected_score or 0,
+                ended_reason=ended_reason,
+                ended_at=now_iso,
+                selections=attempt_selections,
+            ),
+            "selections": attempt_selections,
+            "completed_at": now_iso,
+            "timeout": request.timeout,
+        }
         progress = StudentItemProgress(
             student_assignment_id=student_assignment_id,
             content_item_id=request.content_item_id,
@@ -3477,9 +3508,21 @@ async def complete_rearrangement(
         if request.error_count is not None:
             progress.error_count = request.error_count
 
-        # 合併答題歷程（保留既有 retries 等資訊）
-        existing_data = progress.rearrangement_data or {}
-        existing_data.update(rearrangement_data)
+        # 封存當次選字歷程到 attempts[]（完成 / 超時），保留既有 attempts / retries
+        # selections 以後端逐字累積為準，前端 request.selections 為 fallback
+        existing_data = dict(progress.rearrangement_data or {})
+        attempt_selections = existing_data.get("selections") or request_selections or []
+        existing_data["attempts"] = archive_current_attempt(
+            existing_data,
+            error_count=progress.error_count or 0,
+            expected_score=progress.expected_score or 0,
+            ended_reason=ended_reason,
+            ended_at=now_iso,
+            selections=attempt_selections,
+        )
+        existing_data["selections"] = attempt_selections
+        existing_data["completed_at"] = now_iso
+        existing_data["timeout"] = request.timeout
         progress.rearrangement_data = existing_data
 
     db.commit()
