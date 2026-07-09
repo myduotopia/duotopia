@@ -3089,12 +3089,19 @@
         "selected": "Selected",
         "expected": "Expected",
         "completedAt": "Completed at",
-        "detailedHistoryComingSoon": "Detailed answer history Coming Soon"
+        "detailedHistoryComingSoon": "Detailed answer history Coming Soon",
+        "scorePoints": "{{score}} pts",
+        "attemptCount": "{{count}} attempts",
+        "totalErrors": "{{count}} errors total",
+        "showingRecent": "Showing last {{count}}",
+        "noHistory": "No answer history"
       },
       "badges": {
         "completed": "Completed",
         "incomplete": "Below passing",
-        "notAnswered": "Not answered"
+        "notAnswered": "Not answered",
+        "timeout": "Timed out",
+        "forceRetry": "Forced retry"
       }
     }
   },

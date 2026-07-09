@@ -3232,12 +3232,19 @@
         "selected": "選擇",
         "expected": "應選",
         "completedAt": "完成時間",
-        "detailedHistoryComingSoon": "更詳細的作答紀錄 Coming Soon"
+        "detailedHistoryComingSoon": "更詳細的作答紀錄 Coming Soon",
+        "scorePoints": "{{score}} 分",
+        "attemptCount": "{{count}} 次嘗試",
+        "totalErrors": "共 {{count}} 次錯誤",
+        "showingRecent": "僅顯示最近 {{count}} 次",
+        "noHistory": "無作答紀錄"
       },
       "badges": {
         "completed": "完成",
         "incomplete": "未達標",
-        "notAnswered": "尚未作答"
+        "notAnswered": "尚未作答",
+        "timeout": "超時",
+        "forceRetry": "強制重來"
       }
     }
   },
