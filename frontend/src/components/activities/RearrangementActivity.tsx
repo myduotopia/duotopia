@@ -73,6 +73,9 @@ export interface RearrangementQuestionState {
   timeRemaining: number;
   hasSeenAnswer: boolean; // 是否已看過答案（用於計算重試後滿分）
   maxScore: number; // 該題滿分（初始 100，看過答案後變 60）
+  // #679: 這一輪的 challengeFailed 是否由「超時」造成（否則為錯誤達上限）。
+  // 用於 retry 封存時標記 ended_reason = timeout / force_retry。
+  endedByTimeout?: boolean;
 }
 
 // 內部使用的別名
@@ -493,6 +496,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
             expectedScore: actualScore,
             hasSeenAnswer: true,
             maxScore: 60,
+            endedByTimeout: true, // #679: 這輪因超時結束
           });
         }
         return newStates;
@@ -666,6 +670,21 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     const currentQuestion = questions[currentQuestionIndex];
     setResultModalOpen(false); // 關閉結果 Modal
 
+    // #679: 封存「剛結束那一輪」到 attempts[]。逐字挑選只存在前端本機
+    // （不經 answer endpoint），故需在清空前把該輪 selections 送給後端。
+    // 只有「強制重來」（未完成）需要送 → 完成的那一輪已由 rearrangement-complete
+    // 封存，這裡送空避免重複封存。
+    const prevRoundState = questionStates.get(currentQuestion.content_item_id);
+    const wasForceFailed =
+      !!prevRoundState?.challengeFailed && !prevRoundState?.completed;
+    const endedRoundSelections = wasForceFailed
+      ? [...(selectionsRef.current.get(currentQuestion.content_item_id) || [])]
+      : [];
+    const endedRoundErrorCount = prevRoundState?.errorCount ?? 0;
+    const endedRoundScore = prevRoundState?.expectedScore ?? 0;
+    // 這輪是超時還是錯誤達上限 → 決定後端 ended_reason
+    const endedRoundWasTimeout = !!prevRoundState?.endedByTimeout;
+
     // 🚀 重置狀態（本地操作，不需要 API）
     // 保留 hasSeenAnswer 和 maxScore（一旦看過答案就永不重置）
     setQuestionStates((prev) => {
@@ -681,6 +700,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
         timeRemaining: currentQuestion.time_limit,
         hasSeenAnswer: prevState?.hasSeenAnswer || false, // 保留
         maxScore: prevState?.maxScore || 100, // 保留
+        endedByTimeout: false, // 新一輪重置
       });
       return newStates;
     });
@@ -699,6 +719,10 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
           `/api/students/assignments/${studentAssignmentId}/rearrangement-retry`,
           {
             content_item_id: currentQuestion.content_item_id,
+            selections: endedRoundSelections,
+            error_count: endedRoundErrorCount,
+            expected_score: endedRoundScore,
+            timeout: endedRoundWasTimeout,
           },
         );
       } catch (error) {
