@@ -135,6 +135,30 @@ jobs:
         echo "📧 報告會發送到 myduotopia@gmail.com"
         echo "🤖 包含 OpenAI AI 分析摘要"
 
+    - name: Setup Institution Billing Overdue Check Job (Production Only)
+      if: github.event.inputs.environment == 'production'
+      run: |
+        JOB_NAME="billing-overdue-check-production"
+
+        echo "🗑️  刪除舊的 billing overdue check job（如果存在）..."
+        gcloud scheduler jobs delete $JOB_NAME \
+          --location=${{ env.REGION }} \
+          --quiet || echo "No existing job to delete"
+
+        echo "✨ 創建機構應收帳款逾期掃描 job..."
+        gcloud scheduler jobs create http $JOB_NAME \
+          --location=${{ env.REGION }} \
+          --schedule="0 9 * * *" \
+          --time-zone="Asia/Taipei" \
+          --uri="${{ steps.env_vars.outputs.BACKEND_URL }}/api/cron/billing-overdue-check" \
+          --http-method=POST \
+          --headers="X-Cron-Secret=${{ steps.env_vars.outputs.CRON_SECRET }},Content-Type=application/json" \
+          --attempt-deadline=300s \
+          --max-retry-attempts=3 \
+          --description="每天早上 9:00 (台北時間) 把逾期未收款的機構應收帳款 pending → overdue (issue #838 Phase D) - production only"
+
+        echo "✅ Billing overdue check job 創建成功（安全：僅翻轉帳款狀態，不扣款不寄信）"
+
     # 已關閉 test-notification staging job (2026-02-23)
     # 如需重新啟用，取消下方註解
     # - name: Setup Test Notification Job (Staging Only)
@@ -164,10 +188,11 @@ jobs:
           echo "  - Test Notification (每天 1 次 - staging only)"
           echo "- HTTP 請求成本: 免費（在 Cloud Run 免費額度內）"
         else
-          echo "- Cloud Scheduler: 3 個 jobs × USD 0.10/月 = USD 0.30/月"
+          echo "- Cloud Scheduler: 4 個 jobs × USD 0.10/月 = USD 0.40/月"
           echo "  - Monthly Renewal (每月 1 次 - production only)"
           echo "  - Renewal Reminder (每天 1 次 - production only)"
           echo "  - Recording Error Report (每天 2 次 = 2×30 = 60 次/月 - production only)"
+          echo "  - Billing Overdue Check (每天 1 次 - production only)"
           echo "- HTTP 請求成本: 免費（在 Cloud Run 免費額度內）"
           echo "- BigQuery 查詢成本: ~USD 0.002/月（每天 2 次查詢，每次 < 10 MB）"
           echo "- OpenAI API 成本: ~USD 0.001/月（gpt-4o-mini, 每次 300 tokens, 每天 2 次）"
@@ -193,6 +218,9 @@ jobs:
           echo ""
           echo "3. 測試 monthly renewal（🚨 會真實執行扣款邏輯！）："
           echo "   gcloud scheduler jobs run monthly-renewal-production --location=${{ env.REGION }}"
+          echo ""
+          echo "4. 測試 billing overdue check（安全，僅翻轉逾期帳款狀態）："
+          echo "   gcloud scheduler jobs run billing-overdue-check-production --location=${{ env.REGION }}"
         fi
 
     - name: Summary
@@ -228,6 +256,12 @@ jobs:
           echo "   📊 查詢 BigQuery 錄音錯誤（24H + 1H）"
           echo "   🤖 使用 OpenAI 生成錯誤分析摘要"
           echo "   📧 發送報告到 myduotopia@gmail.com"
+          echo ""
+          echo "📅 Job 4: billing-overdue-check-production (僅 production)"
+          echo "   排程: 每天早上 9:00 (台北時間)"
+          echo "   URL: ${{ steps.env_vars.outputs.BACKEND_URL }}/api/cron/billing-overdue-check"
+          echo "   💰 機構應收帳款 pending → overdue（issue #838 Phase D）"
+          echo "   ✅ 安全：僅翻轉狀態，不扣款不寄信"
         fi
         echo ""
         echo "💡 下次需要更新時，請在 GitHub Actions 手動觸發此 workflow"
