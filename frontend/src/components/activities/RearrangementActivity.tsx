@@ -73,6 +73,9 @@ export interface RearrangementQuestionState {
   timeRemaining: number;
   hasSeenAnswer: boolean; // 是否已看過答案（用於計算重試後滿分）
   maxScore: number; // 該題滿分（初始 100，看過答案後變 60）
+  // #679: 這一輪的 challengeFailed 是否由「超時」造成（否則為錯誤達上限）。
+  // 用於 retry 封存時標記 ended_reason = timeout / force_retry。
+  endedByTimeout?: boolean;
 }
 
 // 內部使用的別名
@@ -493,6 +496,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
             expectedScore: actualScore,
             hasSeenAnswer: true,
             maxScore: 60,
+            endedByTimeout: true, // #679: 這輪因超時結束
           });
         }
         return newStates;
@@ -678,6 +682,8 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       : [];
     const endedRoundErrorCount = prevRoundState?.errorCount ?? 0;
     const endedRoundScore = prevRoundState?.expectedScore ?? 0;
+    // 這輪是超時還是錯誤達上限 → 決定後端 ended_reason
+    const endedRoundWasTimeout = !!prevRoundState?.endedByTimeout;
 
     // 🚀 重置狀態（本地操作，不需要 API）
     // 保留 hasSeenAnswer 和 maxScore（一旦看過答案就永不重置）
@@ -694,6 +700,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
         timeRemaining: currentQuestion.time_limit,
         hasSeenAnswer: prevState?.hasSeenAnswer || false, // 保留
         maxScore: prevState?.maxScore || 100, // 保留
+        endedByTimeout: false, // 新一輪重置
       });
       return newStates;
     });
@@ -715,7 +722,7 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
             selections: endedRoundSelections,
             error_count: endedRoundErrorCount,
             expected_score: endedRoundScore,
-            timeout: false,
+            timeout: endedRoundWasTimeout,
           },
         );
       } catch (error) {
