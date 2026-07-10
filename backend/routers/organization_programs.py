@@ -13,7 +13,7 @@ Endpoints:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from pydantic import BaseModel, Field, computed_field, field_serializer, model_validator
 from typing import List, Optional
 import uuid
@@ -88,7 +88,9 @@ class ContentResponse(BaseModel):
     """Response model for content"""
 
     id: int
-    lesson_id: int
+    # Issue #587/#847: program-direct content has lesson_id NULL + program_id set
+    lesson_id: Optional[int] = None
+    program_id: Optional[int] = None
     type: str
     title: str
     order_index: int
@@ -133,6 +135,8 @@ class ProgramResponse(BaseModel):
     visibility: Optional[str] = "private"
     source_metadata: Optional[dict]
     lessons: List[LessonResponse] = []
+    # Issue #587/#847: contents that live directly under the program (no lesson)
+    contents: List[ContentResponse] = []
 
     @model_validator(mode="before")
     @classmethod
@@ -155,6 +159,32 @@ class ProgramResponse(BaseModel):
 
 
 # ============ Helper Functions ============
+
+
+def _build_content_response(content: Content) -> ContentResponse:
+    """Serialize a Content (lesson-attached or program-direct) with its items."""
+    content_data = ContentResponse.model_validate(content)
+    content_data.items = [
+        ContentItemResponse.model_validate(item)
+        for item in sorted(content.content_items, key=lambda x: x.order_index)
+    ]
+    return content_data
+
+
+def _build_program_direct_contents(program: Program) -> List[ContentResponse]:
+    """
+    Issue #587/#847: Build response for contents that live directly under the
+    program (lesson_id IS NULL). Program.contents is a viewonly relationship
+    already filtered to lesson_id IS NULL.
+    """
+    contents = []
+    for content in sorted(program.contents, key=lambda x: x.order_index):
+        if hasattr(content, "is_active") and not content.is_active:
+            continue
+        if getattr(content, "is_assignment_copy", False):
+            continue
+        contents.append(_build_content_response(content))
+    return contents
 
 
 def get_organization_programs(
@@ -282,7 +312,11 @@ async def list_organization_materials(
         .options(
             joinedload(Program.lessons)
             .joinedload(Lesson.contents)
-            .joinedload(Content.content_items)
+            .joinedload(Content.content_items),
+            # Issue #587/#847: eager-load program-direct contents (lesson_id NULL).
+            # Use selectinload (separate query) to avoid a cartesian-product row
+            # explosion with the joinedload on the Program.lessons collection.
+            selectinload(Program.contents).selectinload(Content.content_items),
         )
         .filter(
             Program.is_template.is_(True),
@@ -313,19 +347,12 @@ async def list_organization_materials(
                     continue
                 if getattr(content, "is_assignment_copy", False):
                     continue
-                content_data = ContentResponse.model_validate(content)
-
-                # Build items
-                content_data.items = [
-                    ContentItemResponse.model_validate(item)
-                    for item in sorted(
-                        content.content_items, key=lambda x: x.order_index
-                    )
-                ]
-
-                lesson_data.contents.append(content_data)
+                lesson_data.contents.append(_build_content_response(content))
 
             program_data.lessons.append(lesson_data)
+
+        # Issue #587/#847: program-direct contents (no lesson)
+        program_data.contents = _build_program_direct_contents(program)
 
         result.append(program_data)
 
@@ -358,7 +385,11 @@ async def get_organization_material_details(
         .options(
             joinedload(Program.lessons)
             .joinedload(Lesson.contents)
-            .joinedload(Content.content_items)
+            .joinedload(Content.content_items),
+            # Issue #587/#847: eager-load program-direct contents (lesson_id NULL).
+            # Use selectinload (separate query) to avoid a cartesian-product row
+            # explosion with the joinedload on the Program.lessons collection.
+            selectinload(Program.contents).selectinload(Content.content_items),
         )
         .filter(Program.id == program_id)
         .first()
@@ -392,14 +423,12 @@ async def get_organization_material_details(
                 continue
             if getattr(content, "is_assignment_copy", False):
                 continue
-            content_data = ContentResponse.model_validate(content)
-            content_data.items = [
-                ContentItemResponse.model_validate(item)
-                for item in sorted(content.content_items, key=lambda x: x.order_index)
-            ]
-            lesson_data.contents.append(content_data)
+            lesson_data.contents.append(_build_content_response(content))
 
         program_data.lessons.append(lesson_data)
+
+    # Issue #587/#847: program-direct contents (no lesson)
+    program_data.contents = _build_program_direct_contents(program)
 
     return program_data
 

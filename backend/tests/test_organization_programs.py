@@ -468,6 +468,93 @@ class TestGetMaterialDetails:
 
 
 # ============================================================================
+# Test Cases: Program-Direct Contents (Issue #587/#847)
+# ============================================================================
+
+
+class TestProgramDirectContents:
+    """
+    Issue #847: contents living directly under a program (lesson_id IS NULL)
+    must be returned by both the list and detail endpoints, otherwise the
+    org-materials UI cannot show them and the card count is wrong.
+    """
+
+    def _add_program_direct_content(
+        self, test_db: Session, program: Program, title: str = "Program Content"
+    ) -> Content:
+        content = Content(
+            lesson_id=None,
+            program_id=program.id,
+            type=ContentType.READING_ASSESSMENT,
+            title=title,
+            order_index=0,
+            is_active=True,
+        )
+        test_db.add(content)
+        test_db.flush()
+        test_db.add(
+            ContentItem(
+                content_id=content.id,
+                text="direct item",
+                translation="直屬項目",
+                order_index=0,
+            )
+        )
+        test_db.commit()
+        test_db.refresh(content)
+        return content
+
+    def test_detail_includes_program_direct_contents(
+        self,
+        test_client: TestClient,
+        test_db: Session,
+        test_org: Organization,
+        test_org_with_materials: list,
+        owner_headers: dict,
+    ):
+        """Detail endpoint returns program-level contents with items."""
+        material = test_org_with_materials[0]
+        content = self._add_program_direct_content(test_db, material)
+
+        response = test_client.get(
+            f"/api/organizations/{test_org.id}/programs/{material.id}",
+            headers=owner_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "contents" in data
+        ids = [c["id"] for c in data["contents"]]
+        assert content.id in ids
+        direct = next(c for c in data["contents"] if c["id"] == content.id)
+        assert direct["lesson_id"] is None
+        assert direct["program_id"] == material.id
+        assert direct["items_count"] == 1
+
+    def test_list_includes_program_direct_contents(
+        self,
+        test_client: TestClient,
+        test_db: Session,
+        test_org: Organization,
+        test_org_with_materials: list,
+        owner_headers: dict,
+    ):
+        """List endpoint returns program-level contents for each material."""
+        material = test_org_with_materials[0]
+        content = self._add_program_direct_content(test_db, material)
+
+        response = test_client.get(
+            f"/api/organizations/{test_org.id}/programs",
+            headers=owner_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        target = next(p for p in data if p["id"] == material.id)
+        assert content.id in [c["id"] for c in target["contents"]]
+
+
+# ============================================================================
 # Test Cases: Create Material (POST)
 # ============================================================================
 

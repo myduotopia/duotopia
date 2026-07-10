@@ -48,8 +48,8 @@ export interface AnswerRecord {
 }
 
 export interface GameState {
-  questions: Question[];
-  currentIndex: number;
+  questions: Question[]; // Shared list (same-question mode) / Team A's stream (diff mode)
+  currentIndex: number; // Shared index / Team A's index in diff mode
   ropePosition: number; // negative = A leading, positive = B leading
   teamACooldown: boolean;
   teamBCooldown: boolean;
@@ -58,9 +58,18 @@ export interface GameState {
   audioMuted: boolean; // Persistent mute toggle across audio-mode questions
   gameStatus: GameStatus;
   scores: { a: number; b: number };
-  answeredBy: Team | null; // Who answered the current question
+  answeredBy: Team | null; // Same-question mode: who answered current question (locks both)
   lastCorrectTeam: Team | null; // For animation
   answerHistory: AnswerRecord[]; // Track who answered each question
+
+  // ---- Different-question-per-team mode (issue #920) ----
+  // When on, each team has its own question stream and answers independently.
+  // Audio modes force this off (a shared sound can't back two questions).
+  diffMode: boolean;
+  questionsB: Question[]; // Team B's stream (diff mode); === questions when same mode
+  indexB: number; // Team B's index (diff mode)
+  lockA: boolean; // Diff mode: Team A locked during its own transition
+  lockB: boolean; // Diff mode: Team B locked during its own transition
 }
 
 export interface GameConfig {
@@ -70,7 +79,8 @@ export interface GameConfig {
 
 export const DEFAULT_GAME_CONFIG: GameConfig = {
   cooldownMs: 2000,
-  transitionMs: 1200,
+  // 答對後停留時間：讓學生看清正解揭示（尤其音檔題無題目帶），落在 1-2 秒
+  transitionMs: 1800,
 };
 
 // Keyboard mappings

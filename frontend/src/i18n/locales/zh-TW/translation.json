@@ -3224,7 +3224,6 @@
     "rearrangement": {
       "labels": {
         "errors": "錯誤",
-        "correctWords": "正確選字",
         "retryCount": "重試",
         "expectedScore": "分數",
         "timedOut": "超時結束",
@@ -3232,12 +3231,18 @@
         "selected": "選擇",
         "expected": "應選",
         "completedAt": "完成時間",
-        "detailedHistoryComingSoon": "更詳細的作答紀錄 Coming Soon"
+        "scorePoints": "{{score}} 分",
+        "attemptCount": "{{count}} 次嘗試",
+        "totalErrors": "共 {{count}} 次錯誤",
+        "showingRecent": "僅顯示最近 {{count}} 次",
+        "noHistory": "無作答紀錄"
       },
       "badges": {
         "completed": "完成",
         "incomplete": "未達標",
-        "notAnswered": "尚未作答"
+        "notAnswered": "尚未作答",
+        "timeout": "超時",
+        "forceRetry": "強制重來"
       }
     }
   },
@@ -3385,7 +3390,12 @@
       "errorsSuffix": "個錯誤——請查看伺服器記錄",
       "notLinked": "您的帳號尚未綁定 1Campus，請先以 1Campus 方式登入",
       "rateLimited": "剛剛已觸發過同步，請稍候片刻再試",
-      "failed": "1Campus 同步失敗，請稍後再試"
+      "failed": "1Campus 同步失敗，請稍後再試",
+      "confirm": {
+        "title": "確定要同步到個人帳號嗎？",
+        "message": "個人帳號下，班級使用 AI 點數將從老師個人點數扣除；如果學生屬於機構，請於機構內匯入班級。",
+        "confirmButton": "仍要同步"
+      }
     }
   },
   "teacherStudents": {
@@ -5370,8 +5380,14 @@
     "rotateDeviceHint": "此遊戲適合橫向遊玩",
     "continueAnyway": "繼續遊玩",
     "imagesModeRequirement": "需要至少 4 個單字有圖片",
-    "clozeModeRequirement": "需要至少 4 個單字有例句",
+    "clozeModeRequirement": "此教材沒有可用的克漏字例句（例句需含該單字）",
+    "audioModeRequirement": "此教材沒有單字錄音",
     "showSentenceTranslation": "顯示例句翻譯",
+    "diffModeOff": "兩隊題目相同",
+    "diffModeOn": "兩隊題目相異",
+    "diffModeHint": "開啟後兩隊各出不同題目（聽音檔模式不適用）",
+    "enterFullscreen": "全螢幕",
+    "exitFullscreen": "退出全螢幕",
     "error": {
       "loadFailed": "載入單字失敗",
       "notEnoughWords": "單字數量不足（至少需要 4 個）"
