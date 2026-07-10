@@ -34,6 +34,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import MagicPasteDialog, {
+  type MagicPasteItem,
+} from "@/components/shared/MagicPasteDialog";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import {
   TTS_ACCENTS,
@@ -1957,6 +1960,8 @@ const VocabularySetPanel = forwardRef<
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [batchPasteDialogOpen, setBatchPasteDialogOpen] = useState(false);
+  // 魔術貼上（issue #891）
+  const [magicPasteOpen, setMagicPasteOpen] = useState(false);
   const [batchPasteText, setBatchPasteText] = useState("");
   const [batchPasteAutoTTS, setBatchPasteAutoTTS] = useState(true);
   const [batchPasteAutoTranslate, setBatchPasteAutoTranslate] = useState(true);
@@ -2169,6 +2174,55 @@ const VocabularySetPanel = forwardRef<
       example_sentence_translation: "",
     };
     setRows([...rows, newRow]);
+  };
+
+  // 魔術貼上（issue #891）：把 AI 擷取的項目併入現有行。
+  // 若目前只有 1 行且是空的預設行，先清掉以免留下空行。
+  const handleMagicPasteInsert = (pastedItems: MagicPasteItem[]) => {
+    if (!pastedItems.length) return;
+
+    let baseRows = rows;
+    if (
+      rows.length === 1 &&
+      !rows[0].text.trim() &&
+      !rows[0].definition.trim()
+    ) {
+      baseRows = [];
+    }
+
+    const capacity = BATCH_PASTE_MAX - baseRows.length;
+    if (capacity <= 0) {
+      toast.error(t("contentEditor.messages.maxRowsReached"));
+      return;
+    }
+    const toAdd = pastedItems.slice(0, capacity);
+
+    let maxId = Math.max(0, ...baseRows.map((r) => parseInt(String(r.id)) || 0));
+    const newRows: ContentRow[] = toAdd.map((item) => {
+      maxId += 1;
+      return {
+        id: maxId.toString(),
+        text: item.text,
+        definition: item.translation || "",
+        translation: "",
+        imageUrl: "",
+        selectedWordLanguage: "chinese",
+        partsOfSpeech: item.part_of_speech
+          ? [item.part_of_speech]
+          : undefined,
+        example_sentence: item.example_sentence || "",
+        example_sentence_translation: item.example_sentence_translation || "",
+      };
+    });
+
+    setRows([...baseRows, ...newRows]);
+    if (pastedItems.length > toAdd.length) {
+      toast.warning(
+        t("contentEditor.messages.batchPasteLimit", { max: BATCH_PASTE_MAX }),
+      );
+    } else {
+      toast.success(`已插入 ${toAdd.length} 個項目`);
+    }
   };
 
   const handleDeleteRow = (index: number) => {
@@ -4402,6 +4456,17 @@ const VocabularySetPanel = forwardRef<
 
         {/* Mobile only: Batch Actions buttons */}
         <div className="flex flex-wrap gap-2 md:hidden">
+          {/* 魔術貼上（issue #891）*/}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setMagicPasteOpen(true)}
+            className="bg-purple-100 hover:bg-purple-200 border-purple-300"
+            title="從圖片 / PDF 擷取教材"
+          >
+            <Sparkles className="h-4 w-4 mr-1" />
+            魔術貼上
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -4492,6 +4557,17 @@ const VocabularySetPanel = forwardRef<
             isBusy={isBatchPasting}
             progress={batchProgress}
           >
+            {/* 魔術貼上（issue #891）*/}
+            <Button
+              variant="outline"
+              onClick={() => setMagicPasteOpen(true)}
+              className="w-full bg-purple-100 hover:bg-purple-200 border-purple-300 text-purple-800"
+              title="從圖片 / PDF 擷取教材"
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              魔術貼上（圖片 / PDF）
+            </Button>
+
             {/* AI Generate Examples */}
             <div className="mt-4 bg-purple-50 rounded-lg border border-purple-200 overflow-hidden">
               <div className="flex items-center gap-2 p-3">
@@ -4753,6 +4829,14 @@ const VocabularySetPanel = forwardRef<
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 魔術貼上 Dialog（issue #891）*/}
+      <MagicPasteDialog
+        open={magicPasteOpen}
+        onClose={() => setMagicPasteOpen(false)}
+        onInsert={handleMagicPasteInsert}
+        level={aiGenerateLevel}
+      />
 
       {/* Batch Paste Dialog (Mobile only - desktop uses inline left panel) */}
       <Dialog
