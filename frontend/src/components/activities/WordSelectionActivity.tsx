@@ -55,6 +55,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
+import { withDemoOverrides } from "@/lib/demoOverrides";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
 import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
@@ -281,7 +282,9 @@ export default function WordSelectionActivity({
           : "";
 
       const apiEndpoint = isDemoMode
-        ? `/api/demo/assignments/${assignmentId}/preview/word-selection-start${excludeParam}`
+        ? withDemoOverrides(
+            `/api/demo/assignments/${assignmentId}/preview/word-selection-start${excludeParam}`,
+          )
         : isPreviewMode
           ? `/api/teachers/assignments/${assignmentId}/preview/word-selection-start${excludeParam}`
           : `/api/students/assignments/${assignmentId}/vocabulary/selection/start`;

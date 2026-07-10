@@ -1,8 +1,14 @@
 /**
  * Demo Assignment Page
  *
- * Public demo page for showcasing assignment features
- * No authentication required - uses demo API endpoints
+ * Public demo page for showcasing assignment features.
+ * No authentication required - uses demo API endpoints.
+ *
+ * #923: renders the same "進階設定" panel teachers get in instant-practice, so
+ * unauthenticated visitors can switch the same material into other practice
+ * modes / toggle settings live. Applying re-fetches the preview with settings as
+ * query-param overrides (stateless — the shared demo row is never mutated) and
+ * remounts the activity from question 1. See lib/demoOverrides.ts.
  */
 
 import { useState, useEffect } from "react";
@@ -12,11 +18,24 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Info } from "lucide-react";
 import { toast } from "sonner";
 import { demoApi } from "@/lib/demoApi";
+import {
+  setDemoOverrides,
+  clearDemoOverrides,
+  type DemoOverrides,
+} from "@/lib/demoOverrides";
 
 // Import student component
 import StudentActivityPageContent, {
   type Activity,
 } from "./student/StudentActivityPageContent";
+// #923: 免登入訪客也能用「進階設定」把同一份教材切成別的玩法/設定
+import InstantPracticeSettingsPanel from "@/components/InstantPracticeSettingsPanel";
+import {
+  instantPracticeModesForContentType,
+  type PracticeMode,
+} from "@/lib/practiceMode";
+import type { PracticeModeSettings } from "@/components/assignment/practiceModeSettings";
+import { buildInstantPracticeSettings } from "@/lib/instantPracticeSettings";
 
 interface DemoActivityResponse {
   assignment_id: number;
@@ -31,6 +50,11 @@ interface DemoActivityResponse {
   show_word?: boolean;
   show_image?: boolean;
   show_option_images?: boolean;
+  // #923: 進階設定面板初值（後端 build_assignment_preview 已回傳）
+  score_category?: string | null;
+  shuffle_questions?: boolean;
+  target_proficiency?: number | null;
+  quiz_time_limit_seconds?: number | null;
   total_activities: number;
   activities: Activity[];
 }
@@ -45,21 +69,31 @@ export default function DemoAssignmentPage() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // #923: 進階設定面板 — 套用後重掛 StudentActivityPageContent 從第 1 題重來
+  const [applying, setApplying] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!assignmentId) {
       navigate("/");
       return;
     }
+    // Fresh demo session → no overrides until the visitor applies the panel.
+    clearDemoOverrides();
     fetchDemoData();
+    return () => clearDemoOverrides();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
-  const fetchDemoData = async () => {
+  const fetchDemoData = async (ov?: DemoOverrides) => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await demoApi.getPreview(parseInt(assignmentId!));
+      // Keep the module-level holder in sync so the inner activity's own
+      // start call carries the same overrides (#923).
+      setDemoOverrides(ov ?? {});
+      const response = await demoApi.getPreview(parseInt(assignmentId!), ov);
       setActivityData(response as DemoActivityResponse);
     } catch (err) {
       console.error("Failed to fetch demo data:", err);
@@ -68,6 +102,38 @@ export default function DemoAssignmentPage() {
       setTimeout(() => navigate("/"), 2000);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // #923: visitor applied the advanced-settings panel — re-preview the same
+  // material in the chosen mode/settings (stateless, no persistence) and remount.
+  const handleApplySettings = async (
+    mode: PracticeMode,
+    settings: PracticeModeSettings,
+  ) => {
+    if (applying || !assignmentId) return;
+    setApplying(true);
+    const ov: DemoOverrides = {
+      practice_mode: mode,
+      show_answer: settings.show_answer,
+      play_audio: settings.play_audio,
+      show_translation: settings.show_translation,
+      show_word: settings.show_word,
+      show_image: settings.show_image,
+      show_option_images: settings.show_option_images,
+      shuffle_questions: settings.shuffle_questions,
+      time_limit_per_question: settings.time_limit_per_question,
+      target_proficiency: settings.target_proficiency,
+    };
+    // null = 不限時；作為 query param 送 "null" 會 422，故僅在有值時帶上。
+    if (settings.quiz_time_limit_seconds != null) {
+      ov.quiz_time_limit_seconds = settings.quiz_time_limit_seconds;
+    }
+    try {
+      await fetchDemoData(ov);
+      setReloadKey((k) => k + 1);
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -131,6 +197,22 @@ export default function DemoAssignmentPage() {
 
       {/* Demo Content - uses StudentActivityPageContent */}
       <StudentActivityPageContent
+        // #923: 套用進階設定後 key 變動 → 重掛，從第 1 題以新玩法/設定重來
+        key={reloadKey}
+        // #923: 免登入訪客的「進階設定」— 只有當內容型別支援多種玩法時才顯示
+        headerActions={
+          instantPracticeModesForContentType(
+            activityData.activities[0]?.type ?? "",
+          ).length > 1 ? (
+            <InstantPracticeSettingsPanel
+              mode={(activityData.practice_mode || "reading") as PracticeMode}
+              contentType={activityData.activities[0]?.type ?? ""}
+              initialSettings={buildInstantPracticeSettings(activityData)}
+              applying={applying}
+              onApply={handleApplySettings}
+            />
+          ) : undefined
+        }
         activities={activityData.activities}
         assignmentTitle={activityData.title}
         assignmentId={activityData.assignment_id}

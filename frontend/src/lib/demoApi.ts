@@ -5,6 +5,7 @@
 
 import { API_URL } from "../config/api";
 import { appendAudioToFormData } from "@/utils/audioFormatDetection";
+import { toQueryString, type DemoOverrides } from "@/lib/demoOverrides";
 
 export class DemoApiError extends Error {
   constructor(
@@ -72,12 +73,21 @@ class DemoApiClient {
   }
 
   /**
-   * Get demo assignment preview data
+   * Get demo assignment preview data.
+   *
+   * #923: optional `overrides` (from the advanced-settings panel) are sent as
+   * query params so the stateless backend overlay previews the same material in
+   * a different mode/config without persisting.
    */
-  async getPreview(assignmentId: number): Promise<unknown> {
-    const response = await fetch(
-      `${this.baseUrl}/api/demo/assignments/${assignmentId}/preview`,
-    );
+  async getPreview(
+    assignmentId: number,
+    overrides?: DemoOverrides,
+  ): Promise<unknown> {
+    const qs = overrides ? toQueryString(overrides) : "";
+    const url =
+      `${this.baseUrl}/api/demo/assignments/${assignmentId}/preview` +
+      (qs ? `?${qs}` : "");
+    const response = await fetch(url);
 
     if (!response.ok) {
       if (response.status === 404) {

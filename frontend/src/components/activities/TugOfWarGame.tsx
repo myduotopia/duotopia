@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { apiClient } from "@/lib/api";
+import { withDemoOverrides } from "@/lib/demoOverrides";
 import {
   useGameLogic,
   isAudioOnlyMode,
@@ -169,7 +170,9 @@ export function TugOfWarGame({
       try {
         setLoading(true);
         const endpoint = isDemoMode
-          ? `/api/demo/assignments/${assignmentId}/preview/word-selection-start`
+          ? withDemoOverrides(
+              `/api/demo/assignments/${assignmentId}/preview/word-selection-start`,
+            )
           : isPreviewMode
             ? `/api/teachers/assignments/${assignmentId}/preview/word-selection-start`
             : `/api/students/assignments/${assignmentId}/vocabulary/selection/start`;

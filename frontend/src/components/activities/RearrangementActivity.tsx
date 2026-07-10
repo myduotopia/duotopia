@@ -15,6 +15,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { withDemoOverrides } from "@/lib/demoOverrides";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -225,7 +226,9 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
       setLoading(true);
       // 根據模式選擇不同的 API
       const apiUrl = isDemoMode
-        ? `/api/demo/assignments/${studentAssignmentId}/preview/rearrangement-questions`
+        ? withDemoOverrides(
+            `/api/demo/assignments/${studentAssignmentId}/preview/rearrangement-questions`,
+          )
         : isPreviewMode
           ? `/api/teachers/assignments/${studentAssignmentId}/preview/rearrangement-questions`
           : `/api/students/assignments/${studentAssignmentId}/rearrangement-questions`;
