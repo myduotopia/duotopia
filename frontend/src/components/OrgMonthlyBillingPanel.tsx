@@ -15,6 +15,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
+// Canonical zh-TW labels for invoice statuses (mirrors STATUS_BADGE in
+// pages/admin/AdminInstitutionInvoices.tsx) so the no-op toast names the
+// settled state the same way the ledger table does.
+const INVOICE_STATUS_LABEL: Record<string, string> = {
+  pending: "待收款",
+  overdue: "逾期",
+  paid: "已收款",
+  cancelled: "已作廢",
+};
+
 interface MonthlyBilling {
   org_id: string;
   year: number;
@@ -154,9 +164,18 @@ export default function OrgMonthlyBillingPanel({
     setCreatingInvoice(true);
     try {
       const inv = await apiClient.createInstitutionInvoice(orgId, year, month);
-      toast.success(
-        `已建立/更新應收帳款：${inv.year} 年 ${inv.month} 月，金額 ${inv.amount.toLocaleString()}`,
-      );
+      // The server only (re)locks the amount while the invoice is still
+      // `pending`; a paid/cancelled/overdue period is left untouched (no-op).
+      // Branch the toast so a no-op doesn't falsely claim a fresh lock.
+      if (inv.status === "pending") {
+        toast.success(
+          `已建立/更新應收帳款：${inv.year} 年 ${inv.month} 月，金額 ${inv.amount.toLocaleString()}`,
+        );
+      } else {
+        toast.info(
+          `${inv.year} 年 ${inv.month} 月帳款已為「${INVOICE_STATUS_LABEL[inv.status] ?? inv.status}」，未變更（金額 ${inv.amount.toLocaleString()}）`,
+        );
+      }
     } catch (e) {
       const msg =
         e instanceof ApiError
