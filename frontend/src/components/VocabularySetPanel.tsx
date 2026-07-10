@@ -2197,7 +2197,10 @@ const VocabularySetPanel = forwardRef<
     }
     const toAdd = pastedItems.slice(0, capacity);
 
-    let maxId = Math.max(0, ...baseRows.map((r) => parseInt(String(r.id)) || 0));
+    let maxId = Math.max(
+      0,
+      ...baseRows.map((r) => parseInt(String(r.id)) || 0),
+    );
     const newRows: ContentRow[] = toAdd.map((item) => {
       maxId += 1;
       return {
@@ -2207,9 +2210,7 @@ const VocabularySetPanel = forwardRef<
         translation: "",
         imageUrl: "",
         selectedWordLanguage: "chinese",
-        partsOfSpeech: item.part_of_speech
-          ? [item.part_of_speech]
-          : undefined,
+        partsOfSpeech: item.part_of_speech ? [item.part_of_speech] : undefined,
         example_sentence: item.example_sentence || "",
         example_sentence_translation: item.example_sentence_translation || "",
       };

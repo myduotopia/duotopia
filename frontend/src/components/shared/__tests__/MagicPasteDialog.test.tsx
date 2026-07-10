@@ -40,9 +40,7 @@ describe("MagicPasteDialog", () => {
   });
 
   it("fetches quota and shows remaining free count on open", async () => {
-    render(
-      <MagicPasteDialog open onClose={vi.fn()} onInsert={vi.fn()} />,
-    );
+    render(<MagicPasteDialog open onClose={vi.fn()} onInsert={vi.fn()} />);
     await waitFor(() => expect(mockQuota).toHaveBeenCalled());
     expect(await screen.findByText(/本月免費剩餘/)).toBeInTheDocument();
   });
@@ -64,9 +62,7 @@ describe("MagicPasteDialog", () => {
       provider: "test",
     });
     const onInsert = vi.fn();
-    render(
-      <MagicPasteDialog open onClose={vi.fn()} onInsert={onInsert} />,
-    );
+    render(<MagicPasteDialog open onClose={vi.fn()} onInsert={onInsert} />);
 
     const input = screen.getByTestId("magic-paste-file-input");
     fireEvent.change(input, { target: { files: [makeFile()] } });
@@ -87,9 +83,7 @@ describe("MagicPasteDialog", () => {
     mockExtract.mockRejectedValue(
       Object.assign(new Error("quota"), { status: 402 }),
     );
-    render(
-      <MagicPasteDialog open onClose={vi.fn()} onInsert={vi.fn()} />,
-    );
+    render(<MagicPasteDialog open onClose={vi.fn()} onInsert={vi.fn()} />);
     fireEvent.change(screen.getByTestId("magic-paste-file-input"), {
       target: { files: [makeFile()] },
     });

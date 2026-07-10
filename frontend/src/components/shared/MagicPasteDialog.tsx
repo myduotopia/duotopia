@@ -106,9 +106,7 @@ export default function MagicPasteDialog({
         toast.error("這張圖片沒有擷取到單字，請換一張試試");
       }
       setItems(result.items);
-      setSelected(
-        Object.fromEntries(result.items.map((_, i) => [i, true])),
-      );
+      setSelected(Object.fromEntries(result.items.map((_, i) => [i, true])));
       setQuota((prev) => ({
         free_limit: prev?.free_limit ?? result.quota.free_limit,
         free_remaining: result.quota.free_remaining,
@@ -152,7 +150,8 @@ export default function MagicPasteDialog({
             魔術貼上：從圖片 / PDF 擷取教材
           </DialogTitle>
           <DialogDescription>
-            上傳一張圖片或 PDF，AI 會自動擷取單字、翻譯與例句，預覽確認後再插入。
+            上傳一張圖片或 PDF，AI
+            會自動擷取單字、翻譯與例句，預覽確認後再插入。
           </DialogDescription>
         </DialogHeader>
 
