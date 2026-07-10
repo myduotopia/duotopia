@@ -291,6 +291,7 @@ jobs:
               'assignments', 'assignment_content', 'assignment_contents', 'student_assignments',
               'student_content_progress', 'student_item_progress',
               'subscription_periods', 'point_usage_logs', 'credit_packages', 'plans',
+              'magic_paste_usage',
               'teacher_subscription_transaction', 'teacher_subscription_transactions', 'invoice_status_history',
               'user_word_progress', 'practice_sessions', 'practice_answers',
               'organizations', 'schools', 'teacher_organizations', 'teacher_schools', 'classroom_schools', 'student_schools',
