@@ -35,6 +35,9 @@ from .subscription import (
 from .credit_package import CreditPackage
 from .credit_package_definition import CreditPackageDefinition
 
+# Magic Paste 每月配額計數（issue #891）
+from .magic_paste_usage import MagicPasteUsage
+
 # Plan models (admin-editable price/quota overrides)
 from .plan import Plan
 
@@ -126,6 +129,7 @@ __all__ = [
     # Credit packages
     "CreditPackage",
     "CreditPackageDefinition",
+    "MagicPasteUsage",
     # Plans
     "Plan",
     # Promo codes / referrals
