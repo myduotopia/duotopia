@@ -666,6 +666,19 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
     const currentQuestion = questions[currentQuestionIndex];
     setResultModalOpen(false); // 關閉結果 Modal
 
+    // #679: 封存「剛結束那一輪」到 attempts[]。逐字挑選只存在前端本機
+    // （不經 answer endpoint），故需在清空前把該輪 selections 送給後端。
+    // 只有「強制重來」（未完成）需要送 → 完成的那一輪已由 rearrangement-complete
+    // 封存，這裡送空避免重複封存。
+    const prevRoundState = questionStates.get(currentQuestion.content_item_id);
+    const wasForceFailed =
+      !!prevRoundState?.challengeFailed && !prevRoundState?.completed;
+    const endedRoundSelections = wasForceFailed
+      ? [...(selectionsRef.current.get(currentQuestion.content_item_id) || [])]
+      : [];
+    const endedRoundErrorCount = prevRoundState?.errorCount ?? 0;
+    const endedRoundScore = prevRoundState?.expectedScore ?? 0;
+
     // 🚀 重置狀態（本地操作，不需要 API）
     // 保留 hasSeenAnswer 和 maxScore（一旦看過答案就永不重置）
     setQuestionStates((prev) => {
@@ -699,6 +712,10 @@ const RearrangementActivity: React.FC<RearrangementActivityProps> = ({
           `/api/students/assignments/${studentAssignmentId}/rearrangement-retry`,
           {
             content_item_id: currentQuestion.content_item_id,
+            selections: endedRoundSelections,
+            error_count: endedRoundErrorCount,
+            expected_score: endedRoundScore,
+            timeout: false,
           },
         );
       } catch (error) {

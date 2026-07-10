@@ -141,12 +141,6 @@ class RearrangementAnswerResponse(BaseModel):
     completed: bool  # 是否完成此題
 
 
-class RearrangementRetryRequest(BaseModel):
-    """重新挑戰請求"""
-
-    content_item_id: int
-
-
 class RearrangementSelectionRecord(BaseModel):
     """單次選字記錄"""
 
@@ -155,6 +149,21 @@ class RearrangementSelectionRecord(BaseModel):
     correct: str  # 正確的字
     is_correct: bool  # 是否正確
     timestamp: str  # ISO 8601 時間戳
+
+
+class RearrangementRetryRequest(BaseModel):
+    """重新挑戰請求
+
+    #679: 逐字挑選在前端本地驗證、不經 rearrangement-answer endpoint，
+    故「剛結束（強制重來 / 超時）那一輪」的選字歷程由前端在 retry 時一併回傳，
+    後端才能封存進 attempts[]。舊前端不帶這些欄位時降級為只記 retry_count。
+    """
+
+    content_item_id: int
+    selections: Optional[List["RearrangementSelectionRecord"]] = None  # 該輪選字歷程
+    error_count: Optional[int] = None  # 該輪錯誤次數
+    expected_score: Optional[float] = None  # 該輪分數
+    timeout: bool = False  # 該輪是否因超時結束（否則視為強制重來）
 
 
 class RearrangementCompleteRequest(BaseModel):

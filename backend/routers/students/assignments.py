@@ -3401,14 +3401,30 @@ async def retry_rearrangement(
     if not progress:
         raise HTTPException(status_code=404, detail="Progress not found")
 
-    # 封存當次選字歷程到 attempts[]（強制重來），再開新一輪
-    # 資料來源為後端逐字累積的 rearrangement_data，前端不需回傳
+    # 封存「剛結束（強制重來 / 超時）那一輪」到 attempts[]，再開新一輪。
+    # 逐字挑選在前端本地驗證、不經 answer endpoint，故選字歷程以前端回傳為權威；
+    # 沒帶時（舊前端）退回後端累積值，只是通常為空 → 不新增空白列。
+    round_selections = (
+        [s.model_dump() for s in request.selections]
+        if request.selections is not None
+        else (progress.rearrangement_data or {}).get("selections")
+    )
+    ended_reason = "timeout" if request.timeout else "force_retry"
     attempts = archive_current_attempt(
         progress.rearrangement_data,
-        error_count=progress.error_count or 0,
-        expected_score=progress.expected_score or 0,
-        ended_reason="force_retry",
+        error_count=(
+            request.error_count
+            if request.error_count is not None
+            else (progress.error_count or 0)
+        ),
+        expected_score=(
+            request.expected_score
+            if request.expected_score is not None
+            else (progress.expected_score or 0)
+        ),
+        ended_reason=ended_reason,
         ended_at=datetime.now(timezone.utc).isoformat(),
+        selections=round_selections,
     )
 
     # 重置進度
