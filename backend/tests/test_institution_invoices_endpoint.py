@@ -131,6 +131,48 @@ def test_create_locks_amount_and_is_idempotent(
     assert count == 1
 
 
+def test_create_on_settled_invoice_is_noop(
+    test_client, admin, shared_test_session, institution_with_student
+):
+    """POSTing "lock" for a period whose invoice is already paid is a no-op:
+    the endpoint still returns 200 with the *settled* row (unchanged amount +
+    status='paid'), it does not revert to pending or create a duplicate. The
+    frontend keys its toast off this status so a no-op isn't shown as a fresh
+    lock."""
+    org = institution_with_student
+    payload = {"organization_id": str(org.id), "year": 2026, "month": 6}
+    created = test_client.post(
+        "/api/admin/institution-invoices", json=payload, headers=_bearer(admin.id)
+    ).json()
+    locked_amount = created["amount"]
+
+    # Settle it.
+    paid = test_client.patch(
+        f"/api/admin/institution-invoices/{created['id']}",
+        json={"status": "paid"},
+        headers=_bearer(admin.id),
+    )
+    assert paid.status_code == 200, paid.text
+
+    # Re-lock the same period → 200, but the settled row is untouched.
+    again = test_client.post(
+        "/api/admin/institution-invoices", json=payload, headers=_bearer(admin.id)
+    )
+    assert again.status_code == 200, again.text
+    body = again.json()
+    assert body["id"] == created["id"]
+    assert body["status"] == "paid"  # not reverted to pending
+    assert body["amount"] == locked_amount  # snapshot unchanged
+
+    # Still exactly one row for the period.
+    count = (
+        shared_test_session.query(InstitutionInvoice)
+        .filter(InstitutionInvoice.organization_id == org.id)
+        .count()
+    )
+    assert count == 1
+
+
 # ---------- list ----------
 
 
