@@ -345,8 +345,13 @@ def _build_prompt(collected_data: Dict[str, Any]) -> str:
 - 超時的題目代表難度較高
 - 請用繁體中文回答"""
 
-    elif mode == "reading":
-        return f"""你是一位英語教學分析專家。請根據以下「例句朗讀」作業的學生表現數據，產生一份結構化的分析報告。
+    elif mode in ("reading", "word_reading"):
+        # Issue #655: word_reading shares the reading prompt; only the
+        # human-facing label/unit differ. JSON structure stays identical so the
+        # frontend renders both report types the same way.
+        label = "單字朗讀" if mode == "word_reading" else "例句朗讀"
+        unit = "單字" if mode == "word_reading" else "句子"
+        return f"""你是一位英語教學分析專家。請根據以下「{label}」作業的學生表現數據，產生一份結構化的分析報告。
 
 作業名稱：{title}
 學生人數：{len(students)}
@@ -367,7 +372,7 @@ def _build_prompt(collected_data: Dict[str, Any]) -> str:
   }},
   "difficult_sentences": [
     {{
-      "sentence": "表現最差的句子",
+      "sentence": "表現最差的{unit}",
       "avg_score": 數字,
       "common_issues": ["常見問題"]
     }}
@@ -481,8 +486,12 @@ async def generate_analysis_report(
             collected_data = _collect_rearrangement_data(
                 db, assignment, student_assignments
             )
-        elif practice_mode == "reading":
+        elif practice_mode in ("reading", "word_reading"):
+            # Issue #655: word_reading (單字朗讀) is the same speech-assessment
+            # data model as reading (例句朗讀), so it reuses the reading
+            # collector. Preserve the real mode so the prompt labels it 單字朗讀.
             collected_data = _collect_reading_data(db, assignment, student_assignments)
+            collected_data["practice_mode"] = practice_mode
         elif practice_mode == "word_selection":
             collected_data = _collect_word_selection_data(
                 db, assignment, student_assignments

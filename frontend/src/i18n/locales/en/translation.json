@@ -1296,7 +1296,8 @@
     "viewLabel": "Select share view",
     "personal": "Personal",
     "orgPrefix": "Org: ",
-    "schoolPrefix": "School: "
+    "schoolPrefix": "School: ",
+    "copyFailed": "Copy failed. Please select and copy the link manually."
   },
   "studentLogin": {
     "header": {
@@ -1612,7 +1613,7 @@
   "privacyPolicy": {
     "header": {
       "title": "Privacy Policy",
-      "lastUpdated": "Last updated: February 14, 2026"
+      "lastUpdated": "Last updated: July 7, 2026"
     },
     "section1": {
       "title": "1. General",
@@ -1681,6 +1682,17 @@
       "title": "10. Policy Changes",
       "item1": "10.1 The Company reserves the right to modify this Privacy Policy at any time. Changes will be posted on this page.",
       "item2": "10.2 Continued use of the Service constitutes your agreement to the revised Privacy Policy."
+    },
+    "section11": {
+      "title": "11. AI Usage Disclosure",
+      "item1": "11.1 To provide the core features of this Service, we use the following AI services and send the necessary audio or text data to the respective providers for real-time processing:",
+      "list": {
+        "item1": "Generative AI: Google Vertex AI (Gemini family), used for Chinese-English translation, teaching-content assistance, and learning-outcome analysis.",
+        "item2": "Speech recognition and pronunciation assessment: Microsoft Azure Speech Service, used to transcribe student recordings and evaluate pronunciation accuracy.",
+        "item3": "Text-to-Speech (TTS): Microsoft Azure Neural Voices, used to generate model-reading audio for teaching materials."
+      },
+      "item2": "11.2 Such AI processing is used solely to deliver the features of this Service. We do not provide your audio or personal data to these providers for training their AI models.",
+      "item3": "11.3 We may adjust the AI providers or models we use for technical optimization, and will update this disclosure on this page accordingly."
     }
   },
   "dialogs": {
@@ -3069,7 +3081,6 @@
     "rearrangement": {
       "labels": {
         "errors": "Errors",
-        "correctWords": "Correct Words",
         "retryCount": "Retries",
         "expectedScore": "Score",
         "timedOut": "Timed Out",
@@ -3077,12 +3088,18 @@
         "selected": "Selected",
         "expected": "Expected",
         "completedAt": "Completed at",
-        "detailedHistoryComingSoon": "Detailed answer history Coming Soon"
+        "scorePoints": "{{score}} pts",
+        "attemptCount": "{{count}} attempts",
+        "totalErrors": "{{count}} errors total",
+        "showingRecent": "Showing last {{count}}",
+        "noHistory": "No answer history"
       },
       "badges": {
         "completed": "Completed",
         "incomplete": "Below passing",
-        "notAnswered": "Not answered"
+        "notAnswered": "Not answered",
+        "timeout": "Timed out",
+        "forceRetry": "Forced retry"
       }
     }
   },
@@ -3374,7 +3391,12 @@
       "errorsSuffix": "error(s) — see logs",
       "notLinked": "Your account is not linked to 1Campus. Log in via 1Campus first.",
       "rateLimited": "Sync was triggered recently — please wait a minute and try again.",
-      "failed": "Failed to start 1Campus sync. Please try again."
+      "failed": "Failed to start 1Campus sync. Please try again.",
+      "confirm": {
+        "title": "Sync into your personal account?",
+        "message": "AI point usage for classes under your personal account will be deducted from your personal points. If the students belong to an organization, please import the class within the organization instead.",
+        "confirmButton": "Sync anyway"
+      }
     }
   },
   "teacherStudents": {
@@ -5314,8 +5336,14 @@
     "rotateDeviceHint": "This game is best played in landscape mode",
     "continueAnyway": "Continue anyway",
     "imagesModeRequirement": "Requires at least 4 words with images",
-    "clozeModeRequirement": "Requires at least 4 words with example sentences",
+    "clozeModeRequirement": "No usable cloze sentences (each sentence must contain the word)",
+    "audioModeRequirement": "No word audio in this material",
     "showSentenceTranslation": "Show sentence translation",
+    "diffModeOff": "Same questions",
+    "diffModeOn": "Different questions",
+    "diffModeHint": "Each team gets different questions (not for audio modes)",
+    "enterFullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
     "error": {
       "loadFailed": "Failed to load vocabulary",
       "notEnoughWords": "Not enough words (minimum 4 required)"

@@ -1935,7 +1935,9 @@ export default function StudentActivityPageContent({
     // 沒有對應 StudentAssignment → 404。改走 QuizPreview wrapper（拿 teacher
     // API 抓 content 後以 previewWords 注入 QuizActivity），跳過學生端 API。
     if (practiceMode === "word_spelling_quiz") {
-      if (isPreviewMode) {
+      // #923: demo visitors go through the real *QuizActivity (demo endpoints),
+      // NOT the teacher-only *QuizPreview wrapper (which hits /api/teachers → 401).
+      if (isPreviewMode && !isDemoMode) {
         return (
           // #861 D: 改用 assignmentId → 後端合併「所有單字集」題目並依設定打亂
           <WordSpellingQuizPreview
@@ -1963,7 +1965,8 @@ export default function StudentActivityPageContent({
       );
     }
     if (practiceMode === "word_cloze_quiz") {
-      if (isPreviewMode) {
+      // #923: demo visitors go through the real *QuizActivity (demo endpoints).
+      if (isPreviewMode && !isDemoMode) {
         return (
           // #861 D: 改用 assignmentId → 後端合併「所有單字集」題目並依設定打亂
           <WordClozeQuizPreview
@@ -1990,7 +1993,8 @@ export default function StudentActivityPageContent({
       );
     }
     if (practiceMode === "word_selection_quiz") {
-      if (isPreviewMode) {
+      // #923: demo visitors go through the real *QuizActivity (demo endpoints).
+      if (isPreviewMode && !isDemoMode) {
         return (
           // #861 D: 改用 assignmentId → 後端合併「所有單字集」題目並依設定打亂，
           // 取代原本每個 activity（單一單字集）各別預覽只顯示 1 組的行為。

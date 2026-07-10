@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
+import { withDemoOverrides } from "@/lib/demoOverrides";
 import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { useShortLandscape } from "./shared/useShortLandscape";
@@ -200,6 +201,27 @@ export default function WordClozeQuizActivity({
     const run = async () => {
       setLoading(true);
       try {
+        if (isDemoMode) {
+          // #923: public demo mirrors the teacher-preview quiz-start (non-live).
+          // No session / prior answers; submission is short-circuited elsewhere.
+          const demo = (await apiClient.get(
+            withDemoOverrides(
+              `/api/demo/assignments/${assignmentId}/preview/cloze-quiz-start`,
+            ),
+          )) as StartResponse;
+          if (cancelled) return;
+          setWords(demo.words);
+          setSessionId(null);
+          setQuizStatus(null);
+          setSettings({
+            show_translation: demo.show_translation,
+            play_audio: demo.play_audio,
+            show_answer: demo.show_answer,
+          });
+          setInitialRemaining(null);
+          setTimerTotal(demo.quiz_time_limit_seconds ?? null);
+          return;
+        }
         const data = (await apiClient.get(
           `/api/students/assignments/${assignmentId}/vocabulary/cloze_quiz/start`,
         )) as StartResponse;
@@ -251,7 +273,14 @@ export default function WordClozeQuizActivity({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId, isLivePreview, previewSettings, previewWords, t]);
+  }, [
+    assignmentId,
+    isDemoMode,
+    isLivePreview,
+    previewSettings,
+    previewWords,
+    t,
+  ]);
 
   const currentWord = words[currentIndex];
 

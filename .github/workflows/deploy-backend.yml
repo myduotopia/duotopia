@@ -291,10 +291,13 @@ jobs:
               'assignments', 'assignment_content', 'assignment_contents', 'student_assignments',
               'student_content_progress', 'student_item_progress',
               'subscription_periods', 'point_usage_logs', 'credit_packages', 'plans',
+              'magic_paste_usage',
               'teacher_subscription_transaction', 'teacher_subscription_transactions', 'invoice_status_history',
               'user_word_progress', 'practice_sessions', 'practice_answers',
               'organizations', 'schools', 'teacher_organizations', 'teacher_schools', 'classroom_schools', 'student_schools',
               'organization_points_log',
+              -- 機構請款（#838，JWT auth 業務表，比照 invoice_status_history）
+              'institution_invoices', 'institution_invoice_emails',
               'program_copy_logs',
               'demo_config',
               'identities',
@@ -392,6 +395,17 @@ jobs:
         ENV_VARS="$ENV_VARS,FROM_EMAIL=${{ secrets.FROM_EMAIL }}"
         ENV_VARS="$ENV_VARS,FROM_NAME=${{ secrets.FROM_NAME }}"
         ENV_VARS="$ENV_VARS,FRONTEND_URL=${{ steps.db_env.outputs.FRONTEND_URL }}"
+
+        # Institution 請款單 remittance account (issue #838 Phase B).
+        # PRODUCTION ONLY — staging/develop deliberately leave these unset so
+        # services.institution_invoice_pdf.get_bank_info() falls back to its
+        # obvious placeholder defaults and test PDFs never expose the real
+        # account (issue #938: 測試時不要顯示真實帳號).
+        if [ "${{ steps.env_vars.outputs.ENV_NAME }}" = "production" ]; then
+          ENV_VARS="$ENV_VARS,INVOICE_BANK_NAME=${{ secrets.INVOICE_BANK_NAME }}"
+          ENV_VARS="$ENV_VARS,INVOICE_BANK_ACCOUNT=${{ secrets.INVOICE_BANK_ACCOUNT }}"
+          ENV_VARS="$ENV_VARS,INVOICE_BANK_HOLDER=${{ secrets.INVOICE_BANK_HOLDER }}"
+        fi
         ENV_VARS="$ENV_VARS,AZURE_SPEECH_KEY=${{ secrets.AZURE_SPEECH_KEY }}"
         ENV_VARS="$ENV_VARS,AZURE_SPEECH_REGION=${{ secrets.AZURE_SPEECH_REGION }}"
         ENV_VARS="$ENV_VARS,AZURE_SPEECH_ENDPOINT=${{ secrets.AZURE_SPEECH_ENDPOINT }}"

@@ -27,6 +27,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { withDemoOverrides } from "@/lib/demoOverrides";
 import WordReadingTemplate from "./WordReadingTemplate";
 import RecordingAttemptsIndicator from "./RecordingAttemptsIndicator";
 import { useTranslation } from "react-i18next";
@@ -186,7 +187,9 @@ export default function WordReadingActivity({
 
       // 根據模式選擇不同的端點
       const endpoint = isDemoMode
-        ? `${apiUrl}/api/demo/assignments/${assignmentId}/preview/vocabulary/activities`
+        ? withDemoOverrides(
+            `${apiUrl}/api/demo/assignments/${assignmentId}/preview/vocabulary/activities`,
+          )
         : isPreviewMode
           ? `${apiUrl}/api/teachers/assignments/${assignmentId}/preview/vocabulary/activities`
           : `${apiUrl}/api/students/assignments/${assignmentId}/vocabulary/activities`;

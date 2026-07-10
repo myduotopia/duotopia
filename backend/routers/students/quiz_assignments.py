@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 from models import (
@@ -397,13 +397,26 @@ async def get_quiz_live_status(
     ``assignment_id`` 為 StudentAssignment.id（與其餘 quiz 端點一致）。
     """
     student_id = int(current_student.get("sub"))
-    sa = _get_student_assignment_or_404(db, assignment_id, student_id)
-    # 注意：path 的 assignment_id 是 StudentAssignment.id；真正的 Assignment 要靠 sa.assignment_id 反查。
-    assignment = (
-        db.query(Assignment).filter(Assignment.id == sa.assignment_id).first()
-        if sa.assignment_id
-        else None
+    # Issue #884 item 3: this endpoint is polled every 3–15s per student, so
+    # load StudentAssignment + its Assignment in ONE round-trip via joinedload
+    # instead of two separate queries.
+    # 注意：path 的 assignment_id 是 StudentAssignment.id；Assignment 由關聯載入。
+    sa = (
+        db.query(StudentAssignment)
+        .options(joinedload(StudentAssignment.assignment))
+        .filter(
+            StudentAssignment.id == assignment_id,
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.is_active.is_(True),
+        )
+        .first()
     )
+    if not sa:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found or not assigned to you",
+        )
+    assignment = sa.assignment
     if assignment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found"
@@ -715,6 +728,96 @@ def _resolve_cloze_answer(item: ContentItem) -> str:
     if word and word in sentence:
         return word
     return word or sentence
+
+
+# ---------------------------------------------------------------------------
+# Quiz payload builders (#861 D / #923) — shared by teacher-preview and public
+# demo endpoints. Cross all vocabulary sets, shuffle by ``shuffle_questions``,
+# attach answer keys/options; do NOT create a PracticeSession or persist
+# anything, so they are safe for the (stateless) demo path.
+# ---------------------------------------------------------------------------
+
+
+def build_selection_quiz_payload(assignment: Assignment, db: Session) -> Dict[str, Any]:
+    """單字選擇小考 payload。附正解與選項，與學生端 ``start_word_selection_quiz`` 同源。"""
+    items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
+    options_by_item = _build_selection_options(items, assignment)
+    show_image = assignment.show_image if assignment.show_image is not None else True
+    answer_key = text_field_for_show_image(show_image)
+
+    def builder(item: ContentItem) -> Dict[str, Any]:
+        correct = getattr(item, answer_key) or ""
+        return {
+            "content_item_id": item.id,
+            "text": item.text,
+            "translation": item.translation or "",
+            "correct_text": correct,
+            "audio_url": item.audio_url,
+            "image_url": item.image_url,
+            "options": options_by_item[item.id],
+        }
+
+    words = _attach_question_numbers(items, builder)
+    return {
+        "practice_mode": "word_selection_quiz",
+        "words": words,
+        "total_questions": len(words),
+        **_common_settings(assignment),
+        "show_option_images": bool(assignment.show_option_images),
+    }
+
+
+def build_spelling_quiz_payload(assignment: Assignment, db: Session) -> Dict[str, Any]:
+    """單字拼寫小考 payload。打字作答、無選項，正解為 ``item.text``。"""
+    items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
+
+    def builder(item: ContentItem) -> Dict[str, Any]:
+        return {
+            "content_item_id": item.id,
+            "text": item.text,
+            "translation": item.translation or "",
+            "audio_url": item.audio_url,
+            "image_url": item.image_url,
+            "part_of_speech": item.part_of_speech,
+            "example_sentence": item.example_sentence,
+            "example_sentence_translation": item.example_sentence_translation,
+            "example_sentence_audio_url": item.example_sentence_audio_url,
+        }
+
+    words = _attach_question_numbers(items, builder)
+    return {
+        "practice_mode": "word_spelling_quiz",
+        "words": words,
+        "total_questions": len(words),
+        **_common_settings(assignment),
+    }
+
+
+def build_cloze_quiz_payload(assignment: Assignment, db: Session) -> Dict[str, Any]:
+    """單字克漏字小考 payload。打字作答，正解為 ``_resolve_cloze_answer(item)``。"""
+    items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
+
+    def builder(item: ContentItem) -> Dict[str, Any]:
+        return {
+            "content_item_id": item.id,
+            "text": item.text,
+            "translation": item.translation or "",
+            "part_of_speech": item.part_of_speech,
+            "example_sentence": item.example_sentence or "",
+            "example_sentence_translation": item.example_sentence_translation or "",
+            "example_sentence_audio_url": item.example_sentence_audio_url,
+            "cloze_answer": _resolve_cloze_answer(item),
+            "image_url": item.image_url,
+            "audio_url": item.audio_url,
+        }
+
+    words = _attach_question_numbers(items, builder)
+    return {
+        "practice_mode": "word_cloze_quiz",
+        "words": words,
+        "total_questions": len(words),
+        **_common_settings(assignment),
+    }
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/cloze_quiz/start")

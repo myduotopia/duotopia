@@ -70,7 +70,18 @@ export interface RearrangementSelection {
   timestamp?: string;
 }
 
+export type RearrangementEndedReason = "completed" | "timeout" | "force_retry";
+
+export interface RearrangementAttempt {
+  selections?: RearrangementSelection[];
+  error_count?: number;
+  expected_score?: number;
+  ended_reason?: RearrangementEndedReason;
+  ended_at?: string; // ISO 8601
+}
+
 export interface RearrangementData {
+  attempts?: RearrangementAttempt[];
   selections?: RearrangementSelection[];
   retries?: number;
   completed_at?: string;

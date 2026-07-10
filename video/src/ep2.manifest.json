@@ -1,0 +1,612 @@
+{
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "episode": 2,
+  "episodesTotal": 7,
+  "bgm": "bgm/candidate_Carefree.mp3",
+  "scenes": [
+    {
+      "id": "title_in",
+      "kind": "title",
+      "audio": "ep2/tts/s01.wav",
+      "durationSec": 7.202,
+      "narration": "有了班級和學生，接下來準備上課要用的教材。這一集介紹兩種做法。",
+      "title": "第二集",
+      "subtitle": "建立教材"
+    },
+    {
+      "id": "steps",
+      "kind": "steps",
+      "audio": "ep2/tts/s02.wav",
+      "durationSec": 9.338,
+      "narration": "第一種，直接複製現成的教材包，最快。第二種，自己建教材，最彈性，這一集用單字集來示範。",
+      "title": "本集 2 種做法",
+      "steps": [
+        "複製現成教材",
+        "自己建教材"
+      ]
+    },
+    {
+      "id": "a_browse",
+      "kind": "shot",
+      "audio": "ep2/tts/s03.wav",
+      "durationSec": 8.003,
+      "narration": "最快的方法，點側邊欄的「資源教材包」，這裡有很多現成的公版教材。",
+      "shot": "ep2/shots/a01_resources.png",
+      "caption": "① 側邊欄「資源教材包」有現成的公版教材",
+      "highlights": [
+        {
+          "x": 580,
+          "y": 207,
+          "w": 210,
+          "h": 42
+        }
+      ],
+      "page": "資源教材包",
+      "step": {
+        "index": 1,
+        "total": 2,
+        "label": "複製現成教材",
+        "prefix": "做法"
+      },
+      "mask": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep2/clips/a_browse.mp4",
+      "clipDurationSec": 7.203,
+      "freezeShot": "ep2/clips/a_browse_last.png",
+      "sfx": [
+        {
+          "t": 1.89,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "a_open",
+      "kind": "shot",
+      "audio": "ep2/tts/s04.wav",
+      "durationSec": 7.628,
+      "narration": "點開一個教材包，就能看到裡面的單元和內容。",
+      "shot": "ep2/shots/a02_pack_detail.png",
+      "caption": "② 點開教材包，看裡面的單元和內容",
+      "highlights": [
+        {
+          "x": 757,
+          "y": 241,
+          "w": 30,
+          "h": 30
+        }
+      ],
+      "page": "資源教材包",
+      "step": {
+        "index": 1,
+        "total": 2,
+        "label": "複製現成教材",
+        "prefix": "做法"
+      },
+      "mask": true,
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep2/clips/a_open.mp4",
+      "clipDurationSec": 6.828,
+      "freezeShot": "ep2/clips/a_open_last.png",
+      "sfx": [
+        {
+          "t": 1.828,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "a_copy",
+      "kind": "shot",
+      "audio": "ep2/tts/s05.wav",
+      "durationSec": 6.003,
+      "narration": "按卡片上的複製鈕。",
+      "shot": "ep2/shots/a03_confirm_dialog.png",
+      "caption": "③ 按卡片上的複製鈕",
+      "highlights": [
+        {
+          "x": 1083,
+          "y": 598,
+          "w": 108,
+          "h": 40
+        }
+      ],
+      "page": "資源教材包",
+      "step": {
+        "index": 1,
+        "total": 2,
+        "label": "複製現成教材",
+        "prefix": "做法"
+      },
+      "mask": true,
+      "sameScreen": true,
+      "clip": "ep2/clips/a_copy.mp4",
+      "clipDurationSec": 5.203,
+      "freezeShot": "ep2/clips/a_copy_last.png",
+      "sfx": [
+        {
+          "t": 1.734,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "a_confirm",
+      "kind": "shot",
+      "audio": "ep2/tts/s06.wav",
+      "durationSec": 8.456,
+      "narration": "確認一下，馬上就複製好了。",
+      "shot": "ep2/shots/a04_copied_toast.png",
+      "caption": "④ 確認複製",
+      "highlights": [
+        {
+          "x": 786,
+          "y": 16,
+          "w": 346,
+          "h": 52
+        }
+      ],
+      "page": "資源教材包",
+      "step": {
+        "index": 1,
+        "total": 2,
+        "label": "複製現成教材",
+        "prefix": "做法"
+      },
+      "mask": true,
+      "sameScreen": true,
+      "clip": "ep2/clips/a_confirm.mp4",
+      "clipDurationSec": 7.656,
+      "freezeShot": "ep2/clips/a_confirm_last.png",
+      "sfx": [
+        {
+          "t": 2.656,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "a_done",
+      "kind": "shot",
+      "audio": "ep2/tts/s07.wav",
+      "durationSec": 8.941,
+      "narration": "複製好的教材就進到「我的教材」，之後可以自由編輯。第一種做法，完成。",
+      "shot": "ep2/shots/a05_my_programs.png",
+      "caption": "複製好的教材就在「我的教材」，可自由編輯",
+      "highlights": [
+        {
+          "x": 1108,
+          "y": 208,
+          "w": 210,
+          "h": 42
+        }
+      ],
+      "page": "我的教材",
+      "step": {
+        "index": 1,
+        "total": 2,
+        "label": "複製現成教材",
+        "prefix": "做法"
+      },
+      "stepDone": true,
+      "spotlight": {
+        "x": 1108,
+        "y": 208,
+        "w": 210,
+        "h": 42
+      },
+      "mask": true,
+      "sameScreen": true,
+      "clip": "ep2/clips/a_done.mp4",
+      "clipDurationSec": 8.141,
+      "freezeShot": "ep2/clips/a_done_last.png",
+      "sfx": [
+        {
+          "t": 2.703,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "b_program",
+      "kind": "shot",
+      "audio": "ep2/tts/s08.wav",
+      "durationSec": 21.753,
+      "narration": "想自己做？在「我的教材」點「新增教材包」。名稱之外，建議把程度選好、描述寫清楚——之後 AI 生成的內容，會更符合你的教學需要。",
+      "shot": "ep2/shots/b01_program_created.png",
+      "caption": "① 「新增教材包」：名稱、程度、描述寫清楚",
+      "highlights": [],
+      "page": "我的教材",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "clip": "ep2/clips/b_program.mp4",
+      "clipDurationSec": 20.953,
+      "freezeShot": "ep2/clips/b_program_last.png",
+      "sfx": [
+        {
+          "t": 1.75,
+          "type": "click"
+        },
+        {
+          "t": 5.469,
+          "type": "click"
+        },
+        {
+          "t": 8.859,
+          "type": "click"
+        },
+        {
+          "t": 16.156,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "b_addcontent",
+      "kind": "shot",
+      "audio": "ep2/tts/s09.wav",
+      "durationSec": 11.035,
+      "narration": "點進教材包，直接「新增教材內容」，不必先建單元。",
+      "shot": "ep2/shots/b02_content_type.png",
+      "caption": "② 點進教材包 →「新增教材內容」（免建單元）",
+      "highlights": [
+        {
+          "x": 1226,
+          "y": 149,
+          "w": 654,
+          "h": 24
+        }
+      ],
+      "page": "我的教材",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "sameScreen": true,
+      "clip": "ep2/clips/b_addcontent.mp4",
+      "clipDurationSec": 10.235,
+      "freezeShot": "ep2/clips/b_addcontent_last.png",
+      "sfx": [
+        {
+          "t": 1.75,
+          "type": "click"
+        },
+        {
+          "t": 6.75,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "b_type",
+      "kind": "shot",
+      "audio": "ep2/tts/s10.wav",
+      "durationSec": 7.221,
+      "narration": "內容類型有好幾種，這一集我們用「單字集」來示範。",
+      "shot": "ep2/shots/b03_vocab_panel.png",
+      "caption": "③ 內容類型有很多種，這集示範「單字集」",
+      "highlights": [],
+      "page": "我的教材 › 單字集",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "sameScreen": true,
+      "clip": "ep2/clips/b_type.mp4",
+      "clipDurationSec": 6.421,
+      "freezeShot": "ep2/clips/b_type_last.png",
+      "sfx": [
+        {
+          "t": 1.781,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "b_paste",
+      "kind": "shot",
+      "audio": "ep2/tts/s11.wav",
+      "durationSec": 13.8,
+      "narration": "左邊的批次欄位，一行一個，把單字貼上。",
+      "shot": "ep2/shots/b04_filled.png",
+      "caption": "④ 左側批次欄位，一行一個貼上單字",
+      "highlights": [
+        {
+          "x": 331,
+          "y": 237,
+          "w": 497,
+          "h": 224
+        }
+      ],
+      "page": "我的教材 › 單字集",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "sameScreen": true,
+      "clip": "ep2/clips/b_paste.mp4",
+      "clipDurationSec": 13.0,
+      "freezeShot": "ep2/clips/b_paste_last.png",
+      "sfx": [
+        {
+          "t": 2.204,
+          "type": "click"
+        },
+        {
+          "t": 8.5,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "b_options",
+      "kind": "shot",
+      "audio": "ep2/tts/s12.wav",
+      "durationSec": 8.688,
+      "narration": "自動翻譯、生成語音先開著。例句難度選 A2，再給 AI 一個提示：請用過去式造句。",
+      "shot": "ep2/shots/b05_options.png",
+      "caption": "例句難度選 A2，AI 提示：請用過去式造句",
+      "highlights": [
+        {
+          "x": 331,
+          "y": 509,
+          "w": 497,
+          "h": 294
+        }
+      ],
+      "page": "我的教材 › 單字集",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "sameScreen": true,
+      "clip": "ep2/clips/b_options.mp4",
+      "clipDurationSec": 7.829,
+      "freezeShot": "ep2/clips/b_options_last.png",
+      "sfx": [
+        {
+          "t": 1.797,
+          "type": "click"
+        },
+        {
+          "t": 4.344,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "b_magic",
+      "kind": "shot",
+      "audio": "ep2/tts/s13.wav",
+      "durationSec": 6.581,
+      "narration": "然後按下「魔術貼上」，讓 AI 工作一下。",
+      "shot": "ep2/shots/b06_magic_loading.png",
+      "caption": "⑤ 按「魔術貼上」，讓 AI 工作一下",
+      "highlights": [
+        {
+          "x": 298,
+          "y": 1001,
+          "w": 463,
+          "h": 40
+        }
+      ],
+      "page": "我的教材 › 單字集",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "sameScreen": true,
+      "clip": "ep2/clips/b_magic.mp4",
+      "clipDurationSec": 5.781,
+      "freezeShot": "ep2/clips/b_magic_last.png",
+      "sfx": [
+        {
+          "t": 2.671,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "b_result",
+      "kind": "shot",
+      "audio": "ep2/tts/s14.wav",
+      "durationSec": 8.13,
+      "narration": "看，翻譯、發音、例句都生好了。咦，例句的中文翻譯是空的——剛剛忘了選例句的翻譯語言。",
+      "shot": "ep2/shots/b07_result_no_trans.png",
+      "caption": "咦，例句的中文翻譯是空的？",
+      "highlights": [
+        {
+          "x": 878,
+          "y": 435,
+          "w": 994,
+          "h": 38
+        }
+      ],
+      "page": "我的教材 › 單字集",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "sameScreen": true,
+      "clip": "ep2/clips/b_result.mp4",
+      "clipDurationSec": 3.563,
+      "freezeShot": "ep2/clips/b_result_last.png"
+    },
+    {
+      "id": "b_fixlang",
+      "kind": "shot",
+      "audio": "ep2/tts/s15.wav",
+      "durationSec": 6.878,
+      "narration": "沒關係，回到設定，把例句的翻譯語言補選起來。",
+      "shot": "ep2/shots/b08_fixlang.png",
+      "caption": "沒關係！補選「翻譯成 → 繁體中文」",
+      "highlights": [
+        {
+          "x": 311,
+          "y": 1035,
+          "w": 505,
+          "h": 34
+        }
+      ],
+      "page": "我的教材 › 單字集",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "sameScreen": true,
+      "clip": "ep2/clips/b_fixlang.mp4",
+      "clipDurationSec": 6.078,
+      "freezeShot": "ep2/clips/b_fixlang_last.png"
+    },
+    {
+      "id": "b_magic2",
+      "kind": "shot",
+      "audio": "ep2/tts/s16.wav",
+      "durationSec": 6.347,
+      "narration": "再按一次魔術貼上。",
+      "shot": "ep2/shots/b06_magic_loading.png",
+      "caption": "再按一次「魔術貼上」",
+      "highlights": [],
+      "page": "我的教材 › 單字集",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "sameScreen": true,
+      "clip": "ep2/clips/b_magic2.mp4",
+      "clipDurationSec": 5.547,
+      "freezeShot": "ep2/clips/b_magic2_last.png",
+      "sfx": [
+        {
+          "t": 2.781,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "b_result2",
+      "kind": "shot",
+      "audio": "ep2/tts/s17.wav",
+      "durationSec": 6.691,
+      "narration": "再按一次魔術貼上，翻譯就補齊了。已經生好的內容，也不會跑掉。",
+      "shot": "ep2/shots/b09_result_translated.png",
+      "caption": "翻譯補齊！已生成的內容不會跑掉",
+      "highlights": [
+        {
+          "x": 878,
+          "y": 435,
+          "w": 994,
+          "h": 38
+        }
+      ],
+      "page": "我的教材 › 單字集",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "sameScreen": true,
+      "clip": "ep2/clips/b_result2.mp4",
+      "clipDurationSec": 3.562,
+      "freezeShot": "ep2/clips/b_result2_last.png"
+    },
+    {
+      "id": "b_cloze",
+      "kind": "shot",
+      "audio": "ep2/tts/s18.wav",
+      "durationSec": 8.781,
+      "narration": "連克漏字的答案，AI 都幫你標好了。想自己改，在例句裡把要挖空的字點兩下就行。",
+      "shot": "ep2/shots/b10_cloze.png",
+      "caption": "⑥ 克漏字答案 AI 也標好了；點兩下可自己改",
+      "highlights": [
+        {
+          "x": 878,
+          "y": 481,
+          "w": 994,
+          "h": 116
+        }
+      ],
+      "zoom": 1.4,
+      "page": "我的教材 › 單字集",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "transition": "fade"
+    },
+    {
+      "id": "b_save",
+      "kind": "shot",
+      "audio": "ep2/tts/s19.wav",
+      "durationSec": 9.144,
+      "narration": "按「儲存」，教材就完成了，可以拿去派作業。",
+      "shot": "ep2/shots/b11_saved.png",
+      "caption": "⑦ 儲存，教材完成！",
+      "highlights": [],
+      "page": "我的教材 › 單字集",
+      "step": {
+        "index": 2,
+        "total": 2,
+        "label": "自己建教材",
+        "prefix": "做法"
+      },
+      "stepDone": true,
+      "transition": "fade",
+      "clip": "ep2/clips/b_save.mp4",
+      "clipDurationSec": 8.344,
+      "freezeShot": "ep2/clips/b_save_last.png",
+      "sfx": [
+        {
+          "t": 2.515,
+          "type": "click"
+        }
+      ]
+    },
+    {
+      "id": "title_out",
+      "kind": "title",
+      "audio": "ep2/tts/s20.wav",
+      "durationSec": 4.462,
+      "narration": "教材有了，下一集我們就來派第一份作業。",
+      "title": "下一集",
+      "subtitle": "派發作業",
+      "progressDots": true
+    }
+  ]
+}

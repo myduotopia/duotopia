@@ -11,9 +11,11 @@
  *   - 其他（尚未作答 / 無分數）                                → 灰色 placeholder
  * 完全不讀 itemFeedbacks、不 onClick、不 autosave。
  *
- * 展開區「選字歷程」label 永遠顯示，但內容依分數分流：
- *   - expected_score >= 60 → 用綠色 chip 呈現完整正確答案（雛型，等 #679 補完整 attempts[] 再接真實資料）
- *   - 其他（沒分數 / < 60） → 顯示「更詳細的作答紀錄 Coming Soon」灰色佔位文字
+ * 展開區「選字歷程」顯示 rearrangement_data.attempts[]（#679）：
+ *   - 每次 attempt 一列：結束時間 · 狀態 pill（完成 / 超時 / 強制重來）· 選字 chips
+ *   - chip 綠底=選對、紅底+✗=選錯（顯示學生實際選的字）
+ *   - 最多顯示最近 3 次；chips 需 flex-wrap（長句一列最多 ~16 chip）
+ *   - 舊資料只有 selections（無 attempts）→ 優雅降級成單一「完成」attempt
  *
  * 詳見 docs/design/grading-page-architecture.md
  */
@@ -29,12 +31,12 @@ import {
   AlertCircle,
   Clock,
   RotateCcw,
-  Target,
 } from "lucide-react";
 import type {
   StudentSubmission,
   ItemFeedback,
   SubmissionItem,
+  RearrangementAttempt,
 } from "@/pages/teacher/GradingPage";
 
 interface SentenceRearrangementPanelProps {
@@ -59,8 +61,18 @@ function formatCompletedAt(timestamp?: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function splitAnswerWords(sentence: string): string[] {
-  return sentence.trim().split(/\s+/).filter(Boolean);
+const MAX_VISIBLE_ATTEMPTS = 3;
+
+function attemptBadgeClass(reason?: string): string {
+  switch (reason) {
+    case "timeout":
+      return "bg-amber-100 text-amber-700";
+    case "force_retry":
+      return "bg-red-100 text-red-700";
+    case "completed":
+    default:
+      return "bg-green-100 text-green-700";
+  }
 }
 
 export function SentenceRearrangementPanel({
@@ -84,47 +96,126 @@ export function SentenceRearrangementPanel({
     }
   }
 
-  const renderSelectionHistory = (item: SubmissionItem) => {
-    // 分流：>= 60 才顯示綠色 chips 雛型；其餘（沒分數 / < 60）顯示 Coming Soon 佔位。
-    // 與 isPassed 判斷（expected_score >= 60）統一，避免 60 分剛好的學生 ✓ 但無歷程。
-    const expectedScore = item.expected_score;
-    const showChips = expectedScore != null && expectedScore >= 60;
+  const badgeLabel = (reason?: string): string => {
+    switch (reason) {
+      case "timeout":
+        return t("gradingPage.rearrangement.badges.timeout");
+      case "force_retry":
+        return t("gradingPage.rearrangement.badges.forceRetry");
+      case "completed":
+      default:
+        return t("gradingPage.rearrangement.badges.completed");
+    }
+  };
 
-    if (!showChips) {
+  const renderSelectionHistory = (item: SubmissionItem) => {
+    const rd = item.rearrangement_data;
+    let attempts: RearrangementAttempt[] = rd?.attempts ?? [];
+
+    // 優雅降級：舊資料只有 selections（無 attempts）→ 當成單一「完成 / 超時」attempt
+    if (attempts.length === 0 && rd?.selections && rd.selections.length > 0) {
+      attempts = [
+        {
+          selections: rd.selections,
+          error_count: item.error_count,
+          expected_score: item.expected_score ?? undefined,
+          ended_reason: rd.timeout ? "timeout" : "completed",
+          ended_at: rd.completed_at ?? item.completed_at ?? undefined,
+        },
+      ];
+    }
+
+    if (attempts.length === 0) {
       return (
         <div className="text-xs text-gray-400 italic">
-          {t("gradingPage.rearrangement.labels.detailedHistoryComingSoon")}
+          {t("gradingPage.rearrangement.labels.noHistory")}
         </div>
       );
     }
 
-    // ⚠️ 示意圖：目前後端還沒提供每次作答（含 retry / timeout）的完整逐字歷程，
-    // 這裡先拿正確答案切成 chips 當 placeholder，讓老師知道未來會看到什麼樣的 UI。
-    // 等 #679 後端補完 attempts[] 資料後再接真實資料。
-    // Layout 參照 docs/design/pencil-new.pen 案例 1（一次答對）：
-    //   時間 · 「完成」綠 pill · 單字 chips 一字排開
-    const formattedTime = formatCompletedAt(item.completed_at);
-    const words = splitAnswerWords(item.question_text);
+    const totalAttempts = attempts.length;
+    const visibleAttempts = attempts.slice(-MAX_VISIBLE_ATTEMPTS);
+    const totalErrors = attempts.reduce(
+      (sum, a) => sum + (a.error_count ?? 0),
+      0,
+    );
+    const score = item.expected_score;
 
     return (
-      <div className="flex flex-wrap items-center gap-2.5">
-        {formattedTime && (
-          <span className="text-xs font-semibold text-gray-700 font-mono">
-            {formattedTime}
-          </span>
-        )}
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-semibold">
-          {t("gradingPage.rearrangement.badges.completed")}
-        </span>
-        <div className="flex flex-wrap gap-1.5">
-          {words.map((word, idx) => (
-            <span
-              key={idx}
-              className="inline-flex items-center px-2.5 py-1 rounded-md border border-green-200 bg-green-50 text-green-700 text-xs font-semibold"
-            >
-              {word}
+      <div className="space-y-3">
+        {/* Summary：分數 · N 次嘗試 · 共 M 次錯誤（· 僅顯示最近 3 次）*/}
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-gray-600">
+          {score != null && (
+            <span className="font-semibold text-blue-600">
+              {t("gradingPage.rearrangement.labels.scorePoints", {
+                score: Number(score).toFixed(0),
+              })}
             </span>
-          ))}
+          )}
+          {score != null && <span className="text-gray-300">·</span>}
+          <span>
+            {t("gradingPage.rearrangement.labels.attemptCount", {
+              count: totalAttempts,
+            })}
+          </span>
+          <span className="text-gray-300">·</span>
+          <span>
+            {t("gradingPage.rearrangement.labels.totalErrors", {
+              count: totalErrors,
+            })}
+          </span>
+          {totalAttempts > MAX_VISIBLE_ATTEMPTS && (
+            <>
+              <span className="text-gray-300">·</span>
+              <span className="text-gray-400">
+                {t("gradingPage.rearrangement.labels.showingRecent", {
+                  count: MAX_VISIBLE_ATTEMPTS,
+                })}
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* 每次 attempt 一列 */}
+        <div className="space-y-2">
+          {visibleAttempts.map((attempt, idx) => {
+            const formattedTime = formatCompletedAt(attempt.ended_at);
+            const selections = attempt.selections ?? [];
+            return (
+              <div key={idx} className="flex flex-wrap items-center gap-2.5">
+                {formattedTime && (
+                  <span className="text-xs font-semibold text-gray-700 font-mono whitespace-nowrap">
+                    {formattedTime}
+                  </span>
+                )}
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${attemptBadgeClass(
+                    attempt.ended_reason,
+                  )}`}
+                >
+                  {badgeLabel(attempt.ended_reason)}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {selections.map((sel, i) => {
+                    const isWrong = sel.is_correct === false;
+                    return (
+                      <span
+                        key={i}
+                        className={`inline-flex items-center px-2.5 py-1 rounded-md border text-xs font-semibold ${
+                          isWrong
+                            ? "border-red-200 bg-red-50 text-red-700"
+                            : "border-green-200 bg-green-50 text-green-700"
+                        }`}
+                      >
+                        {sel.selected}
+                        {isWrong && <span className="ml-0.5">✗</span>}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -187,7 +278,6 @@ export function SentenceRearrangementPanel({
 
                 const errorCount = item.error_count ?? 0;
                 const maxErrors = item.max_errors ?? null;
-                const correctWords = item.correct_word_count ?? 0;
                 const retryCount = item.retry_count ?? 0;
                 const expectedScore = item.expected_score;
                 const timedOut = item.timeout_ended === true;
@@ -274,18 +364,6 @@ export function SentenceRearrangementPanel({
                               <span className="font-semibold">
                                 {errorCount}
                                 {maxErrors != null ? ` / ${maxErrors}` : ""}
-                              </span>
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Target className="h-3 w-3 text-gray-400" />
-                            <span className="text-gray-600">
-                              {t(
-                                "gradingPage.rearrangement.labels.correctWords",
-                              )}
-                              :{" "}
-                              <span className="font-semibold">
-                                {correctWords}
                               </span>
                             </span>
                           </div>

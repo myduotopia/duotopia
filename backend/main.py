@@ -147,33 +147,49 @@ async def startup_event():
 
     logger = logging.getLogger(__name__)
 
-    MAX_RETRIES = 3
-    RETRY_DELAY = 2  # seconds
-
-    for attempt in range(MAX_RETRIES):
+    # In the test suite, Casbin sync must never abort startup. Instantiating
+    # TestClient(app) fires this startup event; when the DB is unreachable (local
+    # SQLite runs with no Postgres) sync_from_database() used to retry and then
+    # raise "Failed to initialize permission system", aborting every
+    # TestClient-based test at setup. In TESTING mode we make it best-effort:
+    # try once, keep any grants we can load (e.g. CI's real Postgres still syncs
+    # exactly as before), but swallow failures instead of crashing. (Issue #314)
+    if os.getenv("TESTING", "").lower() == "true":
         try:
             from services.casbin_service import get_casbin_service
 
-            casbin_service = get_casbin_service()
-            casbin_service.sync_from_database()
-            logger.info("✅ Casbin roles synced from database")
-            break
+            get_casbin_service().sync_from_database()
+            logger.info("✅ Casbin roles synced from database (test mode)")
         except Exception as e:
-            if attempt == MAX_RETRIES - 1:
-                # Last attempt failed - this is critical
-                logger.critical(
-                    f"🚨 CRITICAL: Failed to sync Casbin roles after {MAX_RETRIES} attempts: {e}",
-                    exc_info=True,
-                )
-                raise RuntimeError(
-                    "Failed to initialize permission system. Cannot start application."
-                ) from e
-            else:
-                logger.warning(
-                    f"⚠️ Casbin sync attempt {attempt + 1}/{MAX_RETRIES} failed: {e}. Retrying in {RETRY_DELAY}s..."
-                )
-                time.sleep(RETRY_DELAY)
-                RETRY_DELAY *= 2  # Exponential backoff
+            logger.warning(f"⏭️  TESTING: Casbin sync skipped — DB not reachable ({e})")
+    else:
+        MAX_RETRIES = 3
+        RETRY_DELAY = 2  # seconds
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                from services.casbin_service import get_casbin_service
+
+                casbin_service = get_casbin_service()
+                casbin_service.sync_from_database()
+                logger.info("✅ Casbin roles synced from database")
+                break
+            except Exception as e:
+                if attempt == MAX_RETRIES - 1:
+                    # Last attempt failed - this is critical
+                    logger.critical(
+                        f"🚨 CRITICAL: Failed to sync Casbin roles after {MAX_RETRIES} attempts: {e}",
+                        exc_info=True,
+                    )
+                    raise RuntimeError(
+                        "Failed to initialize permission system. Cannot start application."
+                    ) from e
+                else:
+                    logger.warning(
+                        f"⚠️ Casbin sync attempt {attempt + 1}/{MAX_RETRIES} failed: {e}. Retrying in {RETRY_DELAY}s..."
+                    )
+                    time.sleep(RETRY_DELAY)
+                    RETRY_DELAY *= 2  # Exponential backoff
 
     print(
         "🚀 Application startup complete - "

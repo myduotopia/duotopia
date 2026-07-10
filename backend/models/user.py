@@ -49,7 +49,9 @@ class Identity(Base):
 
     # 1Campus SSO 欄位
     one_campus_uuid = Column(String(100), nullable=True, unique=True, index=True)
-    one_campus_student_id = Column(String(100), nullable=True, index=True)
+    # Issue #730: unique so concurrent 1Campus syncs can't create duplicate
+    # identities for the same student (DB-enforced via partial unique index).
+    one_campus_student_id = Column(String(100), nullable=True, unique=True, index=True)
     one_campus_account = Column(String(255), nullable=True)
     national_id_hash = Column(String(64), nullable=True, index=True)
 

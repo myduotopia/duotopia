@@ -4,6 +4,7 @@ Grading operations (AI and manual)
 
 import json
 import logging
+from collections import defaultdict
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
@@ -37,6 +38,10 @@ from .validators import (
     StudentBatchGradingResult,
     BatchGradeFinalizeRequest,
     BatchGradeFinalizeResponse,
+    GradeStudentAssignmentRequest,
+    SetAssignmentInProgressRequest,
+    ReturnForRevisionRequest,
+    ManualGradeAssignmentRequest,
 )
 from .dependencies import get_current_teacher
 from .detail import (
@@ -48,6 +53,7 @@ from services.analysis_quota import (
     reset_analysis_count_for_assignment,
     reset_analysis_count_for_assignments,
 )
+from services.preview_service import get_sentence_fields
 from .utils import (
     process_audio_with_whisper,
     calculate_text_similarity,
@@ -102,7 +108,7 @@ async def ai_grade_assignment(
     AI 自動批改作業
     只有教師可以觸發批改
     """
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
     perf = PerformanceSnapshot(f"AI_Grade_Assignment_{assignment_id}")
 
     # 1. 取得作業並驗證權限
@@ -135,10 +141,7 @@ async def ai_grade_assignment(
             )
         perf.checkpoint("Status Validation")
 
-    # 3. 簡化版 - 不查詢 Content
-    content = None
-
-    # 4. 取得提交資料（新架構從 StudentContentProgress 取得）
+    # 3. 取得提交資料（新架構從 StudentContentProgress 取得）
     # 暫時簡化處理
 
     try:
@@ -151,12 +154,11 @@ async def ai_grade_assignment(
         else:
             # 準備預期文字
             with start_span("Prepare Expected Texts"):
+                # This simplified path intentionally does not load Content, so
+                # there are no expected texts to prepare. (Issue #335 item 6:
+                # removed dead `hasattr(content, ...)` block that was always
+                # False because content was unconditionally None.)
                 expected_texts = []
-                if hasattr(content, "content_items"):
-                    for item in content.content_items:
-                        expected_texts.append(
-                            item.text if hasattr(item, "text") else ""
-                        )
                 perf.checkpoint("Text Preparation")
 
             # 呼叫 Whisper API（這裡最可能慢）
@@ -253,7 +255,7 @@ async def ai_grade_assignment(
             perf.checkpoint("Database Update Complete")
 
         # 8. 計算處理時間
-        processing_time = (datetime.now() - start_time).total_seconds()
+        processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
         perf.finish()
 
         return AIGradingResponse(
@@ -262,7 +264,7 @@ async def ai_grade_assignment(
             overall_score=overall_score,
             feedback=feedback,
             detailed_feedback=detailed_results,
-            graded_at=datetime.now(),
+            graded_at=datetime.now(timezone.utc),
             processing_time_seconds=round(processing_time, 2),
         )
 
@@ -279,22 +281,33 @@ async def get_assignment_submissions(
     db: Session = Depends(get_db),
 ):
     """獲取作業的所有提交（教師用）"""
-    # 獲取基礎作業資訊
+    # 獲取基礎作業資訊，並驗證此作業屬於登入教師（避免跨班級枚舉）
     base_assignment = (
         db.query(StudentAssignment)
-        .filter(StudentAssignment.id == assignment_id)
+        .join(Classroom)
+        .filter(
+            and_(
+                StudentAssignment.id == assignment_id,
+                Classroom.teacher_id == current_teacher.id,
+            )
+        )
         .first()
     )
 
     if not base_assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Assignment not found or you don't have permission",
+        )
 
-    # 獲取同一內容的所有學生作業
+    # 獲取「同一份作業」的所有學生提交
+    # 需同時過濾 classroom_id 與 assignment_id，否則會回傳整個班級其他作業的提交
     submissions = (
         db.query(StudentAssignment)
         .join(Student)
         .filter(
             StudentAssignment.classroom_id == base_assignment.classroom_id,
+            StudentAssignment.assignment_id == base_assignment.assignment_id,
         )
         .all()
     )
@@ -306,8 +319,6 @@ async def get_assignment_submissions(
     }
 
     submission_ids = [sub.id for sub in submissions]
-    from collections import defaultdict
-
     progress_dict = defaultdict(list)
     for progress in (
         db.query(StudentContentProgress)
@@ -566,6 +577,17 @@ async def get_student_submission(
 
                     # 例句重組專用：補上 max_errors（來自 content_item）
                     if practice_mode == "rearrangement":
+                        # 與學生端出題一致：單字集（VOCABULARY_SET）要用
+                        # example_sentence 當題目，不是 item.text（單字本身）。
+                        # 唯一判定邏輯見 services.preview_service.get_sentence_fields。
+                        fields = get_sentence_fields(
+                            item, content.type, "rearrangement"
+                        )
+                        if fields is not None:
+                            q_text, q_translation, q_audio = fields
+                            submission["question_text"] = q_text
+                            submission["question_translation"] = q_translation
+                            submission["question_audio_url"] = q_audio
                         submission["max_errors"] = (
                             item.max_errors if hasattr(item, "max_errors") else None
                         )
@@ -759,12 +781,14 @@ def _is_quiz_assignment(
 @router.post("/{assignment_id}/grade")
 async def grade_student_assignment(
     assignment_id: int,
-    grade_data: dict,
+    payload: GradeStudentAssignmentRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """教師批改學生作業"""
-    import logging
+    # Issue #335 item 5: validated body bridged to the existing dict logic
+    # (exclude_none keeps the original ``"key" in grade_data`` semantics).
+    grade_data = payload.model_dump(exclude_none=True)
 
     # 獲取學生ID
     student_id = grade_data.get("student_id")
@@ -965,11 +989,13 @@ async def grade_student_assignment(
 @router.post("/{assignment_id}/set-in-progress")
 async def set_assignment_in_progress(
     assignment_id: int,
-    data: dict,
+    payload: SetAssignmentInProgressRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """設定為批改中狀態"""
+    # Issue #335 item 5: validated body bridged to the existing dict logic.
+    data = payload.model_dump(exclude_none=True)
     # 獲取學生ID
     student_id = data.get("student_id")
     if not student_id:
@@ -1145,11 +1171,13 @@ def _do_return_for_revision(
 @router.post("/{assignment_id}/return-for-revision")
 async def return_for_revision(
     assignment_id: int,
-    data: dict,
+    payload: ReturnForRevisionRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """要求訂正 - 要求學生修改作業（單筆）"""
+    # Issue #335 item 5: validated body bridged to the existing dict logic.
+    data = payload.model_dump(exclude_none=True)
     student_id = data.get("student_id")
     if not student_id:
         raise HTTPException(status_code=400, detail="Student ID is required")
@@ -1366,11 +1394,13 @@ async def batch_reset_not_started(
 @router.post("/{assignment_id}/manual-grade")
 async def manual_grade_assignment(
     assignment_id: int,
-    grade_data: dict,
+    payload: ManualGradeAssignmentRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
     """手動評分（教師用）"""
+    # Issue #335 item 5: validated body bridged to the existing dict logic.
+    grade_data = payload.model_dump(exclude_none=True)
     # 獲取作業
     assignment = (
         db.query(StudentAssignment)
@@ -1409,7 +1439,7 @@ async def manual_grade_assignment(
     if "detailed_scores" in grade_data:
         progress_records = (
             db.query(StudentContentProgress)
-            .filter(StudentContentProgress.student_assignment_id == assignment_id)
+            .filter(StudentContentProgress.student_assignment_id == assignment.id)
             .all()
         )
 

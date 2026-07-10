@@ -78,6 +78,14 @@ vi.mock("react-i18next", () => ({
         "teacherClassrooms.dialogs.createDescription": "Create a new classroom",
         "teacherClassrooms.placeholders.classroomName": "e.g., Grade 5",
         "teacherClassrooms.placeholders.description": "Description",
+        "teacherClassrooms.oneCampusSync.buttonIdle": "Sync 1Campus",
+        "teacherClassrooms.oneCampusSync.buttonSyncing": "Syncing...",
+        "teacherClassrooms.oneCampusSync.tooltip": "Sync 1Campus tooltip",
+        "teacherClassrooms.oneCampusSync.confirm.title":
+          "Sync into your personal account?",
+        "teacherClassrooms.oneCampusSync.confirm.message":
+          "Points will be deducted from your personal balance.",
+        "teacherClassrooms.oneCampusSync.confirm.confirmButton": "Sync anyway",
         "common.loading": "Loading...",
         "common.edit": "Edit",
         "common.delete": "Delete",
@@ -112,13 +120,19 @@ vi.mock("@/components/AssignmentDialog", () => ({
 
 // Mock API
 const mockGetTeacherClassrooms = vi.fn();
+const mockSyncOneCampusClasses = vi.fn();
 vi.mock("@/lib/api", () => ({
   apiClient: {
     getTeacherClassrooms: (...args: unknown[]) =>
       mockGetTeacherClassrooms(...args),
+    syncOneCampusClasses: (...args: unknown[]) =>
+      mockSyncOneCampusClasses(...args),
     createClassroom: vi.fn(),
     updateClassroom: vi.fn(),
     deleteClassroom: vi.fn(),
+  },
+  ApiError: class ApiError extends Error {
+    status?: number;
   },
 }));
 
@@ -170,9 +184,14 @@ describe("TeacherClassrooms", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetTeacherClassrooms.mockResolvedValue(mockClassrooms);
+    mockSyncOneCampusClasses.mockResolvedValue({
+      synced: false,
+      schools: [],
+    });
     mockWorkspace.mode = "personal";
     mockWorkspace.selectedSchool = null;
     mockWorkspace.selectedOrganization = null;
+    mockWorkspace.organizations = [];
   });
 
   describe("Rendering", () => {
@@ -489,6 +508,99 @@ describe("TeacherClassrooms", () => {
         (btn) => !btn.hasAttribute("disabled"),
       );
       expect(enabledDispatch).toBeDefined();
+    });
+  });
+
+  describe("1Campus Sync Foolproof (#761)", () => {
+    it("syncs immediately without a dialog when the teacher has no organization", async () => {
+      const user = userEvent.setup();
+      mockWorkspace.organizations = [];
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      const syncButton = screen.getByTitle("Sync 1Campus tooltip");
+      await user.click(syncButton);
+
+      await waitFor(() => {
+        expect(mockSyncOneCampusClasses).toHaveBeenCalledTimes(1);
+      });
+      // No confirmation dialog for personal-only teachers.
+      expect(
+        screen.queryByText("Sync into your personal account?"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows a confirmation dialog (and does not sync yet) when the teacher belongs to an organization", async () => {
+      const user = userEvent.setup();
+      mockWorkspace.organizations = [{ id: "org-1", name: "Test Org" }];
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      const syncButton = screen.getByTitle("Sync 1Campus tooltip");
+      await user.click(syncButton);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Sync into your personal account?"),
+        ).toBeInTheDocument();
+      });
+      // Sync must not fire until the teacher confirms.
+      expect(mockSyncOneCampusClasses).not.toHaveBeenCalled();
+    });
+
+    it("runs the sync after the teacher confirms in the dialog", async () => {
+      const user = userEvent.setup();
+      mockWorkspace.organizations = [{ id: "org-1", name: "Test Org" }];
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      await user.click(screen.getByTitle("Sync 1Campus tooltip"));
+      await waitFor(() => {
+        expect(
+          screen.getByText("Sync into your personal account?"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: "Sync anyway" }));
+
+      await waitFor(() => {
+        expect(mockSyncOneCampusClasses).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("does not sync when the teacher cancels the dialog", async () => {
+      const user = userEvent.setup();
+      mockWorkspace.organizations = [{ id: "org-1", name: "Test Org" }];
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      await user.click(screen.getByTitle("Sync 1Campus tooltip"));
+      await waitFor(() => {
+        expect(
+          screen.getByText("Sync into your personal account?"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText("Sync into your personal account?"),
+        ).not.toBeInTheDocument();
+      });
+      expect(mockSyncOneCampusClasses).not.toHaveBeenCalled();
     });
   });
 

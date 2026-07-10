@@ -2,6 +2,19 @@
 Global pytest configuration
 統一的測試配置，確保所有測試使用相同的資料庫設置
 """
+import os
+
+# Boot the app in test mode BEFORE importing database/main below.
+# - TESTING=true makes the startup event treat Casbin sync_from_database as
+#   best-effort: it no longer retries-then-raises when the DB is unreachable,
+#   which used to abort every TestClient-based test at setup (Issue #314).
+# - DATABASE_URL defaults the app's engine to the local SQLite test DB, so any
+#   code path that bypasses the get_db override fails safe to SQLite instead of
+#   a remote Postgres/Supabase host. setdefault() preserves an explicit
+#   DATABASE_URL (e.g. a Postgres service in CI).
+os.environ.setdefault("TESTING", "true")
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test_org.db")
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

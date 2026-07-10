@@ -2,6 +2,9 @@
 
 本文件記錄所有已配置到 Cloud Run n8n 服務的外部系統認證資訊。
 
+> ⚠️ **不要在本文件寫入任何真實密鑰或識別碼。** 實際值一律存放於 Secret Manager
+> 或各雲端 Console，下方以 `<PLACEHOLDER>` 表示，並註明取得方式。
+
 ## 📋 目錄
 
 - [LINE Messaging API](#line-messaging-api)
@@ -28,11 +31,15 @@
 
 ### 原始資訊
 
+實際值請至 Secret Manager 取得（勿寫入版本控制）：
+
+```powershell
+gcloud secrets versions access latest --secret=line-channel-id --project=<PROJECT_ID>
+gcloud secrets versions access latest --secret=line-channel-secret --project=<PROJECT_ID>
+gcloud secrets versions access latest --secret=line-channel-access-token --project=<PROJECT_ID>
 ```
-Channel ID: 2008963724
-Channel secret: 42a3dfc37f44093bcf89f1e9514cca2a
-Webhook URL: https://n8n-316409492201.asia-east1.run.app/webhook/line-webhook
-```
+
+Webhook URL 格式：`https://<N8N_HOST>/webhook/line-webhook`
 
 ### n8n 使用方式
 
@@ -59,7 +66,7 @@ Headers:
 ### Service Account
 
 ```
-Email: n8n-vertex-ai@duotopia-472708.iam.gserviceaccount.com
+Email: <N8N_VERTEX_AI_SA_EMAIL>   # GCP Console → IAM & Admin → Service Accounts
 Roles:
   - roles/aiplatform.user (Vertex AI)
   - roles/billing.viewer (GCP Billing - Billing Account 層級)
@@ -100,8 +107,8 @@ cloudbilling.googleapis.com (Cloud Billing API)
 
 ### 權限配置
 
-- **Billing Account ID:** `017B33-891FD6-C45566` (duotopia - cacafly - 1)
-- **Service Account:** `n8n-vertex-ai@duotopia-472708.iam.gserviceaccount.com`
+- **Billing Account ID:** `<BILLING_ACCOUNT_ID>` — GCP Console → Billing
+- **Service Account:** `<N8N_VERTEX_AI_SA_EMAIL>`
 - **Role:** `roles/billing.viewer`
 
 ### n8n 使用方式
@@ -109,7 +116,7 @@ cloudbilling.googleapis.com (Cloud Billing API)
 ```javascript
 // HTTP Request 節點
 Method: GET
-URL: https://cloudbilling.googleapis.com/v1/billingAccounts/017B33-891FD6-C45566
+URL: https://cloudbilling.googleapis.com/v1/billingAccounts/<BILLING_ACCOUNT_ID>
 Authentication: 使用 Google Cloud 憑證 (Vertex AI Service Account)
 ```
 
@@ -132,17 +139,17 @@ Authentication: 使用 Google Cloud 憑證 (Vertex AI Service Account)
 
 ```
 名稱: n8n-azure-billing
-App ID (Client ID): 167420c7-cb82-4123-be32-50ec4eb6a6bd
+App ID (Client ID): <AZURE_CLIENT_ID>        # Azure Portal → App registrations
 角色: Billing Reader
-範圍: /subscriptions/eefabf75-cffc-4208-bb83-4f89ad56cc83
+範圍: /subscriptions/<AZURE_SUBSCRIPTION_ID>
 ```
 
 ### 訂閱資訊
 
 ```
 名稱: Azure subscription 1
-Subscription ID: eefabf75-cffc-4208-bb83-4f89ad56cc83
-Tenant ID: d6e155c6-13f2-4984-8269-1e01802abb83
+Subscription ID: <AZURE_SUBSCRIPTION_ID>     # Azure Portal → Subscriptions
+Tenant ID: <AZURE_TENANT_ID>                 # Azure Portal → Microsoft Entra ID → Overview
 ```
 
 ### n8n 使用方式
@@ -227,19 +234,19 @@ return Object.keys(process.env)
 ### 列出所有 Secrets
 
 ```powershell
-gcloud secrets list --project=duotopia-472708
+gcloud secrets list --project=<PROJECT_ID>
 ```
 
 ### 查看 Secret 內容
 
 ```powershell
-gcloud secrets versions access latest --secret=<SECRET_NAME> --project=duotopia-472708
+gcloud secrets versions access latest --secret=<SECRET_NAME> --project=<PROJECT_ID>
 ```
 
 ### 更新 Secret
 
 ```powershell
-echo "NEW_VALUE" | gcloud secrets versions add <SECRET_NAME> --data-file=- --project=duotopia-472708
+echo "NEW_VALUE" | gcloud secrets versions add <SECRET_NAME> --data-file=- --project=<PROJECT_ID>
 ```
 
 ### 綁定到 Cloud Run
@@ -247,7 +254,7 @@ echo "NEW_VALUE" | gcloud secrets versions add <SECRET_NAME> --data-file=- --pro
 ```powershell
 gcloud run services update n8n --region=asia-east1 `
   --update-secrets "ENV_VAR_NAME=secret-name:latest" `
-  --project=duotopia-472708
+  --project=<PROJECT_ID>
 ```
 
 ---
@@ -257,6 +264,7 @@ gcloud run services update n8n --region=asia-east1 `
 1. **永不提交實際密鑰到版本控制**
    - 所有敏感值都已存入 Secret Manager
    - 本地開發使用 `.env` 檔案（已加入 `.gitignore`）
+   - 本文件僅記錄 Secret「名稱」與取得方式，不寫入實際值
 
 2. **定期輪替密鑰**
    - LINE Channel Access Token: 無過期時間，建議每 6 個月輪替
@@ -278,7 +286,7 @@ gcloud run services update n8n --region=asia-east1 `
 
 - **建立日期:** 2026-01-26
 - **Cloud Run 服務:** n8n (asia-east1)
-- **GCP 專案:** duotopia-472708
+- **GCP 專案:** `<PROJECT_ID>`
 - **Azure 訂閱:** Azure subscription 1
 
 ---
@@ -299,21 +307,21 @@ gcloud run services update n8n --region=asia-east1 `
 ```
 名稱: n8n
 區域: asia-east1
-URL: https://n8n-316409492201.asia-east1.run.app
-服務帳號: 316409492201-compute@developer.gserviceaccount.com
+URL: https://<N8N_HOST>
+服務帳號: <N8N_COMPUTE_SA_EMAIL>
 ```
 
 ### 已授權的 IAM 權限
 
 ```
-serviceAccount:316409492201-compute@developer.gserviceaccount.com
+serviceAccount:<N8N_COMPUTE_SA_EMAIL>
   - roles/secretmanager.secretAccessor (所有 Secrets)
 ```
 
 ### Service Accounts 清單
 
 ```
-n8n-vertex-ai@duotopia-472708.iam.gserviceaccount.com
+<N8N_VERTEX_AI_SA_EMAIL>
   - roles/aiplatform.user (Project 層級)
   - roles/billing.viewer (Billing Account 層級)
 ```

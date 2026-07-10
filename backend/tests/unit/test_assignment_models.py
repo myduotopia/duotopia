@@ -17,6 +17,7 @@ from models import (
     Student,
     Classroom,
     Content,
+    ContentItem,
     Lesson,
     Program,
     AssignmentStatus,
@@ -109,9 +110,9 @@ def sample_content(db_session, sample_lesson):
         lesson_id=sample_lesson.id,
         type=ContentType.EXAMPLE_SENTENCES,
         title="Test Content",
-        items=[
-            {"text": "Hello", "translation": "你好"},
-            {"text": "World", "translation": "世界"},
+        content_items=[
+            ContentItem(order_index=0, text="Hello", translation="你好"),
+            ContentItem(order_index=1, text="World", translation="世界"),
         ],
     )
     db_session.add(content)
@@ -217,7 +218,7 @@ class TestAssignmentContentModel:
                 lesson_id=sample_lesson.id,
                 type=ContentType.EXAMPLE_SENTENCES,
                 title=f"Content {i+1}",
-                items=[],
+                content_items=[],
             )
             contents.append(content)
         db_session.add_all(contents)

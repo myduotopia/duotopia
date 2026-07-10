@@ -27,6 +27,7 @@ from models import (
 )
 from .dependencies import get_current_teacher
 from .utils import compute_speaking_total_score
+from .validators import LIVE_QUIZ_MODES
 
 # Single source of truth for speaking-scored modes (Azure pronunciation assessment,
 # score_category=speaking). Imported — not re-declared — so a new speaking mode added
@@ -611,8 +612,11 @@ def _get_owned_live_quiz_or_404(
         raise HTTPException(
             status_code=404, detail="Assignment not found or you don't have permission"
         )
+    # Issue #884 item 1: restrict live-quiz teacher ops to the whitelisted modes
+    # (word_selection/spelling/cloze_quiz) that have student-side gates, so a
+    # speaking_quiz can't be driven as a live quiz.
     practice_mode = assignment.practice_mode or ""
-    if not practice_mode.endswith("_quiz") or not getattr(
+    if practice_mode not in LIVE_QUIZ_MODES or not getattr(
         assignment, "is_live_quiz", False
     ):
         raise HTTPException(

@@ -66,11 +66,16 @@ export default function OrgMaterialsPage() {
     programName: string;
     lessonName: string;
     lessonId: number;
+    // Issue #587/#847: set when creating program-direct content (lesson_id NULL)
+    programId?: number;
   } | null>(null);
 
   // Reading assessment modal
   const [showReadingEditor, setShowReadingEditor] = useState(false);
   const [editorLessonId, setEditorLessonId] = useState<number | null>(null);
+  // Issue #847: programId is set (and editorLessonId is null) when creating/
+  // editing program-direct content
+  const [editorProgramId, setEditorProgramId] = useState<number | null>(null);
   const [editorContentId, setEditorContentId] = useState<number | null>(null);
   const [selectedContent, setSelectedContent] = useState<Content | null>(null);
 
@@ -83,6 +88,10 @@ export default function OrgMaterialsPage() {
     return () => setSidebarDisabled(false);
   }, [showReadingEditor, showVocabularySetEditor, setSidebarDisabled]);
   const [vocabularySetLessonId, setVocabularySetLessonId] = useState<
+    number | null
+  >(null);
+  // Issue #847: programId for program-direct vocabulary set creation/editing
+  const [vocabularySetProgramId, setVocabularySetProgramId] = useState<
     number | null
   >(null);
   const [vocabularySetContentId, setVocabularySetContentId] = useState<
@@ -254,8 +263,22 @@ export default function OrgMaterialsPage() {
   // Content handlers
   const handleCreateContent = (programId: number, lessonId: number) => {
     const program = programs.find((p) => p.id === programId);
-    const lesson = program?.lessons?.find((l) => l.id === lessonId);
-    if (lesson && program) {
+    if (!program) return;
+
+    // Issue #847: lessonId === 0 means create program-direct content (no lesson)
+    if (lessonId === 0) {
+      setContentLessonInfo({
+        programName: program.name,
+        lessonName: "",
+        lessonId: 0,
+        programId: program.id,
+      });
+      setShowContentTypeDialog(true);
+      return;
+    }
+
+    const lesson = program.lessons?.find((l) => l.id === lessonId);
+    if (lesson) {
       setContentLessonInfo({
         programName: program.name,
         lessonName: lesson.name,
@@ -269,11 +292,16 @@ export default function OrgMaterialsPage() {
     content: Content & {
       lessonName?: string;
       programName?: string;
-      lesson_id?: number;
+      lesson_id?: number | null;
+      program_id?: number | null;
     },
   ) => {
     // 統一轉成小寫比對
     const contentType = content.type?.toLowerCase();
+
+    // Issue #847: program-direct content has lesson_id = null; carry program_id
+    // so the editor render gate (which requires lessonId OR programId) passes.
+    const isProgramDirect = !content.lesson_id && !!content.program_id;
 
     // EXAMPLE_SENTENCES uses the same ReadingAssessmentPanel as READING_ASSESSMENT
     if (
@@ -282,6 +310,7 @@ export default function OrgMaterialsPage() {
     ) {
       setSelectedContent(content);
       setEditorLessonId(content.lesson_id || null);
+      setEditorProgramId(isProgramDirect ? content.program_id! : null);
       setEditorContentId(content.id);
       setShowReadingEditor(true);
     } else if (
@@ -290,6 +319,7 @@ export default function OrgMaterialsPage() {
     ) {
       // 編輯單字集內容
       setVocabularySetLessonId(content.lesson_id || null);
+      setVocabularySetProgramId(isProgramDirect ? content.program_id! : null);
       setVocabularySetContentId(content.id);
       setShowVocabularySetEditor(true);
     }
@@ -314,6 +344,13 @@ export default function OrgMaterialsPage() {
       await apiClient.deleteContent(contentId);
       const updatedPrograms = programs.map((program) => ({
         ...program,
+        // Issue #847: ProgramFolderView passes lessonId=0 for program-direct
+        // content; filter program.contents so the deleted card disappears
+        // without a page refresh.
+        contents:
+          lessonId === 0
+            ? program.contents?.filter((c) => c.id !== contentId)
+            : program.contents,
         lessons: program.lessons?.map((lesson) => {
           if (lesson.id === lessonId) {
             return {
@@ -707,11 +744,19 @@ export default function OrgMaterialsPage() {
                 });
                 setShowInstantPractice(true);
               }}
-              onAssignContent={(content, lessonId) => {
-                const program = programs.find((p) =>
-                  p.lessons?.some((l) => l.id === lessonId),
-                );
-                const lesson = program?.lessons?.find((l) => l.id === lessonId);
+              onAssignContent={(content, lessonId, programId) => {
+                // Issue #847: program-direct content (lessonId === 0) is looked
+                // up by programId, not by lesson.
+                const program =
+                  lessonId === 0
+                    ? programs.find((p) => p.id === programId)
+                    : programs.find((p) =>
+                        p.lessons?.some((l) => l.id === lessonId),
+                      );
+                const lesson =
+                  lessonId === 0
+                    ? undefined
+                    : program?.lessons?.find((l) => l.id === lessonId);
                 const cartItem: CartItem = {
                   contentId: content.id,
                   programName: program?.name || "",
@@ -735,92 +780,113 @@ export default function OrgMaterialsPage() {
         </div>
 
         {/* Reading Assessment Modal (新增模式) */}
-        {showReadingEditor && editorLessonId && editorContentId === null && (
-          <>
-            <div
-              className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
-              style={{ left: `${sidebarWidth}px` }}
-            >
-              <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold">
-                  {t("teacherTemplatePrograms.dialogs.addReadingTitle")}
-                </h2>
-                <div className="flex items-center gap-2">
-                  <RefSaveButton panelRef={readingPanelRef} />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    disabled={editorBusy}
-                    onClick={() => {
-                      if (editorBusy) return;
-                      if (
-                        !window.confirm(
-                          t("contentEditor.labels.unsavedChangesConfirm"),
+        {showReadingEditor &&
+          (editorLessonId || editorProgramId) &&
+          editorContentId === null && (
+            <>
+              <div
+                className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+                style={{ left: `${sidebarWidth}px` }}
+              >
+                <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold">
+                    {t("teacherTemplatePrograms.dialogs.addReadingTitle")}
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <RefSaveButton panelRef={readingPanelRef} />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      disabled={editorBusy}
+                      onClick={() => {
+                        if (editorBusy) return;
+                        if (
+                          !window.confirm(
+                            t("contentEditor.labels.unsavedChangesConfirm"),
+                          )
                         )
-                      )
-                        return;
+                          return;
+                        setShowReadingEditor(false);
+                        setEditorLessonId(null);
+                        setEditorProgramId(null);
+                        setEditorContentId(null);
+                        setSelectedContent(null);
+                      }}
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
+                  <ReadingAssessmentPanel
+                    ref={readingPanelRef}
+                    lessonId={editorLessonId || undefined}
+                    programId={editorProgramId || undefined}
+                    isCreating={true}
+                    onSave={async (
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      newContent?: any,
+                    ) => {
+                      // 如果有返回新內容，直接更新前端狀態，不重整頁面
+                      if (newContent && editorLessonId) {
+                        setPrograms(
+                          programs.map((program) => ({
+                            ...program,
+                            lessons: program.lessons?.map((lesson) => {
+                              if (lesson.id === editorLessonId) {
+                                return {
+                                  ...lesson,
+                                  contents: [
+                                    ...(lesson.contents || []),
+                                    newContent,
+                                  ],
+                                };
+                              }
+                              return lesson;
+                            }),
+                          })),
+                        );
+                      } else if (newContent && editorProgramId) {
+                        // Issue #847: program-direct content — append to program.contents
+                        setPrograms(
+                          programs.map((program) =>
+                            program.id === editorProgramId
+                              ? {
+                                  ...program,
+                                  contents: [
+                                    ...(program.contents || []),
+                                    newContent,
+                                  ],
+                                }
+                              : program,
+                          ),
+                        );
+                      }
                       setShowReadingEditor(false);
                       setEditorLessonId(null);
+                      setEditorProgramId(null);
+                      setEditorContentId(null);
+                      setSelectedContent(null);
+                      toast.success(
+                        t("teacherTemplatePrograms.messages.contentSaved"),
+                      );
+                    }}
+                    onCancel={() => {
+                      setShowReadingEditor(false);
+                      setEditorLessonId(null);
+                      setEditorProgramId(null);
                       setEditorContentId(null);
                       setSelectedContent(null);
                     }}
-                  >
-                    <X className="h-5 w-5" />
-                  </Button>
+                  />
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
-                <ReadingAssessmentPanel
-                  ref={readingPanelRef}
-                  lessonId={editorLessonId}
-                  isCreating={true}
-                  onSave={async (
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    newContent?: any,
-                  ) => {
-                    // 如果有返回新內容，直接更新前端狀態，不重整頁面
-                    if (newContent && editorLessonId) {
-                      setPrograms(
-                        programs.map((program) => ({
-                          ...program,
-                          lessons: program.lessons?.map((lesson) => {
-                            if (lesson.id === editorLessonId) {
-                              return {
-                                ...lesson,
-                                contents: [
-                                  ...(lesson.contents || []),
-                                  newContent,
-                                ],
-                              };
-                            }
-                            return lesson;
-                          }),
-                        })),
-                      );
-                    }
-                    setShowReadingEditor(false);
-                    setEditorLessonId(null);
-                    setEditorContentId(null);
-                    setSelectedContent(null);
-                    toast.success(
-                      t("teacherTemplatePrograms.messages.contentSaved"),
-                    );
-                  }}
-                  onCancel={() => {
-                    setShowReadingEditor(false);
-                    setEditorLessonId(null);
-                    setEditorContentId(null);
-                    setSelectedContent(null);
-                  }}
-                />
-              </div>
-            </div>
-          </>
-        )}
+            </>
+          )}
 
         {/* Reading Assessment Panel (編輯模式 - 側邊欄) */}
         {showReadingEditor &&
-          editorLessonId &&
+          (editorLessonId || editorProgramId) &&
           editorContentId !== null &&
           selectedContent && (
             <>
@@ -850,6 +916,7 @@ export default function OrgMaterialsPage() {
                           return;
                         setShowReadingEditor(false);
                         setEditorLessonId(null);
+                        setEditorProgramId(null);
                         setEditorContentId(null);
                         setSelectedContent(null);
                       }}
@@ -876,7 +943,8 @@ export default function OrgMaterialsPage() {
                 <div className="p-6">
                   <ReadingAssessmentPanel
                     ref={readingPanelRef}
-                    lessonId={editorLessonId}
+                    lessonId={editorLessonId || undefined}
+                    programId={editorProgramId || undefined}
                     contentId={editorContentId}
                     content={{
                       id: selectedContent.id,
@@ -893,6 +961,12 @@ export default function OrgMaterialsPage() {
                         setPrograms((prevPrograms) =>
                           prevPrograms.map((program) => ({
                             ...program,
+                            // Issue #847: also update program-direct contents
+                            contents: program.contents?.map((content) =>
+                              content.id === editorContentId
+                                ? { ...content, ...updatedContent }
+                                : content,
+                            ),
                             lessons: program.lessons?.map((lesson) => ({
                               ...lesson,
                               contents: lesson.contents?.map((content) =>
@@ -906,6 +980,7 @@ export default function OrgMaterialsPage() {
                       }
                       setShowReadingEditor(false);
                       setEditorLessonId(null);
+                      setEditorProgramId(null);
                       setEditorContentId(null);
                       setSelectedContent(null);
                       toast.success(
@@ -915,6 +990,7 @@ export default function OrgMaterialsPage() {
                     onCancel={() => {
                       setShowReadingEditor(false);
                       setEditorLessonId(null);
+                      setEditorProgramId(null);
                       setEditorContentId(null);
                       setSelectedContent(null);
                     }}
@@ -926,7 +1002,7 @@ export default function OrgMaterialsPage() {
 
         {/* Sentence Making Editor (新增模式 - 側滑) */}
         {showVocabularySetEditor &&
-          vocabularySetLessonId &&
+          (vocabularySetLessonId || vocabularySetProgramId) &&
           !vocabularySetContentId && (
             <>
               <div
@@ -953,6 +1029,7 @@ export default function OrgMaterialsPage() {
                           return;
                         setShowVocabularySetEditor(false);
                         setVocabularySetLessonId(null);
+                        setVocabularySetProgramId(null);
                         setVocabularySetContentId(null);
                       }}
                     >
@@ -967,7 +1044,8 @@ export default function OrgMaterialsPage() {
                     editingContent={{
                       id: vocabularySetContentId || undefined,
                     }}
-                    lessonId={vocabularySetLessonId}
+                    lessonId={vocabularySetLessonId || undefined}
+                    programId={vocabularySetProgramId || undefined}
                     onUpdateContent={() => {}}
                     onSave={async (
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -992,15 +1070,32 @@ export default function OrgMaterialsPage() {
                             }),
                           })),
                         );
+                      } else if (newContent && vocabularySetProgramId) {
+                        // Issue #847: program-direct content — append to program.contents
+                        setPrograms((prevPrograms) =>
+                          prevPrograms.map((program) =>
+                            program.id === vocabularySetProgramId
+                              ? {
+                                  ...program,
+                                  contents: [
+                                    ...(program.contents || []),
+                                    newContent,
+                                  ],
+                                }
+                              : program,
+                          ),
+                        );
                       }
                       setShowVocabularySetEditor(false);
                       setVocabularySetLessonId(null);
+                      setVocabularySetProgramId(null);
                       setVocabularySetContentId(null);
                       toast.success("內容已成功儲存");
                     }}
                     onCancel={() => {
                       setShowVocabularySetEditor(false);
                       setVocabularySetLessonId(null);
+                      setVocabularySetProgramId(null);
                       setVocabularySetContentId(null);
                     }}
                     isCreating={!vocabularySetContentId}
@@ -1012,7 +1107,7 @@ export default function OrgMaterialsPage() {
 
         {/* Sentence Making Editor (編輯模式 - 側邊欄) */}
         {showVocabularySetEditor &&
-          vocabularySetLessonId &&
+          (vocabularySetLessonId || vocabularySetProgramId) &&
           vocabularySetContentId && (
             <>
               {/* Backdrop */}
@@ -1041,6 +1136,7 @@ export default function OrgMaterialsPage() {
                           return;
                         setShowVocabularySetEditor(false);
                         setVocabularySetLessonId(null);
+                        setVocabularySetProgramId(null);
                         setVocabularySetContentId(null);
                       }}
                       className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1056,7 +1152,8 @@ export default function OrgMaterialsPage() {
                     ref={vocabPanelRef}
                     content={{ id: vocabularySetContentId }}
                     editingContent={{ id: vocabularySetContentId }}
-                    lessonId={vocabularySetLessonId}
+                    lessonId={vocabularySetLessonId || undefined}
+                    programId={vocabularySetProgramId || undefined}
                     onUpdateContent={() => {}}
                     onSave={async (
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1067,6 +1164,12 @@ export default function OrgMaterialsPage() {
                         setPrograms((prevPrograms) =>
                           prevPrograms.map((program) => ({
                             ...program,
+                            // Issue #847: also update program-direct contents
+                            contents: program.contents?.map((content) =>
+                              content.id === vocabularySetContentId
+                                ? { ...content, ...updatedContent }
+                                : content,
+                            ),
                             lessons: program.lessons?.map((lesson) => ({
                               ...lesson,
                               contents: lesson.contents?.map((content) =>
@@ -1080,12 +1183,14 @@ export default function OrgMaterialsPage() {
                       }
                       setShowVocabularySetEditor(false);
                       setVocabularySetLessonId(null);
+                      setVocabularySetProgramId(null);
                       setVocabularySetContentId(null);
                       toast.success("內容已成功儲存");
                     }}
                     onCancel={() => {
                       setShowVocabularySetEditor(false);
                       setVocabularySetLessonId(null);
+                      setVocabularySetProgramId(null);
                       setVocabularySetContentId(null);
                     }}
                     isCreating={false}
@@ -1134,6 +1239,11 @@ export default function OrgMaterialsPage() {
               setShowContentTypeDialog(false);
               setContentLessonInfo(null);
 
+              // Issue #847: lessonId === 0 + programId set means program-direct
+              // content — thread programId so the editor render gate passes.
+              const isProgramDirect =
+                selection.lessonId === 0 && !!selection.programId;
+
               // Handle different content types
               // EXAMPLE_SENTENCES uses the same ReadingAssessmentPanel as READING_ASSESSMENT
               if (
@@ -1142,7 +1252,10 @@ export default function OrgMaterialsPage() {
                 selection.type === "EXAMPLE_SENTENCES"
               ) {
                 // Open modal for new content
-                setEditorLessonId(selection.lessonId);
+                setEditorLessonId(isProgramDirect ? null : selection.lessonId);
+                setEditorProgramId(
+                  isProgramDirect ? selection.programId! : null,
+                );
                 setEditorContentId(null); // null = new content
                 setSelectedContent(null); // No existing content
                 setShowReadingEditor(true);
@@ -1153,7 +1266,12 @@ export default function OrgMaterialsPage() {
                 selection.type === "VOCABULARY_SET"
               ) {
                 // For sentence_making/vocabulary_set, use popup for new content creation
-                setVocabularySetLessonId(selection.lessonId);
+                setVocabularySetLessonId(
+                  isProgramDirect ? null : selection.lessonId,
+                );
+                setVocabularySetProgramId(
+                  isProgramDirect ? selection.programId! : null,
+                );
                 setVocabularySetContentId(null); // null for new content
                 setShowVocabularySetEditor(true);
               } else {

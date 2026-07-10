@@ -25,7 +25,11 @@ import {
   ArrowUpDown,
   Filter,
 } from "lucide-react";
-import { StudentAssignmentCard, AssignmentStatusEnum } from "@/types";
+import {
+  StudentAssignmentCard,
+  AssignmentStatusEnum,
+  AssignmentData,
+} from "@/types";
 import { useTranslation } from "react-i18next";
 import {
   practiceModeIcon,
@@ -42,6 +46,18 @@ const SCORE_CATEGORY_COLORS: Record<string, string> = {
   writing: "bg-blue-100 text-blue-700 border-blue-200",
   reading: "bg-pink-100 text-pink-700 border-pink-200",
 };
+
+// Issue #332: statuses for which the assignment action button stays enabled.
+// Whitelist instead of a negated AND chain, so a newly-added status doesn't
+// silently disable the button.
+const ACTIONABLE_STATUSES = new Set<string>([
+  "NOT_STARTED",
+  "IN_PROGRESS",
+  "SUBMITTED",
+  "GRADED",
+  "RETURNED",
+  "RESUBMITTED",
+]);
 
 export default function StudentAssignmentList() {
   const { t } = useTranslation();
@@ -65,6 +81,8 @@ export default function StudentAssignmentList() {
   const [filterMode, setFilterMode] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 8;
+  // Issue #330: total count for the active tab, from the server (drives paging).
+  const [totalCount, setTotalCount] = useState(0);
   const [stats, setStats] = useState({
     totalAssignments: 0,
     todo: 0,
@@ -81,7 +99,15 @@ export default function StudentAssignmentList() {
         if (!silent) setLoading(true);
         const apiUrl = import.meta.env.VITE_API_URL || "";
 
-        const params = new URLSearchParams({ sort_by: sortBy });
+        // Issue #330: server-side pagination + status filtering. Request only
+        // the active tab's current page; the backend also returns per-tab
+        // counts so every tab badge stays populated.
+        const params = new URLSearchParams({
+          sort_by: sortBy,
+          status: activeTab,
+          page: String(currentPage),
+          page_size: String(PAGE_SIZE),
+        });
         if (filterMode) {
           params.set("practice_mode", filterMode);
         }
@@ -105,26 +131,7 @@ export default function StudentAssignmentList() {
 
         const data = await response.json();
 
-        interface AssignmentData {
-          id: number;
-          title: string;
-          status?: string;
-          due_date?: string;
-          assigned_at?: string;
-          submitted_at?: string;
-          score?: number;
-          feedback?: string;
-          classroom_id: number;
-          content_type?: string;
-          practice_mode?: string;
-          score_category?: string;
-          content_count?: number;
-          is_live_quiz?: boolean;
-          quiz_opened_at?: string | null;
-          quiz_closed_at?: string | null;
-        }
-
-        const assignmentCards: StudentAssignmentCard[] = data.map(
+        const assignmentCards: StudentAssignmentCard[] = data.items.map(
           (a: AssignmentData) => ({
             id: a.id,
             title: a.title,
@@ -147,31 +154,23 @@ export default function StudentAssignmentList() {
         );
 
         setAssignments(assignmentCards);
+        setTotalCount(data.total ?? assignmentCards.length);
 
-        // Calculate stats
-        const todo = assignmentCards.filter(
-          (a) => a.status === "NOT_STARTED" || a.status === "IN_PROGRESS",
-        ).length;
-        const submitted = assignmentCards.filter(
-          (a) => a.status === "SUBMITTED",
-        ).length;
-        const graded = assignmentCards.filter(
-          (a) => a.status === "GRADED",
-        ).length;
-        const returned = assignmentCards.filter(
-          (a) => a.status === "RETURNED",
-        ).length;
-        const resubmitted = assignmentCards.filter(
-          (a) => a.status === "RESUBMITTED",
-        ).length;
-
+        // Stats are computed server-side over the full set (all tabs), so the
+        // badges stay correct even though only one page is fetched.
+        const s = data.stats || {};
         setStats({
-          totalAssignments: assignmentCards.length,
-          todo,
-          submitted,
-          graded,
-          returned,
-          resubmitted,
+          totalAssignments:
+            (s.todo || 0) +
+            (s.submitted || 0) +
+            (s.graded || 0) +
+            (s.returned || 0) +
+            (s.resubmitted || 0),
+          todo: s.todo || 0,
+          submitted: s.submitted || 0,
+          graded: s.graded || 0,
+          returned: s.returned || 0,
+          resubmitted: s.resubmitted || 0,
         });
       } catch (error) {
         console.error("Failed to load assignments:", error);
@@ -181,7 +180,7 @@ export default function StudentAssignmentList() {
         if (!silent) setLoading(false);
       }
     },
-    [token, sortBy, filterMode, t],
+    [token, sortBy, filterMode, activeTab, currentPage, t],
   );
 
   useEffect(() => {
@@ -363,13 +362,7 @@ export default function StudentAssignmentList() {
     return (
       <Button
         onClick={() => handleStartAssignment(assignment.id)}
-        disabled={
-          !canStart &&
-          assignment.status !== "GRADED" &&
-          assignment.status !== "SUBMITTED" &&
-          assignment.status !== "RETURNED" &&
-          assignment.status !== "RESUBMITTED"
-        }
+        disabled={!ACTIONABLE_STATUSES.has(assignment.status)}
         size="sm"
         className={`crayon-texture text-xs sm:text-sm font-medium ${
           canStart || assignment.status === "RETURNED"
@@ -484,25 +477,6 @@ export default function StudentAssignmentList() {
     );
   };
 
-  const filterAssignments = (statusFilter: string) => {
-    switch (statusFilter) {
-      case "todo":
-        return assignments.filter(
-          (a) => a.status === "NOT_STARTED" || a.status === "IN_PROGRESS",
-        );
-      case "submitted":
-        return assignments.filter((a) => a.status === "SUBMITTED");
-      case "graded":
-        return assignments.filter((a) => a.status === "GRADED");
-      case "returned":
-        return assignments.filter((a) => a.status === "RETURNED");
-      case "resubmitted":
-        return assignments.filter((a) => a.status === "RESUBMITTED");
-      default:
-        return assignments;
-    }
-  };
-
   const renderEmptyState = (tab: string) => {
     const iconMap: Record<string, React.ReactNode> = {
       todo: <Clock className="h-12 w-12 text-gray-300 mx-auto mb-3" />,
@@ -532,18 +506,18 @@ export default function StudentAssignmentList() {
   };
 
   const renderTabContent = (tab: string) => {
-    const filtered = filterAssignments(tab);
-    if (filtered.length === 0) return renderEmptyState(tab);
+    // Issue #330: the server already returns just this tab's current page and
+    // the tab's total count, so render `assignments` directly and derive the
+    // page count from totalCount.
+    if (assignments.length === 0) return renderEmptyState(tab);
 
-    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+    const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
     const safeCurrentPage = Math.min(currentPage, totalPages);
-    const startIdx = (safeCurrentPage - 1) * PAGE_SIZE;
-    const paged = filtered.slice(startIdx, startIdx + PAGE_SIZE);
 
     return (
       <>
         <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3 sm:gap-4">
-          {paged.map(renderAssignmentCard)}
+          {assignments.map(renderAssignmentCard)}
         </div>
         {totalPages > 1 && (
           <div className="flex items-center justify-center gap-3 mt-6">

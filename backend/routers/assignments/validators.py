@@ -4,9 +4,17 @@ Pydantic models and validators for assignments
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, model_validator, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 from utils.practice_mode import validate_practice_mode
+
+# Issue #884 item 1: the only practice modes that have student-side live-gate
+# endpoints (_guard_live_gate on start/answer). is_live_quiz is restricted to
+# these on create/patch so e.g. speaking_quiz can't be marked live without a
+# gate protecting students.
+LIVE_QUIZ_MODES = frozenset(
+    {"word_selection_quiz", "word_spelling_quiz", "word_cloze_quiz"}
+)
 
 # Issue #828: 整卷限時上限守衛（10 小時），擋掉負數/超大值；
 # 不用精確 allow-list 以免日後 UI 新增選項就壞掉
@@ -262,3 +270,48 @@ class BatchGradeFinalizeResponse(BaseModel):
     graded_count: int
     unchanged_count: int
     total_count: int
+
+
+# Issue #335 item 5: typed request bodies for the manual/teacher grading
+# endpoints that previously accepted raw ``dict`` (no validation, no score
+# bounds). Endpoints bridge these back to a dict via
+# ``model_dump(exclude_none=True)`` so existing body logic is unchanged while
+# input is now validated at the boundary.
+class TeacherItemGradeResult(BaseModel):
+    """Per-item teacher grade inside GradeStudentAssignmentRequest."""
+
+    item_index: int
+    feedback: Optional[str] = None
+    passed: Optional[bool] = None
+    score: Optional[float] = Field(default=None, ge=0, le=100)
+
+
+class GradeStudentAssignmentRequest(BaseModel):
+    """Body for POST /{assignment_id}/grade."""
+
+    student_id: int
+    score: Optional[float] = Field(default=None, ge=0, le=100)
+    feedback: Optional[str] = None
+    update_status: bool = True
+    item_results: Optional[List[TeacherItemGradeResult]] = None
+
+
+class SetAssignmentInProgressRequest(BaseModel):
+    """Body for POST /{assignment_id}/set-in-progress."""
+
+    student_id: int
+
+
+class ReturnForRevisionRequest(BaseModel):
+    """Body for POST /{assignment_id}/return-for-revision."""
+
+    student_id: int
+    message: Optional[str] = None
+
+
+class ManualGradeAssignmentRequest(BaseModel):
+    """Body for POST /{assignment_id}/manual-grade."""
+
+    score: Optional[float] = Field(default=None, ge=0, le=100)
+    feedback: Optional[str] = None
+    detailed_scores: Optional[Dict[str, Any]] = None

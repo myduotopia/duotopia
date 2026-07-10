@@ -40,6 +40,7 @@ import {
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { apiClient } from "@/lib/api";
+import { withDemoOverrides } from "@/lib/demoOverrides";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
 import VirtualKeyboard from "./shared/VirtualKeyboard";
@@ -250,7 +251,9 @@ export default function WordSpellingActivity({
           : "";
 
       const apiEndpoint = isDemoMode
-        ? `/api/demo/assignments/${assignmentId}/preview/word-spelling-start${excludeParam}`
+        ? withDemoOverrides(
+            `/api/demo/assignments/${assignmentId}/preview/word-spelling-start${excludeParam}`,
+          )
         : isPreviewMode
           ? `/api/teachers/assignments/${assignmentId}/preview/word-spelling-start${excludeParam}`
           : `/api/students/assignments/${assignmentId}/vocabulary/spelling/start`;
