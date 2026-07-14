@@ -39,6 +39,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  ProgramVisibilitySelector,
+  type ProgramVisibility,
+} from "@/components/ProgramVisibilitySelector";
+import {
   DndContext,
   closestCenter,
   PointerSensor,
@@ -176,6 +180,8 @@ function ProgramCard({
   onEdit,
   onDelete,
   onCopyTo,
+  showVisibility,
+  onVisibilityChange,
 }: {
   program: Program;
   isSelected: boolean;
@@ -183,6 +189,11 @@ function ProgramCard({
   onEdit: () => void;
   onDelete: () => void;
   onCopyTo?: () => void;
+  showVisibility?: boolean;
+  onVisibilityChange?: (
+    programId: number,
+    visibility: ProgramVisibility,
+  ) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const lessons = program.lessons ?? [];
@@ -213,6 +224,18 @@ function ProgramCard({
             <p className="text-white text-xs leading-relaxed line-clamp-4 whitespace-pre-line">
               {program.description}
             </p>
+          </div>
+        )}
+
+        {/* Issue #627: 資源帳號可直接在卡片上設定公開範圍。放在描述遮罩之後，
+            才不會在 hover 時被蓋住 */}
+        {showVisibility && onVisibilityChange && (
+          <div className="absolute top-2 right-2">
+            <ProgramVisibilitySelector
+              programId={program.id}
+              currentVisibility={program.visibility ?? "private"}
+              onVisibilityChange={onVisibilityChange}
+            />
           </div>
         )}
       </div>
@@ -853,6 +876,12 @@ export interface ProgramFolderViewProps {
     fromIndex: number,
     toIndex: number,
   ) => void;
+  // Issue #627: 只有資源帳號（contact）能設定教材公開範圍
+  showVisibility?: boolean;
+  onVisibilityChange?: (
+    programId: number,
+    visibility: ProgramVisibility,
+  ) => Promise<void>;
 }
 
 export default function ProgramFolderView({
@@ -874,6 +903,8 @@ export default function ProgramFolderView({
   onReorderLessons,
   onReorderContents,
   onReorderProgramContents,
+  showVisibility,
+  onVisibilityChange,
 }: ProgramFolderViewProps) {
   const { t } = useTranslation();
   const [selectedProgramId, setSelectedProgramId] = useState<number | null>(
@@ -957,6 +988,8 @@ export default function ProgramFolderView({
                           ? () => onCopyProgramTo(program.id)
                           : undefined
                       }
+                      showVisibility={showVisibility}
+                      onVisibilityChange={onVisibilityChange}
                     />
                   </SortableItem>
                 ))}
