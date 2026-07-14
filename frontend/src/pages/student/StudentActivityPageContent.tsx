@@ -2407,6 +2407,9 @@ export default function StudentActivityPageContent({
             onComplete={() => {
               onBack?.();
             }}
+            // 拔河以 fixed inset-0 z-50 全螢幕覆蓋外層 sticky header，
+            // 把「進階設定」入口 thread 進拔河自己的 header 才看得到。
+            headerActions={headerActions}
           />
         );
       }
@@ -2563,7 +2566,9 @@ export default function StudentActivityPageContent({
 
               <div className="flex items-center gap-2 sm:gap-3 justify-end flex-shrink-0">
                 {/* #854: 即刻練習「⚡ 進階設定」觸發鈕（向下下拉浮層）注入點 */}
-                {headerActions}
+                {/* #945: 拔河模式由 TugOfWarGame 自己的 header 渲染 headerActions，
+                    這裡不再渲染，避免在被 z-50 遮住的 sticky header 裡留一顆殭屍按鈕 */}
+                {practiceMode === "tug_of_war" ? null : headerActions}
                 {saving && (
                   <div className="flex items-center gap-1 sm:gap-2 text-xs text-gray-600">
                     <Loader2 className="h-3 w-3 animate-spin" />
