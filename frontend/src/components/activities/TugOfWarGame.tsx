@@ -17,7 +17,7 @@
  * - onComplete: 遊戲結束/關閉時的回調
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
@@ -60,6 +60,10 @@ interface TugOfWarGameProps {
   isPreviewMode?: boolean;
   isDemoMode?: boolean;
   onComplete?: () => void;
+  /** 老師預覽時注入的 header 動作（例如「進階設定」按鈕）。因拔河遊戲以
+   *  fixed inset-0 z-50 全螢幕覆蓋外層 sticky header，需把入口 thread 進本元件
+   *  自己的 header 才看得到。僅在 isPreviewMode 時渲染。 */
+  headerActions?: ReactNode;
 }
 
 interface WordOptionResponse {
@@ -95,6 +99,7 @@ export function TugOfWarGame({
   isPreviewMode = false,
   isDemoMode = false,
   onComplete,
+  headerActions,
 }: TugOfWarGameProps) {
   const { t } = useTranslation();
   const [vocabItems, setVocabItems] = useState<VocabItem[]>([]);
@@ -531,6 +536,12 @@ export function TugOfWarGame({
             ? `A${progress}·B${progressB}/${totalQuestions}`
             : `${progress}/${totalQuestions}`}
         </div>
+
+        {/* 老師預覽用的 header 動作（如「進階設定」）。學生實際作答不注入，
+            這裡再以 isPreviewMode 雙保險 gate 一次。 */}
+        {isPreviewMode && headerActions && (
+          <div className="flex-shrink-0">{headerActions}</div>
+        )}
 
         {/* 全螢幕切換（Esc 退出後可一鍵重進；瀏覽器限制需使用者手勢） */}
         <Button

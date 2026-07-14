@@ -425,7 +425,9 @@ function ContentCard({
                   onInstantPractice();
                 }}
                 title={t("instantPractice.title")}
-                className="pointer-events-auto w-14 h-14 bg-amber-500/60 hover:bg-amber-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors"
+                // #945: after:inset-[-16px] 透明偽元素向四面各外擴 16px（＝兩鈕 gap-8/2）
+                // 作為點擊容錯圈；圈內點歪仍觸發本按鈕而非落到卡片編輯。視覺大小不變。
+                className="relative pointer-events-auto w-14 h-14 bg-amber-500/60 hover:bg-amber-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors after:absolute after:inset-[-16px] after:content-['']"
               >
                 <Play size={24} className="text-white ml-0.5" />
               </button>
@@ -437,7 +439,8 @@ function ContentCard({
                   onAssign();
                 }}
                 title={t("tree.assign")}
-                className="pointer-events-auto w-14 h-14 bg-green-500/60 hover:bg-green-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors"
+                // #945: 同上，點擊容錯圈（四面各 +16px）
+                className="relative pointer-events-auto w-14 h-14 bg-green-500/60 hover:bg-green-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors after:absolute after:inset-[-16px] after:content-['']"
               >
                 <SendHorizontal size={22} className="text-white" />
               </button>
