@@ -27,6 +27,8 @@ from services import magic_paste_quota as mpq
 from services.magic_paste_service import (
     get_magic_paste_service,
     MagicPasteError,
+    EXTRACT_MODES,
+    EXTRACT_MODE_VOCABULARY,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,6 +75,7 @@ async def magic_paste_extract(
     translate_mode: str = Form("image_first"),
     example_mode: str = Form("image_first"),
     level: str = Form("A1"),
+    extract_mode: str = Form(EXTRACT_MODE_VOCABULARY),
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
@@ -81,6 +84,8 @@ async def magic_paste_extract(
         translate_mode = "image_first"
     if example_mode not in _VALID_MODES:
         example_mode = "image_first"
+    if extract_mode not in EXTRACT_MODES:
+        extract_mode = EXTRACT_MODE_VOCABULARY
 
     file_bytes = await file.read()
     service = get_magic_paste_service()
@@ -111,6 +116,7 @@ async def magic_paste_extract(
             translate_mode=translate_mode,
             example_mode=example_mode,
             level=level,
+            extract_mode=extract_mode,
         )
     except MagicPasteError as e:
         raise HTTPException(
@@ -130,6 +136,7 @@ async def magic_paste_extract(
         feature_detail={
             "provider": result["provider"],
             "model": result["model"],
+            "extract_mode": extract_mode,
             "item_count": len(result["items"]),
             "estimated_cost_usd": result["estimated_cost_usd"],
         },

@@ -29,10 +29,14 @@ import {
   RefreshCw,
   Clipboard,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { apiClient, ApiError } from "@/lib/api";
+import MagicPasteDialog, {
+  type MagicPasteItem,
+} from "@/components/shared/MagicPasteDialog";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import {
   TTS_ACCENTS,
@@ -1245,6 +1249,8 @@ const ReadingAssessmentPanel = forwardRef<
   const [ttsModalOpen, setTtsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [batchPasteDialogOpen, setBatchPasteDialogOpen] = useState(false);
+  // 魔術貼上（issue #891）— 例句集 / 朗讀評測：擷取「句子」
+  const [magicPasteOpen, setMagicPasteOpen] = useState(false);
   const [batchPasteText, setBatchPasteText] = useState("");
   const [batchPasteAutoTTS, setBatchPasteAutoTTS] = useState(false);
   const [batchPasteAutoTranslate, setBatchPasteAutoTranslate] = useState(false);
@@ -1671,6 +1677,56 @@ const ReadingAssessmentPanel = forwardRef<
       example_sentence_definition: "",
     };
     setRows([...rows, newRow]);
+  };
+
+  // 魔術貼上（issue #891）：AI 擷取的句子併入現有行。
+  // 例句集/朗讀評測一列 = 句子(text) + 翻譯(definition)。
+  // 若目前只有 1 行且是空的預設行，先清掉以免留下空行。
+  const handleMagicPasteInsert = (pastedItems: MagicPasteItem[]) => {
+    if (!pastedItems.length) return;
+
+    let baseRows = rows;
+    if (
+      rows.length === 1 &&
+      !rows[0].text.trim() &&
+      !rows[0].definition.trim()
+    ) {
+      baseRows = [];
+    }
+
+    const capacity = MAX_ROWS - baseRows.length;
+    if (capacity <= 0) {
+      toast.error(t("contentEditor.messages.maxRowsReached"));
+      return;
+    }
+    const toAdd = pastedItems.slice(0, capacity);
+
+    let maxId = Math.max(
+      0,
+      ...baseRows.map((r) => parseInt(String(r.id)) || 0),
+    );
+    const newRows: ContentRow[] = toAdd.map((item) => {
+      maxId += 1;
+      return {
+        id: maxId.toString(),
+        text: item.text,
+        definition: item.translation || "",
+        translation: "",
+        selectedLanguage: undefined,
+        example_sentence: "",
+        example_sentence_translation: "",
+        example_sentence_definition: "",
+      };
+    });
+
+    setRows([...baseRows, ...newRows]);
+    if (pastedItems.length > toAdd.length) {
+      toast.warning(
+        t("contentEditor.messages.batchPasteLimit", { max: MAX_ROWS }),
+      );
+    } else {
+      toast.success(`已插入 ${toAdd.length} 個句子`);
+    }
   };
 
   const handleDeleteRow = (index: number) => {
@@ -2747,6 +2803,20 @@ const ReadingAssessmentPanel = forwardRef<
 
         {/* Batch Actions - Mobile only (desktop uses left panel) */}
         <div className="flex flex-wrap gap-2 md:hidden">
+          {/* 魔術貼上（issue #891）— 作業副本不提供 */}
+          {!isAssignmentCopy && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMagicPasteOpen(true)}
+              disabled={isBatchProcessing}
+              className="bg-purple-100 hover:bg-purple-200 border-purple-300 disabled:opacity-50"
+              title="從圖片 / PDF 擷取句子"
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              魔術貼上
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -2840,7 +2910,21 @@ const ReadingAssessmentPanel = forwardRef<
             handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)
           }
           isBusy={isPasting}
-        />
+        >
+          {/* 魔術貼上（issue #891）— 作業副本不提供 */}
+          {!isAssignmentCopy && (
+            <Button
+              variant="outline"
+              onClick={() => setMagicPasteOpen(true)}
+              disabled={isBatchProcessing}
+              className="w-full bg-purple-100 hover:bg-purple-200 border-purple-300 text-purple-800 disabled:opacity-50"
+              title="從圖片 / PDF 擷取句子"
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              魔術貼上（圖片 / PDF）
+            </Button>
+          )}
+        </BatchWorkPanel>
 
         {/* Right: Editor Area */}
         <div className="flex-1 flex flex-col">
@@ -2911,6 +2995,14 @@ const ReadingAssessmentPanel = forwardRef<
           isCreating={isCreating}
         />
       )}
+
+      {/* 魔術貼上 Dialog（issue #891）— 例句集/朗讀評測擷取句子 */}
+      <MagicPasteDialog
+        open={magicPasteOpen}
+        onClose={() => setMagicPasteOpen(false)}
+        onInsert={handleMagicPasteInsert}
+        extractMode="sentence"
+      />
 
       {/* Batch Paste Dialog */}
       <Dialog

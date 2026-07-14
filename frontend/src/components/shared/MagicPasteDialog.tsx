@@ -32,6 +32,13 @@ export interface MagicPasteItem {
 
 type Mode = "image_first" | "ai";
 
+/**
+ * 擷取模式（依教材類型）：
+ * - vocabulary：單字集 → 一列 = 單字 + 翻譯 + 詞性 + 例句
+ * - sentence  ：例句集 / 朗讀評測 → 一列 = 句子 + 翻譯
+ */
+export type MagicPasteExtractMode = "vocabulary" | "sentence";
+
 interface QuotaState {
   free_remaining: number;
   free_limit: number;
@@ -42,8 +49,10 @@ interface MagicPasteDialogProps {
   open: boolean;
   onClose: () => void;
   onInsert: (items: MagicPasteItem[]) => void;
-  /** CEFR 程度，供 AI 生成例句參考 */
+  /** CEFR 程度，供 AI 生成例句參考（僅 vocabulary 模式用得到） */
   level?: string;
+  /** 擷取模式，預設 vocabulary（單字集） */
+  extractMode?: MagicPasteExtractMode;
 }
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif,application/pdf";
@@ -54,7 +63,9 @@ export default function MagicPasteDialog({
   onClose,
   onInsert,
   level = "A1",
+  extractMode = "vocabulary",
 }: MagicPasteDialogProps) {
+  const isSentenceMode = extractMode === "sentence";
   const [file, setFile] = useState<File | null>(null);
   const [translateMode, setTranslateMode] = useState<Mode>("image_first");
   const [exampleMode, setExampleMode] = useState<Mode>("image_first");
@@ -101,9 +112,14 @@ export default function MagicPasteDialog({
       formData.append("translate_mode", translateMode);
       formData.append("example_mode", exampleMode);
       formData.append("level", level);
+      formData.append("extract_mode", extractMode);
       const result = await apiClient.magicPasteExtract(formData);
       if (!result.items.length) {
-        toast.error("這張圖片沒有擷取到單字，請換一張試試");
+        toast.error(
+          isSentenceMode
+            ? "這張圖片沒有擷取到句子，請換一張試試"
+            : "這張圖片沒有擷取到單字，請換一張試試",
+        );
       }
       setItems(result.items);
       setSelected(Object.fromEntries(result.items.map((_, i) => [i, true])));
@@ -150,8 +166,9 @@ export default function MagicPasteDialog({
             魔術貼上：從圖片 / PDF 擷取教材
           </DialogTitle>
           <DialogDescription>
-            上傳一張圖片或 PDF，AI
-            會自動擷取單字、翻譯與例句，預覽確認後再插入。
+            {isSentenceMode
+              ? "上傳一張圖片或 PDF，AI 會自動擷取句子與翻譯，預覽確認後再插入。"
+              : "上傳一張圖片或 PDF，AI 會自動擷取單字、翻譯與例句，預覽確認後再插入。"}
           </DialogDescription>
         </DialogHeader>
 
@@ -185,7 +202,7 @@ export default function MagicPasteDialog({
             </span>
           </label>
 
-          {/* 設定 */}
+          {/* 設定（例句集只需要翻譯設定，沒有「例句」欄位） */}
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <p className="font-medium mb-1">翻譯</p>
@@ -196,15 +213,17 @@ export default function MagicPasteDialog({
                 aiLabel="AI 翻譯"
               />
             </div>
-            <div>
-              <p className="font-medium mb-1">例句</p>
-              <ModeToggle
-                value={exampleMode}
-                onChange={setExampleMode}
-                imageLabel="圖片擷取"
-                aiLabel="AI 生成"
-              />
-            </div>
+            {!isSentenceMode && (
+              <div>
+                <p className="font-medium mb-1">例句</p>
+                <ModeToggle
+                  value={exampleMode}
+                  onChange={setExampleMode}
+                  imageLabel="圖片擷取"
+                  aiLabel="AI 生成"
+                />
+              </div>
+            )}
           </div>
 
           {/* 超額提示 */}
@@ -241,27 +260,33 @@ export default function MagicPasteDialog({
                   />
                   <div className="flex-1 grid grid-cols-2 gap-2">
                     <input
-                      className="border rounded px-2 py-1 text-sm"
+                      className={`border rounded px-2 py-1 text-sm ${
+                        isSentenceMode ? "col-span-2" : ""
+                      }`}
                       value={it.text}
-                      placeholder="單字"
+                      placeholder={isSentenceMode ? "句子" : "單字"}
                       onChange={(e) => updateItem(i, { text: e.target.value })}
                     />
                     <input
-                      className="border rounded px-2 py-1 text-sm"
+                      className={`border rounded px-2 py-1 text-sm ${
+                        isSentenceMode ? "col-span-2" : ""
+                      }`}
                       value={it.translation}
                       placeholder="翻譯"
                       onChange={(e) =>
                         updateItem(i, { translation: e.target.value })
                       }
                     />
-                    <input
-                      className="border rounded px-2 py-1 text-sm col-span-2"
-                      value={it.example_sentence}
-                      placeholder="例句"
-                      onChange={(e) =>
-                        updateItem(i, { example_sentence: e.target.value })
-                      }
-                    />
+                    {!isSentenceMode && (
+                      <input
+                        className="border rounded px-2 py-1 text-sm col-span-2"
+                        value={it.example_sentence}
+                        placeholder="例句"
+                        onChange={(e) =>
+                          updateItem(i, { example_sentence: e.target.value })
+                        }
+                      />
+                    )}
                   </div>
                 </div>
               ))}

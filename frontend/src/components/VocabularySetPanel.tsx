@@ -4457,17 +4457,19 @@ const VocabularySetPanel = forwardRef<
 
         {/* Mobile only: Batch Actions buttons */}
         <div className="flex flex-wrap gap-2 md:hidden">
-          {/* 魔術貼上（issue #891）*/}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setMagicPasteOpen(true)}
-            className="bg-purple-100 hover:bg-purple-200 border-purple-300"
-            title="從圖片 / PDF 擷取教材"
-          >
-            <Sparkles className="h-4 w-4 mr-1" />
-            魔術貼上
-          </Button>
+          {/* 魔術貼上（issue #891）— 作業副本不提供 */}
+          {!isAssignmentCopy && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMagicPasteOpen(true)}
+              className="bg-purple-100 hover:bg-purple-200 border-purple-300"
+              title="從圖片 / PDF 擷取教材"
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              魔術貼上
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -4837,6 +4839,7 @@ const VocabularySetPanel = forwardRef<
         onClose={() => setMagicPasteOpen(false)}
         onInsert={handleMagicPasteInsert}
         level={aiGenerateLevel}
+        extractMode="vocabulary"
       />
 
       {/* Batch Paste Dialog (Mobile only - desktop uses inline left panel) */}

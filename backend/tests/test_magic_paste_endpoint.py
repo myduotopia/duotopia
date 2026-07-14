@@ -8,7 +8,12 @@ import io
 
 import pytest
 
-from services.magic_paste_service import MagicPasteService, MagicPasteError
+from services.magic_paste_service import (
+    MagicPasteService,
+    MagicPasteError,
+    EXTRACT_MODE_VOCABULARY,
+    EXTRACT_MODE_SENTENCE,
+)
 from services import magic_paste_quota as mpq
 
 
@@ -72,6 +77,44 @@ def test_estimate_cost_positive():
         FLASH_MODEL, {"input_tokens": 1_000_000, "output_tokens": 1_000_000}
     )
     assert cost > 0
+
+
+# ------------------------------------------------- extract_mode（單字集 / 例句集）
+
+
+def test_vocabulary_prompt_asks_for_words_and_examples():
+    prompt = MagicPasteService._build_prompt(
+        "image_first", "image_first", "A1", EXTRACT_MODE_VOCABULARY
+    )
+    assert "vocabulary entry" in prompt
+    assert "example_sentence" in prompt
+    assert "part_of_speech" in prompt
+
+
+def test_sentence_prompt_asks_for_sentences_only():
+    """例句集：只要句子 + 翻譯，不能要求單字/詞性/例句欄位。"""
+    prompt = MagicPasteService._build_prompt(
+        "image_first", "image_first", "A1", EXTRACT_MODE_SENTENCE
+    )
+    assert "English sentence" in prompt
+    assert "part_of_speech" not in prompt
+    assert "example_sentence" not in prompt
+    # 明確禁止輸出非句子的單字
+    assert "Do NOT output single words" in prompt
+
+
+def test_sentence_prompt_respects_ai_translate_mode():
+    prompt = MagicPasteService._build_prompt(
+        "ai", "image_first", "A1", EXTRACT_MODE_SENTENCE
+    )
+    assert "IGNORE any translation shown in the file" in prompt
+
+
+def test_unknown_extract_mode_falls_back_to_vocabulary():
+    prompt = MagicPasteService._build_prompt(
+        "image_first", "image_first", "A1", "bogus"
+    )
+    assert "vocabulary entry" in prompt
 
 
 # ---------------------------------------------------------------- endpoint
@@ -150,6 +193,61 @@ def test_endpoint_blocks_when_quota_exhausted(
     )
     assert resp.status_code == 402
     assert resp.json()["detail"]["error"] == "MAGIC_PASTE_QUOTA_EXCEEDED"
+
+
+def test_endpoint_passes_extract_mode_to_service(
+    test_client, auth_headers_teacher, monkeypatch
+):
+    """例句集：前端傳的 extract_mode=sentence 要真的傳到 service。"""
+    seen = {}
+
+    async def fake_extract(self, file_bytes, mime_type, **kwargs):
+        seen.update(kwargs)
+        return {
+            "items": [{"text": "I eat an apple.", "translation": "我吃一顆蘋果。"}],
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+            "estimated_cost_usd": 0.0,
+            "provider": "test",
+            "model": "test-model",
+        }
+
+    monkeypatch.setattr(MagicPasteService, "extract", fake_extract)
+
+    resp = test_client.post(
+        "/api/programs/magic-paste",
+        headers=auth_headers_teacher,
+        files={"file": _png()},
+        data={"extract_mode": EXTRACT_MODE_SENTENCE},
+    )
+    assert resp.status_code == 200, resp.text
+    assert seen["extract_mode"] == EXTRACT_MODE_SENTENCE
+    assert resp.json()["items"][0]["text"] == "I eat an apple."
+
+
+def test_endpoint_defaults_to_vocabulary_mode(
+    test_client, auth_headers_teacher, monkeypatch
+):
+    seen = {}
+
+    async def fake_extract(self, file_bytes, mime_type, **kwargs):
+        seen.update(kwargs)
+        return {
+            "items": [],
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+            "estimated_cost_usd": 0.0,
+            "provider": "test",
+            "model": "test-model",
+        }
+
+    monkeypatch.setattr(MagicPasteService, "extract", fake_extract)
+
+    resp = test_client.post(
+        "/api/programs/magic-paste",
+        headers=auth_headers_teacher,
+        files={"file": _png()},
+    )
+    assert resp.status_code == 200
+    assert seen["extract_mode"] == EXTRACT_MODE_VOCABULARY
 
 
 def test_quota_endpoint(test_client, auth_headers_teacher):

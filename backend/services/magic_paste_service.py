@@ -23,6 +23,13 @@ logger = logging.getLogger(__name__)
 FLASH_MODEL = "gemini-2.5-flash"
 OPENAI_VISION_MODEL = "gpt-4o-mini"
 
+# 擷取模式：依教材類型決定 AI 要抓「單字」還是「句子」
+# - vocabulary：單字集（一列 = 單字 + 翻譯 + 詞性 + 例句）
+# - sentence  ：例句集 / 朗讀評測（一列 = 句子 + 翻譯）
+EXTRACT_MODE_VOCABULARY = "vocabulary"
+EXTRACT_MODE_SENTENCE = "sentence"
+EXTRACT_MODES = {EXTRACT_MODE_VOCABULARY, EXTRACT_MODE_SENTENCE}
+
 # 粗略的每百萬 token 美元單價（僅供成本觀測，非計費用途）
 _PRICING_USD_PER_1M = {
     FLASH_MODEL: {"input": 0.30, "output": 2.50},
@@ -67,27 +74,58 @@ class MagicPasteService:
     @staticmethod
     def _system_instruction() -> str:
         return (
-            "You are an assistant that extracts English vocabulary teaching "
-            "material from an uploaded image or PDF for a language-learning app. "
+            "You are an assistant that extracts English teaching material "
+            "from an uploaded image or PDF for a language-learning app. "
             "Always respond with a valid JSON object only, no markdown, no prose. "
             "When translating to Chinese you MUST use Traditional Chinese (繁體中文), "
             "NOT Simplified Chinese."
         )
 
     @staticmethod
-    def _build_prompt(translate_mode: str, example_mode: str, level: str) -> str:
-        # translate_mode / example_mode: "image_first" | "ai"
+    def _translate_rule(translate_mode: str) -> str:
         if translate_mode == "ai":
-            translate_rule = (
+            return (
                 "For `translation`: IGNORE any translation shown in the file and "
                 "ALWAYS generate the Traditional Chinese translation yourself."
             )
-        else:
-            translate_rule = (
-                "For `translation`: use the translation shown in the file when "
-                "present; if it is missing or unclear, generate the Traditional "
-                "Chinese translation yourself (AI fallback)."
+        return (
+            "For `translation`: use the translation shown in the file when "
+            "present; if it is missing or unclear, generate the Traditional "
+            "Chinese translation yourself (AI fallback)."
+        )
+
+    @classmethod
+    def _build_prompt(
+        cls,
+        translate_mode: str,
+        example_mode: str,
+        level: str,
+        extract_mode: str = EXTRACT_MODE_VOCABULARY,
+    ) -> str:
+        """
+        extract_mode:
+        - "vocabulary"（單字集）：一列 = 單字 + 翻譯 + 詞性 + 例句 + 例句翻譯
+        - "sentence"（例句集 / 朗讀評測）：一列 = 句子 + 翻譯
+        translate_mode / example_mode: "image_first" | "ai"
+        """
+        translate_rule = cls._translate_rule(translate_mode)
+
+        if extract_mode == EXTRACT_MODE_SENTENCE:
+            return (
+                "Extract every English sentence from the uploaded file.\n"
+                "Return JSON of the exact shape: "
+                '{"items": [{"text": "...", "translation": "..."}]}\n'
+                "Rules:\n"
+                "- `text`: one complete English sentence exactly as it appears in "
+                "the file. Do NOT split a sentence, do NOT merge two sentences, "
+                "and do NOT rewrite it.\n"
+                f"- {translate_rule}\n"
+                "- Extract sentences only. Do NOT output single words or phrases "
+                "that are not full sentences.\n"
+                "- Preserve the order the sentences appear in the file.\n"
+                '- If the file contains no sentences, return {"items": []}.'
             )
+
         if example_mode == "ai":
             example_rule = (
                 "For `example_sentence`: IGNORE any example in the file and ALWAYS "
@@ -127,19 +165,26 @@ class MagicPasteService:
         translate_mode: str = "image_first",
         example_mode: str = "image_first",
         level: str = "A1",
+        extract_mode: str = EXTRACT_MODE_VOCABULARY,
     ) -> Dict[str, Any]:
         """
         擷取教材內容。
+
+        extract_mode:
+        - "vocabulary"（單字集）
+        - "sentence"（例句集 / 朗讀評測）
 
         Returns:
             {"items": [...], "usage": {...}, "estimated_cost_usd": float,
              "provider": "vertex"|"openai", "model": str}
         """
         self.validate_file(file_bytes, mime_type)
+        if extract_mode not in EXTRACT_MODES:
+            extract_mode = EXTRACT_MODE_VOCABULARY
         normalized_mime = (mime_type or "").split(";")[0].strip().lower()
         if normalized_mime == "image/jpg":
             normalized_mime = "image/jpeg"
-        prompt = self._build_prompt(translate_mode, example_mode, level)
+        prompt = self._build_prompt(translate_mode, example_mode, level, extract_mode)
 
         if self.use_vertex_ai:
             raw, usage, model = await self._extract_vertex(

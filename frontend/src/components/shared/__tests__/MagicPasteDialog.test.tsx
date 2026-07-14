@@ -79,6 +79,75 @@ describe("MagicPasteDialog", () => {
     ]);
   });
 
+  it("sentence mode sends extract_mode=sentence and hides the example toggle", async () => {
+    mockExtract.mockResolvedValue({
+      items: [
+        {
+          text: "I eat an apple every morning.",
+          translation: "我每天早上吃一顆蘋果。",
+          part_of_speech: "",
+          example_sentence: "",
+          example_sentence_translation: "",
+        },
+      ],
+      charge: { charged: "free", points_used: 0, free_remaining: 4 },
+      quota: { free_remaining: 4, free_limit: 5, can_use: true },
+      estimated_cost_usd: 0.0001,
+      provider: "test",
+    });
+    const onInsert = vi.fn();
+    render(
+      <MagicPasteDialog
+        open
+        onClose={vi.fn()}
+        onInsert={onInsert}
+        extractMode="sentence"
+      />,
+    );
+
+    // 例句集沒有「例句」設定（那是單字集才有的欄位）
+    expect(screen.queryByText("例句")).not.toBeInTheDocument();
+    expect(screen.getByText("翻譯")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("magic-paste-file-input"), {
+      target: { files: [makeFile()] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /開始擷取/ }));
+    await waitFor(() => expect(mockExtract).toHaveBeenCalled());
+
+    // FormData 帶了 extract_mode=sentence
+    const formData = mockExtract.mock.calls[0][0] as FormData;
+    expect(formData.get("extract_mode")).toBe("sentence");
+
+    // 預覽顯示句子，插入回傳句子
+    expect(
+      await screen.findByDisplayValue("I eat an apple every morning."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /插入 1 個項目/ }));
+    expect(onInsert).toHaveBeenCalledWith([
+      expect.objectContaining({ text: "I eat an apple every morning." }),
+    ]);
+  });
+
+  it("vocabulary mode sends extract_mode=vocabulary by default", async () => {
+    mockExtract.mockResolvedValue({
+      items: [],
+      charge: { charged: "free", points_used: 0, free_remaining: 4 },
+      quota: { free_remaining: 4, free_limit: 5, can_use: true },
+      estimated_cost_usd: 0,
+      provider: "test",
+    });
+    render(<MagicPasteDialog open onClose={vi.fn()} onInsert={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("magic-paste-file-input"), {
+      target: { files: [makeFile()] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /開始擷取/ }));
+    await waitFor(() => expect(mockExtract).toHaveBeenCalled());
+
+    const formData = mockExtract.mock.calls[0][0] as FormData;
+    expect(formData.get("extract_mode")).toBe("vocabulary");
+  });
+
   it("shows over-limit guidance on 402", async () => {
     mockExtract.mockRejectedValue(
       Object.assign(new Error("quota"), { status: 402 }),
