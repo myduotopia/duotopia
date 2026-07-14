@@ -149,8 +149,10 @@ body {
 .quiz-translation-font {
   font-size: clamp(16px, 1.7vw, 20px);
 }
+/* #880-3-1：輸入框字級原本 min 24px / max 32px，比題目本文（min 20px）還大，
+   看起來過重。改成一律略小於題目字級，讓題目維持視覺主體。 */
 .quiz-input-font {
-  font-size: clamp(24px, 2.6vw, 32px);
+  font-size: clamp(18px, 1.9vw, 24px);
 }
 /* #861 E-2: 翻卡正面（單字資料）字級——單字為焦點放最大，例句次之。 */
 .word-card-word {

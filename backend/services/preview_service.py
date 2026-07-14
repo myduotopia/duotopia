@@ -996,6 +996,8 @@ async def get_word_cloze_start(
                 "audio_url": sentence_audio_for_item,
                 "correct_answer": correct_answer,
                 "correct_answer_length": len(correct_answer),
+                # Issue #880: 派發面板的「顯示圖片」開關需要題目圖片才能生效
+                "image_url": ci.image_url,
                 # Issue #715: 答對後翻面顯示完整單字卡所需欄位
                 "part_of_speech": ci.part_of_speech if is_vocab_item else None,
                 "example_sentence": ci.example_sentence if is_vocab_item else None,
@@ -1031,6 +1033,9 @@ async def get_word_cloze_start(
             assignment.show_translation
             if assignment.show_translation is not None
             else True
+        ),
+        "show_image": (
+            assignment.show_image if assignment.show_image is not None else True
         ),
         "play_audio": assignment.play_audio or False,
         "show_answer": assignment.show_answer or False,

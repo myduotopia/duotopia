@@ -25,17 +25,25 @@ interface ReadingPreviewProps {
   contentId?: number;
   shuffleQuestions?: boolean;
   timeLimitPerQuestion?: number;
+  /** #880: 顯示句子中文翻譯（預設顯示，與學生端一致） */
+  showTranslation?: boolean;
 }
 
 export default function ReadingPreview(props: ReadingPreviewProps) {
   if (props.contentId == null) {
-    return <ReadingPreviewByDemo shuffleQuestions={props.shuffleQuestions} />;
+    return (
+      <ReadingPreviewByDemo
+        shuffleQuestions={props.shuffleQuestions}
+        showTranslation={props.showTranslation}
+      />
+    );
   }
   return (
     <ReadingPreviewByContent
       contentId={props.contentId}
       shuffleQuestions={props.shuffleQuestions}
       timeLimitPerQuestion={props.timeLimitPerQuestion}
+      showTranslation={props.showTranslation}
     />
   );
 }
@@ -67,10 +75,12 @@ function ReadingPreviewByContent({
   contentId,
   shuffleQuestions,
   timeLimitPerQuestion,
+  showTranslation,
 }: {
   contentId: number;
   shuffleQuestions?: boolean;
   timeLimitPerQuestion?: number;
+  showTranslation?: boolean;
 }) {
   const { token } = useTeacherAuthStore();
   const [data, setData] = useState<ContentResponse | null>(null);
@@ -182,6 +192,7 @@ function ReadingPreviewByContent({
         assignmentId={0}
         practiceMode="reading"
         showAnswer={false}
+        showTranslation={showTranslation ?? true}
         timeLimitPerQuestion={timeLimitPerQuestion ?? 0}
         isDemoMode={true}
         isPreviewMode={true}
@@ -209,8 +220,10 @@ interface DemoActivityResponse {
 
 function ReadingPreviewByDemo({
   shuffleQuestions,
+  showTranslation,
 }: {
   shuffleQuestions?: boolean;
+  showTranslation?: boolean;
 }) {
   const [data, setData] = useState<DemoActivityResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -271,6 +284,8 @@ function ReadingPreviewByDemo({
         assignmentId={data.assignment_id}
         practiceMode={data.practice_mode || null}
         showAnswer={data.show_answer || false}
+        // #880: 派發面板的開關優先於 demo 資料，預覽才會跟著 toggle 即時變化
+        showTranslation={showTranslation ?? true}
         timeLimitPerQuestion={data.time_limit_per_question ?? 0}
         isDemoMode={true}
         isPreviewMode={true}

@@ -38,6 +38,7 @@ import QuizAnswerInput, {
   type QuizAnswerInputHandle,
 } from "./shared/QuizAnswerInput";
 import ClozeBlankText from "./shared/ClozeBlankText";
+import { buildClozeBlank } from "./shared/clozeBlank";
 import VirtualKeyboard from "./shared/VirtualKeyboard";
 import CardNavArrow from "./shared/CardNavArrow";
 import QuizReviewView, {
@@ -100,6 +101,9 @@ interface Props {
  * Build a sentence with the cloze answer replaced by a visible blank.
  * Case-insensitive replace on the first occurrence keeps the original
  * casing visible elsewhere (e.g. proper nouns earlier in the sentence).
+ *
+ * #880：挖空長度取自句子裡「實際比對到的那段文字」，不是答案字串本身，
+ * 才不會在大小寫/字形不同時算錯格數。
  */
 const buildBlanked = (sentence: string, answer: string): string => {
   if (!sentence) return "";
@@ -107,8 +111,9 @@ const buildBlanked = (sentence: string, answer: string): string => {
   const idx = sentence.toLowerCase().indexOf(answer.toLowerCase());
   if (idx < 0) return sentence;
   const before = sentence.slice(0, idx);
+  const matched = sentence.slice(idx, idx + answer.length);
   const after = sentence.slice(idx + answer.length);
-  return `${before}_____${after}`;
+  return `${before}${buildClozeBlank(matched)}${after}`;
 };
 
 export default function WordClozeQuizActivity({
@@ -145,6 +150,8 @@ export default function WordClozeQuizActivity({
   const [reviewLoading, setReviewLoading] = useState(false);
   const [settings, setSettings] = useState({
     show_translation: true,
+    // Issue #880: 派發設定的「顯示圖片」開關（原本被 setSettings 漏掉）
+    show_image: true,
     play_audio: false,
     show_answer: false,
   });
@@ -191,6 +198,7 @@ export default function WordClozeQuizActivity({
       setWords(previewWords || []);
       setSettings({
         show_translation: previewSettings?.show_translation ?? true,
+        show_image: previewSettings?.show_image ?? true,
         play_audio: previewSettings?.play_audio ?? false,
         show_answer: previewSettings?.show_answer ?? false,
       });
@@ -215,6 +223,7 @@ export default function WordClozeQuizActivity({
           setQuizStatus(null);
           setSettings({
             show_translation: demo.show_translation,
+            show_image: demo.show_image ?? true,
             play_audio: demo.play_audio,
             show_answer: demo.show_answer,
           });
@@ -246,6 +255,7 @@ export default function WordClozeQuizActivity({
         }
         setSettings({
           show_translation: data.show_translation,
+          show_image: data.show_image ?? true,
           play_audio: data.play_audio,
           show_answer: data.show_answer,
         });
@@ -705,6 +715,15 @@ export default function WordClozeQuizActivity({
                     {t("wordQuiz.revision.hint") ||
                       "訂正模式：答錯會顯示正解，全部改對才能提交"}
                   </div>
+                )}
+
+                {/* #880-2：依派發設定顯示題目圖片 */}
+                {settings.show_image && currentWord.image_url && (
+                  <img
+                    src={currentWord.image_url}
+                    alt=""
+                    className="mx-auto max-h-40 object-contain"
+                  />
                 )}
 
                 {/* 樣式對齊 WordClozeActivity (艾賓浩斯版) */}

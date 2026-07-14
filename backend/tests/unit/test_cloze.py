@@ -8,6 +8,7 @@ matching and are left to teacher confirmation/override per the #632 UX.
 from types import SimpleNamespace
 
 from utils.cloze import (
+    build_blank,
     compute_cloze_answer,
     extract_cloze,
     extract_cloze_for_item,
@@ -20,7 +21,7 @@ class TestExtractCloze:
     def test_exact_match(self):
         blanked, answer = extract_cloze("cup", "I drink from a cup.")
         assert answer == "cup"
-        assert "_____" in blanked
+        assert "___" in blanked
         assert "cup" not in blanked
 
     def test_plural_prefix_match(self):
@@ -172,4 +173,40 @@ class TestExtractClozeForItem:
         blanked, answer = extract_cloze_for_item(item)
         # longest content word picked
         assert answer == "elephant"
-        assert "_____" in blanked
+        assert "_" * len("elephant") in blanked
+        assert "elephant" not in blanked
+
+
+class TestBuildBlank:
+    """#880: 挖空數量必須等於答案字母數（多字答案每字一組、字間留空）。"""
+
+    def test_one_underscore_per_letter(self):
+        assert build_blank("cup") == "___"
+        assert build_blank("elephant") == "________"
+
+    def test_multiword_keeps_word_boundaries(self):
+        assert build_blank("two pieces of cake") == "___ ______ __ ____"
+
+    def test_empty_falls_back_to_placeholder(self):
+        assert build_blank("") == "_____"
+        assert build_blank("   ") == "_____"
+
+
+class TestBlankLengthMatchesAnswer:
+    """挖空長度必須跟著實際比對到的字形走（cups 不是 cup）。"""
+
+    def test_blank_length_follows_matched_form_not_base_word(self):
+        blanked, answer = extract_cloze("cup", "I have two cups on the table.")
+        assert answer == "cups"
+        # 比對到的是 "cups"(4)，不是原型 "cup"(3)
+        assert blanked == "I have two ____ on the table."
+
+    def test_multiword_persisted_answer(self):
+        item = SimpleNamespace(
+            text="cake",
+            example_sentence="I ate two pieces of cake.",
+            cloze_answer="two pieces of cake",
+        )
+        blanked, answer = extract_cloze_for_item(item)
+        assert answer == "two pieces of cake"
+        assert blanked == "I ate ___ ______ __ ____."

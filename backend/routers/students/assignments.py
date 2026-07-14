@@ -686,11 +686,15 @@ async def get_assignment_activities(
     practice_mode = None
     show_answer = False
     score_category = None
+    # Issue #880: 例句朗讀的「顯示句子中文翻譯」開關（未設定時預設顯示）
+    show_translation = True
     parent_assignment = _parent_assignment if student_assignment.assignment_id else None
     if parent_assignment:
         practice_mode = parent_assignment.practice_mode
         show_answer = parent_assignment.show_answer or False
         score_category = parent_assignment.score_category
+        if parent_assignment.show_translation is not None:
+            show_translation = parent_assignment.show_translation
 
     # 檢查 AI 分析額度（根據作業所屬班級判斷：機構班級→機構點數，個人班級→個人配額）
     can_use_ai_analysis = (
@@ -712,6 +716,7 @@ async def get_assignment_activities(
         ),
         "practice_mode": practice_mode,  # 前端用來判斷顯示哪個元件
         "show_answer": show_answer,  # 例句重組：答題結束後是否顯示正確答案
+        "show_translation": show_translation,  # 例句朗讀：是否顯示句子中文翻譯
         "score_category": score_category,  # 分數記錄分類
         "time_limit_per_question": (
             parent_assignment.time_limit_per_question if parent_assignment else None
@@ -2733,6 +2738,8 @@ async def start_word_cloze_practice(
                 "audio_url": sentence_audio_for_item,
                 "correct_answer": correct_answer,
                 "correct_answer_length": len(correct_answer),
+                # Issue #880: 派發面板的「顯示圖片」開關需要題目圖片才能生效
+                "image_url": ci.image_url,
                 # Issue #715: 答對後翻面顯示完整單字卡所需欄位
                 "part_of_speech": ci.part_of_speech if is_vocab_item else None,
                 "example_sentence": ci.example_sentence if is_vocab_item else None,
@@ -2800,6 +2807,7 @@ async def start_word_cloze_practice(
         "all_mastered": all_mastered,
         "is_practice_mode": is_practice_mode,
         "show_translation": (assignment.show_translation if assignment else True),
+        "show_image": (assignment.show_image if assignment else True),
         "play_audio": assignment.play_audio if assignment else False,
         "show_answer": assignment.show_answer if assignment else False,
         "time_limit_per_question": (

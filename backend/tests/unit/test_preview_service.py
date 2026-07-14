@@ -639,8 +639,9 @@ class TestGetWordClozeStart:
             q["example_sentence_audio_url"] == "https://cdn.example.com/apple_sent.mp3"
         )
         assert q["word_audio_url"] == "https://cdn.example.com/apple.mp3"
-        # Sanity: cloze actually blanks out the target word
-        assert "_____" in q["blanked_sentence"]
+        # Sanity: cloze actually blanks out the target word, and the blank is
+        # exactly as long as the answer (#880)
+        assert q["blanked_sentence"] == "I eat an _____ every day."
         assert q["correct_answer"].lower() == "apple"
 
     @pytest.mark.asyncio

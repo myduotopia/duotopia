@@ -85,6 +85,7 @@ interface ActivityResponse {
   practice_mode?: string | null;
   score_category?: string | null;
   show_answer?: boolean; // 例句重組：答題結束後是否顯示正確答案
+  show_translation?: boolean; // #880 例句朗讀：是否顯示句子中文翻譯
   time_limit_per_question?: number;
   total_activities: number;
   activities: Activity[];
@@ -104,6 +105,8 @@ export default function StudentActivityPage() {
   const [returnedAt, setReturnedAt] = useState<string | null>(null);
   const [practiceMode, setPracticeMode] = useState<string | null>(null);
   const [showAnswer, setShowAnswer] = useState<boolean>(false);
+  // #880: 例句朗讀的「顯示句子中文翻譯」開關（未設定時預設顯示）
+  const [showTranslation, setShowTranslation] = useState<boolean>(true);
   const [canUseAiAnalysis, setCanUseAiAnalysis] = useState<boolean>(true);
   const [timeLimitPerQuestion, setTimeLimitPerQuestion] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -164,6 +167,7 @@ export default function StudentActivityPage() {
       setReturnedAt(data.returned_at ?? null);
       setPracticeMode(data.practice_mode || null);
       setShowAnswer(data.show_answer || false);
+      setShowTranslation(data.show_translation ?? true);
       setCanUseAiAnalysis(data.can_use_ai_analysis ?? true);
       setTimeLimitPerQuestion(data.time_limit_per_question ?? 0);
     } catch (error) {
@@ -301,6 +305,7 @@ export default function StudentActivityPage() {
       returnedAt={returnedAt}
       practiceMode={practiceMode}
       showAnswer={showAnswer}
+      showTranslation={showTranslation}
       canUseAiAnalysis={canUseAiAnalysis}
       timeLimitPerQuestion={timeLimitPerQuestion}
       onBack={() => navigate("/student/assignments")}
