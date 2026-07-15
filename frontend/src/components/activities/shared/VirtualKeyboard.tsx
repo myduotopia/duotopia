@@ -36,9 +36,10 @@ interface VirtualKeyboardProps {
 // Punctuation (#763) sits inline on the space/enter row at letter-width so
 // answers like don't / Mr. / sentence-level cloze (? ! ,) can be typed on
 // tablet/mobile without bloating the row height.
-// 5 punct keys here + 10-key top row drive the flex-basis formula in index.css
+// 6 punct keys here + 10-key top row drive the flex-basis formula in index.css
 // (.simple-keyboard .hg-button.vk-punct). Update both together if the layout changes.
-const BOTTOM_ROW = "' . , ? ! {space} {enter}";
+// #949: '-' (hyphen) added so answers like well-known / T-shirt are typable.
+const BOTTOM_ROW = "' . , ? ! - {space} {enter}";
 const LAYOUT = {
   default: [
     "q w e r t y u i o p",
@@ -105,7 +106,7 @@ export default function VirtualKeyboard({
           // Issue #716: 母音用紅色標示（教學常用標法）
           { class: "vk-vowel", buttons: "a e i o u A E I O U" },
           // Issue #763: 標點鍵與字母同寬，不要被預設 flex 撐開
-          { class: "vk-punct", buttons: "' . , ? !" },
+          { class: "vk-punct", buttons: "' . , ? ! -" },
         ]}
       />
     </div>
