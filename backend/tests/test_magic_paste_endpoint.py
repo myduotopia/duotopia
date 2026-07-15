@@ -43,6 +43,45 @@ def test_validate_accepts_image_and_pdf():
     MagicPasteService.validate_file(b"data", "image/jpeg; charset=binary")
 
 
+def test_parse_json_valid():
+    raw = MagicPasteService._parse_json(
+        '{"items": [{"text": "apple", "translation": "蘋果"}]}'
+    )
+    assert raw["items"][0]["text"] == "apple"
+
+
+def test_parse_json_strips_markdown_fence():
+    raw = MagicPasteService._parse_json('```json\n{"items": [{"text": "run"}]}\n```')
+    assert raw["items"][0]["text"] == "run"
+
+
+def test_parse_json_salvages_truncated_response():
+    """token 上限截斷的回應：救回已完整輸出的項目，不整包失敗（#891 502 修復）。"""
+    truncated = (
+        '{"items": ['
+        '{"text": "apple", "translation": "蘋果", "example_sentence": "I eat an apple."},'
+        '{"text": "banana", "translation": "香蕉", "example_sentence": "I like banan'
+        # 從這裡被截斷：字串未結束、陣列/物件未閉合
+    )
+    raw = MagicPasteService._parse_json(truncated)
+    texts = [it["text"] for it in raw["items"]]
+    # 第一個完整項目救回；被截斷的第二個丟棄
+    assert "apple" in texts
+    assert "banana" not in texts
+
+
+def test_salvage_ignores_braces_inside_strings():
+    """例句若含大括號也不能誤判括號配對。"""
+    text = (
+        '{"items": ['
+        '{"text": "brace", "translation": "括號", "example_sentence": "Use {} here."},'
+        '{"text": "next", "transl'  # 截斷
+    )
+    raw = MagicPasteService._parse_json(text)
+    texts = [it["text"] for it in raw["items"]]
+    assert texts == ["brace"]
+
+
 def test_normalize_items_fills_and_drops():
     raw = {
         "items": [

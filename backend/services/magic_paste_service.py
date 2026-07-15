@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 FLASH_MODEL = "gemini-2.5-flash"
 OPENAI_VISION_MODEL = "gpt-4o-mini"
 
+# 一整張單字表 + 每項的翻譯/詞性/例句/例句翻譯，4000 tokens 會被截斷（issue #891
+# preview 實測 502）。拉高上限；若仍截斷，_parse_json 會救回已完整的項目。
+MAX_OUTPUT_TOKENS = 8192
+
 # 擷取模式：依教材類型決定 AI 要抓「單字」還是「句子」
 # - vocabulary：單字集（一列 = 單字 + 翻譯 + 詞性 + 例句）
 # - sentence  ：例句集 / 朗讀評測（一列 = 句子 + 翻譯）
@@ -230,7 +234,7 @@ class MagicPasteService:
             Part,
             GenerationConfig,
         )
-        from services.vertex_ai import get_vertex_ai_service
+        from services.vertex_ai import get_vertex_ai_service, VertexAIService
 
         # 確保 vertexai.init 已呼叫
         get_vertex_ai_service()._ensure_initialized()
@@ -240,10 +244,13 @@ class MagicPasteService:
         )
         part = Part.from_data(data=file_bytes, mime_type=mime_type)
         config = GenerationConfig(
-            max_output_tokens=4000,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
             temperature=0.3,
             response_mime_type="application/json",
         )
+        # 擷取是「照抄 + 翻譯」的結構化任務，不需要 thinking。關掉可加速
+        # 並把整個 token 預算留給實際輸出，降低截斷風險。
+        VertexAIService._set_thinking_budget(config, 0)
         response = await model.generate_content_async(
             [part, prompt], generation_config=config
         )
@@ -283,7 +290,7 @@ class MagicPasteService:
             ],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=4000,
+            max_tokens=MAX_OUTPUT_TOKENS,
         )
         usage = {"input_tokens": 0, "output_tokens": 0}
         if response.usage:
@@ -296,13 +303,65 @@ class MagicPasteService:
 
     # ---------------------------------------------------------------- helpers
 
-    @staticmethod
-    def _parse_json(content: str) -> Any:
+    @classmethod
+    def _parse_json(cls, content: str) -> Any:
         content = (content or "").strip()
-        content = re.sub(r"^.*?```json\s*", "", content, flags=re.DOTALL)
-        content = re.sub(r"^.*?```\s*", "", content, flags=re.DOTALL)
+        # 去掉開頭 / 結尾的 markdown 圍欄（```json ... ```）。
+        # 只錨定首尾，避免把內容一路吃到結尾圍欄（會誤刪整包）。
+        content = re.sub(r"^```[a-zA-Z]*\s*", "", content)
         content = re.sub(r"\s*```$", "", content).strip()
-        return json.loads(content)
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            # AI 輸出可能因 token 上限被截斷（尾端 JSON 不完整）。
+            # 盡量救回已完整輸出的 item 物件，而不是整包擷取失敗。
+            salvaged = cls._salvage_objects(content)
+            if salvaged:
+                logger.warning("[magic-paste] JSON 疑似截斷，救回 %d 個完整項目", len(salvaged))
+                return {"items": salvaged}
+            raise
+
+    @staticmethod
+    def _salvage_objects(text: str) -> List[Dict[str, Any]]:
+        """
+        從（可能被截斷的）文字中掃出所有「完整且平衡」的 JSON 物件，
+        逐一 json.loads，保留看起來像 item（有 text 欄位）的物件。
+
+        括號配對時忽略字串內的大括號與跳脫字元，避免誤判。
+        外層被截斷的 {"items":[...]} 因缺對應的 } 而不會被收錄，
+        因此只會回收到完整的 item 物件。
+        """
+        objects: List[str] = []
+        stack: List[int] = []
+        in_str = False
+        escaped = False
+        for i, ch in enumerate(text):
+            if in_str:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                stack.append(i)
+            elif ch == "}":
+                if stack:
+                    start = stack.pop()
+                    objects.append(text[start : i + 1])
+
+        items: List[Dict[str, Any]] = []
+        for snippet in objects:
+            try:
+                parsed = json.loads(snippet)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict) and str(parsed.get("text") or "").strip():
+                items.append(parsed)
+        return items
 
     @staticmethod
     def _normalize_items(raw: Any) -> List[Dict[str, str]]:
