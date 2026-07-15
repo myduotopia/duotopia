@@ -77,18 +77,18 @@ _CLOZE_STOPWORDS = frozenset(
 def build_blank(matched_text: str) -> str:
     """Render the blank placeholder for the text being blanked out (#880).
 
-    One underscore per character, so the number of blanks equals the number of
-    letters in the answer. Word boundaries are preserved for phrase answers, so
-    "two pieces of cake" renders as "___ ______ __ ____" rather than one
-    unbroken run — the student can still see it is four words.
+    One underscore per WORD (not per letter): a single-word answer renders as a
+    single blank box, and a phrase answer renders as one box per word — so
+    "two pieces of cake" becomes "_ _ _ _" (four boxes). The blank does not
+    reveal the letter count.
 
-    The frontend (``ClozeBlankText``) turns each underscore run into that many
-    per-letter boxes, so the space between runs becomes the gap between words.
+    The frontend (``ClozeBlankText``) renders one box per underscore run, so
+    each space-separated underscore becomes its own box.
     """
     words = matched_text.split()
     if not words:
-        return "_____"
-    return " ".join("_" * len(word) for word in words)
+        return "_"
+    return " ".join("_" for _ in words)
 
 
 def find_cloze_match(

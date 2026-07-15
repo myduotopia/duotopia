@@ -21,7 +21,7 @@ class TestExtractCloze:
     def test_exact_match(self):
         blanked, answer = extract_cloze("cup", "I drink from a cup.")
         assert answer == "cup"
-        assert "___" in blanked
+        assert "_" in blanked
         assert "cup" not in blanked
 
     def test_plural_prefix_match(self):
@@ -173,33 +173,34 @@ class TestExtractClozeForItem:
         blanked, answer = extract_cloze_for_item(item)
         # longest content word picked
         assert answer == "elephant"
-        assert "_" * len("elephant") in blanked
+        # 單字答案 → 單一挖空格（不透露字母數）
+        assert "_" in blanked
         assert "elephant" not in blanked
 
 
 class TestBuildBlank:
-    """#880: 挖空數量必須等於答案字母數（多字答案每字一組、字間留空）。"""
+    """#880: 挖空格數等於答案的「單字數量」（不是字母數）。"""
 
-    def test_one_underscore_per_letter(self):
-        assert build_blank("cup") == "___"
-        assert build_blank("elephant") == "________"
+    def test_single_word_is_one_blank(self):
+        assert build_blank("cup") == "_"
+        assert build_blank("elephant") == "_"
 
-    def test_multiword_keeps_word_boundaries(self):
-        assert build_blank("two pieces of cake") == "___ ______ __ ____"
+    def test_multiword_one_blank_per_word(self):
+        assert build_blank("two pieces of cake") == "_ _ _ _"
 
-    def test_empty_falls_back_to_placeholder(self):
-        assert build_blank("") == "_____"
-        assert build_blank("   ") == "_____"
+    def test_empty_falls_back_to_single_blank(self):
+        assert build_blank("") == "_"
+        assert build_blank("   ") == "_"
 
 
-class TestBlankLengthMatchesAnswer:
-    """挖空長度必須跟著實際比對到的字形走（cups 不是 cup）。"""
+class TestBlankIsWordCount:
+    """挖空格數跟著答案的單字數量走，與字母數無關。"""
 
-    def test_blank_length_follows_matched_form_not_base_word(self):
+    def test_single_word_blank_regardless_of_length(self):
         blanked, answer = extract_cloze("cup", "I have two cups on the table.")
         assert answer == "cups"
-        # 比對到的是 "cups"(4)，不是原型 "cup"(3)
-        assert blanked == "I have two ____ on the table."
+        # "cups" 是一個單字 → 一個挖空格
+        assert blanked == "I have two _ on the table."
 
     def test_multiword_persisted_answer(self):
         item = SimpleNamespace(
@@ -209,4 +210,5 @@ class TestBlankLengthMatchesAnswer:
         )
         blanked, answer = extract_cloze_for_item(item)
         assert answer == "two pieces of cake"
-        assert blanked == "I ate ___ ______ __ ____."
+        # 四個單字 → 四個挖空格
+        assert blanked == "I ate _ _ _ _."

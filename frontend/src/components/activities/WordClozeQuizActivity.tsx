@@ -24,7 +24,6 @@ import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
@@ -744,16 +743,7 @@ export default function WordClozeQuizActivity({
                   )}
 
                 <div className="max-w-2xl mx-auto text-center py-2 space-y-2">
-                  {currentWord.part_of_speech && (
-                    <div className="flex justify-center">
-                      <Badge
-                        variant="secondary"
-                        className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
-                      >
-                        {currentWord.part_of_speech}
-                      </Badge>
-                    </div>
-                  )}
+                  {/* #880-3-3：作答畫面不顯示詞性 chip（答完後的單字卡正面仍會顯示） */}
                   <p className="quiz-question-font leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
                     <ClozeBlankText text={blanked} />
                   </p>

@@ -1,37 +1,33 @@
 /**
- * ClozeBlankText — #880：挖空數量必須等於答案字母數
+ * ClozeBlankText — #880：挖空格數等於答案的「單字數量」（不是字母數）
  *
- * 舊行為（#867）把任意長度的底線串壓成「一個固定寬度的方塊」，
- * 所以後端就算按答案長度吐底線，學生也看不出差別。這裡鎖住新行為：
- * 一個底線 = 一個方格，多字答案分組。
+ * 後端 `build_blank()` 對單字答案吐一個底線、片語答案吐以空白分隔的多個底線
+ * （"_ _ _ _"）。這裡鎖住渲染契約：每個底線串渲染成一個方格。
  */
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import ClozeBlankText from "../ClozeBlankText";
 
 describe("ClozeBlankText", () => {
-  it("一個底線渲染一個方格", () => {
-    render(<ClozeBlankText text="I drink from a ___." />);
-    expect(screen.getAllByTestId("cloze-blank-slot")).toHaveLength(3);
-    expect(screen.getAllByTestId("cloze-blank-group")).toHaveLength(1);
+  it("單字答案（一個底線）渲染一個方格", () => {
+    render(<ClozeBlankText text="I drink from a _." />);
+    expect(screen.getAllByTestId("cloze-blank-slot")).toHaveLength(1);
   });
 
-  it("方格數跟著答案長度走", () => {
-    render(<ClozeBlankText text="I eat an _____ every day." />);
-    expect(screen.getAllByTestId("cloze-blank-slot")).toHaveLength(5);
+  it("方格數不隨字母數變化（多字母答案仍是一格）", () => {
+    // 後端對 "elephant" 只吐一個底線
+    render(<ClozeBlankText text="The _ is huge." />);
+    expect(screen.getAllByTestId("cloze-blank-slot")).toHaveLength(1);
   });
 
-  it("多字答案分成多組，每組字母數各自對應", () => {
-    // "two pieces of cake" → 3 / 6 / 2 / 4
-    render(<ClozeBlankText text="I ate ___ ______ __ ____." />);
-    const groups = screen.getAllByTestId("cloze-blank-group");
-    expect(groups).toHaveLength(4);
-    expect(groups.map((g) => g.childElementCount)).toEqual([3, 6, 2, 4]);
-    expect(screen.getAllByTestId("cloze-blank-slot")).toHaveLength(15);
+  it("片語答案每個單字一格", () => {
+    // "two pieces of cake" → "_ _ _ _" → 4 格
+    render(<ClozeBlankText text="I ate _ _ _ _." />);
+    expect(screen.getAllByTestId("cloze-blank-slot")).toHaveLength(4);
   });
 
   it("保留挖空以外的原文字", () => {
-    const { container } = render(<ClozeBlankText text="I ate ____ today." />);
+    const { container } = render(<ClozeBlankText text="I ate _ today." />);
     expect(container.textContent).toBe("I ate  today.");
   });
 
