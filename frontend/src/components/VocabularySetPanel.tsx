@@ -1982,9 +1982,10 @@ const VocabularySetPanel = forwardRef<
     totalSteps: number;
   } | null>(null);
   const batchPauseRef = useRef(false);
-  // 魔術貼上插入後補洞用的一次性旗標（issue #891）：翻譯 + 詞性
+  // 魔術貼上插入後補洞用的一次性旗標（issue #891）：翻譯 + 詞性 + 例句翻譯
   const magicGapFillRef = useRef(false);
   const magicPosFillRef = useRef(false);
+  const magicExampleFillRef = useRef(false);
   const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(
     new Map(),
   );
@@ -2235,6 +2236,16 @@ const VocabularySetPanel = forwardRef<
       magicGapFillRef.current = true;
     }
     magicPosFillRef.current = true;
+    // 圖上已有例句但沒例句翻譯 → 插入時也幫忙翻譯例句
+    if (
+      toAdd.some(
+        (it) =>
+          it.example_sentence?.trim() &&
+          !it.example_sentence_translation?.trim(),
+      )
+    ) {
+      magicExampleFillRef.current = true;
+    }
 
     if (pastedItems.length > toAdd.length) {
       toast.warning(
@@ -3393,21 +3404,88 @@ const VocabularySetPanel = forwardRef<
     }
   };
 
-  // 魔術貼上插入後補洞：rows 更新後依旗標依序補齊「翻譯」與「詞性」。
-  // 先翻譯（handleBatchGenerateDefinitions 只翻缺翻譯的列、圖上已有者略過，中文路徑
-  // 順帶補詞性），再補剩餘缺詞性的單字。兩步依序 await，避免 setRows 互相覆蓋。
+  // 只補「例句翻譯」：對有例句但沒例句翻譯的列，用 batchTranslate 翻譯例句本身
+  // （對應圖上已有例句、但沒有例句翻譯的情境）。目標語言取「翻譯成」設定，
+  // 未設定則沿用單字翻譯語言，最後 fallback 中文；english/other 不適用例句翻譯故用中文。
+  const fillMissingExampleTranslations = async () => {
+    let target = (aiGenerateTranslateLang ||
+      lastSelectedWordLang ||
+      "chinese") as string;
+    if (target !== "japanese" && target !== "korean") target = "chinese";
+    const langCode =
+      SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === target)?.code ||
+      "zh-TW";
+    const getField = (r: ContentRow) =>
+      target === "japanese"
+        ? r.example_sentence_japanese
+        : target === "korean"
+          ? r.example_sentence_korean
+          : r.example_sentence_translation;
+    const targets = rows
+      .map((r, i) => ({ r, i }))
+      .filter(
+        ({ r }) => r.example_sentence?.trim() && !(getField(r) || "").trim(),
+      );
+    if (!targets.length) return;
+    try {
+      const resp = (await apiClient.batchTranslate(
+        targets.map((tg) => tg.r.example_sentence!.trim()),
+        langCode,
+      )) as { translations?: string[] };
+      const translations = resp.translations || [];
+      setRows((prev) => {
+        const nr = [...prev];
+        targets.forEach((tg, k) => {
+          const tr = translations[k];
+          const cur = nr[tg.i];
+          if (!tr || !cur || !cur.example_sentence?.trim()) return;
+          if ((getField(cur) || "").trim()) return; // 已有翻譯就不覆蓋
+          if (target === "japanese") {
+            nr[tg.i] = {
+              ...cur,
+              example_sentence_japanese: tr,
+              selectedSentenceLanguage: "japanese",
+            };
+          } else if (target === "korean") {
+            nr[tg.i] = {
+              ...cur,
+              example_sentence_korean: tr,
+              selectedSentenceLanguage: "korean",
+            };
+          } else {
+            nr[tg.i] = {
+              ...cur,
+              example_sentence_translation: tr,
+              selectedSentenceLanguage: "chinese",
+            };
+          }
+        });
+        return nr;
+      });
+    } catch (e) {
+      console.error("example translation fill error:", e);
+    }
+  };
+
+  // 魔術貼上插入後補洞：rows 更新後依旗標依序補齊「翻譯 → 詞性 → 例句翻譯」。
+  // 依序 await（各步之間 tick 讓 setRows 提交），避免 setRows 互相覆蓋。
   useEffect(() => {
     const needTranslate = magicGapFillRef.current;
     const needPos = magicPosFillRef.current;
-    if (!needTranslate && !needPos) return;
+    const needExample = magicExampleFillRef.current;
+    if (!needTranslate && !needPos && !needExample) return;
     magicGapFillRef.current = false;
     magicPosFillRef.current = false;
+    magicExampleFillRef.current = false;
     void (async () => {
       if (needTranslate) await handleBatchGenerateDefinitions();
       if (needPos) {
-        // 等翻譯的 setRows 提交後再補詞性
         await new Promise((r) => setTimeout(r, 0));
         await fillMissingPosForWords();
+      }
+      if (needExample) {
+        await new Promise((r) => setTimeout(r, 0));
+        await fillMissingExampleTranslations();
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
