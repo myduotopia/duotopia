@@ -1251,6 +1251,8 @@ const ReadingAssessmentPanel = forwardRef<
   const [batchPasteDialogOpen, setBatchPasteDialogOpen] = useState(false);
   // 魔術貼上（issue #891）— 例句集 / 朗讀評測：擷取「句子」
   const [magicPasteOpen, setMagicPasteOpen] = useState(false);
+  // 魔術貼上插入後補洞（翻譯）用的一次性旗標（issue #891）
+  const magicGapFillRef = useRef(false);
   const [batchPasteText, setBatchPasteText] = useState("");
   const [batchPasteAutoTTS, setBatchPasteAutoTTS] = useState(false);
   const [batchPasteAutoTranslate, setBatchPasteAutoTranslate] = useState(false);
@@ -1720,6 +1722,13 @@ const ReadingAssessmentPanel = forwardRef<
     });
 
     setRows([...baseRows, ...newRows]);
+    // 插入時補洞：有缺翻譯且開了自動翻譯 → 插入後自動補齊（只填空欄）
+    if (
+      batchPasteAutoTranslate &&
+      toAdd.some((it) => !it.translation?.trim())
+    ) {
+      magicGapFillRef.current = true;
+    }
     if (pastedItems.length > toAdd.length) {
       toast.warning(
         t("contentEditor.messages.batchPasteLimit", { max: MAX_ROWS }),
@@ -2261,6 +2270,14 @@ const ReadingAssessmentPanel = forwardRef<
       setIsBatchGeneratingTranslation(false);
     }
   };
+
+  // 魔術貼上插入後補洞：rows 更新完成後，若旗標亮著就補齊缺少的翻譯。
+  useEffect(() => {
+    if (!magicGapFillRef.current) return;
+    magicGapFillRef.current = false;
+    void handleBatchGenerateDefinitions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
 
   const handleBatchPaste = async (autoTTS: boolean, autoTranslate: boolean) => {
     // 預處理：把破折號（— 或連續 ——）替換為單一空白，避免黏字

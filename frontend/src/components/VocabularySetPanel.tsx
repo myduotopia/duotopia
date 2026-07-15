@@ -1981,6 +1981,8 @@ const VocabularySetPanel = forwardRef<
     totalSteps: number;
   } | null>(null);
   const batchPauseRef = useRef(false);
+  // 魔術貼上插入後補洞（翻譯）用的一次性旗標（issue #891）
+  const magicGapFillRef = useRef(false);
   const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(
     new Map(),
   );
@@ -2217,6 +2219,15 @@ const VocabularySetPanel = forwardRef<
     });
 
     setRows([...baseRows, ...newRows]);
+    // 插入時補洞：有缺翻譯且開了自動翻譯 → 插入後自動補齊（只填空欄，
+    // 圖上已有翻譯的列會被 handleBatchGenerateDefinitions 跳過）。語音/例句
+    // 沿用旁邊既有的批次按鈕。
+    if (
+      batchPasteAutoTranslate &&
+      toAdd.some((it) => !it.translation?.trim())
+    ) {
+      magicGapFillRef.current = true;
+    }
     if (pastedItems.length > toAdd.length) {
       toast.warning(
         t("contentEditor.messages.batchPasteLimit", { max: BATCH_PASTE_MAX }),
@@ -3337,6 +3348,16 @@ const VocabularySetPanel = forwardRef<
       toast.error(t("contentEditor.messages.batchTranslationFailed"));
     }
   };
+
+  // 魔術貼上插入後補洞：rows 更新完成後，若旗標亮著就補齊缺少的翻譯。
+  // 用 effect 是為了拿到 setRows 後的最新 rows（handleBatchGenerateDefinitions
+  // 只翻譯缺翻譯的列，圖上已有翻譯者自動略過）。
+  useEffect(() => {
+    if (!magicGapFillRef.current) return;
+    magicGapFillRef.current = false;
+    void handleBatchGenerateDefinitions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
 
   // Example sentence translation functions
   const handleGenerateExampleTranslation = async (index: number) => {
@@ -4571,16 +4592,16 @@ const VocabularySetPanel = forwardRef<
               魔術貼上（圖片 / PDF）
             </Button>
 
-            {/* AI Generate Examples */}
-            <div className="mt-4 bg-purple-50 rounded-lg border border-purple-200 overflow-hidden">
-              <div className="flex items-center gap-2 p-3">
+            {/* AI Generate Examples（緊湊版）*/}
+            <div className="mt-3 bg-purple-50/60 rounded-lg border border-purple-200">
+              <div className="flex items-center gap-2 p-2.5">
                 <input
                   type="checkbox"
                   checked={aiGenerateExpanded}
                   onChange={(e) => setAiGenerateExpanded(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="h-4 w-4 shrink-0" />
                 <span className="text-sm font-semibold text-gray-800">
                   {t("vocabularySet.modals.aiGenerateExamplesTitle")}
                 </span>
@@ -4589,10 +4610,10 @@ const VocabularySetPanel = forwardRef<
                 </span>
               </div>
               {aiGenerateExpanded && (
-                <div className="px-3 pb-3 space-y-3">
-                  {/* Difficulty Level */}
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
+                <div className="px-2.5 pb-2.5 space-y-2">
+                  {/* Difficulty Level — 標籤與 chips 同一行 */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-[11px] text-gray-500 shrink-0">
                       {t("vocabularySet.labels.difficultyLevel")}
                     </label>
                     <div className="flex flex-wrap gap-1">
@@ -4600,7 +4621,7 @@ const VocabularySetPanel = forwardRef<
                         <button
                           key={level}
                           onClick={() => setAiGenerateLevel(level)}
-                          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                          className={`px-2 py-0.5 rounded text-xs font-medium transition-all ${
                             aiGenerateLevel === level
                               ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
                               : "bg-gray-200 text-gray-700 hover:bg-gray-300"
@@ -4613,24 +4634,19 @@ const VocabularySetPanel = forwardRef<
                   </div>
 
                   {/* AI Prompt */}
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
-                      {t("vocabularySet.labels.aiPrompt")}
-                    </label>
-                    <textarea
-                      value={aiGeneratePrompt}
-                      onChange={(e) => setAiGeneratePrompt(e.target.value)}
-                      placeholder={t(
-                        "vocabularySet.placeholders.aiPromptExample",
-                      )}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-none"
-                      rows={2}
-                    />
-                  </div>
+                  <textarea
+                    value={aiGeneratePrompt}
+                    onChange={(e) => setAiGeneratePrompt(e.target.value)}
+                    placeholder={t(
+                      "vocabularySet.placeholders.aiPromptExample",
+                    )}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-none"
+                    rows={2}
+                  />
 
-                  {/* Sentence translation language selector */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs text-gray-600 block">
+                  {/* Sentence translation language — 標籤與下拉同一行 */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] text-gray-500 shrink-0">
                       {t("vocabularySet.labels.translateTo")}
                     </label>
                     <select
@@ -4653,7 +4669,7 @@ const VocabularySetPanel = forwardRef<
                           })),
                         );
                       }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className="flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="">
                         {t("contentEditor.labels.selectLanguage")}
@@ -4667,18 +4683,18 @@ const VocabularySetPanel = forwardRef<
                         {t("contentEditor.labels.otherLanguage")}
                       </option>
                     </select>
-                    {aiGenerateTranslateLang === "other" && (
-                      <input
-                        type="text"
-                        value={customSentenceTranslationLang}
-                        onChange={(e) =>
-                          setCustomSentenceTranslationLang(e.target.value)
-                        }
-                        placeholder={t("contentEditor.labels.enterLanguage")}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      />
-                    )}
                   </div>
+                  {aiGenerateTranslateLang === "other" && (
+                    <input
+                      type="text"
+                      value={customSentenceTranslationLang}
+                      onChange={(e) =>
+                        setCustomSentenceTranslationLang(e.target.value)
+                      }
+                      placeholder={t("contentEditor.labels.enterLanguage")}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  )}
                 </div>
               )}
             </div>

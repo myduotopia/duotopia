@@ -85,24 +85,17 @@ class MagicPasteService:
             "NOT Simplified Chinese."
         )
 
-    @staticmethod
-    def _translate_rule(translate_mode: str) -> str:
-        if translate_mode == "ai":
-            return (
-                "For `translation`: IGNORE any translation shown in the file and "
-                "ALWAYS generate the Traditional Chinese translation yourself."
-            )
-        return (
-            "For `translation`: use the translation shown in the file when "
-            "present; if it is missing or unclear, generate the Traditional "
-            "Chinese translation yourself (AI fallback)."
-        )
+    # 擷取一律「只抄圖上有的」，不在此步 AI 生成翻譯 / 例句。
+    # 缺的欄位留空字串，改由前端「插入時」依共用設定補洞（見 issue #891 redesign spec）。
+    _TRANSLATE_RULE = (
+        "For `translation`: copy ONLY the translation printed in the file. "
+        "If no translation is shown, leave it as an empty string. "
+        "Do NOT generate a translation yourself."
+    )
 
     @classmethod
     def _build_prompt(
         cls,
-        translate_mode: str,
-        example_mode: str,
         level: str,
         extract_mode: str = EXTRACT_MODE_VOCABULARY,
     ) -> str:
@@ -110,10 +103,9 @@ class MagicPasteService:
         extract_mode:
         - "vocabulary"（單字集）：一列 = 單字 + 翻譯 + 詞性 + 例句 + 例句翻譯
         - "sentence"（例句集 / 朗讀評測）：一列 = 句子 + 翻譯
-        translate_mode / example_mode: "image_first" | "ai"
-        """
-        translate_rule = cls._translate_rule(translate_mode)
 
+        `level` 目前保留供未來使用；擷取本身不生成例句故不參考。
+        """
         if extract_mode == EXTRACT_MODE_SENTENCE:
             return (
                 "Extract every English sentence from the uploaded file.\n"
@@ -123,24 +115,13 @@ class MagicPasteService:
                 "- `text`: one complete English sentence exactly as it appears in "
                 "the file. Do NOT split a sentence, do NOT merge two sentences, "
                 "and do NOT rewrite it.\n"
-                f"- {translate_rule}\n"
+                f"- {cls._TRANSLATE_RULE}\n"
                 "- Extract sentences only. Do NOT output single words or phrases "
                 "that are not full sentences.\n"
                 "- Preserve the order the sentences appear in the file.\n"
                 '- If the file contains no sentences, return {"items": []}.'
             )
 
-        if example_mode == "ai":
-            example_rule = (
-                "For `example_sentence`: IGNORE any example in the file and ALWAYS "
-                f"generate a natural CEFR {level} example sentence yourself."
-            )
-        else:
-            example_rule = (
-                "For `example_sentence`: use the example sentence shown in the file "
-                "when present; if it is missing, generate a natural CEFR "
-                f"{level} example sentence yourself (AI fallback)."
-            )
         return (
             "Extract every vocabulary entry from the uploaded file.\n"
             "Return JSON of the exact shape: "
@@ -149,13 +130,14 @@ class MagicPasteService:
             '"example_sentence_translation": "..."}]}\n'
             "Rules:\n"
             "- `text`: the English word or phrase being taught.\n"
-            f"- {translate_rule}\n"
+            f"- {cls._TRANSLATE_RULE}\n"
             "- `part_of_speech`: abbreviation such as n. / v. / adj. / adv. "
             "(empty string if unknown).\n"
-            f"- {example_rule}\n"
-            "- `example_sentence_translation`: Traditional Chinese translation of "
-            "the example sentence.\n"
-            "- Every example sentence MUST contain the exact `text`.\n"
+            "- `example_sentence`: copy ONLY an example sentence printed in the "
+            "file. If none is shown, leave it as an empty string. Do NOT generate "
+            "one yourself.\n"
+            "- `example_sentence_translation`: copy ONLY the example's translation "
+            "printed in the file; otherwise leave it empty.\n"
             "- Preserve the order the entries appear in the file.\n"
             '- If the file contains no vocabulary, return {"items": []}.'
         )
@@ -166,13 +148,11 @@ class MagicPasteService:
         self,
         file_bytes: bytes,
         mime_type: str,
-        translate_mode: str = "image_first",
-        example_mode: str = "image_first",
         level: str = "A1",
         extract_mode: str = EXTRACT_MODE_VOCABULARY,
     ) -> Dict[str, Any]:
         """
-        擷取教材內容。
+        擷取教材內容（只抄圖上有的，不 AI 生成翻譯/例句）。
 
         extract_mode:
         - "vocabulary"（單字集）
@@ -188,7 +168,7 @@ class MagicPasteService:
         normalized_mime = (mime_type or "").split(";")[0].strip().lower()
         if normalized_mime == "image/jpg":
             normalized_mime = "image/jpeg"
-        prompt = self._build_prompt(translate_mode, example_mode, level, extract_mode)
+        prompt = self._build_prompt(level, extract_mode)
 
         if self.use_vertex_ai:
             raw, usage, model = await self._extract_vertex(

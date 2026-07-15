@@ -122,9 +122,7 @@ def test_estimate_cost_positive():
 
 
 def test_vocabulary_prompt_asks_for_words_and_examples():
-    prompt = MagicPasteService._build_prompt(
-        "image_first", "image_first", "A1", EXTRACT_MODE_VOCABULARY
-    )
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_VOCABULARY)
     assert "vocabulary entry" in prompt
     assert "example_sentence" in prompt
     assert "part_of_speech" in prompt
@@ -132,9 +130,7 @@ def test_vocabulary_prompt_asks_for_words_and_examples():
 
 def test_sentence_prompt_asks_for_sentences_only():
     """例句集：只要句子 + 翻譯，不能要求單字/詞性/例句欄位。"""
-    prompt = MagicPasteService._build_prompt(
-        "image_first", "image_first", "A1", EXTRACT_MODE_SENTENCE
-    )
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_SENTENCE)
     assert "English sentence" in prompt
     assert "part_of_speech" not in prompt
     assert "example_sentence" not in prompt
@@ -142,17 +138,19 @@ def test_sentence_prompt_asks_for_sentences_only():
     assert "Do NOT output single words" in prompt
 
 
-def test_sentence_prompt_respects_ai_translate_mode():
-    prompt = MagicPasteService._build_prompt(
-        "ai", "image_first", "A1", EXTRACT_MODE_SENTENCE
-    )
-    assert "IGNORE any translation shown in the file" in prompt
+def test_prompt_never_asks_ai_to_generate():
+    """擷取一律只抄圖上有的，不得指示 AI 生成翻譯/例句（改由插入時補洞）。"""
+    for mode in (EXTRACT_MODE_VOCABULARY, EXTRACT_MODE_SENTENCE):
+        prompt = MagicPasteService._build_prompt("A1", mode)
+        assert "Do NOT generate" in prompt
+        assert "copy ONLY" in prompt
+        # 不得出現「請 AI 生成」類指示
+        assert "generate the Traditional Chinese translation" not in prompt
+        assert "generate a natural CEFR" not in prompt
 
 
 def test_unknown_extract_mode_falls_back_to_vocabulary():
-    prompt = MagicPasteService._build_prompt(
-        "image_first", "image_first", "A1", "bogus"
-    )
+    prompt = MagicPasteService._build_prompt("A1", "bogus")
     assert "vocabulary entry" in prompt
 
 

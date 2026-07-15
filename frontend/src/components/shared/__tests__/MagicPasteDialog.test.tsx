@@ -79,7 +79,7 @@ describe("MagicPasteDialog", () => {
     ]);
   });
 
-  it("sentence mode sends extract_mode=sentence and hides the example toggle", async () => {
+  it("sentence mode sends extract_mode=sentence", async () => {
     mockExtract.mockResolvedValue({
       items: [
         {
@@ -105,9 +105,8 @@ describe("MagicPasteDialog", () => {
       />,
     );
 
-    // 例句集沒有「例句」設定（那是單字集才有的欄位）
-    expect(screen.queryByText("例句")).not.toBeInTheDocument();
-    expect(screen.getByText("翻譯")).toBeInTheDocument();
+    // 翻譯/例句模式切換已移除（改由編輯器共用設定在插入時補洞）
+    expect(screen.queryByText("AI 翻譯")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByTestId("magic-paste-file-input"), {
       target: { files: [makeFile()] },

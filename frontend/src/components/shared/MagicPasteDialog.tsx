@@ -30,8 +30,6 @@ export interface MagicPasteItem {
   example_sentence_translation: string;
 }
 
-type Mode = "image_first" | "ai";
-
 /**
  * 擷取模式（依教材類型）：
  * - vocabulary：單字集 → 一列 = 單字 + 翻譯 + 詞性 + 例句
@@ -67,8 +65,6 @@ export default function MagicPasteDialog({
 }: MagicPasteDialogProps) {
   const isSentenceMode = extractMode === "sentence";
   const [file, setFile] = useState<File | null>(null);
-  const [translateMode, setTranslateMode] = useState<Mode>("image_first");
-  const [exampleMode, setExampleMode] = useState<Mode>("image_first");
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<MagicPasteItem[]>([]);
   const [selected, setSelected] = useState<Record<number, boolean>>({});
@@ -109,8 +105,6 @@ export default function MagicPasteDialog({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("translate_mode", translateMode);
-      formData.append("example_mode", exampleMode);
       formData.append("level", level);
       formData.append("extract_mode", extractMode);
       const result = await apiClient.magicPasteExtract(formData);
@@ -202,29 +196,11 @@ export default function MagicPasteDialog({
             </span>
           </label>
 
-          {/* 設定（例句集只需要翻譯設定，沒有「例句」欄位） */}
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="font-medium mb-1">翻譯</p>
-              <ModeToggle
-                value={translateMode}
-                onChange={setTranslateMode}
-                imageLabel="圖片擷取"
-                aiLabel="AI 翻譯"
-              />
-            </div>
-            {!isSentenceMode && (
-              <div>
-                <p className="font-medium mb-1">例句</p>
-                <ModeToggle
-                  value={exampleMode}
-                  onChange={setExampleMode}
-                  imageLabel="圖片擷取"
-                  aiLabel="AI 生成"
-                />
-              </div>
-            )}
-          </div>
+          {/* 擷取只抄圖上有的；翻譯 / 例句 / 語音由編輯器的共用設定在插入時補齊 */}
+          <p className="text-xs text-gray-500">
+            擷取後會依左側「AI 翻譯 / 語音 /
+            例句」設定，在插入時自動補齊缺少的欄位。
+          </p>
 
           {/* 超額提示 */}
           {overLimit && (
@@ -327,42 +303,5 @@ export default function MagicPasteDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ModeToggle({
-  value,
-  onChange,
-  imageLabel,
-  aiLabel,
-}: {
-  value: Mode;
-  onChange: (m: Mode) => void;
-  imageLabel: string;
-  aiLabel: string;
-}) {
-  return (
-    <div className="inline-flex rounded-md border overflow-hidden">
-      <button
-        type="button"
-        className={`px-3 py-1 ${
-          value === "image_first"
-            ? "bg-purple-600 text-white"
-            : "bg-white text-gray-600"
-        }`}
-        onClick={() => onChange("image_first")}
-      >
-        {imageLabel}
-      </button>
-      <button
-        type="button"
-        className={`px-3 py-1 ${
-          value === "ai" ? "bg-purple-600 text-white" : "bg-white text-gray-600"
-        }`}
-        onClick={() => onChange("ai")}
-      >
-        {aiLabel}
-      </button>
-    </div>
   );
 }

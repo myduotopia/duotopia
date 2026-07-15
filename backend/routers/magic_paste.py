@@ -37,8 +37,6 @@ router = APIRouter(prefix="/api/programs", tags=["magic-paste"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/teacher/login")
 
-_VALID_MODES = {"image_first", "ai"}
-
 
 async def get_current_teacher(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
@@ -72,18 +70,15 @@ def magic_paste_quota(
 @router.post("/magic-paste")
 async def magic_paste_extract(
     file: UploadFile = File(...),
-    translate_mode: str = Form("image_first"),
-    example_mode: str = Form("image_first"),
     level: str = Form("A1"),
     extract_mode: str = Form(EXTRACT_MODE_VOCABULARY),
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """上傳單一圖片/PDF，AI 擷取教材內容並回傳供前端預覽（不寫入 DB）。"""
-    if translate_mode not in _VALID_MODES:
-        translate_mode = "image_first"
-    if example_mode not in _VALID_MODES:
-        example_mode = "image_first"
+    """上傳單一圖片/PDF，AI 擷取教材內容並回傳供前端預覽（不寫入 DB）。
+
+    擷取只抄圖上有的翻譯/例句；AI 翻譯/例句/語音改由前端「插入時」補洞。
+    """
     if extract_mode not in EXTRACT_MODES:
         extract_mode = EXTRACT_MODE_VOCABULARY
 
@@ -113,8 +108,6 @@ async def magic_paste_extract(
         result = await service.extract(
             file_bytes=file_bytes,
             mime_type=file.content_type,
-            translate_mode=translate_mode,
-            example_mode=example_mode,
             level=level,
             extract_mode=extract_mode,
         )
