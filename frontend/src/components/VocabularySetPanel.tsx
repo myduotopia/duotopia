@@ -1982,8 +1982,9 @@ const VocabularySetPanel = forwardRef<
     totalSteps: number;
   } | null>(null);
   const batchPauseRef = useRef(false);
-  // 魔術貼上插入後補洞（翻譯）用的一次性旗標（issue #891）
+  // 魔術貼上插入後補洞用的一次性旗標（issue #891）：翻譯 + 詞性
   const magicGapFillRef = useRef(false);
+  const magicPosFillRef = useRef(false);
   const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(
     new Map(),
   );
@@ -2180,55 +2181,61 @@ const VocabularySetPanel = forwardRef<
   };
 
   // 魔術貼上（issue #891）：把 AI 擷取的項目併入現有行。
-  // 若目前只有 1 行且是空的預設行，先清掉以免留下空行。
+  // 先把右側「空白列」（含初始的預設空行）填滿，剩餘的再往下新增。
   const handleMagicPasteInsert = (pastedItems: MagicPasteItem[]) => {
     if (!pastedItems.length) return;
 
-    let baseRows = rows;
-    if (
-      rows.length === 1 &&
-      !rows[0].text.trim() &&
-      !rows[0].definition.trim()
-    ) {
-      baseRows = [];
-    }
+    const isEmptyRow = (r: ContentRow) =>
+      !r.text.trim() && !r.definition.trim();
+    const makeRow = (
+      item: MagicPasteItem,
+      id: string | number,
+    ): ContentRow => ({
+      id,
+      text: item.text,
+      definition: item.translation || "",
+      translation: "",
+      imageUrl: "",
+      selectedWordLanguage: "chinese",
+      partsOfSpeech: item.part_of_speech ? [item.part_of_speech] : undefined,
+      example_sentence: item.example_sentence || "",
+      example_sentence_translation: item.example_sentence_translation || "",
+    });
 
-    const capacity = BATCH_PASTE_MAX - baseRows.length;
+    const filledCount = rows.filter((r) => !isEmptyRow(r)).length;
+    const capacity = BATCH_PASTE_MAX - filledCount;
     if (capacity <= 0) {
       toast.error(t("contentEditor.messages.maxRowsReached"));
       return;
     }
     const toAdd = pastedItems.slice(0, capacity);
 
-    let maxId = Math.max(
-      0,
-      ...baseRows.map((r) => parseInt(String(r.id)) || 0),
-    );
-    const newRows: ContentRow[] = toAdd.map((item) => {
-      maxId += 1;
-      return {
-        id: maxId.toString(),
-        text: item.text,
-        definition: item.translation || "",
-        translation: "",
-        imageUrl: "",
-        selectedWordLanguage: "chinese",
-        partsOfSpeech: item.part_of_speech ? [item.part_of_speech] : undefined,
-        example_sentence: item.example_sentence || "",
-        example_sentence_translation: item.example_sentence_translation || "",
-      };
+    let maxId = Math.max(0, ...rows.map((r) => parseInt(String(r.id)) || 0));
+    let idx = 0;
+    // 1) 先填滿現有空白列（保留原 id）
+    const filled = rows.map((r) => {
+      if (isEmptyRow(r) && idx < toAdd.length) {
+        return makeRow(toAdd[idx++], r.id);
+      }
+      return r;
     });
+    // 2) 剩餘的往下新增
+    const appended: ContentRow[] = [];
+    while (idx < toAdd.length) {
+      maxId += 1;
+      appended.push(makeRow(toAdd[idx++], maxId.toString()));
+    }
 
-    setRows([...baseRows, ...newRows]);
-    // 插入時補洞：有缺翻譯且開了自動翻譯 → 插入後自動補齊（只填空欄，
-    // 圖上已有翻譯的列會被 handleBatchGenerateDefinitions 跳過）。語音/例句
-    // 沿用旁邊既有的批次按鈕。
+    setRows([...filled, ...appended]);
+    // 插入時補洞：翻譯（缺才補）+ 詞性（一律補齊），只填空欄。
     if (
       batchPasteAutoTranslate &&
       toAdd.some((it) => !it.translation?.trim())
     ) {
       magicGapFillRef.current = true;
     }
+    magicPosFillRef.current = true;
+
     if (pastedItems.length > toAdd.length) {
       toast.warning(
         t("contentEditor.messages.batchPasteLimit", { max: BATCH_PASTE_MAX }),
@@ -3350,13 +3357,59 @@ const VocabularySetPanel = forwardRef<
     }
   };
 
-  // 魔術貼上插入後補洞：rows 更新完成後，若旗標亮著就補齊缺少的翻譯。
-  // 用 effect 是為了拿到 setRows 後的最新 rows（handleBatchGenerateDefinitions
-  // 只翻譯缺翻譯的列，圖上已有翻譯者自動略過）。
+  // 只補「詞性」：對有單字但沒詞性的列，用 batchTranslateWithPos 取詞性（忽略其翻譯，
+  // 保留圖上/既有的翻譯）。functional setRows + 再次判空，避免覆蓋翻譯補洞的結果。
+  const fillMissingPosForWords = async () => {
+    const targets = rows
+      .map((r, i) => ({ r, i }))
+      .filter(
+        ({ r }) =>
+          r.text?.trim() && (!r.partsOfSpeech || r.partsOfSpeech.length === 0),
+      );
+    if (!targets.length) return;
+    try {
+      const resp = (await apiClient.batchTranslateWithPos(
+        targets.map((tg) => tg.r.text.trim()),
+        "zh-TW",
+      )) as { results?: { parts_of_speech?: string[] }[] };
+      const results = resp.results || [];
+      setRows((prev) => {
+        const nr = [...prev];
+        targets.forEach((tg, k) => {
+          const pos = results[k]?.parts_of_speech;
+          const cur = nr[tg.i];
+          if (
+            pos?.length &&
+            cur &&
+            (!cur.partsOfSpeech || cur.partsOfSpeech.length === 0)
+          ) {
+            nr[tg.i] = { ...cur, partsOfSpeech: convertAbbreviatedPOS(pos) };
+          }
+        });
+        return nr;
+      });
+    } catch (e) {
+      console.error("POS fill error:", e);
+    }
+  };
+
+  // 魔術貼上插入後補洞：rows 更新後依旗標依序補齊「翻譯」與「詞性」。
+  // 先翻譯（handleBatchGenerateDefinitions 只翻缺翻譯的列、圖上已有者略過，中文路徑
+  // 順帶補詞性），再補剩餘缺詞性的單字。兩步依序 await，避免 setRows 互相覆蓋。
   useEffect(() => {
-    if (!magicGapFillRef.current) return;
+    const needTranslate = magicGapFillRef.current;
+    const needPos = magicPosFillRef.current;
+    if (!needTranslate && !needPos) return;
     magicGapFillRef.current = false;
-    void handleBatchGenerateDefinitions();
+    magicPosFillRef.current = false;
+    void (async () => {
+      if (needTranslate) await handleBatchGenerateDefinitions();
+      if (needPos) {
+        // 等翻譯的 setRows 提交後再補詞性
+        await new Promise((r) => setTimeout(r, 0));
+        await fillMissingPosForWords();
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows]);
 
@@ -4586,6 +4639,27 @@ const VocabularySetPanel = forwardRef<
                 extractMode="vocabulary"
                 level={aiGenerateLevel}
                 onInsert={handleMagicPasteInsert}
+                validateBeforeExtract={() => {
+                  // 勾了翻譯但沒選語言 → 擋下（避免白白消耗配額）
+                  if (batchPasteAutoTranslate && !lastSelectedWordLang)
+                    return t("contentEditor.labels.selectLanguage");
+                  if (
+                    batchPasteAutoTranslate &&
+                    lastSelectedWordLang === "other" &&
+                    !customTranslationLang.trim()
+                  )
+                    return t("contentEditor.labels.enterCustomLanguage");
+                  // 勾了 AI 生成例句但沒選例句翻譯語言 → 擋下
+                  if (aiGenerateExpanded && !aiGenerateTranslateLang)
+                    return t("contentEditor.labels.selectExampleLanguage");
+                  if (
+                    aiGenerateExpanded &&
+                    aiGenerateTranslateLang === "other" &&
+                    !customSentenceTranslationLang.trim()
+                  )
+                    return t("contentEditor.labels.enterCustomLanguage");
+                  return null;
+                }}
               />
             }
           >

@@ -48,6 +48,11 @@ interface MagicPasteInputProps {
   onCancel?: () => void;
   /** 重置訊號改變時清空狀態（開啟 Dialog / 切到本 tab 時用） */
   resetSignal?: unknown;
+  /**
+   * 按「開始擷取」前的把關：回傳錯誤訊息則擋下並提示（例如勾了翻譯卻沒選語言），
+   * 回傳 null 才實際呼叫 AI。避免忘記選語言而白白消耗一次配額。
+   */
+  validateBeforeExtract?: () => string | null;
 }
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif,application/pdf";
@@ -60,6 +65,7 @@ export default function MagicPasteInput({
   onAfterInsert,
   onCancel,
   resetSignal,
+  validateBeforeExtract,
 }: MagicPasteInputProps) {
   const isSentenceMode = extractMode === "sentence";
   const [file, setFile] = useState<File | null>(null);
@@ -97,6 +103,12 @@ export default function MagicPasteInput({
 
   const handleExtract = async () => {
     if (!file) return;
+    // 把關：勾了翻譯/例句卻沒選語言 → 先提示，不浪費配額
+    const validationError = validateBeforeExtract?.();
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
     setLoading(true);
     setOverLimit(false);
     try {

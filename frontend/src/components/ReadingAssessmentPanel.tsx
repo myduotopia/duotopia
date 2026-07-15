@@ -1684,45 +1684,49 @@ const ReadingAssessmentPanel = forwardRef<
 
   // 魔術貼上（issue #891）：AI 擷取的句子併入現有行。
   // 例句集/朗讀評測一列 = 句子(text) + 翻譯(definition)。
-  // 若目前只有 1 行且是空的預設行，先清掉以免留下空行。
+  // 先把右側「空白列」（含初始的預設空行）填滿，剩餘的再往下新增。
   const handleMagicPasteInsert = (pastedItems: MagicPasteItem[]) => {
     if (!pastedItems.length) return;
 
-    let baseRows = rows;
-    if (
-      rows.length === 1 &&
-      !rows[0].text.trim() &&
-      !rows[0].definition.trim()
-    ) {
-      baseRows = [];
-    }
+    const isEmptyRow = (r: ContentRow) =>
+      !r.text.trim() && !r.definition.trim();
+    const makeRow = (
+      item: MagicPasteItem,
+      id: string | number,
+    ): ContentRow => ({
+      id,
+      text: item.text,
+      definition: item.translation || "",
+      translation: "",
+      selectedLanguage: undefined,
+      example_sentence: "",
+      example_sentence_translation: "",
+      example_sentence_definition: "",
+    });
 
-    const capacity = MAX_ROWS - baseRows.length;
+    const filledCount = rows.filter((r) => !isEmptyRow(r)).length;
+    const capacity = MAX_ROWS - filledCount;
     if (capacity <= 0) {
       toast.error(t("contentEditor.messages.maxRowsReached"));
       return;
     }
     const toAdd = pastedItems.slice(0, capacity);
 
-    let maxId = Math.max(
-      0,
-      ...baseRows.map((r) => parseInt(String(r.id)) || 0),
-    );
-    const newRows: ContentRow[] = toAdd.map((item) => {
-      maxId += 1;
-      return {
-        id: maxId.toString(),
-        text: item.text,
-        definition: item.translation || "",
-        translation: "",
-        selectedLanguage: undefined,
-        example_sentence: "",
-        example_sentence_translation: "",
-        example_sentence_definition: "",
-      };
+    let maxId = Math.max(0, ...rows.map((r) => parseInt(String(r.id)) || 0));
+    let idx = 0;
+    const filled = rows.map((r) => {
+      if (isEmptyRow(r) && idx < toAdd.length) {
+        return makeRow(toAdd[idx++], r.id);
+      }
+      return r;
     });
+    const appended: ContentRow[] = [];
+    while (idx < toAdd.length) {
+      maxId += 1;
+      appended.push(makeRow(toAdd[idx++], maxId.toString()));
+    }
 
-    setRows([...baseRows, ...newRows]);
+    setRows([...filled, ...appended]);
     // 插入時補洞：有缺翻譯且開了自動翻譯 → 插入後自動補齊（只填空欄）
     if (
       batchPasteAutoTranslate &&
@@ -2933,6 +2937,17 @@ const ReadingAssessmentPanel = forwardRef<
               <MagicPasteInput
                 extractMode="sentence"
                 onInsert={handleMagicPasteInsert}
+                validateBeforeExtract={() => {
+                  if (batchPasteAutoTranslate && !selectedTranslateLang)
+                    return t("contentEditor.labels.selectLanguage");
+                  if (
+                    batchPasteAutoTranslate &&
+                    selectedTranslateLang === "other" &&
+                    !customTranslateLang.trim()
+                  )
+                    return t("contentEditor.labels.enterCustomLanguage");
+                  return null;
+                }}
               />
             )
           }

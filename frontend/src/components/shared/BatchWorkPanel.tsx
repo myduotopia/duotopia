@@ -11,6 +11,7 @@
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ClipboardList, ImageUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BatchPasteArea } from "./BatchPasteArea";
 import { BatchTTSSettings, type TTSSettingsState } from "./BatchTTSSettings";
@@ -108,7 +109,7 @@ export function BatchWorkPanel({
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              ✏️{" "}
+              <ClipboardList className="h-4 w-4" />
               {t("contentEditor.batchTabs.text", { defaultValue: "貼上文字" })}
             </button>
             <button
@@ -120,7 +121,7 @@ export function BatchWorkPanel({
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              🖼️{" "}
+              <ImageUp className="h-4 w-4" />
               {t("contentEditor.batchTabs.image", {
                 defaultValue: "圖片 / PDF",
               })}
