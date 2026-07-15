@@ -103,6 +103,8 @@ interface GroupedQuestionsTemplateProps {
   items: Question[];
   // answers?: string[]; // 目前未使用
   currentQuestionIndex?: number;
+  // #880: 依派發設定的「顯示句子中文翻譯」開關決定翻譯顯示與否（預設顯示）
+  showTranslation?: boolean;
   isRecording?: boolean;
   recordingTime?: number;
   onStartRecording?: () => void;
@@ -136,6 +138,7 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
   items,
   // answers = [], // 目前未使用
   currentQuestionIndex = 0,
+  showTranslation = true,
   isRecording = false,
   recordingTime = 0,
   onStartRecording,
@@ -747,8 +750,8 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
               </select>
             </div>
 
-            {/* 翻譯 - 響應式字體和內距 */}
-            {currentQuestion?.translation && (
+            {/* 翻譯 - 響應式字體和內距（#880：依派發設定的「顯示翻譯」開關） */}
+            {showTranslation && currentQuestion?.translation && (
               <div className="flex items-start gap-2 text-sm sm:text-base text-purple-600 bg-purple-50 rounded px-2 sm:px-3 py-1.5 sm:py-2">
                 <Languages className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <span className="whitespace-pre-wrap">

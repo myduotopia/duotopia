@@ -191,6 +191,7 @@ interface StudentActivityPageContentProps {
   returnedAt?: string | null; // Issue #689: 退回時間，前端 hearts reset cycle marker
   practiceMode?: string | null; // 例句重組/朗讀模式
   showAnswer?: boolean; // 例句重組：答題結束後是否顯示正確答案
+  showTranslation?: boolean; // #880 例句朗讀：是否顯示句子中文翻譯
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
   timeLimitPerQuestion?: number; // 每題錄音時間限制（秒）
   // Issue #828: 老師實際的顯示設定，預覽小考時用（取代前端寫死的預設值）
@@ -309,6 +310,7 @@ export default function StudentActivityPageContent({
   returnedAt = null,
   practiceMode = null,
   showAnswer = false,
+  showTranslation = true,
   canUseAiAnalysis = true,
   timeLimitPerQuestion = 0,
   previewSettings,
@@ -2104,6 +2106,7 @@ export default function StudentActivityPageContent({
         <GroupedQuestionsTemplate
           items={activity.items}
           currentQuestionIndex={currentSubQuestionIndex}
+          showTranslation={showTranslation}
           isRecording={isRecording}
           recordingTime={recordingTime}
           onStartRecording={startRecording}
@@ -2276,6 +2279,7 @@ export default function StudentActivityPageContent({
           <ReadingAssessmentTemplate
             content={activity.content}
             targetText={activity.target_text}
+            showTranslation={showTranslation}
             existingAudioUrl={answer?.audioUrl}
             onRecordingComplete={handleRecordingComplete}
             exampleAudioUrl={activity.example_audio_url}

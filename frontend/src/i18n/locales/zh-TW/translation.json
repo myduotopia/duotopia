@@ -2038,6 +2038,7 @@
         "targetProficiencyDesc": "學生需達到此熟悉度才算完成作業",
         "showTranslation": "顯示翻譯",
         "showTranslationDesc": "練習時顯示單字的翻譯",
+        "showSentenceTranslationDesc": "練習時顯示句子的中文翻譯",
         "showWord": "顯示單字",
         "showWordDesc": "練習時顯示英文單字",
         "showImage": "顯示圖片",

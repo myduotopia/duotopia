@@ -365,7 +365,8 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     burnsTokens: true,
     autoGraded: false,
     gradable: true,
-    settings: [SELECT_TIME_READING, TOGGLE_SHUFFLE], // 時間選單 10/20/30，預設 20
+    // #880: 例句朗讀補「顯示句子中文翻譯」開關（時間選單 10/20/30，預設 20）
+    settings: [SELECT_TIME_READING, TOGGLE_SHUFFLE, TOGGLE_SHOW_TRANSLATION],
     defaults: { time_limit_per_question: 20 },
     chipTitleKey: `${PM}.reading`,
     chipDescKey: `${PM}.readingDesc`,

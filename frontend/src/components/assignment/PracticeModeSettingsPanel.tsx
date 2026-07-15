@@ -99,10 +99,13 @@ export function PracticeModeSettingsPanel({
 
   const renderToggle = (spec: SettingSpec & { kind: "toggle" }) => {
     // show_answer 在例句重組用不同描述
-    const descKey =
-      spec.key === "show_answer" && mode === "rearrangement"
-        ? `${PM}.showAnswerDesc`
-        : (TOGGLE_DESC[spec.key] ?? "");
+    // #880: show_translation 在例句朗讀是「句子」翻譯，不是單字翻譯
+    let descKey = TOGGLE_DESC[spec.key] ?? "";
+    if (spec.key === "show_answer" && mode === "rearrangement") {
+      descKey = `${PM}.showAnswerDesc`;
+    } else if (spec.key === "show_translation" && mode === "reading") {
+      descKey = `${PM}.showSentenceTranslationDesc`;
+    }
     const lockedByAudio =
       spec.key === "show_answer" && isShowAnswerLockedByAudio(mode, value);
     // Issue #631：缺題目圖片時禁止「開啟」顯示選項圖片（已開啟者可關閉）。

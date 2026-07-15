@@ -1896,6 +1896,7 @@
         "targetProficiencyDesc": "Students must reach this proficiency to complete the assignment",
         "showTranslation": "Show Translation",
         "showTranslationDesc": "Show word translation during practice",
+        "showSentenceTranslationDesc": "Show sentence translation during practice",
         "showWord": "Show Word",
         "showWordDesc": "Show the word in English during practice",
         "showImage": "Show Image",

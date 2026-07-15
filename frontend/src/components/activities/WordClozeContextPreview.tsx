@@ -9,12 +9,14 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import WordClozeActivity from "./WordClozeActivity";
+import { buildClozeBlank } from "./shared/clozeBlank";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
 interface WordClozeContextPreviewProps {
   contentId: number;
   settings: {
     show_translation?: boolean;
+    show_image?: boolean;
     play_audio?: boolean;
     show_answer?: boolean;
     target_proficiency?: number;
@@ -28,6 +30,7 @@ interface ContentItem {
   text: string;
   translation?: string;
   audio_url?: string;
+  image_url?: string;
   example_sentence?: string;
   example_sentence_translation?: string;
   example_sentence_audio_url?: string;
@@ -43,6 +46,7 @@ interface ClozeQuestion {
   audio_url?: string;
   correct_answer: string;
   correct_answer_length: number;
+  image_url?: string | null;
   part_of_speech?: string | null;
   example_sentence?: string | null;
   example_sentence_translation?: string | null;
@@ -57,7 +61,8 @@ function buildBlankedSentence(sentence: string, word: string): string {
     `\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
     "i",
   );
-  return sentence.replace(re, "_____");
+  // #880：挖空長度依「句子裡比對到的那段文字」而定，老師預覽才會跟學生端一致
+  return sentence.replace(re, (matched) => buildClozeBlank(matched));
 }
 
 export default function WordClozeContextPreview({
@@ -117,6 +122,7 @@ export default function WordClozeContextPreview({
           audio_url: item.example_sentence_audio_url,
           correct_answer: item.text,
           correct_answer_length: item.text.length,
+          image_url: item.image_url ?? null,
           part_of_speech: item.part_of_speech ?? null,
           example_sentence: item.example_sentence ?? null,
           example_sentence_translation:
@@ -132,6 +138,7 @@ export default function WordClozeContextPreview({
   const previewSettings = useMemo(
     () => ({
       show_translation: settings.show_translation,
+      show_image: settings.show_image,
       play_audio: settings.play_audio,
       show_answer: settings.show_answer,
       target_proficiency: settings.target_proficiency,
@@ -139,6 +146,7 @@ export default function WordClozeContextPreview({
     }),
     [
       settings.show_translation,
+      settings.show_image,
       settings.play_audio,
       settings.show_answer,
       settings.target_proficiency,

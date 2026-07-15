@@ -138,6 +138,8 @@ export default function WordSpellingActivity({
 
   // Settings
   const [showTranslation, setShowTranslation] = useState(true);
+  // Issue #880: 派發設定的「顯示圖片」開關
+  const [showImage, setShowImage] = useState(true);
   // True when teacher chose "播放音檔" mode — translation is hidden and the
   // audio button becomes the primary hint, so make it visually prominent.
   const [audioOnlyMode, setAudioOnlyMode] = useState(false);
@@ -288,6 +290,7 @@ export default function WordSpellingActivity({
       setShowTranslation(
         (data.show_translation ?? true) && !(data.play_audio ?? false),
       );
+      setShowImage(data.show_image ?? true);
       // play_audio mode forces show_answer=true (server already enforces).
       setShowAnswerOnWrong(
         (data.show_answer ?? false) || (data.play_audio ?? false),
@@ -360,6 +363,7 @@ export default function WordSpellingActivity({
         (previewSettings?.show_translation ?? true) &&
           !(previewSettings?.play_audio ?? false),
       );
+      setShowImage(previewSettings?.show_image ?? true);
       setShowAnswerOnWrong(
         (previewSettings?.show_answer ?? false) ||
           (previewSettings?.play_audio ?? false),
@@ -868,6 +872,14 @@ export default function WordSpellingActivity({
                     seconds={timeRemaining}
                     total={timeLimit}
                     className="absolute top-0 right-0 z-10"
+                  />
+                )}
+                {/* #880-2：依派發設定顯示題目圖片 */}
+                {showImage && currentWord.image_url && (
+                  <img
+                    src={currentWord.image_url}
+                    alt=""
+                    className="mx-auto max-h-40 object-contain"
                   />
                 )}
                 {showTranslation && currentWord.translation && (
