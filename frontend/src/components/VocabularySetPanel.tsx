@@ -4608,6 +4608,47 @@ const VocabularySetPanel = forwardRef<
                 <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">
                   Beta
                 </span>
+                {aiGenerateExpanded && (
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <label className="text-[11px] text-gray-500 shrink-0">
+                      {t("vocabularySet.labels.translateTo")}
+                    </label>
+                    <select
+                      value={aiGenerateTranslateLang}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAiGenerateTranslateLang(val);
+                        if (val !== "other")
+                          setCustomSentenceTranslationLang("");
+                        // 切換語言時清空所有例句翻譯欄位
+                        setRows((prev) =>
+                          prev.map((row) => ({
+                            ...row,
+                            example_sentence_translation: "",
+                            example_sentence_japanese: "",
+                            example_sentence_korean: "",
+                            selectedSentenceLanguage: (val || undefined) as
+                              | SentenceTranslationLanguage
+                              | undefined,
+                          })),
+                        );
+                      }}
+                      className="max-w-[130px] px-2 py-1 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">
+                        {t("contentEditor.labels.selectLanguage")}
+                      </option>
+                      {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
+                        <option key={lang.value} value={lang.value}>
+                          {lang.label}
+                        </option>
+                      ))}
+                      <option value="other">
+                        {t("contentEditor.labels.otherLanguage")}
+                      </option>
+                    </select>
+                  </div>
+                )}
               </div>
               {aiGenerateExpanded && (
                 <div className="px-2.5 pb-2.5 space-y-2">
@@ -4644,46 +4685,7 @@ const VocabularySetPanel = forwardRef<
                     rows={2}
                   />
 
-                  {/* Sentence translation language — 標籤與下拉同一行 */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-[11px] text-gray-500 shrink-0">
-                      {t("vocabularySet.labels.translateTo")}
-                    </label>
-                    <select
-                      value={aiGenerateTranslateLang}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setAiGenerateTranslateLang(val);
-                        if (val !== "other")
-                          setCustomSentenceTranslationLang("");
-                        // 切換語言時清空所有例句翻譯欄位
-                        setRows((prev) =>
-                          prev.map((row) => ({
-                            ...row,
-                            example_sentence_translation: "",
-                            example_sentence_japanese: "",
-                            example_sentence_korean: "",
-                            selectedSentenceLanguage: (val || undefined) as
-                              | SentenceTranslationLanguage
-                              | undefined,
-                          })),
-                        );
-                      }}
-                      className="flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="">
-                        {t("contentEditor.labels.selectLanguage")}
-                      </option>
-                      {SENTENCE_TRANSLATION_LANGUAGES.map((lang) => (
-                        <option key={lang.value} value={lang.value}>
-                          {lang.label}
-                        </option>
-                      ))}
-                      <option value="other">
-                        {t("contentEditor.labels.otherLanguage")}
-                      </option>
-                    </select>
-                  </div>
+                  {/* 「翻譯成」語言選單已移至標題行右上角；此處僅保留自訂語言輸入 */}
                   {aiGenerateTranslateLang === "other" && (
                     <input
                       type="text"
