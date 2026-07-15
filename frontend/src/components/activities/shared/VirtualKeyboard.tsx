@@ -59,7 +59,8 @@ const DISPLAY = {
   "{shift}": "⇧",
   "{bksp}": "⌫",
   "{enter}": "Enter",
-  "{space}": "Space",
+  // #949: 空白鍵不顯示文字（留空），避免 "Space" 字寬把 Enter 擠到跑版。
+  "{space}": " ",
 };
 
 export default function VirtualKeyboard({

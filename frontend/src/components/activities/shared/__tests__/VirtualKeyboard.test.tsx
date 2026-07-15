@@ -28,4 +28,18 @@ describe("VirtualKeyboard", () => {
     const hyphen = getKey(container, "-");
     expect(hyphen?.className).toContain("vk-punct");
   });
+
+  it("空白鍵不顯示 'Space' 文字（留空避免 Enter 跑版）", () => {
+    const { container } = render(<VirtualKeyboard onKey={vi.fn()} onBackspace={vi.fn()} onEnter={vi.fn()} />);
+    const space = getKey(container, "{space}");
+    expect(space).not.toBeNull();
+    expect(space?.textContent?.trim()).toBe("");
+  });
+
+  it("點擊空白鍵仍以空白字元呼叫 onKey", () => {
+    const onKey = vi.fn();
+    const { container } = render(<VirtualKeyboard onKey={onKey} onBackspace={vi.fn()} onEnter={vi.fn()} />);
+    fireEvent.click(getKey(container, "{space}") as HTMLElement);
+    expect(onKey).toHaveBeenCalledWith(" ");
+  });
 });
