@@ -34,9 +34,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
-import MagicPasteDialog, {
+import MagicPasteDialog from "@/components/shared/MagicPasteDialog";
+import MagicPasteInput, {
   type MagicPasteItem,
-} from "@/components/shared/MagicPasteDialog";
+} from "@/components/shared/MagicPasteInput";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import {
   TTS_ACCENTS,
@@ -4580,18 +4581,14 @@ const VocabularySetPanel = forwardRef<
             }}
             isBusy={isBatchPasting}
             progress={batchProgress}
+            imageTab={
+              <MagicPasteInput
+                extractMode="vocabulary"
+                level={aiGenerateLevel}
+                onInsert={handleMagicPasteInsert}
+              />
+            }
           >
-            {/* 魔術貼上（issue #891）*/}
-            <Button
-              variant="outline"
-              onClick={() => setMagicPasteOpen(true)}
-              className="w-full bg-purple-100 hover:bg-purple-200 border-purple-300 text-purple-800"
-              title="從圖片 / PDF 擷取教材"
-            >
-              <Sparkles className="h-4 w-4 mr-1" />
-              魔術貼上（圖片 / PDF）
-            </Button>
-
             {/* AI Generate Examples（緊湊版）*/}
             <div className="mt-3 bg-purple-50/60 rounded-lg border border-purple-200">
               <div className="flex items-center gap-2 p-2.5">

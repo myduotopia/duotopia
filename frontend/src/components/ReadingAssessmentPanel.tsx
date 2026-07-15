@@ -34,9 +34,10 @@ import {
 import { toast } from "sonner";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { apiClient, ApiError } from "@/lib/api";
-import MagicPasteDialog, {
+import MagicPasteDialog from "@/components/shared/MagicPasteDialog";
+import MagicPasteInput, {
   type MagicPasteItem,
-} from "@/components/shared/MagicPasteDialog";
+} from "@/components/shared/MagicPasteInput";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import {
   TTS_ACCENTS,
@@ -2927,21 +2928,15 @@ const ReadingAssessmentPanel = forwardRef<
             handleBatchPaste(batchPasteAutoTTS, batchPasteAutoTranslate)
           }
           isBusy={isPasting}
-        >
-          {/* 魔術貼上（issue #891）— 作業副本不提供 */}
-          {!isAssignmentCopy && (
-            <Button
-              variant="outline"
-              onClick={() => setMagicPasteOpen(true)}
-              disabled={isBatchProcessing}
-              className="w-full bg-purple-100 hover:bg-purple-200 border-purple-300 text-purple-800 disabled:opacity-50"
-              title="從圖片 / PDF 擷取句子"
-            >
-              <Sparkles className="h-4 w-4 mr-1" />
-              魔術貼上（圖片 / PDF）
-            </Button>
-          )}
-        </BatchWorkPanel>
+          imageTab={
+            isAssignmentCopy ? undefined : (
+              <MagicPasteInput
+                extractMode="sentence"
+                onInsert={handleMagicPasteInsert}
+              />
+            )
+          }
+        />
 
         {/* Right: Editor Area */}
         <div className="flex-1 flex flex-col">
