@@ -483,8 +483,16 @@ async def get_word_selection_start(
     assignment: Assignment,
     db: Session,
     exclude_ids: str = "",
+    ignore_stored_distractors: bool = False,
 ) -> dict:
-    """Return word-selection practice data with options/distractors."""
+    """Return word-selection practice data with options/distractors.
+
+    ``ignore_stored_distractors`` (#923 demo): when the display language is
+    overridden at runtime (e.g. a demo visitor flips ``show_image``), the
+    stored distractors — generated for the assignment's original language —
+    would mismatch the correct answer's language. Passing True forces the
+    same-language runtime fallback below instead of reusing stored ones.
+    """
     if assignment.practice_mode not in ("word_selection", "tug_of_war"):
         raise HTTPException(
             status_code=400,
@@ -547,7 +555,7 @@ async def get_word_selection_start(
 
         # Use stored distractors if available (≥3), else fallback to other words
         stored = normalize_distractors(item.distractors)
-        if len(stored) >= 3:
+        if not ignore_stored_distractors and len(stored) >= 3:
             final_distractors = list(stored[:3])
         else:
             target = correct_answer.lower().strip()
@@ -988,6 +996,8 @@ async def get_word_cloze_start(
                 "audio_url": sentence_audio_for_item,
                 "correct_answer": correct_answer,
                 "correct_answer_length": len(correct_answer),
+                # Issue #880: 派發面板的「顯示圖片」開關需要題目圖片才能生效
+                "image_url": ci.image_url,
                 # Issue #715: 答對後翻面顯示完整單字卡所需欄位
                 "part_of_speech": ci.part_of_speech if is_vocab_item else None,
                 "example_sentence": ci.example_sentence if is_vocab_item else None,
@@ -1023,6 +1033,9 @@ async def get_word_cloze_start(
             assignment.show_translation
             if assignment.show_translation is not None
             else True
+        ),
+        "show_image": (
+            assignment.show_image if assignment.show_image is not None else True
         ),
         "play_audio": assignment.play_audio or False,
         "show_answer": assignment.show_answer or False,

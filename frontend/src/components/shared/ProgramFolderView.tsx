@@ -39,6 +39,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  ProgramVisibilitySelector,
+  type ProgramVisibility,
+} from "@/components/ProgramVisibilitySelector";
+import {
   DndContext,
   closestCenter,
   PointerSensor,
@@ -176,6 +180,8 @@ function ProgramCard({
   onEdit,
   onDelete,
   onCopyTo,
+  showVisibility,
+  onVisibilityChange,
 }: {
   program: Program;
   isSelected: boolean;
@@ -183,13 +189,20 @@ function ProgramCard({
   onEdit: () => void;
   onDelete: () => void;
   onCopyTo?: () => void;
+  showVisibility?: boolean;
+  onVisibilityChange?: (
+    programId: number,
+    visibility: ProgramVisibility,
+  ) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const lessons = program.lessons ?? [];
-  const contentCount = lessons.reduce(
-    (sum, l) => sum + (l.contents?.length ?? 0),
-    0,
-  );
+  // Issue #847: include program-direct contents (lesson_id IS NULL, Issue #587)
+  // in the card count — previously only lesson.contents were summed, so the
+  // badge stayed stale after adding content directly under the program.
+  const contentCount =
+    lessons.reduce((sum, l) => sum + (l.contents?.length ?? 0), 0) +
+    (program.contents?.length ?? 0);
 
   return (
     <div
@@ -211,6 +224,18 @@ function ProgramCard({
             <p className="text-white text-xs leading-relaxed line-clamp-4 whitespace-pre-line">
               {program.description}
             </p>
+          </div>
+        )}
+
+        {/* Issue #627: 資源帳號可直接在卡片上設定公開範圍。放在描述遮罩之後，
+            才不會在 hover 時被蓋住 */}
+        {showVisibility && onVisibilityChange && (
+          <div className="absolute top-2 right-2">
+            <ProgramVisibilitySelector
+              programId={program.id}
+              currentVisibility={program.visibility ?? "private"}
+              onVisibilityChange={onVisibilityChange}
+            />
           </div>
         )}
       </div>
@@ -423,7 +448,9 @@ function ContentCard({
                   onInstantPractice();
                 }}
                 title={t("instantPractice.title")}
-                className="pointer-events-auto w-14 h-14 bg-amber-500/60 hover:bg-amber-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors"
+                // #945: after:inset-[-16px] 透明偽元素向四面各外擴 16px（＝兩鈕 gap-8/2）
+                // 作為點擊容錯圈；圈內點歪仍觸發本按鈕而非落到卡片編輯。視覺大小不變。
+                className="relative pointer-events-auto w-14 h-14 bg-amber-500/60 hover:bg-amber-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors after:absolute after:inset-[-16px] after:content-['']"
               >
                 <Play size={24} className="text-white ml-0.5" />
               </button>
@@ -435,7 +462,8 @@ function ContentCard({
                   onAssign();
                 }}
                 title={t("tree.assign")}
-                className="pointer-events-auto w-14 h-14 bg-green-500/60 hover:bg-green-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors"
+                // #945: 同上，點擊容錯圈（四面各 +16px）
+                className="relative pointer-events-auto w-14 h-14 bg-green-500/60 hover:bg-green-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors after:absolute after:inset-[-16px] after:content-['']"
               >
                 <SendHorizontal size={22} className="text-white" />
               </button>
@@ -848,6 +876,12 @@ export interface ProgramFolderViewProps {
     fromIndex: number,
     toIndex: number,
   ) => void;
+  // Issue #627: 只有資源帳號（contact）能設定教材公開範圍
+  showVisibility?: boolean;
+  onVisibilityChange?: (
+    programId: number,
+    visibility: ProgramVisibility,
+  ) => Promise<void>;
 }
 
 export default function ProgramFolderView({
@@ -869,6 +903,8 @@ export default function ProgramFolderView({
   onReorderLessons,
   onReorderContents,
   onReorderProgramContents,
+  showVisibility,
+  onVisibilityChange,
 }: ProgramFolderViewProps) {
   const { t } = useTranslation();
   const [selectedProgramId, setSelectedProgramId] = useState<number | null>(
@@ -952,6 +988,8 @@ export default function ProgramFolderView({
                           ? () => onCopyProgramTo(program.id)
                           : undefined
                       }
+                      showVisibility={showVisibility}
+                      onVisibilityChange={onVisibilityChange}
                     />
                   </SortableItem>
                 ))}

@@ -32,11 +32,8 @@ import QuestionStatBar, {
 // #854: 即刻練習練習畫面上的可收合進階設定
 import InstantPracticeSettingsPanel from "@/components/InstantPracticeSettingsPanel";
 import type { PracticeMode } from "@/lib/practiceMode";
-import {
-  clampPerQuestionTime,
-  clampQuizTime,
-  type PracticeModeSettings,
-} from "@/components/assignment/practiceModeSettings";
+import type { PracticeModeSettings } from "@/components/assignment/practiceModeSettings";
+import { buildInstantPracticeSettings } from "@/lib/instantPracticeSettings";
 
 interface QuizStatQuestion {
   content_item_id: number;
@@ -76,21 +73,8 @@ interface ActivityResponse {
 }
 
 /** 由 preview 回傳組出進階設定面板初值（缺項用合理預設）。 */
-function buildSettings(d: ActivityResponse): PracticeModeSettings {
-  return {
-    time_limit_per_question: clampPerQuestionTime(d.time_limit_per_question),
-    quiz_time_limit_seconds: clampQuizTime(d.quiz_time_limit_seconds),
-    is_live_quiz: Boolean(d.is_live_quiz),
-    shuffle_questions: Boolean(d.shuffle_questions),
-    show_answer: Boolean(d.show_answer),
-    play_audio: Boolean(d.play_audio),
-    target_proficiency: d.target_proficiency ?? 80,
-    show_translation: d.show_translation ?? true,
-    show_word: d.show_word ?? true,
-    show_image: d.show_image ?? true,
-    show_option_images: Boolean(d.show_option_images),
-  };
-}
+const buildSettings = (d: ActivityResponse): PracticeModeSettings =>
+  buildInstantPracticeSettings(d);
 
 export default function TeacherAssignmentPreviewPage() {
   const { t } = useTranslation();

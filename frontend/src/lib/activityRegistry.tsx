@@ -125,6 +125,7 @@ export const DISPATCH_PREVIEW: Partial<
       contentId={contentId ?? vocabFallbackContentId}
       settings={{
         show_translation: settings.show_translation,
+        show_image: settings.show_image,
         play_audio: settings.play_audio,
         show_answer: settings.show_answer,
         time_limit_per_question: settings.time_limit_per_question,
@@ -137,6 +138,7 @@ export const DISPATCH_PREVIEW: Partial<
       contentId={contentId ?? vocabFallbackContentId}
       settings={{
         show_translation: settings.show_translation,
+        show_image: settings.show_image,
         play_audio: settings.play_audio,
         show_answer: settings.show_answer,
         target_proficiency: settings.target_proficiency,
@@ -158,6 +160,7 @@ export const DISPATCH_PREVIEW: Partial<
       contentId={contentId}
       shuffleQuestions={settings.shuffle_questions}
       timeLimitPerQuestion={settings.time_limit_per_question}
+      showTranslation={settings.show_translation}
     />
   ),
 };

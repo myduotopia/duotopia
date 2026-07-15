@@ -2038,6 +2038,7 @@
         "targetProficiencyDesc": "學生需達到此熟悉度才算完成作業",
         "showTranslation": "顯示翻譯",
         "showTranslationDesc": "練習時顯示單字的翻譯",
+        "showSentenceTranslationDesc": "練習時顯示句子的中文翻譯",
         "showWord": "顯示單字",
         "showWordDesc": "練習時顯示英文單字",
         "showImage": "顯示圖片",
@@ -3224,7 +3225,6 @@
     "rearrangement": {
       "labels": {
         "errors": "錯誤",
-        "correctWords": "正確選字",
         "retryCount": "重試",
         "expectedScore": "分數",
         "timedOut": "超時結束",
@@ -3232,12 +3232,18 @@
         "selected": "選擇",
         "expected": "應選",
         "completedAt": "完成時間",
-        "detailedHistoryComingSoon": "更詳細的作答紀錄 Coming Soon"
+        "scorePoints": "{{score}} 分",
+        "attemptCount": "{{count}} 次嘗試",
+        "totalErrors": "共 {{count}} 次錯誤",
+        "showingRecent": "僅顯示最近 {{count}} 次",
+        "noHistory": "無作答紀錄"
       },
       "badges": {
         "completed": "完成",
         "incomplete": "未達標",
-        "notAnswered": "尚未作答"
+        "notAnswered": "尚未作答",
+        "timeout": "超時",
+        "forceRetry": "強制重來"
       }
     }
   },
@@ -3385,7 +3391,12 @@
       "errorsSuffix": "個錯誤——請查看伺服器記錄",
       "notLinked": "您的帳號尚未綁定 1Campus，請先以 1Campus 方式登入",
       "rateLimited": "剛剛已觸發過同步，請稍候片刻再試",
-      "failed": "1Campus 同步失敗，請稍後再試"
+      "failed": "1Campus 同步失敗，請稍後再試",
+      "confirm": {
+        "title": "確定要同步到個人帳號嗎？",
+        "message": "個人帳號下，班級使用 AI 點數將從老師個人點數扣除；如果學生屬於機構，請於機構內匯入班級。",
+        "confirmButton": "仍要同步"
+      }
     }
   },
   "teacherStudents": {

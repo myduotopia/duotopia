@@ -74,6 +74,23 @@ _CLOZE_STOPWORDS = frozenset(
 )
 
 
+def build_blank(matched_text: str) -> str:
+    """Render the blank placeholder for the text being blanked out (#880).
+
+    One underscore per WORD (not per letter): a single-word answer renders as a
+    single blank box, and a phrase answer renders as one box per word — so
+    "two pieces of cake" becomes "_ _ _ _" (four boxes). The blank does not
+    reveal the letter count.
+
+    The frontend (``ClozeBlankText``) renders one box per underscore run, so
+    each space-separated underscore becomes its own box.
+    """
+    words = matched_text.split()
+    if not words:
+        return "_"
+    return " ".join("_" for _ in words)
+
+
 def find_cloze_match(
     answer: str, example_sentence: str
 ) -> Optional[Tuple[int, int, str]]:
@@ -120,7 +137,7 @@ def extract_cloze(base_word: str, example_sentence: str) -> Optional[Tuple[str, 
     if not match:
         return None
     start, end, actual = match
-    blanked = example_sentence[:start] + "_____" + example_sentence[end:]
+    blanked = example_sentence[:start] + build_blank(actual) + example_sentence[end:]
     return blanked, actual
 
 
@@ -148,7 +165,7 @@ def pick_cloze_target_from_sentence(sentence: str) -> Optional[Tuple[str, str]]:
 
     best = max(candidates, key=lambda x: (len(x[2]), -x[0]))
     start, end, word = best
-    blanked = sentence[:start] + "_____" + sentence[end:]
+    blanked = sentence[:start] + build_blank(word) + sentence[end:]
     return blanked, word
 
 
@@ -170,7 +187,7 @@ def extract_cloze_for_item(content_item) -> Optional[Tuple[str, str]]:
         match = find_cloze_match(persisted, example)
         if match:
             start, end, actual = match
-            blanked = example[:start] + "_____" + example[end:]
+            blanked = example[:start] + build_blank(actual) + example[end:]
             return blanked, actual
 
     # Strategy 1: VOCABULARY_SET — base word + example sentence

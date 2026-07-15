@@ -1896,6 +1896,7 @@
         "targetProficiencyDesc": "Students must reach this proficiency to complete the assignment",
         "showTranslation": "Show Translation",
         "showTranslationDesc": "Show word translation during practice",
+        "showSentenceTranslationDesc": "Show sentence translation during practice",
         "showWord": "Show Word",
         "showWordDesc": "Show the word in English during practice",
         "showImage": "Show Image",
@@ -3081,7 +3082,6 @@
     "rearrangement": {
       "labels": {
         "errors": "Errors",
-        "correctWords": "Correct Words",
         "retryCount": "Retries",
         "expectedScore": "Score",
         "timedOut": "Timed Out",
@@ -3089,12 +3089,18 @@
         "selected": "Selected",
         "expected": "Expected",
         "completedAt": "Completed at",
-        "detailedHistoryComingSoon": "Detailed answer history Coming Soon"
+        "scorePoints": "{{score}} pts",
+        "attemptCount": "{{count}} attempts",
+        "totalErrors": "{{count}} errors total",
+        "showingRecent": "Showing last {{count}}",
+        "noHistory": "No answer history"
       },
       "badges": {
         "completed": "Completed",
         "incomplete": "Below passing",
-        "notAnswered": "Not answered"
+        "notAnswered": "Not answered",
+        "timeout": "Timed out",
+        "forceRetry": "Forced retry"
       }
     }
   },
@@ -3386,7 +3392,12 @@
       "errorsSuffix": "error(s) — see logs",
       "notLinked": "Your account is not linked to 1Campus. Log in via 1Campus first.",
       "rateLimited": "Sync was triggered recently — please wait a minute and try again.",
-      "failed": "Failed to start 1Campus sync. Please try again."
+      "failed": "Failed to start 1Campus sync. Please try again.",
+      "confirm": {
+        "title": "Sync into your personal account?",
+        "message": "AI point usage for classes under your personal account will be deducted from your personal points. If the students belong to an organization, please import the class within the organization instead.",
+        "confirmButton": "Sync anyway"
+      }
     }
   },
   "teacherStudents": {

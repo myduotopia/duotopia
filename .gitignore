@@ -154,3 +154,22 @@ worktrees/
 
 # Social media content generation (local only)
 docs/social-media/
+
+# Tutorial video subproject (video/): source in video/src is tracked;
+# rendered output and large media assets are kept local only
+/output/
+/video/out/
+/video/node_modules/
+/video/public/
+
+# Pencil design working files (kept local)
+*.pen
+
+# Local one-off debug/investigation scripts (do not commit)
+backend/check_*.py
+backend/query_*.py
+backend/scan_*.py
+backend/summary_*.py
+
+# Claude Code per-user local settings (do not commit)
+.claude/settings.local.json

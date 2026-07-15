@@ -191,6 +191,7 @@ interface StudentActivityPageContentProps {
   returnedAt?: string | null; // Issue #689: 退回時間，前端 hearts reset cycle marker
   practiceMode?: string | null; // 例句重組/朗讀模式
   showAnswer?: boolean; // 例句重組：答題結束後是否顯示正確答案
+  showTranslation?: boolean; // #880 例句朗讀：是否顯示句子中文翻譯
   canUseAiAnalysis?: boolean; // 教師/機構是否有 AI 分析額度
   timeLimitPerQuestion?: number; // 每題錄音時間限制（秒）
   // Issue #828: 老師實際的顯示設定，預覽小考時用（取代前端寫死的預設值）
@@ -309,6 +310,7 @@ export default function StudentActivityPageContent({
   returnedAt = null,
   practiceMode = null,
   showAnswer = false,
+  showTranslation = true,
   canUseAiAnalysis = true,
   timeLimitPerQuestion = 0,
   previewSettings,
@@ -1935,7 +1937,9 @@ export default function StudentActivityPageContent({
     // 沒有對應 StudentAssignment → 404。改走 QuizPreview wrapper（拿 teacher
     // API 抓 content 後以 previewWords 注入 QuizActivity），跳過學生端 API。
     if (practiceMode === "word_spelling_quiz") {
-      if (isPreviewMode) {
+      // #923: demo visitors go through the real *QuizActivity (demo endpoints),
+      // NOT the teacher-only *QuizPreview wrapper (which hits /api/teachers → 401).
+      if (isPreviewMode && !isDemoMode) {
         return (
           // #861 D: 改用 assignmentId → 後端合併「所有單字集」題目並依設定打亂
           <WordSpellingQuizPreview
@@ -1963,7 +1967,8 @@ export default function StudentActivityPageContent({
       );
     }
     if (practiceMode === "word_cloze_quiz") {
-      if (isPreviewMode) {
+      // #923: demo visitors go through the real *QuizActivity (demo endpoints).
+      if (isPreviewMode && !isDemoMode) {
         return (
           // #861 D: 改用 assignmentId → 後端合併「所有單字集」題目並依設定打亂
           <WordClozeQuizPreview
@@ -1990,7 +1995,8 @@ export default function StudentActivityPageContent({
       );
     }
     if (practiceMode === "word_selection_quiz") {
-      if (isPreviewMode) {
+      // #923: demo visitors go through the real *QuizActivity (demo endpoints).
+      if (isPreviewMode && !isDemoMode) {
         return (
           // #861 D: 改用 assignmentId → 後端合併「所有單字集」題目並依設定打亂，
           // 取代原本每個 activity（單一單字集）各別預覽只顯示 1 組的行為。
@@ -2100,6 +2106,7 @@ export default function StudentActivityPageContent({
         <GroupedQuestionsTemplate
           items={activity.items}
           currentQuestionIndex={currentSubQuestionIndex}
+          showTranslation={showTranslation}
           isRecording={isRecording}
           recordingTime={recordingTime}
           onStartRecording={startRecording}
@@ -2272,6 +2279,7 @@ export default function StudentActivityPageContent({
           <ReadingAssessmentTemplate
             content={activity.content}
             targetText={activity.target_text}
+            showTranslation={showTranslation}
             existingAudioUrl={answer?.audioUrl}
             onRecordingComplete={handleRecordingComplete}
             exampleAudioUrl={activity.example_audio_url}
@@ -2403,6 +2411,9 @@ export default function StudentActivityPageContent({
             onComplete={() => {
               onBack?.();
             }}
+            // 拔河以 fixed inset-0 z-50 全螢幕覆蓋外層 sticky header，
+            // 把「進階設定」入口 thread 進拔河自己的 header 才看得到。
+            headerActions={headerActions}
           />
         );
       }
@@ -2559,7 +2570,9 @@ export default function StudentActivityPageContent({
 
               <div className="flex items-center gap-2 sm:gap-3 justify-end flex-shrink-0">
                 {/* #854: 即刻練習「⚡ 進階設定」觸發鈕（向下下拉浮層）注入點 */}
-                {headerActions}
+                {/* #945: 拔河模式由 TugOfWarGame 自己的 header 渲染 headerActions，
+                    這裡不再渲染，避免在被 z-50 遮住的 sticky header 裡留一顆殭屍按鈕 */}
+                {practiceMode === "tug_of_war" ? null : headerActions}
                 {saving && (
                   <div className="flex items-center gap-1 sm:gap-2 text-xs text-gray-600">
                     <Loader2 className="h-3 w-3 animate-spin" />

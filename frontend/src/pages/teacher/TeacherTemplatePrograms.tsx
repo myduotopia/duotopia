@@ -814,6 +814,8 @@ function TeacherTemplateProgramsInner() {
         ) : (
           <ProgramFolderView
             programs={filteredPrograms}
+            showVisibility={isResourceAccount}
+            onVisibilityChange={handleVisibilityChange}
             onEditProgram={handleEditProgram}
             onDeleteProgram={handleDeleteProgram}
             onCopyProgramTo={

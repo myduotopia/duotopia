@@ -14,6 +14,7 @@ interface Props {
   contentId?: number;
   settings: {
     show_translation?: boolean;
+    show_image?: boolean;
     play_audio?: boolean;
     show_answer?: boolean;
     time_limit_per_question?: number;
@@ -145,12 +146,14 @@ export default function WordClozeQuizPreview({
   const previewSettings = useMemo(
     () => ({
       show_translation: settings.show_translation,
+      show_image: settings.show_image,
       play_audio: settings.play_audio,
       show_answer: settings.show_answer,
       time_limit_per_question: settings.time_limit_per_question ?? null,
     }),
     [
       settings.show_translation,
+      settings.show_image,
       settings.play_audio,
       settings.show_answer,
       settings.time_limit_per_question,

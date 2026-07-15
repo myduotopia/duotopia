@@ -40,6 +40,7 @@ import {
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { apiClient } from "@/lib/api";
+import { withDemoOverrides } from "@/lib/demoOverrides";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
 import VirtualKeyboard from "./shared/VirtualKeyboard";
@@ -65,6 +66,8 @@ interface ClozeQuestion {
   // preview/demo mode (mirrors how word_selection exposes translation).
   correct_answer: string;
   correct_answer_length: number;
+  // Issue #880: 依派發設定的「顯示圖片」開關決定是否顯示題目圖片
+  image_url?: string | null;
   // Issue #715: 答對後翻面顯示完整單字卡所需欄位
   part_of_speech?: string | null;
   example_sentence?: string | null;
@@ -100,6 +103,7 @@ interface WordClozeActivityProps {
   previewQuestions?: ClozeQuestion[];
   previewSettings?: {
     show_translation?: boolean;
+    show_image?: boolean;
     play_audio?: boolean;
     show_answer?: boolean;
     target_proficiency?: number;
@@ -140,6 +144,8 @@ export default function WordClozeActivity({
   const quizInputRef = useRef<QuizAnswerInputHandle>(null);
 
   const [showTranslation, setShowTranslation] = useState(true);
+  // Issue #880: 派發設定的「顯示圖片」開關
+  const [showImage, setShowImage] = useState(true);
   const [audioOnlyMode, setAudioOnlyMode] = useState(false);
   // Issue #867: 老師開「答錯顯示答案」(或播放音檔模式強制) 時，答錯後以紅色
   // placeholder 在 input 顯示正解；學生再次輸入即消失（#828 重構時誤刪，此處還原）。
@@ -244,7 +250,9 @@ export default function WordClozeActivity({
           : "";
 
       const apiEndpoint = isDemoMode
-        ? `/api/demo/assignments/${assignmentId}/preview/word-cloze-start${excludeParam}`
+        ? withDemoOverrides(
+            `/api/demo/assignments/${assignmentId}/preview/word-cloze-start${excludeParam}`,
+          )
         : isPreviewMode
           ? `/api/teachers/assignments/${assignmentId}/preview/word-cloze-start${excludeParam}`
           : `/api/students/assignments/${assignmentId}/vocabulary/cloze/start`;
@@ -265,6 +273,7 @@ export default function WordClozeActivity({
         achieved: boolean;
         is_practice_mode?: boolean;
         show_translation: boolean;
+        show_image?: boolean;
         play_audio: boolean;
         show_answer?: boolean;
         time_limit_per_question: number | null;
@@ -278,6 +287,7 @@ export default function WordClozeActivity({
       setShowTranslation(
         (data.show_translation ?? true) && !(data.play_audio ?? false),
       );
+      setShowImage(data.show_image ?? true);
       // play_audio mode forces show_answer=true.
       setShowAnswerOnWrong(
         (data.show_answer ?? false) || (data.play_audio ?? false),
@@ -351,6 +361,7 @@ export default function WordClozeActivity({
         (previewSettings?.show_translation ?? true) &&
           !(previewSettings?.play_audio ?? false),
       );
+      setShowImage(previewSettings?.show_image ?? true);
       setShowAnswerOnWrong(
         (previewSettings?.show_answer ?? false) ||
           (previewSettings?.play_audio ?? false),
@@ -885,15 +896,14 @@ export default function WordClozeActivity({
                 )}
 
                 <div className="max-w-2xl mx-auto text-center py-2 space-y-2">
-                  {currentQ.part_of_speech && (
-                    <div className="flex justify-center">
-                      <Badge
-                        variant="secondary"
-                        className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
-                      >
-                        {currentQ.part_of_speech}
-                      </Badge>
-                    </div>
+                  {/* #880-3-3：作答畫面不顯示詞性 chip（答完後的單字卡正面仍會顯示） */}
+                  {/* #880-2：依派發設定顯示題目圖片 */}
+                  {showImage && currentQ.image_url && (
+                    <img
+                      src={currentQ.image_url}
+                      alt=""
+                      className="mx-auto max-h-40 object-contain"
+                    />
                   )}
                   <p className="quiz-question-font leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
                     <ClozeBlankText text={currentQ.blanked_sentence} />

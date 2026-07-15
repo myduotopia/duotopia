@@ -24,10 +24,10 @@ import { Loader2, Send, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
+import { withDemoOverrides } from "@/lib/demoOverrides";
 import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { useShortLandscape } from "./shared/useShortLandscape";
@@ -37,6 +37,7 @@ import QuizAnswerInput, {
   type QuizAnswerInputHandle,
 } from "./shared/QuizAnswerInput";
 import ClozeBlankText from "./shared/ClozeBlankText";
+import { buildClozeBlank } from "./shared/clozeBlank";
 import VirtualKeyboard from "./shared/VirtualKeyboard";
 import CardNavArrow from "./shared/CardNavArrow";
 import QuizReviewView, {
@@ -99,6 +100,9 @@ interface Props {
  * Build a sentence with the cloze answer replaced by a visible blank.
  * Case-insensitive replace on the first occurrence keeps the original
  * casing visible elsewhere (e.g. proper nouns earlier in the sentence).
+ *
+ * #880：挖空長度取自句子裡「實際比對到的那段文字」，不是答案字串本身，
+ * 才不會在大小寫/字形不同時算錯格數。
  */
 const buildBlanked = (sentence: string, answer: string): string => {
   if (!sentence) return "";
@@ -106,8 +110,9 @@ const buildBlanked = (sentence: string, answer: string): string => {
   const idx = sentence.toLowerCase().indexOf(answer.toLowerCase());
   if (idx < 0) return sentence;
   const before = sentence.slice(0, idx);
+  const matched = sentence.slice(idx, idx + answer.length);
   const after = sentence.slice(idx + answer.length);
-  return `${before}_____${after}`;
+  return `${before}${buildClozeBlank(matched)}${after}`;
 };
 
 export default function WordClozeQuizActivity({
@@ -144,6 +149,8 @@ export default function WordClozeQuizActivity({
   const [reviewLoading, setReviewLoading] = useState(false);
   const [settings, setSettings] = useState({
     show_translation: true,
+    // Issue #880: 派發設定的「顯示圖片」開關（原本被 setSettings 漏掉）
+    show_image: true,
     play_audio: false,
     show_answer: false,
   });
@@ -190,6 +197,7 @@ export default function WordClozeQuizActivity({
       setWords(previewWords || []);
       setSettings({
         show_translation: previewSettings?.show_translation ?? true,
+        show_image: previewSettings?.show_image ?? true,
         play_audio: previewSettings?.play_audio ?? false,
         show_answer: previewSettings?.show_answer ?? false,
       });
@@ -200,6 +208,28 @@ export default function WordClozeQuizActivity({
     const run = async () => {
       setLoading(true);
       try {
+        if (isDemoMode) {
+          // #923: public demo mirrors the teacher-preview quiz-start (non-live).
+          // No session / prior answers; submission is short-circuited elsewhere.
+          const demo = (await apiClient.get(
+            withDemoOverrides(
+              `/api/demo/assignments/${assignmentId}/preview/cloze-quiz-start`,
+            ),
+          )) as StartResponse;
+          if (cancelled) return;
+          setWords(demo.words);
+          setSessionId(null);
+          setQuizStatus(null);
+          setSettings({
+            show_translation: demo.show_translation,
+            show_image: demo.show_image ?? true,
+            play_audio: demo.play_audio,
+            show_answer: demo.show_answer,
+          });
+          setInitialRemaining(null);
+          setTimerTotal(demo.quiz_time_limit_seconds ?? null);
+          return;
+        }
         const data = (await apiClient.get(
           `/api/students/assignments/${assignmentId}/vocabulary/cloze_quiz/start`,
         )) as StartResponse;
@@ -224,6 +254,7 @@ export default function WordClozeQuizActivity({
         }
         setSettings({
           show_translation: data.show_translation,
+          show_image: data.show_image ?? true,
           play_audio: data.play_audio,
           show_answer: data.show_answer,
         });
@@ -251,7 +282,14 @@ export default function WordClozeQuizActivity({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId, isLivePreview, previewSettings, previewWords, t]);
+  }, [
+    assignmentId,
+    isDemoMode,
+    isLivePreview,
+    previewSettings,
+    previewWords,
+    t,
+  ]);
 
   const currentWord = words[currentIndex];
 
@@ -678,6 +716,15 @@ export default function WordClozeQuizActivity({
                   </div>
                 )}
 
+                {/* #880-2：依派發設定顯示題目圖片 */}
+                {settings.show_image && currentWord.image_url && (
+                  <img
+                    src={currentWord.image_url}
+                    alt=""
+                    className="mx-auto max-h-40 object-contain"
+                  />
+                )}
+
                 {/* 樣式對齊 WordClozeActivity (艾賓浩斯版) */}
                 {settings.play_audio &&
                   currentWord.example_sentence_audio_url && (
@@ -696,16 +743,7 @@ export default function WordClozeQuizActivity({
                   )}
 
                 <div className="max-w-2xl mx-auto text-center py-2 space-y-2">
-                  {currentWord.part_of_speech && (
-                    <div className="flex justify-center">
-                      <Badge
-                        variant="secondary"
-                        className="bg-gray-200 text-gray-700 hover:bg-gray-200 font-normal"
-                      >
-                        {currentWord.part_of_speech}
-                      </Badge>
-                    </div>
-                  )}
+                  {/* #880-3-3：作答畫面不顯示詞性 chip（答完後的單字卡正面仍會顯示） */}
                   <p className="quiz-question-font leading-relaxed text-gray-800 font-semibold px-4 tracking-wide">
                     <ClozeBlankText text={blanked} />
                   </p>

@@ -1,0 +1,68 @@
+{
+  "classrooms": {
+    "clip": "ep1/clips/classrooms.mp4",
+    "clipDurationSec": 2.891,
+    "freezeShot": "ep1/clips/classrooms_last.png",
+    "sfx": []
+  },
+  "create": {
+    "clip": "ep1/clips/create.mp4",
+    "clipDurationSec": 14.0,
+    "freezeShot": "ep1/clips/create_last.png",
+    "sfx": [
+      {
+        "t": 2.046,
+        "type": "click"
+      },
+      {
+        "t": 5.64,
+        "type": "click"
+      },
+      {
+        "t": 9.14,
+        "type": "click"
+      }
+    ]
+  },
+  "students": {
+    "clip": "ep1/clips/students.mp4",
+    "clipDurationSec": 10.765,
+    "freezeShot": "ep1/clips/students_last.png",
+    "sfx": [
+      {
+        "t": 3.906,
+        "type": "click"
+      },
+      {
+        "t": 8.421,
+        "type": "click"
+      }
+    ]
+  },
+  "addstudent": {
+    "clip": "ep1/clips/addstudent.mp4",
+    "clipDurationSec": 6.922,
+    "freezeShot": "ep1/clips/addstudent_last.png",
+    "sfx": [
+      {
+        "t": 1.828,
+        "type": "click"
+      },
+      {
+        "t": 5.375,
+        "type": "click"
+      }
+    ]
+  },
+  "password": {
+    "clip": "ep1/clips/password.mp4",
+    "clipDurationSec": 7.391,
+    "freezeShot": "ep1/clips/password_last.png",
+    "sfx": [
+      {
+        "t": 1.922,
+        "type": "click"
+      }
+    ]
+  }
+}

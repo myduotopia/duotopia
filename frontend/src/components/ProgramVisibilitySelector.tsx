@@ -8,7 +8,7 @@ import {
 import { Globe, Lock, Building2, User } from "lucide-react";
 import { toast } from "sonner";
 
-type ProgramVisibility =
+export type ProgramVisibility =
   | "private"
   | "public"
   | "organization_only"

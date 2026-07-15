@@ -29,6 +29,7 @@ from models import (
 from services.preview_service import get_sentence_fields, _VOCABULARY_CONTENT_TYPES
 from services.quota_service import QuotaService
 from utils.cloze import extract_cloze_for_item
+from utils.rearrangement_history import archive_current_attempt
 from .dependencies import get_current_student
 from .quiz_assignments import score_and_finalize_quiz
 from .validators import (
@@ -685,11 +686,15 @@ async def get_assignment_activities(
     practice_mode = None
     show_answer = False
     score_category = None
+    # Issue #880: 例句朗讀的「顯示句子中文翻譯」開關（未設定時預設顯示）
+    show_translation = True
     parent_assignment = _parent_assignment if student_assignment.assignment_id else None
     if parent_assignment:
         practice_mode = parent_assignment.practice_mode
         show_answer = parent_assignment.show_answer or False
         score_category = parent_assignment.score_category
+        if parent_assignment.show_translation is not None:
+            show_translation = parent_assignment.show_translation
 
     # 檢查 AI 分析額度（根據作業所屬班級判斷：機構班級→機構點數，個人班級→個人配額）
     can_use_ai_analysis = (
@@ -711,6 +716,7 @@ async def get_assignment_activities(
         ),
         "practice_mode": practice_mode,  # 前端用來判斷顯示哪個元件
         "show_answer": show_answer,  # 例句重組：答題結束後是否顯示正確答案
+        "show_translation": show_translation,  # 例句朗讀：是否顯示句子中文翻譯
         "score_category": score_category,  # 分數記錄分類
         "time_limit_per_question": (
             parent_assignment.time_limit_per_question if parent_assignment else None
@@ -2732,6 +2738,8 @@ async def start_word_cloze_practice(
                 "audio_url": sentence_audio_for_item,
                 "correct_answer": correct_answer,
                 "correct_answer_length": len(correct_answer),
+                # Issue #880: 派發面板的「顯示圖片」開關需要題目圖片才能生效
+                "image_url": ci.image_url,
                 # Issue #715: 答對後翻面顯示完整單字卡所需欄位
                 "part_of_speech": ci.part_of_speech if is_vocab_item else None,
                 "example_sentence": ci.example_sentence if is_vocab_item else None,
@@ -2799,6 +2807,7 @@ async def start_word_cloze_practice(
         "all_mastered": all_mastered,
         "is_practice_mode": is_practice_mode,
         "show_translation": (assignment.show_translation if assignment else True),
+        "show_image": (assignment.show_image if assignment else True),
         "play_audio": assignment.play_audio if assignment else False,
         "show_answer": assignment.show_answer if assignment else False,
         "time_limit_per_question": (
@@ -3316,7 +3325,10 @@ async def submit_rearrangement_answer(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     )
-    progress.rearrangement_data = {"selections": selections}
+    # 合併寫回，保留既有 attempts / retries（不可整包覆蓋，否則會清掉封存的歷程）
+    data = dict(progress.rearrangement_data or {})
+    data["selections"] = selections
+    progress.rearrangement_data = data
 
     # 檢查是否達到錯誤上限
     challenge_failed = progress.error_count >= max_errors
@@ -3397,13 +3409,43 @@ async def retry_rearrangement(
     if not progress:
         raise HTTPException(status_code=404, detail="Progress not found")
 
+    # 封存「剛結束（強制重來 / 超時）那一輪」到 attempts[]，再開新一輪。
+    # 逐字挑選在前端本地驗證、不經 answer endpoint，故選字歷程以前端回傳為權威；
+    # 沒帶時（舊前端）退回後端累積值，只是通常為空 → 不新增空白列。
+    round_selections = (
+        [s.model_dump() for s in request.selections]
+        if request.selections is not None
+        else (progress.rearrangement_data or {}).get("selections")
+    )
+    ended_reason = "timeout" if request.timeout else "force_retry"
+    attempts = archive_current_attempt(
+        progress.rearrangement_data,
+        error_count=(
+            request.error_count
+            if request.error_count is not None
+            else (progress.error_count or 0)
+        ),
+        expected_score=(
+            request.expected_score
+            if request.expected_score is not None
+            else (progress.expected_score or 0)
+        ),
+        ended_reason=ended_reason,
+        ended_at=datetime.now(timezone.utc).isoformat(),
+        selections=round_selections,
+    )
+
     # 重置進度
     progress.error_count = 0
     progress.correct_word_count = 0
     progress.expected_score = 100.0
     progress.retry_count = (progress.retry_count or 0) + 1
     progress.status = "IN_PROGRESS"
-    progress.rearrangement_data = {"selections": [], "retries": progress.retry_count}
+    progress.rearrangement_data = {
+        "attempts": attempts,
+        "selections": [],
+        "retries": progress.retry_count,
+    }
 
     db.commit()
 
@@ -3447,15 +3489,28 @@ async def complete_rearrangement(
         .first()
     )
 
-    # 組裝 rearrangement_data（包含完整答題歷程）
-    rearrangement_data = {}
-    if request.selections:
-        rearrangement_data["selections"] = [s.model_dump() for s in request.selections]
-    rearrangement_data["completed_at"] = datetime.now(timezone.utc).isoformat()
-    rearrangement_data["timeout"] = request.timeout
+    now_iso = datetime.now(timezone.utc).isoformat()
+    ended_reason = "timeout" if request.timeout else "completed"
+    request_selections = (
+        [s.model_dump() for s in request.selections] if request.selections else None
+    )
 
     if not progress:
         # 防禦性：建立新記錄（正常情況下應該已存在）
+        attempt_selections = request_selections or []
+        rearrangement_data = {
+            "attempts": archive_current_attempt(
+                None,
+                error_count=request.error_count or 0,
+                expected_score=request.expected_score or 0,
+                ended_reason=ended_reason,
+                ended_at=now_iso,
+                selections=attempt_selections,
+            ),
+            "selections": attempt_selections,
+            "completed_at": now_iso,
+            "timeout": request.timeout,
+        }
         progress = StudentItemProgress(
             student_assignment_id=student_assignment_id,
             content_item_id=request.content_item_id,
@@ -3477,9 +3532,21 @@ async def complete_rearrangement(
         if request.error_count is not None:
             progress.error_count = request.error_count
 
-        # 合併答題歷程（保留既有 retries 等資訊）
-        existing_data = progress.rearrangement_data or {}
-        existing_data.update(rearrangement_data)
+        # 封存當次選字歷程到 attempts[]（完成 / 超時），保留既有 attempts / retries
+        # selections 以後端逐字累積為準，前端 request.selections 為 fallback
+        existing_data = dict(progress.rearrangement_data or {})
+        attempt_selections = existing_data.get("selections") or request_selections or []
+        existing_data["attempts"] = archive_current_attempt(
+            existing_data,
+            error_count=progress.error_count or 0,
+            expected_score=progress.expected_score or 0,
+            ended_reason=ended_reason,
+            ended_at=now_iso,
+            selections=attempt_selections,
+        )
+        existing_data["selections"] = attempt_selections
+        existing_data["completed_at"] = now_iso
+        existing_data["timeout"] = request.timeout
         progress.rearrangement_data = existing_data
 
     db.commit()

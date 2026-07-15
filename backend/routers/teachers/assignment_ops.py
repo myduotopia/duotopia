@@ -15,7 +15,7 @@ from fastapi import (
     Form,
 )
 from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 from database import get_db
 from models import Teacher, Classroom, Student, Program, Lesson, Content, ContentItem
@@ -293,39 +293,9 @@ async def preview_selection_quiz_start(
         )
 
     # Lazy import 避免 teacher ↔ student router 的 import-time 循環
-    from routers.students.quiz_assignments import (
-        _load_quiz_items,
-        _build_selection_options,
-        _attach_question_numbers,
-        _common_settings,
-    )
-    from utils.distractors import text_field_for_show_image
+    from routers.students.quiz_assignments import build_selection_quiz_payload
 
-    items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
-    options_by_item = _build_selection_options(items, assignment)
-    show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(show_image)
-
-    def builder(item: ContentItem) -> Dict[str, Any]:
-        correct = getattr(item, answer_key) or ""
-        return {
-            "content_item_id": item.id,
-            "text": item.text,
-            "translation": item.translation or "",
-            "correct_text": correct,
-            "audio_url": item.audio_url,
-            "image_url": item.image_url,
-            "options": options_by_item[item.id],
-        }
-
-    words = _attach_question_numbers(items, builder)
-    return {
-        "practice_mode": "word_selection_quiz",
-        "words": words,
-        "total_questions": len(words),
-        **_common_settings(assignment),
-        "show_option_images": bool(assignment.show_option_images),
-    }
+    return build_selection_quiz_payload(assignment, db)
 
 
 @router.get("/assignments/{assignment_id}/preview/spelling-quiz-start")
@@ -346,34 +316,9 @@ async def preview_spelling_quiz_start(
             detail="This assignment is not a word_spelling_quiz",
         )
 
-    from routers.students.quiz_assignments import (
-        _load_quiz_items,
-        _attach_question_numbers,
-        _common_settings,
-    )
+    from routers.students.quiz_assignments import build_spelling_quiz_payload
 
-    items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
-
-    def builder(item: ContentItem) -> Dict[str, Any]:
-        return {
-            "content_item_id": item.id,
-            "text": item.text,
-            "translation": item.translation or "",
-            "audio_url": item.audio_url,
-            "image_url": item.image_url,
-            "part_of_speech": item.part_of_speech,
-            "example_sentence": item.example_sentence,
-            "example_sentence_translation": item.example_sentence_translation,
-            "example_sentence_audio_url": item.example_sentence_audio_url,
-        }
-
-    words = _attach_question_numbers(items, builder)
-    return {
-        "practice_mode": "word_spelling_quiz",
-        "words": words,
-        "total_questions": len(words),
-        **_common_settings(assignment),
-    }
+    return build_spelling_quiz_payload(assignment, db)
 
 
 @router.get("/assignments/{assignment_id}/preview/cloze-quiz-start")
@@ -395,36 +340,9 @@ async def preview_cloze_quiz_start(
             detail="This assignment is not a word_cloze_quiz",
         )
 
-    from routers.students.quiz_assignments import (
-        _load_quiz_items,
-        _attach_question_numbers,
-        _common_settings,
-        _resolve_cloze_answer,
-    )
+    from routers.students.quiz_assignments import build_cloze_quiz_payload
 
-    items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
-
-    def builder(item: ContentItem) -> Dict[str, Any]:
-        return {
-            "content_item_id": item.id,
-            "text": item.text,
-            "translation": item.translation or "",
-            "part_of_speech": item.part_of_speech,
-            "example_sentence": item.example_sentence or "",
-            "example_sentence_translation": item.example_sentence_translation or "",
-            "example_sentence_audio_url": item.example_sentence_audio_url,
-            "cloze_answer": _resolve_cloze_answer(item),
-            "image_url": item.image_url,
-            "audio_url": item.audio_url,
-        }
-
-    words = _attach_question_numbers(items, builder)
-    return {
-        "practice_mode": "word_cloze_quiz",
-        "words": words,
-        "total_questions": len(words),
-        **_common_settings(assignment),
-    }
+    return build_cloze_quiz_payload(assignment, db)
 
 
 @router.post("/assignments/{assignment_id}/preview/word-selection-answer")

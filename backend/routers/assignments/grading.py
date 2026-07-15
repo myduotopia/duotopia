@@ -53,6 +53,7 @@ from services.analysis_quota import (
     reset_analysis_count_for_assignment,
     reset_analysis_count_for_assignments,
 )
+from services.preview_service import get_sentence_fields
 from .utils import (
     process_audio_with_whisper,
     calculate_text_similarity,
@@ -576,6 +577,17 @@ async def get_student_submission(
 
                     # 例句重組專用：補上 max_errors（來自 content_item）
                     if practice_mode == "rearrangement":
+                        # 與學生端出題一致：單字集（VOCABULARY_SET）要用
+                        # example_sentence 當題目，不是 item.text（單字本身）。
+                        # 唯一判定邏輯見 services.preview_service.get_sentence_fields。
+                        fields = get_sentence_fields(
+                            item, content.type, "rearrangement"
+                        )
+                        if fields is not None:
+                            q_text, q_translation, q_audio = fields
+                            submission["question_text"] = q_text
+                            submission["question_translation"] = q_translation
+                            submission["question_audio_url"] = q_audio
                         submission["max_errors"] = (
                             item.max_errors if hasattr(item, "max_errors") else None
                         )

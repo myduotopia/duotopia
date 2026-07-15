@@ -8,6 +8,7 @@ matching and are left to teacher confirmation/override per the #632 UX.
 from types import SimpleNamespace
 
 from utils.cloze import (
+    build_blank,
     compute_cloze_answer,
     extract_cloze,
     extract_cloze_for_item,
@@ -20,7 +21,7 @@ class TestExtractCloze:
     def test_exact_match(self):
         blanked, answer = extract_cloze("cup", "I drink from a cup.")
         assert answer == "cup"
-        assert "_____" in blanked
+        assert "_" in blanked
         assert "cup" not in blanked
 
     def test_plural_prefix_match(self):
@@ -172,4 +173,42 @@ class TestExtractClozeForItem:
         blanked, answer = extract_cloze_for_item(item)
         # longest content word picked
         assert answer == "elephant"
-        assert "_____" in blanked
+        # 單字答案 → 單一挖空格（不透露字母數）
+        assert "_" in blanked
+        assert "elephant" not in blanked
+
+
+class TestBuildBlank:
+    """#880: 挖空格數等於答案的「單字數量」（不是字母數）。"""
+
+    def test_single_word_is_one_blank(self):
+        assert build_blank("cup") == "_"
+        assert build_blank("elephant") == "_"
+
+    def test_multiword_one_blank_per_word(self):
+        assert build_blank("two pieces of cake") == "_ _ _ _"
+
+    def test_empty_falls_back_to_single_blank(self):
+        assert build_blank("") == "_"
+        assert build_blank("   ") == "_"
+
+
+class TestBlankIsWordCount:
+    """挖空格數跟著答案的單字數量走，與字母數無關。"""
+
+    def test_single_word_blank_regardless_of_length(self):
+        blanked, answer = extract_cloze("cup", "I have two cups on the table.")
+        assert answer == "cups"
+        # "cups" 是一個單字 → 一個挖空格
+        assert blanked == "I have two _ on the table."
+
+    def test_multiword_persisted_answer(self):
+        item = SimpleNamespace(
+            text="cake",
+            example_sentence="I ate two pieces of cake.",
+            cloze_answer="two pieces of cake",
+        )
+        blanked, answer = extract_cloze_for_item(item)
+        assert answer == "two pieces of cake"
+        # 四個單字 → 四個挖空格
+        assert blanked == "I ate _ _ _ _."

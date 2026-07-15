@@ -29,6 +29,9 @@ interface AssessmentResult {
 interface ReadingAssessmentProps {
   content: string;
   targetText: string;
+  // #880: 例句朗讀時 content 帶的是句子的中文翻譯，依派發設定決定顯示與否。
+  // 其他用途（未知題型 fallback）不傳，預設顯示，行為不變。
+  showTranslation?: boolean;
   existingAudioUrl?: string | null; // 現有的錄音（例如重刷頁面後）
   onRecordingComplete?: (blob: Blob, url: string) => void; // 錄音完成回調
   exampleAudioUrl?: string;
@@ -48,6 +51,7 @@ interface ReadingAssessmentProps {
 export default function ReadingAssessmentTemplate({
   content,
   targetText,
+  showTranslation = true,
   existingAudioUrl,
   onRecordingComplete,
   exampleAudioUrl,
@@ -243,9 +247,12 @@ export default function ReadingAssessmentTemplate({
             <h2 className="text-3xl font-medium text-gray-900 leading-relaxed whitespace-pre-wrap">
               {targetText}
             </h2>
-            <p className="text-lg text-gray-600 whitespace-pre-wrap">
-              {content}
-            </p>
+            {/* #880: content 為句子的中文翻譯，依派發設定的「顯示翻譯」開關顯示 */}
+            {showTranslation && content && (
+              <p className="text-lg text-gray-600 whitespace-pre-wrap">
+                {content}
+              </p>
+            )}
           </div>
 
           {/* 🎯 錄音元件 - 使用統一的 AudioRecorder */}
