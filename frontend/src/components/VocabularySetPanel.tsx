@@ -4736,7 +4736,7 @@ const VocabularySetPanel = forwardRef<
   }
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-200px)]">
+    <div className="flex flex-col h-full min-h-[calc(100vh-160px)] max-h-[calc(100vh-160px)]">
       {/* Fixed Header Section */}
       <div className="flex-shrink-0 space-y-4 pb-4">
         {/* Title Input - Show in both create and edit mode */}
