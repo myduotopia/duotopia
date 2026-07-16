@@ -2188,6 +2188,24 @@ const VocabularySetPanel = forwardRef<
 
     const isEmptyRow = (r: ContentRow) =>
       !r.text.trim() && !r.definition.trim();
+    // 例句是否包含該單字或其變化形（run→running/runs、happy→happier、study→studies…）。
+    // 片語用子字串比對；單字用「整字 / 前綴關係 / 共同字首 ≥4」的啟發式。
+    const exampleContainsWord = (word: string, example: string): boolean => {
+      const w = (word || "").trim().toLowerCase();
+      const s = (example || "").toLowerCase();
+      if (!w || !s) return false;
+      if (w.includes(" ")) return s.includes(w);
+      const tokens = s.match(/[a-z]+(?:['-][a-z]+)*/g) || [];
+      return tokens.some((tk) => {
+        if (tk === w) return true;
+        if (tk.startsWith(w) || w.startsWith(tk))
+          return Math.min(tk.length, w.length) >= 3;
+        let common = 0;
+        const n = Math.min(tk.length, w.length);
+        while (common < n && tk[common] === w[common]) common++;
+        return common >= 4;
+      });
+    };
     // 克漏字答案：把單字設為例句中的挖空詞（整字比對、保留例句原始大小寫）。
     // 單字沒完整出現在例句中就不預設（例如變化形，交給老師手動挑）。
     const deriveClozeAnswer = (word: string, example: string): string => {
@@ -2198,7 +2216,12 @@ const VocabularySetPanel = forwardRef<
       return m ? m[0] : "";
     };
     const makeRow = (item: MagicPasteItem, id: string | number): ContentRow => {
-      const example = item.example_sentence || "";
+      // 例句沒有對應到該單字（或變化形）→ 留空，不硬塞不相干的句子。
+      const example =
+        item.example_sentence &&
+        exampleContainsWord(item.text, item.example_sentence)
+          ? item.example_sentence
+          : "";
       return {
         id,
         text: item.text,
@@ -2208,7 +2231,9 @@ const VocabularySetPanel = forwardRef<
         selectedWordLanguage: "chinese",
         partsOfSpeech: item.part_of_speech ? [item.part_of_speech] : undefined,
         example_sentence: example,
-        example_sentence_translation: item.example_sentence_translation || "",
+        example_sentence_translation: example
+          ? item.example_sentence_translation || ""
+          : "",
         cloze_answer: deriveClozeAnswer(item.text, example),
       };
     };
