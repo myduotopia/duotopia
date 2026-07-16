@@ -1982,10 +1982,11 @@ const VocabularySetPanel = forwardRef<
     totalSteps: number;
   } | null>(null);
   const batchPauseRef = useRef(false);
-  // 魔術貼上插入後補洞用的一次性旗標（issue #891）：翻譯 + 詞性 + 例句翻譯
+  // 魔術貼上插入後補洞用的一次性旗標（issue #891）：翻譯 + 詞性 + 例句翻譯 + 語音
   const magicGapFillRef = useRef(false);
   const magicPosFillRef = useRef(false);
   const magicExampleFillRef = useRef(false);
+  const magicTtsFillRef = useRef(false);
   const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(
     new Map(),
   );
@@ -2280,6 +2281,10 @@ const VocabularySetPanel = forwardRef<
       )
     ) {
       magicExampleFillRef.current = true;
+    }
+    // 勾了 AI 生成語音 → 插入時補單字與例句音檔
+    if (batchPasteAutoTTS) {
+      magicTtsFillRef.current = true;
     }
 
     if (pastedItems.length > toAdd.length) {
@@ -3502,16 +3507,107 @@ const VocabularySetPanel = forwardRef<
     }
   };
 
-  // 魔術貼上插入後補洞：rows 更新後依旗標依序補齊「翻譯 → 詞性 → 例句翻譯」。
+  // 只補「音檔」：勾了 AI 生成語音時，對缺單字音檔、缺例句音檔的列各自產生 TTS。
+  // 沿用左側語音設定（口音/性別/語速）；Random 時逐題不同語音，否則批次同一語音。
+  const fillMissingAudio = async () => {
+    const toFullUrl = (u: string) =>
+      u.startsWith("http") ? u : `${import.meta.env.VITE_API_URL}${u}`;
+    const wordTargets = rows
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => r.text?.trim() && !r.audioUrl && !r.audio_url);
+    const exampleTargets = rows
+      .map((r, i) => ({ r, i }))
+      .filter(
+        ({ r }) => r.example_sentence?.trim() && !r.example_sentence_audio_url,
+      );
+    if (!wordTargets.length && !exampleTargets.length) return;
+
+    const isRandom = batchTTSAccent === "Random" || batchTTSGender === "Random";
+    const genOne = async (text: string): Promise<string> => {
+      const { voice, rate } = getVoiceAndRate(
+        batchTTSAccent,
+        batchTTSGender,
+        batchTTSSpeed,
+      );
+      const r = await apiClient.generateTTS(text, voice, rate, "+0%");
+      return r && typeof r === "object" && "audio_url" in r
+        ? toFullUrl((r as { audio_url: string }).audio_url)
+        : "";
+    };
+    const genBatch = async (texts: string[]): Promise<string[]> => {
+      const { voice, rate } = getVoiceAndRate(
+        batchTTSAccent,
+        batchTTSGender,
+        batchTTSSpeed,
+      );
+      const r = await apiClient.batchGenerateTTS(texts, voice, rate, "+0%");
+      return r &&
+        typeof r === "object" &&
+        "audio_urls" in r &&
+        Array.isArray((r as { audio_urls: string[] }).audio_urls)
+        ? (r as { audio_urls: string[] }).audio_urls.map(toFullUrl)
+        : [];
+    };
+
+    const wordUrls: Record<number, string> = {};
+    const exampleUrls: Record<number, string> = {};
+    try {
+      if (isRandom) {
+        for (const t of wordTargets) {
+          const u = await genOne(t.r.text!.trim());
+          if (u) wordUrls[t.i] = u;
+        }
+        for (const t of exampleTargets) {
+          const u = await genOne(t.r.example_sentence!.trim());
+          if (u) exampleUrls[t.i] = u;
+        }
+      } else {
+        if (wordTargets.length) {
+          const urls = await genBatch(wordTargets.map((t) => t.r.text!.trim()));
+          wordTargets.forEach((t, k) => {
+            if (urls[k]) wordUrls[t.i] = urls[k];
+          });
+        }
+        if (exampleTargets.length) {
+          const urls = await genBatch(
+            exampleTargets.map((t) => t.r.example_sentence!.trim()),
+          );
+          exampleTargets.forEach((t, k) => {
+            if (urls[k]) exampleUrls[t.i] = urls[k];
+          });
+        }
+      }
+      setRows((prev) => {
+        const nr = [...prev];
+        Object.entries(wordUrls).forEach(([i, url]) => {
+          const idx = Number(i);
+          if (nr[idx] && !nr[idx].audioUrl)
+            nr[idx] = { ...nr[idx], audioUrl: url };
+        });
+        Object.entries(exampleUrls).forEach(([i, url]) => {
+          const idx = Number(i);
+          if (nr[idx] && !nr[idx].example_sentence_audio_url)
+            nr[idx] = { ...nr[idx], example_sentence_audio_url: url };
+        });
+        return nr;
+      });
+    } catch (e) {
+      console.error("audio fill error:", e);
+    }
+  };
+
+  // 魔術貼上插入後補洞：rows 更新後依旗標依序補齊「翻譯 → 詞性 → 例句翻譯 → 語音」。
   // 依序 await（各步之間 tick 讓 setRows 提交），避免 setRows 互相覆蓋。
   useEffect(() => {
     const needTranslate = magicGapFillRef.current;
     const needPos = magicPosFillRef.current;
     const needExample = magicExampleFillRef.current;
-    if (!needTranslate && !needPos && !needExample) return;
+    const needTts = magicTtsFillRef.current;
+    if (!needTranslate && !needPos && !needExample && !needTts) return;
     magicGapFillRef.current = false;
     magicPosFillRef.current = false;
     magicExampleFillRef.current = false;
+    magicTtsFillRef.current = false;
     void (async () => {
       if (needTranslate) await handleBatchGenerateDefinitions();
       if (needPos) {
@@ -3521,6 +3617,10 @@ const VocabularySetPanel = forwardRef<
       if (needExample) {
         await new Promise((r) => setTimeout(r, 0));
         await fillMissingExampleTranslations();
+      }
+      if (needTts) {
+        await new Promise((r) => setTimeout(r, 0));
+        await fillMissingAudio();
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
