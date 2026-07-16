@@ -2188,20 +2188,30 @@ const VocabularySetPanel = forwardRef<
 
     const isEmptyRow = (r: ContentRow) =>
       !r.text.trim() && !r.definition.trim();
-    const makeRow = (
-      item: MagicPasteItem,
-      id: string | number,
-    ): ContentRow => ({
-      id,
-      text: item.text,
-      definition: item.translation || "",
-      translation: "",
-      imageUrl: "",
-      selectedWordLanguage: "chinese",
-      partsOfSpeech: item.part_of_speech ? [item.part_of_speech] : undefined,
-      example_sentence: item.example_sentence || "",
-      example_sentence_translation: item.example_sentence_translation || "",
-    });
+    // 克漏字答案：把單字設為例句中的挖空詞（整字比對、保留例句原始大小寫）。
+    // 單字沒完整出現在例句中就不預設（例如變化形，交給老師手動挑）。
+    const deriveClozeAnswer = (word: string, example: string): string => {
+      const w = (word || "").trim();
+      if (!w || !example) return "";
+      const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const m = example.match(new RegExp(`\\b${escaped}\\b`, "i"));
+      return m ? m[0] : "";
+    };
+    const makeRow = (item: MagicPasteItem, id: string | number): ContentRow => {
+      const example = item.example_sentence || "";
+      return {
+        id,
+        text: item.text,
+        definition: item.translation || "",
+        translation: "",
+        imageUrl: "",
+        selectedWordLanguage: "chinese",
+        partsOfSpeech: item.part_of_speech ? [item.part_of_speech] : undefined,
+        example_sentence: example,
+        example_sentence_translation: item.example_sentence_translation || "",
+        cloze_answer: deriveClozeAnswer(item.text, example),
+      };
+    };
 
     const filledCount = rows.filter((r) => !isEmptyRow(r)).length;
     const capacity = BATCH_PASTE_MAX - filledCount;
