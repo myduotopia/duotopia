@@ -9,8 +9,9 @@
  * 只負責「擷取 + 預覽 + 回傳」；插入後的翻譯/例句/語音補洞由呼叫端處理。
  */
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Sparkles, Upload, Loader2, AlertCircle } from "lucide-react";
+import { Sparkles, Upload, Loader2, AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiClient } from "@/lib/api";
@@ -67,6 +68,7 @@ export default function MagicPasteInput({
   resetSignal,
   validateBeforeExtract,
 }: MagicPasteInputProps) {
+  const { t } = useTranslation();
   const isSentenceMode = extractMode === "sentence";
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -87,13 +89,20 @@ export default function MagicPasteInput({
       .catch(() => setQuota(null));
   }, [resetSignal]);
 
+  const handleReset = () => {
+    setFile(null);
+    setItems([]);
+    setSelected({});
+    setOverLimit(false);
+  };
+
   const handleFile = (f: File | null) => {
     if (!f) {
       setFile(null);
       return;
     }
     if (f.size > MAX_BYTES) {
-      toast.error("檔案過大（上限 10MB）");
+      toast.error(t("contentEditor.magicPaste.fileTooLarge"));
       return;
     }
     setFile(f);
@@ -120,8 +129,8 @@ export default function MagicPasteInput({
       if (!result.items.length) {
         toast.error(
           isSentenceMode
-            ? "這張圖片沒有擷取到句子，請換一張試試"
-            : "這張圖片沒有擷取到單字，請換一張試試",
+            ? t("contentEditor.magicPaste.noSentenceExtracted")
+            : t("contentEditor.magicPaste.noWordExtracted"),
         );
       }
       setItems(result.items);
@@ -136,7 +145,7 @@ export default function MagicPasteInput({
       if (err.status === 402) {
         setOverLimit(true);
       } else {
-        toast.error(err.message || "AI 擷取失敗，請稍後再試");
+        toast.error(err.message || t("contentEditor.magicPaste.extractFailed"));
       }
     } finally {
       setLoading(false);
@@ -153,7 +162,7 @@ export default function MagicPasteInput({
 
   const handleInsert = () => {
     if (!selectedItems.length) {
-      toast.error("請至少勾選一個項目");
+      toast.error(t("contentEditor.magicPaste.selectAtLeastOne"));
       return;
     }
     onInsert(selectedItems);
@@ -168,31 +177,43 @@ export default function MagicPasteInput({
       {/* 配額提示 */}
       {quota && (
         <p className="text-xs text-gray-500">
-          本月免費剩餘{" "}
-          <span className="font-semibold text-purple-600">
-            {quota.free_remaining}
-          </span>{" "}
-          / {quota.free_limit} 張，超額以點數計費
+          {t("contentEditor.magicPaste.quota", {
+            remaining: quota.free_remaining,
+            limit: quota.free_limit,
+          })}
         </p>
       )}
 
-      {/* 上傳區 */}
-      <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-purple-400">
-        <input
-          type="file"
-          accept={ACCEPT}
-          className="hidden"
-          data-testid="magic-paste-file-input"
-          onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-        />
-        <Upload className="h-5 w-5 text-gray-400 mb-1" />
-        <span className="text-xs text-gray-600 text-center break-all">
-          {file ? file.name : "選擇圖片或 PDF（一次一張）"}
-        </span>
-      </label>
+      {/* 上傳區（選好檔或擷取後，右上角有取消按鈕可清掉重來） */}
+      <div className="relative">
+        <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-purple-400">
+          <input
+            type="file"
+            accept={ACCEPT}
+            className="hidden"
+            data-testid="magic-paste-file-input"
+            onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+          />
+          <Upload className="h-5 w-5 text-gray-400 mb-1" />
+          <span className="text-xs text-gray-600 text-center break-all">
+            {file ? file.name : t("contentEditor.magicPaste.pickFile")}
+          </span>
+        </label>
+        {(file || items.length > 0) && (
+          <button
+            type="button"
+            onClick={handleReset}
+            aria-label={t("contentEditor.magicPaste.cancel")}
+            title={t("contentEditor.magicPaste.cancel")}
+            className="absolute top-1.5 right-1.5 p-1 rounded-full bg-white/90 border border-gray-200 text-gray-500 hover:text-gray-700 hover:bg-gray-100 shadow-sm"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
 
       <p className="text-[11px] text-gray-400 leading-snug">
-        擷取後依上方「AI 翻譯 / 語音 / 例句」設定，在插入時自動補齊缺少的欄位。
+        {t("contentEditor.magicPaste.autoFillHint")}
       </p>
 
       {/* 超額提示 */}
@@ -200,11 +221,11 @@ export default function MagicPasteInput({
         <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800">
           <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
           <span>
-            本月免費次數已用完且點數不足，請
+            {t("contentEditor.magicPaste.overLimitPre")}
             <a href="/pricing" className="underline font-medium mx-1">
-              訂閱方案或購買點數
+              {t("contentEditor.magicPaste.overLimitLink")}
             </a>
-            後再使用。
+            {t("contentEditor.magicPaste.overLimitPost")}
           </span>
         </div>
       )}
@@ -213,7 +234,7 @@ export default function MagicPasteInput({
       {items.length > 0 && (
         <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
           <p className="text-xs font-medium text-gray-700">
-            擷取結果（勾選要插入的，可直接改）
+            {t("contentEditor.magicPaste.previewHint")}
           </p>
           {items.map((it, i) => (
             <div
@@ -233,7 +254,11 @@ export default function MagicPasteInput({
                     isSentenceMode ? "col-span-2" : ""
                   }`}
                   value={it.text}
-                  placeholder={isSentenceMode ? "句子" : "單字"}
+                  placeholder={t(
+                    isSentenceMode
+                      ? "contentEditor.magicPaste.phSentence"
+                      : "contentEditor.magicPaste.phWord",
+                  )}
                   onChange={(e) => updateItem(i, { text: e.target.value })}
                 />
                 <input
@@ -241,7 +266,7 @@ export default function MagicPasteInput({
                     isSentenceMode ? "col-span-2" : ""
                   }`}
                   value={it.translation}
-                  placeholder="翻譯"
+                  placeholder={t("contentEditor.magicPaste.phTranslation")}
                   onChange={(e) =>
                     updateItem(i, { translation: e.target.value })
                   }
@@ -250,7 +275,7 @@ export default function MagicPasteInput({
                   <input
                     className="border rounded px-1.5 py-1 text-xs col-span-2 min-w-0"
                     value={it.example_sentence}
-                    placeholder="例句"
+                    placeholder={t("contentEditor.magicPaste.phExample")}
                     onChange={(e) =>
                       updateItem(i, { example_sentence: e.target.value })
                     }
@@ -273,12 +298,12 @@ export default function MagicPasteInput({
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                擷取中…
+                {t("contentEditor.magicPaste.extracting")}
               </>
             ) : (
               <>
                 <Sparkles className="h-4 w-4 mr-1" />
-                開始擷取
+                {t("contentEditor.magicPaste.start")}
               </>
             )}
           </Button>
@@ -287,12 +312,14 @@ export default function MagicPasteInput({
             onClick={handleInsert}
             className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
           >
-            插入 {selectedItems.length} 個項目
+            {t("contentEditor.magicPaste.insertN", {
+              count: selectedItems.length,
+            })}
           </Button>
         )}
         {onCancel && (
           <Button variant="outline" onClick={onCancel}>
-            取消
+            {t("contentEditor.magicPaste.cancel")}
           </Button>
         )}
       </div>

@@ -21,6 +21,14 @@ vi.mock("sonner", () => ({
   },
 }));
 
+// i18n 未在測試初始化 → t 直接回 key，斷言改用 key
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+    i18n: { language: "zh-TW" },
+  }),
+}));
+
 function makeFile(name = "words.png", type = "image/png") {
   return new File([new Uint8Array([1, 2, 3])], name, { type });
 }
@@ -42,7 +50,7 @@ describe("MagicPasteDialog", () => {
   it("fetches quota and shows remaining free count on open", async () => {
     render(<MagicPasteDialog open onClose={vi.fn()} onInsert={vi.fn()} />);
     await waitFor(() => expect(mockQuota).toHaveBeenCalled());
-    expect(await screen.findByText(/本月免費剩餘/)).toBeInTheDocument();
+    expect(await screen.findByText(/magicPaste.quota/)).toBeInTheDocument();
   });
 
   it("extracts and inserts selected items", async () => {
@@ -67,13 +75,13 @@ describe("MagicPasteDialog", () => {
     const input = screen.getByTestId("magic-paste-file-input");
     fireEvent.change(input, { target: { files: [makeFile()] } });
 
-    fireEvent.click(screen.getByRole("button", { name: /開始擷取/ }));
+    fireEvent.click(screen.getByRole("button", { name: /magicPaste.start/ }));
     await waitFor(() => expect(mockExtract).toHaveBeenCalled());
 
     // preview row rendered
     expect(await screen.findByDisplayValue("apple")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /插入 1 個項目/ }));
+    fireEvent.click(screen.getByRole("button", { name: /magicPaste.insertN/ }));
     expect(onInsert).toHaveBeenCalledWith([
       expect.objectContaining({ text: "apple", translation: "蘋果" }),
     ]);
@@ -106,12 +114,12 @@ describe("MagicPasteDialog", () => {
     );
 
     // 翻譯/例句模式切換已移除（改由編輯器共用設定在插入時補洞）
-    expect(screen.queryByText("AI 翻譯")).not.toBeInTheDocument();
+    expect(screen.queryByText("AI translate toggle")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByTestId("magic-paste-file-input"), {
       target: { files: [makeFile()] },
     });
-    fireEvent.click(screen.getByRole("button", { name: /開始擷取/ }));
+    fireEvent.click(screen.getByRole("button", { name: /magicPaste.start/ }));
     await waitFor(() => expect(mockExtract).toHaveBeenCalled());
 
     // FormData 帶了 extract_mode=sentence
@@ -122,7 +130,7 @@ describe("MagicPasteDialog", () => {
     expect(
       await screen.findByDisplayValue("I eat an apple every morning."),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /插入 1 個項目/ }));
+    fireEvent.click(screen.getByRole("button", { name: /magicPaste.insertN/ }));
     expect(onInsert).toHaveBeenCalledWith([
       expect.objectContaining({ text: "I eat an apple every morning." }),
     ]);
@@ -140,7 +148,7 @@ describe("MagicPasteDialog", () => {
     fireEvent.change(screen.getByTestId("magic-paste-file-input"), {
       target: { files: [makeFile()] },
     });
-    fireEvent.click(screen.getByRole("button", { name: /開始擷取/ }));
+    fireEvent.click(screen.getByRole("button", { name: /magicPaste.start/ }));
     await waitFor(() => expect(mockExtract).toHaveBeenCalled());
 
     const formData = mockExtract.mock.calls[0][0] as FormData;
@@ -155,7 +163,9 @@ describe("MagicPasteDialog", () => {
     fireEvent.change(screen.getByTestId("magic-paste-file-input"), {
       target: { files: [makeFile()] },
     });
-    fireEvent.click(screen.getByRole("button", { name: /開始擷取/ }));
-    expect(await screen.findByText(/訂閱方案或購買點數/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /magicPaste.start/ }));
+    expect(
+      await screen.findByText(/magicPaste.overLimitLink/),
+    ).toBeInTheDocument();
   });
 });

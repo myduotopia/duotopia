@@ -2216,6 +2216,11 @@ const VocabularySetPanel = forwardRef<
       const m = example.match(new RegExp(`\\b${escaped}\\b`, "i"));
       return m ? m[0] : "";
     };
+    // 依目前選定的單字翻譯語言，把擷取到的翻譯放進對應欄位（英文→translation、
+    // 中文→definition…），並設 selectedWordLanguage，否則選英文時翻譯會被塞進中文欄
+    // 而右側顯示空白（issue #891 回饋 2、5）。
+    const wordLang = (lastSelectedWordLang ||
+      "chinese") as WordTranslationLanguage;
     const makeRow = (item: MagicPasteItem, id: string | number): ContentRow => {
       // 例句沒有對應到該單字（或變化形）→ 留空，不硬塞不相干的句子。
       const example =
@@ -2223,13 +2228,17 @@ const VocabularySetPanel = forwardRef<
         exampleContainsWord(item.text, item.example_sentence)
           ? item.example_sentence
           : "";
+      const trans = item.translation || "";
       return {
         id,
         text: item.text,
-        definition: item.translation || "",
-        translation: "",
+        // chinese / other → definition（中文欄）；english/ja/ko → 各自欄位
+        definition: wordLang === "chinese" || wordLang === "other" ? trans : "",
+        translation: wordLang === "english" ? trans : "",
+        japanese_translation: wordLang === "japanese" ? trans : "",
+        korean_translation: wordLang === "korean" ? trans : "",
         imageUrl: "",
-        selectedWordLanguage: "chinese",
+        selectedWordLanguage: wordLang,
         partsOfSpeech: item.part_of_speech ? [item.part_of_speech] : undefined,
         example_sentence: example,
         example_sentence_translation: example
@@ -2292,7 +2301,9 @@ const VocabularySetPanel = forwardRef<
         t("contentEditor.messages.batchPasteLimit", { max: BATCH_PASTE_MAX }),
       );
     } else {
-      toast.success(`已插入 ${toAdd.length} 個項目`);
+      toast.success(
+        t("contentEditor.magicPaste.insertedN", { count: toAdd.length }),
+      );
     }
   };
 
@@ -4999,7 +5010,8 @@ const VocabularySetPanel = forwardRef<
               items={rows.map((row) => row.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="flex-1 space-y-3 pr-2">
+              {/* 小題清單內部捲動，左側批次區才不會跟著滑走（issue #891 回饋 4）*/}
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-2">
                 {rows.map((row, index) => {
                   // useSortable must be called inside the component that's in SortableContext
                   // so we'll use a nested component

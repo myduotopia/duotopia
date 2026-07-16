@@ -1739,7 +1739,11 @@ const ReadingAssessmentPanel = forwardRef<
         t("contentEditor.messages.batchPasteLimit", { max: MAX_ROWS }),
       );
     } else {
-      toast.success(`已插入 ${toAdd.length} 個句子`);
+      toast.success(
+        t("contentEditor.magicPaste.insertedNSentences", {
+          count: toAdd.length,
+        }),
+      );
     }
   };
 
@@ -2965,7 +2969,8 @@ const ReadingAssessmentPanel = forwardRef<
               items={rows.map((row) => row.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="space-y-3 pr-2">
+              {/* 小題清單內部捲動，左側批次區才不會跟著滑走（issue #891 回饋 4）*/}
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-2">
                 {rows.map((row, index) => {
                   // useSortable must be called inside the component that's in SortableContext
                   // so we'll use a nested component
