@@ -16,6 +16,7 @@ interface WordSelectionPreviewProps {
   settings: {
     show_image?: boolean;
     show_option_images?: boolean;
+    show_example_sentence?: boolean;
     play_audio?: boolean;
     target_proficiency?: number;
     time_limit_per_question?: number;
@@ -29,6 +30,10 @@ interface ContentItem {
   translation?: string;
   audio_url?: string;
   image_url?: string;
+  // Issue #860
+  example_sentence?: string | null;
+  example_sentence_translation?: string | null;
+  cloze_answer?: string | null;
 }
 
 interface OptionEntry {
@@ -45,6 +50,10 @@ interface WordOption {
   image_url?: string;
   memory_strength: number;
   options: OptionEntry[];
+  // Issue #860
+  example_sentence?: string | null;
+  example_sentence_translation?: string | null;
+  cloze_answer?: string | null;
 }
 
 function buildOptions(
@@ -128,7 +137,10 @@ export default function WordSelectionPreview({
 
   // 組成 WordOption[]（含選項）— 只在 items 或 show_image 變動時重組
   const previewWords = useMemo<WordOption[]>(() => {
-    const showImage = settings.show_image ?? true;
+    // 例句模式固定英文選項（show_image 視為 true）。
+    const showImage = settings.show_example_sentence
+      ? true
+      : (settings.show_image ?? true);
     return items.map((item) => ({
       content_item_id: item.id,
       text: item.text,
@@ -138,8 +150,11 @@ export default function WordSelectionPreview({
       image_url: item.image_url,
       memory_strength: 0,
       options: buildOptions(item, items, showImage),
+      example_sentence: item.example_sentence,
+      example_sentence_translation: item.example_sentence_translation,
+      cloze_answer: item.cloze_answer,
     }));
-  }, [items, settings.show_image]);
+  }, [items, settings.show_image, settings.show_example_sentence]);
 
   // 穩定的 previewSettings reference — 否則 WordSelectionActivity 的 useEffect
   // 會在 AssignmentDialog 每次表單按鍵時重觸發，把預覽 reset 回第 1 題
@@ -147,6 +162,7 @@ export default function WordSelectionPreview({
     () => ({
       show_image: settings.show_image,
       show_option_images: settings.show_option_images,
+      show_example_sentence: settings.show_example_sentence,
       play_audio: settings.play_audio,
       target_proficiency: settings.target_proficiency,
       time_limit_per_question: settings.time_limit_per_question ?? null,
@@ -154,6 +170,7 @@ export default function WordSelectionPreview({
     [
       settings.show_image,
       settings.show_option_images,
+      settings.show_example_sentence,
       settings.play_audio,
       settings.target_proficiency,
       settings.time_limit_per_question,

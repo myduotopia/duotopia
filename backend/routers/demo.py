@@ -144,6 +144,7 @@ def demo_overrides(
     show_word: Optional[bool] = Query(None),
     show_image: Optional[bool] = Query(None),
     show_option_images: Optional[bool] = Query(None),
+    show_example_sentence: Optional[bool] = Query(None),
     shuffle_questions: Optional[bool] = Query(None),
     time_limit_per_question: Optional[int] = Query(None),
     quiz_time_limit_seconds: Optional[int] = Query(None),
@@ -169,6 +170,7 @@ def demo_overrides(
         "show_word": show_word,
         "show_image": show_image,
         "show_option_images": show_option_images,
+        "show_example_sentence": show_example_sentence,
         "shuffle_questions": shuffle_questions,
         "time_limit_per_question": time_limit_per_question,
         "quiz_time_limit_seconds": quiz_time_limit_seconds,
@@ -194,6 +196,11 @@ def _apply_overrides(assignment: Assignment, overrides: dict) -> Assignment:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="show_image and show_option_images are mutually exclusive",
+        )
+    if effective.get("show_example_sentence") and effective.get("show_option_images"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="show_example_sentence and show_option_images are mutually exclusive",
         )
     effective["score_category"] = resolve_score_category(practice_mode, play_audio)
     # type: ignore[return-value] — overlay quacks like Assignment for readers.

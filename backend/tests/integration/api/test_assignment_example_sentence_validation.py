@@ -426,6 +426,176 @@ def test_create_allows_word_selection_on_vocab_without_examples(fresh_db):
     assert resp.status_code == 200, resp.text
 
 
+# --- Issue #860: show_example_sentence gates example + cloze requirement ----
+
+
+@pytest.mark.parametrize("practice_mode", ["word_selection", "word_selection_quiz"])
+def test_create_rejects_example_flag_when_sentence_missing(fresh_db, practice_mode):
+    """With show_example_sentence on, the selection family DOES need example
+    sentences — the题目 becomes a blanked example. Missing sentence ⇒ 422."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Word-only",
+        [{"text": "cat", "translation": "貓"}],  # no example sentence
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode=practice_mode,
+            show_example_sentence=True,
+        ),
+    )
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "EXAMPLE_SENTENCE_REQUIRED"
+    assert detail["content_titles"] == ["Word-only"]
+
+
+@pytest.mark.parametrize("practice_mode", ["word_selection", "word_selection_quiz"])
+def test_create_rejects_example_flag_when_cloze_answer_missing(fresh_db, practice_mode):
+    """Sentence + translation present but no cloze_answer ⇒ CLOZE_ANSWER_REQUIRED
+    (we must know which word to blank out, same as word_cloze)."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "No-Cloze",
+        [
+            {
+                "text": "apple",
+                "translation": "蘋果",
+                "example_sentence": "I eat an apple.",
+                "example_sentence_translation": "我吃一顆蘋果。",
+                # cloze_answer deliberately omitted
+            }
+        ],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode=practice_mode,
+            show_example_sentence=True,
+        ),
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "CLOZE_ANSWER_REQUIRED"
+
+
+@pytest.mark.parametrize("practice_mode", ["word_selection", "word_selection_quiz"])
+def test_create_allows_example_flag_with_full_data(fresh_db, practice_mode):
+    """Full example sentence + translation + matching cloze_answer ⇒ 200."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Complete",
+        [
+            {
+                "text": "apple",
+                "translation": "蘋果",
+                "example_sentence": "I eat an apple.",
+                "example_sentence_translation": "我吃一顆蘋果。",
+                "cloze_answer": "apple",
+            }
+        ],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode=practice_mode,
+            show_example_sentence=True,
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_create_without_example_flag_stays_permissive(fresh_db):
+    """Regression guard: word_selection_quiz WITHOUT the flag must still be
+    dispatchable on a vocab set that has no example sentences at all."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Word-only",
+        [{"text": "cat", "translation": "貓"}],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=False,
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_create_rejects_example_flag_with_option_images(fresh_db):
+    """show_example_sentence blanks the English word → options are English text;
+    it is mutually exclusive with show_option_images (pydantic 422)."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Complete",
+        [
+            {
+                "text": "apple",
+                "translation": "蘋果",
+                "example_sentence": "I eat an apple.",
+                "example_sentence_translation": "我吃一顆蘋果。",
+                "cloze_answer": "apple",
+            }
+        ],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=True,
+            show_image=False,
+            show_option_images=True,
+        ),
+    )
+    assert resp.status_code == 422, resp.text
+
+
 # --- update_assignment (PUT) validation ----------------------------------
 
 

@@ -96,6 +96,13 @@ class Assignment(Base):
     # 是否顯示選項圖片（預設 false）- 單字選擇模式專用（Issue #631）
     show_option_images = Column(Boolean, default=False)
 
+    # 是否以例句（答案挖空）作為題目（預設 false）- 單字選擇小考／艾賓浩斯專用（Issue #860）
+    # 開啟時題目顯示該單字的例句並把單字挖空，選項維持四選一（英文單字），不需打字。
+    # 與 show_word / play_audio 為互斥的「題目呈現方式」，且與 show_option_images 互斥。
+    show_example_sentence = Column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+
     # 軟刪除標記
     is_active = Column(Boolean, default=True)
 

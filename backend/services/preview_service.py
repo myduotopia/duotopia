@@ -309,6 +309,15 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
                     "translation": q_translation,
                     "audio_url": q_audio,
                     "recording_url": None,
+                    # Issue #860: 讓教師預覽頁在「顯示例句（答案挖空）」模式能重現題目
+                    "example_sentence": getattr(item, "example_sentence", "") or "",
+                    "example_sentence_translation": (
+                        getattr(item, "example_sentence_translation", "") or ""
+                    ),
+                    "example_sentence_audio_url": getattr(
+                        item, "example_sentence_audio_url", None
+                    ),
+                    "cloze_answer": getattr(item, "cloze_answer", "") or "",
                 }
             )
 
@@ -344,6 +353,9 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
             assignment.show_image if assignment.show_image is not None else True
         ),
         "show_option_images": bool(getattr(assignment, "show_option_images", False)),
+        "show_example_sentence": bool(
+            getattr(assignment, "show_example_sentence", False)
+        ),
         "quiz_time_limit_seconds": assignment.quiz_time_limit_seconds,
         # #854: 即刻練習練習畫面進階設定面板的初值需要這兩個欄位
         "shuffle_questions": bool(getattr(assignment, "shuffle_questions", False)),
@@ -608,6 +620,9 @@ async def get_word_selection_start(
             assignment.show_image if assignment.show_image is not None else True
         ),
         "show_option_images": bool(getattr(assignment, "show_option_images", False)),
+        "show_example_sentence": bool(
+            getattr(assignment, "show_example_sentence", False)
+        ),
         "play_audio": assignment.play_audio or False,
         "time_limit_per_question": assignment.time_limit_per_question,
     }

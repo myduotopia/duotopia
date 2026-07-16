@@ -66,6 +66,7 @@ class CreateAssignmentRequest(BaseModel):
     show_image: Optional[bool] = None
     show_translation: Optional[bool] = None
     show_option_images: Optional[bool] = None  # Issue #631
+    show_example_sentence: Optional[bool] = None  # Issue #860
     score_category: Optional[str] = None
 
     @field_validator("quiz_time_limit_seconds")
@@ -84,6 +85,11 @@ class CreateAssignmentRequest(BaseModel):
         # Issue #631: show_image 與 show_option_images 互斥，避免題目圖片直接洩漏答案
         if self.show_image and self.show_option_images:
             raise ValueError("show_image and show_option_images are mutually exclusive")
+        # Issue #860: 例句挖空題的選項是英文單字，與「選項顯示圖片」互斥
+        if self.show_example_sentence and self.show_option_images:
+            raise ValueError(
+                "show_example_sentence and show_option_images are mutually exclusive"
+            )
         return self
 
 
@@ -108,6 +114,7 @@ class UpdateAssignmentRequest(BaseModel):
     show_image: Optional[bool] = None
     show_translation: Optional[bool] = None
     show_option_images: Optional[bool] = None  # Issue #631
+    show_example_sentence: Optional[bool] = None  # Issue #860
 
     @field_validator("quiz_time_limit_seconds")
     @classmethod
@@ -120,6 +127,11 @@ class UpdateAssignmentRequest(BaseModel):
         # 不在 validator 階段判斷，留給 CRUD 層讀現值再檢查。
         if self.show_image is True and self.show_option_images is True:
             raise ValueError("show_image and show_option_images are mutually exclusive")
+        # Issue #860: 例句挖空題選項為英文單字，與選項圖片互斥（同上只擋兩者都明確 True）
+        if self.show_example_sentence is True and self.show_option_images is True:
+            raise ValueError(
+                "show_example_sentence and show_option_images are mutually exclusive"
+            )
         return self
 
 

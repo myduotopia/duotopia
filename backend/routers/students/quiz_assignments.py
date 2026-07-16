@@ -368,6 +368,10 @@ def _common_settings(assignment: Assignment) -> Dict[str, Any]:
         "time_limit_per_question": assignment.time_limit_per_question,
         # Issue #828: 整卷限時（秒）— null 不限時
         "quiz_time_limit_seconds": assignment.quiz_time_limit_seconds,
+        # Issue #860: 顯示例句（答案挖空）
+        "show_example_sentence": bool(
+            getattr(assignment, "show_example_sentence", False)
+        ),
     }
 
 
@@ -523,6 +527,12 @@ async def start_word_selection_quiz(
             "audio_url": item.audio_url,
             "image_url": item.image_url,
             "options": options_by_item[item.id],
+            # Issue #860: 顯示例句（答案挖空）所需資料；前端在 show_example_sentence
+            # 開啟時用 cloze_answer 把例句挖空（沿用 word_cloze_quiz 的前端挖空邏輯）。
+            "example_sentence": item.example_sentence or "",
+            "example_sentence_translation": item.example_sentence_translation or "",
+            "example_sentence_audio_url": item.example_sentence_audio_url,
+            "cloze_answer": _resolve_cloze_answer(item),
             "prior_answer": (
                 prior.answer_data.get("selected_answer")
                 if prior and prior.answer_data
@@ -755,6 +765,11 @@ def build_selection_quiz_payload(assignment: Assignment, db: Session) -> Dict[st
             "audio_url": item.audio_url,
             "image_url": item.image_url,
             "options": options_by_item[item.id],
+            # Issue #860: 顯示例句（答案挖空）所需資料
+            "example_sentence": item.example_sentence or "",
+            "example_sentence_translation": item.example_sentence_translation or "",
+            "example_sentence_audio_url": item.example_sentence_audio_url,
+            "cloze_answer": _resolve_cloze_answer(item),
         }
 
     words = _attach_question_numbers(items, builder)
@@ -1308,6 +1323,11 @@ async def review_word_selection_quiz(
             "audio_url": item.audio_url,
             "image_url": item.image_url,
             "options": options,
+            # Issue #860: 訂正/回顧頁也要能重現挖空例句題
+            "example_sentence": item.example_sentence or "",
+            "example_sentence_translation": item.example_sentence_translation or "",
+            "example_sentence_audio_url": item.example_sentence_audio_url,
+            "cloze_answer": _resolve_cloze_answer(item),
         }
 
     return _build_review_response(

@@ -84,7 +84,8 @@ export type SettingKey =
   | "show_translation"
   | "show_word"
   | "show_image"
-  | "show_option_images";
+  | "show_option_images"
+  | "show_example_sentence";
 
 export type SettingValue = boolean | number | string;
 
@@ -119,7 +120,13 @@ interface SegmentedOption {
  * 不進 registry，由 Panel 的 context props 處理。
  */
 export type SettingSpec =
-  | { kind: "toggle"; key: SettingKey; excludes?: SettingKey[] }
+  | {
+      kind: "toggle";
+      key: SettingKey;
+      excludes?: SettingKey[];
+      /** Issue #860: 依另一個 setting 的值隱藏此 toggle（如例句挖空模式下隱藏圖片相關開關）。 */
+      hideWhen?: { key: SettingKey; equals: SettingValue };
+    }
   | {
       kind: "segmented";
       key: SettingKey;
@@ -210,11 +217,14 @@ const TOGGLE_SHOW_IMAGE: SettingSpec = {
   kind: "toggle",
   key: "show_image",
   excludes: ["show_option_images"], // Issue #631 互斥
+  // Issue #860: 例句挖空模式題目是句子、選項固定英文單字，圖片開關無意義 → 隱藏
+  hideWhen: { key: "show_example_sentence", equals: true },
 };
 const TOGGLE_SHOW_OPTION_IMAGES: SettingSpec = {
   kind: "toggle",
   key: "show_option_images",
   excludes: ["show_image"], // Issue #631 互斥
+  hideWhen: { key: "show_example_sentence", equals: true },
 };
 const NUMBER_TARGET_PROFICIENCY: SettingSpec = {
   kind: "number",
@@ -295,24 +305,42 @@ const SEGMENTED_PLAY_AUDIO: SettingSpec = {
     { value: false, emoji: "🔇", labelKey: `${PM}.playAudioNo` },
   ],
 };
-/** 單字選擇家族「題目呈現方式」：顯示單字 ↔ 播放音檔（連動 play_audio；按鈕底下顯示描述而非 score）。 */
-const SEGMENTED_DISPLAY_SELECTION: SettingSpec = {
+/**
+ * 單字選擇家族「題目呈現方式」三選一（Issue #860）：顯示單字 ↔ 播放音檔 ↔ 顯示例句(答案挖空)。
+ * 三者互斥。key 用 show_example_sentence（唯一能把「例句」與另外兩者區分的欄位），另兩顆靠
+ * patch 的 play_audio / show_word 互相區分（isSegmentedOptionActive 會一併比對 patch）。
+ * 「顯示例句」同時把選項語言固定為英文（show_image:true → answer_key=text）並關閉選項圖片，
+ * 因此圖片相關 toggle 在此模式下由 hideWhen 隱藏。
+ */
+const SEGMENTED_DISPLAY_SELECTION_WITH_EXAMPLE: SettingSpec = {
   kind: "segmented",
-  key: "show_word",
+  key: "show_example_sentence",
   options: [
     {
-      value: true,
+      value: false,
       emoji: "👁️",
       labelKey: `${PM}.displayWord`,
       descKey: `${PM}.displayWordDesc`,
-      patch: { play_audio: false },
+      patch: { play_audio: false, show_word: true },
     },
     {
       value: false,
       emoji: "🔊",
       labelKey: `${PM}.playAudioWord`,
       descKey: `${PM}.playAudioWordDesc`,
-      patch: { play_audio: true },
+      patch: { play_audio: true, show_word: false },
+    },
+    {
+      value: true,
+      emoji: "📝",
+      labelKey: `${PM}.displayExampleSentence`,
+      descKey: `${PM}.displayExampleSentenceDesc`,
+      patch: {
+        play_audio: false,
+        show_word: false,
+        show_image: true,
+        show_option_images: false,
+      },
     },
   ],
 };
@@ -454,7 +482,7 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     gradable: false,
     settings: [
       NUMBER_TARGET_PROFICIENCY,
-      SEGMENTED_DISPLAY_SELECTION,
+      SEGMENTED_DISPLAY_SELECTION_WITH_EXAMPLE,
       SELECT_TIME_SELECTION,
       TOGGLE_SHOW_ANSWER,
       TOGGLE_SHOW_IMAGE,
@@ -490,7 +518,7 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     gradable: false,
     // #878：移除「顯示答案」—— 小考最終整卷顯示答案，此單題開關無作用
     settings: [
-      SEGMENTED_DISPLAY_SELECTION,
+      SEGMENTED_DISPLAY_SELECTION_WITH_EXAMPLE,
       TOGGLE_LIVE_QUIZ,
       SELECT_QUIZ_TIME,
       TOGGLE_SHOW_IMAGE,

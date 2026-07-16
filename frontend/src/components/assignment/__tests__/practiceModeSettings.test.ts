@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import type { SettingSpec } from "@/lib/practiceMode";
 import {
+  applySegmentedOption,
   applySettingChange,
   clampPerQuestionTime,
   clampQuizTime,
@@ -28,6 +29,7 @@ const base: PracticeModeSettings = {
   show_word: true,
   show_image: true,
   show_option_images: false,
+  show_example_sentence: false,
 };
 
 const SHOW_IMAGE: SettingSpec = {
@@ -220,5 +222,76 @@ describe("clampPerQuestionTime / clampQuizTime — API 時間值夾到合法選�
     expect(clampPerQuestionTime(null)).toBe(30);
     expect(clampPerQuestionTime("abc")).toBe(30);
     expect(clampQuizTime(undefined)).toBe(0);
+  });
+});
+
+// Issue #860: 單字選擇「題目呈現方式」三選一（顯示單字 / 播放音檔 / 顯示例句挖空）。
+// 兩顆「非例句」按鈕的 show_example_sentence 值都是 false，靠 patch 的 play_audio/
+// show_word 區分，因此必須用 applySegmentedOption（吃指定 option）而非 find-by-value。
+const DISPLAY_SELECTION_3WAY: SettingSpec = {
+  kind: "segmented",
+  key: "show_example_sentence",
+  options: [
+    {
+      value: false,
+      labelKey: "word",
+      patch: { play_audio: false, show_word: true },
+    },
+    {
+      value: false,
+      labelKey: "audio",
+      patch: { play_audio: true, show_word: false },
+    },
+    {
+      value: true,
+      labelKey: "example",
+      patch: {
+        play_audio: false,
+        show_word: false,
+        show_image: true,
+        show_option_images: false,
+      },
+    },
+  ],
+};
+
+describe("Issue #860 — 單字選擇題目呈現三選一", () => {
+  const spec = DISPLAY_SELECTION_3WAY as SettingSpec & { kind: "segmented" };
+  const [wordOpt, audioOpt, exampleOpt] = spec.options;
+
+  it("選『顯示例句』→ 開 show_example_sentence 且固定英文選項（show_image=true）並關選項圖片", () => {
+    const next = applySegmentedOption(base, spec, exampleOpt);
+    expect(next.show_example_sentence).toBe(true);
+    expect(next.play_audio).toBe(false);
+    expect(next.show_word).toBe(false);
+    expect(next.show_image).toBe(true);
+    expect(next.show_option_images).toBe(false);
+  });
+
+  it("選『播放音檔』→ 不誤抓第一顆 false 按鈕，正確設 play_audio=true", () => {
+    const next = applySegmentedOption(base, spec, audioOpt);
+    expect(next.show_example_sentence).toBe(false);
+    expect(next.play_audio).toBe(true);
+    expect(next.show_word).toBe(false);
+  });
+
+  it("從例句模式切回『顯示單字』→ 關 show_example_sentence", () => {
+    const inExample = applySegmentedOption(base, spec, exampleOpt);
+    const back = applySegmentedOption(inExample, spec, wordOpt);
+    expect(back.show_example_sentence).toBe(false);
+    expect(back.play_audio).toBe(false);
+    expect(back.show_word).toBe(true);
+  });
+
+  it("選中態：兩顆 false 按鈕靠 patch 區分，不會同時 active", () => {
+    const inExample = applySegmentedOption(base, spec, exampleOpt);
+    expect(isSegmentedOptionActive(inExample, spec, exampleOpt)).toBe(true);
+    expect(isSegmentedOptionActive(inExample, spec, wordOpt)).toBe(false);
+    expect(isSegmentedOptionActive(inExample, spec, audioOpt)).toBe(false);
+
+    const inWord = applySegmentedOption(base, spec, wordOpt);
+    expect(isSegmentedOptionActive(inWord, spec, wordOpt)).toBe(true);
+    expect(isSegmentedOptionActive(inWord, spec, audioOpt)).toBe(false);
+    expect(isSegmentedOptionActive(inWord, spec, exampleOpt)).toBe(false);
   });
 });

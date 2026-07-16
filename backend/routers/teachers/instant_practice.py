@@ -56,11 +56,16 @@ class InstantPracticeRequest(BaseModel):
     show_word: Optional[bool] = True
     show_image: Optional[bool] = True
     show_option_images: Optional[bool] = False  # Issue #631
+    show_example_sentence: Optional[bool] = False  # Issue #860
 
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "InstantPracticeRequest":
         if self.show_image and self.show_option_images:
             raise ValueError("show_image and show_option_images are mutually exclusive")
+        if self.show_example_sentence and self.show_option_images:
+            raise ValueError(
+                "show_example_sentence and show_option_images are mutually exclusive"
+            )
         return self
 
 
@@ -242,6 +247,7 @@ async def create_instant_practice(
         show_word=request.show_word,
         show_image=request.show_image,
         show_option_images=bool(request.show_option_images),  # Issue #631
+        show_example_sentence=bool(request.show_example_sentence),  # Issue #860
         score_category=resolve_score_category(
             request.practice_mode, request.play_audio
         ),
@@ -321,6 +327,7 @@ class InstantPracticeReconfigureRequest(BaseModel):
     show_word: Optional[bool] = True
     show_image: Optional[bool] = True
     show_option_images: Optional[bool] = False  # Issue #631
+    show_example_sentence: Optional[bool] = False  # Issue #860
     target_proficiency: Optional[int] = None
 
     @field_validator("practice_mode")
@@ -333,6 +340,10 @@ class InstantPracticeReconfigureRequest(BaseModel):
     def _option_images_xor_image(self) -> "InstantPracticeReconfigureRequest":
         if self.show_image and self.show_option_images:
             raise ValueError("show_image and show_option_images are mutually exclusive")
+        if self.show_example_sentence and self.show_option_images:
+            raise ValueError(
+                "show_example_sentence and show_option_images are mutually exclusive"
+            )
         return self
 
 
@@ -377,6 +388,7 @@ async def reconfigure_instant_practice(
     assignment.show_word = request.show_word
     assignment.show_image = request.show_image
     assignment.show_option_images = bool(request.show_option_images)  # Issue #631
+    assignment.show_example_sentence = bool(request.show_example_sentence)  # Issue #860
     if request.target_proficiency is not None:
         assignment.target_proficiency = request.target_proficiency
     assignment.score_category = resolve_score_category(

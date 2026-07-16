@@ -2058,6 +2058,8 @@
         "playAudioWord": "播放音檔",
         "playAudioWordDesc": "聽音檔選翻譯",
         "playAudioFillDesc": "聽音檔拼/填單字",
+        "displayExampleSentence": "顯示例句",
+        "displayExampleSentenceDesc": "看例句(答案挖空)選單字",
         "showAnswerLockedByAudio": "播放音檔模式必須顯示答案"
       }
     },

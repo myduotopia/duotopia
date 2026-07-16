@@ -35,6 +35,8 @@ import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import CardNavArrow from "./shared/CardNavArrow";
 import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
+import ClozeBlankText from "./shared/ClozeBlankText";
+import { buildBlankedSentence } from "@/lib/cloze";
 import { useShortLandscape } from "./shared/useShortLandscape";
 import QuizReviewView, {
   type QuizReviewPayload,
@@ -64,6 +66,11 @@ interface QuizWord {
   question_number: number;
   prior_answer?: string | null;
   prior_is_correct?: boolean | null;
+  // Issue #860: 顯示例句（答案挖空）用
+  example_sentence?: string | null;
+  example_sentence_translation?: string | null;
+  example_sentence_audio_url?: string | null;
+  cloze_answer?: string | null;
 }
 
 interface StartResponse {
@@ -74,6 +81,7 @@ interface StartResponse {
   show_word: boolean;
   show_image: boolean;
   show_option_images: boolean;
+  show_example_sentence: boolean;
   play_audio: boolean;
   show_answer: boolean;
   time_limit_per_question?: number | null;
@@ -134,6 +142,7 @@ export default function WordSelectionQuizActivity({
     show_word: true,
     show_image: true,
     show_option_images: false,
+    show_example_sentence: false,
     play_audio: false,
     show_answer: false,
   });
@@ -154,6 +163,7 @@ export default function WordSelectionQuizActivity({
         show_word: previewSettings?.show_word ?? true,
         show_image: previewSettings?.show_image ?? true,
         show_option_images: previewSettings?.show_option_images ?? false,
+        show_example_sentence: previewSettings?.show_example_sentence ?? false,
         play_audio: previewSettings?.play_audio ?? false,
         show_answer: previewSettings?.show_answer ?? false,
       });
@@ -181,6 +191,7 @@ export default function WordSelectionQuizActivity({
             show_word: demo.show_word,
             show_image: demo.show_image,
             show_option_images: demo.show_option_images,
+            show_example_sentence: demo.show_example_sentence ?? false,
             play_audio: demo.play_audio,
             show_answer: demo.show_answer,
           });
@@ -214,6 +225,7 @@ export default function WordSelectionQuizActivity({
           show_word: data.show_word,
           show_image: data.show_image,
           show_option_images: data.show_option_images,
+          show_example_sentence: data.show_example_sentence ?? false,
           play_audio: data.play_audio,
           show_answer: data.show_answer,
         });
@@ -524,7 +536,11 @@ export default function WordSelectionQuizActivity({
 
   const isLast = currentIndex === words.length - 1;
   const selectedForCurrent = selectedByItem[currentWord.content_item_id];
-  const showQuestionImage = settings.show_image && !!currentWord.image_url;
+  // Issue #860: 例句挖空題的題目是句子，不顯示圖片（即使 show_image 為 true）
+  const showQuestionImage =
+    settings.show_image &&
+    !settings.show_example_sentence &&
+    !!currentWord.image_url;
   // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
   // 拿全寬（窄螢幕、或圖在上時），讓長句有整列寬度好換行、字級不被擠小。
   const hasLongOption =
@@ -649,25 +665,27 @@ export default function WordSelectionQuizActivity({
               useHorizontal ? "flex flex-row gap-6" : "flex flex-col gap-6",
             )}
           >
-            {settings.show_image && currentWord.image_url && (
-              <div
-                className={cn(
-                  "flex justify-center shrink-0",
-                  useHorizontal && "w-1/2 relative min-h-48",
-                )}
-              >
-                <img
-                  src={currentWord.image_url}
-                  alt=""
+            {settings.show_image &&
+              !settings.show_example_sentence &&
+              currentWord.image_url && (
+                <div
                   className={cn(
-                    "object-contain rounded-lg",
-                    useHorizontal
-                      ? "absolute inset-0 w-full h-full"
-                      : "max-h-[clamp(8rem,30vh,22rem)] w-auto",
+                    "flex justify-center shrink-0",
+                    useHorizontal && "w-1/2 relative min-h-48",
                   )}
-                />
-              </div>
-            )}
+                >
+                  <img
+                    src={currentWord.image_url}
+                    alt=""
+                    className={cn(
+                      "object-contain rounded-lg",
+                      useHorizontal
+                        ? "absolute inset-0 w-full h-full"
+                        : "max-h-[clamp(8rem,30vh,22rem)] w-auto",
+                    )}
+                  />
+                </div>
+              )}
 
             <div
               className={cn(
@@ -689,15 +707,29 @@ export default function WordSelectionQuizActivity({
                 </div>
               )}
 
-              {/* show_image=true → 顯示翻譯（圖+翻譯，避免英文選項秒解）；否則顯示英文題 */}
-              {!settings.play_audio && (
+              {/* Issue #860: 例句挖空題 → 顯示挖空後的英文例句（選項為英文單字） */}
+              {settings.show_example_sentence ? (
                 <div className="text-center py-4 sm:py-6">
-                  <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
-                    {settings.show_image
-                      ? currentWord.translation
-                      : currentWord.text}
+                  <h2 className="text-[clamp(22px,7vh,28px)] font-bold text-gray-800 leading-relaxed select-none">
+                    <ClozeBlankText
+                      text={buildBlankedSentence(
+                        currentWord.example_sentence,
+                        currentWord.cloze_answer,
+                      )}
+                    />
                   </h2>
                 </div>
+              ) : (
+                /* show_image=true → 顯示翻譯（圖+翻譯，避免英文選項秒解）；否則顯示英文題 */
+                !settings.play_audio && (
+                  <div className="text-center py-4 sm:py-6">
+                    <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
+                      {settings.show_image
+                        ? currentWord.translation
+                        : currentWord.text}
+                    </h2>
+                  </div>
+                )
               )}
 
               <div

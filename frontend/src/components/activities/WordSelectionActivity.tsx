@@ -59,6 +59,8 @@ import { withDemoOverrides } from "@/lib/demoOverrides";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
 import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
+import ClozeBlankText from "./shared/ClozeBlankText";
+import { buildBlankedSentence } from "@/lib/cloze";
 import { useShortLandscape } from "./shared/useShortLandscape";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
@@ -78,6 +80,11 @@ interface WordOption {
   image_url?: string;
   memory_strength: number;
   options: OptionEntry[];
+  // Issue #860: 顯示例句（答案挖空）
+  example_sentence?: string | null;
+  example_sentence_translation?: string | null;
+  example_sentence_audio_url?: string | null;
+  cloze_answer?: string | null;
 }
 
 interface ProficiencyStatus {
@@ -111,6 +118,7 @@ interface WordSelectionActivityProps {
   previewSettings?: {
     show_image?: boolean;
     show_option_images?: boolean;
+    show_example_sentence?: boolean;
     play_audio?: boolean;
     target_proficiency?: number;
     time_limit_per_question?: number | null;
@@ -152,6 +160,7 @@ export default function WordSelectionActivity({
   // Settings
   const [showImage, setShowImage] = useState(true);
   const [showOptionImages, setShowOptionImages] = useState(false);
+  const [showExampleSentence, setShowExampleSentence] = useState(false);
   const [playAudio, setPlayAudio] = useState(false);
 
   // Proficiency
@@ -306,6 +315,7 @@ export default function WordSelectionActivity({
         is_practice_mode?: boolean;
         show_image: boolean;
         show_option_images?: boolean;
+        show_example_sentence?: boolean;
         play_audio: boolean;
         time_limit_per_question: number | null;
       }>(apiEndpoint);
@@ -315,6 +325,7 @@ export default function WordSelectionActivity({
       setIsPracticeMode(data.is_practice_mode ?? false);
       setShowImage(data.show_image ?? true);
       setShowOptionImages(data.show_option_images ?? false);
+      setShowExampleSentence(data.show_example_sentence ?? false);
       setPlayAudio(data.play_audio ?? false);
       setTimeLimit(data.time_limit_per_question || null);
       setTimeRemaining(data.time_limit_per_question || null);
@@ -391,6 +402,7 @@ export default function WordSelectionActivity({
       setIsPracticeMode(false);
       setShowImage(previewSettings?.show_image ?? true);
       setShowOptionImages(previewSettings?.show_option_images ?? false);
+      setShowExampleSentence(previewSettings?.show_example_sentence ?? false);
       setPlayAudio(previewSettings?.play_audio ?? false);
       setTimeLimit(previewSettings?.time_limit_per_question || null);
       setTimeRemaining(previewSettings?.time_limit_per_question || null);
@@ -954,8 +966,8 @@ export default function WordSelectionActivity({
             className="absolute top-0 right-0 z-10"
           />
         )}
-        {/* Image */}
-        {showImage && currentWord.image_url && (
+        {/* Image — Issue #860: 例句挖空題不顯示圖片（題目是句子） */}
+        {showImage && !showExampleSentence && currentWord.image_url && (
           <div
             className={cn(
               "flex justify-center shrink-0",
@@ -984,14 +996,28 @@ export default function WordSelectionActivity({
             useHorizontal && "min-w-0",
           )}
         >
-          {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
-              即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
-          {!playAudio && (
+          {/* Issue #860: 例句挖空題 → 顯示挖空後的英文例句（選項為英文單字） */}
+          {showExampleSentence ? (
             <div className="text-center py-4 sm:py-6">
-              <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
-                {showImage ? currentWord.translation : currentWord.text}
+              <h2 className="text-[clamp(22px,7vh,28px)] font-bold text-gray-800 leading-relaxed select-none">
+                <ClozeBlankText
+                  text={buildBlankedSentence(
+                    currentWord.example_sentence,
+                    currentWord.cloze_answer,
+                  )}
+                />
               </h2>
             </div>
+          ) : (
+            /* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
+              即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */
+            !playAudio && (
+              <div className="text-center py-4 sm:py-6">
+                <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
+                  {showImage ? currentWord.translation : currentWord.text}
+                </h2>
+              </div>
+            )
           )}
 
           {/* Audio Button - only show if playAudio setting is enabled */}

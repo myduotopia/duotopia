@@ -50,6 +50,7 @@ interface DemoActivityResponse {
   show_word?: boolean;
   show_image?: boolean;
   show_option_images?: boolean;
+  show_example_sentence?: boolean;
   // #923: 進階設定面板初值（後端 build_assignment_preview 已回傳）
   score_category?: string | null;
   shuffle_questions?: boolean;
@@ -121,6 +122,7 @@ export default function DemoAssignmentPage() {
       show_word: settings.show_word,
       show_image: settings.show_image,
       show_option_images: settings.show_option_images,
+      show_example_sentence: settings.show_example_sentence,
       shuffle_questions: settings.shuffle_questions,
       time_limit_per_question: settings.time_limit_per_question,
       target_proficiency: settings.target_proficiency,
@@ -225,6 +227,7 @@ export default function DemoAssignmentPage() {
           show_word: activityData.show_word,
           show_image: activityData.show_image,
           show_option_images: activityData.show_option_images,
+          show_example_sentence: activityData.show_example_sentence,
         }}
         isDemoMode={true}
         isPreviewMode={true}

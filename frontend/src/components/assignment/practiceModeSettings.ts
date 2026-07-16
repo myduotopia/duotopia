@@ -31,6 +31,8 @@ export interface PracticeModeSettings {
   show_word: boolean;
   show_image: boolean;
   show_option_images: boolean;
+  // Issue #860: 顯示例句（答案挖空）— 單字選擇小考／艾賓浩斯專用
+  show_example_sentence: boolean;
 }
 
 type MutableSettings = Record<SettingKey, SettingValue>;
@@ -99,6 +101,30 @@ export function applySettingChange(
     }
   }
 
+  return next as unknown as PracticeModeSettings;
+}
+
+/**
+ * 套用某顆 segmented 按鈕（Issue #860 三選一）：直接吃該 option，設 spec.key = option.value
+ * 並套用 option.patch。與 applySettingChange 的差別：當多顆按鈕共用同一個 key 值（如例句
+ * 三選一中「顯示單字」與「播放音檔」的 show_example_sentence 都是 false）時，用 find-by-value
+ * 會錯抓第一顆；這裡直接吃指定 option 才正確。
+ */
+export function applySegmentedOption(
+  value: PracticeModeSettings,
+  spec: SettingSpec & { kind: "segmented" },
+  option: {
+    value: SettingValue;
+    patch?: Partial<Record<SettingKey, SettingValue>>;
+  },
+): PracticeModeSettings {
+  const next = { ...value } as MutableSettings;
+  next[spec.key] = option.value;
+  if (option.patch) {
+    for (const k of Object.keys(option.patch) as SettingKey[]) {
+      next[k] = option.patch[k] as SettingValue;
+    }
+  }
   return next as unknown as PracticeModeSettings;
 }
 

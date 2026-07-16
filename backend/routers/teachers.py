@@ -4723,6 +4723,9 @@ async def preview_word_selection_start(
             assignment.show_image if assignment.show_image is not None else True
         ),
         "show_option_images": bool(getattr(assignment, "show_option_images", False)),
+        "show_example_sentence": bool(
+            getattr(assignment, "show_example_sentence", False)
+        ),
         "play_audio": assignment.play_audio or False,
         "time_limit_per_question": assignment.time_limit_per_question,
     }
