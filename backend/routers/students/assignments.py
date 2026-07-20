@@ -28,7 +28,7 @@ from models import (
 )
 from services.preview_service import get_sentence_fields, _VOCABULARY_CONTENT_TYPES
 from services.quota_service import QuotaService
-from utils.cloze import extract_cloze_for_item
+from utils.cloze import extract_cloze_for_item, collapse_to_single_blank
 from utils.rearrangement_history import archive_current_attempt
 from .dependencies import get_current_student
 from .quiz_assignments import score_and_finalize_quiz
@@ -1647,7 +1647,10 @@ async def start_word_selection_practice(
                 "cloze_answer": cloze[1] if cloze else "",
                 # Issue #860: 挖空由後端算，前端只渲染（避免兩邊比對規則漂移）。
                 # Fail closed：挖不出空回空字串，不可退回原句（原句含答案）。
-                "blanked_sentence": cloze[0] if cloze else "",
+                # 收合成單一格：選擇題顯示格數等於洩漏答案字數。
+                "blanked_sentence": (
+                    collapse_to_single_blank(cloze[0]) if cloze else ""
+                ),
             }
         )
 

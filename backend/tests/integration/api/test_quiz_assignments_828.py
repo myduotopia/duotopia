@@ -405,8 +405,8 @@ def test_selection_quiz_blanks_inflected_form_without_leaking_suffix(setup_datab
 
 
 def test_selection_quiz_blanks_without_stored_cloze_answer(setup_database):
-    """Issue #860 回歸：沒設 cloze_answer 時 fallback 到單字本身，
-    片語答案挖成一字一格（不可整句原樣顯示、洩漏答案）。"""
+    """Issue #860 回歸：沒設 cloze_answer 時 fallback 到單字本身。
+    片語答案收合成單一格 —— 顯示格數等於洩漏答案是幾個字（選擇題不可洩漏）。"""
     sa_id = _seed_example_selection_quiz()
     headers = {"Authorization": f"Bearer {_student_token()}"}
 
@@ -416,7 +416,7 @@ def test_selection_quiz_blanks_without_stored_cloze_answer(setup_database):
     )
     assert start.status_code == 200, start.text
     word = {w["content_item_id"]: w for w in start.json()["words"]}[4]
-    assert word["blanked_sentence"] == "I love to _ _ of landscapes."
+    assert word["blanked_sentence"] == "I love to _ of landscapes."
     assert "take pictures" not in word["blanked_sentence"]
 
 

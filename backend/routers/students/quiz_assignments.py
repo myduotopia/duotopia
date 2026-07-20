@@ -745,7 +745,7 @@ def _example_cloze_fields(item: ContentItem) -> Dict[str, Any]:
     extract_cloze_for_item 本身已含 fallback 鏈（存的答案 → 單字本身 → 句中挑字），
     所以缺 cloze_answer 的舊資料/範例教材也挖得出來。
     """
-    from utils.cloze import extract_cloze_for_item
+    from utils.cloze import extract_cloze_for_item, collapse_to_single_blank
 
     cloze = extract_cloze_for_item(item)
     # 刻意不送 example_sentence_translation / example_sentence_audio_url：
@@ -759,10 +759,11 @@ def _example_cloze_fields(item: ContentItem) -> Dict[str, Any]:
     # cloze_answer 也一律跟著 cloze 結果走（挖不出空就給空字串），與
     # students/assignments.py 的等價處理一致；先前 fallback 到
     # _resolve_cloze_answer 在極端髒資料下可能回整句。
+    # Issue #860: 收合成單一格 —— 選擇題顯示格數等於洩漏答案字數。
     return {
         "example_sentence": item.example_sentence or "",
         "cloze_answer": cloze[1] if cloze else "",
-        "blanked_sentence": cloze[0] if cloze else "",
+        "blanked_sentence": collapse_to_single_blank(cloze[0]) if cloze else "",
     }
 
 

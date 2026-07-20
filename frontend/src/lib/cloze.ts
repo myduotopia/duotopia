@@ -18,13 +18,16 @@ function escapeRegExp(s: string): string {
 }
 
 /**
- * 挖空佔位符：一個字一個底線（鏡射後端 build_blank）。
- * "cake" → "_"；"two pieces of cake" → "_ _ _ _"
+ * 挖空佔位符：一律單一格，不論答案是幾個字。
+ * "cake" → "_"；"take pictures" → "_"
+ *
+ * 與後端 build_blank（#880 一字一格）刻意不同：那是為 word_cloze 的「打字作答」
+ * 設計的，字數對打字者是合理提示。但單字選擇是四選一，顯示格數等於洩漏答案字數
+ * （看到兩格就能排除所有單字選項），因此收合成一格。後端在 #860 的三個 payload
+ * 也用 collapse_to_single_blank() 做同樣收合，兩邊結果一致。
  */
-export function buildBlank(matchedText: string): string {
-  const words = matchedText.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "_";
-  return words.map(() => "_").join(" ");
+export function buildBlank(_matchedText: string): string {
+  return "_";
 }
 
 /**

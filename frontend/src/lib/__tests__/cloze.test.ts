@@ -9,14 +9,14 @@
 import { describe, it, expect } from "vitest";
 import { buildBlank, findClozeMatch, buildBlankedSentence } from "../cloze";
 
-describe("buildBlank — 一個字一個底線（不洩漏字母數）", () => {
+describe("buildBlank — 一律單一格（不洩漏答案字數）", () => {
   it("單字 → 一格", () => {
     expect(buildBlank("cake")).toBe("_");
   });
 
-  it("片語 → 一字一格", () => {
-    expect(buildBlank("two pieces of cake")).toBe("_ _ _ _");
-    expect(buildBlank("take pictures")).toBe("_ _");
+  it("片語也只有一格（看到格數就能猜出答案是幾個字 → 選擇題不可洩漏）", () => {
+    expect(buildBlank("two pieces of cake")).toBe("_");
+    expect(buildBlank("take pictures")).toBe("_");
   });
 
   it("空字串 → 仍給一格", () => {
@@ -65,13 +65,13 @@ describe("buildBlankedSentence", () => {
     );
   });
 
-  it("片語挖成一字一格", () => {
+  it("片語也收合成單一格", () => {
     expect(
       buildBlankedSentence(
         "I love to take pictures of landscapes.",
         "take pictures",
       ),
-    ).toBe("I love to _ _ of landscapes.");
+    ).toBe("I love to _ of landscapes.");
   });
 
   it("沒有 cloze_answer 時 fallback 到單字本身（回歸：範例教材整句不挖空）", () => {
@@ -81,7 +81,7 @@ describe("buildBlankedSentence", () => {
         null,
         "take pictures",
       ),
-    ).toBe("I love to _ _ of landscapes.");
+    ).toBe("I love to _ of landscapes.");
   });
 
   it("cloze_answer 在句中找不到時，也會 fallback 到單字本身", () => {

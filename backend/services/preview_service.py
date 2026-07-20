@@ -303,7 +303,10 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
                 continue  # skip vocab items without example_sentence
             q_text, q_translation, q_audio = fields
             # Issue #860: 例句挖空（與學生端同一支 extract_cloze_for_item）
-            from utils.cloze import extract_cloze_for_item as _extract_cloze
+            from utils.cloze import (
+                extract_cloze_for_item as _extract_cloze,
+                collapse_to_single_blank as _collapse_blank,
+            )
 
             _item_cloze = _extract_cloze(item)
             items_data.append(
@@ -324,7 +327,9 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
                     "example_sentence": getattr(item, "example_sentence", "") or "",
                     "cloze_answer": _item_cloze[1] if _item_cloze else "",
                     # Fail closed：挖不出空回空字串，不可退回原句（原句含答案）
-                    "blanked_sentence": _item_cloze[0] if _item_cloze else "",
+                    "blanked_sentence": (
+                        _collapse_blank(_item_cloze[0]) if _item_cloze else ""
+                    ),
                 }
             )
 
