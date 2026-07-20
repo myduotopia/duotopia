@@ -1130,6 +1130,13 @@ async def patch_assignment(
             detail="show_example_sentence and show_option_images are mutually exclusive",
         )
 
+    # Issue #860: 單字音檔會唸出被挖空的答案 → 與例句挖空互斥（跨 request 再驗一次）
+    if assignment.show_example_sentence and assignment.play_audio:
+        raise HTTPException(
+            status_code=422,
+            detail="show_example_sentence and play_audio are mutually exclusive",
+        )
+
     # word_selection: show_image 切換 → 選項語言要跟著翻面（英文 ↔ 翻譯），
     # 必須重生 distractors，否則學生端會看到語言不一致的選項。
     #

@@ -67,6 +67,11 @@ class InstantPracticeRequest(BaseModel):
             raise ValueError(
                 "show_example_sentence and show_option_images are mutually exclusive"
             )
+        # Issue #860: 單字音檔會唸出被挖空的答案 → 與例句挖空互斥
+        if self.show_example_sentence and self.play_audio:
+            raise ValueError(
+                "show_example_sentence and play_audio are mutually exclusive"
+            )
         return self
 
 
@@ -364,6 +369,11 @@ class InstantPracticeReconfigureRequest(BaseModel):
         if self.show_example_sentence and self.show_option_images:
             raise ValueError(
                 "show_example_sentence and show_option_images are mutually exclusive"
+            )
+        # Issue #860: 單字音檔會唸出被挖空的答案 → 與例句挖空互斥
+        if self.show_example_sentence and self.play_audio:
+            raise ValueError(
+                "show_example_sentence and play_audio are mutually exclusive"
             )
         return self
 

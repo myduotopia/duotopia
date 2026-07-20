@@ -523,6 +523,14 @@ async def get_word_selection_start(
             detail="This assignment does not support word-selection or tug-of-war mode",
         )
 
+    # Issue #860: 例句挖空模式的 per-item payload 走與學生端相同的處理（見下方組裝）
+    from utils.cloze import (
+        extract_cloze_for_item as _extract_cloze,
+        collapse_to_single_blank as _collapse_blank,
+    )
+
+    _show_example_sentence = bool(getattr(assignment, "show_example_sentence", False))
+
     content_items = (
         db.query(ContentItem)
         .join(Content)
@@ -601,6 +609,30 @@ async def get_word_selection_start(
         options = [correct_option] + final_distractors
         random.shuffle(options)
 
+        # Issue #860: 例句挖空模式下，per-item payload 必須與學生端同一套處理 ——
+        # 送後端算好的 blanked_sentence，並拿掉例句翻譯／例句音檔（翻譯直接講出
+        # 該單字、音檔唸出含答案的整句）。本函式支撐「公開未認證」的 demo 端點，
+        # 前端有沒有渲染不算數，JSON 裡有就是洩漏。
+        if _show_example_sentence:
+            _cloze = _extract_cloze(item)
+            example_fields = {
+                "example_sentence": item.example_sentence or "",
+                "cloze_answer": _cloze[1] if _cloze else "",
+                "blanked_sentence": (_collapse_blank(_cloze[0]) if _cloze else ""),
+            }
+        else:
+            example_fields = {
+                "example_sentence": item.example_sentence or "",
+                "example_sentence_translation": (
+                    item.example_sentence_translation or ""
+                ),
+                "example_sentence_audio_url": (
+                    sentence_audio_by_id.get(item.id)
+                    or item.example_sentence_audio_url
+                    or ""
+                ),
+            }
+
         words_with_options.append(
             {
                 "content_item_id": item.id,
@@ -609,13 +641,7 @@ async def get_word_selection_start(
                 "correct_text": correct_answer,
                 "audio_url": item.audio_url,
                 "image_url": item.image_url,
-                "example_sentence": item.example_sentence or "",
-                "example_sentence_translation": item.example_sentence_translation or "",
-                "example_sentence_audio_url": (
-                    sentence_audio_by_id.get(item.id)
-                    or item.example_sentence_audio_url
-                    or ""
-                ),
+                **example_fields,
                 "memory_strength": 0,
                 "options": options,
             }
