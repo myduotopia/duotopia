@@ -236,10 +236,14 @@ async def create_instant_practice(
         db.add(item_copy)
         db.flush()
 
-    # 產生干擾項：word_selection 依 show_image 決定選項語言（#854）；tug_of_war 維持定義
+    # 產生干擾項：word_selection 依 show_image 決定選項語言（#854）；tug_of_war 維持定義。
+    # Issue #860: 必須用收斂後的值，與下方寫入 Assignment.show_image 同一個來源，
+    # 否則例句挖空題會出現「正解英文、干擾項中文」。
     if request.practice_mode == "word_selection":
         _regenerate_word_selection_distractors_for_content(
-            db, content_copy.id, bool(request.show_image)
+            db,
+            content_copy.id,
+            effective_show_image(request.show_image, request.show_example_sentence),
         )
     elif request.practice_mode == "tug_of_war":
         _ensure_distractors_for_content(db, content_copy.id)
@@ -429,8 +433,10 @@ async def reconfigure_instant_practice(
         ]
         for content_id in content_ids:
             if request.practice_mode in ("word_selection", "word_selection_quiz"):
+                # Issue #860: 與上方 assignment.show_image 用同一個收斂後的值，
+                # 否則例句挖空題會出現「正解英文、干擾項中文」。
                 _regenerate_word_selection_distractors_for_content(
-                    db, content_id, bool(request.show_image)
+                    db, content_id, bool(assignment.show_image)
                 )
             else:
                 _ensure_distractors_for_content(db, content_id)

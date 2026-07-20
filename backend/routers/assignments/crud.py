@@ -1132,10 +1132,14 @@ async def patch_assignment(
 
     # word_selection: show_image 切換 → 選項語言要跟著翻面（英文 ↔ 翻譯），
     # 必須重生 distractors，否則學生端會看到語言不一致的選項。
-    if (
-        "show_image" in provided
-        and prev_show_image != assignment.show_image
-        and assignment.practice_mode == "word_selection"
+    #
+    # Issue #860: 觸發條件改看「show_image 實際值有沒有變」，不再要求 show_image
+    # 一定要出現在 request 裡 —— 只送 show_example_sentence=true 的 PATCH 會由
+    # 上面的收斂把 show_image 推成 True，這種情況同樣必須重生干擾項。
+    # 小考（word_selection_quiz）同樣吃 stored distractors，一併納入。
+    if prev_show_image != assignment.show_image and assignment.practice_mode in (
+        "word_selection",
+        "word_selection_quiz",
     ):
         from utils.distractors import regenerate_word_selection_distractors
 

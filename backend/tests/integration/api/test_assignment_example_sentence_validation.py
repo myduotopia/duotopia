@@ -643,6 +643,72 @@ def test_create_rejects_example_flag_with_option_images(fresh_db):
     assert resp.status_code == 422, resp.text
 
 
+def test_patch_example_flag_regenerates_english_distractors(fresh_db):
+    """Issue #860: 只 PATCH show_example_sentence=true（沒送 show_image）時，
+    show_image 會被收斂成 True → 選項語言翻成英文，干擾項必須跟著重生，
+    否則會出現「正解英文、干擾項中文」。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    items = [
+        {
+            "text": w,
+            "translation": zh,
+            "example_sentence": f"I like {w}.",
+            "example_sentence_translation": f"我喜歡{zh}。",
+            "cloze_answer": w,
+        }
+        for w, zh in [
+            ("apple", "蘋果"),
+            ("banana", "香蕉"),
+            ("cherry", "櫻桃"),
+            ("grape", "葡萄"),
+        ]
+    ]
+    content_id = _add_vocab_content(db, seed["lesson_id"], "Fruits", items)
+    db.close()
+
+    token = _login_teacher()
+    created = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection",
+            show_image=False,  # 起始為中文選項
+        ),
+    )
+    assert created.status_code == 200, created.text
+    assignment_id = created.json()["assignment_id"]
+
+    resp = client.patch(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"show_example_sentence": True},  # 刻意不送 show_image
+    )
+    assert resp.status_code == 200, resp.text
+
+    check = TestingSessionLocal()
+    assignment = check.query(Assignment).filter(Assignment.id == assignment_id).first()
+    assert assignment.show_image is True  # 被收斂
+    english = {i["text"] for i in items}
+    chinese = {i["translation"] for i in items}
+    copied = (
+        check.query(ContentItem)
+        .join(Content, ContentItem.content_id == Content.id)
+        .join(AssignmentContent, AssignmentContent.content_id == Content.id)
+        .filter(AssignmentContent.assignment_id == assignment_id)
+        .all()
+    )
+    assert copied, "expected copied content items"
+    for item in copied:
+        for d in item.distractors or []:
+            text = d["text"] if isinstance(d, dict) else d
+            assert text in english, f"干擾項應為英文，得到 {text!r}"
+            assert text not in chinese
+    check.close()
+
+
 def test_put_uses_persisted_example_flag_when_not_resent(fresh_db):
     """Issue #860 回歸：PUT（換 content_ids）通常不會重送 show_example_sentence。
     若當成 False，已開啟例句挖空的作業就能換上「沒有例句」的教材而驗證不到。
