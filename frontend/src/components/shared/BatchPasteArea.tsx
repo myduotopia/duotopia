@@ -100,7 +100,7 @@ export function BatchPasteArea({
         {displayLabel}
       </label>
       <div
-        className="flex-1 min-h-[calc(1.625rem*8+1rem)] max-h-[calc(1.625rem*10+1rem)] border border-gray-300 rounded-lg focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all overflow-y-auto cursor-text"
+        className="flex-1 min-h-[calc(1.625rem*4+1rem)] max-h-[calc(1.625rem*10+1rem)] border border-gray-300 rounded-lg focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all overflow-y-auto cursor-text"
         onClick={(e) => {
           const ta = (e.currentTarget as HTMLElement).querySelector("textarea");
           if (ta) ta.focus();
@@ -122,7 +122,7 @@ export function BatchPasteArea({
             placeholder={placeholder}
             className="flex-1 px-3 py-2 font-mono text-sm resize-none outline-none leading-[1.625rem] overflow-hidden"
             style={{
-              height: `${Math.max(lines.length, 8) * 1.625 + 1}rem`,
+              height: `${Math.max(lines.length, 4) * 1.625 + 1}rem`,
             }}
           />
         </div>

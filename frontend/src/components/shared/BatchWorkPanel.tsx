@@ -95,8 +95,9 @@ export function BatchWorkPanel({
   const onTextTab = !showTabs || activeTab === "text";
 
   return (
-    // 面板矮於捲動區才固定得住；內容過長時面板自己捲，tab 列在下方另設 sticky 不被捲掉
-    <div className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4 sticky top-0 self-start max-h-[70vh] overflow-y-auto overscroll-contain">
+    // 整塊固定在畫面上：sticky 釘住 + 用滿可視高度；貼上區可壓縮讓內容盡量一次顯示完，
+    // 真的塞不下時面板自己捲（tab 列另設 sticky 不被捲掉）
+    <div className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4 sticky top-0 self-start max-h-[calc(100vh-180px)] overflow-y-auto overscroll-contain">
       <div className="space-y-3 flex-1 flex flex-col">
         {/* Tab 切換（貼上文字 / 圖片 PDF）— issue #891 */}
         {showTabs && (
