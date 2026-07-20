@@ -316,13 +316,12 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
                     # Issue #860: 讓教師預覽頁在「顯示例句（答案挖空）」模式能重現題目。
                     # blanked_sentence 由後端算（含 cloze_answer 缺漏時的 fallback），
                     # 與學生端同源。
+                    #
+                    # 與 quiz_assignments._example_cloze_fields 一致，刻意不送
+                    # example_sentence_translation / example_sentence_audio_url：
+                    # 兩者都會洩漏答案（翻譯講出該單字、音檔唸出含答案的整句），
+                    # 而本函式會被「公開未認證」的 demo preview 端點呼叫。
                     "example_sentence": getattr(item, "example_sentence", "") or "",
-                    "example_sentence_translation": (
-                        getattr(item, "example_sentence_translation", "") or ""
-                    ),
-                    "example_sentence_audio_url": getattr(
-                        item, "example_sentence_audio_url", None
-                    ),
                     "cloze_answer": _item_cloze[1] if _item_cloze else "",
                     # Fail closed：挖不出空回空字串，不可退回原句（原句含答案）
                     "blanked_sentence": _item_cloze[0] if _item_cloze else "",

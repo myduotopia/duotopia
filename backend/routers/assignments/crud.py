@@ -383,6 +383,8 @@ async def create_assignment(
         bool(request.show_example_sentence),
     )
 
+    from utils.distractors import effective_show_image
+
     # Sanitize answer_mode - deprecated field with database constraint
     # Only 'listening' and 'writing' are allowed by database CHECK constraint
     # If value is invalid (e.g., 'speaking'), use default 'writing'
@@ -416,7 +418,10 @@ async def create_assignment(
         # 單字選擇模式設定
         target_proficiency=request.target_proficiency,
         show_word=request.show_word,
-        show_image=request.show_image,
+        # Issue #860: 例句挖空題選項固定英文 → show_image 視為 True（在寫入端收斂）
+        show_image=effective_show_image(
+            request.show_image, request.show_example_sentence
+        ),
         show_translation=request.show_translation,
         show_option_images=bool(request.show_option_images),  # Issue #631
         show_example_sentence=bool(request.show_example_sentence),  # Issue #860
@@ -1040,6 +1045,11 @@ async def patch_assignment(
     for field in advanced_fields:
         if field in provided:
             setattr(assignment, field, getattr(request, field))
+
+    # Issue #860: 例句挖空題選項固定英文 → show_image 視為 True。在此收斂，避免
+    # 只送 show_example_sentence=true 的 PATCH 造成「英文挖空題 + 中文選項」。
+    if assignment.show_example_sentence:
+        assignment.show_image = True
 
     # Issue #860: 開啟「顯示例句（答案挖空）」時，本作業的副本內容必須齊備例句 +
     # cloze 答案，否則學生端題目會空白/挖不出空。與 play_audio 一樣，只在「切換為

@@ -202,6 +202,11 @@ def _apply_overrides(assignment: Assignment, overrides: dict) -> Assignment:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="show_example_sentence and show_option_images are mutually exclusive",
         )
+    # Issue #860: 例句挖空題選項固定英文 → show_image 視為 True。demo 是 read-time
+    # overlay（不寫 DB），所以在這裡收斂，避免只帶 show_example_sentence=true 的
+    # query string 產生「英文挖空題 + 中文選項」。
+    if effective.get("show_example_sentence"):
+        effective["show_image"] = True
     effective["score_category"] = resolve_score_category(practice_mode, play_audio)
     # type: ignore[return-value] — overlay quacks like Assignment for readers.
     return _AssignmentOverlay(assignment, effective)

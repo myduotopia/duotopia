@@ -559,6 +559,53 @@ def test_create_without_example_flag_stays_permissive(fresh_db):
     assert resp.status_code == 200, resp.text
 
 
+def test_create_forces_english_options_when_example_flag_on(fresh_db):
+    """Issue #860: 例句挖空題正解是被挖掉的英文字 → 選項語言必須是英文。
+    只送 show_example_sentence=true（沒送 show_image）時，後端要把 show_image
+    收斂成 True，否則會出現「英文挖空題 + 中文選項」。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Complete",
+        [
+            {
+                "text": "apple",
+                "translation": "蘋果",
+                "example_sentence": "I eat an apple.",
+                "example_sentence_translation": "我吃一顆蘋果。",
+                "cloze_answer": "apple",
+            }
+        ],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=True,
+            show_image=False,  # 刻意送 False，後端應強制為 True
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+    check = TestingSessionLocal()
+    assignment = (
+        check.query(Assignment)
+        .filter(Assignment.id == resp.json()["assignment_id"])
+        .first()
+    )
+    assert assignment.show_example_sentence is True
+    assert assignment.show_image is True  # 被收斂
+    check.close()
+
+
 def test_create_rejects_example_flag_with_option_images(fresh_db):
     """show_example_sentence blanks the English word → options are English text;
     it is mutually exclusive with show_option_images (pydantic 422)."""

@@ -33,6 +33,7 @@ from models import (
 from utils.permissions import check_content_access
 from utils.practice_mode import validate_practice_mode
 from utils.score_category import resolve_score_category
+from utils.distractors import effective_show_image
 from .dependencies import get_current_teacher
 
 logger = logging.getLogger(__name__)
@@ -258,7 +259,10 @@ async def create_instant_practice(
         play_audio=request.play_audio,
         show_translation=request.show_translation,
         show_word=request.show_word,
-        show_image=request.show_image,
+        # Issue #860: 例句挖空題選項固定英文 → show_image 視為 True
+        show_image=effective_show_image(
+            request.show_image, request.show_example_sentence
+        ),
         show_option_images=bool(request.show_option_images),  # Issue #631
         show_example_sentence=bool(request.show_example_sentence),  # Issue #860
         score_category=resolve_score_category(
@@ -399,7 +403,9 @@ async def reconfigure_instant_practice(
     assignment.play_audio = request.play_audio
     assignment.show_translation = request.show_translation
     assignment.show_word = request.show_word
-    assignment.show_image = request.show_image
+    assignment.show_image = effective_show_image(
+        request.show_image, request.show_example_sentence
+    )
     assignment.show_option_images = bool(request.show_option_images)  # Issue #631
     assignment.show_example_sentence = bool(request.show_example_sentence)  # Issue #860
     if request.target_proficiency is not None:

@@ -15,6 +15,21 @@ class Distractor(TypedDict):
     image_url: Optional[str]
 
 
+def effective_show_image(
+    show_image: Optional[bool], show_example_sentence: Optional[bool] = False
+) -> bool:
+    """Issue #860: 例句挖空題的選項固定為英文單字 → 等同 show_image=True。
+
+    題目是「挖空的英文例句」，正解是被挖掉的英文字，因此選項語言必須是英文
+    （text）。若仍讓 show_image 決定，直接呼 API 只送 show_example_sentence=true
+    的路徑（PATCH / 即刻練習 reconfigure / demo query override）會出現
+    「英文挖空題 + 中文選項」的語意不一致。在寫入端收斂，讀取端就不必各自記得配對。
+    """
+    if show_example_sentence:
+        return True
+    return True if show_image is None else bool(show_image)
+
+
 def text_field_for_show_image(show_image: bool) -> str:
     """Which ContentItem field provides the displayed option text.
 
