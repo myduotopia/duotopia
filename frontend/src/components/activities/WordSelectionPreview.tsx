@@ -160,7 +160,9 @@ export default function WordSelectionPreview({
   // 會在 AssignmentDialog 每次表單按鍵時重觸發，把預覽 reset 回第 1 題
   const previewSettings = useMemo(
     () => ({
-      show_image: settings.show_image,
+      // Issue #860: 例句挖空題選項固定英文 → show_image 視為 true（與後端
+      // effective_show_image 同一不變式，不依賴 UI 永遠成對送出）
+      show_image: settings.show_example_sentence ? true : settings.show_image,
       show_option_images: settings.show_option_images,
       show_example_sentence: settings.show_example_sentence,
       play_audio: settings.play_audio,

@@ -219,7 +219,8 @@ export default function WordSelectionQuizPreview({
   const previewSettings = useMemo(
     () => ({
       show_word: settings.show_word,
-      show_image: settings.show_image,
+      // Issue #860: 例句挖空題選項固定英文 → show_image 視為 true
+      show_image: settings.show_example_sentence ? true : settings.show_image,
       show_option_images: settings.show_option_images,
       show_example_sentence: settings.show_example_sentence,
       play_audio: settings.play_audio,

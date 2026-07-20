@@ -756,9 +756,12 @@ def _example_cloze_fields(item: ContentItem) -> Dict[str, Any]:
     # 等於把答案直接印在題目上。派發流程有 _raise_if_missing_examples 擋住這種
     # 資料，但即刻練習／demo 覆寫不跑該驗證，所以這裡必須自己守住。
     # 前端拿到空字串會退回一般題型呈現（顯示單字／翻譯），不會開天窗。
+    # cloze_answer 也一律跟著 cloze 結果走（挖不出空就給空字串），與
+    # students/assignments.py 的等價處理一致；先前 fallback 到
+    # _resolve_cloze_answer 在極端髒資料下可能回整句。
     return {
         "example_sentence": item.example_sentence or "",
-        "cloze_answer": cloze[1] if cloze else _resolve_cloze_answer(item),
+        "cloze_answer": cloze[1] if cloze else "",
         "blanked_sentence": cloze[0] if cloze else "",
     }
 

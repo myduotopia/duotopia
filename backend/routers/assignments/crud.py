@@ -911,11 +911,21 @@ async def update_assignment(
     effective_play_audio = (
         request.play_audio if request.play_audio is not None else assignment.play_audio
     )
+    # Issue #860: 必須用「request 有給就用、沒給就沿用現值」解析，不能直接
+    # bool(request.show_example_sentence)。這支 PUT 主要用途是換 content_ids，
+    # 呼叫端通常不會重送這個 flag（schema 也沒要求），若當成 False 會讓已開啟
+    # 例句挖空的作業換上「沒有例句/cloze 答案」的教材而驗證不到。
+    # 與上面的 effective_play_audio 同一套處理（本端點僅驗證、不寫回進階設定）。
+    effective_show_example_sentence = (
+        request.show_example_sentence
+        if request.show_example_sentence is not None
+        else assignment.show_example_sentence
+    )
     _raise_if_missing_examples(
         new_contents,
         effective_mode,
         bool(effective_play_audio),
-        bool(request.show_example_sentence),
+        bool(effective_show_example_sentence),
     )
 
     # 更新基本資訊

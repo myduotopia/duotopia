@@ -643,6 +643,63 @@ def test_create_rejects_example_flag_with_option_images(fresh_db):
     assert resp.status_code == 422, resp.text
 
 
+def test_put_uses_persisted_example_flag_when_not_resent(fresh_db):
+    """Issue #860 回歸：PUT（換 content_ids）通常不會重送 show_example_sentence。
+    若當成 False，已開啟例句挖空的作業就能換上「沒有例句」的教材而驗證不到。
+    必須沿用作業上已存的旗標來驗證。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    good = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Good",
+        [
+            {
+                "text": "apple",
+                "translation": "蘋果",
+                "example_sentence": "I eat an apple.",
+                "example_sentence_translation": "我吃一顆蘋果。",
+                "cloze_answer": "apple",
+            }
+        ],
+    )
+    bad = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "NoExample",
+        [{"text": "dog", "translation": "狗"}],  # 無例句
+    )
+    db.close()
+
+    token = _login_teacher()
+    created = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [good],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=True,
+        ),
+    )
+    assert created.status_code == 200, created.text
+    assignment_id = created.json()["assignment_id"]
+
+    # 換成沒有例句的教材，且「不重送」show_example_sentence
+    resp = client.put(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [bad],
+            title="換教材",
+            practice_mode="word_selection_quiz",
+        ),
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "EXAMPLE_SENTENCE_REQUIRED"
+
+
 # --- update_assignment (PUT) validation ----------------------------------
 
 
