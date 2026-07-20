@@ -190,21 +190,26 @@ def _apply_overrides(assignment: Assignment, overrides: dict) -> Assignment:
         return assignment
 
     effective = dict(overrides)
+
+    # overrides 只含 query string 實際帶到的 key，其餘一律沿用作業已存值 ——
+    # 覆寫是「疊加」而非「取代整組設定」。所有互斥檢查都必須基於這組解析後的
+    # 有效值，否則連結少帶一個參數就會讓守衛靜默失效（#860 踩過兩次：
+    # show_example_sentence 少帶 → 守衛不觸發；show_option_images 少帶 → 同理）。
+    def _eff(key: str) -> bool:
+        return bool(effective.get(key, getattr(assignment, key, False)))
+
     practice_mode = effective.get("practice_mode", assignment.practice_mode)
-    play_audio = effective.get("play_audio", bool(assignment.play_audio))
-    # Issue #860: 與 practice_mode / play_audio 同樣要 fallback 到已存值 ——
-    # overrides 只含 query string 實際帶到的 key，若直接用 effective.get() 判斷，
-    # 一個已開啟例句挖空的作業只要連結沒重帶這個參數就會被當成 False，導致
-    # 下方互斥檢查與 show_image 收斂雙雙失效。
-    show_example_sentence = effective.get(
-        "show_example_sentence", bool(assignment.show_example_sentence)
-    )
-    if effective.get("show_image") and effective.get("show_option_images"):
+    play_audio = _eff("play_audio")
+    show_image = _eff("show_image")
+    show_option_images = _eff("show_option_images")
+    show_example_sentence = _eff("show_example_sentence")
+
+    if show_image and show_option_images:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="show_image and show_option_images are mutually exclusive",
         )
-    if show_example_sentence and effective.get("show_option_images"):
+    if show_example_sentence and show_option_images:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="show_example_sentence and show_option_images are mutually exclusive",
