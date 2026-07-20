@@ -4736,7 +4736,7 @@ const VocabularySetPanel = forwardRef<
   }
 
   return (
-    <div className="flex flex-col h-full min-h-[calc(100vh-160px)] max-h-[calc(100vh-160px)]">
+    <div className="flex flex-col h-full max-h-[calc(100vh-200px)]">
       {/* Fixed Header Section */}
       <div className="flex-shrink-0 space-y-4 pb-4">
         {/* Title Input - Show in both create and edit mode */}
@@ -5010,8 +5010,8 @@ const VocabularySetPanel = forwardRef<
               items={rows.map((row) => row.id)}
               strategy={verticalListSortingStrategy}
             >
-              {/* 小題清單內部捲動，左側批次區才不會跟著滑走（issue #891 回饋 4）*/}
-              <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-2">
+              {/* 小題清單自然增長、跟著頁面往下滑；左側批次區改用定高 + sticky 固定 */}
+              <div className="flex-1 space-y-3 pr-2">
                 {rows.map((row, index) => {
                   // useSortable must be called inside the component that's in SortableContext
                   // so we'll use a nested component

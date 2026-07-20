@@ -95,7 +95,8 @@ export function BatchWorkPanel({
   const onTextTab = !showTabs || activeTab === "text";
 
   return (
-    <div className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4 sticky top-0 self-start">
+    // 定高 + 內部捲動：面板本身比視窗矮，sticky 才固定得住（面板若比視窗高就會被捲走）
+    <div className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4 sticky top-0 self-start max-h-[calc(100vh-160px)] overflow-y-auto">
       <div className="space-y-3 flex-1 flex flex-col">
         {/* Tab 切換（貼上文字 / 圖片 PDF）— issue #891 */}
         {showTabs && (
