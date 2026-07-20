@@ -527,12 +527,8 @@ async def start_word_selection_quiz(
             "audio_url": item.audio_url,
             "image_url": item.image_url,
             "options": options_by_item[item.id],
-            # Issue #860: 顯示例句（答案挖空）所需資料；前端在 show_example_sentence
-            # 開啟時用 cloze_answer 把例句挖空（沿用 word_cloze_quiz 的前端挖空邏輯）。
-            "example_sentence": item.example_sentence or "",
-            "example_sentence_translation": item.example_sentence_translation or "",
-            "example_sentence_audio_url": item.example_sentence_audio_url,
-            "cloze_answer": _resolve_cloze_answer(item),
+            # Issue #860: 顯示例句（答案挖空）所需資料（含後端算好的 blanked_sentence）
+            **_example_cloze_fields(item),
             "prior_answer": (
                 prior.answer_data.get("selected_answer")
                 if prior and prior.answer_data
@@ -740,6 +736,28 @@ def _resolve_cloze_answer(item: ContentItem) -> str:
     return word or sentence
 
 
+def _example_cloze_fields(item: ContentItem) -> Dict[str, Any]:
+    """Issue #860: 例句挖空題所需欄位，含後端算好的 blanked_sentence。
+
+    挖空一律由後端算（沿用 word_cloze 的 extract_cloze_for_item），前端只負責
+    渲染，避免兩邊比對規則漂移 —— 例如 cloze_answer="apple" 但句中是 "apples"
+    時，若前端自行用子字串比對會殘留 "s" 而洩漏答案。
+    extract_cloze_for_item 本身已含 fallback 鏈（存的答案 → 單字本身 → 句中挑字），
+    所以缺 cloze_answer 的舊資料/範例教材也挖得出來。
+    """
+    from utils.cloze import extract_cloze_for_item
+
+    cloze = extract_cloze_for_item(item)
+    # 刻意不送 example_sentence_translation / example_sentence_audio_url：
+    # 這個題型不渲染它們，且兩者都會洩漏答案（翻譯直接講出該單字、音檔唸出整句
+    # 含挖空的字）。與 word_cloze 不同——那邊是打字作答且本來就給提示。
+    return {
+        "example_sentence": item.example_sentence or "",
+        "cloze_answer": cloze[1] if cloze else _resolve_cloze_answer(item),
+        "blanked_sentence": cloze[0] if cloze else (item.example_sentence or ""),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Quiz payload builders (#861 D / #923) — shared by teacher-preview and public
 # demo endpoints. Cross all vocabulary sets, shuffle by ``shuffle_questions``,
@@ -766,10 +784,7 @@ def build_selection_quiz_payload(assignment: Assignment, db: Session) -> Dict[st
             "image_url": item.image_url,
             "options": options_by_item[item.id],
             # Issue #860: 顯示例句（答案挖空）所需資料
-            "example_sentence": item.example_sentence or "",
-            "example_sentence_translation": item.example_sentence_translation or "",
-            "example_sentence_audio_url": item.example_sentence_audio_url,
-            "cloze_answer": _resolve_cloze_answer(item),
+            **_example_cloze_fields(item),
         }
 
     words = _attach_question_numbers(items, builder)
@@ -1324,10 +1339,7 @@ async def review_word_selection_quiz(
             "image_url": item.image_url,
             "options": options,
             # Issue #860: 訂正/回顧頁也要能重現挖空例句題
-            "example_sentence": item.example_sentence or "",
-            "example_sentence_translation": item.example_sentence_translation or "",
-            "example_sentence_audio_url": item.example_sentence_audio_url,
-            "cloze_answer": _resolve_cloze_answer(item),
+            **_example_cloze_fields(item),
         }
 
     return _build_review_response(

@@ -303,6 +303,29 @@ def _seed_example_selection_quiz() -> int:
                 example_sentence_translation="香蕉是黃色的。",
                 cloze_answer="banana",
             ),
+            # Issue #860 回歸：cloze_answer 是原形但句中是變化形（apple → apples），
+            # 挖空必須整個 apples 拿掉，不能殘留 "s" 洩漏答案。
+            ContentItem(
+                id=3,
+                content_id=1,
+                order_index=3,
+                text="cup",
+                translation="杯子",
+                example_sentence="I have two cups.",
+                example_sentence_translation="我有兩個杯子。",
+                cloze_answer="cup",
+            ),
+            # Issue #860 回歸：沒設 cloze_answer 時要 fallback 到單字本身，
+            # 否則整句連答案一起顯示（老師派發預覽實際踩到）。
+            ContentItem(
+                id=4,
+                content_id=1,
+                order_index=4,
+                text="take pictures",
+                translation="拍照",
+                example_sentence="I love to take pictures of landscapes.",
+                example_sentence_translation="我喜歡拍風景照。",
+            ),
         ]
     )
     db.commit()
@@ -356,8 +379,45 @@ def test_selection_quiz_start_ships_example_sentence_and_cloze(setup_database):
     by_id = {w["content_item_id"]: w for w in body["words"]}
     assert by_id[1]["example_sentence"] == "I eat an apple."
     assert by_id[1]["cloze_answer"] == "apple"
-    assert by_id[2]["example_sentence_translation"] == "香蕉是黃色的。"
+    assert by_id[1]["blanked_sentence"] == "I eat an _."
     assert by_id[2]["cloze_answer"] == "banana"
+    assert by_id[2]["blanked_sentence"] == "The _ is yellow."
+    # 例句翻譯／音檔刻意不下放（會洩漏答案）
+    assert "example_sentence_translation" not in by_id[1]
+    assert "example_sentence_audio_url" not in by_id[1]
+
+
+def test_selection_quiz_blanks_inflected_form_without_leaking_suffix(setup_database):
+    """Issue #860 回歸：cloze_answer='cup' 但句中是 'cups' → 整個 cups 挖掉。
+    先前前端用子字串比對會變成 'I have two _s.'，尾巴洩漏答案。"""
+    sa_id = _seed_example_selection_quiz()
+    headers = {"Authorization": f"Bearer {_student_token()}"}
+
+    start = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/start",
+        headers=headers,
+    )
+    assert start.status_code == 200, start.text
+    word = {w["content_item_id"]: w for w in start.json()["words"]}[3]
+    assert word["blanked_sentence"] == "I have two _."
+    assert "s." not in word["blanked_sentence"]
+    assert word["cloze_answer"] == "cups"  # 實際出現在句中的變化形
+
+
+def test_selection_quiz_blanks_without_stored_cloze_answer(setup_database):
+    """Issue #860 回歸：沒設 cloze_answer 時 fallback 到單字本身，
+    片語答案挖成一字一格（不可整句原樣顯示、洩漏答案）。"""
+    sa_id = _seed_example_selection_quiz()
+    headers = {"Authorization": f"Bearer {_student_token()}"}
+
+    start = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/start",
+        headers=headers,
+    )
+    assert start.status_code == 200, start.text
+    word = {w["content_item_id"]: w for w in start.json()["words"]}[4]
+    assert word["blanked_sentence"] == "I love to _ _ of landscapes."
+    assert "take pictures" not in word["blanked_sentence"]
 
 
 def test_spelling_quiz_is_case_insensitive(setup_database):

@@ -302,6 +302,10 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
             if fields is None:
                 continue  # skip vocab items without example_sentence
             q_text, q_translation, q_audio = fields
+            # Issue #860: 例句挖空（與學生端同一支 extract_cloze_for_item）
+            from utils.cloze import extract_cloze_for_item as _extract_cloze
+
+            _item_cloze = _extract_cloze(item)
             items_data.append(
                 {
                     "id": item.id,
@@ -309,7 +313,9 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
                     "translation": q_translation,
                     "audio_url": q_audio,
                     "recording_url": None,
-                    # Issue #860: 讓教師預覽頁在「顯示例句（答案挖空）」模式能重現題目
+                    # Issue #860: 讓教師預覽頁在「顯示例句（答案挖空）」模式能重現題目。
+                    # blanked_sentence 由後端算（含 cloze_answer 缺漏時的 fallback），
+                    # 與學生端同源。
                     "example_sentence": getattr(item, "example_sentence", "") or "",
                     "example_sentence_translation": (
                         getattr(item, "example_sentence_translation", "") or ""
@@ -317,7 +323,12 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
                     "example_sentence_audio_url": getattr(
                         item, "example_sentence_audio_url", None
                     ),
-                    "cloze_answer": getattr(item, "cloze_answer", "") or "",
+                    "cloze_answer": _item_cloze[1] if _item_cloze else "",
+                    "blanked_sentence": (
+                        _item_cloze[0]
+                        if _item_cloze
+                        else (getattr(item, "example_sentence", "") or "")
+                    ),
                 }
             )
 

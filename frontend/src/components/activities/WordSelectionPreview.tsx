@@ -32,8 +32,8 @@ interface ContentItem {
   image_url?: string;
   // Issue #860
   example_sentence?: string | null;
-  example_sentence_translation?: string | null;
   cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 interface OptionEntry {
@@ -52,8 +52,8 @@ interface WordOption {
   options: OptionEntry[];
   // Issue #860
   example_sentence?: string | null;
-  example_sentence_translation?: string | null;
   cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 function buildOptions(
@@ -151,8 +151,8 @@ export default function WordSelectionPreview({
       memory_strength: 0,
       options: buildOptions(item, items, showImage),
       example_sentence: item.example_sentence,
-      example_sentence_translation: item.example_sentence_translation,
       cloze_answer: item.cloze_answer,
+      blanked_sentence: item.blanked_sentence,
     }));
   }, [items, settings.show_image, settings.show_example_sentence]);
 

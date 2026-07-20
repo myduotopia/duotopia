@@ -80,11 +80,11 @@ interface WordOption {
   image_url?: string;
   memory_strength: number;
   options: OptionEntry[];
-  // Issue #860: 顯示例句（答案挖空）
+  // Issue #860: 顯示例句（答案挖空）。blanked_sentence 由後端算好；
+  // 老師派發預覽等只有原始教材的路徑沒有此欄位，前端才自行挖空。
   example_sentence?: string | null;
-  example_sentence_translation?: string | null;
-  example_sentence_audio_url?: string | null;
   cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 interface ProficiencyStatus {
@@ -1001,10 +1001,14 @@ export default function WordSelectionActivity({
             <div className="text-center py-4 sm:py-6">
               <h2 className="text-[clamp(22px,7vh,28px)] font-bold text-gray-800 leading-relaxed select-none">
                 <ClozeBlankText
-                  text={buildBlankedSentence(
-                    currentWord.example_sentence,
-                    currentWord.cloze_answer,
-                  )}
+                  text={
+                    currentWord.blanked_sentence ||
+                    buildBlankedSentence(
+                      currentWord.example_sentence,
+                      currentWord.cloze_answer,
+                      currentWord.text,
+                    )
+                  }
                 />
               </h2>
             </div>

@@ -34,8 +34,8 @@ interface ApiItem {
   image_url?: string;
   // Issue #860: 顯示例句（答案挖空）預覽用
   example_sentence?: string | null;
-  example_sentence_translation?: string | null;
   cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 // Deterministic PRNG seeded per item, mirroring the backend's
@@ -98,8 +98,8 @@ interface QuizWord {
   question_number: number;
   // Issue #860
   example_sentence?: string | null;
-  example_sentence_translation?: string | null;
   cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 // 後端 /preview/selection-quiz-start 回傳的題目形狀（#861 D）：已含全單字集、
@@ -115,8 +115,8 @@ interface ServerQuizWord {
   question_number?: number;
   // Issue #860
   example_sentence?: string | null;
-  example_sentence_translation?: string | null;
   cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 export default function WordSelectionQuizPreview({
@@ -184,8 +184,8 @@ export default function WordSelectionQuizPreview({
         options: w.options,
         question_number: w.question_number ?? idx + 1,
         example_sentence: w.example_sentence,
-        example_sentence_translation: w.example_sentence_translation,
         cloze_answer: w.cloze_answer,
+        blanked_sentence: w.blanked_sentence,
       }));
     }
     // contentId 路徑：前端組選項。例句模式固定英文選項（show_image 視為 true）。
@@ -204,8 +204,8 @@ export default function WordSelectionQuizPreview({
         options: buildOptions(item, items, showImage),
         question_number: idx + 1,
         example_sentence: item.example_sentence,
-        example_sentence_translation: item.example_sentence_translation,
         cloze_answer: item.cloze_answer,
+        blanked_sentence: item.blanked_sentence,
       };
     });
   }, [
