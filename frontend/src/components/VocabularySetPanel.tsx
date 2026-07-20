@@ -4736,7 +4736,10 @@ const VocabularySetPanel = forwardRef<
   }
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-200px)]">
+    // 不鎖高度：根容器隨內容長高，捲動交給外層（Dialog 的 overflow 區）。
+    // 若在此鎖 max-h，中間 flex row 會被壓死，左側 sticky 面板只能在那段高度內
+    // 移動、捲過就被帶走 —— 這正是左側區塊會「被上面吃掉」的原因。
+    <div className="flex flex-col">
       {/* Fixed Header Section */}
       <div className="flex-shrink-0 space-y-4 pb-4">
         {/* Title Input - Show in both create and edit mode */}
