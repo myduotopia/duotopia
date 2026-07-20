@@ -398,6 +398,30 @@ async def reconfigure_instant_practice(
             status_code=403, detail="You don't have permission for this practice"
         )
 
+    # Issue #860: 與 create_instant_practice / 派發 create·PUT·PATCH 一致 —— 開啟
+    # 「顯示例句（答案挖空）」時，本作業的副本內容必須齊備例句 + 可定位的 cloze 答案。
+    # 少了這道守衛，老師從練習畫面切到「顯示例句」會拿到 200，學生端卻因 fail-closed
+    # 靜默退回一般題型，老師完全不知道教材資料不足。驗證要在寫入設定之前做。
+    if request.show_example_sentence:
+        from routers.assignments.crud import _raise_if_missing_examples
+
+        copy_contents = (
+            db.query(Content)
+            .join(
+                AssignmentContent,
+                AssignmentContent.content_id == Content.id,
+            )
+            .options(selectinload(Content.content_items))
+            .filter(AssignmentContent.assignment_id == assignment.id)
+            .all()
+        )
+        _raise_if_missing_examples(
+            copy_contents,
+            request.practice_mode,
+            bool(request.play_audio),
+            show_example_sentence=True,
+        )
+
     # 更新進階設定
     assignment.practice_mode = request.practice_mode
     assignment.time_limit_per_question = request.time_limit_per_question

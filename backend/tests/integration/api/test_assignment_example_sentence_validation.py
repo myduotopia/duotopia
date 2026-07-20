@@ -643,6 +643,54 @@ def test_create_rejects_example_flag_with_option_images(fresh_db):
     assert resp.status_code == 422, resp.text
 
 
+def test_instant_practice_reconfigure_validates_example_flag(fresh_db):
+    """Issue #860: 即刻練習 reconfigure（老師在練習畫面切到「顯示例句」）也必須
+    驗證教材有例句 + cloze 答案。少了守衛會回 200，學生端卻靜默退回一般題型，
+    老師不知道資料不足 —— 與其他所有寫入路徑不一致。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    no_example = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "NoExample",
+        [
+            {"text": "cat", "translation": "貓"},
+            {"text": "dog", "translation": "狗"},
+            {"text": "bird", "translation": "鳥"},
+            {"text": "fish", "translation": "魚"},
+        ],
+    )
+    db.close()
+
+    token = _login_teacher()
+    headers = {"Authorization": f"Bearer {token}"}
+    created = client.post(
+        "/api/teachers/instant-practice/create",
+        headers=headers,
+        json={
+            "content_id": no_example,
+            "classroom_id": seed["classroom_id"],
+            "practice_mode": "word_selection",
+            "show_image": False,
+        },
+    )
+    assert created.status_code == 200, created.text
+    assignment_id = created.json()["assignment_id"]
+
+    # 切到「顯示例句」— 教材沒有例句，應被擋下
+    resp = client.patch(
+        f"/api/teachers/instant-practice/{assignment_id}/reconfigure",
+        headers=headers,
+        json={
+            "practice_mode": "word_selection",
+            "show_example_sentence": True,
+            "show_image": False,
+        },
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "EXAMPLE_SENTENCE_REQUIRED"
+
+
 def test_patch_example_flag_regenerates_english_distractors(fresh_db):
     """Issue #860: 只 PATCH show_example_sentence=true（沒送 show_image）時，
     show_image 會被收斂成 True → 選項語言翻成英文，干擾項必須跟著重生，
