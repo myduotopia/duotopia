@@ -192,12 +192,19 @@ def _apply_overrides(assignment: Assignment, overrides: dict) -> Assignment:
     effective = dict(overrides)
     practice_mode = effective.get("practice_mode", assignment.practice_mode)
     play_audio = effective.get("play_audio", bool(assignment.play_audio))
+    # Issue #860: 與 practice_mode / play_audio 同樣要 fallback 到已存值 ——
+    # overrides 只含 query string 實際帶到的 key，若直接用 effective.get() 判斷，
+    # 一個已開啟例句挖空的作業只要連結沒重帶這個參數就會被當成 False，導致
+    # 下方互斥檢查與 show_image 收斂雙雙失效。
+    show_example_sentence = effective.get(
+        "show_example_sentence", bool(assignment.show_example_sentence)
+    )
     if effective.get("show_image") and effective.get("show_option_images"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="show_image and show_option_images are mutually exclusive",
         )
-    if effective.get("show_example_sentence") and effective.get("show_option_images"):
+    if show_example_sentence and effective.get("show_option_images"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="show_example_sentence and show_option_images are mutually exclusive",
@@ -205,7 +212,7 @@ def _apply_overrides(assignment: Assignment, overrides: dict) -> Assignment:
     # Issue #860: 例句挖空題選項固定英文 → show_image 視為 True。demo 是 read-time
     # overlay（不寫 DB），所以在這裡收斂，避免只帶 show_example_sentence=true 的
     # query string 產生「英文挖空題 + 中文選項」。
-    if effective.get("show_example_sentence"):
+    if show_example_sentence:
         effective["show_image"] = True
     effective["score_category"] = resolve_score_category(practice_mode, play_audio)
     # type: ignore[return-value] — overlay quacks like Assignment for readers.
