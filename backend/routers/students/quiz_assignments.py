@@ -751,10 +751,15 @@ def _example_cloze_fields(item: ContentItem) -> Dict[str, Any]:
     # 刻意不送 example_sentence_translation / example_sentence_audio_url：
     # 這個題型不渲染它們，且兩者都會洩漏答案（翻譯直接講出該單字、音檔唸出整句
     # 含挖空的字）。與 word_cloze 不同——那邊是打字作答且本來就給提示。
+    #
+    # Fail closed：挖不出空時回空字串，不可退回原句 —— 原句幾乎必然含答案，
+    # 等於把答案直接印在題目上。派發流程有 _raise_if_missing_examples 擋住這種
+    # 資料，但即刻練習／demo 覆寫不跑該驗證，所以這裡必須自己守住。
+    # 前端拿到空字串會退回一般題型呈現（顯示單字／翻譯），不會開天窗。
     return {
         "example_sentence": item.example_sentence or "",
         "cloze_answer": cloze[1] if cloze else _resolve_cloze_answer(item),
-        "blanked_sentence": cloze[0] if cloze else (item.example_sentence or ""),
+        "blanked_sentence": cloze[0] if cloze else "",
     }
 
 

@@ -90,10 +90,9 @@ describe("buildBlankedSentence", () => {
     );
   });
 
-  it("都找不到 → 原句照回（不硬塞底線）", () => {
-    expect(buildBlankedSentence("Nothing matches here.", "xyz", "qqq")).toBe(
-      "Nothing matches here.",
-    );
+  it("都找不到 → fail closed 回空字串（絕不可退回原句，原句含答案）", () => {
+    // 退回原句等於把答案印在題目上；呼叫端拿到空字串會退回一般題型呈現。
+    expect(buildBlankedSentence("I have two apples.", "xyz", "qqq")).toBe("");
   });
 
   it("空句子 → 空字串", () => {

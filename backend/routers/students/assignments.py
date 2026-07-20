@@ -1645,12 +1645,9 @@ async def start_word_selection_practice(
                     source_item.example_sentence or "" if source_item else ""
                 ),
                 "cloze_answer": cloze[1] if cloze else "",
-                # Issue #860: 挖空由後端算，前端只渲染（避免兩邊比對規則漂移）
-                "blanked_sentence": (
-                    cloze[0]
-                    if cloze
-                    else (source_item.example_sentence or "" if source_item else "")
-                ),
+                # Issue #860: 挖空由後端算，前端只渲染（避免兩邊比對規則漂移）。
+                # Fail closed：挖不出空回空字串，不可退回原句（原句含答案）。
+                "blanked_sentence": cloze[0] if cloze else "",
             }
         )
 

@@ -324,11 +324,8 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
                         item, "example_sentence_audio_url", None
                     ),
                     "cloze_answer": _item_cloze[1] if _item_cloze else "",
-                    "blanked_sentence": (
-                        _item_cloze[0]
-                        if _item_cloze
-                        else (getattr(item, "example_sentence", "") or "")
-                    ),
+                    # Fail closed：挖不出空回空字串，不可退回原句（原句含答案）
+                    "blanked_sentence": _item_cloze[0] if _item_cloze else "",
                 }
             )
 

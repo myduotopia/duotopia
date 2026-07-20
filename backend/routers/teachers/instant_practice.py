@@ -168,6 +168,19 @@ async def create_instant_practice(
     if not content:
         raise HTTPException(status_code=404, detail="Content not found")
 
+    # Issue #860: 即刻練習原本不走派發驗證，但開啟「顯示例句（答案挖空）」後同樣
+    # 需要例句 + 可定位的 cloze 答案，否則學生端挖不出空。重用派發流程同一支守衛，
+    # 讓老師拿到明確 422（而不是靜默退回一般題型）。
+    if request.show_example_sentence:
+        from routers.assignments.crud import _raise_if_missing_examples
+
+        _raise_if_missing_examples(
+            [content],
+            request.practice_mode,
+            bool(request.play_audio),
+            show_example_sentence=True,
+        )
+
     # 複製 Content 和 ContentItem（重用既有邏輯）
     content_copy = Content(
         lesson_id=content.lesson_id,

@@ -896,7 +896,19 @@ export default function WordSelectionActivity({
   }
 
   const currentWord = words[currentIndex];
-  const showQuestionImage = showImage && !!currentWord?.image_url;
+  // Issue #860: 挖空句優先用後端算好的；只有派發預覽（只有原始教材）才前端自行挖。
+  // 兩者都挖不出來時為空字串 → 退回一般題型呈現，不顯示未挖空原句（會洩漏答案）。
+  const blankedText =
+    showExampleSentence && currentWord
+      ? currentWord.blanked_sentence ||
+        buildBlankedSentence(
+          currentWord.example_sentence,
+          currentWord.cloze_answer,
+          currentWord.text,
+        )
+      : "";
+  const showQuestionImage =
+    showImage && !blankedText && !!currentWord?.image_url;
 
   // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
   // 拿全寬（窄螢幕、或圖在上時），讓長句有整列寬度好換行、字級不被擠小。
@@ -967,7 +979,7 @@ export default function WordSelectionActivity({
           />
         )}
         {/* Image — Issue #860: 例句挖空題不顯示圖片（題目是句子） */}
-        {showImage && !showExampleSentence && currentWord.image_url && (
+        {showImage && !blankedText && currentWord.image_url && (
           <div
             className={cn(
               "flex justify-center shrink-0",
@@ -997,19 +1009,10 @@ export default function WordSelectionActivity({
           )}
         >
           {/* Issue #860: 例句挖空題 → 顯示挖空後的英文例句（選項為英文單字） */}
-          {showExampleSentence ? (
+          {blankedText ? (
             <div className="text-center py-4 sm:py-6">
               <h2 className="text-[clamp(22px,7vh,28px)] font-bold text-gray-800 leading-relaxed select-none">
-                <ClozeBlankText
-                  text={
-                    currentWord.blanked_sentence ||
-                    buildBlankedSentence(
-                      currentWord.example_sentence,
-                      currentWord.cloze_answer,
-                      currentWord.text,
-                    )
-                  }
-                />
+                <ClozeBlankText text={blankedText} />
               </h2>
             </div>
           ) : (

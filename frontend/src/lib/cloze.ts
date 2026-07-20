@@ -59,6 +59,9 @@ export function findClozeMatch(
  * 把例句挖空。依序嘗試 `answer`（老師存的 cloze_answer）→ `fallbackWord`（單字本身），
  * 鏡射後端 extract_cloze_for_item 的 fallback 鏈 —— 教材沒設 cloze_answer 時（如
  * 範例/示範教材、舊資料）仍要挖得出來，否則會整句連答案一起顯示。
+ *
+ * **Fail closed**：兩者都比不到時回空字串，而不是原句 —— 原句幾乎必然含答案，
+ * 退回原句等於把答案直接印在題目上。呼叫端拿到空字串應退回一般題型呈現。
  */
 export function buildBlankedSentence(
   sentence: string | null | undefined,
@@ -68,7 +71,7 @@ export function buildBlankedSentence(
   if (!sentence) return "";
   const match =
     findClozeMatch(answer, sentence) ?? findClozeMatch(fallbackWord, sentence);
-  if (!match) return sentence;
+  if (!match) return "";
   const [start, end, matched] = match;
   return sentence.slice(0, start) + buildBlank(matched) + sentence.slice(end);
 }

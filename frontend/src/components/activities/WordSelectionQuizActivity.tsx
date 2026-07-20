@@ -536,11 +536,19 @@ export default function WordSelectionQuizActivity({
 
   const isLast = currentIndex === words.length - 1;
   const selectedForCurrent = selectedByItem[currentWord.content_item_id];
-  // Issue #860: 例句挖空題的題目是句子，不顯示圖片（即使 show_image 為 true）
+  // Issue #860: 挖空句優先用後端算好的；只有派發預覽（只有原始教材）才前端自行挖。
+  // 兩者都挖不出來時為空字串 → 退回一般題型呈現，不顯示未挖空原句。
+  const blankedText = settings.show_example_sentence
+    ? currentWord.blanked_sentence ||
+      buildBlankedSentence(
+        currentWord.example_sentence,
+        currentWord.cloze_answer,
+        currentWord.text,
+      )
+    : "";
+  // 例句挖空題的題目是句子，不顯示圖片（即使 show_image 為 true）
   const showQuestionImage =
-    settings.show_image &&
-    !settings.show_example_sentence &&
-    !!currentWord.image_url;
+    settings.show_image && !blankedText && !!currentWord.image_url;
   // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
   // 拿全寬（窄螢幕、或圖在上時），讓長句有整列寬度好換行、字級不被擠小。
   const hasLongOption =
@@ -665,27 +673,25 @@ export default function WordSelectionQuizActivity({
               useHorizontal ? "flex flex-row gap-6" : "flex flex-col gap-6",
             )}
           >
-            {settings.show_image &&
-              !settings.show_example_sentence &&
-              currentWord.image_url && (
-                <div
+            {settings.show_image && !blankedText && currentWord.image_url && (
+              <div
+                className={cn(
+                  "flex justify-center shrink-0",
+                  useHorizontal && "w-1/2 relative min-h-48",
+                )}
+              >
+                <img
+                  src={currentWord.image_url}
+                  alt=""
                   className={cn(
-                    "flex justify-center shrink-0",
-                    useHorizontal && "w-1/2 relative min-h-48",
+                    "object-contain rounded-lg",
+                    useHorizontal
+                      ? "absolute inset-0 w-full h-full"
+                      : "max-h-[clamp(8rem,30vh,22rem)] w-auto",
                   )}
-                >
-                  <img
-                    src={currentWord.image_url}
-                    alt=""
-                    className={cn(
-                      "object-contain rounded-lg",
-                      useHorizontal
-                        ? "absolute inset-0 w-full h-full"
-                        : "max-h-[clamp(8rem,30vh,22rem)] w-auto",
-                    )}
-                  />
-                </div>
-              )}
+                />
+              </div>
+            )}
 
             <div
               className={cn(
@@ -707,20 +713,13 @@ export default function WordSelectionQuizActivity({
                 </div>
               )}
 
-              {/* Issue #860: 例句挖空題 → 顯示挖空後的英文例句（選項為英文單字） */}
-              {settings.show_example_sentence ? (
+              {/* Issue #860: 例句挖空題 → 顯示挖空後的英文例句（選項為英文單字）。
+                  挖不出空時（資料異常）blankedText 為空，退回一般題型呈現，
+                  絕不顯示未挖空的原句（會直接洩漏答案）。 */}
+              {settings.show_example_sentence && blankedText ? (
                 <div className="text-center py-4 sm:py-6">
                   <h2 className="text-[clamp(22px,7vh,28px)] font-bold text-gray-800 leading-relaxed select-none">
-                    <ClozeBlankText
-                      text={
-                        currentWord.blanked_sentence ||
-                        buildBlankedSentence(
-                          currentWord.example_sentence,
-                          currentWord.cloze_answer,
-                          currentWord.text,
-                        )
-                      }
-                    />
+                    <ClozeBlankText text={blankedText} />
                   </h2>
                 </div>
               ) : (
