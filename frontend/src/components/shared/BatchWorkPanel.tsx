@@ -95,12 +95,13 @@ export function BatchWorkPanel({
   const onTextTab = !showTabs || activeTab === "text";
 
   return (
-    // 定高 + 內部捲動：面板本身比視窗矮，sticky 才固定得住（面板若比視窗高就會被捲走）
-    <div className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4 sticky top-0 self-start max-h-[calc(100vh-160px)] overflow-y-auto">
+    // 面板矮於捲動區才固定得住；內容過長時面板自己捲，tab 列在下方另設 sticky 不被捲掉
+    <div className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4 sticky top-0 self-start max-h-[70vh] overflow-y-auto overscroll-contain">
       <div className="space-y-3 flex-1 flex flex-col">
         {/* Tab 切換（貼上文字 / 圖片 PDF）— issue #891 */}
         {showTabs && (
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+          // 面板內部捲動時，tab 列釘在面板頂端，不會被捲掉
+          <div className="sticky top-0 z-10 flex gap-1 bg-gray-100 p-1 rounded-lg">
             <button
               type="button"
               onClick={() => setActiveTab("text")}
