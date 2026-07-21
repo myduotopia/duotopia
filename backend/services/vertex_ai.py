@@ -19,6 +19,8 @@ import asyncio
 import time
 from typing import Optional, Literal
 
+from core.config import settings
+
 logger = logging.getLogger(__name__)
 
 # Model name constants
@@ -34,7 +36,8 @@ class VertexAIService:
 
     def __init__(self):
         self.project_id = os.getenv("VERTEX_AI_PROJECT_ID", "duotopia-472708")
-        self.location = os.getenv("VERTEX_AI_LOCATION", "asia-northeast1")
+        # 單一設定來源，避免與 config.py 預設值不一致（Issue #959）
+        self.location = settings.VERTEX_AI_LOCATION
         self._initialized = False
         # Cached models without system_instruction (for reuse)
         self._flash_model = None
