@@ -387,7 +387,7 @@ jobs:
         esac
         ENV_VARS="$ENV_VARS,USE_VERTEX_AI=${_USE_VERTEX_AI}"
         ENV_VARS="$ENV_VARS,VERTEX_AI_PROJECT_ID=$PROJECT_ID"
-        ENV_VARS="$ENV_VARS,VERTEX_AI_LOCATION=asia-east1"
+        ENV_VARS="$ENV_VARS,VERTEX_AI_LOCATION=asia-northeast1"
         ENV_VARS="$ENV_VARS,SMTP_HOST=${{ secrets.SMTP_HOST }}"
         ENV_VARS="$ENV_VARS,SMTP_PORT=${{ secrets.SMTP_PORT }}"
         ENV_VARS="$ENV_VARS,SMTP_USER=${{ secrets.SMTP_USER }}"

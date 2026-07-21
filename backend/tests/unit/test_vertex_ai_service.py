@@ -308,12 +308,14 @@ class TestGetVertexAIService:
 class TestVertexLocationDefault:
     """Issue #959: Vertex AI 資料出境收斂迴歸測試
 
-    未設定 VERTEX_AI_LOCATION 時，預設應為 asia-east1（台灣），
-    收斂學生學習資料出境範圍。config.py 於 import 時會 load_dotenv 讀本機
-    .env，故 patch dotenv.load_dotenv 成 no-op 以單獨驗證程式碼預設值。
+    未設定 VERTEX_AI_LOCATION 時，預設應為 asia-northeast1（東京）。
+    asia-east1（台灣）實測無 Gemini 2.5 模型，asia-northeast1 是唯一同時
+    提供 gemini-2.5-flash 與 gemini-2.5-pro 的亞洲 region。config.py 於
+    import 時會 load_dotenv 讀本機 .env，故 patch dotenv.load_dotenv 成
+    no-op 以單獨驗證程式碼預設值。
     """
 
-    def test_default_location_is_asia_east1(self):
+    def test_default_location_is_asia_northeast1(self):
         import importlib
         import os
         from unittest.mock import patch
@@ -328,7 +330,8 @@ class TestVertexLocationDefault:
 
             importlib.reload(core.config)
             try:
-                assert core.config.settings.VERTEX_AI_LOCATION == "asia-east1"
+                assert core.config.settings.VERTEX_AI_LOCATION == "asia-northeast1"
+                assert core.config.settings.VERTEX_AI_LOCATION != "asia-east1"
             finally:
                 importlib.reload(core.config)
 
