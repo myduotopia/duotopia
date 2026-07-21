@@ -559,6 +559,44 @@ def test_create_without_example_flag_stays_permissive(fresh_db):
     assert resp.status_code == 200, resp.text
 
 
+def test_patch_toggling_example_flag_on_validates_missing_example(fresh_db):
+    """Issue #860: PATCH 把 show_example_sentence 從關切成開時，必須重新驗證本作業
+    的副本內容有例句 + cloze 答案（鏡射 play_audio toggle 的守衛）。原本以
+    show_example_sentence=False 派發（無例句也可），後來 PATCH 開啟 → 應 422。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Word-only",
+        [{"text": "cat", "translation": "貓"}],  # 無例句
+    )
+    db.close()
+
+    token = _login_teacher()
+    headers = {"Authorization": f"Bearer {token}"}
+    created = client.post(
+        "/api/teachers/assignments/create",
+        headers=headers,
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=False,  # 起始關閉 → 無例句也可派發
+        ),
+    )
+    assert created.status_code == 200, created.text
+    assignment_id = created.json()["assignment_id"]
+
+    resp = client.patch(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers=headers,
+        json={"show_example_sentence": True},  # 切開 → 需重新驗證
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "EXAMPLE_SENTENCE_REQUIRED"
+
+
 def test_instant_practice_reconfigure_validates_example_flag(fresh_db):
     """Issue #860: 即刻練習 reconfigure（老師在練習畫面切到「顯示例句」）也必須
     驗證教材有例句 + cloze 答案。少了守衛會回 200，學生端卻靜默退回一般題型，

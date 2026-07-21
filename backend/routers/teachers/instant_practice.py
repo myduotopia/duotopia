@@ -257,7 +257,6 @@ async def create_instant_practice(
         play_audio=request.play_audio,
         show_translation=request.show_translation,
         show_word=request.show_word,
-        # Issue #860: 例句挖空題選項固定英文 → show_image 視為 True
         show_image=request.show_image,
         show_option_images=bool(request.show_option_images),  # Issue #631
         show_example_sentence=bool(request.show_example_sentence),  # Issue #860
