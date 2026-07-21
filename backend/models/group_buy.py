@@ -23,7 +23,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 
 from database import Base
 from .base import UUID
@@ -74,7 +74,15 @@ class GroupBuyTeam(Base):
 
     __table_args__ = (
         Index("ix_group_buy_teams_owner", "owner_teacher_id"),
-        Index("ix_group_buy_teams_source_org", "source_organization_id"),
+        # 部分唯一索引：同一來源機構最多回填一個 team，讓冪等不變式由 DB 保證
+        # （防並發重跑重複），而非只靠回填 SQL 的 WHERE NOT EXISTS。NULL（新開團）
+        # 不受限。postgresql_where 在 SQLite 測試被忽略，退化為一般唯一索引。
+        Index(
+            "uq_group_buy_teams_source_org",
+            "source_organization_id",
+            unique=True,
+            postgresql_where=text("source_organization_id IS NOT NULL"),
+        ),
     )
 
     def __repr__(self):

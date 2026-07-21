@@ -17,7 +17,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from auth import get_password_hash
-from models import GroupBuyMember, GroupBuyTeam, Plan, Teacher
+from models import GroupBuyMember, GroupBuyTeam, Organization, Plan, Teacher
 
 
 # ---------- fixtures ----------
@@ -125,6 +125,33 @@ def test_pause_extend_columns_default(team_with_owner):
     assert m.paused_remaining_seconds is None
     assert m.paused_at is None
     assert m.individual_auto_renew_suspended is False
+
+
+def test_source_organization_id_unique_when_set(team_with_owner):
+    """同一來源機構最多回填一個 team（冪等不變式由 DB 唯一索引保證）。
+
+    註：SQLite 忽略 postgresql_where，退化為一般唯一索引；對「非 NULL 值唯一」
+    的驗證仍成立（NULL 多列允許另有 test 覆蓋隱含於 fixture）。
+    """
+    db, team, owner = team_with_owner
+    org = Organization(name="src-org", org_type="group_buy")
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    team.source_organization_id = org.id
+    db.commit()
+
+    dup = GroupBuyTeam(
+        owner_teacher_id=owner.id,
+        plan_id=team.plan_id,
+        seat_limit=30,
+        source_organization_id=org.id,  # 同一來源機構 → 應違反唯一索引
+    )
+    db.add(dup)
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
 
 
 def test_cascade_delete_team_removes_members(team_with_owner):

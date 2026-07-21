@@ -60,9 +60,12 @@ def upgrade() -> None:
         "CREATE INDEX IF NOT EXISTS ix_group_buy_teams_owner "
         "ON group_buy_teams (owner_teacher_id)"
     )
+    # 部分唯一索引：同一來源機構最多回填一個 team（冪等不變式由 DB 保證，
+    # 亦擋並發重跑）。NULL（新開團）不受限。
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_group_buy_teams_source_org "
-        "ON group_buy_teams (source_organization_id)"
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_group_buy_teams_source_org "
+        "ON group_buy_teams (source_organization_id) "
+        "WHERE source_organization_id IS NOT NULL"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_group_buy_teams_is_active "
@@ -172,6 +175,12 @@ def upgrade() -> None:
             LIMIT 1
         ) towner ON TRUE
         WHERE o.org_type = 'group_buy'
+          -- seat_limit 為 NOT NULL。plans.teacher_seats 在 schema 層仍可為 NULL
+          -- （只有應用層 validate_group_buy_plan 保證非空），故若三來源皆 NULL
+          -- 就跳過此 org（改由下方 NOTICE 揭露），而非讓 NOT NULL violation
+          -- 中斷整條 set-based INSERT、卡住整個環境的回填（graceful degrade）。
+          AND COALESCE(o.teacher_limit, sch.teacher_seat_limit, sch.teacher_seats)
+              IS NOT NULL
           AND NOT EXISTS (
               SELECT 1 FROM group_buy_teams t
               WHERE t.source_organization_id = o.id
