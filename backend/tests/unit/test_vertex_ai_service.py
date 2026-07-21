@@ -19,18 +19,22 @@ class TestVertexAIServiceInit:
     """Test VertexAIService initialization"""
 
     def test_default_config(self):
+        from core.config import settings
+
         service = VertexAIService()
         assert service.project_id == "duotopia-472708"
-        assert service.location == "us-central1"
+        # location 收斂為單一來源 settings.VERTEX_AI_LOCATION（Issue #959），
+        # 不 pin 特定字面值以免隨環境變數變動而脆弱
+        assert service.location == settings.VERTEX_AI_LOCATION
         assert service._initialized is False
         assert service._flash_model is None
         assert service._pro_model is None
 
-    @patch.dict(
-        "os.environ",
-        {"VERTEX_AI_PROJECT_ID": "test-proj", "VERTEX_AI_LOCATION": "us-west1"},
-    )
-    def test_custom_config(self):
+    @patch.dict("os.environ", {"VERTEX_AI_PROJECT_ID": "test-proj"})
+    @patch("services.vertex_ai.settings")
+    def test_custom_config(self, mock_settings):
+        # location 來自 settings，改以 patch settings 驗證覆寫（Issue #959）
+        mock_settings.VERTEX_AI_LOCATION = "us-west1"
         service = VertexAIService()
         assert service.project_id == "test-proj"
         assert service.location == "us-west1"
@@ -299,3 +303,47 @@ class TestGetVertexAIService:
         svc2 = get_vertex_ai_service()
         assert svc1 is svc2
         module._vertex_ai_service = None  # cleanup
+
+
+class TestVertexLocationDefault:
+    """Issue #959: Vertex AI 資料出境收斂迴歸測試
+
+    未設定 VERTEX_AI_LOCATION 時，預設應為 asia-east1（台灣），
+    收斂學生學習資料出境範圍。config.py 於 import 時會 load_dotenv 讀本機
+    .env，故 patch dotenv.load_dotenv 成 no-op 以單獨驗證程式碼預設值。
+    """
+
+    def test_default_location_is_asia_east1(self):
+        import importlib
+        import os
+        from unittest.mock import patch
+
+        env_without_loc = {
+            k: v for k, v in os.environ.items() if k != "VERTEX_AI_LOCATION"
+        }
+        with patch.dict(os.environ, env_without_loc, clear=True), patch(
+            "dotenv.load_dotenv"
+        ):
+            import core.config
+
+            importlib.reload(core.config)
+            try:
+                assert core.config.settings.VERTEX_AI_LOCATION == "asia-east1"
+            finally:
+                importlib.reload(core.config)
+
+    def test_env_location_overrides_default(self):
+        import importlib
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"VERTEX_AI_LOCATION": "us-central1"}), patch(
+            "dotenv.load_dotenv"
+        ):
+            import core.config
+
+            importlib.reload(core.config)
+            try:
+                assert core.config.settings.VERTEX_AI_LOCATION == "us-central1"
+            finally:
+                importlib.reload(core.config)

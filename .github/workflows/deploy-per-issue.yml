@@ -120,7 +120,7 @@ jobs:
           ENV_VARS="$ENV_VARS,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
           ENV_VARS="$ENV_VARS,USE_VERTEX_AI=${{ vars.USE_VERTEX_AI_PREVIEW || 'false' }}"
           ENV_VARS="$ENV_VARS,VERTEX_AI_PROJECT_ID=${PROJECT_ID}"
-          ENV_VARS="$ENV_VARS,VERTEX_AI_LOCATION=us-central1"
+          ENV_VARS="$ENV_VARS,VERTEX_AI_LOCATION=asia-east1"
           ENV_VARS="$ENV_VARS,SMTP_HOST=${{ secrets.SMTP_HOST }}"
           ENV_VARS="$ENV_VARS,SMTP_PORT=${{ secrets.SMTP_PORT }}"
           ENV_VARS="$ENV_VARS,SMTP_USER=${{ secrets.SMTP_USER }}"
@@ -267,6 +267,9 @@ jobs:
           gcloud auth configure-docker ${REGION}-docker.pkg.dev
 
           echo "🔍 DEBUG: Building frontend image"
+          # Per-issue previews are always non-prod test traffic — GA/Meta Pixel IDs
+          # are passed empty (disabled via index.html guard) to avoid polluting
+          # production analytics. (Issue #959)
           docker build \
             -f Dockerfile.staging \
             --build-arg VITE_API_URL="${BACKEND_URL}" \
@@ -274,8 +277,8 @@ jobs:
             --build-arg VITE_TAPPAY_SERVER_TYPE=production \
             --build-arg VITE_TAPPAY_PRODUCTION_APP_ID="${{ secrets.TAPPAY_PRODUCTION_APP_ID }}" \
             --build-arg VITE_TAPPAY_PRODUCTION_APP_KEY="${{ secrets.TAPPAY_PRODUCTION_APP_KEY }}" \
-            --build-arg VITE_GA_MEASUREMENT_ID="${{ secrets.VITE_GA_MEASUREMENT_ID }}" \
-            --build-arg VITE_META_PIXEL_ID="${{ secrets.VITE_META_PIXEL_ID }}" \
+            --build-arg VITE_GA_MEASUREMENT_ID="" \
+            --build-arg VITE_META_PIXEL_ID="" \
             --build-arg VITE_SUPABASE_URL="${{ secrets.STAGING_SUPABASE_URL }}" \
             --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.STAGING_SUPABASE_ANON_KEY }}" \
             -t "${IMAGE}" \
