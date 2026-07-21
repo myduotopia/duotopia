@@ -139,7 +139,11 @@ def upgrade() -> None:
         SELECT
             towner.teacher_id,
             sch.plan_id,
-            COALESCE(o.teacher_limit, sch.teacher_seat_limit),
+            -- seat_limit 為 NOT NULL，但 org.teacher_limit / school.teacher_seat_limit
+            -- 皆可為 NULL（NULL = 無限制）。以 plan.teacher_seats 作最終保底 —
+            -- 團購方案該欄一定非空（validate_group_buy_plan 強制），確保不會插入 NULL
+            -- 而讓整條 set-based INSERT 中斷、卡住整個環境的回填。
+            COALESCE(o.teacher_limit, sch.teacher_seat_limit, sch.teacher_seats),
             o.subscription_start_date,
             o.subscription_end_date,
             o.contact_email,
@@ -149,8 +153,9 @@ def upgrade() -> None:
             now()
         FROM organizations o
         JOIN LATERAL (
-            SELECT s.plan_id, s.teacher_seat_limit
+            SELECT s.plan_id, s.teacher_seat_limit, p.teacher_seats
             FROM schools s
+            JOIN plans p ON p.id = s.plan_id
             WHERE s.organization_id = o.id
               AND s.is_active = TRUE
               AND s.plan_id IS NOT NULL
@@ -174,9 +179,34 @@ def upgrade() -> None:
         """
     )
 
+    # 3b) 診斷：INNER JOIN LATERAL 會排除「沒有 active school+plan」或「沒有 active
+    #     org_owner」的 group_buy org（因 plan_id / owner_teacher_id 為 NOT NULL，
+    #     無法 LEFT JOIN 補列）。這類 org 不會產生 team，PR2 雙讀切換後會看不到，
+    #     故在此發 NOTICE 讓被跳過的 org 可被發現（deploy log 可見）。
+    op.execute(
+        """
+        DO $$
+        DECLARE skipped INT;
+        BEGIN
+            SELECT count(*) INTO skipped
+            FROM organizations o
+            WHERE o.org_type = 'group_buy'
+              AND NOT EXISTS (
+                  SELECT 1 FROM group_buy_teams t
+                  WHERE t.source_organization_id = o.id
+              );
+            IF skipped > 0 THEN
+                RAISE NOTICE '[issue-862 backfill] % group_buy org(s) 缺 active school+plan 或 org_owner，未回填成 team，請人工檢查', skipped;
+            END IF;
+        END $$;
+        """
+    )
+
     # ------------------------------------------------------------------
-    # 4) 回填 members（team 來源 org 底下所有 active teacher_schools）
-    #    DISTINCT ON 避免同一老師綁多校時違反 (team_id, teacher_id) 唯一約束。
+    # 4) 回填 members（team 來源 org 底下所有 teacher_schools，含 active/inactive —
+    #    is_active 原封帶入以保留歷史，非只取 active）。
+    #    DISTINCT ON 避免同一老師綁多校時違反 (team_id, teacher_id) 唯一約束；
+    #    以 is_active DESC 優先，確保重複時保留「仍在職」那一列的狀態。
     #    is_owner = (teacher = team.owner_teacher_id)。
     # ------------------------------------------------------------------
     op.execute(
@@ -199,7 +229,7 @@ def upgrade() -> None:
             SELECT 1 FROM group_buy_members m
             WHERE m.team_id = t.id AND m.teacher_id = ts.teacher_id
         )
-        ORDER BY t.id, ts.teacher_id, ts.school_id;
+        ORDER BY t.id, ts.teacher_id, ts.is_active DESC, ts.school_id;
         """
     )
 
