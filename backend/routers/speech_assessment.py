@@ -20,6 +20,7 @@ from database import get_db
 from auth import get_current_user
 from performance_monitoring import trace_function, start_span, PerformanceSnapshot
 from core.thread_pool import get_speech_thread_pool, get_audio_thread_pool
+from core.config import settings
 from models import (
     Student,
     StudentContentProgress,
@@ -304,7 +305,8 @@ def assess_pronunciation(audio_data: bytes, reference_text: str) -> Dict[str, An
 
     # 取得 Azure 設定
     speech_key = os.getenv("AZURE_SPEECH_KEY")
-    speech_region = os.getenv("AZURE_SPEECH_REGION", "eastasia")
+    # 單一設定來源，避免寫死 fallback region（Issue #958）
+    speech_region = settings.AZURE_SPEECH_REGION
 
     logger.debug(f"Azure Speech Key configured: {bool(speech_key)}")
     logger.debug(f"Azure Speech Region: {speech_region}")

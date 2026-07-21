@@ -241,7 +241,7 @@ async def get_demo_speech_token(request: Request):
     Returns:
         {
             "token": "<azure-speech-token>",
-            "region": "eastasia",
+            "region": "japaneast",
             "expires_in": 300,
             "demo_mode": true,
             "remaining_today": <remaining quota>

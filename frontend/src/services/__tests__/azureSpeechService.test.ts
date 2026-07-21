@@ -72,7 +72,7 @@ describe("AzureSpeechService", () => {
       const mockTokenResponse = {
         data: {
           token: "test-token-abc123",
-          region: "eastasia",
+          region: "japaneast",
           expires_in: 600,
         },
       };
@@ -89,14 +89,14 @@ describe("AzureSpeechService", () => {
         }),
       );
       expect(result.token).toBe("test-token-abc123");
-      expect(result.region).toBe("eastasia");
+      expect(result.region).toBe("japaneast");
     });
 
     it("should cache token and reuse within expiration time", async () => {
       const mockTokenResponse = {
         data: {
           token: "cached-token",
-          region: "eastasia",
+          region: "japaneast",
           expires_in: 600,
         },
       };
@@ -118,10 +118,10 @@ describe("AzureSpeechService", () => {
 
     it("should refresh token after expiration", async () => {
       const mockToken1 = {
-        data: { token: "token-1", region: "eastasia", expires_in: 1 }, // 1 second
+        data: { token: "token-1", region: "japaneast", expires_in: 1 }, // 1 second
       };
       const mockToken2 = {
-        data: { token: "token-2", region: "eastasia", expires_in: 600 },
+        data: { token: "token-2", region: "japaneast", expires_in: 600 },
       };
 
       vi.mocked(axios.post)
@@ -143,7 +143,7 @@ describe("AzureSpeechService", () => {
 
     it("should cache with a 120s safety buffer (Issue #136)", async () => {
       vi.mocked(axios.post).mockResolvedValueOnce({
-        data: { token: "buffer-token", region: "eastasia", expires_in: 600 },
+        data: { token: "buffer-token", region: "japaneast", expires_in: 600 },
       });
 
       const before = Date.now();
@@ -163,12 +163,12 @@ describe("AzureSpeechService", () => {
       // 后端 cache 命中时可能回传很小的剩余秒数（如 100s）
       vi.mocked(axios.post)
         .mockResolvedValueOnce({
-          data: { token: "small-token", region: "eastasia", expires_in: 100 },
+          data: { token: "small-token", region: "japaneast", expires_in: 100 },
         })
         .mockResolvedValueOnce({
           data: {
             token: "refetched-token",
-            region: "eastasia",
+            region: "japaneast",
             expires_in: 600,
           },
         });

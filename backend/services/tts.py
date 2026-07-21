@@ -11,6 +11,7 @@ from typing import Optional, Dict  # noqa: F401
 from google.cloud import storage
 from datetime import datetime  # noqa: F401
 import azure.cognitiveservices.speech as speechsdk
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,8 @@ class TTSService:
 
         # Azure Speech 設定
         self.azure_speech_key = os.getenv("AZURE_SPEECH_KEY")
-        self.azure_speech_region = os.getenv("AZURE_SPEECH_REGION", "eastasia")
+        # 單一設定來源，避免寫死 fallback region（Issue #958）
+        self.azure_speech_region = settings.AZURE_SPEECH_REGION
 
         if not self.azure_speech_key:
             # 不立即拋出錯誤，允許延遲檢查（用於開發環境）
