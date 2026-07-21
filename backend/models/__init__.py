@@ -60,6 +60,9 @@ from .organization import (
     StudentSchool,
 )
 
+# Group-buy standalone models (issue #862 — 團購脫離機構表)
+from .group_buy import GroupBuyTeam, GroupBuyMember
+
 # Student status history (issue #768 — per-head billing trail)
 from .student_status_history import StudentStatusHistory
 
@@ -144,6 +147,9 @@ __all__ = [
     "TeacherSchool",
     "ClassroomSchool",
     "StudentSchool",
+    # Group-buy standalone (issue #862)
+    "GroupBuyTeam",
+    "GroupBuyMember",
     # Student status history
     "StudentStatusHistory",
     # Institution billing invoices
