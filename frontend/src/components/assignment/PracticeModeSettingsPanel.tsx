@@ -27,7 +27,6 @@ import {
 import type { ScoreCategory } from "@/utils/scoreCategory";
 import {
   applySettingChange,
-  applySegmentedOption,
   isSegmentedOptionActive,
   isShowAnswerLockedByAudio,
   segmentedScoreCategory,
@@ -43,6 +42,7 @@ const TOGGLE_DESC: Partial<Record<SettingKey, string>> = {
   show_translation: `${PM}.showTranslationDesc`,
   show_image: `${PM}.showImageDesc`,
   show_option_images: `${PM}.showOptionImagesDesc`,
+  show_example_sentence: `${PM}.showExampleSentenceDesc`, // Issue #860
   is_live_quiz: `${PM}.liveQuizHint`,
 };
 
@@ -55,7 +55,6 @@ const SEGMENTED_LABEL: Partial<Record<SettingKey, string>> = {
   play_audio: `${PM}.playAudio`,
   show_word: `${PM}.questionDisplay`,
   show_translation: `${PM}.questionDisplay`,
-  show_example_sentence: `${PM}.questionDisplay`, // Issue #860: 三選一題目呈現
 };
 
 const SCORE_I18N: Record<ScoreCategory, string> = {
@@ -213,7 +212,7 @@ export function PracticeModeSettingsPanel({
         {t(SEGMENTED_LABEL[spec.key] ?? "")}
       </Label>
       <div className="flex gap-3">
-        {spec.options.map((opt, i) => {
+        {spec.options.map((opt) => {
           const active = isSegmentedOptionActive(value, spec, opt);
           const sub = opt.descKey
             ? t(opt.descKey)
@@ -223,9 +222,9 @@ export function PracticeModeSettingsPanel({
           return (
             <button
               type="button"
-              key={`${String(opt.value)}-${i}`}
+              key={String(opt.value)}
               disabled={locked}
-              onClick={() => onChange(applySegmentedOption(value, spec, opt))}
+              onClick={() => apply(spec, opt.value)}
               className={cn(
                 "flex-1 p-3 rounded-lg border text-sm",
                 locked && "opacity-50 cursor-not-allowed",
@@ -249,10 +248,9 @@ export function PracticeModeSettingsPanel({
   );
 
   const renderSpec = (spec: SettingSpec) => {
-    // Issue #835 / #860: 依另一個 setting 的值條件隱藏（is_live_quiz 開啟時隱藏整卷限時；
-    // show_example_sentence 開啟時隱藏圖片相關 toggle）。
+    // Issue #835: 依另一個 setting 的值條件隱藏（如 is_live_quiz 開啟時隱藏整卷限時）。
     if (
-      (spec.kind === "select" || spec.kind === "toggle") &&
+      spec.kind === "select" &&
       spec.hideWhen &&
       v[spec.hideWhen.key] === spec.hideWhen.equals
     ) {

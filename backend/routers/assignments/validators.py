@@ -85,17 +85,7 @@ class CreateAssignmentRequest(BaseModel):
         # Issue #631: show_image 與 show_option_images 互斥，避免題目圖片直接洩漏答案
         if self.show_image and self.show_option_images:
             raise ValueError("show_image and show_option_images are mutually exclusive")
-        # Issue #860: 例句挖空題的選項是英文單字，與「選項顯示圖片」互斥
-        if self.show_example_sentence and self.show_option_images:
-            raise ValueError(
-                "show_example_sentence and show_option_images are mutually exclusive"
-            )
-        # Issue #860: 播放音檔放的是「該單字本身」的發音 → 等於把挖空的答案唸出來，
-        # 與例句挖空互斥。UI 的三選一已互斥，這裡是 API 邊界的第二道防線。
-        if self.show_example_sentence and self.play_audio:
-            raise ValueError(
-                "show_example_sentence and play_audio are mutually exclusive"
-            )
+        # Issue #860: 「顯示例句」是獨立附加開關，與圖片/選項圖片/播放音檔皆不互斥。
         return self
 
 
@@ -133,16 +123,7 @@ class UpdateAssignmentRequest(BaseModel):
         # 不在 validator 階段判斷，留給 CRUD 層讀現值再檢查。
         if self.show_image is True and self.show_option_images is True:
             raise ValueError("show_image and show_option_images are mutually exclusive")
-        # Issue #860: 例句挖空題選項為英文單字，與選項圖片互斥（同上只擋兩者都明確 True）
-        if self.show_example_sentence is True and self.show_option_images is True:
-            raise ValueError(
-                "show_example_sentence and show_option_images are mutually exclusive"
-            )
-        # Issue #860: 單字音檔會唸出被挖空的答案 → 與例句挖空互斥
-        if self.show_example_sentence is True and self.play_audio is True:
-            raise ValueError(
-                "show_example_sentence and play_audio are mutually exclusive"
-            )
+        # Issue #860: 「顯示例句」是獨立附加開關，與圖片/選項圖片/播放音檔皆不互斥。
         return self
 
 

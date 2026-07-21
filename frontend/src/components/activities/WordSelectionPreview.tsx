@@ -137,10 +137,8 @@ export default function WordSelectionPreview({
 
   // 組成 WordOption[]（含選項）— 只在 items 或 show_image 變動時重組
   const previewWords = useMemo<WordOption[]>(() => {
-    // 例句模式固定英文選項（show_image 視為 true）。
-    const showImage = settings.show_example_sentence
-      ? true
-      : (settings.show_image ?? true);
+    // 選項語言由 show_image 決定，不受例句影響。
+    const showImage = settings.show_image ?? true;
     return items.map((item) => ({
       content_item_id: item.id,
       text: item.text,
@@ -154,15 +152,13 @@ export default function WordSelectionPreview({
       cloze_answer: item.cloze_answer,
       blanked_sentence: item.blanked_sentence,
     }));
-  }, [items, settings.show_image, settings.show_example_sentence]);
+  }, [items, settings.show_image]);
 
   // 穩定的 previewSettings reference — 否則 WordSelectionActivity 的 useEffect
   // 會在 AssignmentDialog 每次表單按鍵時重觸發，把預覽 reset 回第 1 題
   const previewSettings = useMemo(
     () => ({
-      // Issue #860: 例句挖空題選項固定英文 → show_image 視為 true（與後端
-      // effective_show_image 同一不變式，不依賴 UI 永遠成對送出）
-      show_image: settings.show_example_sentence ? true : settings.show_image,
+      show_image: settings.show_image,
       show_option_images: settings.show_option_images,
       show_example_sentence: settings.show_example_sentence,
       play_audio: settings.play_audio,

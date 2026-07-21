@@ -33,7 +33,6 @@ from models import (
 from utils.permissions import check_content_access
 from utils.practice_mode import validate_practice_mode
 from utils.score_category import resolve_score_category
-from utils.distractors import effective_show_image
 from .dependencies import get_current_teacher
 
 logger = logging.getLogger(__name__)
@@ -63,15 +62,7 @@ class InstantPracticeRequest(BaseModel):
     def _option_images_xor_image(self) -> "InstantPracticeRequest":
         if self.show_image and self.show_option_images:
             raise ValueError("show_image and show_option_images are mutually exclusive")
-        if self.show_example_sentence and self.show_option_images:
-            raise ValueError(
-                "show_example_sentence and show_option_images are mutually exclusive"
-            )
-        # Issue #860: 單字音檔會唸出被挖空的答案 → 與例句挖空互斥
-        if self.show_example_sentence and self.play_audio:
-            raise ValueError(
-                "show_example_sentence and play_audio are mutually exclusive"
-            )
+        # Issue #860: 「顯示例句」是獨立附加開關，與圖片/選項圖片/播放音檔皆不互斥。
         return self
 
 
@@ -246,9 +237,7 @@ async def create_instant_practice(
     # 否則例句挖空題會出現「正解英文、干擾項中文」。
     if request.practice_mode == "word_selection":
         _regenerate_word_selection_distractors_for_content(
-            db,
-            content_copy.id,
-            effective_show_image(request.show_image, request.show_example_sentence),
+            db, content_copy.id, bool(request.show_image)
         )
     elif request.practice_mode == "tug_of_war":
         _ensure_distractors_for_content(db, content_copy.id)
@@ -269,9 +258,7 @@ async def create_instant_practice(
         show_translation=request.show_translation,
         show_word=request.show_word,
         # Issue #860: 例句挖空題選項固定英文 → show_image 視為 True
-        show_image=effective_show_image(
-            request.show_image, request.show_example_sentence
-        ),
+        show_image=request.show_image,
         show_option_images=bool(request.show_option_images),  # Issue #631
         show_example_sentence=bool(request.show_example_sentence),  # Issue #860
         score_category=resolve_score_category(
@@ -366,15 +353,7 @@ class InstantPracticeReconfigureRequest(BaseModel):
     def _option_images_xor_image(self) -> "InstantPracticeReconfigureRequest":
         if self.show_image and self.show_option_images:
             raise ValueError("show_image and show_option_images are mutually exclusive")
-        if self.show_example_sentence and self.show_option_images:
-            raise ValueError(
-                "show_example_sentence and show_option_images are mutually exclusive"
-            )
-        # Issue #860: 單字音檔會唸出被挖空的答案 → 與例句挖空互斥
-        if self.show_example_sentence and self.play_audio:
-            raise ValueError(
-                "show_example_sentence and play_audio are mutually exclusive"
-            )
+        # Issue #860: 「顯示例句」是獨立附加開關，與圖片/選項圖片/播放音檔皆不互斥。
         return self
 
 
@@ -441,9 +420,7 @@ async def reconfigure_instant_practice(
     assignment.play_audio = request.play_audio
     assignment.show_translation = request.show_translation
     assignment.show_word = request.show_word
-    assignment.show_image = effective_show_image(
-        request.show_image, request.show_example_sentence
-    )
+    assignment.show_image = request.show_image
     assignment.show_option_images = bool(request.show_option_images)  # Issue #631
     assignment.show_example_sentence = bool(request.show_example_sentence)  # Issue #860
     if request.target_proficiency is not None:

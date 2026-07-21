@@ -383,8 +383,6 @@ async def create_assignment(
         bool(request.show_example_sentence),
     )
 
-    from utils.distractors import effective_show_image
-
     # Sanitize answer_mode - deprecated field with database constraint
     # Only 'listening' and 'writing' are allowed by database CHECK constraint
     # If value is invalid (e.g., 'speaking'), use default 'writing'
@@ -418,13 +416,12 @@ async def create_assignment(
         # 單字選擇模式設定
         target_proficiency=request.target_proficiency,
         show_word=request.show_word,
-        # Issue #860: 例句挖空題選項固定英文 → show_image 視為 True（在寫入端收斂）
-        show_image=effective_show_image(
-            request.show_image, request.show_example_sentence
-        ),
+        show_image=request.show_image,
         show_translation=request.show_translation,
         show_option_images=bool(request.show_option_images),  # Issue #631
-        show_example_sentence=bool(request.show_example_sentence),  # Issue #860
+        # Issue #860: 「顯示例句（答案挖空）」是獨立附加開關，只在選項上方多顯示挖空
+        # 例句；選項語言仍由 show_image 決定，與圖片/選項圖片/播放音檔皆不互斥。
+        show_example_sentence=bool(request.show_example_sentence),
         # score_category is auto-resolved; any client-supplied value is ignored.
         # See docs/design/score-category-mapping.md
         score_category=resolve_score_category(
@@ -1056,11 +1053,6 @@ async def patch_assignment(
         if field in provided:
             setattr(assignment, field, getattr(request, field))
 
-    # Issue #860: 例句挖空題選項固定英文 → show_image 視為 True。在此收斂，避免
-    # 只送 show_example_sentence=true 的 PATCH 造成「英文挖空題 + 中文選項」。
-    if assignment.show_example_sentence:
-        assignment.show_image = True
-
     # Issue #860: 開啟「顯示例句（答案挖空）」時，本作業的副本內容必須齊備例句 +
     # cloze 答案，否則學生端題目會空白/挖不出空。與 play_audio 一樣，只在「切換為
     # 開」時重新驗證；關閉永遠安全。
@@ -1123,30 +1115,12 @@ async def patch_assignment(
             detail="show_image and show_option_images are mutually exclusive",
         )
 
-    # Issue #860: 例句挖空題選項為英文單字，與選項圖片互斥
-    if assignment.show_example_sentence and assignment.show_option_images:
-        raise HTTPException(
-            status_code=422,
-            detail="show_example_sentence and show_option_images are mutually exclusive",
-        )
-
-    # Issue #860: 單字音檔會唸出被挖空的答案 → 與例句挖空互斥（跨 request 再驗一次）
-    if assignment.show_example_sentence and assignment.play_audio:
-        raise HTTPException(
-            status_code=422,
-            detail="show_example_sentence and play_audio are mutually exclusive",
-        )
-
     # word_selection: show_image 切換 → 選項語言要跟著翻面（英文 ↔ 翻譯），
     # 必須重生 distractors，否則學生端會看到語言不一致的選項。
-    #
-    # Issue #860: 觸發條件改看「show_image 實際值有沒有變」，不再要求 show_image
-    # 一定要出現在 request 裡 —— 只送 show_example_sentence=true 的 PATCH 會由
-    # 上面的收斂把 show_image 推成 True，這種情況同樣必須重生干擾項。
-    # 小考（word_selection_quiz）同樣吃 stored distractors，一併納入。
-    if prev_show_image != assignment.show_image and assignment.practice_mode in (
-        "word_selection",
-        "word_selection_quiz",
+    if (
+        "show_image" in provided
+        and prev_show_image != assignment.show_image
+        and assignment.practice_mode == "word_selection"
     ):
         from utils.distractors import regenerate_word_selection_distractors
 

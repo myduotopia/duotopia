@@ -188,10 +188,8 @@ export default function WordSelectionQuizPreview({
         blanked_sentence: w.blanked_sentence,
       }));
     }
-    // contentId 路徑：前端組選項。例句模式固定英文選項（show_image 視為 true）。
-    const showImage = settings.show_example_sentence
-      ? true
-      : settings.show_image !== false;
+    // contentId 路徑：前端組選項。選項語言由 show_image 決定，不受例句影響。
+    const showImage = settings.show_image !== false;
     return items.map((item, idx) => {
       const correctText = showImage ? item.text : item.translation || "";
       return {
@@ -208,19 +206,12 @@ export default function WordSelectionQuizPreview({
         blanked_sentence: item.blanked_sentence,
       };
     });
-  }, [
-    useAssignment,
-    serverWords,
-    items,
-    settings.show_image,
-    settings.show_example_sentence,
-  ]);
+  }, [useAssignment, serverWords, items, settings.show_image]);
 
   const previewSettings = useMemo(
     () => ({
       show_word: settings.show_word,
-      // Issue #860: 例句挖空題選項固定英文 → show_image 視為 true
-      show_image: settings.show_example_sentence ? true : settings.show_image,
+      show_image: settings.show_image,
       show_option_images: settings.show_option_images,
       show_example_sentence: settings.show_example_sentence,
       play_audio: settings.play_audio,

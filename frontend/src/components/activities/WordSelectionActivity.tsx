@@ -896,8 +896,10 @@ export default function WordSelectionActivity({
   }
 
   const currentWord = words[currentIndex];
-  // Issue #860: 挖空句優先用後端算好的；只有派發預覽（只有原始教材）才前端自行挖。
-  // 兩者都挖不出來時為空字串 → 退回一般題型呈現，不顯示未挖空原句（會洩漏答案）。
+  // Issue #860: 「顯示例句」是附加提示 —— 題目呈現方式維持顯示單字／播放音檔，
+  // 額外在選項上方顯示把目標單字挖空的例句。挖空句優先用後端算好的；只有派發預覽
+  // （只有原始教材）才前端自行挖。挖不出空時為空字串 → 該卡不顯示例句，
+  // 絕不顯示未挖空原句（會洩漏答案）。
   const blankedText =
     showExampleSentence && currentWord
       ? currentWord.blanked_sentence ||
@@ -907,8 +909,7 @@ export default function WordSelectionActivity({
           currentWord.text,
         )
       : "";
-  const showQuestionImage =
-    showImage && !blankedText && !!currentWord?.image_url;
+  const showQuestionImage = showImage && !!currentWord?.image_url;
 
   // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
   // 拿全寬（窄螢幕、或圖在上時），讓長句有整列寬度好換行、字級不被擠小。
@@ -978,8 +979,8 @@ export default function WordSelectionActivity({
             className="absolute top-0 right-0 z-10"
           />
         )}
-        {/* Image — Issue #860: 例句挖空題不顯示圖片（題目是句子） */}
-        {showImage && !blankedText && currentWord.image_url && (
+        {/* Image */}
+        {showImage && currentWord.image_url && (
           <div
             className={cn(
               "flex justify-center shrink-0",
@@ -1008,23 +1009,14 @@ export default function WordSelectionActivity({
             useHorizontal && "min-w-0",
           )}
         >
-          {/* Issue #860: 例句挖空題 → 顯示挖空後的英文例句（選項為英文單字） */}
-          {blankedText ? (
+          {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
+              即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
+          {!playAudio && (
             <div className="text-center py-4 sm:py-6">
-              <h2 className="text-[clamp(22px,7vh,28px)] font-bold text-gray-800 leading-relaxed select-none">
-                <ClozeBlankText text={blankedText} />
+              <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
+                {showImage ? currentWord.translation : currentWord.text}
               </h2>
             </div>
-          ) : (
-            /* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
-              即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */
-            !playAudio && (
-              <div className="text-center py-4 sm:py-6">
-                <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
-                  {showImage ? currentWord.translation : currentWord.text}
-                </h2>
-              </div>
-            )
           )}
 
           {/* Audio Button - only show if playAudio setting is enabled */}
@@ -1039,6 +1031,17 @@ export default function WordSelectionActivity({
                 <Volume2 className="h-5 w-5" />
                 {t("wordSelection.playAudio") || "Play Audio"}
               </Button>
+            </div>
+          )}
+
+          {/* Issue #860: 「顯示例句」附加提示 —— 在選項上方多顯示一行把目標單字
+              挖空的例句。挖不出空時 blankedText 為空 → 該卡不顯示，
+              絕不顯示未挖空原句（會洩漏答案）。 */}
+          {blankedText && (
+            <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 px-4 py-3 text-center">
+              <p className="text-[clamp(18px,4.5vh,22px)] font-medium text-gray-700 leading-relaxed select-none">
+                <ClozeBlankText text={blankedText} />
+              </p>
             </div>
           )}
 

@@ -192,39 +192,22 @@ def _apply_overrides(assignment: Assignment, overrides: dict) -> Assignment:
     effective = dict(overrides)
 
     # overrides 只含 query string 實際帶到的 key，其餘一律沿用作業已存值 ——
-    # 覆寫是「疊加」而非「取代整組設定」。所有互斥檢查都必須基於這組解析後的
-    # 有效值，否則連結少帶一個參數就會讓守衛靜默失效（#860 踩過兩次：
-    # show_example_sentence 少帶 → 守衛不觸發；show_option_images 少帶 → 同理）。
+    # 覆寫是「疊加」而非「取代整組設定」。互斥檢查必須基於這組解析後的有效值，
+    # 否則連結少帶一個參數就會讓守衛靜默失效（#631 show_image×show_option_images）。
     def _eff(key: str) -> bool:
         return bool(effective.get(key, getattr(assignment, key, False)))
 
     practice_mode = effective.get("practice_mode", assignment.practice_mode)
     play_audio = _eff("play_audio")
-    show_image = _eff("show_image")
-    show_option_images = _eff("show_option_images")
-    show_example_sentence = _eff("show_example_sentence")
 
-    if show_image and show_option_images:
+    # Issue #631: show_image 與 show_option_images 互斥
+    if _eff("show_image") and _eff("show_option_images"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="show_image and show_option_images are mutually exclusive",
         )
-    if show_example_sentence and show_option_images:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="show_example_sentence and show_option_images are mutually exclusive",
-        )
-    # Issue #860: 單字音檔會唸出被挖空的答案 → 與例句挖空互斥
-    if show_example_sentence and play_audio:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="show_example_sentence and play_audio are mutually exclusive",
-        )
-    # Issue #860: 例句挖空題選項固定英文 → show_image 視為 True。demo 是 read-time
-    # overlay（不寫 DB），所以在這裡收斂，避免只帶 show_example_sentence=true 的
-    # query string 產生「英文挖空題 + 中文選項」。
-    if show_example_sentence:
-        effective["show_image"] = True
+    # Issue #860: 「顯示例句」是獨立附加開關，與圖片/選項圖片/播放音檔皆不互斥，
+    # 且不影響選項語言，故此處不需針對它做任何收斂或互斥檢查。
     effective["score_category"] = resolve_score_category(practice_mode, play_audio)
     # type: ignore[return-value] — overlay quacks like Assignment for readers.
     return _AssignmentOverlay(assignment, effective)

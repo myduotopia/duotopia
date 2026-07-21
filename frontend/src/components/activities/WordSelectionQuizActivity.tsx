@@ -536,8 +536,10 @@ export default function WordSelectionQuizActivity({
 
   const isLast = currentIndex === words.length - 1;
   const selectedForCurrent = selectedByItem[currentWord.content_item_id];
-  // Issue #860: 挖空句優先用後端算好的；只有派發預覽（只有原始教材）才前端自行挖。
-  // 兩者都挖不出來時為空字串 → 退回一般題型呈現，不顯示未挖空原句。
+  // Issue #860: 「顯示例句」是附加提示 —— 題目呈現方式維持顯示單字／播放音檔，
+  // 額外在選項上方顯示「把目標單字挖空的例句」。挖空句優先用後端算好的；只有派發
+  // 預覽（只有原始教材）才前端自行挖。挖不出空時為空字串 → 該卡不顯示例句，
+  // 絕不顯示未挖空原句（會洩漏答案）。
   const blankedText = settings.show_example_sentence
     ? currentWord.blanked_sentence ||
       buildBlankedSentence(
@@ -546,9 +548,7 @@ export default function WordSelectionQuizActivity({
         currentWord.text,
       )
     : "";
-  // 例句挖空題的題目是句子，不顯示圖片（即使 show_image 為 true）
-  const showQuestionImage =
-    settings.show_image && !blankedText && !!currentWord.image_url;
+  const showQuestionImage = settings.show_image && !!currentWord.image_url;
   // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
   // 拿全寬（窄螢幕、或圖在上時），讓長句有整列寬度好換行、字級不被擠小。
   const hasLongOption =
@@ -673,7 +673,7 @@ export default function WordSelectionQuizActivity({
               useHorizontal ? "flex flex-row gap-6" : "flex flex-col gap-6",
             )}
           >
-            {settings.show_image && !blankedText && currentWord.image_url && (
+            {settings.show_image && currentWord.image_url && (
               <div
                 className={cn(
                   "flex justify-center shrink-0",
@@ -713,26 +713,26 @@ export default function WordSelectionQuizActivity({
                 </div>
               )}
 
-              {/* Issue #860: 例句挖空題 → 顯示挖空後的英文例句（選項為英文單字）。
-                  挖不出空時（資料異常）blankedText 為空，退回一般題型呈現，
-                  絕不顯示未挖空的原句（會直接洩漏答案）。 */}
-              {settings.show_example_sentence && blankedText ? (
+              {/* show_image=true → 顯示翻譯（圖+翻譯，避免英文選項秒解）；否則顯示英文題 */}
+              {!settings.play_audio && (
                 <div className="text-center py-4 sm:py-6">
-                  <h2 className="text-[clamp(22px,7vh,28px)] font-bold text-gray-800 leading-relaxed select-none">
-                    <ClozeBlankText text={blankedText} />
+                  <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
+                    {settings.show_image
+                      ? currentWord.translation
+                      : currentWord.text}
                   </h2>
                 </div>
-              ) : (
-                /* show_image=true → 顯示翻譯（圖+翻譯，避免英文選項秒解）；否則顯示英文題 */
-                !settings.play_audio && (
-                  <div className="text-center py-4 sm:py-6">
-                    <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
-                      {settings.show_image
-                        ? currentWord.translation
-                        : currentWord.text}
-                    </h2>
-                  </div>
-                )
+              )}
+
+              {/* Issue #860: 「顯示例句」附加提示 —— 在選項上方多顯示一行把目標
+                  單字挖空的例句。挖不出空時 blankedText 為空 → 該卡不顯示，
+                  絕不顯示未挖空原句（會洩漏答案）。 */}
+              {blankedText && (
+                <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 px-4 py-3 text-center">
+                  <p className="text-[clamp(18px,4.5vh,22px)] font-medium text-gray-700 leading-relaxed select-none">
+                    <ClozeBlankText text={blankedText} />
+                  </p>
+                </div>
               )}
 
               <div

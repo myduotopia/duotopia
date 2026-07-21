@@ -105,30 +105,6 @@ export function applySettingChange(
 }
 
 /**
- * 套用某顆 segmented 按鈕（Issue #860 三選一）：直接吃該 option，設 spec.key = option.value
- * 並套用 option.patch。與 applySettingChange 的差別：當多顆按鈕共用同一個 key 值（如例句
- * 三選一中「顯示單字」與「播放音檔」的 show_example_sentence 都是 false）時，用 find-by-value
- * 會錯抓第一顆；這裡直接吃指定 option 才正確。
- */
-export function applySegmentedOption(
-  value: PracticeModeSettings,
-  spec: SettingSpec & { kind: "segmented" },
-  option: {
-    value: SettingValue;
-    patch?: Partial<Record<SettingKey, SettingValue>>;
-  },
-): PracticeModeSettings {
-  const next = { ...value } as MutableSettings;
-  next[spec.key] = option.value;
-  if (option.patch) {
-    for (const k of Object.keys(option.patch) as SettingKey[]) {
-      next[k] = option.patch[k] as SettingValue;
-    }
-  }
-  return next as unknown as PracticeModeSettings;
-}
-
-/**
  * segmented 某顆按鈕是否為當前選中態。判定 = 主 key 相符 ∧ 該按鈕 patch 的所有 key 也相符
  * （沿用舊行為：如「顯示單字」鈕須 show_word=true ∧ play_audio=false 才算選中）。
  */
