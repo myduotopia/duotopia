@@ -120,7 +120,7 @@ jobs:
           ENV_VARS="$ENV_VARS,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
           ENV_VARS="$ENV_VARS,USE_VERTEX_AI=${{ vars.USE_VERTEX_AI_PREVIEW || 'false' }}"
           ENV_VARS="$ENV_VARS,VERTEX_AI_PROJECT_ID=${PROJECT_ID}"
-          ENV_VARS="$ENV_VARS,VERTEX_AI_LOCATION=asia-east1"
+          ENV_VARS="$ENV_VARS,VERTEX_AI_LOCATION=asia-northeast1"
           ENV_VARS="$ENV_VARS,SMTP_HOST=${{ secrets.SMTP_HOST }}"
           ENV_VARS="$ENV_VARS,SMTP_PORT=${{ secrets.SMTP_PORT }}"
           ENV_VARS="$ENV_VARS,SMTP_USER=${{ secrets.SMTP_USER }}"
