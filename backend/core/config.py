@@ -101,7 +101,11 @@ class Settings:
     VERTEX_AI_PROJECT_ID: Optional[str] = os.getenv(
         "VERTEX_AI_PROJECT_ID", "duotopia-472708"
     )
-    VERTEX_AI_LOCATION: str = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+    # 預設 asia-northeast1（東京）：收斂學生學習資料出境範圍至亞洲（Issue #959）。
+    # asia-east1（台灣）經實測無 Gemini 2.5 模型（404），asia-northeast1 是唯一
+    # 同時提供 gemini-2.5-flash 與 gemini-2.5-pro 的亞洲 region，且與 Azure
+    # Speech（japaneast）同在日本東京，合規（非中港澳）。
+    VERTEX_AI_LOCATION: str = os.getenv("VERTEX_AI_LOCATION", "asia-northeast1")
 
     # TapPay Configuration
     TAPPAY_ENV: Literal["sandbox", "production"] = os.getenv("TAPPAY_ENV", "sandbox")

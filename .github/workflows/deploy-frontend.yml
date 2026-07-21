@@ -235,6 +235,18 @@ jobs:
         TAPPAY_PRODUCTION_APP_ID="${{ secrets.TAPPAY_PRODUCTION_APP_ID }}"
         TAPPAY_PRODUCTION_APP_KEY="${{ secrets.TAPPAY_PRODUCTION_APP_KEY }}"
 
+        # Analytics/Pixel: only inject real IDs on production (main). staging/develop
+        # get empty values so their traffic never pollutes production analytics and
+        # no Meta Pixel loads in non-prod. index.html guards treat empty as disabled.
+        # (Issue #959)
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          GA_MEASUREMENT_ID="${{ secrets.VITE_GA_MEASUREMENT_ID }}"
+          META_PIXEL_ID="${{ secrets.VITE_META_PIXEL_ID }}"
+        else
+          GA_MEASUREMENT_ID=""
+          META_PIXEL_ID=""
+        fi
+
         docker build -f $DOCKERFILE \
           --build-arg VITE_API_URL=${{ steps.backend_url.outputs.BACKEND_URL }} \
           --build-arg VITE_ENVIRONMENT=${{ steps.env_vars.outputs.ENV_NAME }} \
@@ -242,8 +254,8 @@ jobs:
           --build-arg VITE_TAPPAY_SERVER_TYPE=$TAPPAY_SERVER_TYPE \
           --build-arg VITE_TAPPAY_PRODUCTION_APP_ID=$TAPPAY_PRODUCTION_APP_ID \
           --build-arg VITE_TAPPAY_PRODUCTION_APP_KEY=$TAPPAY_PRODUCTION_APP_KEY \
-          --build-arg VITE_GA_MEASUREMENT_ID=${{ secrets.VITE_GA_MEASUREMENT_ID }} \
-          --build-arg VITE_META_PIXEL_ID=${{ secrets.VITE_META_PIXEL_ID }} \
+          --build-arg VITE_GA_MEASUREMENT_ID=$GA_MEASUREMENT_ID \
+          --build-arg VITE_META_PIXEL_ID=$META_PIXEL_ID \
           --build-arg VITE_SUPABASE_URL=${{ steps.supabase.outputs.URL }} \
           --build-arg VITE_SUPABASE_ANON_KEY=${{ steps.supabase.outputs.ANON_KEY }} \
           -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/${{ steps.env_vars.outputs.FRONTEND_SERVICE }}:$GITHUB_SHA .
