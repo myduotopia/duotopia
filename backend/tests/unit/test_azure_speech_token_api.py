@@ -22,7 +22,7 @@ class TestAzureSpeechTokenAPI:
         """Test 2: 登录教师成功获取 token"""
         mock_get_token.return_value = {
             "token": "fake-token-12345",
-            "region": "eastasia",
+            "region": "japaneast",
             "expires_in": 600,
         }
 
@@ -33,7 +33,7 @@ class TestAzureSpeechTokenAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["token"] == "fake-token-12345"
-        assert data["region"] == "eastasia"
+        assert data["region"] == "japaneast"
         assert data["expires_in"] == 600
 
     @patch("services.azure_speech_token.AzureSpeechTokenService.get_token")
@@ -43,7 +43,7 @@ class TestAzureSpeechTokenAPI:
         """Test 3: 登录学生成功获取 token"""
         mock_get_token.return_value = {
             "token": "student-token-67890",
-            "region": "eastasia",
+            "region": "japaneast",
             "expires_in": 600,
         }
 
@@ -54,7 +54,7 @@ class TestAzureSpeechTokenAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["token"] == "student-token-67890"
-        assert data["region"] == "eastasia"
+        assert data["region"] == "japaneast"
 
     @patch("services.azure_speech_token.AzureSpeechTokenService.get_token")
     def test_token_service_called_once(
@@ -63,7 +63,7 @@ class TestAzureSpeechTokenAPI:
         """Test 4: 验证服务层被正确调用"""
         mock_get_token.return_value = {
             "token": "test-token",
-            "region": "eastasia",
+            "region": "japaneast",
             "expires_in": 600,
         }
 
@@ -125,7 +125,9 @@ class TestAzureSpeechTokenService:
             result = await service.get_token()
 
             assert result["token"] == "new-azure-token-12345"
-            assert result["region"] == "eastasia"
+            # region 來自 settings（env 驅動），回應應與 service 設定一致，
+            # 不 pin 特定字面值以免隨環境變數變動而脆弱（Issue #958）
+            assert result["region"] == service.region
             assert result["expires_in"] == 600
 
             # 验证调用了 Azure issueToken endpoint
@@ -315,7 +317,7 @@ class TestTokenRateLimiting:
         """Test 13: Rate limiting 阻止过多请求 (10次/分钟)"""
         mock_get_token.return_value = {
             "token": "test-token",
-            "region": "eastasia",
+            "region": "japaneast",
             "expires_in": 600,
         }
 
@@ -334,3 +336,58 @@ class TestTokenRateLimiting:
 
         assert success_count == 10
         assert rate_limited_count == 1
+
+
+class TestAzureSpeechRegionCompliance:
+    """
+    Issue #958: 合規性迴歸測試
+
+    教育部校園徵求案規定產品不得連線至中國大陸（含港、澳）IP。
+    Azure Speech 的 `eastasia` region 實體位於香港，故：
+    1. 未設定環境變數時，預設 region 必須是合規的 `japaneast`（東京），不得為 `eastasia`
+    2. 程式碼中不得有任何寫死 `eastasia` 的 fallback
+    """
+
+    def test_default_region_is_compliant_japaneast(self):
+        """未設定 AZURE_SPEECH_REGION 時，程式碼預設應為 japaneast 而非香港 eastasia
+
+        config.py 於 import 時會 load_dotenv() 讀取本機 .env，為了單獨驗證
+        「程式碼寫死的 fallback」，此處把 load_dotenv patch 成 no-op，
+        並清除環境變數，讓 os.getenv 回傳 code default。
+        """
+        import importlib
+        import os
+        from unittest.mock import patch
+
+        env_without_region = {
+            k: v for k, v in os.environ.items() if k != "AZURE_SPEECH_REGION"
+        }
+        with patch.dict(os.environ, env_without_region, clear=True), patch(
+            "dotenv.load_dotenv"
+        ):
+            import core.config
+
+            importlib.reload(core.config)
+            try:
+                assert core.config.settings.AZURE_SPEECH_REGION == "japaneast"
+                assert core.config.settings.AZURE_SPEECH_REGION != "eastasia"
+            finally:
+                # 還原 singleton，避免污染其他測試
+                importlib.reload(core.config)
+
+    def test_env_region_overrides_default(self):
+        """明確設定 AZURE_SPEECH_REGION 時應覆寫預設值"""
+        import importlib
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"AZURE_SPEECH_REGION": "southeastasia"}), patch(
+            "dotenv.load_dotenv"
+        ):
+            import core.config
+
+            importlib.reload(core.config)
+            try:
+                assert core.config.settings.AZURE_SPEECH_REGION == "southeastasia"
+            finally:
+                importlib.reload(core.config)

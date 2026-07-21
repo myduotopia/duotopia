@@ -12,6 +12,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from utils.http_client import get_http_client
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,8 @@ class AzureSpeechTokenService:
 
     def __init__(self):
         self.subscription_key = os.getenv("AZURE_SPEECH_KEY")
-        self.region = os.getenv("AZURE_SPEECH_REGION", "eastasia")
+        # 單一設定來源，避免各處寫死 fallback region（Issue #958）
+        self.region = settings.AZURE_SPEECH_REGION
         self._cached_token: Optional[str] = None
         self._token_expires_at: Optional[datetime] = None
 
@@ -36,7 +38,7 @@ class AzureSpeechTokenService:
         Returns:
             {
                 "token": "<authorization-token>",
-                "region": "eastasia",
+                "region": "japaneast",
                 "expires_in": 600
             }
 

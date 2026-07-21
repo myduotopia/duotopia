@@ -85,7 +85,7 @@ describe("DemoSpeechService", () => {
         ok: true,
         json: async () => ({
           token: "test-token",
-          region: "eastasia",
+          region: "japaneast",
           expires_in: 300,
           demo_mode: true,
           remaining_today: 59,
@@ -94,7 +94,7 @@ describe("DemoSpeechService", () => {
 
       const result = await service.getToken();
       expect(result.token).toBe("test-token");
-      expect(result.region).toBe("eastasia");
+      expect(result.region).toBe("japaneast");
       expect(result.remaining_today).toBe(59);
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
@@ -105,7 +105,7 @@ describe("DemoSpeechService", () => {
         ok: true,
         json: async () => ({
           token: "cached-token",
-          region: "eastasia",
+          region: "japaneast",
           expires_in: 300,
           demo_mode: true,
           remaining_today: 58,
@@ -127,7 +127,7 @@ describe("DemoSpeechService", () => {
           ok: true,
           json: async () => ({
             token: "first-token",
-            region: "eastasia",
+            region: "japaneast",
             expires_in: 300,
             demo_mode: true,
             remaining_today: 59,
@@ -137,7 +137,7 @@ describe("DemoSpeechService", () => {
           ok: true,
           json: async () => ({
             token: "fresh-token",
-            region: "eastasia",
+            region: "japaneast",
             expires_in: 300,
             demo_mode: true,
             remaining_today: 58,
@@ -218,7 +218,7 @@ describe("DemoSpeechService", () => {
           ok: true,
           json: async () => ({
             token: "token-1",
-            region: "eastasia",
+            region: "japaneast",
             expires_in: 300,
             demo_mode: true,
             remaining_today: 59,
@@ -228,7 +228,7 @@ describe("DemoSpeechService", () => {
           ok: true,
           json: async () => ({
             token: "token-2",
-            region: "eastasia",
+            region: "japaneast",
             expires_in: 300,
             demo_mode: true,
             remaining_today: 58,
@@ -257,7 +257,7 @@ describe("DemoSpeechService", () => {
         ok: true,
         json: async () => ({
           token: "test",
-          region: "eastasia",
+          region: "japaneast",
           expires_in: 300,
           demo_mode: true,
           remaining_today: 42,

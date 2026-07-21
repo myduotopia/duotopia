@@ -82,7 +82,10 @@ class Settings:
 
     # Azure Speech Services (optional)
     AZURE_SPEECH_KEY: Optional[str] = os.getenv("AZURE_SPEECH_KEY")
-    AZURE_SPEECH_REGION: Optional[str] = os.getenv("AZURE_SPEECH_REGION", "eastasia")
+    # 預設 japaneast（東京）：教育部校園徵求案規定不得連線至中國大陸含港澳，
+    # Azure eastasia 實體位於香港，故預設值改為合規的 japaneast，
+    # 避免漏設環境變數時靜默 fallback 到香港（Issue #958）
+    AZURE_SPEECH_REGION: Optional[str] = os.getenv("AZURE_SPEECH_REGION", "japaneast")
     AZURE_SPEECH_ENDPOINT: Optional[str] = os.getenv("AZURE_SPEECH_ENDPOINT")
 
     # Resource Account (資源教材包來源帳號)

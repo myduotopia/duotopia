@@ -59,7 +59,7 @@ async def get_speech_token(
     Returns:
         {
             "token": "<authorization-token>",
-            "region": "eastasia",
+            "region": "japaneast",
             "expires_in": 600
         }
     """
