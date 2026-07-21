@@ -2216,11 +2216,17 @@ const VocabularySetPanel = forwardRef<
       const m = example.match(new RegExp(`\\b${escaped}\\b`, "i"));
       return m ? m[0] : "";
     };
-    // 依目前選定的單字翻譯語言，把擷取到的翻譯放進對應欄位（英文→translation、
-    // 中文→definition…），並設 selectedWordLanguage，否則選英文時翻譯會被塞進中文欄
-    // 而右側顯示空白（issue #891 回饋 2、5）。
-    const wordLang = (lastSelectedWordLang ||
-      "chinese") as WordTranslationLanguage;
+    // 偵測擷取到的翻譯是哪種語言（韓文 Hangul / 日文假名 / 中文漢字 / 英文），
+    // 用來決定放進哪個翻譯欄位。無翻譯回 ""。
+    const detectLang = (s: string): WordTranslationLanguage | "" => {
+      const v = (s || "").trim();
+      if (!v) return "";
+      if (/[가-힣]/.test(v)) return "korean";
+      if (/[぀-ヿ]/.test(v)) return "japanese";
+      if (/[一-鿿]/.test(v)) return "chinese";
+      if (/[A-Za-z]/.test(v)) return "english";
+      return "chinese";
+    };
     const makeRow = (item: MagicPasteItem, id: string | number): ContentRow => {
       // 例句沒有對應到該單字（或變化形）→ 留空，不硬塞不相干的句子。
       const example =
@@ -2229,16 +2235,22 @@ const VocabularySetPanel = forwardRef<
           ? item.example_sentence
           : "";
       const trans = item.translation || "";
+      // 一律擷取：把翻譯放進「它自己語言」的欄位（英文釋義→translation、中文→definition…）
+      const captured = detectLang(trans) || "chinese";
+      // 顯示語言：勾了 AI 自動翻譯 → 顯示使用者選的語言（讓 AI 補該語言翻譯）；
+      // 沒勾 → 顯示擷取到的語言與內容。
+      const displayLang = (
+        batchPasteAutoTranslate ? lastSelectedWordLang || captured : captured
+      ) as WordTranslationLanguage;
       return {
         id,
         text: item.text,
-        // chinese / other → definition（中文欄）；english/ja/ko → 各自欄位
-        definition: wordLang === "chinese" || wordLang === "other" ? trans : "",
-        translation: wordLang === "english" ? trans : "",
-        japanese_translation: wordLang === "japanese" ? trans : "",
-        korean_translation: wordLang === "korean" ? trans : "",
+        definition: captured === "chinese" || captured === "other" ? trans : "",
+        translation: captured === "english" ? trans : "",
+        japanese_translation: captured === "japanese" ? trans : "",
+        korean_translation: captured === "korean" ? trans : "",
         imageUrl: "",
-        selectedWordLanguage: wordLang,
+        selectedWordLanguage: displayLang,
         partsOfSpeech: item.part_of_speech ? [item.part_of_speech] : undefined,
         example_sentence: example,
         example_sentence_translation: example
@@ -2273,16 +2285,16 @@ const VocabularySetPanel = forwardRef<
     }
 
     setRows([...filled, ...appended]);
-    // 插入時補洞：翻譯（缺才補）+ 詞性（一律補齊），只填空欄。
-    if (
-      batchPasteAutoTranslate &&
-      toAdd.some((it) => !it.translation?.trim())
-    ) {
+    // 插入時補洞：詞性一律補齊；翻譯/例句翻譯只在勾了「AI 自動翻譯」時補。
+    // 勾了就把所有缺「選定語言」翻譯的列補上（擷取到的可能是別的語言，例如英文釋義，
+    // handleBatchGenerateDefinitions 只翻缺選定語言欄位的列，已有者略過）。
+    if (batchPasteAutoTranslate) {
       magicGapFillRef.current = true;
     }
     magicPosFillRef.current = true;
-    // 圖上已有例句但沒例句翻譯 → 插入時也幫忙翻譯例句
+    // 勾了 AI 自動翻譯、且有例句缺翻譯 → 插入時翻譯例句
     if (
+      batchPasteAutoTranslate &&
       toAdd.some(
         (it) =>
           it.example_sentence?.trim() &&
