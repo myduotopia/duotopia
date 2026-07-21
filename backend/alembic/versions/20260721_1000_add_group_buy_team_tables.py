@@ -5,6 +5,12 @@
 + TeacherSchool）回填進新表。**本 migration 只建表 + 回填，不改動任何讀寫路徑**
 （雙讀切換在 PR2）。
 
+已知取捨：group_buy_teams.seat_limit 為 NOT NULL。org.teacher_limit /
+school.teacher_seat_limit 的 NULL 語意為「無限制」，但回填以
+COALESCE(..., plan.teacher_seats) 落到具體數字，即把「無限制」窄化為有限上限。
+實務上 create_group_buy_org_and_school 一律把 teacher_limit 設為 plan.teacher_seats，
+故此路徑幾乎不會踩到；此窄化為 seat_limit NOT NULL 的可接受取捨。
+
 回填策略（冪等）：
   - teams：每個 org_type='group_buy' 的 organization → 一列 group_buy_teams，
     owner = 其 org_owner、plan/seat 取最早 active school、訂閱窗口/聯絡資訊取自 org。
@@ -212,8 +218,10 @@ def upgrade() -> None:
     )
 
     # ------------------------------------------------------------------
-    # 4) 回填 members（team 來源 org 底下所有 teacher_schools，含 active/inactive —
-    #    is_active 原封帶入以保留歷史，非只取 active）。
+    # 4) 回填 members（team 來源 org 底下 active school 的 teacher_schools）。
+    #    school 以 s.is_active = TRUE 過濾，與 team 回填（只採 active school）一致，
+    #    避免把已停用分校的綁定拉進來。teacher_schools 本身的 is_active 則原封帶入
+    #    以保留在職/離團歷史（含 active/inactive）。
     #    DISTINCT ON 避免同一老師綁多校時違反 (team_id, teacher_id) 唯一約束；
     #    以 is_active DESC 優先，確保重複時保留「仍在職」那一列的狀態。
     #    is_owner = (teacher = team.owner_teacher_id)。
@@ -232,7 +240,7 @@ def upgrade() -> None:
             now()
         FROM group_buy_teams t
         JOIN organizations o ON o.id = t.source_organization_id
-        JOIN schools s ON s.organization_id = o.id
+        JOIN schools s ON s.organization_id = o.id AND s.is_active = TRUE
         JOIN teacher_schools ts ON ts.school_id = s.id
         WHERE NOT EXISTS (
             SELECT 1 FROM group_buy_members m
