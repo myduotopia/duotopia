@@ -919,9 +919,7 @@ export default function WordSelectionActivity({
           currentWord.text,
         )
       : "";
-  // #967: 例句題型「例句即題目」，不顯示單字圖片（圖片＝答案，會直接洩漏）。
-  const showQuestionImage =
-    showImage && !showExampleSentence && !!currentWord?.image_url;
+  const showQuestionImage = showImage && !!currentWord?.image_url;
 
   // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
   // 拿全寬（窄螢幕、或圖在上時），讓長句有整列寬度好換行、字級不被擠小。

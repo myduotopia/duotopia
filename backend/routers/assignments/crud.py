@@ -126,7 +126,11 @@ def _collect_contents_missing_examples(
     return missing_titles
 
 
-def _requires_sentence_audio(practice_mode: Optional[str], play_audio: bool) -> bool:
+def _requires_sentence_audio(
+    practice_mode: Optional[str],
+    play_audio: bool,
+    show_example_sentence: bool = False,
+) -> bool:
     """Issue #757: which mode + play_audio combos must have audio at dispatch.
 
     Returns True only when the student-facing UX literally cannot work
@@ -134,16 +138,23 @@ def _requires_sentence_audio(practice_mode: Optional[str], play_audio: bool) -> 
       - reading: AI assesses pronunciation against the sentence audio prompt
       - rearrangement w/ play_audio: 聽力重組 needs audio cue
       - word_cloze w/ play_audio: 聽力克漏字 needs audio cue
+      - word_selection(_quiz) w/ show_example_sentence + play_audio (issue #967):
+        例句題型「例句即題目」，開播放音檔時播的是例句音檔 → 缺音檔就播不出來
     """
     if practice_mode == "reading":
         return True
     if practice_mode in ("rearrangement", "word_cloze", "word_cloze_quiz"):
         return bool(play_audio)
+    if show_example_sentence and practice_mode in _EXAMPLE_SENTENCE_SELECTION_MODES:
+        return bool(play_audio)
     return False
 
 
 def _collect_contents_missing_audio(
-    contents: List[Content], practice_mode: Optional[str], play_audio: bool
+    contents: List[Content],
+    practice_mode: Optional[str],
+    play_audio: bool,
+    show_example_sentence: bool = False,
 ) -> List[str]:
     """Return titles of contents whose items lack example sentence audio.
 
@@ -155,7 +166,7 @@ def _collect_contents_missing_audio(
     Items without an example_sentence are skipped here — they're already
     rejected by ``_collect_contents_missing_examples`` upstream.
     """
-    if not _requires_sentence_audio(practice_mode, play_audio):
+    if not _requires_sentence_audio(practice_mode, play_audio, show_example_sentence):
         return []
 
     missing_titles: List[str] = []
@@ -242,7 +253,9 @@ def _raise_if_missing_examples(
             },
         )
 
-    missing_audio = _collect_contents_missing_audio(contents, practice_mode, play_audio)
+    missing_audio = _collect_contents_missing_audio(
+        contents, practice_mode, play_audio, show_example_sentence
+    )
     if missing_audio:
         raise HTTPException(
             status_code=422,

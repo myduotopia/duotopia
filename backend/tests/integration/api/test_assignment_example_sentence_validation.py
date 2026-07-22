@@ -1017,6 +1017,100 @@ def test_create_allows_word_cloze_without_play_audio_when_audio_missing(fresh_db
     assert resp.status_code == 200, resp.text
 
 
+# --- Issue #967: word_selection example-audio validation ------------------
+
+
+def test_create_rejects_word_selection_quiz_when_example_audio_missing(fresh_db):
+    """Issue #967: word_selection_quiz + show_example_sentence + play_audio 播的是
+    例句音檔（例句即題目）→ 缺 example_sentence_audio_url 必須在派發階段擋下。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Selection No Audio",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=True,
+            play_audio=True,
+        ),
+    )
+
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "EXAMPLE_AUDIO_REQUIRED"
+    assert detail["practice_mode"] == "word_selection_quiz"
+    assert detail["play_audio"] is True
+    assert detail["content_titles"] == ["Selection No Audio"]
+
+
+def test_create_allows_word_selection_example_without_play_audio_missing_audio(
+    fresh_db,
+):
+    """show_example_sentence 但沒開 play_audio → 例句以文字呈現，不需例句音檔。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Selection Text Only",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=True,
+            play_audio=False,
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_create_allows_word_selection_play_audio_without_example_sentence(fresh_db):
+    """沒開 show_example_sentence → word_selection 考單字本身、不碰例句音檔，
+    即使教材缺例句音檔也可派發（play_audio 播的是單字音檔）。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Selection Word Audio",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=False,
+            play_audio=True,
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
 def test_create_rejects_word_cloze_when_cloze_answer_not_set(fresh_db):
     """Issue #632: dispatching word_cloze on a vocab set whose items have no
     confirmed cloze_answer must be blocked — even when the answer would be
