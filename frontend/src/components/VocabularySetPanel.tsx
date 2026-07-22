@@ -1982,9 +1982,10 @@ const VocabularySetPanel = forwardRef<
     totalSteps: number;
   } | null>(null);
   const batchPauseRef = useRef(false);
-  // 魔術貼上插入後補洞用的一次性旗標（issue #891）：翻譯 + 詞性 + 例句翻譯 + 語音
+  // 魔術貼上插入後補洞用的一次性旗標（issue #891）：翻譯 + 詞性 + 生成例句 + 例句翻譯 + 語音
   const magicGapFillRef = useRef(false);
   const magicPosFillRef = useRef(false);
+  const magicExampleGenRef = useRef(false);
   const magicExampleFillRef = useRef(false);
   const magicTtsFillRef = useRef(false);
   const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(
@@ -2292,7 +2293,12 @@ const VocabularySetPanel = forwardRef<
       magicGapFillRef.current = true;
     }
     magicPosFillRef.current = true;
-    // 勾了 AI 自動翻譯、且有例句缺翻譯 → 插入時翻譯例句
+    // 勾了 AI 生成例句 → 對「沒例句」的列（本來就沒擷取到、或例句不含該字被清掉）
+    // 在插入時生成例句（連同例句翻譯 / 音檔 / 克漏字）。
+    if (aiGenerateExpanded) {
+      magicExampleGenRef.current = true;
+    }
+    // 勾了 AI 自動翻譯、且有「圖上已有例句」但缺翻譯 → 插入時翻譯那些例句
     if (
       batchPasteAutoTranslate &&
       toAdd.some(
@@ -3467,6 +3473,68 @@ const VocabularySetPanel = forwardRef<
     }
   };
 
+  // 生成例句：對「有單字、沒例句」的列（本來沒擷取到、或例句不含該字被清掉）用
+  // AI 生成例句（後端一併回傳例句翻譯 / 音檔 / 克漏字）。使用左側「AI 生成例句」設定
+  // （難度 / 提示 / 翻譯成），語音沿用 AI 生成語音勾選與語音設定。functional setRows
+  // + 再判空，不覆蓋已有例句。
+  const fillMissingExamples = async () => {
+    const targets = rows
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => r.text?.trim() && !r.example_sentence?.trim());
+    if (!targets.length) return;
+
+    let targetLanguage = "";
+    if (aiGenerateTranslateLang === "other") {
+      targetLanguage = customSentenceTranslationLang || "";
+    } else if (aiGenerateTranslateLang) {
+      targetLanguage =
+        SENTENCE_TRANSLATION_LANGUAGES.find(
+          (l) => l.value === aiGenerateTranslateLang,
+        )?.code || "";
+    }
+
+    try {
+      const response = await apiClient.generateSentences({
+        words: targets.map((t) => t.r.text.trim()),
+        definitions: targets.map((t) => t.r.definition || ""),
+        lesson_id: lessonId,
+        level: aiGenerateLevel,
+        prompt: aiGeneratePrompt || undefined,
+        translate_to: targetLanguage || undefined,
+        parts_of_speech: targets.map((t) => t.r.partsOfSpeech || []),
+        audio_settings: batchPasteAutoTTS
+          ? {
+              accent: batchTTSAccent,
+              gender: batchTTSGender,
+              speed: batchTTSSpeed,
+            }
+          : undefined,
+      });
+      const sentences = response.sentences;
+      if (!sentences || !Array.isArray(sentences)) return;
+      const resultMap = new Map(sentences.map((s) => [s.word, s]));
+      setRows((prev) => {
+        const nr = [...prev];
+        targets.forEach((t) => {
+          const cur = nr[t.i];
+          if (!cur || cur.example_sentence?.trim()) return; // 已有例句不覆蓋
+          const m = resultMap.get(cur.text);
+          if (!m || !m.sentence) return;
+          nr[t.i] = {
+            ...cur,
+            example_sentence: m.sentence,
+            example_sentence_translation: m.translation || "",
+            example_sentence_audio_url: m.audio_url || "",
+            cloze_answer: m.cloze_answer || "",
+          };
+        });
+        return nr;
+      });
+    } catch (e) {
+      console.error("example generation fill error:", e);
+    }
+  };
+
   // 只補「例句翻譯」：對有例句但沒例句翻譯的列，用 batchTranslate 翻譯例句本身
   // （對應圖上已有例句、但沒有例句翻譯的情境）。目標語言取「翻譯成」設定，
   // 未設定則沿用單字翻譯語言，最後 fallback 中文；english/other 不適用例句翻譯故用中文。
@@ -3624,18 +3692,33 @@ const VocabularySetPanel = forwardRef<
   useEffect(() => {
     const needTranslate = magicGapFillRef.current;
     const needPos = magicPosFillRef.current;
+    const needExampleGen = magicExampleGenRef.current;
     const needExample = magicExampleFillRef.current;
     const needTts = magicTtsFillRef.current;
-    if (!needTranslate && !needPos && !needExample && !needTts) return;
+    if (
+      !needTranslate &&
+      !needPos &&
+      !needExampleGen &&
+      !needExample &&
+      !needTts
+    )
+      return;
     magicGapFillRef.current = false;
     magicPosFillRef.current = false;
+    magicExampleGenRef.current = false;
     magicExampleFillRef.current = false;
     magicTtsFillRef.current = false;
     void (async () => {
+      // handleBatchGenerateDefinitions 用 snapshot setRows，必須最先跑；其餘皆 functional。
       if (needTranslate) await handleBatchGenerateDefinitions();
       if (needPos) {
         await new Promise((r) => setTimeout(r, 0));
         await fillMissingPosForWords();
+      }
+      // 先「生成例句」（連同例句翻譯/音檔/克漏字），再補圖上已有例句的缺翻譯，避免重工
+      if (needExampleGen) {
+        await new Promise((r) => setTimeout(r, 0));
+        await fillMissingExamples();
       }
       if (needExample) {
         await new Promise((r) => setTimeout(r, 0));
