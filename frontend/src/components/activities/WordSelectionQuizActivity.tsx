@@ -35,6 +35,8 @@ import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import CardNavArrow from "./shared/CardNavArrow";
 import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
+import ClozeBlankText from "./shared/ClozeBlankText";
+import { buildBlankedSentence } from "@/lib/cloze";
 import { useShortLandscape } from "./shared/useShortLandscape";
 import QuizReviewView, {
   type QuizReviewPayload,
@@ -64,6 +66,11 @@ interface QuizWord {
   question_number: number;
   prior_answer?: string | null;
   prior_is_correct?: boolean | null;
+  // Issue #860: 顯示例句（答案挖空）用。blanked_sentence 由後端算好；
+  // 老師派發預覽等只有原始教材的路徑沒有此欄位，前端才自行挖空。
+  example_sentence?: string | null;
+  cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 interface StartResponse {
@@ -74,6 +81,7 @@ interface StartResponse {
   show_word: boolean;
   show_image: boolean;
   show_option_images: boolean;
+  show_example_sentence: boolean;
   play_audio: boolean;
   show_answer: boolean;
   time_limit_per_question?: number | null;
@@ -134,6 +142,7 @@ export default function WordSelectionQuizActivity({
     show_word: true,
     show_image: true,
     show_option_images: false,
+    show_example_sentence: false,
     play_audio: false,
     show_answer: false,
   });
@@ -154,6 +163,7 @@ export default function WordSelectionQuizActivity({
         show_word: previewSettings?.show_word ?? true,
         show_image: previewSettings?.show_image ?? true,
         show_option_images: previewSettings?.show_option_images ?? false,
+        show_example_sentence: previewSettings?.show_example_sentence ?? false,
         play_audio: previewSettings?.play_audio ?? false,
         show_answer: previewSettings?.show_answer ?? false,
       });
@@ -181,6 +191,7 @@ export default function WordSelectionQuizActivity({
             show_word: demo.show_word,
             show_image: demo.show_image,
             show_option_images: demo.show_option_images,
+            show_example_sentence: demo.show_example_sentence ?? false,
             play_audio: demo.play_audio,
             show_answer: demo.show_answer,
           });
@@ -214,6 +225,7 @@ export default function WordSelectionQuizActivity({
           show_word: data.show_word,
           show_image: data.show_image,
           show_option_images: data.show_option_images,
+          show_example_sentence: data.show_example_sentence ?? false,
           play_audio: data.play_audio,
           show_answer: data.show_answer,
         });
@@ -524,6 +536,18 @@ export default function WordSelectionQuizActivity({
 
   const isLast = currentIndex === words.length - 1;
   const selectedForCurrent = selectedByItem[currentWord.content_item_id];
+  // Issue #860: 「顯示例句」是附加提示 —— 題目呈現方式維持顯示單字／播放音檔，
+  // 額外在選項上方顯示「把目標單字挖空的例句」。挖空句優先用後端算好的；只有派發
+  // 預覽（只有原始教材）才前端自行挖。挖不出空時為空字串 → 該卡不顯示例句，
+  // 絕不顯示未挖空原句（會洩漏答案）。
+  const blankedText = settings.show_example_sentence
+    ? currentWord.blanked_sentence ||
+      buildBlankedSentence(
+        currentWord.example_sentence,
+        currentWord.cloze_answer,
+        currentWord.text,
+      )
+    : "";
   const showQuestionImage = settings.show_image && !!currentWord.image_url;
   // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
   // 拿全寬（窄螢幕、或圖在上時），讓長句有整列寬度好換行、字級不被擠小。
@@ -697,6 +721,17 @@ export default function WordSelectionQuizActivity({
                       ? currentWord.translation
                       : currentWord.text}
                   </h2>
+                </div>
+              )}
+
+              {/* Issue #860: 「顯示例句」附加提示 —— 在選項上方多顯示一行把目標
+                  單字挖空的例句。挖不出空時 blankedText 為空 → 該卡不顯示，
+                  絕不顯示未挖空原句（會洩漏答案）。 */}
+              {blankedText && (
+                <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 px-4 py-3 text-center">
+                  <p className="text-[clamp(18px,4.5vh,22px)] font-medium text-gray-700 leading-relaxed select-none">
+                    <ClozeBlankText text={blankedText} />
+                  </p>
                 </div>
               )}
 

@@ -1916,6 +1916,7 @@
         "playAudioWord": "Play Audio",
         "playAudioWordDesc": "Listen to audio and select translation",
         "playAudioFillDesc": "Listen to audio and type the word",
+        "showExampleSentenceDesc": "Show example sentence during practice",
         "showAnswerLockedByAudio": "Audio mode must reveal the answer"
       }
     },

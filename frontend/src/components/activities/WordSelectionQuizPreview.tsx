@@ -16,6 +16,7 @@ interface Props {
     show_word?: boolean;
     show_image?: boolean;
     show_option_images?: boolean;
+    show_example_sentence?: boolean;
     play_audio?: boolean;
     show_answer?: boolean;
     time_limit_per_question?: number;
@@ -31,6 +32,10 @@ interface ApiItem {
   translation?: string;
   audio_url?: string;
   image_url?: string;
+  // Issue #860: 顯示例句（答案挖空）預覽用
+  example_sentence?: string | null;
+  cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 // Deterministic PRNG seeded per item, mirroring the backend's
@@ -91,6 +96,10 @@ interface QuizWord {
   image_url?: string | null;
   options: QuizOption[];
   question_number: number;
+  // Issue #860
+  example_sentence?: string | null;
+  cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 // 後端 /preview/selection-quiz-start 回傳的題目形狀（#861 D）：已含全單字集、
@@ -104,6 +113,10 @@ interface ServerQuizWord {
   image_url?: string | null;
   options: QuizOption[];
   question_number?: number;
+  // Issue #860
+  example_sentence?: string | null;
+  cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 export default function WordSelectionQuizPreview({
@@ -170,9 +183,12 @@ export default function WordSelectionQuizPreview({
         image_url: w.image_url,
         options: w.options,
         question_number: w.question_number ?? idx + 1,
+        example_sentence: w.example_sentence,
+        cloze_answer: w.cloze_answer,
+        blanked_sentence: w.blanked_sentence,
       }));
     }
-    // contentId 路徑：前端組選項
+    // contentId 路徑：前端組選項。選項語言由 show_image 決定，不受例句影響。
     const showImage = settings.show_image !== false;
     return items.map((item, idx) => {
       const correctText = showImage ? item.text : item.translation || "";
@@ -185,6 +201,9 @@ export default function WordSelectionQuizPreview({
         image_url: item.image_url,
         options: buildOptions(item, items, showImage),
         question_number: idx + 1,
+        example_sentence: item.example_sentence,
+        cloze_answer: item.cloze_answer,
+        blanked_sentence: item.blanked_sentence,
       };
     });
   }, [useAssignment, serverWords, items, settings.show_image]);
@@ -194,6 +213,7 @@ export default function WordSelectionQuizPreview({
       show_word: settings.show_word,
       show_image: settings.show_image,
       show_option_images: settings.show_option_images,
+      show_example_sentence: settings.show_example_sentence,
       play_audio: settings.play_audio,
       show_answer: settings.show_answer,
       time_limit_per_question: settings.time_limit_per_question ?? null,
@@ -202,6 +222,7 @@ export default function WordSelectionQuizPreview({
       settings.show_word,
       settings.show_image,
       settings.show_option_images,
+      settings.show_example_sentence,
       settings.play_audio,
       settings.show_answer,
       settings.time_limit_per_question,

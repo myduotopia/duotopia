@@ -84,7 +84,8 @@ export type SettingKey =
   | "show_translation"
   | "show_word"
   | "show_image"
-  | "show_option_images";
+  | "show_option_images"
+  | "show_example_sentence";
 
 export type SettingValue = boolean | number | string;
 
@@ -202,6 +203,13 @@ const TOGGLE_SHUFFLE: SettingSpec = {
   key: "shuffle_questions",
 };
 const TOGGLE_SHOW_ANSWER: SettingSpec = { kind: "toggle", key: "show_answer" };
+// Issue #860: 「顯示例句（答案挖空）」是獨立的附加開關 —— 題目呈現方式維持顯示單字／
+// 播放音檔，此開關只是額外在選項上方多顯示一行「把目標單字挖空的例句」。與圖片／選項
+// 圖片／播放音檔皆不互斥；選項語言仍由 show_image 決定，不受例句影響。
+const TOGGLE_SHOW_EXAMPLE_SENTENCE: SettingSpec = {
+  kind: "toggle",
+  key: "show_example_sentence",
+};
 const TOGGLE_SHOW_TRANSLATION: SettingSpec = {
   kind: "toggle",
   key: "show_translation",
@@ -457,6 +465,7 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
       SEGMENTED_DISPLAY_SELECTION,
       SELECT_TIME_SELECTION,
       TOGGLE_SHOW_ANSWER,
+      TOGGLE_SHOW_EXAMPLE_SENTENCE,
       TOGGLE_SHOW_IMAGE,
       TOGGLE_SHOW_OPTION_IMAGES,
     ],
@@ -493,6 +502,7 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
       SEGMENTED_DISPLAY_SELECTION,
       TOGGLE_LIVE_QUIZ,
       SELECT_QUIZ_TIME,
+      TOGGLE_SHOW_EXAMPLE_SENTENCE,
       TOGGLE_SHOW_IMAGE,
       TOGGLE_SHOW_OPTION_IMAGES,
     ],

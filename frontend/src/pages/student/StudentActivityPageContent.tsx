@@ -201,6 +201,7 @@ interface StudentActivityPageContentProps {
     show_word?: boolean;
     show_image?: boolean;
     show_option_images?: boolean;
+    show_example_sentence?: boolean;
   };
   // #830: 老師預覽小考時，注入每張卡底部「該題班級表現」%條（學生作答頁不傳）。
   renderCardFooter?: (contentItemId: number) => ReactNode;
@@ -2006,6 +2007,8 @@ export default function StudentActivityPageContent({
               show_word: previewSettings?.show_word ?? true,
               show_image: previewSettings?.show_image ?? true,
               show_option_images: previewSettings?.show_option_images ?? false,
+              show_example_sentence:
+                previewSettings?.show_example_sentence ?? false,
               play_audio: previewSettings?.play_audio ?? false,
               show_answer: showAnswer,
             }}

@@ -28,7 +28,7 @@ from models import (
 )
 from services.preview_service import get_sentence_fields, _VOCABULARY_CONTENT_TYPES
 from services.quota_service import QuotaService
-from utils.cloze import extract_cloze_for_item
+from utils.cloze import extract_cloze_for_item, collapse_to_single_blank
 from utils.rearrangement_history import archive_current_attempt
 from .dependencies import get_current_student
 from .quiz_assignments import score_and_finalize_quiz
@@ -1590,6 +1590,8 @@ async def start_word_selection_practice(
         db.query(ContentItem).filter(ContentItem.id.in_(content_item_ids)).all()
     )
     distractors_map = {item.id: item.distractors for item in items_with_distractors}
+    # Issue #860: 顯示例句（答案挖空）所需資料，用同一批已載入的 ContentItem。
+    items_map = {item.id: item for item in items_with_distractors}
 
     for i, word in enumerate(words_data):
         correct_answer = word.get(answer_key) or ""
@@ -1623,6 +1625,11 @@ async def start_word_selection_practice(
         options = [correct_option] + final_distractors
         random.shuffle(options)
 
+        # Issue #860: 例句（答案挖空）資料；cloze_answer 沿用 extract_cloze_for_item
+        # 的解析（優先 stored cloze_answer，再回退推導），前端在 show_example_sentence
+        # 開啟時據此把例句挖空。
+        source_item = items_map.get(word["content_item_id"])
+        cloze = extract_cloze_for_item(source_item) if source_item else None
         words_with_options.append(
             {
                 "content_item_id": word["content_item_id"],
@@ -1633,6 +1640,17 @@ async def start_word_selection_practice(
                 "image_url": word.get("image_url"),
                 "memory_strength": word.get("memory_strength", 0),
                 "options": options,
+                # 刻意不送例句翻譯／例句音檔：此題型不渲染，且兩者都會洩漏答案。
+                "example_sentence": (
+                    source_item.example_sentence or "" if source_item else ""
+                ),
+                "cloze_answer": cloze[1] if cloze else "",
+                # Issue #860: 挖空由後端算，前端只渲染（避免兩邊比對規則漂移）。
+                # Fail closed：挖不出空回空字串，不可退回原句（原句含答案）。
+                # 收合成單一格：選擇題顯示格數等於洩漏答案字數。
+                "blanked_sentence": (
+                    collapse_to_single_blank(cloze[0]) if cloze else ""
+                ),
             }
         )
 
@@ -1674,6 +1692,11 @@ async def start_word_selection_practice(
         "show_image": assignment.show_image if assignment else True,
         "show_option_images": (
             bool(assignment.show_option_images) if assignment else False
+        ),
+        "show_example_sentence": (
+            bool(getattr(assignment, "show_example_sentence", False))
+            if assignment
+            else False
         ),
         "play_audio": assignment.play_audio if assignment else False,
         "time_limit_per_question": (

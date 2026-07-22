@@ -91,6 +91,20 @@ def build_blank(matched_text: str) -> str:
     return " ".join("_" for _ in words)
 
 
+def collapse_to_single_blank(blanked_sentence: str) -> str:
+    """把「一字一格」的挖空收合成單一格（Issue #860 單字選擇例句題專用）。
+
+    ``build_blank`` 依 #880 對片語答案產生 "_ _"（一字一格），那是為 word_cloze
+    的「打字作答」設計的——知道字數是合理提示。但單字選擇是四選一，顯示格數等於
+    直接洩漏答案是幾個字（如看到兩格就能排除所有單字選項），因此這裡收合成一格。
+
+    "I love to _ _ of landscapes." → "I love to _ of landscapes."
+    """
+    if not blanked_sentence:
+        return blanked_sentence
+    return re.sub(r"_(?:\s+_)+", "_", blanked_sentence)
+
+
 def find_cloze_match(
     answer: str, example_sentence: str
 ) -> Optional[Tuple[int, int, str]]:

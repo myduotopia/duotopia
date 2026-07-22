@@ -59,6 +59,8 @@ import { withDemoOverrides } from "@/lib/demoOverrides";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
 import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
+import ClozeBlankText from "./shared/ClozeBlankText";
+import { buildBlankedSentence } from "@/lib/cloze";
 import { useShortLandscape } from "./shared/useShortLandscape";
 import { aggregateTierCounts, weightedMastery } from "./wordFamiliarity";
 
@@ -78,6 +80,11 @@ interface WordOption {
   image_url?: string;
   memory_strength: number;
   options: OptionEntry[];
+  // Issue #860: 顯示例句（答案挖空）。blanked_sentence 由後端算好；
+  // 老師派發預覽等只有原始教材的路徑沒有此欄位，前端才自行挖空。
+  example_sentence?: string | null;
+  cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 interface ProficiencyStatus {
@@ -111,6 +118,7 @@ interface WordSelectionActivityProps {
   previewSettings?: {
     show_image?: boolean;
     show_option_images?: boolean;
+    show_example_sentence?: boolean;
     play_audio?: boolean;
     target_proficiency?: number;
     time_limit_per_question?: number | null;
@@ -152,6 +160,7 @@ export default function WordSelectionActivity({
   // Settings
   const [showImage, setShowImage] = useState(true);
   const [showOptionImages, setShowOptionImages] = useState(false);
+  const [showExampleSentence, setShowExampleSentence] = useState(false);
   const [playAudio, setPlayAudio] = useState(false);
 
   // Proficiency
@@ -306,6 +315,7 @@ export default function WordSelectionActivity({
         is_practice_mode?: boolean;
         show_image: boolean;
         show_option_images?: boolean;
+        show_example_sentence?: boolean;
         play_audio: boolean;
         time_limit_per_question: number | null;
       }>(apiEndpoint);
@@ -315,6 +325,7 @@ export default function WordSelectionActivity({
       setIsPracticeMode(data.is_practice_mode ?? false);
       setShowImage(data.show_image ?? true);
       setShowOptionImages(data.show_option_images ?? false);
+      setShowExampleSentence(data.show_example_sentence ?? false);
       setPlayAudio(data.play_audio ?? false);
       setTimeLimit(data.time_limit_per_question || null);
       setTimeRemaining(data.time_limit_per_question || null);
@@ -391,6 +402,7 @@ export default function WordSelectionActivity({
       setIsPracticeMode(false);
       setShowImage(previewSettings?.show_image ?? true);
       setShowOptionImages(previewSettings?.show_option_images ?? false);
+      setShowExampleSentence(previewSettings?.show_example_sentence ?? false);
       setPlayAudio(previewSettings?.play_audio ?? false);
       setTimeLimit(previewSettings?.time_limit_per_question || null);
       setTimeRemaining(previewSettings?.time_limit_per_question || null);
@@ -884,6 +896,19 @@ export default function WordSelectionActivity({
   }
 
   const currentWord = words[currentIndex];
+  // Issue #860: 「顯示例句」是附加提示 —— 題目呈現方式維持顯示單字／播放音檔，
+  // 額外在選項上方顯示把目標單字挖空的例句。挖空句優先用後端算好的；只有派發預覽
+  // （只有原始教材）才前端自行挖。挖不出空時為空字串 → 該卡不顯示例句，
+  // 絕不顯示未挖空原句（會洩漏答案）。
+  const blankedText =
+    showExampleSentence && currentWord
+      ? currentWord.blanked_sentence ||
+        buildBlankedSentence(
+          currentWord.example_sentence,
+          currentWord.cloze_answer,
+          currentWord.text,
+        )
+      : "";
   const showQuestionImage = showImage && !!currentWord?.image_url;
 
   // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
@@ -1006,6 +1031,17 @@ export default function WordSelectionActivity({
                 <Volume2 className="h-5 w-5" />
                 {t("wordSelection.playAudio") || "Play Audio"}
               </Button>
+            </div>
+          )}
+
+          {/* Issue #860: 「顯示例句」附加提示 —— 在選項上方多顯示一行把目標單字
+              挖空的例句。挖不出空時 blankedText 為空 → 該卡不顯示，
+              絕不顯示未挖空原句（會洩漏答案）。 */}
+          {blankedText && (
+            <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 px-4 py-3 text-center">
+              <p className="text-[clamp(18px,4.5vh,22px)] font-medium text-gray-700 leading-relaxed select-none">
+                <ClozeBlankText text={blankedText} />
+              </p>
             </div>
           )}
 
