@@ -71,6 +71,8 @@ interface QuizWord {
   example_sentence?: string | null;
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
+  // Issue #967: 例句題型 + 播放音檔時，改播例句音檔（非單字音檔）。
+  example_sentence_audio_url?: string | null;
 }
 
 interface StartResponse {
@@ -548,7 +550,16 @@ export default function WordSelectionQuizActivity({
         currentWord.text,
       )
     : "";
-  const showQuestionImage = settings.show_image && !!currentWord.image_url;
+  // Issue #967: 例句題型「例句即題目」。開啟時題目改為挖空例句，不再顯示單字/翻譯，
+  // 且若同時開播放音檔，改播例句音檔（而非單字音檔）。
+  const questionAudioUrl = settings.show_example_sentence
+    ? currentWord.example_sentence_audio_url
+    : currentWord.audio_url;
+  // #967: 例句題型「例句即題目」，不顯示單字圖片（圖片＝答案，會直接洩漏）。
+  const showQuestionImage =
+    settings.show_image &&
+    !settings.show_example_sentence &&
+    !!currentWord.image_url;
   // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
   // 拿全寬（窄螢幕、或圖在上時），讓長句有整列寬度好換行、字級不被擠小。
   const hasLongOption =
@@ -673,7 +684,7 @@ export default function WordSelectionQuizActivity({
               useHorizontal ? "flex flex-row gap-6" : "flex flex-col gap-6",
             )}
           >
-            {settings.show_image && currentWord.image_url && (
+            {showQuestionImage && (
               <div
                 className={cn(
                   "flex justify-center shrink-0",
@@ -681,7 +692,7 @@ export default function WordSelectionQuizActivity({
                 )}
               >
                 <img
-                  src={currentWord.image_url}
+                  src={currentWord.image_url ?? undefined}
                   alt=""
                   className={cn(
                     "object-contain rounded-lg",
@@ -699,13 +710,13 @@ export default function WordSelectionQuizActivity({
                 useHorizontal && "min-w-0",
               )}
             >
-              {settings.play_audio && currentWord.audio_url && (
+              {settings.play_audio && questionAudioUrl && (
                 <div className="flex justify-center">
                   <Button
                     type="button"
                     size="lg"
                     variant="outline"
-                    onClick={() => playAudio(currentWord.audio_url)}
+                    onClick={() => playAudio(questionAudioUrl)}
                   >
                     <Volume2 className="h-5 w-5 mr-2" />
                     {t("wordQuiz.playAudio") || "Play"}
@@ -713,8 +724,9 @@ export default function WordSelectionQuizActivity({
                 </div>
               )}
 
-              {/* show_image=true → 顯示翻譯（圖+翻譯，避免英文選項秒解）；否則顯示英文題 */}
-              {!settings.play_audio && (
+              {/* show_image=true → 顯示翻譯（圖+翻譯，避免英文選項秒解）；否則顯示英文題。
+                  #967：例句題型時題目改為挖空例句（見下方），這裡不顯示單字/翻譯。 */}
+              {!settings.play_audio && !settings.show_example_sentence && (
                 <div className="text-center py-4 sm:py-6">
                   <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
                     {settings.show_image
@@ -724,11 +736,11 @@ export default function WordSelectionQuizActivity({
                 </div>
               )}
 
-              {/* Issue #860: 「顯示例句」附加提示 —— 在選項上方多顯示一行把目標
-                  單字挖空的例句。挖不出空時 blankedText 為空 → 該卡不顯示，
-                  絕不顯示未挖空原句（會洩漏答案）。 */}
+              {/* Issue #860 / #967: 例句題型 —— 挖空例句「就是題目」，放題目位置、
+                  不加外框底色（只有挖空單字有框，由 ClozeBlankText 提供）。挖不出空時
+                  blankedText 為空 → 該卡不顯示，絕不顯示未挖空原句（會洩漏答案）。 */}
               {blankedText && (
-                <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 px-4 py-3 text-center">
+                <div className="text-center py-4 sm:py-6">
                   <p className="text-[clamp(18px,4.5vh,22px)] font-medium text-gray-700 leading-relaxed select-none">
                     <ClozeBlankText text={blankedText} />
                   </p>
@@ -751,8 +763,12 @@ export default function WordSelectionQuizActivity({
               >
                 {currentWord.options.map((opt, index) => {
                   const isSelected = selectedForCurrent === opt.text;
+                  // #967: 例句題型選項一律英文（不渲染圖片），即使舊資料同時開了
+                  // show_option_images（#955 曾允許並存，現已互斥）。
                   const renderAsImage =
-                    settings.show_option_images && !!opt.image_url;
+                    settings.show_option_images &&
+                    !settings.show_example_sentence &&
+                    !!opt.image_url;
                   // 訂正模式作答後揭示：正解綠勾、學生答錯紅叉（參考艾賓浩斯）
                   const isCorrectOption =
                     opt.text.trim().toLowerCase() ===

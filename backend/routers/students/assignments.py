@@ -1640,9 +1640,15 @@ async def start_word_selection_practice(
                 "image_url": word.get("image_url"),
                 "memory_strength": word.get("memory_strength", 0),
                 "options": options,
-                # 刻意不送例句翻譯／例句音檔：此題型不渲染，且兩者都會洩漏答案。
+                # 刻意不送例句翻譯：此題型不渲染，且翻譯會直接講出該單字洩漏答案。
                 "example_sentence": (
                     source_item.example_sentence or "" if source_item else ""
+                ),
+                # Issue #967: 例句題型即「例句就是題目」，開播放音檔時改播例句音檔。
+                # 已知取捨：例句音檔會唸出整句（含挖空單字），可能透露答案 —— 依產品
+                # 決策照送（老師自行決定是否同時開播放音檔）。
+                "example_sentence_audio_url": (
+                    source_item.example_sentence_audio_url if source_item else None
                 ),
                 "cloze_answer": cloze[1] if cloze else "",
                 # Issue #860: 挖空由後端算，前端只渲染（避免兩邊比對規則漂移）。

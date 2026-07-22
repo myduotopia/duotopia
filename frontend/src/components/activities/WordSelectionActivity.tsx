@@ -85,6 +85,8 @@ interface WordOption {
   example_sentence?: string | null;
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
+  // Issue #967: 例句題型 + 播放音檔時，改播例句音檔（非單字音檔）。
+  example_sentence_audio_url?: string | null;
 }
 
 interface ProficiencyStatus {
@@ -430,24 +432,31 @@ export default function WordSelectionActivity({
     };
   }, []);
 
+  // Issue #967: 例句題型時改播例句音檔（非單字音檔）。
+  const resolveAudioUrl = useCallback(
+    (word?: WordOption) =>
+      showExampleSentence ? word?.example_sentence_audio_url : word?.audio_url,
+    [showExampleSentence],
+  );
+
   // Play audio for current word
   const playWordAudio = useCallback(() => {
-    const currentWord = words[currentIndex];
-    if (currentWord?.audio_url) {
+    const url = resolveAudioUrl(words[currentIndex]);
+    if (url) {
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      audioRef.current = new Audio(currentWord.audio_url);
+      audioRef.current = new Audio(url);
       audioRef.current.play().catch(console.error);
     }
-  }, [words, currentIndex]);
+  }, [words, currentIndex, resolveAudioUrl]);
 
   // Auto-play audio when word changes if play_audio is enabled
   // Don't play when round is completed (to avoid extra playback on "Finish Round")
   useEffect(() => {
     if (
       playAudio &&
-      words[currentIndex]?.audio_url &&
+      resolveAudioUrl(words[currentIndex]) &&
       !showResult &&
       !roundCompleted
     ) {
@@ -457,6 +466,7 @@ export default function WordSelectionActivity({
     currentIndex,
     playAudio,
     playWordAudio,
+    resolveAudioUrl,
     words,
     showResult,
     roundCompleted,
@@ -909,7 +919,9 @@ export default function WordSelectionActivity({
           currentWord.text,
         )
       : "";
-  const showQuestionImage = showImage && !!currentWord?.image_url;
+  // #967: 例句題型「例句即題目」，不顯示單字圖片（圖片＝答案，會直接洩漏）。
+  const showQuestionImage =
+    showImage && !showExampleSentence && !!currentWord?.image_url;
 
   // Issue #844: 任一非圖片選項 ≥5 詞（≥4 空格）→ 視為長選項。長選項一律單欄
   // 拿全寬（窄螢幕、或圖在上時），讓長句有整列寬度好換行、字級不被擠小。
@@ -980,7 +992,7 @@ export default function WordSelectionActivity({
           />
         )}
         {/* Image */}
-        {showImage && currentWord.image_url && (
+        {showQuestionImage && (
           <div
             className={cn(
               "flex justify-center shrink-0",
@@ -990,7 +1002,7 @@ export default function WordSelectionActivity({
             )}
           >
             <img
-              src={currentWord.image_url}
+              src={currentWord.image_url ?? undefined}
               alt={currentWord.text}
               className={cn(
                 "object-contain rounded-lg",
@@ -1010,8 +1022,9 @@ export default function WordSelectionActivity({
           )}
         >
           {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
-              即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
-          {!playAudio && (
+              即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解。
+              #967：例句題型時題目改為挖空例句（見下方），這裡不顯示單字/翻譯。 */}
+          {!playAudio && !showExampleSentence && (
             <div className="text-center py-4 sm:py-6">
               <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
                 {showImage ? currentWord.translation : currentWord.text}
@@ -1034,11 +1047,11 @@ export default function WordSelectionActivity({
             </div>
           )}
 
-          {/* Issue #860: 「顯示例句」附加提示 —— 在選項上方多顯示一行把目標單字
-              挖空的例句。挖不出空時 blankedText 為空 → 該卡不顯示，
-              絕不顯示未挖空原句（會洩漏答案）。 */}
+          {/* Issue #860 / #967: 例句題型 —— 挖空例句「就是題目」，放題目位置、
+              不加外框底色（只有挖空單字有框，由 ClozeBlankText 提供）。挖不出空時
+              blankedText 為空 → 該卡不顯示，絕不顯示未挖空原句（會洩漏答案）。 */}
           {blankedText && (
-            <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 px-4 py-3 text-center">
+            <div className="text-center py-4 sm:py-6">
               <p className="text-[clamp(18px,4.5vh,22px)] font-medium text-gray-700 leading-relaxed select-none">
                 <ClozeBlankText text={blankedText} />
               </p>
@@ -1073,8 +1086,11 @@ export default function WordSelectionActivity({
                 showResult && isSelected && !isCorrectAnswer;
               // 答錯後才揭示的正解需要打勾動畫引導注意
               const animateReveal = showCorrect && !isCorrect;
-              // 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字
-              const renderAsImage = showOptionImages && !!optionImage;
+              // 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字。
+              // #967: 例句題型選項一律英文（不渲染圖片），即使舊資料同時開了
+              // showOptionImages（#955 曾允許並存，現已互斥）。
+              const renderAsImage =
+                showOptionImages && !showExampleSentence && !!optionImage;
 
               return (
                 <WordSelectionOptionButton

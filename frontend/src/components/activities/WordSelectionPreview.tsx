@@ -32,6 +32,7 @@ interface ContentItem {
   image_url?: string;
   // Issue #860
   example_sentence?: string | null;
+  example_sentence_audio_url?: string | null; // Issue #967
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
 }
@@ -52,6 +53,7 @@ interface WordOption {
   options: OptionEntry[];
   // Issue #860
   example_sentence?: string | null;
+  example_sentence_audio_url?: string | null; // Issue #967
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
 }
@@ -149,6 +151,7 @@ export default function WordSelectionPreview({
       memory_strength: 0,
       options: buildOptions(item, items, showImage),
       example_sentence: item.example_sentence,
+      example_sentence_audio_url: item.example_sentence_audio_url,
       cloze_answer: item.cloze_answer,
       blanked_sentence: item.blanked_sentence,
     }));

@@ -321,10 +321,14 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
                     # 與學生端同源。
                     #
                     # 與 quiz_assignments._example_cloze_fields 一致，刻意不送
-                    # example_sentence_translation / example_sentence_audio_url：
-                    # 兩者都會洩漏答案（翻譯講出該單字、音檔唸出含答案的整句），
-                    # 而本函式會被「公開未認證」的 demo preview 端點呼叫。
+                    # example_sentence_translation：翻譯會直接講出該單字洩漏答案。
+                    # Issue #967: 送 example_sentence_audio_url，讓教師預覽與學生端
+                    # 一致（例句題型開播放音檔時可試聽例句音檔）。已知取捨：音檔會唸出
+                    # 含挖空單字的整句，可能透露答案 —— 依產品決策照送。
                     "example_sentence": getattr(item, "example_sentence", "") or "",
+                    "example_sentence_audio_url": (
+                        getattr(item, "example_sentence_audio_url", None) or None
+                    ),
                     "cloze_answer": _item_cloze[1] if _item_cloze else "",
                     # Fail closed：挖不出空回空字串，不可退回原句（原句含答案）
                     "blanked_sentence": (
@@ -610,13 +614,19 @@ async def get_word_selection_start(
         random.shuffle(options)
 
         # Issue #860: 例句挖空模式下，per-item payload 必須與學生端同一套處理 ——
-        # 送後端算好的 blanked_sentence，並拿掉例句翻譯／例句音檔（翻譯直接講出
-        # 該單字、音檔唸出含答案的整句）。本函式支撐「公開未認證」的 demo 端點，
-        # 前端有沒有渲染不算數，JSON 裡有就是洩漏。
+        # 送後端算好的 blanked_sentence，拿掉例句翻譯（翻譯直接講出該單字洩漏答案）。
+        # Issue #967: 送 example_sentence_audio_url，讓例句題型開播放音檔時可播例句
+        # 音檔（與學生端／教師預覽一致）。已知取捨：音檔會唸出含挖空單字的整句、
+        # 可能透露答案 —— 依產品決策照送。
         if _show_example_sentence:
             _cloze = _extract_cloze(item)
             example_fields = {
                 "example_sentence": item.example_sentence or "",
+                "example_sentence_audio_url": (
+                    sentence_audio_by_id.get(item.id)
+                    or item.example_sentence_audio_url
+                    or ""
+                ),
                 "cloze_answer": _cloze[1] if _cloze else "",
                 "blanked_sentence": (_collapse_blank(_cloze[0]) if _cloze else ""),
             }

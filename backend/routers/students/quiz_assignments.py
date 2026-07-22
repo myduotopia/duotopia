@@ -748,9 +748,10 @@ def _example_cloze_fields(item: ContentItem) -> Dict[str, Any]:
     from utils.cloze import extract_cloze_for_item, collapse_to_single_blank
 
     cloze = extract_cloze_for_item(item)
-    # 刻意不送 example_sentence_translation / example_sentence_audio_url：
-    # 這個題型不渲染它們，且兩者都會洩漏答案（翻譯直接講出該單字、音檔唸出整句
-    # 含挖空的字）。與 word_cloze 不同——那邊是打字作答且本來就給提示。
+    # 刻意不送 example_sentence_translation：翻譯會直接講出該單字洩漏答案。
+    # Issue #967: 例句題型即「例句就是題目」，開播放音檔時改播例句音檔，故送
+    # example_sentence_audio_url。已知取捨：例句音檔會唸出整句（含挖空單字），
+    # 可能透露答案 —— 依產品決策照送（老師自行決定是否同時開播放音檔）。
     #
     # Fail closed：挖不出空時回空字串，不可退回原句 —— 原句幾乎必然含答案，
     # 等於把答案直接印在題目上。派發流程有 _raise_if_missing_examples 擋住這種
@@ -762,6 +763,7 @@ def _example_cloze_fields(item: ContentItem) -> Dict[str, Any]:
     # Issue #860: 收合成單一格 —— 選擇題顯示格數等於洩漏答案字數。
     return {
         "example_sentence": item.example_sentence or "",
+        "example_sentence_audio_url": item.example_sentence_audio_url,
         "cloze_answer": cloze[1] if cloze else "",
         "blanked_sentence": collapse_to_single_blank(cloze[0]) if cloze else "",
     }

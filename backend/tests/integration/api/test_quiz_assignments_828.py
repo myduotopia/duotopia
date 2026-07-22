@@ -291,6 +291,7 @@ def _seed_example_selection_quiz() -> int:
                 translation="蘋果",
                 example_sentence="I eat an apple.",
                 example_sentence_translation="我吃一顆蘋果。",
+                example_sentence_audio_url="https://cdn/example/apple_sent.mp3",
                 cloze_answer="apple",
             ),
             ContentItem(
@@ -382,9 +383,12 @@ def test_selection_quiz_start_ships_example_sentence_and_cloze(setup_database):
     assert by_id[1]["blanked_sentence"] == "I eat an _."
     assert by_id[2]["cloze_answer"] == "banana"
     assert by_id[2]["blanked_sentence"] == "The _ is yellow."
-    # 例句翻譯／音檔刻意不下放（會洩漏答案）
+    # 例句翻譯刻意不下放（翻譯直接講出該單字洩漏答案）
     assert "example_sentence_translation" not in by_id[1]
-    assert "example_sentence_audio_url" not in by_id[1]
+    # Issue #967: 例句題型「例句即題目」，開播放音檔時需播例句音檔 → 下放例句音檔。
+    assert (
+        by_id[1]["example_sentence_audio_url"] == "https://cdn/example/apple_sent.mp3"
+    )
 
 
 def test_selection_quiz_blanks_inflected_form_without_leaking_suffix(setup_database):
