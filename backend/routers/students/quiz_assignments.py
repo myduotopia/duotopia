@@ -451,7 +451,11 @@ def _build_selection_options(
 ) -> Dict[int, List[Dict[str, Any]]]:
     """Build option lists per item, mirroring selection/start's distractor rules."""
     show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(show_image)
+    # Issue #967: 例句題型選項一律英文。且例句時不可用 stored distractors —— 它們依
+    # show_image 分語言儲存，show_image=關 時是中文，會出現「正解英文＋干擾中文」，
+    # 改用英文 pool 現組（pool＝其他單字的英文 text，與 stored 同來源、品質等價）。
+    show_example = bool(getattr(assignment, "show_example_sentence", False))
+    answer_key = text_field_for_show_image(show_image, show_example)
 
     pool = [
         {
@@ -470,7 +474,7 @@ def _build_selection_options(
         rng = random.Random(item.id)
         correct_text = getattr(item, answer_key) or ""
         stored = normalize_distractors(item.distractors)
-        if len(stored) >= 3:
+        if not show_example and len(stored) >= 3:
             distractors = list(stored[:3])
         else:
             target = correct_text.lower().strip()
@@ -512,7 +516,9 @@ async def start_word_selection_quiz(
     options_by_item = _build_selection_options(items, assignment)
 
     show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(show_image)
+    answer_key = text_field_for_show_image(
+        show_image, bool(getattr(assignment, "show_example_sentence", False))
+    )
 
     existing = _existing_answers_for_session(db, session.id)
 
@@ -587,7 +593,9 @@ async def submit_word_selection_quiz_answer(
     # selected option against the item's answer text, same field/normalisation as
     # _build_selection_options uses to build the correct option.
     show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(show_image)
+    answer_key = text_field_for_show_image(
+        show_image, bool(getattr(assignment, "show_example_sentence", False))
+    )
     correct_text = getattr(item, answer_key) or ""
     is_correct = request.selected_answer.strip().lower() == correct_text.strip().lower()
 
@@ -782,7 +790,9 @@ def build_selection_quiz_payload(assignment: Assignment, db: Session) -> Dict[st
     items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
     options_by_item = _build_selection_options(items, assignment)
     show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(show_image)
+    answer_key = text_field_for_show_image(
+        show_image, bool(getattr(assignment, "show_example_sentence", False))
+    )
 
     def builder(item: ContentItem) -> Dict[str, Any]:
         correct = getattr(item, answer_key) or ""

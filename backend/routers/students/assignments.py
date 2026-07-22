@@ -1580,7 +1580,12 @@ async def start_word_selection_practice(
         if assignment and assignment.show_image is not None
         else True
     )
-    answer_key = text_field_for_show_image(show_image_for_options)
+    # Issue #967: 例句題型選項一律英文；且不可用依 show_image 分語言儲存的 stored
+    # distractors（show_image=關 時是中文，會「正解英文＋干擾中文」），改用英文 pool 現組。
+    show_example = bool(
+        assignment and getattr(assignment, "show_example_sentence", False)
+    )
+    answer_key = text_field_for_show_image(show_image_for_options, show_example)
 
     words_with_options = []
 
@@ -1599,7 +1604,7 @@ async def start_word_selection_practice(
             distractors_map.get(word["content_item_id"])
         )
 
-        if len(stored_distractors) >= 3:
+        if not show_example and len(stored_distractors) >= 3:
             final_distractors = list(stored_distractors[:3])
         else:
             # Fallback: 從其他單字取（同時帶 image_url）— 依 show_image 決定語言
@@ -1760,15 +1765,23 @@ async def submit_word_selection_answer(
             detail="Content item not found",
         )
 
-    # 取得作業設定，依 show_image 決定正解語言（true=英文 / false=翻譯）
+    # 取得作業設定，依 show_image 決定正解語言（true=英文 / false=翻譯）。
+    # Issue #967: 例句題型選項一律英文 → 正解也一律用 content_item.text，
+    # 否則選項英文、比對用翻譯會全判錯。
     assignment_for_check = student_assignment.assignment
     show_image_mode = bool(
         assignment_for_check.show_image
         if assignment_for_check and assignment_for_check.show_image is not None
         else True
     )
+    show_example_mode = bool(
+        assignment_for_check
+        and getattr(assignment_for_check, "show_example_sentence", False)
+    )
     correct_answer = (
-        content_item.text if show_image_mode else content_item.translation
+        content_item.text
+        if (show_image_mode or show_example_mode)
+        else content_item.translation
     ) or ""
 
     # 伺服器端驗證答案正確性（不信任客戶端的 is_correct）

@@ -391,6 +391,60 @@ def test_selection_quiz_start_ships_example_sentence_and_cloze(setup_database):
     )
 
 
+def test_selection_quiz_example_forces_english_options_when_show_image_off(
+    setup_database,
+):
+    """Issue #967: show_example_sentence + show_image=False → 選項/正解一律英文
+    (item.text)，不是翻譯。例句挖空的是英文單字，選項必須英文才能填空。
+    seed 的 assignment 正是 show_image=False + show_example_sentence=True。"""
+    sa_id = _seed_example_selection_quiz()
+    headers = {"Authorization": f"Bearer {_student_token()}"}
+
+    start = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/start",
+        headers=headers,
+    )
+    assert start.status_code == 200, start.text
+    by_id = {w["content_item_id"]: w for w in start.json()["words"]}
+
+    # 正解為英文（apple），不是翻譯（蘋果）
+    assert by_id[1]["correct_text"] == "apple"
+    # 選項一律英文，不得出現任何中文翻譯（否則正解英文＋干擾中文會破圖）
+    chinese_translations = {"蘋果", "香蕉", "杯子", "拍照"}
+    opt_texts = {o["text"] for o in by_id[1]["options"]}
+    assert not (opt_texts & chinese_translations), opt_texts
+    assert "apple" in opt_texts
+
+
+def test_selection_quiz_example_grades_english_answer_when_show_image_off(
+    setup_database,
+):
+    """Issue #967: 承上，答案比對也用英文 —— 送 'apple' 判對、送翻譯 '蘋果' 判錯。"""
+    sa_id = _seed_example_selection_quiz()
+    headers = {"Authorization": f"Bearer {_student_token()}"}
+    session_id = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/start",
+        headers=headers,
+    ).json()["session_id"]
+
+    def _answer(selected: str) -> bool:
+        resp = client.post(
+            f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/answer",
+            headers=headers,
+            json={
+                "content_item_id": 1,
+                "selected_answer": selected,
+                "time_spent_seconds": 3,
+                "session_id": session_id,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        return resp.json()["is_correct"]
+
+    assert _answer("apple") is True
+    assert _answer("蘋果") is False
+
+
 def test_selection_quiz_blanks_inflected_form_without_leaking_suffix(setup_database):
     """Issue #860 回歸：cloze_answer='cup' 但句中是 'cups' → 整個 cups 挖掉。
     先前前端用子字串比對會變成 'I have two _s.'，尾巴洩漏答案。"""

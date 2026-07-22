@@ -11,6 +11,8 @@
  *     + useShortLandscape 走橫式排版（圖左、選項右 2×2）
  *   - #844 欄數固定（不依字長翻轉）：手機單欄、平板 2×2、桌機 4 欄；長選項另把題目圖移到上方。
  *     字級用 fit-to-box（撐大／縮／不裁字）
+ *   - #967 例句挖空模式（show_example_sentence）：題目改為挖空例句、不顯示單字/翻譯（單字圖仍可顯示）；
+ *     選項一律英文（後端強制）；播放音檔改播例句音檔；與選項圖片互斥；版面固定直式（例句是長文）。
  */
 
 import {
@@ -565,7 +567,13 @@ export default function WordSelectionQuizActivity({
     );
   // 直式優先；題目有圖 + 矮橫螢幕（手機橫放）才走橫式（圖左、選項右）。
   // #844：長選項時關閉橫式 → 圖回到上方，下方選項拿全寬單欄。
-  const useHorizontal = showQuestionImage && isShortLandscape && !hasLongOption;
+  // #967：例句題型時關閉橫式 —— 挖空例句是長文題目，橫式窄欄會擠爆；改直式讓
+  // 例句拿全寬、圖片（若開）疊上方。
+  const useHorizontal =
+    showQuestionImage &&
+    isShortLandscape &&
+    !hasLongOption &&
+    !settings.show_example_sentence;
   // Issue #830 訂正模式 gating + 揭示
   const currentCorrect = correctByItem[currentWord.content_item_id];
   const currentResolved = currentCorrect === true;

@@ -582,7 +582,11 @@ async def get_word_selection_start(
     show_image_for_options = (
         assignment.show_image if assignment.show_image is not None else True
     )
-    answer_field = text_field_for_show_image(show_image_for_options)
+    # Issue #967: 例句題型選項一律英文；且例句時不可用 stored distractors（依 show_image
+    # 分語言儲存，show_image=關 時是中文），改用英文 pool 現組。
+    answer_field = text_field_for_show_image(
+        show_image_for_options, _show_example_sentence
+    )
 
     words_with_options = []
 
@@ -591,7 +595,11 @@ async def get_word_selection_start(
 
         # Use stored distractors if available (≥3), else fallback to other words
         stored = normalize_distractors(item.distractors)
-        if not ignore_stored_distractors and len(stored) >= 3:
+        if (
+            not ignore_stored_distractors
+            and not _show_example_sentence
+            and len(stored) >= 3
+        ):
             final_distractors = list(stored[:3])
         else:
             target = correct_answer.lower().strip()

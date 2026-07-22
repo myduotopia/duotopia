@@ -24,6 +24,12 @@
  * - 答案比對使用後端傳的 correct_text（fallback: 依 showImage flag 決定 text/translation）
  * - 不顯示文字提示語（畫面已直覺）
  *
+ * show_example_sentence 模式（例句挖空，Issue #967）：
+ * - 題目改為挖空例句（例句即題目），不顯示單字/翻譯；單字圖片仍可顯示
+ * - 選項一律英文（不論 show_image 開關）—— 例句挖的是英文單字，後端強制英文正解/選項
+ * - 播放音檔改播例句音檔；與「選項以圖片呈現」互斥
+ * - 版面固定直式（例句是長文，不走橫式窄欄）
+ *
  * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
  *    改動前必讀：docs/design/preview-architecture.md
  */
@@ -273,11 +279,13 @@ export default function WordSelectionActivity({
   const isShortLandscape = useShortLandscape();
 
   // show_image 模式下正解為英文 (word.text)，否則為翻譯。優先信任後端傳的
-  // correct_text；舊版後端未回傳時依 showImage flag fallback。
+  // correct_text；舊版後端未回傳時依 flag fallback。
+  // Issue #967: 例句題型選項一律英文 → fallback 也用 word.text。
   const getExpectedAnswer = useCallback(
     (word: WordOption) =>
-      word.correct_text ?? (showImage ? word.text : word.translation),
-    [showImage],
+      word.correct_text ??
+      (showImage || showExampleSentence ? word.text : word.translation),
+    [showImage, showExampleSentence],
   );
 
   // Start practice session
@@ -931,7 +939,12 @@ export default function WordSelectionActivity({
 
   // 直式優先：題目有圖且視窗矮（橫向手機）才退回橫式（圖左、選項右）。
   // #844：長選項時關閉橫式 → 圖回到上方，下方選項拿全寬單欄。
-  const useHorizontal = showQuestionImage && isShortLandscape && !hasLongOption;
+  // #967：例句題型時關閉橫式 —— 挖空例句是長文題目，橫式窄欄會擠爆；改直式。
+  const useHorizontal =
+    showQuestionImage &&
+    isShortLandscape &&
+    !hasLongOption &&
+    !showExampleSentence;
 
   return (
     <div className="flex flex-col gap-6 min-h-[calc(100dvh-8rem)]">
