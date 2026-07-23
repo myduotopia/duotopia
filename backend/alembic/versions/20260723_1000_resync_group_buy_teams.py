@@ -28,6 +28,20 @@ depends_on = None
 
 def upgrade() -> None:
     # ------------------------------------------------------------------
+    # 0) 自癒：補建 teams 的部分唯一索引。
+    #    PR1（20260721_1000）在 iterate 中把 ix_group_buy_teams_source_org（普通）
+    #    改成 uq_group_buy_teams_source_org（部分唯一）——但那是「改一支已被套用過
+    #    的 migration」。先前已套用該 revision 的環境不會重跑，於是缺 uq_ 索引，
+    #    下方 ON CONFLICT 會報 "no unique or exclusion constraint matching"。
+    #    這裡 IF NOT EXISTS 補上，讓所有環境一致（新環境 no-op）。
+    # ------------------------------------------------------------------
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_group_buy_teams_source_org "
+        "ON group_buy_teams (source_organization_id) "
+        "WHERE source_organization_id IS NOT NULL"
+    )
+
+    # ------------------------------------------------------------------
     # 1) UPSERT teams：每個 group_buy org → 一列，衝突（同 source_organization_id）
     #    時把欄位刷新為舊表當前值。seat_limit 以 plan.teacher_seats 保底，皆 NULL
     #    才跳過（graceful，與 PR1 一致）。ON CONFLICT 目標為部分唯一索引，需帶述詞。

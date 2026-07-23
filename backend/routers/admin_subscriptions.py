@@ -5,7 +5,6 @@ Admin Subscription Management API
 不依賴 teacher_subscription_transactions
 """
 
-import logging
 from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, aliased
@@ -38,7 +37,6 @@ from routers.admin import get_current_admin
 from services.group_buy import create_group_buy_period, mirror_group_buy_dual_write
 
 router = APIRouter(prefix="/api/admin/subscription", tags=["admin-subscription"])
-logger = logging.getLogger(__name__)
 
 
 # ============ Request/Response Models ============
@@ -319,7 +317,7 @@ async def _create_group_buy_admin_subscription(
     org = (
         db.query(Organization).filter(Organization.id == school.organization_id).first()
     )
-    mirror_group_buy_dual_write(org, db, logger)
+    mirror_group_buy_dual_write(org, db)
 
     db.commit()
     db.refresh(period)

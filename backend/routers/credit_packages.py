@@ -1405,7 +1405,7 @@ async def open_group_buy(
             # best-effort 鏡射進 group_buy_teams/members。鏡射失敗只回滾鏡射本身，
             # **不可**讓一筆已扣款且 org/school/名冊都正常的購買被 rollback→退款
             # （共用 helper 內含 SAVEPOINT + logging；drift 由每月 cron re-sync 補平）。
-            mirror_group_buy_dual_write(org, db, logger)
+            mirror_group_buy_dual_write(org, db)
 
             success_txn = TeacherSubscriptionTransaction(
                 teacher_id=current_teacher.id,

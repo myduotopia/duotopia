@@ -536,7 +536,7 @@ def sync_group_buy_team_from_org(org: Organization, db: Session) -> GroupBuyTeam
     return team
 
 
-def mirror_group_buy_dual_write(org, db, logger) -> None:
+def mirror_group_buy_dual_write(org: Organization | None, db: Session) -> None:
     """Best-effort dual-write of a group-buy org into the new tables (issue #862).
 
     Wraps ``sync_group_buy_team_from_org`` in a SAVEPOINT so a mirror failure
@@ -562,21 +562,21 @@ def mirror_group_buy_dual_write(org, db, logger) -> None:
         )
 
 
-def resync_all_group_buy_teams(db) -> int:
-    """Re-run the mirror for every active group-buy Organization (issue #862).
+def resync_all_group_buy_teams(db: Session) -> int:
+    """Re-run the mirror for every group-buy Organization (issue #862).
 
     Heals drift left by any best-effort mirror write that failed after the
     read-switch. Idempotent (``sync_group_buy_team_from_org`` upserts). Returns
     the number of orgs synced. Does NOT commit — caller owns the transaction.
+
+    Does NOT filter on ``Organization.is_active``: a group-buy org can be
+    deactivated / soft-deleted via the generic org endpoints (PUT/DELETE
+    /organizations/{id}) which don't call the mirror, so an inactive org is
+    exactly the drift case we must heal — ``sync_group_buy_team_from_org`` sets
+    ``team.is_active = org.is_active`` regardless, flipping the stale team to
+    inactive so the read-switched status/roster queries stop surfacing it.
     """
-    orgs = (
-        db.query(Organization)
-        .filter(
-            Organization.org_type == "group_buy",
-            Organization.is_active.is_(True),
-        )
-        .all()
-    )
+    orgs = db.query(Organization).filter(Organization.org_type == "group_buy").all()
     synced = 0
     for org in orgs:
         # Per-org SAVEPOINT so one bad org can't abort the whole heal / the
