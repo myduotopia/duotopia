@@ -1402,8 +1402,20 @@ async def open_group_buy(
 
             # issue #862 PR2 雙寫：舊表（org/school/名冊/續約窗口）寫完後，於同一
             # 交易鏡射進 group_buy_teams/members，讓新表保持新鮮（讀取仍走舊表到
-            # PR3）。鏡射失敗會連同上方一起進補償流程（卡已扣款 → REFUND REQUIRED）。
-            sync_group_buy_team_from_org(org, db)
+            # PR3）。用 SAVEPOINT 包起來 best-effort：鏡射屬「目前未被讀取」的鏡像表，
+            # 一旦失敗（例如並發撞 uq_group_buy_teams_source_org）只回滾鏡射本身，
+            # **不可**讓一筆已扣款且 org/school/名冊都正常的購買被 rollback→退款。
+            # 鏡射 self-healing，下次寫入或 PR3 前的全量 re-sync 會補上。
+            try:
+                with db.begin_nested():
+                    sync_group_buy_team_from_org(org, db)
+            except Exception as sync_err:  # noqa: BLE001 - best-effort mirror
+                logger.error(
+                    "group-buy dual-write mirror failed (non-fatal; mirror "
+                    "unread until PR3) org=%s: %s",
+                    org.id,
+                    sync_err,
+                )
 
             success_txn = TeacherSubscriptionTransaction(
                 teacher_id=current_teacher.id,

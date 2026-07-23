@@ -488,6 +488,9 @@ def sync_group_buy_team_from_org(org: Organization, db: Session) -> GroupBuyTeam
     # Members: all teacher_schools under the org's ACTIVE schools (aligned with
     # the team's active-school sourcing). Dedup by teacher, preferring the
     # active binding so a teacher in two schools keeps their in-team state.
+    # Deterministic order (active first, then school_id) so that when a teacher
+    # has multiple same-active-state bindings across branch schools, the winning
+    # source_school_id is stable across runs rather than DB-order-dependent.
     ts_rows = (
         db.query(TeacherSchool)
         .join(School, School.id == TeacherSchool.school_id)
@@ -495,6 +498,7 @@ def sync_group_buy_team_from_org(org: Organization, db: Session) -> GroupBuyTeam
             School.organization_id == org.id,
             School.is_active.is_(True),
         )
+        .order_by(TeacherSchool.is_active.desc(), TeacherSchool.school_id.asc())
         .all()
     )
     best_by_teacher: dict[int, TeacherSchool] = {}

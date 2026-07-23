@@ -12,6 +12,8 @@ import pytest
 
 from auth import create_access_token, get_password_hash
 from models import (
+    GroupBuyMember,
+    GroupBuyTeam,
     Organization,
     Plan,
     School,
@@ -197,6 +199,27 @@ def test_happy_path_creates_org_school_binding_period(
     assert txn.status == "SUCCESS"
     assert txn.amount == gb_plan.annual_fee * gb_plan.teacher_seats
     assert txn.subscription_type == gb_plan.name
+
+    # issue #862 PR2 雙寫：開團端點應於同一交易鏡射到新表（讀取仍走舊表）。
+    # 這鎖定 call-site wiring（傳對 org、交易順序），非只測 pure function。
+    team = (
+        shared_test_session.query(GroupBuyTeam)
+        .filter(GroupBuyTeam.source_organization_id == org.id)
+        .one()
+    )
+    assert team.owner_teacher_id == teacher.id
+    assert team.plan_id == gb_plan.id
+    assert team.seat_limit == gb_plan.teacher_seats
+    owner_member = (
+        shared_test_session.query(GroupBuyMember)
+        .filter(
+            GroupBuyMember.team_id == team.id,
+            GroupBuyMember.teacher_id == teacher.id,
+        )
+        .one()
+    )
+    assert owner_member.is_owner is True
+    assert owner_member.is_active is True
 
 
 def test_repeat_open_adds_school_to_existing_org(
