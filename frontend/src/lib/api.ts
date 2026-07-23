@@ -1557,7 +1557,11 @@ class ApiClient {
         example_sentence: string;
         example_sentence_translation: string;
       }>;
-      charge: { charged: string; points_used: number; free_remaining: number };
+      charge: {
+        charged: string;
+        points_used: number;
+        free_remaining: number;
+      } | null;
       quota: {
         free_remaining: number;
         free_limit: number;

@@ -226,6 +226,35 @@ def test_endpoint_success_decrements_free_quota(
     assert body["quota"]["free_remaining"] == mpq.FREE_MONTHLY_LIMIT - 1
 
 
+def test_endpoint_zero_items_does_not_consume_quota(
+    test_client, auth_headers_teacher, monkeypatch
+):
+    """擷取到 0 項（模糊圖/非教材圖）→ 不扣配額（round-3 #2）。"""
+
+    async def fake_extract(self, file_bytes, mime_type, **kwargs):
+        return {
+            "items": [],
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+            "estimated_cost_usd": 0.0,
+            "provider": "test",
+            "model": "test-model",
+        }
+
+    monkeypatch.setattr(MagicPasteService, "extract", fake_extract)
+    resp = test_client.post(
+        "/api/programs/magic-paste",
+        headers=auth_headers_teacher,
+        files={"file": _png()},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["items"] == []
+    assert body["charge"] is None
+    # 免費額度未被扣（仍是滿的）
+    assert body["quota"]["free_used"] == 0
+    assert body["quota"]["free_remaining"] == mpq.FREE_MONTHLY_LIMIT
+
+
 def test_endpoint_blocks_when_quota_exhausted(
     test_client, auth_headers_teacher, demo_teacher, shared_test_session, mock_extract
 ):

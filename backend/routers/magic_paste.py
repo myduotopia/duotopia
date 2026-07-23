@@ -79,7 +79,7 @@ async def magic_paste_extract(
     except MagicPasteError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    # 2) 配額預檢：明顯用完就不浪費 AI 呼叫
+    # 3) 配額預檢：明顯用完就不浪費 AI 呼叫
     quota_before = mpq.get_quota_status(db, current_teacher)
     if not quota_before["can_use"]:
         raise HTTPException(
@@ -91,7 +91,7 @@ async def magic_paste_extract(
             },
         )
 
-    # 3) AI 擷取
+    # 4) AI 擷取
     try:
         result = await service.extract(
             file_bytes=file_bytes,
@@ -110,18 +110,22 @@ async def magic_paste_extract(
             detail="AI 擷取失敗，請稍後再試",
         )
 
-    # 4) 擷取成功後才扣配額（免費優先，超額扣點；點數不足丟 402）
-    charge = mpq.consume(
-        db,
-        current_teacher,
-        feature_detail={
-            "provider": result["provider"],
-            "model": result["model"],
-            "extract_mode": extract_mode,
-            "item_count": len(result["items"]),
-            "estimated_cost_usd": result["estimated_cost_usd"],
-        },
-    )
+    # 5) 有擷取到項目才扣配額（免費優先，超額扣點；點數不足丟 402）。
+    #    擷取到 0 項（模糊圖 / 非教材圖）不扣額，避免老師白白損失一次額度
+    #    （AI 成本雖已產生，但不轉嫁；產品決策見 review PR #943 round-3 #2）。
+    charge = None
+    if result["items"]:
+        charge = mpq.consume(
+            db,
+            current_teacher,
+            feature_detail={
+                "provider": result["provider"],
+                "model": result["model"],
+                "extract_mode": extract_mode,
+                "item_count": len(result["items"]),
+                "estimated_cost_usd": result["estimated_cost_usd"],
+            },
+        )
     quota_after = mpq.get_quota_status(db, current_teacher)
 
     return {

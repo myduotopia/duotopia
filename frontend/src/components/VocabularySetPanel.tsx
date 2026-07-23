@@ -38,6 +38,11 @@ import MagicPasteDialog from "@/components/shared/MagicPasteDialog";
 import MagicPasteInput, {
   type MagicPasteItem,
 } from "@/components/shared/MagicPasteInput";
+import {
+  detectLang,
+  exampleContainsWord,
+  deriveClozeAnswer,
+} from "@/utils/magicPasteHelpers";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import {
   TTS_ACCENTS,
@@ -2190,44 +2195,8 @@ const VocabularySetPanel = forwardRef<
 
     const isEmptyRow = (r: ContentRow) =>
       !r.text.trim() && !r.definition.trim();
-    // 例句是否包含該單字或其變化形（run→running/runs、happy→happier、study→studies…）。
-    // 片語用子字串比對；單字用「整字 / 前綴關係 / 共同字首 ≥4」的啟發式。
-    const exampleContainsWord = (word: string, example: string): boolean => {
-      const w = (word || "").trim().toLowerCase();
-      const s = (example || "").toLowerCase();
-      if (!w || !s) return false;
-      if (w.includes(" ")) return s.includes(w);
-      const tokens = s.match(/[a-z]+(?:['-][a-z]+)*/g) || [];
-      return tokens.some((tk) => {
-        if (tk === w) return true;
-        if (tk.startsWith(w) || w.startsWith(tk))
-          return Math.min(tk.length, w.length) >= 3;
-        let common = 0;
-        const n = Math.min(tk.length, w.length);
-        while (common < n && tk[common] === w[common]) common++;
-        return common >= 4;
-      });
-    };
-    // 克漏字答案：把單字設為例句中的挖空詞（整字比對、保留例句原始大小寫）。
-    // 單字沒完整出現在例句中就不預設（例如變化形，交給老師手動挑）。
-    const deriveClozeAnswer = (word: string, example: string): string => {
-      const w = (word || "").trim();
-      if (!w || !example) return "";
-      const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const m = example.match(new RegExp(`\\b${escaped}\\b`, "i"));
-      return m ? m[0] : "";
-    };
-    // 偵測擷取到的翻譯是哪種語言（韓文 Hangul / 日文假名 / 中文漢字 / 英文），
-    // 用來決定放進哪個翻譯欄位。無翻譯回 ""。
-    const detectLang = (s: string): WordTranslationLanguage | "" => {
-      const v = (s || "").trim();
-      if (!v) return "";
-      if (/[가-힣]/.test(v)) return "korean";
-      if (/[぀-ヿ]/.test(v)) return "japanese";
-      if (/[一-鿿]/.test(v)) return "chinese";
-      if (/[A-Za-z]/.test(v)) return "english";
-      return "chinese";
-    };
+    // exampleContainsWord / deriveClozeAnswer / detectLang 抽到 utils/magicPasteHelpers
+    // 以便單元測試（review PR #943 round-3 #3、#4）。
     const makeRow = (item: MagicPasteItem, id: string | number): ContentRow => {
       // 例句沒有對應到該單字（或變化形）→ 留空，不硬塞不相干的句子。
       const example =
@@ -3440,16 +3409,18 @@ const VocabularySetPanel = forwardRef<
   // 只補「詞性」：對有單字但沒詞性的列，用 batchTranslateWithPos 取詞性（忽略其翻譯，
   // 保留圖上/既有的翻譯）。functional setRows + 再次判空，避免覆蓋翻譯補洞的結果。
   const fillMissingPosForWords = async () => {
+    // 以 row.id 對位（非陣列索引），避免補洞 await 期間老師拖曳重排/增刪列時寫錯列
+    // （review PR #943 round-3 #1）。
     const targets = rows
-      .map((r, i) => ({ r, i }))
       .filter(
-        ({ r }) =>
+        (r) =>
           r.text?.trim() && (!r.partsOfSpeech || r.partsOfSpeech.length === 0),
-      );
+      )
+      .map((r) => ({ id: r.id, text: r.text.trim() }));
     if (!targets.length) return;
     try {
       const resp = (await apiClient.batchTranslateWithPos(
-        targets.map((tg) => tg.r.text.trim()),
+        targets.map((tg) => tg.text),
         "zh-TW",
       )) as { results?: { parts_of_speech?: string[] }[] };
       const results = resp.results || [];
@@ -3457,13 +3428,12 @@ const VocabularySetPanel = forwardRef<
         const nr = [...prev];
         targets.forEach((tg, k) => {
           const pos = results[k]?.parts_of_speech;
-          const cur = nr[tg.i];
-          if (
-            pos?.length &&
-            cur &&
-            (!cur.partsOfSpeech || cur.partsOfSpeech.length === 0)
-          ) {
-            nr[tg.i] = { ...cur, partsOfSpeech: convertAbbreviatedPOS(pos) };
+          if (!pos?.length) return;
+          const idx = nr.findIndex((r) => r.id === tg.id);
+          if (idx < 0) return;
+          const cur = nr[idx];
+          if (!cur.partsOfSpeech || cur.partsOfSpeech.length === 0) {
+            nr[idx] = { ...cur, partsOfSpeech: convertAbbreviatedPOS(pos) };
           }
         });
         return nr;
@@ -3478,9 +3448,15 @@ const VocabularySetPanel = forwardRef<
   // （難度 / 提示 / 翻譯成），語音沿用 AI 生成語音勾選與語音設定。functional setRows
   // + 再判空，不覆蓋已有例句。
   const fillMissingExamples = async () => {
+    // 以 row.id 對位（review PR #943 round-3 #1）
     const targets = rows
-      .map((r, i) => ({ r, i }))
-      .filter(({ r }) => r.text?.trim() && !r.example_sentence?.trim());
+      .filter((r) => r.text?.trim() && !r.example_sentence?.trim())
+      .map((r) => ({
+        id: r.id,
+        text: r.text.trim(),
+        definition: r.definition || "",
+        partsOfSpeech: r.partsOfSpeech || [],
+      }));
     if (!targets.length) return;
 
     let targetLanguage = "";
@@ -3495,13 +3471,13 @@ const VocabularySetPanel = forwardRef<
 
     try {
       const response = await apiClient.generateSentences({
-        words: targets.map((t) => t.r.text.trim()),
-        definitions: targets.map((t) => t.r.definition || ""),
+        words: targets.map((t) => t.text),
+        definitions: targets.map((t) => t.definition),
         lesson_id: lessonId,
         level: aiGenerateLevel,
         prompt: aiGeneratePrompt || undefined,
         translate_to: targetLanguage || undefined,
-        parts_of_speech: targets.map((t) => t.r.partsOfSpeech || []),
+        parts_of_speech: targets.map((t) => t.partsOfSpeech),
         audio_settings: batchPasteAutoTTS
           ? {
               accent: batchTTSAccent,
@@ -3515,12 +3491,14 @@ const VocabularySetPanel = forwardRef<
       const resultMap = new Map(sentences.map((s) => [s.word, s]));
       setRows((prev) => {
         const nr = [...prev];
-        targets.forEach((t) => {
-          const cur = nr[t.i];
-          if (!cur || cur.example_sentence?.trim()) return; // 已有例句不覆蓋
+        targets.forEach((tg) => {
+          const idx = nr.findIndex((r) => r.id === tg.id);
+          if (idx < 0) return;
+          const cur = nr[idx];
+          if (cur.example_sentence?.trim()) return; // 已有例句不覆蓋
           const m = resultMap.get(cur.text);
           if (!m || !m.sentence) return;
-          nr[t.i] = {
+          nr[idx] = {
             ...cur,
             example_sentence: m.sentence,
             example_sentence_translation: m.translation || "",
@@ -3552,15 +3530,14 @@ const VocabularySetPanel = forwardRef<
         : target === "korean"
           ? r.example_sentence_korean
           : r.example_sentence_translation;
+    // 以 row.id 對位（review PR #943 round-3 #1）
     const targets = rows
-      .map((r, i) => ({ r, i }))
-      .filter(
-        ({ r }) => r.example_sentence?.trim() && !(getField(r) || "").trim(),
-      );
+      .filter((r) => r.example_sentence?.trim() && !(getField(r) || "").trim())
+      .map((r) => ({ id: r.id, example: r.example_sentence!.trim() }));
     if (!targets.length) return;
     try {
       const resp = (await apiClient.batchTranslate(
-        targets.map((tg) => tg.r.example_sentence!.trim()),
+        targets.map((tg) => tg.example),
         langCode,
       )) as { translations?: string[] };
       const translations = resp.translations || [];
@@ -3568,23 +3545,26 @@ const VocabularySetPanel = forwardRef<
         const nr = [...prev];
         targets.forEach((tg, k) => {
           const tr = translations[k];
-          const cur = nr[tg.i];
-          if (!tr || !cur || !cur.example_sentence?.trim()) return;
+          if (!tr) return;
+          const idx = nr.findIndex((r) => r.id === tg.id);
+          if (idx < 0) return;
+          const cur = nr[idx];
+          if (!cur.example_sentence?.trim()) return;
           if ((getField(cur) || "").trim()) return; // 已有翻譯就不覆蓋
           if (target === "japanese") {
-            nr[tg.i] = {
+            nr[idx] = {
               ...cur,
               example_sentence_japanese: tr,
               selectedSentenceLanguage: "japanese",
             };
           } else if (target === "korean") {
-            nr[tg.i] = {
+            nr[idx] = {
               ...cur,
               example_sentence_korean: tr,
               selectedSentenceLanguage: "korean",
             };
           } else {
-            nr[tg.i] = {
+            nr[idx] = {
               ...cur,
               example_sentence_translation: tr,
               selectedSentenceLanguage: "chinese",
@@ -3603,14 +3583,15 @@ const VocabularySetPanel = forwardRef<
   const fillMissingAudio = async () => {
     const toFullUrl = (u: string) =>
       u.startsWith("http") ? u : `${import.meta.env.VITE_API_URL}${u}`;
+    // 以 row.id 對位（review PR #943 round-3 #1）
     const wordTargets = rows
-      .map((r, i) => ({ r, i }))
-      .filter(({ r }) => r.text?.trim() && !r.audioUrl && !r.audio_url);
+      .filter((r) => r.text?.trim() && !r.audioUrl && !r.audio_url)
+      .map((r) => ({ id: r.id, text: r.text.trim() }));
     const exampleTargets = rows
-      .map((r, i) => ({ r, i }))
       .filter(
-        ({ r }) => r.example_sentence?.trim() && !r.example_sentence_audio_url,
-      );
+        (r) => r.example_sentence?.trim() && !r.example_sentence_audio_url,
+      )
+      .map((r) => ({ id: r.id, example: r.example_sentence!.trim() }));
     if (!wordTargets.length && !exampleTargets.length) return;
 
     const isRandom = batchTTSAccent === "Random" || batchTTSGender === "Random";
@@ -3640,48 +3621,44 @@ const VocabularySetPanel = forwardRef<
         : [];
     };
 
-    const wordUrls: Record<number, string> = {};
-    const exampleUrls: Record<number, string> = {};
+    // 以 row.id 為鍵，避免 reorder/增刪列造成音檔掛錯列
+    const wordUrls = new Map<string | number, string>();
+    const exampleUrls = new Map<string | number, string>();
     try {
       if (isRandom) {
         for (const t of wordTargets) {
-          const u = await genOne(t.r.text!.trim());
-          if (u) wordUrls[t.i] = u;
+          const u = await genOne(t.text);
+          if (u) wordUrls.set(t.id, u);
         }
         for (const t of exampleTargets) {
-          const u = await genOne(t.r.example_sentence!.trim());
-          if (u) exampleUrls[t.i] = u;
+          const u = await genOne(t.example);
+          if (u) exampleUrls.set(t.id, u);
         }
       } else {
         if (wordTargets.length) {
-          const urls = await genBatch(wordTargets.map((t) => t.r.text!.trim()));
+          const urls = await genBatch(wordTargets.map((t) => t.text));
           wordTargets.forEach((t, k) => {
-            if (urls[k]) wordUrls[t.i] = urls[k];
+            if (urls[k]) wordUrls.set(t.id, urls[k]);
           });
         }
         if (exampleTargets.length) {
-          const urls = await genBatch(
-            exampleTargets.map((t) => t.r.example_sentence!.trim()),
-          );
+          const urls = await genBatch(exampleTargets.map((t) => t.example));
           exampleTargets.forEach((t, k) => {
-            if (urls[k]) exampleUrls[t.i] = urls[k];
+            if (urls[k]) exampleUrls.set(t.id, urls[k]);
           });
         }
       }
-      setRows((prev) => {
-        const nr = [...prev];
-        Object.entries(wordUrls).forEach(([i, url]) => {
-          const idx = Number(i);
-          if (nr[idx] && !nr[idx].audioUrl)
-            nr[idx] = { ...nr[idx], audioUrl: url };
-        });
-        Object.entries(exampleUrls).forEach(([i, url]) => {
-          const idx = Number(i);
-          if (nr[idx] && !nr[idx].example_sentence_audio_url)
-            nr[idx] = { ...nr[idx], example_sentence_audio_url: url };
-        });
-        return nr;
-      });
+      setRows((prev) =>
+        prev.map((r) => {
+          let next = r;
+          const wu = wordUrls.get(r.id);
+          if (wu && !next.audioUrl) next = { ...next, audioUrl: wu };
+          const eu = exampleUrls.get(r.id);
+          if (eu && !next.example_sentence_audio_url)
+            next = { ...next, example_sentence_audio_url: eu };
+          return next;
+        }),
+      );
     } catch (e) {
       console.error("audio fill error:", e);
     }
