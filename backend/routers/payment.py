@@ -14,10 +14,6 @@ from models import (
     TransactionType,
     SubscriptionPeriod,
     PointUsageLog,
-    TeacherOrganization,
-    Organization,
-    School,
-    TeacherSchool,
     GroupBuyTeam,
     GroupBuyMember,
 )
