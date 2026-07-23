@@ -23,7 +23,10 @@ from models import (
     TeacherOrganization,
     TeacherSchool,
 )
-from services.group_buy import sync_group_buy_team_from_org
+from services.group_buy import (
+    resync_all_group_buy_teams,
+    sync_group_buy_team_from_org,
+)
 
 
 def _teacher(db, email):
@@ -198,6 +201,29 @@ def test_sync_reflects_member_leave(shared_test_session):
         .is_active
         is False
     )
+
+
+def test_resync_heals_deactivated_org(shared_test_session):
+    """B（PR3 review）：團購 org 經一般 org 端點停用（不經鏡射）後，heal 必須把
+    stale 的 team.is_active 從 True 翻成 False，否則切讀後成員無限期顯示團購身分。
+    resync 不可過濾 is_active，否則永遠掃不到這個 org。"""
+    db = shared_test_session
+    owner = _teacher(db, "o_heal@d.com")
+    plan = _plan(db)
+    org, _ = _group_buy_org(db, owner, plan)
+    team = sync_group_buy_team_from_org(org, db)
+    db.commit()
+    assert team.is_active is True
+
+    # 一般 org 端點停用（不經鏡射）→ 新表 stale
+    org.is_active = False
+    db.commit()
+
+    synced = resync_all_group_buy_teams(db)
+    db.commit()
+    assert synced >= 1
+    db.refresh(team)
+    assert team.is_active is False
 
 
 def test_sync_skips_non_group_buy(shared_test_session):

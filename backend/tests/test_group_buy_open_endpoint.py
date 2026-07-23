@@ -222,6 +222,57 @@ def test_happy_path_creates_org_school_binding_period(
     assert owner_member.is_active is True
 
 
+def test_open_survives_mirror_failure(
+    test_client, auth_header, teacher, gb_plan, shared_test_session, monkeypatch
+):
+    """issue #862：雙寫鏡射失敗**不可**讓一筆已扣款的開團被 rollback→退款。
+    強迫 sync 拋錯，斷言端點仍成功、org/school/period 仍寫入、team 未建（鏡射回滾）。"""
+    import services.group_buy as gb
+
+    def _boom(org, db):
+        raise RuntimeError("mirror boom")
+
+    monkeypatch.setattr(gb, "sync_group_buy_team_from_org", _boom)
+
+    mock_tappay = Mock()
+    mock_tappay.process_payment.return_value = {
+        "status": 0,
+        "rec_trade_id": "REC-BOOM",
+        "card_secret": {},
+    }
+    with patch("routers.credit_packages.ENABLE_PAYMENT", True), patch(
+        "routers.credit_packages.TapPayService", return_value=mock_tappay
+    ):
+        r = test_client.post(
+            "/api/credit-packages/group-buy-open",
+            json={"prime": "prime-x", "plan_name": gb_plan.name},
+            headers=auth_header,
+        )
+
+    assert r.status_code == 200, r.json()  # 已扣款購買未被鏡射失敗連累
+    body = r.json()
+    shared_test_session.expire_all()
+    # 真實寫入仍 commit
+    assert (
+        shared_test_session.query(Organization)
+        .filter(Organization.id == body["organization_id"])
+        .one()
+    )
+    assert (
+        shared_test_session.query(SubscriptionPeriod)
+        .filter(SubscriptionPeriod.teacher_id == teacher.id)
+        .count()
+        >= 1
+    )
+    # 鏡射（SAVEPOINT）已回滾 → 無 team 列
+    assert (
+        shared_test_session.query(GroupBuyTeam)
+        .filter(GroupBuyTeam.source_organization_id == body["organization_id"])
+        .count()
+        == 0
+    )
+
+
 def test_repeat_open_adds_school_to_existing_org(
     test_client, auth_header, teacher, gb_plan, shared_test_session
 ):

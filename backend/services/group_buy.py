@@ -7,6 +7,7 @@ All amount/quota computations are server-side from the Plan row — never
 trust the frontend.
 """
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from zoneinfo import ZoneInfo
@@ -26,6 +27,9 @@ from models import (
     TeacherOrganization,
     TeacherSchool,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 # Each monthly grant gives this many points to every teacher bound to an
@@ -344,21 +348,26 @@ def grant_monthly_for_group_buy(today: datetime, db: Session) -> dict:
     )
     month_start = today_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
+    # issue #862 read-switch：發點眼前先全量 re-sync，補平任何 best-effort 鏡射
+    # 失敗留下的漂移，確保下方以新表計算資格時是最新狀態（在 advisory lock 內、
+    # commit 前執行，heal 與發點同一交易原子提交）。
+    resync_all_group_buy_teams(db)
+
+    # 資格改讀新表 group_buy_members → group_buy_teams（取代舊 TeacherSchool→
+    # School→Org join）。條件對齊舊語意：成員 active、team active 且訂閱未過期、
+    # 方案 active 且為團購方案、老師 active。
     rows = (
         db.query(Teacher, Plan)
-        .join(TeacherSchool, TeacherSchool.teacher_id == Teacher.id)
-        .join(School, School.id == TeacherSchool.school_id)
-        .join(Plan, Plan.id == School.plan_id)
-        .join(Organization, Organization.id == School.organization_id)
+        .join(GroupBuyMember, GroupBuyMember.teacher_id == Teacher.id)
+        .join(GroupBuyTeam, GroupBuyTeam.id == GroupBuyMember.team_id)
+        .join(Plan, Plan.id == GroupBuyTeam.plan_id)
         .filter(
-            TeacherSchool.is_active.is_(True),
-            School.is_active.is_(True),
+            GroupBuyMember.is_active.is_(True),
+            GroupBuyTeam.is_active.is_(True),
+            GroupBuyTeam.subscription_end >= today_local,
             Teacher.is_active.is_(True),
             Plan.is_active.is_(True),
             Plan.teacher_seats.isnot(None),
-            Organization.org_type == "group_buy",
-            Organization.is_active.is_(True),
-            Organization.subscription_end_date >= today_local,
         )
         .all()
     )
@@ -525,3 +534,59 @@ def sync_group_buy_team_from_org(org: Organization, db: Session) -> GroupBuyTeam
     db.flush()
 
     return team
+
+
+def mirror_group_buy_dual_write(org: Organization | None, db: Session) -> None:
+    """Best-effort dual-write of a group-buy org into the new tables (issue #862).
+
+    Wraps ``sync_group_buy_team_from_org`` in a SAVEPOINT so a mirror failure
+    rolls back ONLY the mirror rows — never the caller's real write / charge —
+    then absorbs + logs the error. Shared by every write call site so the
+    SAVEPOINT + logging behaviour lives in one place (review PR #968 #2).
+
+    After the PR3 read-switch the mirror is load-bearing, so a swallowed failure
+    means a briefly stale new-table row; ``resync_all_group_buy_teams`` (run at
+    the monthly cron start) heals that drift, and the ERROR log flags it for ops.
+    """
+    if org is None:
+        return
+    try:
+        with db.begin_nested():
+            sync_group_buy_team_from_org(org, db)
+    except Exception as sync_err:  # noqa: BLE001 - best-effort mirror
+        logger.error(
+            "group-buy dual-write mirror failed (non-fatal; healed by monthly "
+            "re-sync) org=%s: %s",
+            getattr(org, "id", "?"),
+            sync_err,
+        )
+
+
+def resync_all_group_buy_teams(db: Session) -> int:
+    """Re-run the mirror for every group-buy Organization (issue #862).
+
+    Heals drift left by any best-effort mirror write that failed after the
+    read-switch. Idempotent (``sync_group_buy_team_from_org`` upserts). Returns
+    the number of orgs synced. Does NOT commit — caller owns the transaction.
+
+    Does NOT filter on ``Organization.is_active``: a group-buy org can be
+    deactivated / soft-deleted via the generic org endpoints (PUT/DELETE
+    /organizations/{id}) which don't call the mirror, so an inactive org is
+    exactly the drift case we must heal — ``sync_group_buy_team_from_org`` sets
+    ``team.is_active = org.is_active`` regardless, flipping the stale team to
+    inactive so the read-switched status/roster queries stop surfacing it.
+    """
+    orgs = db.query(Organization).filter(Organization.org_type == "group_buy").all()
+    synced = 0
+    for org in orgs:
+        # Per-org SAVEPOINT so one bad org can't abort the whole heal / the
+        # monthly grant transaction it runs inside.
+        try:
+            with db.begin_nested():
+                if sync_group_buy_team_from_org(org, db) is not None:
+                    synced += 1
+        except Exception as sync_err:  # noqa: BLE001 - best-effort heal
+            logger.error(
+                "group-buy re-sync heal failed for org=%s: %s", org.id, sync_err
+            )
+    return synced
