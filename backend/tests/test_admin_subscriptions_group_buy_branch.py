@@ -13,6 +13,8 @@ import pytest
 
 from auth import create_access_token, get_password_hash
 from models import (
+    GroupBuyMember,
+    GroupBuyTeam,
     Organization,
     Plan,
     School,
@@ -240,6 +242,24 @@ def test_admin_joins_teacher_to_existing_team(
     ops = period.admin_metadata.get("operations", [])
     assert ops and ops[0]["action"] == "admin_join_group_buy"
     assert ops[0]["group_owner_email"] == owner.email
+
+    # issue #862 PR2 雙寫：admin 加團 call-site 應把 target 鏡射進 group_buy_members
+    # （讀取仍走舊表）。鎖定 call-site wiring。
+    team = (
+        shared_test_session.query(GroupBuyTeam)
+        .filter(GroupBuyTeam.source_organization_id == org.id)
+        .one()
+    )
+    member = (
+        shared_test_session.query(GroupBuyMember)
+        .filter(
+            GroupBuyMember.team_id == team.id,
+            GroupBuyMember.teacher_id == target.id,
+        )
+        .one()
+    )
+    assert member.is_owner is False
+    assert member.is_active is True
 
 
 # ---------- post-join guards ----------

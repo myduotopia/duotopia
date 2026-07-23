@@ -16,6 +16,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from models import (
+    GroupBuyMember,
+    GroupBuyTeam,
     Organization,
     Plan,
     School,
@@ -396,3 +398,130 @@ def grant_monthly_for_group_buy(today: datetime, db: Session) -> dict:
 
     db.commit()
     return counters
+
+
+# ---------- dual-write mirror (issue #862 PR2) ----------
+
+
+def sync_group_buy_team_from_org(org: Organization, db: Session) -> GroupBuyTeam | None:
+    """Idempotently mirror an old-table group-buy Organization (+ its School /
+    TeacherOrganization / TeacherSchool) into the new group_buy_teams /
+    group_buy_members tables (issue #862 方案 B PR2 雙寫).
+
+    Called after every old-table write path (open / add-branch / add-member /
+    renew / leave) inside the same transaction, so the new tables stay fresh
+    while reads still run off the old tables until PR3. Reads the org's CURRENT
+    old-table state and upserts new rows — self-healing against drift, safe to
+    re-run (no duplicate teams/members).
+
+    Returns the synced GroupBuyTeam, or None when the org isn't a syncable
+    group-buy (not group_buy, no active school-with-plan, no active org_owner,
+    or seat_limit fully underivable — mirroring the backfill's skip rules).
+
+    Does NOT commit; the caller owns the transaction. Fields are derived
+    identically to the PR1 backfill so team/member state matches whether a row
+    arrived via backfill or via this live mirror.
+    """
+    if org.org_type != "group_buy":
+        return None
+
+    # Earliest active school with a plan → source of plan/seat (matches backfill).
+    school = (
+        db.query(School)
+        .filter(
+            School.organization_id == org.id,
+            School.is_active.is_(True),
+            School.plan_id.isnot(None),
+        )
+        .order_by(School.created_at.asc())
+        .first()
+    )
+    if school is None:
+        return None
+    plan = db.query(Plan).filter(Plan.id == school.plan_id).first()
+
+    owner_org = (
+        db.query(TeacherOrganization)
+        .filter(
+            TeacherOrganization.organization_id == org.id,
+            TeacherOrganization.role == "org_owner",
+            TeacherOrganization.is_active.is_(True),
+        )
+        .order_by(TeacherOrganization.created_at.asc())
+        .first()
+    )
+    if owner_org is None:
+        return None
+    owner_id = owner_org.teacher_id
+
+    # seat_limit is NOT NULL; NULL org/school limits mean "unlimited", so fall
+    # back to plan.teacher_seats (guaranteed set for group-buy plans) — same
+    # accepted narrowing as the backfill.
+    seat_limit = (
+        org.teacher_limit
+        if org.teacher_limit is not None
+        else school.teacher_seat_limit
+        if school.teacher_seat_limit is not None
+        else (plan.teacher_seats if plan is not None else None)
+    )
+    if seat_limit is None:
+        return None
+
+    team = (
+        db.query(GroupBuyTeam)
+        .filter(GroupBuyTeam.source_organization_id == org.id)
+        .first()
+    )
+    if team is None:
+        team = GroupBuyTeam(source_organization_id=org.id)
+        db.add(team)
+    team.owner_teacher_id = owner_id
+    team.plan_id = school.plan_id
+    team.seat_limit = int(seat_limit)
+    team.subscription_start = org.subscription_start_date
+    team.subscription_end = org.subscription_end_date
+    team.contact_email = org.contact_email
+    team.contact_phone = org.contact_phone
+    team.is_active = org.is_active
+    db.flush()  # need team.id for member FKs
+
+    # Members: all teacher_schools under the org's ACTIVE schools (aligned with
+    # the team's active-school sourcing). Dedup by teacher, preferring the
+    # active binding so a teacher in two schools keeps their in-team state.
+    # Deterministic order (active first, then school_id) so that when a teacher
+    # has multiple same-active-state bindings across branch schools, the winning
+    # source_school_id is stable across runs rather than DB-order-dependent.
+    ts_rows = (
+        db.query(TeacherSchool)
+        .join(School, School.id == TeacherSchool.school_id)
+        .filter(
+            School.organization_id == org.id,
+            School.is_active.is_(True),
+        )
+        .order_by(TeacherSchool.is_active.desc(), TeacherSchool.school_id.asc())
+        .all()
+    )
+    best_by_teacher: dict[int, TeacherSchool] = {}
+    for ts in ts_rows:
+        cur = best_by_teacher.get(ts.teacher_id)
+        if cur is None or (ts.is_active and not cur.is_active):
+            best_by_teacher[ts.teacher_id] = ts
+
+    for teacher_id, ts in best_by_teacher.items():
+        member = (
+            db.query(GroupBuyMember)
+            .filter(
+                GroupBuyMember.team_id == team.id,
+                GroupBuyMember.teacher_id == teacher_id,
+            )
+            .first()
+        )
+        if member is None:
+            member = GroupBuyMember(team_id=team.id, teacher_id=teacher_id)
+            db.add(member)
+        member.is_owner = teacher_id == owner_id
+        member.is_active = ts.is_active
+        member.source_school_id = ts.school_id
+    db.flush()
+
+    return team
