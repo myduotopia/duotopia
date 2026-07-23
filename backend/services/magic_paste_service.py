@@ -62,9 +62,30 @@ class MagicPasteService:
 
     # ---------------------------------------------------------------- 驗證
 
+    @staticmethod
+    def _sniff_mime(data: bytes) -> Optional[str]:
+        """用檔頭 magic bytes 判斷實際檔案類型；認不出回 None。"""
+        if data[:8] == b"\x89PNG\r\n\x1a\n":
+            return "image/png"
+        if data[:3] == b"\xff\xd8\xff":
+            return "image/jpeg"
+        if data[:6] in (b"GIF87a", b"GIF89a"):
+            return "image/gif"
+        if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            return "image/webp"
+        if data[:5] == b"%PDF-":
+            return "application/pdf"
+        return None
+
     @classmethod
     def validate_file(cls, file_bytes: bytes, mime_type: str) -> None:
-        """驗證單一上傳檔（類型、非空、大小）。不符丟 MagicPasteError。"""
+        """
+        驗證單一上傳檔（類型、非空、大小、內容簽章）。不符丟 MagicPasteError。
+
+        以 magic bytes 嗅探實際內容，不能只信 client 送來的 Content-Type，避免偽造
+        content-type 把任意位元組送進 AI 供應商（review PR #943 round-4 #1；比照
+        speech_assessment.py 的做法）。
+        """
         normalized = (mime_type or "").split(";")[0].strip().lower()
         if normalized not in cls.ALLOWED_MIME_TYPES:
             raise MagicPasteError(f"不支援的檔案類型：{mime_type or '未知'}（僅支援圖片或 PDF）")
@@ -72,6 +93,9 @@ class MagicPasteService:
             raise MagicPasteError("檔案內容為空")
         if len(file_bytes) > cls.MAX_FILE_BYTES:
             raise MagicPasteError(f"檔案過大（上限 {cls.MAX_FILE_BYTES // (1024 * 1024)}MB）")
+        # 實際內容必須是支援的圖片 / PDF 簽章
+        if cls._sniff_mime(file_bytes) is None:
+            raise MagicPasteError("檔案內容不是支援的圖片或 PDF（可能副檔名/類型不符）")
 
     # ---------------------------------------------------------------- prompt
 

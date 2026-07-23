@@ -19,10 +19,15 @@ from services import magic_paste_quota as mpq
 
 # ---------------------------------------------------------------- service unit
 
+# 各類型的最小合法檔頭（magic bytes）
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
+JPEG_BYTES = b"\xff\xd8\xff\xe0" + b"\x00" * 8
+PDF_BYTES = b"%PDF-1.4\n" + b"\x00" * 8
+
 
 def test_validate_rejects_unsupported_type():
     with pytest.raises(MagicPasteError):
-        MagicPasteService.validate_file(b"abc", "text/plain")
+        MagicPasteService.validate_file(PNG_BYTES, "text/plain")
 
 
 def test_validate_rejects_empty():
@@ -36,11 +41,17 @@ def test_validate_rejects_oversize():
         MagicPasteService.validate_file(big, "image/png")
 
 
+def test_validate_rejects_spoofed_content_type():
+    """content-type 宣稱 image/png 但實際位元組不是任何支援簽章 → 擋下（round-4 #1）。"""
+    with pytest.raises(MagicPasteError):
+        MagicPasteService.validate_file(b"totally-not-an-image", "image/png")
+
+
 def test_validate_accepts_image_and_pdf():
-    MagicPasteService.validate_file(b"data", "image/png")
-    MagicPasteService.validate_file(b"data", "application/pdf")
+    MagicPasteService.validate_file(PNG_BYTES, "image/png")
+    MagicPasteService.validate_file(PDF_BYTES, "application/pdf")
     # 帶 charset 參數也要能過
-    MagicPasteService.validate_file(b"data", "image/jpeg; charset=binary")
+    MagicPasteService.validate_file(JPEG_BYTES, "image/jpeg; charset=binary")
 
 
 def test_parse_json_valid():
@@ -182,7 +193,7 @@ def mock_extract(monkeypatch):
 
 
 def _png():
-    return ("word.png", io.BytesIO(b"fake-png-bytes"), "image/png")
+    return ("word.png", io.BytesIO(PNG_BYTES), "image/png")
 
 
 def test_endpoint_requires_auth(test_client):
