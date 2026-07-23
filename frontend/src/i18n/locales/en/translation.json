@@ -4564,6 +4564,37 @@
     }
   },
   "contentEditor": {
+    "magicPaste": {
+      "fileTooLarge": "File too large (max 10MB)",
+      "noSentenceExtracted": "No sentences found in this image. Try another.",
+      "noWordExtracted": "No words found in this image. Try another.",
+      "extractFailed": "AI extraction failed. Please try again later.",
+      "selectAtLeastOne": "Please select at least one item.",
+      "quota": "{{remaining}} / {{limit}} free left this month; overage billed with points.",
+      "cancel": "Cancel",
+      "pickFile": "Choose an image or PDF (one at a time)",
+      "autoFillHint": "After extraction, missing fields are auto-filled on insert per the AI translate / audio / example settings above.",
+      "overLimitPre": "You've used all free extractions this month and don't have enough points. Please ",
+      "overLimitLink": "subscribe or buy points",
+      "overLimitPost": " to continue.",
+      "previewHint": "Results — check items to insert; fields are editable.",
+      "phSentence": "Sentence",
+      "phWord": "Word",
+      "phTranslation": "Translation",
+      "phExample": "Example",
+      "extracting": "Extracting…",
+      "start": "Start extraction",
+      "insertN": "Insert {{count}} items",
+      "insertedN": "Inserted {{count}} items",
+      "insertedNSentences": "Inserted {{count}} sentences",
+      "dialogTitle": "Magic Paste: extract from image / PDF",
+      "dialogDescSentence": "Upload an image or PDF; AI extracts sentences and translations for you to review before inserting.",
+      "dialogDescVocab": "Upload an image or PDF; AI extracts words, translations, and examples for you to review before inserting."
+    },
+    "batchTabs": {
+      "text": "Paste text",
+      "image": "Image / PDF"
+    },
     "labels": {
       "title": "Title",
       "pasteContent": "Paste vocabulary",

@@ -55,6 +55,7 @@ from routers import blog
 from routers import organization_programs
 from routers import school_programs
 from routers import resource_materials
+from routers import magic_paste  # 教材內容魔術貼上（issue #891）
 from routers.auth_one_campus import router as auth_one_campus_router
 from routers.organization_points import router as organization_points_router
 from routes import logs
@@ -290,6 +291,7 @@ app.include_router(assignments.router)
 app.include_router(unassign.router)
 app.include_router(files.router)  # 檔案服務路由
 app.include_router(programs.router)  # 課程管理路由
+app.include_router(magic_paste.router)  # 教材內容魔術貼上（issue #891）
 app.include_router(resource_materials.router)  # 資源教材包路由
 app.include_router(speech_assessment.router)  # 語音評估路由
 app.include_router(azure_speech_token.router)  # Azure Speech Token 路由

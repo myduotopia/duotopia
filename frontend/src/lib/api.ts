@@ -1506,6 +1506,72 @@ class ApiClient {
     return response.json();
   }
 
+  // ============ Magic Paste（教材內容魔術貼上, issue #891）============
+  /** 查詢本月魔術貼上配額狀態 */
+  async getMagicPasteQuota() {
+    return this.request<{
+      year_month: string;
+      free_limit: number;
+      free_used: number;
+      free_remaining: number;
+      points_per_image: number;
+      paid_quota_remaining: number;
+      can_use: boolean;
+    }>("/api/programs/magic-paste/quota");
+  }
+
+  /** 上傳 1 張圖片/PDF，AI 擷取教材內容（不寫入 DB，回傳供前端預覽） */
+  async magicPasteExtract(formData: FormData) {
+    const currentToken = this.getToken();
+    const headers: HeadersInit = {};
+    if (currentToken) {
+      headers["Authorization"] = `Bearer ${currentToken}`;
+    }
+
+    const response = await fetch(`${this.baseUrl}/api/programs/magic-paste`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let detail: unknown = null;
+      try {
+        detail = (await response.json()).detail;
+      } catch {
+        detail = await response.text();
+      }
+      const err = new Error(
+        typeof detail === "string" ? detail : "Magic paste failed",
+      ) as Error & { status?: number; detail?: unknown };
+      err.status = response.status;
+      err.detail = detail;
+      throw err;
+    }
+
+    return response.json() as Promise<{
+      items: Array<{
+        text: string;
+        translation: string;
+        part_of_speech: string;
+        example_sentence: string;
+        example_sentence_translation: string;
+      }>;
+      charge: {
+        charged: string;
+        points_used: number;
+        free_remaining: number;
+      } | null;
+      quota: {
+        free_remaining: number;
+        free_limit: number;
+        can_use: boolean;
+      };
+      estimated_cost_usd: number;
+      provider: string;
+    }>;
+  }
+
   // ============ Student Methods ============
   async getStudentProfile() {
     return this.request("/api/students/me");
