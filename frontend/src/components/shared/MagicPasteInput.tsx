@@ -192,7 +192,11 @@ export default function MagicPasteInput({
             accept={ACCEPT}
             className="hidden"
             data-testid="magic-paste-file-input"
-            onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              handleFile(e.target.files?.[0] ?? null);
+              // 清空原生 input 值，確保「取消/插入後再選同一個檔」也會觸發 onChange
+              e.target.value = "";
+            }}
           />
           <Upload className="h-5 w-5 text-gray-400 mb-1" />
           <span className="text-xs text-gray-600 text-center break-all">

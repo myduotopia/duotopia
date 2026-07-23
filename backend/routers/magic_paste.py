@@ -17,12 +17,13 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Teacher
-from auth import verify_token
+
+# 共用同一份教師鑑權依賴，避免 auth 邏輯分叉（review PR #943 #2）
+from routers.teachers import get_current_teacher
 from services import magic_paste_quota as mpq
 from services.magic_paste_service import (
     get_magic_paste_service,
@@ -34,28 +35,6 @@ from services.magic_paste_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/programs", tags=["magic-paste"])
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/teacher/login")
-
-
-async def get_current_teacher(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
-) -> Teacher:
-    payload = verify_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        )
-    if payload.get("type") != "teacher":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Not a teacher"
-        )
-    teacher = db.query(Teacher).filter(Teacher.id == payload.get("sub")).first()
-    if not teacher:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Teacher not found"
-        )
-    return teacher
 
 
 @router.get("/magic-paste/quota")
@@ -116,7 +95,7 @@ async def magic_paste_extract(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
         )
     except Exception as e:  # AI 供應商錯誤
-        logger.error("[magic-paste] extraction failed: %s", e)
+        logger.error("[magic-paste] extraction failed: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="AI 擷取失敗，請稍後再試",

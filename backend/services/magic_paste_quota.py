@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from models import Teacher, MagicPasteUsage
 from services.quota_service import QuotaService
@@ -55,6 +56,45 @@ def _get_or_create_usage(
         row = MagicPasteUsage(teacher_id=teacher_id, year_month=year_month, count=0)
         db.add(row)
         db.flush()  # 取得 id，但先不 commit
+    return row
+
+
+def _get_or_create_usage_locked(
+    db: Session, teacher_id: int, year_month: str
+) -> MagicPasteUsage:
+    """
+    取得（或建立）當月計數列，並以 SELECT ... FOR UPDATE 鎖住，讓同一老師的
+    consume 序列化，避免 check-then-increment 的競態把免費額度多花（review PR #943 #1）。
+    首次建立時靠 UNIQUE(teacher_id, year_month) 擋並發，衝突則改讀對方已建立的列。
+    （SQLite 不支援 FOR UPDATE，SQLAlchemy 會自動忽略，測試不受影響。）
+    """
+    row = (
+        db.query(MagicPasteUsage)
+        .filter(
+            MagicPasteUsage.teacher_id == teacher_id,
+            MagicPasteUsage.year_month == year_month,
+        )
+        .with_for_update()
+        .first()
+    )
+    if row is not None:
+        return row
+
+    row = MagicPasteUsage(teacher_id=teacher_id, year_month=year_month, count=0)
+    db.add(row)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        row = (
+            db.query(MagicPasteUsage)
+            .filter(
+                MagicPasteUsage.teacher_id == teacher_id,
+                MagicPasteUsage.year_month == year_month,
+            )
+            .with_for_update()
+            .first()
+        )
     return row
 
 
@@ -100,7 +140,8 @@ def consume(
         HTTPException(402): 免費額度用完且點數不足（由 QuotaService.deduct_quota 丟出）。
     """
     ym = year_month or current_year_month()
-    row = _get_or_create_usage(db, teacher.id, ym)
+    # 鎖住當月計數列，序列化同一老師的並發消耗
+    row = _get_or_create_usage_locked(db, teacher.id, ym)
 
     if row.count < FREE_MONTHLY_LIMIT:
         row.count += 1

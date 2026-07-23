@@ -2246,7 +2246,7 @@ const VocabularySetPanel = forwardRef<
       return {
         id,
         text: item.text,
-        definition: captured === "chinese" || captured === "other" ? trans : "",
+        definition: captured === "chinese" ? trans : "",
         translation: captured === "english" ? trans : "",
         japanese_translation: captured === "japanese" ? trans : "",
         korean_translation: captured === "korean" ? trans : "",
