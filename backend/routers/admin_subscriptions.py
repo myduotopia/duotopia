@@ -34,7 +34,7 @@ from models import (
 )
 from models.credit_package import CreditPackage
 from routers.admin import get_current_admin
-from services.group_buy import create_group_buy_period
+from services.group_buy import create_group_buy_period, sync_group_buy_team_from_org
 
 router = APIRouter(prefix="/api/admin/subscription", tags=["admin-subscription"])
 
@@ -311,6 +311,15 @@ async def _create_group_buy_admin_subscription(
             }
         ]
     }
+
+    # issue #862 PR2 雙寫：admin 手動加團也把該 org 的名冊鏡射進新表，
+    # 讓 group_buy_members 保持新鮮（讀取仍走舊表到 PR3）。
+    org = (
+        db.query(Organization).filter(Organization.id == school.organization_id).first()
+    )
+    if org is not None:
+        sync_group_buy_team_from_org(org, db)
+
     db.commit()
     db.refresh(period)
 

@@ -104,6 +104,11 @@ def get_teacher_organizations(
                 TeacherOrganization.teacher_id == teacher_id,
                 TeacherOrganization.is_active.is_(True),  # Only active memberships
                 Organization.is_active.is_(True),  # Only active organizations
+                # issue #862：團購脫離機構 — group_buy org 不進 workspace，讓團購
+                # 老師（含發起人）維持個人模式自管班級/學生。機構(institution)不受
+                # 影響。帳務端點（/org-purchase、/org-renew）直接查 TeacherOrganization，
+                # 不經此端點，故發起人續購/加購仍正常。
+                Organization.org_type != "group_buy",
             )
             .options(joinedload(TeacherOrganization.organization))
             .all()

@@ -38,6 +38,7 @@ from services.group_buy import (
     create_group_buy_org_and_school,
     create_group_buy_period,
     find_owned_group_buy_org,
+    sync_group_buy_team_from_org,
     validate_group_buy_plan,
 )
 from config.plans import (
@@ -1398,6 +1399,11 @@ async def open_group_buy(
                         payment_id=external_transaction_id,
                     )
                     members_bound += 1
+
+            # issue #862 PR2 雙寫：舊表（org/school/名冊/續約窗口）寫完後，於同一
+            # 交易鏡射進 group_buy_teams/members，讓新表保持新鮮（讀取仍走舊表到
+            # PR3）。鏡射失敗會連同上方一起進補償流程（卡已扣款 → REFUND REQUIRED）。
+            sync_group_buy_team_from_org(org, db)
 
             success_txn = TeacherSubscriptionTransaction(
                 teacher_id=current_teacher.id,
