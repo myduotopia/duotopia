@@ -48,17 +48,6 @@ def _get_usage(
     )
 
 
-def _get_or_create_usage(
-    db: Session, teacher_id: int, year_month: str
-) -> MagicPasteUsage:
-    row = _get_usage(db, teacher_id, year_month)
-    if row is None:
-        row = MagicPasteUsage(teacher_id=teacher_id, year_month=year_month, count=0)
-        db.add(row)
-        db.flush()  # 取得 id，但先不 commit
-    return row
-
-
 def _get_or_create_usage_locked(
     db: Session, teacher_id: int, year_month: str
 ) -> MagicPasteUsage:

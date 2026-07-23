@@ -190,6 +190,17 @@ def test_endpoint_requires_auth(test_client):
     assert resp.status_code == 401
 
 
+def test_endpoint_rejects_oversize(test_client, auth_headers_teacher, monkeypatch):
+    """超過大小上限的檔案 → 400（且只讀到 上限+1 bytes，不整包載入）。"""
+    monkeypatch.setattr(MagicPasteService, "MAX_FILE_BYTES", 10)
+    resp = test_client.post(
+        "/api/programs/magic-paste",
+        headers=auth_headers_teacher,
+        files={"file": ("big.png", io.BytesIO(b"x" * 50), "image/png")},
+    )
+    assert resp.status_code == 400
+
+
 def test_endpoint_rejects_bad_type(test_client, auth_headers_teacher):
     resp = test_client.post(
         "/api/programs/magic-paste",
@@ -206,7 +217,6 @@ def test_endpoint_success_decrements_free_quota(
         "/api/programs/magic-paste",
         headers=auth_headers_teacher,
         files={"file": _png()},
-        data={"translate_mode": "image_first", "example_mode": "ai"},
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()

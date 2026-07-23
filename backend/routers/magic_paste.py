@@ -61,10 +61,19 @@ async def magic_paste_extract(
     if extract_mode not in EXTRACT_MODES:
         extract_mode = EXTRACT_MODE_VOCABULARY
 
-    file_bytes = await file.read()
     service = get_magic_paste_service()
 
-    # 1) 檔案驗證（類型 / 大小 / 非空）
+    # 1) 大小把關優先：最多讀 上限+1 bytes，超過就中止，避免整包超大檔先讀進記憶體
+    #    造成資源耗盡（review PR #943 #1）。
+    max_bytes = service.MAX_FILE_BYTES
+    file_bytes = await file.read(max_bytes + 1)
+    if len(file_bytes) > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"檔案過大（上限 {max_bytes // (1024 * 1024)}MB）",
+        )
+
+    # 2) 其餘檔案驗證（類型 / 非空；大小已於上一步把關）
     try:
         service.validate_file(file_bytes, file.content_type)
     except MagicPasteError as e:
