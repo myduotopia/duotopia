@@ -9,6 +9,8 @@ import pytest
 
 from auth import create_access_token, get_password_hash
 from models import (
+    GroupBuyMember,
+    GroupBuyTeam,
     Organization,
     Plan,
     School,
@@ -118,6 +120,20 @@ def teacher_in_group_buy_team(shared_test_session):
             roles=["teacher"],
             is_active=True,
         )
+    )
+    # issue #862 read-switch：in_group_buy_team 改讀新表，故直接建 team + member
+    # 列（此 fixture 無 owner，直接建以表達「t 已在某團購團隊」）。
+    team = GroupBuyTeam(
+        owner_teacher_id=t.id,
+        plan_id=plan.id,
+        seat_limit=plan.teacher_seats,
+        is_active=True,
+        source_organization_id=org.id,
+    )
+    shared_test_session.add(team)
+    shared_test_session.flush()
+    shared_test_session.add(
+        GroupBuyMember(team_id=team.id, teacher_id=t.id, is_owner=False, is_active=True)
     )
     shared_test_session.commit()
     return t

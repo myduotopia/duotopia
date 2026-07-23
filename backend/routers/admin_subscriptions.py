@@ -35,7 +35,7 @@ from models import (
 )
 from models.credit_package import CreditPackage
 from routers.admin import get_current_admin
-from services.group_buy import create_group_buy_period, sync_group_buy_team_from_org
+from services.group_buy import create_group_buy_period, mirror_group_buy_dual_write
 
 router = APIRouter(prefix="/api/admin/subscription", tags=["admin-subscription"])
 logger = logging.getLogger(__name__)
@@ -314,23 +314,12 @@ async def _create_group_buy_admin_subscription(
         ]
     }
 
-    # issue #862 PR2 雙寫：admin 手動加團也把該 org 的名冊鏡射進新表，讓
-    # group_buy_members 保持新鮮（讀取仍走舊表到 PR3）。SAVEPOINT best-effort：
-    # 鏡射失敗只回滾鏡射本身，不影響已完成的加團寫入（鏡射 self-healing）。
+    # issue #862 雙寫：admin 手動加團也把該 org 的名冊 best-effort 鏡射進新表
+    # （共用 helper 內含 SAVEPOINT + logging；失敗只回滾鏡射本身，不影響加團寫入）。
     org = (
         db.query(Organization).filter(Organization.id == school.organization_id).first()
     )
-    if org is not None:
-        try:
-            with db.begin_nested():
-                sync_group_buy_team_from_org(org, db)
-        except Exception as sync_err:  # noqa: BLE001 - best-effort mirror
-            logger.error(
-                "group-buy dual-write mirror failed (non-fatal; mirror "
-                "unread until PR3) org=%s: %s",
-                org.id,
-                sync_err,
-            )
+    mirror_group_buy_dual_write(org, db, logger)
 
     db.commit()
     db.refresh(period)

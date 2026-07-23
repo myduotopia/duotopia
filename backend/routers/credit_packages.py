@@ -28,6 +28,8 @@ from models import (
     TeacherSchool,
     School,
     Plan,
+    GroupBuyTeam,
+    GroupBuyMember,
 )
 from routers.teachers import get_current_teacher
 from services.tappay_service import TapPayService
@@ -38,7 +40,7 @@ from services.group_buy import (
     create_group_buy_org_and_school,
     create_group_buy_period,
     find_owned_group_buy_org,
-    sync_group_buy_team_from_org,
+    mirror_group_buy_dual_write,
     validate_group_buy_plan,
 )
 from config.plans import (
@@ -887,17 +889,16 @@ def _classify_team_emails(emails: list[str], db: Session) -> dict:
     teacher_ids_verified = [t.id for t in teachers if t.email_verified]
     in_team_ids: set[int] = set()
     if teacher_ids_verified:
+        # issue #862 read-switch：改讀新表 group_buy_members → group_buy_teams
+        # 判定「已在某團購團隊」，取代舊 TeacherSchool→School→Org(group_buy) join。
         in_team_ids = {
             row[0]
-            for row in db.query(TeacherSchool.teacher_id)
-            .join(School, School.id == TeacherSchool.school_id)
-            .join(Organization, Organization.id == School.organization_id)
+            for row in db.query(GroupBuyMember.teacher_id)
+            .join(GroupBuyTeam, GroupBuyTeam.id == GroupBuyMember.team_id)
             .filter(
-                TeacherSchool.teacher_id.in_(teacher_ids_verified),
-                TeacherSchool.is_active.is_(True),
-                School.is_active.is_(True),
-                Organization.org_type == "group_buy",
-                Organization.is_active.is_(True),
+                GroupBuyMember.teacher_id.in_(teacher_ids_verified),
+                GroupBuyMember.is_active.is_(True),
+                GroupBuyTeam.is_active.is_(True),
             )
             .all()
         }
@@ -1400,22 +1401,11 @@ async def open_group_buy(
                     )
                     members_bound += 1
 
-            # issue #862 PR2 雙寫：舊表（org/school/名冊/續約窗口）寫完後，於同一
-            # 交易鏡射進 group_buy_teams/members，讓新表保持新鮮（讀取仍走舊表到
-            # PR3）。用 SAVEPOINT 包起來 best-effort：鏡射屬「目前未被讀取」的鏡像表，
-            # 一旦失敗（例如並發撞 uq_group_buy_teams_source_org）只回滾鏡射本身，
-            # **不可**讓一筆已扣款且 org/school/名冊都正常的購買被 rollback→退款。
-            # 鏡射 self-healing，下次寫入或 PR3 前的全量 re-sync 會補上。
-            try:
-                with db.begin_nested():
-                    sync_group_buy_team_from_org(org, db)
-            except Exception as sync_err:  # noqa: BLE001 - best-effort mirror
-                logger.error(
-                    "group-buy dual-write mirror failed (non-fatal; mirror "
-                    "unread until PR3) org=%s: %s",
-                    org.id,
-                    sync_err,
-                )
+            # issue #862 雙寫：舊表（org/school/名冊/續約窗口）寫完後，於同一交易
+            # best-effort 鏡射進 group_buy_teams/members。鏡射失敗只回滾鏡射本身，
+            # **不可**讓一筆已扣款且 org/school/名冊都正常的購買被 rollback→退款
+            # （共用 helper 內含 SAVEPOINT + logging；drift 由每月 cron re-sync 補平）。
+            mirror_group_buy_dual_write(org, db, logger)
 
             success_txn = TeacherSubscriptionTransaction(
                 teacher_id=current_teacher.id,

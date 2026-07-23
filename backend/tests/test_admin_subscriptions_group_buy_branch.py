@@ -262,6 +262,58 @@ def test_admin_joins_teacher_to_existing_team(
     assert member.is_active is True
 
 
+def test_admin_join_survives_mirror_failure(
+    test_client,
+    admin,
+    owner,
+    target,
+    opened_team,
+    gb_plan_30,
+    shared_test_session,
+    monkeypatch,
+):
+    """issue #862：鏡射失敗**不可**回滾已完成的 admin 加團寫入。強迫 sync 拋錯，
+    斷言端點仍成功、TeacherSchool + period 仍寫入。"""
+    import services.group_buy as gb
+
+    def _boom(org, db):
+        raise RuntimeError("mirror boom")
+
+    monkeypatch.setattr(gb, "sync_group_buy_team_from_org", _boom)
+
+    r = _post_create(
+        test_client,
+        admin,
+        {
+            "teacher_email": target.email,
+            "plan_name": gb_plan_30.name,
+            "group_owner_email": owner.email,
+            "reason": "comp",
+        },
+    )
+    assert r.status_code == 200, r.json()  # 加團仍成功
+    org, school = opened_team
+    shared_test_session.expire_all()
+    assert (
+        shared_test_session.query(TeacherSchool)
+        .filter(
+            TeacherSchool.teacher_id == target.id,
+            TeacherSchool.school_id == school.id,
+            TeacherSchool.is_active.is_(True),
+        )
+        .one()
+    )
+    assert (
+        shared_test_session.query(SubscriptionPeriod)
+        .filter(
+            SubscriptionPeriod.teacher_id == target.id,
+            SubscriptionPeriod.payment_method == "group_buy",
+        )
+        .count()
+        >= 1
+    )
+
+
 # ---------- post-join guards ----------
 
 
