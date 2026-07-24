@@ -41,6 +41,7 @@ from services.group_buy import (
     create_group_buy_period,
     find_owned_group_buy_org,
     mirror_group_buy_dual_write,
+    pause_joining_teachers_for_org,
     validate_group_buy_plan,
 )
 from config.plans import (
@@ -1356,6 +1357,7 @@ async def open_group_buy(
             # leader-fill window from roster to pay is hours; a member
             # could have joined another team in between). All-or-nothing.
             members_bound = 0
+            joined_member_objs = []
             if normalized_member_emails:
                 # Batch the defensive in-tx re-check too — at the 50-seat
                 # ceiling the per-email helper was 49 × 2 = 98 queries
@@ -1399,6 +1401,7 @@ async def open_group_buy(
                         start=now,
                         payment_id=external_transaction_id,
                     )
+                    joined_member_objs.append(member)
                     members_bound += 1
 
             # issue #862 雙寫：舊表（org/school/名冊/續約窗口）寫完後，於同一交易
@@ -1406,6 +1409,14 @@ async def open_group_buy(
             # **不可**讓一筆已扣款且 org/school/名冊都正常的購買被 rollback→退款
             # （共用 helper 內含 SAVEPOINT + logging；drift 由每月 cron re-sync 補平）。
             mirror_group_buy_dual_write(org, db)
+
+            # issue #862 §4.8：入團 → 暫停各人（發起人 + 團員）的既有個人訂閱並凍結
+            # 殘值、關 auto_renew（防 P1 重複收費）。在主交易內（非 SAVEPOINT）：pause
+            # 是 P1 防線，失敗應連同退款補償一起處理而非靜默吞掉；cron Phase 2 guard
+            # 為執行期雙保險。無個人訂閱者為 no-op。mirror 需先建好 member 列。
+            pause_joining_teachers_for_org(
+                org, [current_teacher] + joined_member_objs, db, now=now
+            )
 
             success_txn = TeacherSubscriptionTransaction(
                 teacher_id=current_teacher.id,

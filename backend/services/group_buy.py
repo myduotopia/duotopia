@@ -353,6 +353,11 @@ def grant_monthly_for_group_buy(today: datetime, db: Session) -> dict:
     # commit 前執行，heal 與發點同一交易原子提交）。
     resync_all_group_buy_teams(db)
 
+    # issue #862 §4.8 B：heal 之後（停用的 org/school 已把 team 翻 inactive）掃描
+    # 「會籍/團隊已結束但個人訂閱仍 paused」的成員 → 恢復殘值。涵蓋團購到期
+    # （subscription_end < now）、退團漏勾即時 hook、團隊/成員被停用。防 P2 吞權益。
+    resume_ended_paused_memberships(db, now=today_local)
+
     # 資格改讀新表 group_buy_members → group_buy_teams（取代舊 TeacherSchool→
     # School→Org join）。條件對齊舊語意：成員 active、team active 且訂閱未過期、
     # 方案 active 且為團購方案、老師 active。
@@ -609,3 +614,200 @@ def resync_all_group_buy_teams(db: Session) -> int:
                 "group-buy re-sync heal failed for org=%s: %s", org.id, sync_err
             )
     return synced
+
+
+# ---------- §4.8 pause + extend (residual preservation) ----------
+
+
+def pause_individual_for_member(
+    teacher: Teacher, member: GroupBuyMember, db: Session, *, now: datetime
+) -> bool:
+    """On group-buy join, pause the teacher's active INDIVIDUAL subscription and
+    record the frozen residual on the group_buy_member (issue #862 §4.8).
+
+    Freezes remaining time (`paused_remaining_seconds`) and the paused period id;
+    the period's `quota_used` is left untouched so unused points are preserved.
+    Flips the individual period `status='paused'` (drops it out of `current_period`
+    selection and out of cron Phase-1 expiry) and — critically — turns OFF
+    `subscription_auto_renew` so the monthly renewal cron can't re-charge and
+    create a fresh active individual period that would shadow the group-buy points.
+
+    Idempotent: no-op if the member is already paused. No-op (returns False) if the
+    teacher has no active, not-yet-expired individual period. Does NOT commit.
+    Returns True if a pause was applied.
+    """
+    if member.paused_period_id is not None:
+        return False  # already paused for this membership
+    ind = (
+        db.query(SubscriptionPeriod)
+        .filter(
+            SubscriptionPeriod.teacher_id == teacher.id,
+            SubscriptionPeriod.status == "active",
+            SubscriptionPeriod.payment_method != "group_buy",
+        )
+        .order_by(SubscriptionPeriod.start_date.desc())
+        .first()
+    )
+    if ind is None:
+        return False
+    end = _as_utc(ind.end_date)
+    now_utc = _as_utc(now)
+    if end <= now_utc:
+        return False  # already expired → nothing to preserve; treat as pure member
+
+    member.paused_period_id = ind.id
+    member.paused_remaining_seconds = int((end - now_utc).total_seconds())
+    member.paused_at = now
+    ind.status = "paused"
+    if teacher.subscription_auto_renew:
+        teacher.subscription_auto_renew = False
+        member.individual_auto_renew_suspended = True
+    db.flush()
+    return True
+
+
+def resume_individual_for_member(
+    member: GroupBuyMember, db: Session, *, now: datetime
+) -> bool:
+    """On leave / team-end, restore the paused individual subscription's residual
+    (issue #862 §4.8): shift the frozen period to start at `now` and run for the
+    frozen remaining seconds, with `quota_used` unchanged (unused points carry).
+    Re-enables `subscription_auto_renew` if it was suspended for this membership,
+    so the existing monthly cron takes over once the residual runs out.
+
+    Idempotent: no-op if the member isn't paused, or if the referenced period is
+    no longer `paused` (already resumed elsewhere). Always clears the member's
+    pause bookkeeping so a second trigger can't double-resume. Does NOT commit.
+    Returns True if a period was resumed.
+    """
+    if member.paused_period_id is None:
+        return False
+
+    resumed = False
+    p = (
+        db.query(SubscriptionPeriod)
+        .filter(SubscriptionPeriod.id == member.paused_period_id)
+        .first()
+    )
+    if p is not None and p.status == "paused":
+        p.start_date = now
+        p.end_date = now + timedelta(seconds=member.paused_remaining_seconds or 0)
+        p.status = "active"  # quota_used untouched → points residual preserved
+        if member.individual_auto_renew_suspended:
+            teacher = db.query(Teacher).filter(Teacher.id == member.teacher_id).first()
+            if teacher is not None:
+                teacher.subscription_auto_renew = True
+        resumed = True
+
+    # Clear bookkeeping regardless, so a later trigger is a clean no-op.
+    member.paused_period_id = None
+    member.paused_remaining_seconds = None
+    member.individual_auto_renew_suspended = False
+    member.paused_at = None
+    db.flush()
+    return resumed
+
+
+# ---------- §4.8 orchestration (join / leave / team-end / reconcile) ----------
+
+
+def pause_joining_teachers_for_org(
+    org: Organization, teachers: list, db: Session, *, now: datetime
+) -> int:
+    """After a group-buy open / add-member writes the old tables and the mirror
+    has created the group_buy_members rows, pause each joining teacher's active
+    individual subscription (issue #862 §4.8). Idempotent per member. Returns the
+    number actually paused. Does NOT commit.
+    """
+    team = (
+        db.query(GroupBuyTeam)
+        .filter(
+            GroupBuyTeam.source_organization_id == org.id,
+            GroupBuyTeam.is_active.is_(True),
+        )
+        .first()
+    )
+    if team is None:
+        return 0
+    paused = 0
+    for teacher in teachers:
+        member = (
+            db.query(GroupBuyMember)
+            .filter(
+                GroupBuyMember.team_id == team.id,
+                GroupBuyMember.teacher_id == teacher.id,
+            )
+            .first()
+        )
+        if member is not None and pause_individual_for_member(
+            teacher, member, db, now=now
+        ):
+            paused += 1
+    return paused
+
+
+def resume_member_on_group_buy_unbind(
+    teacher_id: int, school_id, db: Session, *, now: datetime
+) -> bool:
+    """Immediate resume trigger (§4.8 A): when a TeacherSchool under a group-buy
+    school is deactivated via the generic schools.py endpoints (which aren't
+    group-buy-aware), restore that member's paused individual subscription right
+    away instead of waiting for the monthly reconcile. No-op for non-group-buy
+    schools or non-paused members. Does NOT commit. Returns True if resumed.
+    """
+    school = db.query(School).filter(School.id == school_id).first()
+    if school is None:
+        return False
+    org = (
+        db.query(Organization)
+        .filter(
+            Organization.id == school.organization_id,
+            Organization.org_type == "group_buy",
+        )
+        .first()
+    )
+    if org is None:
+        return False
+    member = (
+        db.query(GroupBuyMember)
+        .join(GroupBuyTeam, GroupBuyTeam.id == GroupBuyMember.team_id)
+        .filter(
+            GroupBuyTeam.source_organization_id == org.id,
+            GroupBuyMember.teacher_id == teacher_id,
+        )
+        .first()
+    )
+    if member is None:
+        return False
+    return resume_individual_for_member(member, db, now=now)
+
+
+def resume_ended_paused_memberships(db: Session, *, now: datetime) -> int:
+    """Backstop resume sweep (§4.8 B + team-end): resume every still-paused member
+    whose group-buy benefit has ended — membership deactivated, team deactivated,
+    or team subscription window elapsed (發起人 didn't renew). Catches any leave
+    path that skipped the immediate hook, and the team-expiry case. Idempotent
+    (resume clears bookkeeping). Returns count resumed. Does NOT commit.
+
+    Run inside the monthly cron (after the re-sync heal, which flips teams of
+    deactivated orgs/schools to inactive so they get swept here too).
+    """
+    now_utc = _as_utc(now)
+    rows = (
+        db.query(GroupBuyMember)
+        .join(GroupBuyTeam, GroupBuyTeam.id == GroupBuyMember.team_id)
+        .filter(
+            GroupBuyMember.paused_period_id.isnot(None),
+            (
+                (GroupBuyMember.is_active.is_(False))
+                | (GroupBuyTeam.is_active.is_(False))
+                | (GroupBuyTeam.subscription_end < now_utc)
+            ),
+        )
+        .all()
+    )
+    resumed = 0
+    for member in rows:
+        if resume_individual_for_member(member, db, now=now):
+            resumed += 1
+    return resumed

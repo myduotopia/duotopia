@@ -34,7 +34,11 @@ from models import (
 )
 from models.credit_package import CreditPackage
 from routers.admin import get_current_admin
-from services.group_buy import create_group_buy_period, mirror_group_buy_dual_write
+from services.group_buy import (
+    create_group_buy_period,
+    mirror_group_buy_dual_write,
+    pause_joining_teachers_for_org,
+)
 
 router = APIRouter(prefix="/api/admin/subscription", tags=["admin-subscription"])
 
@@ -318,6 +322,10 @@ async def _create_group_buy_admin_subscription(
         db.query(Organization).filter(Organization.id == school.organization_id).first()
     )
     mirror_group_buy_dual_write(org, db)
+    # issue #862 §4.8：admin 加團也要暫停該老師的既有個人訂閱（凍結殘值 + 關
+    # auto_renew）。mirror 先建好 member 列後再暫停；無個人訂閱者為 no-op。
+    if org is not None:
+        pause_joining_teachers_for_org(org, [teacher], db, now=now)
 
     db.commit()
     db.refresh(period)

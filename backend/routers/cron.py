@@ -21,6 +21,8 @@ from models import (
     Classroom,
     ClassroomStudent,
     StudentItemProgress,
+    GroupBuyTeam,
+    GroupBuyMember,
 )
 from services.email_service import email_service
 from services.tappay_service import TapPayService
@@ -141,6 +143,20 @@ async def monthly_renewal_cron(
         f"Found {len(teachers_with_auto_renew)} teachers with auto_renew enabled"
     )
 
+    # issue #862 §4.8 P1 雙保險：跳過「active 團購成員」的個人 auto_renew 扣款。
+    # 團購成員點數來自團隊年費、個人訂閱入團時已 paused；這裡在扣款前再攔一次，
+    # 即使某次 pause 漏關 auto_renew，也不會對團購成員重複收費（防 P1）。
+    active_gb_member_ids = {
+        row[0]
+        for row in db.query(GroupBuyMember.teacher_id)
+        .join(GroupBuyTeam, GroupBuyTeam.id == GroupBuyMember.team_id)
+        .filter(
+            GroupBuyMember.is_active.is_(True),
+            GroupBuyTeam.is_active.is_(True),
+        )
+        .all()
+    }
+
     results = {
         "status": "completed",
         "date": today_taipei.isoformat(),
@@ -174,6 +190,15 @@ async def monthly_renewal_cron(
 
     for teacher in teachers_with_auto_renew:
         try:
+            # issue #862 §4.8 P1：active 團購成員不對其個人訂閱扣款（雙保險）。
+            if teacher.id in active_gb_member_ids:
+                logger.info(
+                    f"Teacher {teacher.email} is an active group-buy member; "
+                    "skipping individual auto-renew charge"
+                )
+                results["skipped"] += 1
+                continue
+
             # 💳 檢查是否有儲存的信用卡 Token
             if not teacher.card_key or not teacher.card_token:
                 logger.info(
