@@ -95,6 +95,28 @@ def test_returns_best_discount_when_teacher_in_multiple_group_buy_teams(
     assert get_teacher_topup_discount(teacher, shared_test_session) == Decimal("0.85")
 
 
+def test_owner_membership_also_yields_discount(shared_test_session, teacher):
+    """發起人在名冊也是一列（is_owner=True）；查詢不 filter is_owner，故 owner-only
+    綁定也應拿到折扣。鎖定「owner 也是 member 列」不變式，防未來誤加 is_owner filter。"""
+    plan = _make_group_buy_plan(shared_test_session, "團購-30席", 0.90)
+    team = GroupBuyTeam(
+        owner_teacher_id=teacher.id,
+        plan_id=plan.id,
+        seat_limit=plan.teacher_seats,
+        is_active=True,
+    )
+    shared_test_session.add(team)
+    shared_test_session.flush()
+    shared_test_session.add(
+        GroupBuyMember(
+            team_id=team.id, teacher_id=teacher.id, is_owner=True, is_active=True
+        )
+    )
+    shared_test_session.commit()
+
+    assert get_teacher_topup_discount(teacher, shared_test_session) == Decimal("0.90")
+
+
 def test_ignores_inactive_member(shared_test_session, teacher):
     plan = _make_group_buy_plan(shared_test_session, "團購-30席", 0.90)
     _bind(shared_test_session, teacher, plan, member_active=False)
