@@ -6,7 +6,7 @@ without going through TapPay. Covers validation, seat / duplicate
 checks, and the happy path.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -312,6 +312,80 @@ def test_admin_join_survives_mirror_failure(
         .count()
         >= 1
     )
+
+
+def _indiv_sub(db, teacher, *, days_left=120):
+    teacher.subscription_auto_renew = True
+    p = SubscriptionPeriod(
+        teacher_id=teacher.id,
+        plan_name="Tutor Teachers",
+        amount_paid=299,
+        quota_total=2000,
+        quota_used=100,
+        start_date=datetime.now(timezone.utc) - timedelta(days=3),
+        end_date=datetime.now(timezone.utc) + timedelta(days=days_left),
+        payment_method="manual",
+        payment_status="paid",
+        status="active",
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+def test_admin_join_pauses_target_existing_individual_sub(
+    test_client, admin, owner, target, opened_team, gb_plan_30, shared_test_session
+):
+    """§4.8：admin 加團時，target 既有個人訂閱應被暫停、auto_renew 關（端點級）。"""
+    ind = _indiv_sub(shared_test_session, target)
+
+    r = _post_create(
+        test_client,
+        admin,
+        {
+            "teacher_email": target.email,
+            "plan_name": gb_plan_30.name,
+            "group_owner_email": owner.email,
+            "reason": "join",
+        },
+    )
+    assert r.status_code == 200, r.json()
+    shared_test_session.expire_all()
+    shared_test_session.refresh(ind)
+    assert ind.status == "paused"
+    t2 = shared_test_session.query(Teacher).filter(Teacher.id == target.id).one()
+    assert t2.subscription_auto_renew is False
+
+
+def test_schools_add_teacher_to_group_buy_school_pauses_and_delete_resumes(
+    test_client, owner, target, opened_team, shared_test_session
+):
+    """§4.8 #1：經通用 schools 端點把有個人訂閱的老師加進團購 school → 暫停；
+    再 DELETE 移除 → 恢復殘值。驗證 router wiring（id / commit 順序）。"""
+    org, school = opened_team
+    ind = _indiv_sub(shared_test_session, target, days_left=120)
+
+    # 通用 join 端點（org_owner 有權限）
+    r = test_client.post(
+        f"/api/schools/{school.id}/teachers",
+        headers=_bearer(owner.id),
+        json={"teacher_id": target.id, "roles": ["teacher"]},
+    )
+    assert r.status_code in (200, 201), r.json()
+    shared_test_session.expire_all()
+    shared_test_session.refresh(ind)
+    assert ind.status == "paused"
+
+    # 通用 leave 端點 → 恢復
+    r = test_client.delete(
+        f"/api/schools/{school.id}/teachers/{target.id}",
+        headers=_bearer(owner.id),
+    )
+    assert r.status_code in (200, 204), getattr(r, "text", "")
+    shared_test_session.expire_all()
+    shared_test_session.refresh(ind)
+    assert ind.status == "active"
 
 
 # ---------- post-join guards ----------

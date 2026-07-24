@@ -143,9 +143,12 @@ async def monthly_renewal_cron(
         f"Found {len(teachers_with_auto_renew)} teachers with auto_renew enabled"
     )
 
-    # issue #862 §4.8 P1 雙保險：跳過「active 團購成員」的個人 auto_renew 扣款。
+    # issue #862 §4.8 P1 雙保險：跳過「仍在享有團購」成員的個人 auto_renew 扣款。
     # 團購成員點數來自團隊年費、個人訂閱入團時已 paused；這裡在扣款前再攔一次，
     # 即使某次 pause 漏關 auto_renew，也不會對團購成員重複收費（防 P1）。
+    # 必須同時檢查 subscription_end >= now，與「發點資格」「resume sweep」對齊
+    # 「還在享有團購」的定義——否則團隊年度到期後（沒續約），成員已被 resume、
+    # auto_renew 轉回 True，卻仍被此 skip-list 命中而永遠不扣款、靜默失去訂閱。
     active_gb_member_ids = {
         row[0]
         for row in db.query(GroupBuyMember.teacher_id)
@@ -153,6 +156,7 @@ async def monthly_renewal_cron(
         .filter(
             GroupBuyMember.is_active.is_(True),
             GroupBuyTeam.is_active.is_(True),
+            GroupBuyTeam.subscription_end >= now_taipei,
         )
         .all()
     }
