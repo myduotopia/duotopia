@@ -1925,31 +1925,6 @@ class ApiClient {
     >("/api/credit-packages/group-buy-plans", { method: "GET" });
   }
 
-  // ===== Phase 5-2 (issue #768): group-buy open =====
-  async openGroupBuy(body: {
-    prime: string;
-    plan_name: string;
-    cardholder?: { name?: string; email?: string; phone_number?: string };
-    // issue #768 comment #3 roster flow: leader supplies all member emails
-    // up-front. Length must equal plan.teacher_seats - 1; backend rejects
-    // payment if any is not_registered / not_verified / in_group_buy_team.
-    member_emails?: string[];
-  }) {
-    return this.request<{
-      success: boolean;
-      message: string;
-      transaction_id?: string;
-      organization_id?: string;
-      school_id?: string;
-      subscription_end_date?: string;
-      teacher_seat_limit?: number;
-      members_bound?: number;
-    }>("/api/credit-packages/group-buy-open", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-  }
-
   // ===== Phase 5-2 (issue #768 comment #3): roster email validation =====
   async validateTeamEmails(emails: string[], signal?: AbortSignal) {
     return this.request<{
@@ -2082,6 +2057,9 @@ class ApiClient {
     return this.request<{
       status: string;
       plan: string | null;
+      // issue #862：後端由 group_buy_teams/members 推導的方案身分，供前端分流
+      // 顯示（個人 / 團購發起人 / 團購團員）。
+      plan_type?: "individual" | "group_buy_owner" | "group_buy_member";
       days_remaining: number | null;
       is_active: boolean;
       quota_used: number;
