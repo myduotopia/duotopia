@@ -19,12 +19,11 @@ from models import (
     SubscriptionPeriod,
     Teacher,
 )
-from datetime import timedelta as _td  # noqa: F401 (kept for clarity below)
-
 from models import Organization, School, TeacherOrganization, TeacherSchool
 from services.group_buy import (
     pause_individual_for_member,
     pause_joining_teachers_for_org,
+    pause_member_on_group_buy_bind,
     resume_ended_paused_memberships,
     resume_individual_for_member,
     resume_member_on_group_buy_unbind,
@@ -351,6 +350,62 @@ def test_resume_ended_sweep_by_team_expiry(shared_test_session):
     assert n == 1
     db.refresh(ind)
     assert ind.status == "active"
+
+
+def test_pause_member_on_group_buy_bind(shared_test_session):
+    """#1：老師經通用 join 端點被加進團購 school（非 open/admin）→ bind helper 應
+    mirror 出 member 列並暫停其個人訂閱。"""
+    db = shared_test_session
+    owner = _teacher(db, "bind_owner@d.com")
+    joiner = _teacher(db, "bind_joiner@d.com", auto_renew=True)
+    plan = _plan(db)
+    org, school, team = _full_group_buy(db, owner, plan)
+    ind = _indiv_period(db, joiner, days_left=90)
+    db.add(
+        TeacherSchool(
+            teacher_id=joiner.id, school_id=school.id, roles=["teacher"], is_active=True
+        )
+    )
+    db.commit()
+
+    ok = pause_member_on_group_buy_bind(
+        joiner.id, school.id, db, now=datetime.now(timezone.utc)
+    )
+    db.commit()
+    assert ok is True
+    db.refresh(ind)
+    assert ind.status == "paused"
+    joiner_db = _reload(db, joiner.id)
+    assert joiner_db.subscription_auto_renew is False
+
+
+def test_resume_restores_auto_renew_even_if_period_gone(shared_test_session):
+    """#2：paused period 不見了（p None），resume 仍要恢復 auto_renew、不可讓老師
+    永久卡在不續約。"""
+    db = shared_test_session
+    t = _teacher(db, "strand@d.com", auto_renew=True)
+    plan = _plan(db)
+    m = _member(db, plan, t)
+    ind = _indiv_period(db, t)
+    pause_individual_for_member(t, m, db, now=datetime.now(timezone.utc))
+    db.commit()
+    db.refresh(t)
+    assert t.subscription_auto_renew is False  # pause 關掉了
+
+    db.delete(ind)  # 模擬 period 消失
+    db.commit()
+
+    resumed = resume_individual_for_member(m, db, now=datetime.now(timezone.utc))
+    db.commit()
+    assert resumed is False  # period 沒了 → 沒 resume
+    db.refresh(t)
+    db.refresh(m)
+    assert t.subscription_auto_renew is True  # 但 auto_renew 已恢復（不卡死）
+    assert m.individual_auto_renew_suspended is False
+
+
+def _reload(db, teacher_id):
+    return db.query(Teacher).filter(Teacher.id == teacher_id).first()
 
 
 def test_resume_ended_sweep_skips_still_active_membership(shared_test_session):

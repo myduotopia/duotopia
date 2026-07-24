@@ -222,6 +222,52 @@ def test_happy_path_creates_org_school_binding_period(
     assert owner_member.is_active is True
 
 
+def test_open_pauses_leader_existing_individual_subscription(
+    test_client, auth_header, teacher, gb_plan, shared_test_session
+):
+    """issue #862 §4.8：發起人開團前若已有有效個人訂閱，開團後該個人 period 應被
+    暫停（status=paused）且 auto_renew 關掉（防 P1 重複收費）。端點級整合驗證。"""
+    from datetime import datetime, timedelta, timezone
+
+    teacher.subscription_auto_renew = True
+    ind = SubscriptionPeriod(
+        teacher_id=teacher.id,
+        plan_name="Tutor Teachers",
+        amount_paid=299,
+        quota_total=2000,
+        quota_used=300,
+        start_date=datetime.now(timezone.utc) - timedelta(days=5),
+        end_date=datetime.now(timezone.utc) + timedelta(days=90),
+        payment_method="manual",
+        payment_status="paid",
+        status="active",
+    )
+    shared_test_session.add(ind)
+    shared_test_session.commit()
+
+    mock_tappay = Mock()
+    mock_tappay.process_payment.return_value = {
+        "status": 0,
+        "rec_trade_id": "REC-PAUSE",
+        "card_secret": {},
+    }
+    with patch("routers.credit_packages.ENABLE_PAYMENT", True), patch(
+        "routers.credit_packages.TapPayService", return_value=mock_tappay
+    ):
+        r = test_client.post(
+            "/api/credit-packages/group-buy-open",
+            json={"prime": "prime-x", "plan_name": gb_plan.name},
+            headers=auth_header,
+        )
+    assert r.status_code == 200, r.json()
+
+    shared_test_session.expire_all()
+    shared_test_session.refresh(ind)
+    assert ind.status == "paused"  # 個人訂閱被暫停凍結
+    t2 = shared_test_session.query(Teacher).filter(Teacher.id == teacher.id).one()
+    assert t2.subscription_auto_renew is False  # 關掉月扣防 P1
+
+
 def test_open_survives_mirror_failure(
     test_client, auth_header, teacher, gb_plan, shared_test_session, monkeypatch
 ):

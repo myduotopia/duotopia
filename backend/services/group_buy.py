@@ -693,11 +693,25 @@ def resume_individual_for_member(
         p.start_date = now
         p.end_date = now + timedelta(seconds=member.paused_remaining_seconds or 0)
         p.status = "active"  # quota_used untouched → points residual preserved
-        if member.individual_auto_renew_suspended:
-            teacher = db.query(Teacher).filter(Teacher.id == member.teacher_id).first()
-            if teacher is not None:
-                teacher.subscription_auto_renew = True
         resumed = True
+    elif member.individual_auto_renew_suspended:
+        # Period gone / already-resumed elsewhere: residual is unrecoverable, but
+        # we must NOT leave the teacher permanently opted out of auto-renew. Flag
+        # for ops since the bookkeeping recording this is wiped just below.
+        logger.warning(
+            "group-buy resume: paused period %s for member %s missing or no "
+            "longer paused; restoring auto_renew, residual unrecoverable",
+            member.paused_period_id,
+            member.id,
+        )
+
+    # Restore auto_renew whenever WE suspended it — independent of whether the
+    # period could be resumed — so a lost/expired paused period can't strand the
+    # teacher with subscription_auto_renew=False forever.
+    if member.individual_auto_renew_suspended:
+        teacher = db.query(Teacher).filter(Teacher.id == member.teacher_id).first()
+        if teacher is not None:
+            teacher.subscription_auto_renew = True
 
     # Clear bookkeeping regardless, so a later trigger is a clean no-op.
     member.paused_period_id = None
@@ -780,6 +794,64 @@ def resume_member_on_group_buy_unbind(
     if member is None:
         return False
     return resume_individual_for_member(member, db, now=now)
+
+
+def pause_member_on_group_buy_bind(
+    teacher_id: int, school_id, db: Session, *, now: datetime
+) -> bool:
+    """Immediate pause trigger symmetric to ``resume_member_on_group_buy_unbind``
+    (§4.8 #1): when a teacher is added to / reactivated in a group-buy school via
+    the generic schools.py endpoints (which aren't group-buy-aware and skip the
+    payment/admin join flow), mirror the org so the GroupBuyMember row exists,
+    then pause that teacher's individual subscription right away. Closes the P1
+    double-charge gap on the non-payment join paths — otherwise the teacher keeps
+    auto-renewing their individual sub in parallel with the group-buy grant, and
+    the cron Phase-2 guard wouldn't even see them until the next monthly heal.
+
+    No-op for non-group-buy schools / teachers without an active individual sub.
+    Does NOT commit. Returns True if a pause was applied.
+    """
+    school = db.query(School).filter(School.id == school_id).first()
+    if school is None:
+        return False
+    org = (
+        db.query(Organization)
+        .filter(
+            Organization.id == school.organization_id,
+            Organization.org_type == "group_buy",
+        )
+        .first()
+    )
+    if org is None:
+        return False
+    # Ensure the just-added/reactivated TeacherSchool is visible, then mirror so
+    # the GroupBuyMember row exists (autoflush is off in this project).
+    db.flush()
+    mirror_group_buy_dual_write(org, db)
+    team = (
+        db.query(GroupBuyTeam)
+        .filter(
+            GroupBuyTeam.source_organization_id == org.id,
+            GroupBuyTeam.is_active.is_(True),
+        )
+        .first()
+    )
+    if team is None:
+        return False
+    member = (
+        db.query(GroupBuyMember)
+        .filter(
+            GroupBuyMember.team_id == team.id,
+            GroupBuyMember.teacher_id == teacher_id,
+        )
+        .first()
+    )
+    if member is None:
+        return False
+    teacher = db.query(Teacher).filter(Teacher.id == teacher_id).first()
+    if teacher is None:
+        return False
+    return pause_individual_for_member(teacher, member, db, now=now)
 
 
 def resume_ended_paused_memberships(db: Session, *, now: datetime) -> int:

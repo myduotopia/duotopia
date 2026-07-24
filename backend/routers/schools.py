@@ -26,7 +26,10 @@ from models import (
 )
 from auth import verify_token
 from services.casbin_service import get_casbin_service
-from services.group_buy import resume_member_on_group_buy_unbind
+from services.group_buy import (
+    pause_member_on_group_buy_bind,
+    resume_member_on_group_buy_unbind,
+)
 
 
 router = APIRouter(prefix="/api/schools", tags=["schools"])
@@ -684,6 +687,13 @@ async def add_teacher_to_school(
         )
         db.add(teacher_school)
 
+    # issue #862 §4.8 #1：把老師加進/重新啟用到團購 school（非 open/admin 流程）時，
+    # 對稱地立即暫停其個人訂閱、關 auto_renew（非團購 / 無個人訂閱為 no-op），
+    # 補上 P1 雙保險在通用 join 端點的缺口。
+    pause_member_on_group_buy_bind(
+        request.teacher_id, school_id, db, now=datetime.now(timezone.utc)
+    )
+
     db.commit()
     db.refresh(teacher_school)
 
@@ -761,10 +771,15 @@ async def update_teacher_school_roles(
     # Update is_active if provided
     if request.is_active is not None:
         teacher_school.is_active = request.is_active
-    # issue #862 §4.8 A：把團購成員從團購 school 停用（退團）時，立即恢復其暫停的
-    # 個人訂閱殘值（非團購 school / 非 paused 為 no-op）。
-    if teacher_school.is_active is False:
+    # issue #862 §4.8：對團購 school 的成員綁定啟停做對稱的 pause/resume（非團購
+    # school / 非 paused / 無個人訂閱為 no-op）。停用→退團→恢復殘值；重新啟用→
+    # 入團→暫停個人訂閱（補 P1 雙保險在通用 join 端點的缺口）。
+    if request.is_active is False:
         resume_member_on_group_buy_unbind(
+            teacher_id, school_id, db, now=datetime.now(timezone.utc)
+        )
+    elif request.is_active is True:
+        pause_member_on_group_buy_bind(
             teacher_id, school_id, db, now=datetime.now(timezone.utc)
         )
     db.commit()
