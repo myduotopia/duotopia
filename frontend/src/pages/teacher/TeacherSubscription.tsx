@@ -438,6 +438,12 @@ export default function TeacherSubscription() {
     );
   }
 
+  // issue #862：以後端 plan_type 判定是否已在團購方案（發起人或團員），供各處 upsell
+  // 一致隱藏，取代舊的 plan 名稱前綴檢查。
+  const isGroupBuyPlan =
+    subscription?.plan_type === "group_buy_owner" ||
+    subscription?.plan_type === "group_buy_member";
+
   return (
     <>
       <div>
@@ -584,11 +590,9 @@ export default function TeacherSubscription() {
                 existing individual subscribers. Hide for teachers already
                 on a group-buy plan — clicking through would hit R2-F2
                 single-org guard and 409.
-                issue #862：改用後端 plan_type（group_buy_owner/member）判定，
-                與 plans-tab upsell 一致，取代舊的 plan 名稱前綴檢查。 */}
-            {ENABLE_GROUP_BUY &&
-              subscription?.plan_type !== "group_buy_owner" &&
-              subscription?.plan_type !== "group_buy_member" && (
+                issue #862：改用後端 plan_type（isGroupBuyPlan）判定，與 plans-tab
+                upsell 一致，取代舊的 plan 名稱前綴檢查。 */}
+            {ENABLE_GROUP_BUY && !isGroupBuyPlan && (
               <Card className="mb-6 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
                 <CardContent className="py-5">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
