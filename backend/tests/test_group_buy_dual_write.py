@@ -152,6 +152,28 @@ def test_sync_is_idempotent(shared_test_session):
     assert db.query(GroupBuyMember).filter_by(team_id=team.id).count() == 1
 
 
+def test_sync_deactivates_team_when_only_school_deactivated(shared_test_session):
+    """#2（PR4）：org 仍 active、但其唯一 school 被停用（schools.py delete/update，
+    不經鏡射）→ sync 找不到 active school 會 return None，此時必須把既有 team 翻
+    inactive，否則切讀後 cron 持續發點、membership 持續說「已在團」。"""
+    db = shared_test_session
+    owner = _teacher(db, "o_school@d.com")
+    plan = _plan(db)
+    org, school = _group_buy_org(db, owner, plan)
+    team = sync_group_buy_team_from_org(org, db)
+    db.commit()
+    assert team.is_active is True
+
+    # 只停用 school（org 不動）→ sync 應 return None 且把 team 翻 inactive
+    school.is_active = False
+    db.commit()
+    result = sync_group_buy_team_from_org(org, db)
+    db.commit()
+    assert result is None
+    db.refresh(team)
+    assert team.is_active is False
+
+
 def test_sync_reflects_renew_and_seat_change(shared_test_session):
     db = shared_test_session
     owner = _teacher(db, "o3@d.com")

@@ -434,6 +434,25 @@ def sync_group_buy_team_from_org(org: Organization, db: Session) -> GroupBuyTeam
     if org.org_type != "group_buy":
         return None
 
+    def _orphan_none() -> None:
+        """issue #862 #2 — the org is (or became) un-syncable: no active
+        school-with-plan / no active org_owner / seat underivable. If a team row
+        already exists for this org, flip it inactive so the read-switched
+        status/roster/grant paths stop surfacing it. This is the ONLY heal for
+        SCHOOL-level deactivation (schools.py delete/update_school flips
+        School.is_active without touching the org or the mirror), which would
+        otherwise leave group_buy_teams.is_active stuck True and keep granting.
+        """
+        existing = (
+            db.query(GroupBuyTeam)
+            .filter(GroupBuyTeam.source_organization_id == org.id)
+            .first()
+        )
+        if existing is not None and existing.is_active:
+            existing.is_active = False
+            db.flush()
+        return None
+
     # Earliest active school with a plan → source of plan/seat (matches backfill).
     school = (
         db.query(School)
@@ -446,7 +465,7 @@ def sync_group_buy_team_from_org(org: Organization, db: Session) -> GroupBuyTeam
         .first()
     )
     if school is None:
-        return None
+        return _orphan_none()
     plan = db.query(Plan).filter(Plan.id == school.plan_id).first()
 
     owner_org = (
@@ -460,7 +479,7 @@ def sync_group_buy_team_from_org(org: Organization, db: Session) -> GroupBuyTeam
         .first()
     )
     if owner_org is None:
-        return None
+        return _orphan_none()
     owner_id = owner_org.teacher_id
 
     # seat_limit is NOT NULL; NULL org/school limits mean "unlimited", so fall
@@ -474,7 +493,7 @@ def sync_group_buy_team_from_org(org: Organization, db: Session) -> GroupBuyTeam
         else (plan.teacher_seats if plan is not None else None)
     )
     if seat_limit is None:
-        return None
+        return _orphan_none()
 
     team = (
         db.query(GroupBuyTeam)
