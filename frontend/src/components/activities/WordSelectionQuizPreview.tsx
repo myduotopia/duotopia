@@ -34,6 +34,7 @@ interface ApiItem {
   image_url?: string;
   // Issue #860: 顯示例句（答案挖空）預覽用
   example_sentence?: string | null;
+  example_sentence_audio_url?: string | null; // Issue #967
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
 }
@@ -98,6 +99,7 @@ interface QuizWord {
   question_number: number;
   // Issue #860
   example_sentence?: string | null;
+  example_sentence_audio_url?: string | null; // Issue #967
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
 }
@@ -115,6 +117,7 @@ interface ServerQuizWord {
   question_number?: number;
   // Issue #860
   example_sentence?: string | null;
+  example_sentence_audio_url?: string | null; // Issue #967
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
 }
@@ -184,14 +187,17 @@ export default function WordSelectionQuizPreview({
         options: w.options,
         question_number: w.question_number ?? idx + 1,
         example_sentence: w.example_sentence,
+        example_sentence_audio_url: w.example_sentence_audio_url,
         cloze_answer: w.cloze_answer,
         blanked_sentence: w.blanked_sentence,
       }));
     }
-    // contentId 路徑：前端組選項。選項語言由 show_image 決定，不受例句影響。
-    const showImage = settings.show_image !== false;
+    // contentId 路徑：前端組選項。選項語言由 show_image 決定；
+    // Issue #967: 例句題型（show_example_sentence）一律英文選項。
+    const englishOptions =
+      settings.show_image !== false || settings.show_example_sentence === true;
     return items.map((item, idx) => {
-      const correctText = showImage ? item.text : item.translation || "";
+      const correctText = englishOptions ? item.text : item.translation || "";
       return {
         content_item_id: item.id,
         text: item.text,
@@ -199,14 +205,21 @@ export default function WordSelectionQuizPreview({
         correct_text: correctText,
         audio_url: item.audio_url,
         image_url: item.image_url,
-        options: buildOptions(item, items, showImage),
+        options: buildOptions(item, items, englishOptions),
         question_number: idx + 1,
         example_sentence: item.example_sentence,
+        example_sentence_audio_url: item.example_sentence_audio_url,
         cloze_answer: item.cloze_answer,
         blanked_sentence: item.blanked_sentence,
       };
     });
-  }, [useAssignment, serverWords, items, settings.show_image]);
+  }, [
+    useAssignment,
+    serverWords,
+    items,
+    settings.show_image,
+    settings.show_example_sentence,
+  ]);
 
   const previewSettings = useMemo(
     () => ({

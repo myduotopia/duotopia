@@ -24,6 +24,12 @@
  * - 答案比對使用後端傳的 correct_text（fallback: 依 showImage flag 決定 text/translation）
  * - 不顯示文字提示語（畫面已直覺）
  *
+ * show_example_sentence 模式（例句挖空，Issue #967）：
+ * - 題目改為挖空例句（例句即題目），不顯示單字/翻譯；單字圖片仍可顯示
+ * - 選項一律英文（不論 show_image 開關）—— 例句挖的是英文單字，後端強制英文正解/選項
+ * - 播放音檔改播例句音檔；與「選項以圖片呈現」互斥
+ * - 版面固定直式（例句是長文，不走橫式窄欄）
+ *
  * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
  *    改動前必讀：docs/design/preview-architecture.md
  */
@@ -85,6 +91,8 @@ interface WordOption {
   example_sentence?: string | null;
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
+  // Issue #967: 例句題型 + 播放音檔時，改播例句音檔（非單字音檔）。
+  example_sentence_audio_url?: string | null;
 }
 
 interface ProficiencyStatus {
@@ -271,11 +279,13 @@ export default function WordSelectionActivity({
   const isShortLandscape = useShortLandscape();
 
   // show_image 模式下正解為英文 (word.text)，否則為翻譯。優先信任後端傳的
-  // correct_text；舊版後端未回傳時依 showImage flag fallback。
+  // correct_text；舊版後端未回傳時依 flag fallback。
+  // Issue #967: 例句題型選項一律英文 → fallback 也用 word.text。
   const getExpectedAnswer = useCallback(
     (word: WordOption) =>
-      word.correct_text ?? (showImage ? word.text : word.translation),
-    [showImage],
+      word.correct_text ??
+      (showImage || showExampleSentence ? word.text : word.translation),
+    [showImage, showExampleSentence],
   );
 
   // Start practice session
@@ -430,24 +440,31 @@ export default function WordSelectionActivity({
     };
   }, []);
 
+  // Issue #967: 例句題型時改播例句音檔（非單字音檔）。
+  const resolveAudioUrl = useCallback(
+    (word?: WordOption) =>
+      showExampleSentence ? word?.example_sentence_audio_url : word?.audio_url,
+    [showExampleSentence],
+  );
+
   // Play audio for current word
   const playWordAudio = useCallback(() => {
-    const currentWord = words[currentIndex];
-    if (currentWord?.audio_url) {
+    const url = resolveAudioUrl(words[currentIndex]);
+    if (url) {
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      audioRef.current = new Audio(currentWord.audio_url);
+      audioRef.current = new Audio(url);
       audioRef.current.play().catch(console.error);
     }
-  }, [words, currentIndex]);
+  }, [words, currentIndex, resolveAudioUrl]);
 
   // Auto-play audio when word changes if play_audio is enabled
   // Don't play when round is completed (to avoid extra playback on "Finish Round")
   useEffect(() => {
     if (
       playAudio &&
-      words[currentIndex]?.audio_url &&
+      resolveAudioUrl(words[currentIndex]) &&
       !showResult &&
       !roundCompleted
     ) {
@@ -457,6 +474,7 @@ export default function WordSelectionActivity({
     currentIndex,
     playAudio,
     playWordAudio,
+    resolveAudioUrl,
     words,
     showResult,
     roundCompleted,
@@ -921,7 +939,12 @@ export default function WordSelectionActivity({
 
   // 直式優先：題目有圖且視窗矮（橫向手機）才退回橫式（圖左、選項右）。
   // #844：長選項時關閉橫式 → 圖回到上方，下方選項拿全寬單欄。
-  const useHorizontal = showQuestionImage && isShortLandscape && !hasLongOption;
+  // #967：例句題型時關閉橫式 —— 挖空例句是長文題目，橫式窄欄會擠爆；改直式。
+  const useHorizontal =
+    showQuestionImage &&
+    isShortLandscape &&
+    !hasLongOption &&
+    !showExampleSentence;
 
   return (
     <div className="flex flex-col gap-6 min-h-[calc(100dvh-8rem)]">
@@ -980,7 +1003,7 @@ export default function WordSelectionActivity({
           />
         )}
         {/* Image */}
-        {showImage && currentWord.image_url && (
+        {showQuestionImage && (
           <div
             className={cn(
               "flex justify-center shrink-0",
@@ -990,7 +1013,7 @@ export default function WordSelectionActivity({
             )}
           >
             <img
-              src={currentWord.image_url}
+              src={currentWord.image_url ?? undefined}
               alt={currentWord.text}
               className={cn(
                 "object-contain rounded-lg",
@@ -1010,8 +1033,9 @@ export default function WordSelectionActivity({
           )}
         >
           {/* Word Text — show_image 模式時隱藏英文（避免答案太明顯），改顯示翻譯提示
-              即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解 */}
-          {!playAudio && (
+              即使老師勾了 show_image 但實際沒附圖，仍套用此規則 — 否則英文題目+英文選項會秒解。
+              #967：例句題型時題目改為挖空例句（見下方），這裡不顯示單字/翻譯。 */}
+          {!playAudio && !showExampleSentence && (
             <div className="text-center py-4 sm:py-6">
               <h2 className="text-[clamp(26px,9vh,30px)] font-bold text-gray-800 select-none">
                 {showImage ? currentWord.translation : currentWord.text}
@@ -1034,11 +1058,11 @@ export default function WordSelectionActivity({
             </div>
           )}
 
-          {/* Issue #860: 「顯示例句」附加提示 —— 在選項上方多顯示一行把目標單字
-              挖空的例句。挖不出空時 blankedText 為空 → 該卡不顯示，
-              絕不顯示未挖空原句（會洩漏答案）。 */}
+          {/* Issue #860 / #967: 例句題型 —— 挖空例句「就是題目」，放題目位置、
+              不加外框底色（只有挖空單字有框，由 ClozeBlankText 提供）。挖不出空時
+              blankedText 為空 → 該卡不顯示，絕不顯示未挖空原句（會洩漏答案）。 */}
           {blankedText && (
-            <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 px-4 py-3 text-center">
+            <div className="text-center py-4 sm:py-6">
               <p className="text-[clamp(18px,4.5vh,22px)] font-medium text-gray-700 leading-relaxed select-none">
                 <ClozeBlankText text={blankedText} />
               </p>
@@ -1073,8 +1097,11 @@ export default function WordSelectionActivity({
                 showResult && isSelected && !isCorrectAnswer;
               // 答錯後才揭示的正解需要打勾動畫引導注意
               const animateReveal = showCorrect && !isCorrect;
-              // 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字
-              const renderAsImage = showOptionImages && !!optionImage;
+              // 選項圖片模式 — 有圖則顯示圖，沒圖 fallback 為文字。
+              // #967: 例句題型選項一律英文（不渲染圖片），即使舊資料同時開了
+              // showOptionImages（#955 曾允許並存，現已互斥）。
+              const renderAsImage =
+                showOptionImages && !showExampleSentence && !!optionImage;
 
               return (
                 <WordSelectionOptionButton

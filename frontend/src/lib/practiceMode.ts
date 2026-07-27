@@ -203,12 +203,13 @@ const TOGGLE_SHUFFLE: SettingSpec = {
   key: "shuffle_questions",
 };
 const TOGGLE_SHOW_ANSWER: SettingSpec = { kind: "toggle", key: "show_answer" };
-// Issue #860: 「顯示例句（答案挖空）」是獨立的附加開關 —— 題目呈現方式維持顯示單字／
-// 播放音檔，此開關只是額外在選項上方多顯示一行「把目標單字挖空的例句」。與圖片／選項
-// 圖片／播放音檔皆不互斥；選項語言仍由 show_image 決定，不受例句影響。
+// Issue #860 / #967: 「顯示例句（答案挖空）」開啟時，挖空例句「就是題目」——
+// 題目區不再顯示單字／翻譯，選項固定英文，若同時開播放音檔則改播例句音檔。
+// 因為例句取代了圖片題目，與「選項以圖片呈現」(show_option_images) 互斥（二擇一）。
 const TOGGLE_SHOW_EXAMPLE_SENTENCE: SettingSpec = {
   kind: "toggle",
   key: "show_example_sentence",
+  excludes: ["show_option_images"], // Issue #967 互斥
 };
 const TOGGLE_SHOW_TRANSLATION: SettingSpec = {
   kind: "toggle",
@@ -222,7 +223,7 @@ const TOGGLE_SHOW_IMAGE: SettingSpec = {
 const TOGGLE_SHOW_OPTION_IMAGES: SettingSpec = {
   kind: "toggle",
   key: "show_option_images",
-  excludes: ["show_image"], // Issue #631 互斥
+  excludes: ["show_image", "show_example_sentence"], // #631 圖片題互斥 / #967 例句題互斥
 };
 const NUMBER_TARGET_PROFICIENCY: SettingSpec = {
   kind: "number",

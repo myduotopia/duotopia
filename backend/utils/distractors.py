@@ -15,13 +15,20 @@ class Distractor(TypedDict):
     image_url: Optional[str]
 
 
-def text_field_for_show_image(show_image: bool) -> str:
+def text_field_for_show_image(
+    show_image: bool, show_example_sentence: bool = False
+) -> str:
     """Which ContentItem field provides the displayed option text.
 
     When the question shows an image, options/answer must be in the foreign
     language (`text`) so the picture doesn't trivially reveal the answer.
     Otherwise the legacy behaviour applies: options show the translation.
+
+    Issue #967: 「顯示例句（答案挖空）」時，題目是英文例句、挖空的是英文單字 ——
+    選項必須是英文才能填空，故一律強制 `text`，不論 show_image 開關。
     """
+    if show_example_sentence:
+        return "text"
     return "text" if show_image else "translation"
 
 
