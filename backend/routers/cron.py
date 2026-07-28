@@ -690,7 +690,7 @@ async def recording_error_report_cron(
 
     功能：
     1. 查詢 BigQuery 過去 24 小時和最近 1 小時的錄音錯誤
-    2. 使用 OpenAI 生成錯誤摘要
+    2. 使用 Vertex AI (Gemini) 生成錯誤摘要
     3. 發送統計報告到官網信箱 (myduotopia@gmail.com)
 
     安全性：只允許帶有正確 X-Cron-Secret header 的請求
