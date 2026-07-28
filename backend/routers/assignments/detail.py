@@ -378,6 +378,9 @@ async def get_assignment_detail(
         "show_word": assignment.show_word,
         "show_image": assignment.show_image,
         "show_option_images": bool(getattr(assignment, "show_option_images", False)),
+        "show_example_sentence": bool(
+            getattr(assignment, "show_example_sentence", False)
+        ),
         # Issue #835: 編輯 sheet 讀回 live 模式原始值
         "quiz_time_limit_seconds": assignment.quiz_time_limit_seconds,
         "is_live_quiz": bool(getattr(assignment, "is_live_quiz", False)),

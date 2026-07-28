@@ -31,6 +31,8 @@ export interface PracticeModeSettings {
   show_word: boolean;
   show_image: boolean;
   show_option_images: boolean;
+  // Issue #860: 顯示例句（答案挖空）— 單字選擇小考／艾賓浩斯專用
+  show_example_sentence: boolean;
 }
 
 type MutableSettings = Record<SettingKey, SettingValue>;

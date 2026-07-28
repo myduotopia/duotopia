@@ -21,6 +21,7 @@ from models import (
     TeacherOrganization,
     TeacherSchool,
 )
+from services.group_buy import sync_group_buy_team_from_org
 
 
 def _bearer(teacher_id):
@@ -125,6 +126,10 @@ def _make_group_buy_team(
                 status="active",
             )
         )
+    # issue #862 read-switch：status 端點改讀新表，故 fixture 也把舊表狀態鏡射
+    # 進 group_buy_teams/members（等同 production 雙寫）。
+    shared_test_session.flush()
+    sync_group_buy_team_from_org(org, shared_test_session)
     shared_test_session.commit()
     return org, school
 

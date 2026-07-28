@@ -2058,6 +2058,7 @@
         "playAudioWord": "播放音檔",
         "playAudioWordDesc": "聽音檔選翻譯",
         "playAudioFillDesc": "聽音檔拼/填單字",
+        "showExampleSentenceDesc": "練習時顯示例句",
         "showAnswerLockedByAudio": "播放音檔模式必須顯示答案"
       }
     },
@@ -4576,6 +4577,37 @@
     }
   },
   "contentEditor": {
+    "magicPaste": {
+      "fileTooLarge": "檔案過大（上限 10MB）",
+      "noSentenceExtracted": "這張圖片沒有擷取到句子，請換一張試試",
+      "noWordExtracted": "這張圖片沒有擷取到單字，請換一張試試",
+      "extractFailed": "AI 擷取失敗，請稍後再試",
+      "selectAtLeastOne": "請至少勾選一個項目",
+      "quota": "本月免費剩餘 {{remaining}} / {{limit}} 張，超額以點數計費",
+      "cancel": "取消",
+      "pickFile": "選擇圖片或 PDF（一次一張）",
+      "autoFillHint": "擷取後依上方「AI 翻譯 / 語音 / 例句」設定，在插入時自動補齊缺少的欄位。",
+      "overLimitPre": "本月免費次數已用完且點數不足，請",
+      "overLimitLink": "訂閱方案或購買點數",
+      "overLimitPost": "後再使用。",
+      "previewHint": "擷取結果（勾選要插入的，可直接改）",
+      "phSentence": "句子",
+      "phWord": "單字",
+      "phTranslation": "翻譯",
+      "phExample": "例句",
+      "extracting": "擷取中…",
+      "start": "開始擷取",
+      "insertN": "插入 {{count}} 個項目",
+      "insertedN": "已插入 {{count}} 個項目",
+      "insertedNSentences": "已插入 {{count}} 個句子",
+      "dialogTitle": "魔術貼上：從圖片 / PDF 擷取教材",
+      "dialogDescSentence": "上傳一張圖片或 PDF，AI 會自動擷取句子與翻譯，預覽確認後再插入。",
+      "dialogDescVocab": "上傳一張圖片或 PDF，AI 會自動擷取單字、翻譯與例句，預覽確認後再插入。"
+    },
+    "batchTabs": {
+      "text": "貼上文字",
+      "image": "圖片 / PDF"
+    },
     "labels": {
       "title": "標題",
       "pasteContent": "請貼上單字",

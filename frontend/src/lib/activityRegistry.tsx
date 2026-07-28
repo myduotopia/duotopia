@@ -33,6 +33,7 @@ export interface DispatchPreviewSettings {
   show_translation: boolean;
   show_word: boolean;
   show_option_images: boolean;
+  show_example_sentence: boolean;
   play_audio: boolean;
   show_answer: boolean;
   target_proficiency: number;
@@ -73,6 +74,7 @@ export const DISPATCH_PREVIEW: Partial<
         show_word: settings.show_word,
         show_image: settings.show_image,
         show_option_images: settings.show_option_images,
+        show_example_sentence: settings.show_example_sentence,
         play_audio: settings.play_audio,
         show_answer: settings.show_answer,
         time_limit_per_question: settings.time_limit_per_question,
@@ -86,6 +88,7 @@ export const DISPATCH_PREVIEW: Partial<
       settings={{
         show_image: settings.show_image,
         show_option_images: settings.show_option_images,
+        show_example_sentence: settings.show_example_sentence,
         play_audio: settings.play_audio,
         target_proficiency: settings.target_proficiency,
         time_limit_per_question: settings.time_limit_per_question,

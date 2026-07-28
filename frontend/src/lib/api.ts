@@ -1506,6 +1506,72 @@ class ApiClient {
     return response.json();
   }
 
+  // ============ Magic Paste（教材內容魔術貼上, issue #891）============
+  /** 查詢本月魔術貼上配額狀態 */
+  async getMagicPasteQuota() {
+    return this.request<{
+      year_month: string;
+      free_limit: number;
+      free_used: number;
+      free_remaining: number;
+      points_per_image: number;
+      paid_quota_remaining: number;
+      can_use: boolean;
+    }>("/api/programs/magic-paste/quota");
+  }
+
+  /** 上傳 1 張圖片/PDF，AI 擷取教材內容（不寫入 DB，回傳供前端預覽） */
+  async magicPasteExtract(formData: FormData) {
+    const currentToken = this.getToken();
+    const headers: HeadersInit = {};
+    if (currentToken) {
+      headers["Authorization"] = `Bearer ${currentToken}`;
+    }
+
+    const response = await fetch(`${this.baseUrl}/api/programs/magic-paste`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let detail: unknown = null;
+      try {
+        detail = (await response.json()).detail;
+      } catch {
+        detail = await response.text();
+      }
+      const err = new Error(
+        typeof detail === "string" ? detail : "Magic paste failed",
+      ) as Error & { status?: number; detail?: unknown };
+      err.status = response.status;
+      err.detail = detail;
+      throw err;
+    }
+
+    return response.json() as Promise<{
+      items: Array<{
+        text: string;
+        translation: string;
+        part_of_speech: string;
+        example_sentence: string;
+        example_sentence_translation: string;
+      }>;
+      charge: {
+        charged: string;
+        points_used: number;
+        free_remaining: number;
+      } | null;
+      quota: {
+        free_remaining: number;
+        free_limit: number;
+        can_use: boolean;
+      };
+      estimated_cost_usd: number;
+      provider: string;
+    }>;
+  }
+
   // ============ Student Methods ============
   async getStudentProfile() {
     return this.request("/api/students/me");
@@ -1859,31 +1925,6 @@ class ApiClient {
     >("/api/credit-packages/group-buy-plans", { method: "GET" });
   }
 
-  // ===== Phase 5-2 (issue #768): group-buy open =====
-  async openGroupBuy(body: {
-    prime: string;
-    plan_name: string;
-    cardholder?: { name?: string; email?: string; phone_number?: string };
-    // issue #768 comment #3 roster flow: leader supplies all member emails
-    // up-front. Length must equal plan.teacher_seats - 1; backend rejects
-    // payment if any is not_registered / not_verified / in_group_buy_team.
-    member_emails?: string[];
-  }) {
-    return this.request<{
-      success: boolean;
-      message: string;
-      transaction_id?: string;
-      organization_id?: string;
-      school_id?: string;
-      subscription_end_date?: string;
-      teacher_seat_limit?: number;
-      members_bound?: number;
-    }>("/api/credit-packages/group-buy-open", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-  }
-
   // ===== Phase 5-2 (issue #768 comment #3): roster email validation =====
   async validateTeamEmails(emails: string[], signal?: AbortSignal) {
     return this.request<{
@@ -2016,6 +2057,9 @@ class ApiClient {
     return this.request<{
       status: string;
       plan: string | null;
+      // issue #862：後端由 group_buy_teams/members 推導的方案身分，供前端分流
+      // 顯示（個人 / 團購發起人 / 團購團員）。
+      plan_type?: "individual" | "group_buy_owner" | "group_buy_member";
       days_remaining: number | null;
       is_active: boolean;
       quota_used: number;

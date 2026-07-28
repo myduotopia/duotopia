@@ -493,6 +493,7 @@ export function AssignmentDialog({
     show_word: true, // 顯示單字（單字選擇專用）
     show_image: true, // 顯示題目圖片
     show_option_images: false, // 顯示選項圖片（單字選擇專用，與 show_image 互斥，Issue #631）
+    show_example_sentence: false, // 顯示例句（答案挖空）（單字選擇小考／艾賓浩斯，Issue #860）
   });
 
   // Issue #752: 練習模式 chip 列橫向滑動 + 箭頭按鈕（內容超寬時才顯示）
@@ -696,6 +697,7 @@ export function AssignmentDialog({
         show_word: true,
         show_image: true,
         show_option_images: false,
+        show_example_sentence: false,
       });
       setCurrentStep(needsClassroomStep ? 0 : 1);
       setActiveTab(showOrgTab ? "organization" : "template");
@@ -1271,6 +1273,7 @@ export function AssignmentDialog({
         show_word: formData.show_word,
         show_image: formData.show_image,
         show_option_images: formData.show_option_images,
+        show_example_sentence: formData.show_example_sentence, // Issue #860
         ...(effectiveOrganizationId && {
           organization_id: effectiveOrganizationId,
         }),
@@ -1459,6 +1462,7 @@ export function AssignmentDialog({
       show_word: true,
       show_image: true,
       show_option_images: false,
+      show_example_sentence: false,
     });
     setCartItems([]);
     setExpandedPrograms(new Set());

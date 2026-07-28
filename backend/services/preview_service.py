@@ -302,6 +302,13 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
             if fields is None:
                 continue  # skip vocab items without example_sentence
             q_text, q_translation, q_audio = fields
+            # Issue #860: 例句挖空（與學生端同一支 extract_cloze_for_item）
+            from utils.cloze import (
+                extract_cloze_for_item as _extract_cloze,
+                collapse_to_single_blank as _collapse_blank,
+            )
+
+            _item_cloze = _extract_cloze(item)
             items_data.append(
                 {
                     "id": item.id,
@@ -309,6 +316,24 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
                     "translation": q_translation,
                     "audio_url": q_audio,
                     "recording_url": None,
+                    # Issue #860: 讓教師預覽頁在「顯示例句（答案挖空）」模式能重現題目。
+                    # blanked_sentence 由後端算（含 cloze_answer 缺漏時的 fallback），
+                    # 與學生端同源。
+                    #
+                    # 與 quiz_assignments._example_cloze_fields 一致，刻意不送
+                    # example_sentence_translation：翻譯會直接講出該單字洩漏答案。
+                    # Issue #967: 送 example_sentence_audio_url，讓教師預覽與學生端
+                    # 一致（例句題型開播放音檔時可試聽例句音檔）。已知取捨：音檔會唸出
+                    # 含挖空單字的整句，可能透露答案 —— 依產品決策照送。
+                    "example_sentence": getattr(item, "example_sentence", "") or "",
+                    "example_sentence_audio_url": (
+                        getattr(item, "example_sentence_audio_url", None) or None
+                    ),
+                    "cloze_answer": _item_cloze[1] if _item_cloze else "",
+                    # Fail closed：挖不出空回空字串，不可退回原句（原句含答案）
+                    "blanked_sentence": (
+                        _collapse_blank(_item_cloze[0]) if _item_cloze else ""
+                    ),
                 }
             )
 
@@ -344,6 +369,9 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
             assignment.show_image if assignment.show_image is not None else True
         ),
         "show_option_images": bool(getattr(assignment, "show_option_images", False)),
+        "show_example_sentence": bool(
+            getattr(assignment, "show_example_sentence", False)
+        ),
         "quiz_time_limit_seconds": assignment.quiz_time_limit_seconds,
         # #854: 即刻練習練習畫面進階設定面板的初值需要這兩個欄位
         "shuffle_questions": bool(getattr(assignment, "shuffle_questions", False)),
@@ -499,6 +527,14 @@ async def get_word_selection_start(
             detail="This assignment does not support word-selection or tug-of-war mode",
         )
 
+    # Issue #860: 例句挖空模式的 per-item payload 走與學生端相同的處理（見下方組裝）
+    from utils.cloze import (
+        extract_cloze_for_item as _extract_cloze,
+        collapse_to_single_blank as _collapse_blank,
+    )
+
+    _show_example_sentence = bool(getattr(assignment, "show_example_sentence", False))
+
     content_items = (
         db.query(ContentItem)
         .join(Content)
@@ -546,7 +582,11 @@ async def get_word_selection_start(
     show_image_for_options = (
         assignment.show_image if assignment.show_image is not None else True
     )
-    answer_field = text_field_for_show_image(show_image_for_options)
+    # Issue #967: 例句題型選項一律英文；且例句時不可用 stored distractors（依 show_image
+    # 分語言儲存，show_image=關 時是中文），改用英文 pool 現組。
+    answer_field = text_field_for_show_image(
+        show_image_for_options, _show_example_sentence
+    )
 
     words_with_options = []
 
@@ -555,7 +595,11 @@ async def get_word_selection_start(
 
         # Use stored distractors if available (≥3), else fallback to other words
         stored = normalize_distractors(item.distractors)
-        if not ignore_stored_distractors and len(stored) >= 3:
+        if (
+            not ignore_stored_distractors
+            and not _show_example_sentence
+            and len(stored) >= 3
+        ):
             final_distractors = list(stored[:3])
         else:
             target = correct_answer.lower().strip()
@@ -577,6 +621,36 @@ async def get_word_selection_start(
         options = [correct_option] + final_distractors
         random.shuffle(options)
 
+        # Issue #860: 例句挖空模式下，per-item payload 必須與學生端同一套處理 ——
+        # 送後端算好的 blanked_sentence，拿掉例句翻譯（翻譯直接講出該單字洩漏答案）。
+        # Issue #967: 送 example_sentence_audio_url，讓例句題型開播放音檔時可播例句
+        # 音檔（與學生端／教師預覽一致）。已知取捨：音檔會唸出含挖空單字的整句、
+        # 可能透露答案 —— 依產品決策照送。
+        if _show_example_sentence:
+            _cloze = _extract_cloze(item)
+            example_fields = {
+                "example_sentence": item.example_sentence or "",
+                "example_sentence_audio_url": (
+                    sentence_audio_by_id.get(item.id)
+                    or item.example_sentence_audio_url
+                    or ""
+                ),
+                "cloze_answer": _cloze[1] if _cloze else "",
+                "blanked_sentence": (_collapse_blank(_cloze[0]) if _cloze else ""),
+            }
+        else:
+            example_fields = {
+                "example_sentence": item.example_sentence or "",
+                "example_sentence_translation": (
+                    item.example_sentence_translation or ""
+                ),
+                "example_sentence_audio_url": (
+                    sentence_audio_by_id.get(item.id)
+                    or item.example_sentence_audio_url
+                    or ""
+                ),
+            }
+
         words_with_options.append(
             {
                 "content_item_id": item.id,
@@ -585,13 +659,7 @@ async def get_word_selection_start(
                 "correct_text": correct_answer,
                 "audio_url": item.audio_url,
                 "image_url": item.image_url,
-                "example_sentence": item.example_sentence or "",
-                "example_sentence_translation": item.example_sentence_translation or "",
-                "example_sentence_audio_url": (
-                    sentence_audio_by_id.get(item.id)
-                    or item.example_sentence_audio_url
-                    or ""
-                ),
+                **example_fields,
                 "memory_strength": 0,
                 "options": options,
             }
@@ -608,6 +676,9 @@ async def get_word_selection_start(
             assignment.show_image if assignment.show_image is not None else True
         ),
         "show_option_images": bool(getattr(assignment, "show_option_images", False)),
+        "show_example_sentence": bool(
+            getattr(assignment, "show_example_sentence", False)
+        ),
         "play_audio": assignment.play_audio or False,
         "time_limit_per_question": assignment.time_limit_per_question,
     }

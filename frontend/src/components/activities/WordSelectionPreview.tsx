@@ -16,6 +16,7 @@ interface WordSelectionPreviewProps {
   settings: {
     show_image?: boolean;
     show_option_images?: boolean;
+    show_example_sentence?: boolean;
     play_audio?: boolean;
     target_proficiency?: number;
     time_limit_per_question?: number;
@@ -29,6 +30,11 @@ interface ContentItem {
   translation?: string;
   audio_url?: string;
   image_url?: string;
+  // Issue #860
+  example_sentence?: string | null;
+  example_sentence_audio_url?: string | null; // Issue #967
+  cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 interface OptionEntry {
@@ -45,6 +51,11 @@ interface WordOption {
   image_url?: string;
   memory_strength: number;
   options: OptionEntry[];
+  // Issue #860
+  example_sentence?: string | null;
+  example_sentence_audio_url?: string | null; // Issue #967
+  cloze_answer?: string | null;
+  blanked_sentence?: string | null;
 }
 
 function buildOptions(
@@ -126,20 +137,26 @@ export default function WordSelectionPreview({
     };
   }, [contentId, token]);
 
-  // 組成 WordOption[]（含選項）— 只在 items 或 show_image 變動時重組
+  // 組成 WordOption[]（含選項）— 只在 items / show_image / show_example_sentence 變動時重組
   const previewWords = useMemo<WordOption[]>(() => {
-    const showImage = settings.show_image ?? true;
+    // 選項語言由 show_image 決定；Issue #967: 例句題型一律英文選項。
+    const englishOptions =
+      (settings.show_image ?? true) || settings.show_example_sentence === true;
     return items.map((item) => ({
       content_item_id: item.id,
       text: item.text,
       translation: item.translation || "",
-      correct_text: showImage ? item.text : item.translation || "",
+      correct_text: englishOptions ? item.text : item.translation || "",
       audio_url: item.audio_url,
       image_url: item.image_url,
       memory_strength: 0,
-      options: buildOptions(item, items, showImage),
+      options: buildOptions(item, items, englishOptions),
+      example_sentence: item.example_sentence,
+      example_sentence_audio_url: item.example_sentence_audio_url,
+      cloze_answer: item.cloze_answer,
+      blanked_sentence: item.blanked_sentence,
     }));
-  }, [items, settings.show_image]);
+  }, [items, settings.show_image, settings.show_example_sentence]);
 
   // 穩定的 previewSettings reference — 否則 WordSelectionActivity 的 useEffect
   // 會在 AssignmentDialog 每次表單按鍵時重觸發，把預覽 reset 回第 1 題
@@ -147,6 +164,7 @@ export default function WordSelectionPreview({
     () => ({
       show_image: settings.show_image,
       show_option_images: settings.show_option_images,
+      show_example_sentence: settings.show_example_sentence,
       play_audio: settings.play_audio,
       target_proficiency: settings.target_proficiency,
       time_limit_per_question: settings.time_limit_per_question ?? null,
@@ -154,6 +172,7 @@ export default function WordSelectionPreview({
     [
       settings.show_image,
       settings.show_option_images,
+      settings.show_example_sentence,
       settings.play_audio,
       settings.target_proficiency,
       settings.time_limit_per_question,

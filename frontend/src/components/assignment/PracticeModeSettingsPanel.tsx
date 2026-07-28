@@ -42,6 +42,7 @@ const TOGGLE_DESC: Partial<Record<SettingKey, string>> = {
   show_translation: `${PM}.showTranslationDesc`,
   show_image: `${PM}.showImageDesc`,
   show_option_images: `${PM}.showOptionImagesDesc`,
+  show_example_sentence: `${PM}.showExampleSentenceDesc`, // Issue #860
   is_live_quiz: `${PM}.liveQuizHint`,
 };
 

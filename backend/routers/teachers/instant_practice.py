@@ -56,11 +56,13 @@ class InstantPracticeRequest(BaseModel):
     show_word: Optional[bool] = True
     show_image: Optional[bool] = True
     show_option_images: Optional[bool] = False  # Issue #631
+    show_example_sentence: Optional[bool] = False  # Issue #860
 
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "InstantPracticeRequest":
         if self.show_image and self.show_option_images:
             raise ValueError("show_image and show_option_images are mutually exclusive")
+        # Issue #860: 「顯示例句」是獨立附加開關，與圖片/選項圖片/播放音檔皆不互斥。
         return self
 
 
@@ -163,6 +165,19 @@ async def create_instant_practice(
     if not content:
         raise HTTPException(status_code=404, detail="Content not found")
 
+    # Issue #860: 即刻練習原本不走派發驗證，但開啟「顯示例句（答案挖空）」後同樣
+    # 需要例句 + 可定位的 cloze 答案，否則學生端挖不出空。重用派發流程同一支守衛，
+    # 讓老師拿到明確 422（而不是靜默退回一般題型）。
+    if request.show_example_sentence:
+        from routers.assignments.crud import _raise_if_missing_examples
+
+        _raise_if_missing_examples(
+            [content],
+            request.practice_mode,
+            bool(request.play_audio),
+            show_example_sentence=True,
+        )
+
     # 複製 Content 和 ContentItem（重用既有邏輯）
     content_copy = Content(
         lesson_id=content.lesson_id,
@@ -217,7 +232,7 @@ async def create_instant_practice(
         db.add(item_copy)
         db.flush()
 
-    # 產生干擾項：word_selection 依 show_image 決定選項語言（#854）；tug_of_war 維持定義
+    # 產生干擾項：word_selection 依 show_image 決定選項語言（#854）；tug_of_war 維持定義。
     if request.practice_mode == "word_selection":
         _regenerate_word_selection_distractors_for_content(
             db, content_copy.id, bool(request.show_image)
@@ -242,6 +257,7 @@ async def create_instant_practice(
         show_word=request.show_word,
         show_image=request.show_image,
         show_option_images=bool(request.show_option_images),  # Issue #631
+        show_example_sentence=bool(request.show_example_sentence),  # Issue #860
         score_category=resolve_score_category(
             request.practice_mode, request.play_audio
         ),
@@ -321,6 +337,7 @@ class InstantPracticeReconfigureRequest(BaseModel):
     show_word: Optional[bool] = True
     show_image: Optional[bool] = True
     show_option_images: Optional[bool] = False  # Issue #631
+    show_example_sentence: Optional[bool] = False  # Issue #860
     target_proficiency: Optional[int] = None
 
     @field_validator("practice_mode")
@@ -333,6 +350,7 @@ class InstantPracticeReconfigureRequest(BaseModel):
     def _option_images_xor_image(self) -> "InstantPracticeReconfigureRequest":
         if self.show_image and self.show_option_images:
             raise ValueError("show_image and show_option_images are mutually exclusive")
+        # Issue #860: 「顯示例句」是獨立附加開關，與圖片/選項圖片/播放音檔皆不互斥。
         return self
 
 
@@ -366,6 +384,30 @@ async def reconfigure_instant_practice(
             status_code=403, detail="You don't have permission for this practice"
         )
 
+    # Issue #860: 與 create_instant_practice / 派發 create·PUT·PATCH 一致 —— 開啟
+    # 「顯示例句（答案挖空）」時，本作業的副本內容必須齊備例句 + 可定位的 cloze 答案。
+    # 少了這道守衛，老師從練習畫面切到「顯示例句」會拿到 200，學生端卻因 fail-closed
+    # 靜默退回一般題型，老師完全不知道教材資料不足。驗證要在寫入設定之前做。
+    if request.show_example_sentence:
+        from routers.assignments.crud import _raise_if_missing_examples
+
+        copy_contents = (
+            db.query(Content)
+            .join(
+                AssignmentContent,
+                AssignmentContent.content_id == Content.id,
+            )
+            .options(selectinload(Content.content_items))
+            .filter(AssignmentContent.assignment_id == assignment.id)
+            .all()
+        )
+        _raise_if_missing_examples(
+            copy_contents,
+            request.practice_mode,
+            bool(request.play_audio),
+            show_example_sentence=True,
+        )
+
     # 更新進階設定
     assignment.practice_mode = request.practice_mode
     assignment.time_limit_per_question = request.time_limit_per_question
@@ -377,6 +419,7 @@ async def reconfigure_instant_practice(
     assignment.show_word = request.show_word
     assignment.show_image = request.show_image
     assignment.show_option_images = bool(request.show_option_images)  # Issue #631
+    assignment.show_example_sentence = bool(request.show_example_sentence)  # Issue #860
     if request.target_proficiency is not None:
         assignment.target_proficiency = request.target_proficiency
     assignment.score_category = resolve_score_category(
