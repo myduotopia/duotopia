@@ -61,6 +61,7 @@ interface ActivityResponse {
   show_word?: boolean;
   show_image?: boolean;
   show_option_images?: boolean;
+  show_example_sentence?: boolean;
   // #854: 即刻練習進階設定面板初值 + 顯示判斷
   quiz_time_limit_seconds?: number | null;
   is_live_quiz?: boolean;
@@ -173,6 +174,7 @@ export default function TeacherAssignmentPreviewPage() {
             show_word: settings.show_word,
             show_image: settings.show_image,
             show_option_images: settings.show_option_images,
+            show_example_sentence: settings.show_example_sentence,
             target_proficiency: settings.target_proficiency,
           },
         );
@@ -262,6 +264,7 @@ export default function TeacherAssignmentPreviewPage() {
           show_word: activityData.show_word,
           show_image: activityData.show_image,
           show_option_images: activityData.show_option_images,
+          show_example_sentence: activityData.show_example_sentence,
         }}
         isPreviewMode={true}
         authToken={token || undefined}

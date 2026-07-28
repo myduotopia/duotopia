@@ -7,6 +7,7 @@ All amount/quota computations are server-side from the Plan row — never
 trust the frontend.
 """
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from zoneinfo import ZoneInfo
@@ -16,6 +17,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from models import (
+    GroupBuyMember,
+    GroupBuyTeam,
     Organization,
     Plan,
     School,
@@ -24,6 +27,9 @@ from models import (
     TeacherOrganization,
     TeacherSchool,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 # Each monthly grant gives this many points to every teacher bound to an
@@ -342,21 +348,31 @@ def grant_monthly_for_group_buy(today: datetime, db: Session) -> dict:
     )
     month_start = today_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
+    # issue #862 read-switch：發點眼前先全量 re-sync，補平任何 best-effort 鏡射
+    # 失敗留下的漂移，確保下方以新表計算資格時是最新狀態（在 advisory lock 內、
+    # commit 前執行，heal 與發點同一交易原子提交）。
+    resync_all_group_buy_teams(db)
+
+    # issue #862 §4.8 B：heal 之後（停用的 org/school 已把 team 翻 inactive）掃描
+    # 「會籍/團隊已結束但個人訂閱仍 paused」的成員 → 恢復殘值。涵蓋團購到期
+    # （subscription_end < now）、退團漏勾即時 hook、團隊/成員被停用。防 P2 吞權益。
+    resume_ended_paused_memberships(db, now=today_local)
+
+    # 資格改讀新表 group_buy_members → group_buy_teams（取代舊 TeacherSchool→
+    # School→Org join）。條件對齊舊語意：成員 active、team active 且訂閱未過期、
+    # 方案 active 且為團購方案、老師 active。
     rows = (
         db.query(Teacher, Plan)
-        .join(TeacherSchool, TeacherSchool.teacher_id == Teacher.id)
-        .join(School, School.id == TeacherSchool.school_id)
-        .join(Plan, Plan.id == School.plan_id)
-        .join(Organization, Organization.id == School.organization_id)
+        .join(GroupBuyMember, GroupBuyMember.teacher_id == Teacher.id)
+        .join(GroupBuyTeam, GroupBuyTeam.id == GroupBuyMember.team_id)
+        .join(Plan, Plan.id == GroupBuyTeam.plan_id)
         .filter(
-            TeacherSchool.is_active.is_(True),
-            School.is_active.is_(True),
+            GroupBuyMember.is_active.is_(True),
+            GroupBuyTeam.is_active.is_(True),
+            GroupBuyTeam.subscription_end >= today_local,
             Teacher.is_active.is_(True),
             Plan.is_active.is_(True),
             Plan.teacher_seats.isnot(None),
-            Organization.org_type == "group_buy",
-            Organization.is_active.is_(True),
-            Organization.subscription_end_date >= today_local,
         )
         .all()
     )
@@ -396,3 +412,474 @@ def grant_monthly_for_group_buy(today: datetime, db: Session) -> dict:
 
     db.commit()
     return counters
+
+
+# ---------- dual-write mirror (issue #862 PR2) ----------
+
+
+def sync_group_buy_team_from_org(org: Organization, db: Session) -> GroupBuyTeam | None:
+    """Idempotently mirror an old-table group-buy Organization (+ its School /
+    TeacherOrganization / TeacherSchool) into the new group_buy_teams /
+    group_buy_members tables (issue #862 方案 B PR2 雙寫).
+
+    Called after every old-table write path (open / add-branch / add-member /
+    renew / leave) inside the same transaction, so the new tables stay fresh
+    while reads still run off the old tables until PR3. Reads the org's CURRENT
+    old-table state and upserts new rows — self-healing against drift, safe to
+    re-run (no duplicate teams/members).
+
+    Returns the synced GroupBuyTeam, or None when the org isn't a syncable
+    group-buy (not group_buy, no active school-with-plan, no active org_owner,
+    or seat_limit fully underivable — mirroring the backfill's skip rules).
+
+    Does NOT commit; the caller owns the transaction. Fields are derived
+    identically to the PR1 backfill so team/member state matches whether a row
+    arrived via backfill or via this live mirror.
+    """
+    if org.org_type != "group_buy":
+        return None
+
+    def _orphan_none() -> None:
+        """issue #862 #2 — the org is (or became) un-syncable: no active
+        school-with-plan / no active org_owner / seat underivable. If a team row
+        already exists for this org, flip it inactive so the read-switched
+        status/roster/grant paths stop surfacing it. This is the ONLY heal for
+        SCHOOL-level deactivation (schools.py delete/update_school flips
+        School.is_active without touching the org or the mirror), which would
+        otherwise leave group_buy_teams.is_active stuck True and keep granting.
+        """
+        existing = (
+            db.query(GroupBuyTeam)
+            .filter(GroupBuyTeam.source_organization_id == org.id)
+            .first()
+        )
+        if existing is not None and existing.is_active:
+            existing.is_active = False
+            db.flush()
+        return None
+
+    # Earliest active school with a plan → source of plan/seat (matches backfill).
+    school = (
+        db.query(School)
+        .filter(
+            School.organization_id == org.id,
+            School.is_active.is_(True),
+            School.plan_id.isnot(None),
+        )
+        .order_by(School.created_at.asc())
+        .first()
+    )
+    if school is None:
+        return _orphan_none()
+    plan = db.query(Plan).filter(Plan.id == school.plan_id).first()
+
+    owner_org = (
+        db.query(TeacherOrganization)
+        .filter(
+            TeacherOrganization.organization_id == org.id,
+            TeacherOrganization.role == "org_owner",
+            TeacherOrganization.is_active.is_(True),
+        )
+        .order_by(TeacherOrganization.created_at.asc())
+        .first()
+    )
+    if owner_org is None:
+        return _orphan_none()
+    owner_id = owner_org.teacher_id
+
+    # seat_limit is NOT NULL; NULL org/school limits mean "unlimited", so fall
+    # back to plan.teacher_seats (guaranteed set for group-buy plans) — same
+    # accepted narrowing as the backfill.
+    seat_limit = (
+        org.teacher_limit
+        if org.teacher_limit is not None
+        else school.teacher_seat_limit
+        if school.teacher_seat_limit is not None
+        else (plan.teacher_seats if plan is not None else None)
+    )
+    if seat_limit is None:
+        return _orphan_none()
+
+    team = (
+        db.query(GroupBuyTeam)
+        .filter(GroupBuyTeam.source_organization_id == org.id)
+        .first()
+    )
+    if team is None:
+        team = GroupBuyTeam(source_organization_id=org.id)
+        db.add(team)
+    team.owner_teacher_id = owner_id
+    team.plan_id = school.plan_id
+    team.seat_limit = int(seat_limit)
+    team.subscription_start = org.subscription_start_date
+    team.subscription_end = org.subscription_end_date
+    team.contact_email = org.contact_email
+    team.contact_phone = org.contact_phone
+    team.is_active = org.is_active
+    db.flush()  # need team.id for member FKs
+
+    # Members: all teacher_schools under the org's ACTIVE schools (aligned with
+    # the team's active-school sourcing). Dedup by teacher, preferring the
+    # active binding so a teacher in two schools keeps their in-team state.
+    # Deterministic order (active first, then school_id) so that when a teacher
+    # has multiple same-active-state bindings across branch schools, the winning
+    # source_school_id is stable across runs rather than DB-order-dependent.
+    ts_rows = (
+        db.query(TeacherSchool)
+        .join(School, School.id == TeacherSchool.school_id)
+        .filter(
+            School.organization_id == org.id,
+            School.is_active.is_(True),
+        )
+        .order_by(TeacherSchool.is_active.desc(), TeacherSchool.school_id.asc())
+        .all()
+    )
+    best_by_teacher: dict[int, TeacherSchool] = {}
+    for ts in ts_rows:
+        cur = best_by_teacher.get(ts.teacher_id)
+        if cur is None or (ts.is_active and not cur.is_active):
+            best_by_teacher[ts.teacher_id] = ts
+
+    for teacher_id, ts in best_by_teacher.items():
+        member = (
+            db.query(GroupBuyMember)
+            .filter(
+                GroupBuyMember.team_id == team.id,
+                GroupBuyMember.teacher_id == teacher_id,
+            )
+            .first()
+        )
+        if member is None:
+            member = GroupBuyMember(team_id=team.id, teacher_id=teacher_id)
+            db.add(member)
+        member.is_owner = teacher_id == owner_id
+        member.is_active = ts.is_active
+        member.source_school_id = ts.school_id
+    db.flush()
+
+    return team
+
+
+def mirror_group_buy_dual_write(org: Organization | None, db: Session) -> None:
+    """Best-effort dual-write of a group-buy org into the new tables (issue #862).
+
+    Wraps ``sync_group_buy_team_from_org`` in a SAVEPOINT so a mirror failure
+    rolls back ONLY the mirror rows — never the caller's real write / charge —
+    then absorbs + logs the error. Shared by every write call site so the
+    SAVEPOINT + logging behaviour lives in one place (review PR #968 #2).
+
+    After the PR3 read-switch the mirror is load-bearing, so a swallowed failure
+    means a briefly stale new-table row; ``resync_all_group_buy_teams`` (run at
+    the monthly cron start) heals that drift, and the ERROR log flags it for ops.
+    """
+    if org is None:
+        return
+    try:
+        with db.begin_nested():
+            sync_group_buy_team_from_org(org, db)
+    except Exception as sync_err:  # noqa: BLE001 - best-effort mirror
+        logger.error(
+            "group-buy dual-write mirror failed (non-fatal; healed by monthly "
+            "re-sync) org=%s: %s",
+            getattr(org, "id", "?"),
+            sync_err,
+        )
+
+
+def resync_all_group_buy_teams(db: Session) -> int:
+    """Re-run the mirror for every group-buy Organization (issue #862).
+
+    Heals drift left by any best-effort mirror write that failed after the
+    read-switch. Idempotent (``sync_group_buy_team_from_org`` upserts). Returns
+    the number of orgs synced. Does NOT commit — caller owns the transaction.
+
+    Does NOT filter on ``Organization.is_active``: a group-buy org can be
+    deactivated / soft-deleted via the generic org endpoints (PUT/DELETE
+    /organizations/{id}) which don't call the mirror, so an inactive org is
+    exactly the drift case we must heal — ``sync_group_buy_team_from_org`` sets
+    ``team.is_active = org.is_active`` regardless, flipping the stale team to
+    inactive so the read-switched status/roster queries stop surfacing it.
+    """
+    orgs = db.query(Organization).filter(Organization.org_type == "group_buy").all()
+    synced = 0
+    for org in orgs:
+        # Per-org SAVEPOINT so one bad org can't abort the whole heal / the
+        # monthly grant transaction it runs inside.
+        try:
+            with db.begin_nested():
+                if sync_group_buy_team_from_org(org, db) is not None:
+                    synced += 1
+        except Exception as sync_err:  # noqa: BLE001 - best-effort heal
+            logger.error(
+                "group-buy re-sync heal failed for org=%s: %s", org.id, sync_err
+            )
+    return synced
+
+
+# ---------- §4.8 pause + extend (residual preservation) ----------
+
+
+def pause_individual_for_member(
+    teacher: Teacher, member: GroupBuyMember, db: Session, *, now: datetime
+) -> bool:
+    """On group-buy join, pause the teacher's active INDIVIDUAL subscription and
+    record the frozen residual on the group_buy_member (issue #862 §4.8).
+
+    Freezes remaining time (`paused_remaining_seconds`) and the paused period id;
+    the period's `quota_used` is left untouched so unused points are preserved.
+    Flips the individual period `status='paused'` (drops it out of `current_period`
+    selection and out of cron Phase-1 expiry) and — critically — turns OFF
+    `subscription_auto_renew` so the monthly renewal cron can't re-charge and
+    create a fresh active individual period that would shadow the group-buy points.
+
+    Idempotent: no-op if the member is already paused. No-op (returns False) if the
+    teacher has no active, not-yet-expired individual period. Does NOT commit.
+    Returns True if a pause was applied.
+    """
+    if member.paused_period_id is not None:
+        return False  # already paused for this membership
+    ind = (
+        db.query(SubscriptionPeriod)
+        .filter(
+            SubscriptionPeriod.teacher_id == teacher.id,
+            SubscriptionPeriod.status == "active",
+            SubscriptionPeriod.payment_method != "group_buy",
+        )
+        .order_by(SubscriptionPeriod.start_date.desc())
+        .first()
+    )
+    if ind is None:
+        return False
+    end = _as_utc(ind.end_date)
+    now_utc = _as_utc(now)
+    if end <= now_utc:
+        return False  # already expired → nothing to preserve; treat as pure member
+
+    member.paused_period_id = ind.id
+    member.paused_remaining_seconds = int((end - now_utc).total_seconds())
+    member.paused_at = now
+    ind.status = "paused"
+    if teacher.subscription_auto_renew:
+        teacher.subscription_auto_renew = False
+        member.individual_auto_renew_suspended = True
+    db.flush()
+    return True
+
+
+def resume_individual_for_member(
+    member: GroupBuyMember, db: Session, *, now: datetime
+) -> bool:
+    """On leave / team-end, restore the paused individual subscription's residual
+    (issue #862 §4.8): shift the frozen period to start at `now` and run for the
+    frozen remaining seconds, with `quota_used` unchanged (unused points carry).
+    Re-enables `subscription_auto_renew` if it was suspended for this membership,
+    so the existing monthly cron takes over once the residual runs out.
+
+    Idempotent: no-op if the member isn't paused, or if the referenced period is
+    no longer `paused` (already resumed elsewhere). Always clears the member's
+    pause bookkeeping so a second trigger can't double-resume. Does NOT commit.
+    Returns True if a period was resumed.
+    """
+    if member.paused_period_id is None:
+        return False
+
+    resumed = False
+    p = (
+        db.query(SubscriptionPeriod)
+        .filter(SubscriptionPeriod.id == member.paused_period_id)
+        .first()
+    )
+    if p is not None and p.status == "paused":
+        p.start_date = now
+        p.end_date = now + timedelta(seconds=member.paused_remaining_seconds or 0)
+        p.status = "active"  # quota_used untouched → points residual preserved
+        resumed = True
+    elif member.individual_auto_renew_suspended:
+        # Period gone / already-resumed elsewhere: residual is unrecoverable, but
+        # we must NOT leave the teacher permanently opted out of auto-renew. Flag
+        # for ops since the bookkeeping recording this is wiped just below.
+        logger.warning(
+            "group-buy resume: paused period %s for member %s missing or no "
+            "longer paused; restoring auto_renew, residual unrecoverable",
+            member.paused_period_id,
+            member.id,
+        )
+
+    # Restore auto_renew whenever WE suspended it — independent of whether the
+    # period could be resumed — so a lost/expired paused period can't strand the
+    # teacher with subscription_auto_renew=False forever.
+    if member.individual_auto_renew_suspended:
+        teacher = db.query(Teacher).filter(Teacher.id == member.teacher_id).first()
+        if teacher is not None:
+            teacher.subscription_auto_renew = True
+
+    # Clear bookkeeping regardless, so a later trigger is a clean no-op.
+    member.paused_period_id = None
+    member.paused_remaining_seconds = None
+    member.individual_auto_renew_suspended = False
+    member.paused_at = None
+    db.flush()
+    return resumed
+
+
+# ---------- §4.8 orchestration (join / leave / team-end / reconcile) ----------
+
+
+def pause_joining_teachers_for_org(
+    org: Organization, teachers: list, db: Session, *, now: datetime
+) -> int:
+    """After a group-buy open / add-member writes the old tables and the mirror
+    has created the group_buy_members rows, pause each joining teacher's active
+    individual subscription (issue #862 §4.8). Idempotent per member. Returns the
+    number actually paused. Does NOT commit.
+    """
+    team = (
+        db.query(GroupBuyTeam)
+        .filter(
+            GroupBuyTeam.source_organization_id == org.id,
+            GroupBuyTeam.is_active.is_(True),
+        )
+        .first()
+    )
+    if team is None:
+        return 0
+    paused = 0
+    for teacher in teachers:
+        member = (
+            db.query(GroupBuyMember)
+            .filter(
+                GroupBuyMember.team_id == team.id,
+                GroupBuyMember.teacher_id == teacher.id,
+            )
+            .first()
+        )
+        if member is not None and pause_individual_for_member(
+            teacher, member, db, now=now
+        ):
+            paused += 1
+    return paused
+
+
+def resume_member_on_group_buy_unbind(
+    teacher_id: int, school_id, db: Session, *, now: datetime
+) -> bool:
+    """Immediate resume trigger (§4.8 A): when a TeacherSchool under a group-buy
+    school is deactivated via the generic schools.py endpoints (which aren't
+    group-buy-aware), restore that member's paused individual subscription right
+    away instead of waiting for the monthly reconcile. No-op for non-group-buy
+    schools or non-paused members. Does NOT commit. Returns True if resumed.
+    """
+    school = db.query(School).filter(School.id == school_id).first()
+    if school is None:
+        return False
+    org = (
+        db.query(Organization)
+        .filter(
+            Organization.id == school.organization_id,
+            Organization.org_type == "group_buy",
+        )
+        .first()
+    )
+    if org is None:
+        return False
+    member = (
+        db.query(GroupBuyMember)
+        .join(GroupBuyTeam, GroupBuyTeam.id == GroupBuyMember.team_id)
+        .filter(
+            GroupBuyTeam.source_organization_id == org.id,
+            GroupBuyMember.teacher_id == teacher_id,
+        )
+        .first()
+    )
+    if member is None:
+        return False
+    return resume_individual_for_member(member, db, now=now)
+
+
+def pause_member_on_group_buy_bind(
+    teacher_id: int, school_id, db: Session, *, now: datetime
+) -> bool:
+    """Immediate pause trigger symmetric to ``resume_member_on_group_buy_unbind``
+    (§4.8 #1): when a teacher is added to / reactivated in a group-buy school via
+    the generic schools.py endpoints (which aren't group-buy-aware and skip the
+    payment/admin join flow), mirror the org so the GroupBuyMember row exists,
+    then pause that teacher's individual subscription right away. Closes the P1
+    double-charge gap on the non-payment join paths — otherwise the teacher keeps
+    auto-renewing their individual sub in parallel with the group-buy grant, and
+    the cron Phase-2 guard wouldn't even see them until the next monthly heal.
+
+    No-op for non-group-buy schools / teachers without an active individual sub.
+    Does NOT commit. Returns True if a pause was applied.
+    """
+    school = db.query(School).filter(School.id == school_id).first()
+    if school is None:
+        return False
+    org = (
+        db.query(Organization)
+        .filter(
+            Organization.id == school.organization_id,
+            Organization.org_type == "group_buy",
+        )
+        .first()
+    )
+    if org is None:
+        return False
+    # Ensure the just-added/reactivated TeacherSchool is visible, then mirror so
+    # the GroupBuyMember row exists (autoflush is off in this project).
+    db.flush()
+    mirror_group_buy_dual_write(org, db)
+    team = (
+        db.query(GroupBuyTeam)
+        .filter(
+            GroupBuyTeam.source_organization_id == org.id,
+            GroupBuyTeam.is_active.is_(True),
+        )
+        .first()
+    )
+    if team is None:
+        return False
+    member = (
+        db.query(GroupBuyMember)
+        .filter(
+            GroupBuyMember.team_id == team.id,
+            GroupBuyMember.teacher_id == teacher_id,
+        )
+        .first()
+    )
+    if member is None:
+        return False
+    teacher = db.query(Teacher).filter(Teacher.id == teacher_id).first()
+    if teacher is None:
+        return False
+    return pause_individual_for_member(teacher, member, db, now=now)
+
+
+def resume_ended_paused_memberships(db: Session, *, now: datetime) -> int:
+    """Backstop resume sweep (§4.8 B + team-end): resume every still-paused member
+    whose group-buy benefit has ended — membership deactivated, team deactivated,
+    or team subscription window elapsed (發起人 didn't renew). Catches any leave
+    path that skipped the immediate hook, and the team-expiry case. Idempotent
+    (resume clears bookkeeping). Returns count resumed. Does NOT commit.
+
+    Run inside the monthly cron (after the re-sync heal, which flips teams of
+    deactivated orgs/schools to inactive so they get swept here too).
+    """
+    now_utc = _as_utc(now)
+    rows = (
+        db.query(GroupBuyMember)
+        .join(GroupBuyTeam, GroupBuyTeam.id == GroupBuyMember.team_id)
+        .filter(
+            GroupBuyMember.paused_period_id.isnot(None),
+            (
+                (GroupBuyMember.is_active.is_(False))
+                | (GroupBuyTeam.is_active.is_(False))
+                | (GroupBuyTeam.subscription_end < now_utc)
+            ),
+        )
+        .all()
+    )
+    resumed = 0
+    for member in rows:
+        if resume_individual_for_member(member, db, now=now):
+            resumed += 1
+    return resumed

@@ -144,6 +144,7 @@ def demo_overrides(
     show_word: Optional[bool] = Query(None),
     show_image: Optional[bool] = Query(None),
     show_option_images: Optional[bool] = Query(None),
+    show_example_sentence: Optional[bool] = Query(None),
     shuffle_questions: Optional[bool] = Query(None),
     time_limit_per_question: Optional[int] = Query(None),
     quiz_time_limit_seconds: Optional[int] = Query(None),
@@ -169,6 +170,7 @@ def demo_overrides(
         "show_word": show_word,
         "show_image": show_image,
         "show_option_images": show_option_images,
+        "show_example_sentence": show_example_sentence,
         "shuffle_questions": shuffle_questions,
         "time_limit_per_question": time_limit_per_question,
         "quiz_time_limit_seconds": quiz_time_limit_seconds,
@@ -188,13 +190,24 @@ def _apply_overrides(assignment: Assignment, overrides: dict) -> Assignment:
         return assignment
 
     effective = dict(overrides)
+
+    # overrides 只含 query string 實際帶到的 key，其餘一律沿用作業已存值 ——
+    # 覆寫是「疊加」而非「取代整組設定」。互斥檢查必須基於這組解析後的有效值，
+    # 否則連結少帶一個參數就會讓守衛靜默失效（#631 show_image×show_option_images）。
+    def _eff(key: str) -> bool:
+        return bool(effective.get(key, getattr(assignment, key, False)))
+
     practice_mode = effective.get("practice_mode", assignment.practice_mode)
-    play_audio = effective.get("play_audio", bool(assignment.play_audio))
-    if effective.get("show_image") and effective.get("show_option_images"):
+    play_audio = _eff("play_audio")
+
+    # Issue #631: show_image 與 show_option_images 互斥
+    if _eff("show_image") and _eff("show_option_images"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="show_image and show_option_images are mutually exclusive",
         )
+    # Issue #860: 「顯示例句」是獨立附加開關，與圖片/選項圖片/播放音檔皆不互斥，
+    # 且不影響選項語言，故此處不需針對它做任何收斂或互斥檢查。
     effective["score_category"] = resolve_score_category(practice_mode, play_audio)
     # type: ignore[return-value] — overlay quacks like Assignment for readers.
     return _AssignmentOverlay(assignment, effective)

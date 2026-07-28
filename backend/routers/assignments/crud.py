@@ -68,9 +68,40 @@ _PRACTICE_MODES_REQUIRING_EXAMPLES = {
     "word_cloze_quiz",
 }
 
+# Issue #860: 單字選擇小考／艾賓浩斯本身不需要例句（考單字本身），但當老師勾選
+# 「顯示例句（答案挖空）」派發條件時，題目改成把單字挖空的例句 → 這兩個模式就
+# 需要完整例句 + cloze 答案，等同 word_cloze。用 flag 動態納入需求判斷，未勾選時
+# 維持原本「無例句也可派發」的行為（見 test_create_allows_word_selection_on_vocab_without_examples）。
+_EXAMPLE_SENTENCE_SELECTION_MODES = {
+    "word_selection",
+    "word_selection_quiz",
+}
+
+
+def _requires_examples(
+    practice_mode: Optional[str], show_example_sentence: bool = False
+) -> bool:
+    if practice_mode in _PRACTICE_MODES_REQUIRING_EXAMPLES:
+        return True
+    if show_example_sentence and practice_mode in _EXAMPLE_SENTENCE_SELECTION_MODES:
+        return True
+    return False
+
+
+def _requires_cloze_answer(
+    practice_mode: Optional[str], show_example_sentence: bool = False
+) -> bool:
+    if practice_mode in ("word_cloze", "word_cloze_quiz"):
+        return True
+    if show_example_sentence and practice_mode in _EXAMPLE_SENTENCE_SELECTION_MODES:
+        return True
+    return False
+
 
 def _collect_contents_missing_examples(
-    contents: List[Content], practice_mode: Optional[str]
+    contents: List[Content],
+    practice_mode: Optional[str],
+    show_example_sentence: bool = False,
 ) -> List[str]:
     """Return titles of vocab contents whose items lack example sentences.
 
@@ -79,7 +110,7 @@ def _collect_contents_missing_examples(
     Caller must ensure ``content.content_items`` are eager-loaded; this helper
     does not query the database.
     """
-    if practice_mode not in _PRACTICE_MODES_REQUIRING_EXAMPLES:
+    if not _requires_examples(practice_mode, show_example_sentence):
         return []
 
     missing_titles: List[str] = []
@@ -95,7 +126,11 @@ def _collect_contents_missing_examples(
     return missing_titles
 
 
-def _requires_sentence_audio(practice_mode: Optional[str], play_audio: bool) -> bool:
+def _requires_sentence_audio(
+    practice_mode: Optional[str],
+    play_audio: bool,
+    show_example_sentence: bool = False,
+) -> bool:
     """Issue #757: which mode + play_audio combos must have audio at dispatch.
 
     Returns True only when the student-facing UX literally cannot work
@@ -103,16 +138,23 @@ def _requires_sentence_audio(practice_mode: Optional[str], play_audio: bool) -> 
       - reading: AI assesses pronunciation against the sentence audio prompt
       - rearrangement w/ play_audio: 聽力重組 needs audio cue
       - word_cloze w/ play_audio: 聽力克漏字 needs audio cue
+      - word_selection(_quiz) w/ show_example_sentence + play_audio (issue #967):
+        例句題型「例句即題目」，開播放音檔時播的是例句音檔 → 缺音檔就播不出來
     """
     if practice_mode == "reading":
         return True
     if practice_mode in ("rearrangement", "word_cloze", "word_cloze_quiz"):
         return bool(play_audio)
+    if show_example_sentence and practice_mode in _EXAMPLE_SENTENCE_SELECTION_MODES:
+        return bool(play_audio)
     return False
 
 
 def _collect_contents_missing_audio(
-    contents: List[Content], practice_mode: Optional[str], play_audio: bool
+    contents: List[Content],
+    practice_mode: Optional[str],
+    play_audio: bool,
+    show_example_sentence: bool = False,
 ) -> List[str]:
     """Return titles of contents whose items lack example sentence audio.
 
@@ -124,7 +166,7 @@ def _collect_contents_missing_audio(
     Items without an example_sentence are skipped here — they're already
     rejected by ``_collect_contents_missing_examples`` upstream.
     """
-    if not _requires_sentence_audio(practice_mode, play_audio):
+    if not _requires_sentence_audio(practice_mode, play_audio, show_example_sentence):
         return []
 
     missing_titles: List[str] = []
@@ -146,7 +188,9 @@ def _collect_contents_missing_audio(
 
 
 def _collect_contents_missing_cloze_answer(
-    contents: List[Content], practice_mode: Optional[str]
+    contents: List[Content],
+    practice_mode: Optional[str],
+    show_example_sentence: bool = False,
 ) -> List[str]:
     """Return titles of contents whose items lack an explicit cloze answer.
 
@@ -163,7 +207,7 @@ def _collect_contents_missing_cloze_answer(
     Items without an example sentence are skipped — they're already rejected
     by ``_collect_contents_missing_examples`` upstream.
     """
-    if practice_mode not in ("word_cloze", "word_cloze_quiz"):
+    if not _requires_cloze_answer(practice_mode, show_example_sentence):
         return []
 
     from utils.cloze import find_cloze_match
@@ -185,6 +229,7 @@ def _raise_if_missing_examples(
     contents: List[Content],
     practice_mode: Optional[str],
     play_audio: bool = False,
+    show_example_sentence: bool = False,
 ) -> None:
     """Raise 422 when vocab contents miss example data (text, audio, or cloze).
 
@@ -192,9 +237,12 @@ def _raise_if_missing_examples(
     validation only runs for the modes that actually need audio at runtime
     (issue #757); no audio backfill happens at dispatch any more — the
     teacher must regenerate via the AI button in the vocab set editor.
-    Cloze-answer validation runs for word_cloze (issue #632).
+    Cloze-answer validation runs for word_cloze (issue #632), and for
+    word_selection(_quiz) when show_example_sentence is on (issue #860).
     """
-    missing = _collect_contents_missing_examples(contents, practice_mode)
+    missing = _collect_contents_missing_examples(
+        contents, practice_mode, show_example_sentence
+    )
     if missing:
         raise HTTPException(
             status_code=422,
@@ -205,7 +253,9 @@ def _raise_if_missing_examples(
             },
         )
 
-    missing_audio = _collect_contents_missing_audio(contents, practice_mode, play_audio)
+    missing_audio = _collect_contents_missing_audio(
+        contents, practice_mode, play_audio, show_example_sentence
+    )
     if missing_audio:
         raise HTTPException(
             status_code=422,
@@ -217,7 +267,9 @@ def _raise_if_missing_examples(
             },
         )
 
-    missing_cloze = _collect_contents_missing_cloze_answer(contents, practice_mode)
+    missing_cloze = _collect_contents_missing_cloze_answer(
+        contents, practice_mode, show_example_sentence
+    )
     if missing_cloze:
         raise HTTPException(
             status_code=422,
@@ -338,7 +390,10 @@ async def create_assignment(
     # audio is missing. Teachers must fix the source vocab set first (the AI
     # button on each row regenerates both the sentence and its TTS audio).
     _raise_if_missing_examples(
-        contents, request.practice_mode, request.play_audio or False
+        contents,
+        request.practice_mode,
+        request.play_audio or False,
+        bool(request.show_example_sentence),
     )
 
     # Sanitize answer_mode - deprecated field with database constraint
@@ -377,6 +432,9 @@ async def create_assignment(
         show_image=request.show_image,
         show_translation=request.show_translation,
         show_option_images=bool(request.show_option_images),  # Issue #631
+        # Issue #860: 「顯示例句（答案挖空）」是獨立附加開關，只在選項上方多顯示挖空
+        # 例句；選項語言仍由 show_image 決定，與圖片/選項圖片/播放音檔皆不互斥。
+        show_example_sentence=bool(request.show_example_sentence),
         # score_category is auto-resolved; any client-supplied value is ignored.
         # See docs/design/score-category-mapping.md
         score_category=resolve_score_category(
@@ -863,7 +921,22 @@ async def update_assignment(
     effective_play_audio = (
         request.play_audio if request.play_audio is not None else assignment.play_audio
     )
-    _raise_if_missing_examples(new_contents, effective_mode, bool(effective_play_audio))
+    # Issue #860: 必須用「request 有給就用、沒給就沿用現值」解析，不能直接
+    # bool(request.show_example_sentence)。這支 PUT 主要用途是換 content_ids，
+    # 呼叫端通常不會重送這個 flag（schema 也沒要求），若當成 False 會讓已開啟
+    # 例句挖空的作業換上「沒有例句/cloze 答案」的教材而驗證不到。
+    # 與上面的 effective_play_audio 同一套處理（本端點僅驗證、不寫回進階設定）。
+    effective_show_example_sentence = (
+        request.show_example_sentence
+        if request.show_example_sentence is not None
+        else assignment.show_example_sentence
+    )
+    _raise_if_missing_examples(
+        new_contents,
+        effective_mode,
+        bool(effective_play_audio),
+        bool(effective_show_example_sentence),
+    )
 
     # 更新基本資訊
     assignment.title = request.title
@@ -986,11 +1059,37 @@ async def patch_assignment(
         "show_image",
         "show_translation",
         "show_option_images",  # Issue #631
+        "show_example_sentence",  # Issue #860
     ]
     prev_show_image = assignment.show_image
     for field in advanced_fields:
         if field in provided:
             setattr(assignment, field, getattr(request, field))
+
+    # Issue #860: 開啟「顯示例句（答案挖空）」時，本作業的副本內容必須齊備例句 +
+    # cloze 答案，否則學生端題目會空白/挖不出空。與 play_audio 一樣，只在「切換為
+    # 開」時重新驗證；關閉永遠安全。
+    if (
+        "show_example_sentence" in provided
+        and assignment.show_example_sentence
+        and _requires_examples(assignment.practice_mode, True)
+    ):
+        copy_contents = (
+            db.query(Content)
+            .join(
+                AssignmentContent,
+                AssignmentContent.content_id == Content.id,
+            )
+            .options(selectinload(Content.content_items))
+            .filter(AssignmentContent.assignment_id == assignment_id)
+            .all()
+        )
+        _raise_if_missing_examples(
+            copy_contents,
+            assignment.practice_mode,
+            bool(assignment.play_audio),
+            show_example_sentence=True,
+        )
 
     # Issue #835 / #884 item 1: live 模式僅對 whitelist 的小考有效
     # （practice_mode 在 PATCH 不可變）

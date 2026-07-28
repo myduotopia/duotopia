@@ -368,6 +368,10 @@ def _common_settings(assignment: Assignment) -> Dict[str, Any]:
         "time_limit_per_question": assignment.time_limit_per_question,
         # Issue #828: 整卷限時（秒）— null 不限時
         "quiz_time_limit_seconds": assignment.quiz_time_limit_seconds,
+        # Issue #860: 顯示例句（答案挖空）
+        "show_example_sentence": bool(
+            getattr(assignment, "show_example_sentence", False)
+        ),
     }
 
 
@@ -447,7 +451,11 @@ def _build_selection_options(
 ) -> Dict[int, List[Dict[str, Any]]]:
     """Build option lists per item, mirroring selection/start's distractor rules."""
     show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(show_image)
+    # Issue #967: 例句題型選項一律英文。且例句時不可用 stored distractors —— 它們依
+    # show_image 分語言儲存，show_image=關 時是中文，會出現「正解英文＋干擾中文」，
+    # 改用英文 pool 現組（pool＝其他單字的英文 text，與 stored 同來源、品質等價）。
+    show_example = bool(getattr(assignment, "show_example_sentence", False))
+    answer_key = text_field_for_show_image(show_image, show_example)
 
     pool = [
         {
@@ -466,7 +474,7 @@ def _build_selection_options(
         rng = random.Random(item.id)
         correct_text = getattr(item, answer_key) or ""
         stored = normalize_distractors(item.distractors)
-        if len(stored) >= 3:
+        if not show_example and len(stored) >= 3:
             distractors = list(stored[:3])
         else:
             target = correct_text.lower().strip()
@@ -508,7 +516,9 @@ async def start_word_selection_quiz(
     options_by_item = _build_selection_options(items, assignment)
 
     show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(show_image)
+    answer_key = text_field_for_show_image(
+        show_image, bool(getattr(assignment, "show_example_sentence", False))
+    )
 
     existing = _existing_answers_for_session(db, session.id)
 
@@ -523,6 +533,8 @@ async def start_word_selection_quiz(
             "audio_url": item.audio_url,
             "image_url": item.image_url,
             "options": options_by_item[item.id],
+            # Issue #860: 顯示例句（答案挖空）所需資料（含後端算好的 blanked_sentence）
+            **_example_cloze_fields(item),
             "prior_answer": (
                 prior.answer_data.get("selected_answer")
                 if prior and prior.answer_data
@@ -581,7 +593,9 @@ async def submit_word_selection_quiz_answer(
     # selected option against the item's answer text, same field/normalisation as
     # _build_selection_options uses to build the correct option.
     show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(show_image)
+    answer_key = text_field_for_show_image(
+        show_image, bool(getattr(assignment, "show_example_sentence", False))
+    )
     correct_text = getattr(item, answer_key) or ""
     is_correct = request.selected_answer.strip().lower() == correct_text.strip().lower()
 
@@ -730,6 +744,39 @@ def _resolve_cloze_answer(item: ContentItem) -> str:
     return word or sentence
 
 
+def _example_cloze_fields(item: ContentItem) -> Dict[str, Any]:
+    """Issue #860: 例句挖空題所需欄位，含後端算好的 blanked_sentence。
+
+    挖空一律由後端算（沿用 word_cloze 的 extract_cloze_for_item），前端只負責
+    渲染，避免兩邊比對規則漂移 —— 例如 cloze_answer="apple" 但句中是 "apples"
+    時，若前端自行用子字串比對會殘留 "s" 而洩漏答案。
+    extract_cloze_for_item 本身已含 fallback 鏈（存的答案 → 單字本身 → 句中挑字），
+    所以缺 cloze_answer 的舊資料/範例教材也挖得出來。
+    """
+    from utils.cloze import extract_cloze_for_item, collapse_to_single_blank
+
+    cloze = extract_cloze_for_item(item)
+    # 刻意不送 example_sentence_translation：翻譯會直接講出該單字洩漏答案。
+    # Issue #967: 例句題型即「例句就是題目」，開播放音檔時改播例句音檔，故送
+    # example_sentence_audio_url。已知取捨：例句音檔會唸出整句（含挖空單字），
+    # 可能透露答案 —— 依產品決策照送（老師自行決定是否同時開播放音檔）。
+    #
+    # Fail closed：挖不出空時回空字串，不可退回原句 —— 原句幾乎必然含答案，
+    # 等於把答案直接印在題目上。派發流程有 _raise_if_missing_examples 擋住這種
+    # 資料，但即刻練習／demo 覆寫不跑該驗證，所以這裡必須自己守住。
+    # 前端拿到空字串會退回一般題型呈現（顯示單字／翻譯），不會開天窗。
+    # cloze_answer 也一律跟著 cloze 結果走（挖不出空就給空字串），與
+    # students/assignments.py 的等價處理一致；先前 fallback 到
+    # _resolve_cloze_answer 在極端髒資料下可能回整句。
+    # Issue #860: 收合成單一格 —— 選擇題顯示格數等於洩漏答案字數。
+    return {
+        "example_sentence": item.example_sentence or "",
+        "example_sentence_audio_url": item.example_sentence_audio_url,
+        "cloze_answer": cloze[1] if cloze else "",
+        "blanked_sentence": collapse_to_single_blank(cloze[0]) if cloze else "",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Quiz payload builders (#861 D / #923) — shared by teacher-preview and public
 # demo endpoints. Cross all vocabulary sets, shuffle by ``shuffle_questions``,
@@ -743,7 +790,9 @@ def build_selection_quiz_payload(assignment: Assignment, db: Session) -> Dict[st
     items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
     options_by_item = _build_selection_options(items, assignment)
     show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(show_image)
+    answer_key = text_field_for_show_image(
+        show_image, bool(getattr(assignment, "show_example_sentence", False))
+    )
 
     def builder(item: ContentItem) -> Dict[str, Any]:
         correct = getattr(item, answer_key) or ""
@@ -755,6 +804,8 @@ def build_selection_quiz_payload(assignment: Assignment, db: Session) -> Dict[st
             "audio_url": item.audio_url,
             "image_url": item.image_url,
             "options": options_by_item[item.id],
+            # Issue #860: 顯示例句（答案挖空）所需資料
+            **_example_cloze_fields(item),
         }
 
     words = _attach_question_numbers(items, builder)
@@ -1308,6 +1359,8 @@ async def review_word_selection_quiz(
             "audio_url": item.audio_url,
             "image_url": item.image_url,
             "options": options,
+            # Issue #860: 訂正/回顧頁也要能重現挖空例句題
+            **_example_cloze_fields(item),
         }
 
     return _build_review_response(

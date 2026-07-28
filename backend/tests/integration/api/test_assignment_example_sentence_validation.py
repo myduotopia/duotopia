@@ -426,6 +426,282 @@ def test_create_allows_word_selection_on_vocab_without_examples(fresh_db):
     assert resp.status_code == 200, resp.text
 
 
+# --- Issue #860: show_example_sentence gates example + cloze requirement ----
+
+
+@pytest.mark.parametrize("practice_mode", ["word_selection", "word_selection_quiz"])
+def test_create_rejects_example_flag_when_sentence_missing(fresh_db, practice_mode):
+    """With show_example_sentence on, the selection family DOES need example
+    sentences — the题目 becomes a blanked example. Missing sentence ⇒ 422."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Word-only",
+        [{"text": "cat", "translation": "貓"}],  # no example sentence
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode=practice_mode,
+            show_example_sentence=True,
+        ),
+    )
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "EXAMPLE_SENTENCE_REQUIRED"
+    assert detail["content_titles"] == ["Word-only"]
+
+
+@pytest.mark.parametrize("practice_mode", ["word_selection", "word_selection_quiz"])
+def test_create_rejects_example_flag_when_cloze_answer_missing(fresh_db, practice_mode):
+    """Sentence + translation present but no cloze_answer ⇒ CLOZE_ANSWER_REQUIRED
+    (we must know which word to blank out, same as word_cloze)."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "No-Cloze",
+        [
+            {
+                "text": "apple",
+                "translation": "蘋果",
+                "example_sentence": "I eat an apple.",
+                "example_sentence_translation": "我吃一顆蘋果。",
+                # cloze_answer deliberately omitted
+            }
+        ],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode=practice_mode,
+            show_example_sentence=True,
+        ),
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "CLOZE_ANSWER_REQUIRED"
+
+
+@pytest.mark.parametrize("practice_mode", ["word_selection", "word_selection_quiz"])
+def test_create_allows_example_flag_with_full_data(fresh_db, practice_mode):
+    """Full example sentence + translation + matching cloze_answer ⇒ 200."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Complete",
+        [
+            {
+                "text": "apple",
+                "translation": "蘋果",
+                "example_sentence": "I eat an apple.",
+                "example_sentence_translation": "我吃一顆蘋果。",
+                "cloze_answer": "apple",
+            }
+        ],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode=practice_mode,
+            show_example_sentence=True,
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_create_without_example_flag_stays_permissive(fresh_db):
+    """Regression guard: word_selection_quiz WITHOUT the flag must still be
+    dispatchable on a vocab set that has no example sentences at all."""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Word-only",
+        [{"text": "cat", "translation": "貓"}],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=False,
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_patch_toggling_example_flag_on_validates_missing_example(fresh_db):
+    """Issue #860: PATCH 把 show_example_sentence 從關切成開時，必須重新驗證本作業
+    的副本內容有例句 + cloze 答案（鏡射 play_audio toggle 的守衛）。原本以
+    show_example_sentence=False 派發（無例句也可），後來 PATCH 開啟 → 應 422。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Word-only",
+        [{"text": "cat", "translation": "貓"}],  # 無例句
+    )
+    db.close()
+
+    token = _login_teacher()
+    headers = {"Authorization": f"Bearer {token}"}
+    created = client.post(
+        "/api/teachers/assignments/create",
+        headers=headers,
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=False,  # 起始關閉 → 無例句也可派發
+        ),
+    )
+    assert created.status_code == 200, created.text
+    assignment_id = created.json()["assignment_id"]
+
+    resp = client.patch(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers=headers,
+        json={"show_example_sentence": True},  # 切開 → 需重新驗證
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "EXAMPLE_SENTENCE_REQUIRED"
+
+
+def test_instant_practice_reconfigure_validates_example_flag(fresh_db):
+    """Issue #860: 即刻練習 reconfigure（老師在練習畫面切到「顯示例句」）也必須
+    驗證教材有例句 + cloze 答案。少了守衛會回 200，學生端卻靜默退回一般題型，
+    老師不知道資料不足 —— 與其他所有寫入路徑不一致。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    no_example = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "NoExample",
+        [
+            {"text": "cat", "translation": "貓"},
+            {"text": "dog", "translation": "狗"},
+            {"text": "bird", "translation": "鳥"},
+            {"text": "fish", "translation": "魚"},
+        ],
+    )
+    db.close()
+
+    token = _login_teacher()
+    headers = {"Authorization": f"Bearer {token}"}
+    created = client.post(
+        "/api/teachers/instant-practice/create",
+        headers=headers,
+        json={
+            "content_id": no_example,
+            "classroom_id": seed["classroom_id"],
+            "practice_mode": "word_selection",
+            "show_image": False,
+        },
+    )
+    assert created.status_code == 200, created.text
+    assignment_id = created.json()["assignment_id"]
+
+    # 切到「顯示例句」— 教材沒有例句，應被擋下
+    resp = client.patch(
+        f"/api/teachers/instant-practice/{assignment_id}/reconfigure",
+        headers=headers,
+        json={
+            "practice_mode": "word_selection",
+            "show_example_sentence": True,
+            "show_image": False,
+        },
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "EXAMPLE_SENTENCE_REQUIRED"
+
+
+def test_put_uses_persisted_example_flag_when_not_resent(fresh_db):
+    """Issue #860 回歸：PUT（換 content_ids）通常不會重送 show_example_sentence。
+    若當成 False，已開啟例句挖空的作業就能換上「沒有例句」的教材而驗證不到。
+    必須沿用作業上已存的旗標來驗證。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    good = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Good",
+        [
+            {
+                "text": "apple",
+                "translation": "蘋果",
+                "example_sentence": "I eat an apple.",
+                "example_sentence_translation": "我吃一顆蘋果。",
+                "cloze_answer": "apple",
+            }
+        ],
+    )
+    bad = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "NoExample",
+        [{"text": "dog", "translation": "狗"}],  # 無例句
+    )
+    db.close()
+
+    token = _login_teacher()
+    created = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [good],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=True,
+        ),
+    )
+    assert created.status_code == 200, created.text
+    assignment_id = created.json()["assignment_id"]
+
+    # 換成沒有例句的教材，且「不重送」show_example_sentence
+    resp = client.put(
+        f"/api/teachers/assignments/{assignment_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [bad],
+            title="換教材",
+            practice_mode="word_selection_quiz",
+        ),
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "EXAMPLE_SENTENCE_REQUIRED"
+
+
 # --- update_assignment (PUT) validation ----------------------------------
 
 
@@ -736,6 +1012,100 @@ def test_create_allows_word_cloze_without_play_audio_when_audio_missing(fresh_db
             [content_id],
             practice_mode="word_cloze",
             play_audio=False,
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+# --- Issue #967: word_selection example-audio validation ------------------
+
+
+def test_create_rejects_word_selection_quiz_when_example_audio_missing(fresh_db):
+    """Issue #967: word_selection_quiz + show_example_sentence + play_audio 播的是
+    例句音檔（例句即題目）→ 缺 example_sentence_audio_url 必須在派發階段擋下。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Selection No Audio",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=True,
+            play_audio=True,
+        ),
+    )
+
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "EXAMPLE_AUDIO_REQUIRED"
+    assert detail["practice_mode"] == "word_selection_quiz"
+    assert detail["play_audio"] is True
+    assert detail["content_titles"] == ["Selection No Audio"]
+
+
+def test_create_allows_word_selection_example_without_play_audio_missing_audio(
+    fresh_db,
+):
+    """show_example_sentence 但沒開 play_audio → 例句以文字呈現，不需例句音檔。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Selection Text Only",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=True,
+            play_audio=False,
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_create_allows_word_selection_play_audio_without_example_sentence(fresh_db):
+    """沒開 show_example_sentence → word_selection 考單字本身、不碰例句音檔，
+    即使教材缺例句音檔也可派發（play_audio 播的是單字音檔）。"""
+    db = TestingSessionLocal()
+    seed = _seed_minimal(db)
+    content_id = _add_vocab_content(
+        db,
+        seed["lesson_id"],
+        "Selection Word Audio",
+        [_full_text_item(audio_url=None)],
+    )
+    db.close()
+
+    token = _login_teacher()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json=_create_payload(
+            seed["classroom_id"],
+            [content_id],
+            practice_mode="word_selection_quiz",
+            show_example_sentence=False,
+            play_audio=True,
         ),
     )
     assert resp.status_code == 200, resp.text
