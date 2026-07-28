@@ -11,12 +11,17 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import Plan, School, Teacher, TeacherSchool
+from models import GroupBuyMember, GroupBuyTeam, Plan, Teacher
 
 
 def get_teacher_topup_discount(teacher: Teacher, db: Session) -> Optional[Decimal]:
-    """Return MIN(topup_discount) across the teacher's active group-buy schools,
+    """Return MIN(topup_discount) across the teacher's active group-buy teams,
     or None if the teacher has no group-buy binding.
+
+    issue #862 read-switch：改讀新表 group_buy_members → group_buy_teams → Plan
+    （取代舊 TeacherSchool → School → Plan join），與其餘團購讀取路徑一致，讓折扣
+    在最後停舊寫後仍正確。語意對齊舊版：只看 active 綁定（member + team is_active），
+    不看 subscription_end（行為保持）。
 
     Detection of "group-buy plan" is by `Plan.teacher_seats IS NOT NULL` —
     matches `_guard_group_buy` in config/plans.py. Filtering only on
@@ -26,12 +31,12 @@ def get_teacher_topup_discount(teacher: Teacher, db: Session) -> Optional[Decima
     """
     raw = (
         db.query(func.min(Plan.topup_discount))
-        .join(School, School.plan_id == Plan.id)
-        .join(TeacherSchool, TeacherSchool.school_id == School.id)
+        .join(GroupBuyTeam, GroupBuyTeam.plan_id == Plan.id)
+        .join(GroupBuyMember, GroupBuyMember.team_id == GroupBuyTeam.id)
         .filter(
-            TeacherSchool.teacher_id == teacher.id,
-            TeacherSchool.is_active.is_(True),
-            School.is_active.is_(True),
+            GroupBuyMember.teacher_id == teacher.id,
+            GroupBuyMember.is_active.is_(True),
+            GroupBuyTeam.is_active.is_(True),
             Plan.is_active.is_(True),
             Plan.teacher_seats.isnot(None),  # canonical group-buy signal
             Plan.topup_discount.isnot(None),

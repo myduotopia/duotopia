@@ -83,22 +83,50 @@ export function BatchTranslateSettings({
     return <div className="space-y-2">{languageSelector}</div>;
   }
 
-  // card variant
+  // card variant（緊湊：啟用時語言下拉內嵌標題行右側、收窄；停用只留一行）
+  const showCustomBelow =
+    enabled && supportsCustomLanguage && selectedLanguage === "other";
   return (
-    <div className="bg-green-50 rounded-lg border border-green-200 overflow-hidden">
-      <div className="flex items-center gap-2 p-3">
+    <div className="bg-green-50/60 rounded-lg border border-green-200">
+      <div className="flex items-center gap-2 p-2.5">
         <input
           type="checkbox"
           checked={enabled}
           onChange={(e) => onEnabledChange(e.target.checked)}
           className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
-        <Globe className="h-4 w-4" />
-        <span className="text-sm font-semibold text-gray-800">
+        <Globe className="h-4 w-4 shrink-0" />
+        <span className="text-sm font-semibold text-gray-800 whitespace-nowrap">
           {t("contentEditor.labels.aiGenerateTranslation")}
         </span>
+        {enabled && (
+          <select
+            value={selectedLanguage}
+            onChange={(e) => onLanguageChange(e.target.value)}
+            className="ml-auto max-w-[140px] px-2 py-1 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">{t("contentEditor.labels.selectLanguage")}</option>
+            {languages.map((lang) => (
+              <option key={lang.value} value={lang.value}>
+                {lang.value === "other"
+                  ? t("contentEditor.labels.otherLanguage")
+                  : lang.label}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
-      {enabled && <div className="px-3 pb-3 space-y-2">{languageSelector}</div>}
+      {showCustomBelow && (
+        <div className="px-2.5 pb-2.5">
+          <input
+            type="text"
+            value={customLanguage}
+            onChange={(e) => onCustomLanguageChange?.(e.target.value)}
+            placeholder={t("contentEditor.labels.enterLanguage")}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+      )}
     </div>
   );
 }

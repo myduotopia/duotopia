@@ -23,6 +23,7 @@ export interface InstantPracticeSettingsInput {
   show_word?: boolean;
   show_image?: boolean;
   show_option_images?: boolean;
+  show_example_sentence?: boolean;
 }
 
 /** Build panel initial values from a response (missing fields → sane defaults). */
@@ -41,5 +42,6 @@ export function buildInstantPracticeSettings(
     show_word: d.show_word ?? true,
     show_image: d.show_image ?? true,
     show_option_images: Boolean(d.show_option_images),
+    show_example_sentence: Boolean(d.show_example_sentence),
   };
 }

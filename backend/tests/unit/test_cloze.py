@@ -212,3 +212,32 @@ class TestBlankIsWordCount:
         assert answer == "two pieces of cake"
         # 四個單字 → 四個挖空格
         assert blanked == "I ate _ _ _ _."
+
+
+# --- Issue #860: 單字選擇例句題的單一格收合 -------------------------------
+
+
+def test_collapse_to_single_blank_merges_phrase_blanks():
+    """片語答案的多格挖空要收合成一格 —— 選擇題顯示格數等於洩漏答案字數。"""
+    from utils.cloze import collapse_to_single_blank
+
+    assert (
+        collapse_to_single_blank("I love to _ _ of landscapes.")
+        == "I love to _ of landscapes."
+    )
+    assert collapse_to_single_blank("Give me _ _ _ _ please.") == "Give me _ please."
+
+
+def test_collapse_to_single_blank_leaves_single_blank_untouched():
+    from utils.cloze import collapse_to_single_blank
+
+    assert collapse_to_single_blank("I eat an _.") == "I eat an _."
+    assert collapse_to_single_blank("") == ""
+
+
+def test_build_blank_still_per_word_for_word_cloze():
+    """word_cloze（打字作答）維持一字一格 —— #880 的刻意設計，不受 #860 影響。"""
+    from utils.cloze import build_blank
+
+    assert build_blank("cake") == "_"
+    assert build_blank("two pieces of cake") == "_ _ _ _"

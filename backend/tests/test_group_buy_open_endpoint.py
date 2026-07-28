@@ -12,6 +12,8 @@ import pytest
 
 from auth import create_access_token, get_password_hash
 from models import (
+    GroupBuyMember,
+    GroupBuyTeam,
     Organization,
     Plan,
     School,
@@ -197,6 +199,124 @@ def test_happy_path_creates_org_school_binding_period(
     assert txn.status == "SUCCESS"
     assert txn.amount == gb_plan.annual_fee * gb_plan.teacher_seats
     assert txn.subscription_type == gb_plan.name
+
+    # issue #862 PR2 雙寫：開團端點應於同一交易鏡射到新表（讀取仍走舊表）。
+    # 這鎖定 call-site wiring（傳對 org、交易順序），非只測 pure function。
+    team = (
+        shared_test_session.query(GroupBuyTeam)
+        .filter(GroupBuyTeam.source_organization_id == org.id)
+        .one()
+    )
+    assert team.owner_teacher_id == teacher.id
+    assert team.plan_id == gb_plan.id
+    assert team.seat_limit == gb_plan.teacher_seats
+    owner_member = (
+        shared_test_session.query(GroupBuyMember)
+        .filter(
+            GroupBuyMember.team_id == team.id,
+            GroupBuyMember.teacher_id == teacher.id,
+        )
+        .one()
+    )
+    assert owner_member.is_owner is True
+    assert owner_member.is_active is True
+
+
+def test_open_pauses_leader_existing_individual_subscription(
+    test_client, auth_header, teacher, gb_plan, shared_test_session
+):
+    """issue #862 §4.8：發起人開團前若已有有效個人訂閱，開團後該個人 period 應被
+    暫停（status=paused）且 auto_renew 關掉（防 P1 重複收費）。端點級整合驗證。"""
+    from datetime import datetime, timedelta, timezone
+
+    teacher.subscription_auto_renew = True
+    ind = SubscriptionPeriod(
+        teacher_id=teacher.id,
+        plan_name="Tutor Teachers",
+        amount_paid=299,
+        quota_total=2000,
+        quota_used=300,
+        start_date=datetime.now(timezone.utc) - timedelta(days=5),
+        end_date=datetime.now(timezone.utc) + timedelta(days=90),
+        payment_method="manual",
+        payment_status="paid",
+        status="active",
+    )
+    shared_test_session.add(ind)
+    shared_test_session.commit()
+
+    mock_tappay = Mock()
+    mock_tappay.process_payment.return_value = {
+        "status": 0,
+        "rec_trade_id": "REC-PAUSE",
+        "card_secret": {},
+    }
+    with patch("routers.credit_packages.ENABLE_PAYMENT", True), patch(
+        "routers.credit_packages.TapPayService", return_value=mock_tappay
+    ):
+        r = test_client.post(
+            "/api/credit-packages/group-buy-open",
+            json={"prime": "prime-x", "plan_name": gb_plan.name},
+            headers=auth_header,
+        )
+    assert r.status_code == 200, r.json()
+
+    shared_test_session.expire_all()
+    shared_test_session.refresh(ind)
+    assert ind.status == "paused"  # 個人訂閱被暫停凍結
+    t2 = shared_test_session.query(Teacher).filter(Teacher.id == teacher.id).one()
+    assert t2.subscription_auto_renew is False  # 關掉月扣防 P1
+
+
+def test_open_survives_mirror_failure(
+    test_client, auth_header, teacher, gb_plan, shared_test_session, monkeypatch
+):
+    """issue #862：雙寫鏡射失敗**不可**讓一筆已扣款的開團被 rollback→退款。
+    強迫 sync 拋錯，斷言端點仍成功、org/school/period 仍寫入、team 未建（鏡射回滾）。"""
+    import services.group_buy as gb
+
+    def _boom(org, db):
+        raise RuntimeError("mirror boom")
+
+    monkeypatch.setattr(gb, "sync_group_buy_team_from_org", _boom)
+
+    mock_tappay = Mock()
+    mock_tappay.process_payment.return_value = {
+        "status": 0,
+        "rec_trade_id": "REC-BOOM",
+        "card_secret": {},
+    }
+    with patch("routers.credit_packages.ENABLE_PAYMENT", True), patch(
+        "routers.credit_packages.TapPayService", return_value=mock_tappay
+    ):
+        r = test_client.post(
+            "/api/credit-packages/group-buy-open",
+            json={"prime": "prime-x", "plan_name": gb_plan.name},
+            headers=auth_header,
+        )
+
+    assert r.status_code == 200, r.json()  # 已扣款購買未被鏡射失敗連累
+    body = r.json()
+    shared_test_session.expire_all()
+    # 真實寫入仍 commit
+    assert (
+        shared_test_session.query(Organization)
+        .filter(Organization.id == body["organization_id"])
+        .one()
+    )
+    assert (
+        shared_test_session.query(SubscriptionPeriod)
+        .filter(SubscriptionPeriod.teacher_id == teacher.id)
+        .count()
+        >= 1
+    )
+    # 鏡射（SAVEPOINT）已回滾 → 無 team 列
+    assert (
+        shared_test_session.query(GroupBuyTeam)
+        .filter(GroupBuyTeam.source_organization_id == body["organization_id"])
+        .count()
+        == 0
+    )
 
 
 def test_repeat_open_adds_school_to_existing_org(

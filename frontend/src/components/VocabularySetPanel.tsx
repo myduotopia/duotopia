@@ -34,6 +34,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import MagicPasteDialog from "@/components/shared/MagicPasteDialog";
+import MagicPasteInput, {
+  type MagicPasteItem,
+} from "@/components/shared/MagicPasteInput";
+import {
+  detectLang,
+  exampleContainsWord,
+  deriveClozeAnswer,
+} from "@/utils/magicPasteHelpers";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import {
   TTS_ACCENTS,
@@ -1957,6 +1966,8 @@ const VocabularySetPanel = forwardRef<
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [batchPasteDialogOpen, setBatchPasteDialogOpen] = useState(false);
+  // 魔術貼上（issue #891）
+  const [magicPasteOpen, setMagicPasteOpen] = useState(false);
   const [batchPasteText, setBatchPasteText] = useState("");
   const [batchPasteAutoTTS, setBatchPasteAutoTTS] = useState(true);
   const [batchPasteAutoTranslate, setBatchPasteAutoTranslate] = useState(true);
@@ -1976,6 +1987,12 @@ const VocabularySetPanel = forwardRef<
     totalSteps: number;
   } | null>(null);
   const batchPauseRef = useRef(false);
+  // 魔術貼上插入後補洞用的一次性旗標（issue #891）：翻譯 + 詞性 + 生成例句 + 例句翻譯 + 語音
+  const magicGapFillRef = useRef(false);
+  const magicPosFillRef = useRef(false);
+  const magicExampleGenRef = useRef(false);
+  const magicExampleFillRef = useRef(false);
+  const magicTtsFillRef = useRef(false);
   const [duplicateMap, setDuplicateMap] = useState<Map<number, string[]>>(
     new Map(),
   );
@@ -2177,6 +2194,112 @@ const VocabularySetPanel = forwardRef<
       example_sentence_translation: "",
     };
     setRows([...rows, newRow]);
+  };
+
+  // 魔術貼上（issue #891）：把 AI 擷取的項目併入現有行。
+  // 先把右側「空白列」（含初始的預設空行）填滿，剩餘的再往下新增。
+  const handleMagicPasteInsert = (pastedItems: MagicPasteItem[]) => {
+    if (!pastedItems.length) return;
+
+    const isEmptyRow = (r: ContentRow) =>
+      !r.text.trim() && !r.definition.trim();
+    // exampleContainsWord / deriveClozeAnswer / detectLang 抽到 utils/magicPasteHelpers
+    // 以便單元測試（review PR #943 round-3 #3、#4）。
+    const makeRow = (item: MagicPasteItem, id: string | number): ContentRow => {
+      // 例句沒有對應到該單字（或變化形）→ 留空，不硬塞不相干的句子。
+      const example =
+        item.example_sentence &&
+        exampleContainsWord(item.text, item.example_sentence)
+          ? item.example_sentence
+          : "";
+      const trans = item.translation || "";
+      // 一律擷取：把翻譯放進「它自己語言」的欄位（英文釋義→translation、中文→definition…）
+      const captured = detectLang(trans) || "chinese";
+      // 顯示語言：勾了 AI 自動翻譯 → 顯示使用者選的語言（讓 AI 補該語言翻譯）；
+      // 沒勾 → 顯示擷取到的語言與內容。
+      const displayLang = (
+        batchPasteAutoTranslate ? lastSelectedWordLang || captured : captured
+      ) as WordTranslationLanguage;
+      return {
+        id,
+        text: item.text,
+        definition: captured === "chinese" ? trans : "",
+        translation: captured === "english" ? trans : "",
+        japanese_translation: captured === "japanese" ? trans : "",
+        korean_translation: captured === "korean" ? trans : "",
+        imageUrl: "",
+        selectedWordLanguage: displayLang,
+        partsOfSpeech: item.part_of_speech ? [item.part_of_speech] : undefined,
+        example_sentence: example,
+        example_sentence_translation: example
+          ? item.example_sentence_translation || ""
+          : "",
+        cloze_answer: deriveClozeAnswer(item.text, example),
+      };
+    };
+
+    const filledCount = rows.filter((r) => !isEmptyRow(r)).length;
+    const capacity = BATCH_PASTE_MAX - filledCount;
+    if (capacity <= 0) {
+      toast.error(t("contentEditor.messages.maxRowsReached"));
+      return;
+    }
+    const toAdd = pastedItems.slice(0, capacity);
+
+    let maxId = Math.max(0, ...rows.map((r) => parseInt(String(r.id)) || 0));
+    let idx = 0;
+    // 1) 先填滿現有空白列（保留原 id）
+    const filled = rows.map((r) => {
+      if (isEmptyRow(r) && idx < toAdd.length) {
+        return makeRow(toAdd[idx++], r.id);
+      }
+      return r;
+    });
+    // 2) 剩餘的往下新增
+    const appended: ContentRow[] = [];
+    while (idx < toAdd.length) {
+      maxId += 1;
+      appended.push(makeRow(toAdd[idx++], maxId.toString()));
+    }
+
+    setRows([...filled, ...appended]);
+    // 插入時補洞：詞性一律補齊；翻譯/例句翻譯只在勾了「AI 自動翻譯」時補。
+    // 勾了就把所有缺「選定語言」翻譯的列補上（擷取到的可能是別的語言，例如英文釋義，
+    // handleBatchGenerateDefinitions 只翻缺選定語言欄位的列，已有者略過）。
+    if (batchPasteAutoTranslate) {
+      magicGapFillRef.current = true;
+    }
+    magicPosFillRef.current = true;
+    // 勾了 AI 生成例句 → 對「沒例句」的列（本來就沒擷取到、或例句不含該字被清掉）
+    // 在插入時生成例句（連同例句翻譯 / 音檔 / 克漏字）。
+    if (aiGenerateExpanded) {
+      magicExampleGenRef.current = true;
+    }
+    // 勾了 AI 自動翻譯、且有「圖上已有例句」但缺翻譯 → 插入時翻譯那些例句
+    if (
+      batchPasteAutoTranslate &&
+      toAdd.some(
+        (it) =>
+          it.example_sentence?.trim() &&
+          !it.example_sentence_translation?.trim(),
+      )
+    ) {
+      magicExampleFillRef.current = true;
+    }
+    // 勾了 AI 生成語音 → 插入時補單字與例句音檔
+    if (batchPasteAutoTTS) {
+      magicTtsFillRef.current = true;
+    }
+
+    if (pastedItems.length > toAdd.length) {
+      toast.warning(
+        t("contentEditor.messages.batchPasteLimit", { max: BATCH_PASTE_MAX }),
+      );
+    } else {
+      toast.success(
+        t("contentEditor.magicPaste.insertedN", { count: toAdd.length }),
+      );
+    }
   };
 
   const handleDeleteRow = (index: number) => {
@@ -3325,6 +3448,309 @@ const VocabularySetPanel = forwardRef<
     }
   };
 
+  // 只補「詞性」：對有單字但沒詞性的列，用 batchTranslateWithPos 取詞性（忽略其翻譯，
+  // 保留圖上/既有的翻譯）。functional setRows + 再次判空，避免覆蓋翻譯補洞的結果。
+  const fillMissingPosForWords = async () => {
+    // 以 row.id 對位（非陣列索引），避免補洞 await 期間老師拖曳重排/增刪列時寫錯列
+    // （review PR #943 round-3 #1）。
+    const targets = rows
+      .filter(
+        (r) =>
+          r.text?.trim() && (!r.partsOfSpeech || r.partsOfSpeech.length === 0),
+      )
+      .map((r) => ({ id: r.id, text: r.text.trim() }));
+    if (!targets.length) return;
+    try {
+      const resp = (await apiClient.batchTranslateWithPos(
+        targets.map((tg) => tg.text),
+        "zh-TW",
+      )) as { results?: { parts_of_speech?: string[] }[] };
+      const results = resp.results || [];
+      setRows((prev) => {
+        const nr = [...prev];
+        targets.forEach((tg, k) => {
+          const pos = results[k]?.parts_of_speech;
+          if (!pos?.length) return;
+          const idx = nr.findIndex((r) => r.id === tg.id);
+          if (idx < 0) return;
+          const cur = nr[idx];
+          if (!cur.partsOfSpeech || cur.partsOfSpeech.length === 0) {
+            nr[idx] = { ...cur, partsOfSpeech: convertAbbreviatedPOS(pos) };
+          }
+        });
+        return nr;
+      });
+    } catch (e) {
+      console.error("POS fill error:", e);
+    }
+  };
+
+  // 生成例句：對「有單字、沒例句」的列（本來沒擷取到、或例句不含該字被清掉）用
+  // AI 生成例句（後端一併回傳例句翻譯 / 音檔 / 克漏字）。使用左側「AI 生成例句」設定
+  // （難度 / 提示 / 翻譯成），語音沿用 AI 生成語音勾選與語音設定。functional setRows
+  // + 再判空，不覆蓋已有例句。
+  const fillMissingExamples = async () => {
+    // 以 row.id 對位（review PR #943 round-3 #1）
+    const targets = rows
+      .filter((r) => r.text?.trim() && !r.example_sentence?.trim())
+      .map((r) => ({
+        id: r.id,
+        text: r.text.trim(),
+        definition: r.definition || "",
+        partsOfSpeech: r.partsOfSpeech || [],
+      }));
+    if (!targets.length) return;
+
+    let targetLanguage = "";
+    if (aiGenerateTranslateLang === "other") {
+      targetLanguage = customSentenceTranslationLang || "";
+    } else if (aiGenerateTranslateLang) {
+      targetLanguage =
+        SENTENCE_TRANSLATION_LANGUAGES.find(
+          (l) => l.value === aiGenerateTranslateLang,
+        )?.code || "";
+    }
+
+    try {
+      const response = await apiClient.generateSentences({
+        words: targets.map((t) => t.text),
+        definitions: targets.map((t) => t.definition),
+        lesson_id: lessonId,
+        level: aiGenerateLevel,
+        prompt: aiGeneratePrompt || undefined,
+        translate_to: targetLanguage || undefined,
+        parts_of_speech: targets.map((t) => t.partsOfSpeech),
+        audio_settings: batchPasteAutoTTS
+          ? {
+              accent: batchTTSAccent,
+              gender: batchTTSGender,
+              speed: batchTTSSpeed,
+            }
+          : undefined,
+      });
+      const sentences = response.sentences;
+      if (!sentences || !Array.isArray(sentences)) return;
+      const resultMap = new Map(sentences.map((s) => [s.word, s]));
+      setRows((prev) => {
+        const nr = [...prev];
+        targets.forEach((tg) => {
+          const idx = nr.findIndex((r) => r.id === tg.id);
+          if (idx < 0) return;
+          const cur = nr[idx];
+          if (cur.example_sentence?.trim()) return; // 已有例句不覆蓋
+          const m = resultMap.get(cur.text);
+          if (!m || !m.sentence) return;
+          nr[idx] = {
+            ...cur,
+            example_sentence: m.sentence,
+            example_sentence_translation: m.translation || "",
+            example_sentence_audio_url: m.audio_url || "",
+            cloze_answer: m.cloze_answer || "",
+          };
+        });
+        return nr;
+      });
+    } catch (e) {
+      console.error("example generation fill error:", e);
+    }
+  };
+
+  // 只補「例句翻譯」：對有例句但沒例句翻譯的列，用 batchTranslate 翻譯例句本身
+  // （對應圖上已有例句、但沒有例句翻譯的情境）。目標語言取「翻譯成」設定，
+  // 未設定則沿用單字翻譯語言，最後 fallback 中文；english/other 不適用例句翻譯故用中文。
+  const fillMissingExampleTranslations = async () => {
+    let target = (aiGenerateTranslateLang ||
+      lastSelectedWordLang ||
+      "chinese") as string;
+    if (target !== "japanese" && target !== "korean") target = "chinese";
+    const langCode =
+      SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === target)?.code ||
+      "zh-TW";
+    const getField = (r: ContentRow) =>
+      target === "japanese"
+        ? r.example_sentence_japanese
+        : target === "korean"
+          ? r.example_sentence_korean
+          : r.example_sentence_translation;
+    // 以 row.id 對位（review PR #943 round-3 #1）
+    const targets = rows
+      .filter((r) => r.example_sentence?.trim() && !(getField(r) || "").trim())
+      .map((r) => ({ id: r.id, example: r.example_sentence!.trim() }));
+    if (!targets.length) return;
+    try {
+      const resp = (await apiClient.batchTranslate(
+        targets.map((tg) => tg.example),
+        langCode,
+      )) as { translations?: string[] };
+      const translations = resp.translations || [];
+      setRows((prev) => {
+        const nr = [...prev];
+        targets.forEach((tg, k) => {
+          const tr = translations[k];
+          if (!tr) return;
+          const idx = nr.findIndex((r) => r.id === tg.id);
+          if (idx < 0) return;
+          const cur = nr[idx];
+          if (!cur.example_sentence?.trim()) return;
+          if ((getField(cur) || "").trim()) return; // 已有翻譯就不覆蓋
+          if (target === "japanese") {
+            nr[idx] = {
+              ...cur,
+              example_sentence_japanese: tr,
+              selectedSentenceLanguage: "japanese",
+            };
+          } else if (target === "korean") {
+            nr[idx] = {
+              ...cur,
+              example_sentence_korean: tr,
+              selectedSentenceLanguage: "korean",
+            };
+          } else {
+            nr[idx] = {
+              ...cur,
+              example_sentence_translation: tr,
+              selectedSentenceLanguage: "chinese",
+            };
+          }
+        });
+        return nr;
+      });
+    } catch (e) {
+      console.error("example translation fill error:", e);
+    }
+  };
+
+  // 只補「音檔」：勾了 AI 生成語音時，對缺單字音檔、缺例句音檔的列各自產生 TTS。
+  // 沿用左側語音設定（口音/性別/語速）；Random 時逐題不同語音，否則批次同一語音。
+  const fillMissingAudio = async () => {
+    const toFullUrl = (u: string) =>
+      u.startsWith("http") ? u : `${import.meta.env.VITE_API_URL}${u}`;
+    // 以 row.id 對位（review PR #943 round-3 #1）
+    const wordTargets = rows
+      .filter((r) => r.text?.trim() && !r.audioUrl && !r.audio_url)
+      .map((r) => ({ id: r.id, text: r.text.trim() }));
+    const exampleTargets = rows
+      .filter(
+        (r) => r.example_sentence?.trim() && !r.example_sentence_audio_url,
+      )
+      .map((r) => ({ id: r.id, example: r.example_sentence!.trim() }));
+    if (!wordTargets.length && !exampleTargets.length) return;
+
+    const isRandom = batchTTSAccent === "Random" || batchTTSGender === "Random";
+    const genOne = async (text: string): Promise<string> => {
+      const { voice, rate } = getVoiceAndRate(
+        batchTTSAccent,
+        batchTTSGender,
+        batchTTSSpeed,
+      );
+      const r = await apiClient.generateTTS(text, voice, rate, "+0%");
+      return r && typeof r === "object" && "audio_url" in r
+        ? toFullUrl((r as { audio_url: string }).audio_url)
+        : "";
+    };
+    const genBatch = async (texts: string[]): Promise<string[]> => {
+      const { voice, rate } = getVoiceAndRate(
+        batchTTSAccent,
+        batchTTSGender,
+        batchTTSSpeed,
+      );
+      const r = await apiClient.batchGenerateTTS(texts, voice, rate, "+0%");
+      return r &&
+        typeof r === "object" &&
+        "audio_urls" in r &&
+        Array.isArray((r as { audio_urls: string[] }).audio_urls)
+        ? (r as { audio_urls: string[] }).audio_urls.map(toFullUrl)
+        : [];
+    };
+
+    // 以 row.id 為鍵，避免 reorder/增刪列造成音檔掛錯列
+    const wordUrls = new Map<string | number, string>();
+    const exampleUrls = new Map<string | number, string>();
+    try {
+      if (isRandom) {
+        for (const t of wordTargets) {
+          const u = await genOne(t.text);
+          if (u) wordUrls.set(t.id, u);
+        }
+        for (const t of exampleTargets) {
+          const u = await genOne(t.example);
+          if (u) exampleUrls.set(t.id, u);
+        }
+      } else {
+        if (wordTargets.length) {
+          const urls = await genBatch(wordTargets.map((t) => t.text));
+          wordTargets.forEach((t, k) => {
+            if (urls[k]) wordUrls.set(t.id, urls[k]);
+          });
+        }
+        if (exampleTargets.length) {
+          const urls = await genBatch(exampleTargets.map((t) => t.example));
+          exampleTargets.forEach((t, k) => {
+            if (urls[k]) exampleUrls.set(t.id, urls[k]);
+          });
+        }
+      }
+      setRows((prev) =>
+        prev.map((r) => {
+          let next = r;
+          const wu = wordUrls.get(r.id);
+          if (wu && !next.audioUrl) next = { ...next, audioUrl: wu };
+          const eu = exampleUrls.get(r.id);
+          if (eu && !next.example_sentence_audio_url)
+            next = { ...next, example_sentence_audio_url: eu };
+          return next;
+        }),
+      );
+    } catch (e) {
+      console.error("audio fill error:", e);
+    }
+  };
+
+  // 魔術貼上插入後補洞：rows 更新後依旗標依序補齊「翻譯 → 詞性 → 例句翻譯 → 語音」。
+  // 依序 await（各步之間 tick 讓 setRows 提交），避免 setRows 互相覆蓋。
+  useEffect(() => {
+    const needTranslate = magicGapFillRef.current;
+    const needPos = magicPosFillRef.current;
+    const needExampleGen = magicExampleGenRef.current;
+    const needExample = magicExampleFillRef.current;
+    const needTts = magicTtsFillRef.current;
+    if (
+      !needTranslate &&
+      !needPos &&
+      !needExampleGen &&
+      !needExample &&
+      !needTts
+    )
+      return;
+    magicGapFillRef.current = false;
+    magicPosFillRef.current = false;
+    magicExampleGenRef.current = false;
+    magicExampleFillRef.current = false;
+    magicTtsFillRef.current = false;
+    void (async () => {
+      // handleBatchGenerateDefinitions 用 snapshot setRows，必須最先跑；其餘皆 functional。
+      if (needTranslate) await handleBatchGenerateDefinitions();
+      if (needPos) {
+        await new Promise((r) => setTimeout(r, 0));
+        await fillMissingPosForWords();
+      }
+      // 先「生成例句」（連同例句翻譯/音檔/克漏字），再補圖上已有例句的缺翻譯，避免重工
+      if (needExampleGen) {
+        await new Promise((r) => setTimeout(r, 0));
+        await fillMissingExamples();
+      }
+      if (needExample) {
+        await new Promise((r) => setTimeout(r, 0));
+        await fillMissingExampleTranslations();
+      }
+      if (needTts) {
+        await new Promise((r) => setTimeout(r, 0));
+        await fillMissingAudio();
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
+
   // Example sentence translation functions
   const handleGenerateExampleTranslation = async (index: number) => {
     const currentLang = rows[index].selectedSentenceLanguage || "chinese";
@@ -4439,7 +4865,10 @@ const VocabularySetPanel = forwardRef<
   }
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-200px)]">
+    // 不鎖高度：根容器隨內容長高，捲動交給外層（Dialog 的 overflow 區）。
+    // 若在此鎖 max-h，中間 flex row 會被壓死，左側 sticky 面板只能在那段高度內
+    // 移動、捲過就被帶走 —— 這正是左側區塊會「被上面吃掉」的原因。
+    <div className="flex flex-col">
       {/* Fixed Header Section */}
       <div className="flex-shrink-0 space-y-4 pb-4">
         {/* Title Input - Show in both create and edit mode */}
@@ -4459,6 +4888,19 @@ const VocabularySetPanel = forwardRef<
 
         {/* Mobile only: Batch Actions buttons */}
         <div className="flex flex-wrap gap-2 md:hidden">
+          {/* 魔術貼上（issue #891）— 作業副本不提供 */}
+          {!isAssignmentCopy && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMagicPasteOpen(true)}
+              className="bg-purple-100 hover:bg-purple-200 border-purple-300"
+              title="從圖片 / PDF 擷取教材"
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              魔術貼上
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -4548,67 +4990,54 @@ const VocabularySetPanel = forwardRef<
             }}
             isBusy={isBatchPasting}
             progress={batchProgress}
+            imageTab={
+              <MagicPasteInput
+                extractMode="vocabulary"
+                level={aiGenerateLevel}
+                onInsert={handleMagicPasteInsert}
+                validateBeforeExtract={() => {
+                  // 勾了翻譯但沒選語言 → 擋下（避免白白消耗配額）
+                  if (batchPasteAutoTranslate && !lastSelectedWordLang)
+                    return t("contentEditor.labels.selectLanguage");
+                  if (
+                    batchPasteAutoTranslate &&
+                    lastSelectedWordLang === "other" &&
+                    !customTranslationLang.trim()
+                  )
+                    return t("contentEditor.labels.enterCustomLanguage");
+                  // 勾了 AI 生成例句但沒選例句翻譯語言 → 擋下
+                  if (aiGenerateExpanded && !aiGenerateTranslateLang)
+                    return t("contentEditor.labels.selectExampleLanguage");
+                  if (
+                    aiGenerateExpanded &&
+                    aiGenerateTranslateLang === "other" &&
+                    !customSentenceTranslationLang.trim()
+                  )
+                    return t("contentEditor.labels.enterCustomLanguage");
+                  return null;
+                }}
+              />
+            }
           >
-            {/* AI Generate Examples */}
-            <div className="mt-4 bg-purple-50 rounded-lg border border-purple-200 overflow-hidden">
-              <div className="flex items-center gap-2 p-3">
+            {/* AI Generate Examples（緊湊版）*/}
+            <div className="mt-3 bg-purple-50/60 rounded-lg border border-purple-200">
+              <div className="flex items-center gap-2 p-2.5">
                 <input
                   type="checkbox"
                   checked={aiGenerateExpanded}
                   onChange={(e) => setAiGenerateExpanded(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="h-4 w-4 shrink-0" />
                 <span className="text-sm font-semibold text-gray-800">
                   {t("vocabularySet.modals.aiGenerateExamplesTitle")}
                 </span>
                 <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">
                   Beta
                 </span>
-              </div>
-              {aiGenerateExpanded && (
-                <div className="px-3 pb-3 space-y-3">
-                  {/* Difficulty Level */}
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
-                      {t("vocabularySet.labels.difficultyLevel")}
-                    </label>
-                    <div className="flex flex-wrap gap-1">
-                      {["A1", "A2", "B1", "B2", "C1", "C2"].map((level) => (
-                        <button
-                          key={level}
-                          onClick={() => setAiGenerateLevel(level)}
-                          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-                            aiGenerateLevel === level
-                              ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
-                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                          }`}
-                        >
-                          {level}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* AI Prompt */}
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
-                      {t("vocabularySet.labels.aiPrompt")}
-                    </label>
-                    <textarea
-                      value={aiGeneratePrompt}
-                      onChange={(e) => setAiGeneratePrompt(e.target.value)}
-                      placeholder={t(
-                        "vocabularySet.placeholders.aiPromptExample",
-                      )}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-none"
-                      rows={2}
-                    />
-                  </div>
-
-                  {/* Sentence translation language selector */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs text-gray-600 block">
+                {aiGenerateExpanded && (
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <label className="text-[11px] text-gray-500 shrink-0">
                       {t("vocabularySet.labels.translateTo")}
                     </label>
                     <select
@@ -4639,7 +5068,7 @@ const VocabularySetPanel = forwardRef<
                           }),
                         );
                       }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className="max-w-[130px] px-2 py-1 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="">
                         {t("contentEditor.labels.selectLanguage")}
@@ -4653,18 +5082,56 @@ const VocabularySetPanel = forwardRef<
                         {t("contentEditor.labels.otherLanguage")}
                       </option>
                     </select>
-                    {aiGenerateTranslateLang === "other" && (
-                      <input
-                        type="text"
-                        value={customSentenceTranslationLang}
-                        onChange={(e) =>
-                          setCustomSentenceTranslationLang(e.target.value)
-                        }
-                        placeholder={t("contentEditor.labels.enterLanguage")}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      />
-                    )}
                   </div>
+                )}
+              </div>
+              {aiGenerateExpanded && (
+                <div className="px-2.5 pb-2.5 space-y-2">
+                  {/* Difficulty Level — 標籤與 chips 同一行 */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-[11px] text-gray-500 shrink-0">
+                      {t("vocabularySet.labels.difficultyLevel")}
+                    </label>
+                    <div className="flex flex-wrap gap-1">
+                      {["A1", "A2", "B1", "B2", "C1", "C2"].map((level) => (
+                        <button
+                          key={level}
+                          onClick={() => setAiGenerateLevel(level)}
+                          className={`px-2 py-0.5 rounded text-xs font-medium transition-all ${
+                            aiGenerateLevel === level
+                              ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
+                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                          }`}
+                        >
+                          {level}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* AI Prompt */}
+                  <textarea
+                    value={aiGeneratePrompt}
+                    onChange={(e) => setAiGeneratePrompt(e.target.value)}
+                    placeholder={t(
+                      "vocabularySet.placeholders.aiPromptExample",
+                    )}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-none"
+                    rows={2}
+                  />
+
+                  {/* 「翻譯成」語言選單已移至標題行右上角；此處僅保留自訂語言輸入 */}
+                  {aiGenerateTranslateLang === "other" && (
+                    <input
+                      type="text"
+                      value={customSentenceTranslationLang}
+                      onChange={(e) =>
+                        setCustomSentenceTranslationLang(e.target.value)
+                      }
+                      placeholder={t("contentEditor.labels.enterLanguage")}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -4683,6 +5150,7 @@ const VocabularySetPanel = forwardRef<
               items={rows.map((row) => row.id)}
               strategy={verticalListSortingStrategy}
             >
+              {/* 小題清單自然增長、跟著頁面往下滑；左側批次區改用定高 + sticky 固定 */}
               <div className="flex-1 space-y-3 pr-2">
                 {rows.map((row, index) => {
                   // useSortable must be called inside the component that's in SortableContext
@@ -4824,6 +5292,15 @@ const VocabularySetPanel = forwardRef<
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 魔術貼上 Dialog（issue #891）*/}
+      <MagicPasteDialog
+        open={magicPasteOpen}
+        onClose={() => setMagicPasteOpen(false)}
+        onInsert={handleMagicPasteInsert}
+        level={aiGenerateLevel}
+        extractMode="vocabulary"
+      />
 
       {/* Batch Paste Dialog (Mobile only - desktop uses inline left panel) */}
       <Dialog
