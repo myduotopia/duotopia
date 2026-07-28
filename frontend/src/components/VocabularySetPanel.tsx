@@ -1994,11 +1994,19 @@ const VocabularySetPanel = forwardRef<
 
   // 多義 Picker 狀態（英英釋義 / 中文翻譯皆可）
   const [definitionPicker, setDefinitionPicker] = useState<{
-    rowIndex: number;
+    // #957: 以穩定的 row.id 定位目標列，避免多義選擇器在 await 期間
+    // 列被重排/刪除後，用捕捉到的 index 寫到別列。
+    rowId: string | number;
     word: string;
     options: string[];
     targetLang: WordTranslationLanguage;
   } | null>(null);
+
+  // #957: 追蹤「例句翻譯」正在 in-flight 的 row.id。
+  // 例句翻譯語言選單 onChange 會清空所有列的例句翻譯欄，
+  // 若清空與翻譯回寫交錯，會把剛寫入的結果清掉；此 ref 讓 onChange
+  // 略過正在翻譯的列。用 ref 而非 state：只在事件當下讀取，不需觸發重繪。
+  const translatingSentenceRowsRef = useRef<Set<string | number>>(new Set());
 
   // AI 生成例句對話框狀態
   const [aiGenerateModalOpen, setAiGenerateModalOpen] = useState(false);
@@ -3032,8 +3040,15 @@ const VocabularySetPanel = forwardRef<
     index: number,
     targetLang: WordTranslationLanguage,
   ) => {
-    const newRows = [...rows];
-    if (!newRows[index].text) {
+    // #957: 送出請求前先鎖定該列的穩定 id 與來源文字。
+    // await 期間列可能被重排/刪除/其他翻譯回寫，捕捉的 index 會失效，
+    // 回來後一律用 rowId 在最新的 rows 內定位目標列並 deep copy 該列，
+    // 不再用整包淺拷貝快照覆寫回去。
+    const sourceRow = rows[index];
+    if (!sourceRow) return;
+    const rowId = sourceRow.id;
+    const sourceText = sourceRow.text;
+    if (!sourceText) {
       toast.error(t("contentEditor.messages.enterTextFirst"));
       return;
     }
@@ -3041,8 +3056,7 @@ const VocabularySetPanel = forwardRef<
     // 檢查是否需要自動辨識詞性（詞性陣列為空且翻譯成中文）
     const needAutoDetectPOS =
       targetLang === "chinese" &&
-      (!newRows[index].partsOfSpeech ||
-        newRows[index].partsOfSpeech.length === 0);
+      (!sourceRow.partsOfSpeech || sourceRow.partsOfSpeech.length === 0);
 
     const langConfig = WORD_TRANSLATION_LANGUAGES.find(
       (l) => l.value === targetLang,
@@ -3053,81 +3067,109 @@ const VocabularySetPanel = forwardRef<
       if (needAutoDetectPOS) {
         // 使用新的 API 同時翻譯和辨識詞性（僅中文）
         const response = await apiClient.translateWithPos(
-          newRows[index].text,
+          sourceText,
           langConfig?.code || "zh-TW",
         );
-
-        // 自動填入詞性（轉換縮寫為完整名稱）
-        if (response.parts_of_speech && response.parts_of_speech.length > 0) {
-          newRows[index].partsOfSpeech = convertAbbreviatedPOS(
-            response.parts_of_speech,
-          );
-        }
 
         // 中文多義檢查
         const multiDefs = parseMultipleDefinitions(response.translation);
         if (multiDefs.length > 1) {
           setDefinitionPicker({
-            rowIndex: index,
-            word: newRows[index].text,
+            rowId,
+            word: sourceText,
             options: multiDefs,
             targetLang: "chinese",
           });
-          newRows[index].selectedWordLanguage = targetLang;
-          setRows(newRows);
+          setRows((prev) =>
+            prev.map((r) => {
+              if (r.id !== rowId) return r;
+              const next = { ...r };
+              // 自動填入詞性（轉換縮寫為完整名稱）
+              if (
+                response.parts_of_speech &&
+                response.parts_of_speech.length > 0
+              ) {
+                next.partsOfSpeech = convertAbbreviatedPOS(
+                  response.parts_of_speech,
+                );
+              }
+              next.selectedWordLanguage = targetLang;
+              return next;
+            }),
+          );
           return;
         }
 
         // 單個定義：去掉編號前綴，提取詞性
         const parsed = extractPosFromTranslation(response.translation);
-        if (parsed.pos) {
-          newRows[index].partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
-        }
-        newRows[index].definition = parsed.text;
+        setRows((prev) =>
+          prev.map((r) => {
+            if (r.id !== rowId) return r;
+            const next = { ...r };
+            if (
+              response.parts_of_speech &&
+              response.parts_of_speech.length > 0
+            ) {
+              next.partsOfSpeech = convertAbbreviatedPOS(
+                response.parts_of_speech,
+              );
+            }
+            if (parsed.pos) {
+              next.partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
+            }
+            next.definition = parsed.text;
+            next.selectedWordLanguage = targetLang;
+            return next;
+          }),
+        );
       } else {
         // 已有詞性或非中文，只翻譯不改變詞性
         const response = (await apiClient.translateText(
-          newRows[index].text,
+          sourceText,
           langConfig?.code || "zh-TW",
         )) as { translation: string };
 
         // 多義檢查：所有語言，若有多個定義則彈出選擇器
-        {
-          const multiDefs = parseMultipleDefinitions(response.translation);
-          if (multiDefs.length > 1) {
-            setDefinitionPicker({
-              rowIndex: index,
-              word: newRows[index].text,
-              options: multiDefs,
-              targetLang,
-            });
-            newRows[index].selectedWordLanguage = targetLang;
-            setRows(newRows);
-            return;
-          }
+        const multiDefs = parseMultipleDefinitions(response.translation);
+        if (multiDefs.length > 1) {
+          setDefinitionPicker({
+            rowId,
+            word: sourceText,
+            options: multiDefs,
+            targetLang,
+          });
+          setRows((prev) =>
+            prev.map((r) =>
+              r.id === rowId ? { ...r, selectedWordLanguage: targetLang } : r,
+            ),
+          );
+          return;
         }
 
         // 根據目標語言寫入對應欄位
-        {
-          const parsed = extractPosFromTranslation(response.translation);
-          if (parsed.pos) {
-            newRows[index].partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
-          }
-          if (targetLang === "chinese") {
-            newRows[index].definition = parsed.text;
-          } else if (targetLang === "english") {
-            newRows[index].translation = parsed.text;
-          } else if (targetLang === "japanese") {
-            newRows[index].japanese_translation = parsed.text;
-          } else if (targetLang === "korean") {
-            newRows[index].korean_translation = parsed.text;
-          }
-        }
+        const parsed = extractPosFromTranslation(response.translation);
+        setRows((prev) =>
+          prev.map((r) => {
+            if (r.id !== rowId) return r;
+            const next = { ...r };
+            if (parsed.pos) {
+              next.partsOfSpeech = convertAbbreviatedPOS([parsed.pos]);
+            }
+            if (targetLang === "chinese") {
+              next.definition = parsed.text;
+            } else if (targetLang === "english") {
+              next.translation = parsed.text;
+            } else if (targetLang === "japanese") {
+              next.japanese_translation = parsed.text;
+            } else if (targetLang === "korean") {
+              next.korean_translation = parsed.text;
+            }
+            next.selectedWordLanguage = targetLang;
+            return next;
+          }),
+        );
       }
 
-      // 記錄最後選擇的語言
-      newRows[index].selectedWordLanguage = targetLang;
-      setRows(newRows);
       toast.success(
         needAutoDetectPOS
           ? t("vocabularySet.messages.translationAndPOSComplete")
@@ -3293,8 +3335,14 @@ const VocabularySetPanel = forwardRef<
     index: number,
     targetLang: SentenceTranslationLanguage,
   ) => {
-    const newRows = [...rows];
-    if (!newRows[index].example_sentence) {
+    // #957: 送出請求前先鎖定該列的穩定 id 與來源例句，來源固定為 example_sentence，
+    // 絕不會抓到「單字翻譯」那段文字。回來後用 rowId 定位並 deep copy 目標列，
+    // 找不到（已被刪）就放棄寫入。
+    const sourceRow = rows[index];
+    if (!sourceRow) return;
+    const rowId = sourceRow.id;
+    const sourceSentence = sourceRow.example_sentence;
+    if (!sourceSentence) {
       toast.error(t("vocabularySet.messages.enterExampleFirst"));
       return;
     }
@@ -3304,28 +3352,37 @@ const VocabularySetPanel = forwardRef<
     );
     toast.info(t("vocabularySet.messages.generatingExampleTranslation"));
 
+    // 標記此列例句翻譯進行中，避免語言選單 onChange 清空正在寫入的列
+    translatingSentenceRowsRef.current.add(rowId);
     try {
       const response = (await apiClient.translateText(
-        newRows[index].example_sentence!,
+        sourceSentence,
         langConfig?.code || "zh-TW",
       )) as { translation: string };
 
-      // 根據目標語言寫入對應欄位
-      if (targetLang === "chinese") {
-        newRows[index].example_sentence_translation = response.translation;
-      } else if (targetLang === "japanese") {
-        newRows[index].example_sentence_japanese = response.translation;
-      } else if (targetLang === "korean") {
-        newRows[index].example_sentence_korean = response.translation;
-      }
-
-      // 記錄最後選擇的語言
-      newRows[index].selectedSentenceLanguage = targetLang;
-      setRows(newRows);
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.id !== rowId) return r;
+          const next = { ...r };
+          // 根據目標語言寫入對應欄位
+          if (targetLang === "chinese") {
+            next.example_sentence_translation = response.translation;
+          } else if (targetLang === "japanese") {
+            next.example_sentence_japanese = response.translation;
+          } else if (targetLang === "korean") {
+            next.example_sentence_korean = response.translation;
+          }
+          // 記錄最後選擇的語言
+          next.selectedSentenceLanguage = targetLang;
+          return next;
+        }),
+      );
       toast.success(t("vocabularySet.messages.exampleTranslationComplete"));
     } catch (error) {
       console.error("Example sentence translation error:", error);
       toast.error(t("vocabularySet.messages.exampleTranslationFailed"));
+    } finally {
+      translatingSentenceRowsRef.current.delete(rowId);
     }
   };
 
@@ -4562,16 +4619,24 @@ const VocabularySetPanel = forwardRef<
                         if (val !== "other")
                           setCustomSentenceTranslationLang("");
                         // 切換語言時清空所有例句翻譯欄位
+                        // #957: 正在翻譯（in-flight）的列不動，避免把即將回寫的結果清掉
                         setRows((prev) =>
-                          prev.map((row) => ({
-                            ...row,
-                            example_sentence_translation: "",
-                            example_sentence_japanese: "",
-                            example_sentence_korean: "",
-                            selectedSentenceLanguage: (val || undefined) as
-                              | SentenceTranslationLanguage
-                              | undefined,
-                          })),
+                          prev.map((row) => {
+                            if (
+                              translatingSentenceRowsRef.current.has(row.id)
+                            ) {
+                              return row;
+                            }
+                            return {
+                              ...row,
+                              example_sentence_translation: "",
+                              example_sentence_japanese: "",
+                              example_sentence_korean: "",
+                              selectedSentenceLanguage: (val || undefined) as
+                                | SentenceTranslationLanguage
+                                | undefined,
+                            };
+                          }),
                         );
                       }}
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
@@ -4722,24 +4787,30 @@ const VocabularySetPanel = forwardRef<
                 key={i}
                 onClick={() => {
                   const parsed = extractPosFromTranslation(def);
-                  const newRows = [...rows];
-                  const ri = definitionPicker.rowIndex;
-                  if (parsed.pos) {
-                    newRows[ri].partsOfSpeech = convertAbbreviatedPOS([
-                      parsed.pos,
-                    ]);
-                  }
+                  // #957: 用 rowId 定位並 deep copy 目標列，避免用捕捉的 index 寫到別列
+                  const rowId = definitionPicker.rowId;
                   const tLang = definitionPicker.targetLang;
-                  if (tLang === "chinese") {
-                    newRows[ri].definition = parsed.text;
-                  } else if (tLang === "english") {
-                    newRows[ri].translation = parsed.text;
-                  } else if (tLang === "japanese") {
-                    newRows[ri].japanese_translation = parsed.text;
-                  } else if (tLang === "korean") {
-                    newRows[ri].korean_translation = parsed.text;
-                  }
-                  setRows(newRows);
+                  setRows((prev) =>
+                    prev.map((r) => {
+                      if (r.id !== rowId) return r;
+                      const next = { ...r };
+                      if (parsed.pos) {
+                        next.partsOfSpeech = convertAbbreviatedPOS([
+                          parsed.pos,
+                        ]);
+                      }
+                      if (tLang === "chinese") {
+                        next.definition = parsed.text;
+                      } else if (tLang === "english") {
+                        next.translation = parsed.text;
+                      } else if (tLang === "japanese") {
+                        next.japanese_translation = parsed.text;
+                      } else if (tLang === "korean") {
+                        next.korean_translation = parsed.text;
+                      }
+                      return next;
+                    }),
+                  );
                   setDefinitionPicker(null);
                   toast.success(
                     t("contentEditor.messages.translationComplete"),
