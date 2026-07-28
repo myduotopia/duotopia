@@ -6,15 +6,28 @@ This test file validates that the generate_sentences method:
 2. Each sentence object contains the original word field
 3. Handles array misalignment scenarios correctly
 4. Maintains 1:1 correspondence even when AI fails partially
+
+All AI generation now goes through Vertex AI (Gemini), so these tests mock
+``TranslationService.vertex_ai.generate_json`` which returns already-parsed
+Python objects (not raw JSON strings).
 """
 import os
 import sys
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest  # noqa: E402
 from services.translation import TranslationService  # noqa: E402
+
+
+def _make_vertex_service():
+    """Create a TranslationService wired to a mocked Vertex AI client."""
+    service = TranslationService()
+    service.vertex_ai = AsyncMock()
+    # _ensure_client() must not try to (re)initialise the real client
+    service._ensure_client = lambda: None
+    return service
 
 
 @pytest.mark.unit
@@ -24,36 +37,24 @@ class TestSentenceGenerationMisalignment:
     @pytest.fixture
     def service(self):
         """Create test service instance"""
-        return TranslationService()
+        return _make_vertex_service()
 
     @pytest.mark.asyncio
     async def test_generate_sentences_returns_matching_array_length(self, service):
         """Test that generate_sentences returns array matching input word count"""
         words = ["apple", "banana", "cherry", "date", "elderberry"]
 
-        # Mock OpenAI response with correct number of sentences
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[
-            0
-        ].message.content = """[
-            {"sentence": "I eat an apple every day.", "word": "apple"},
-            {"sentence": "The banana is yellow.", "word": "banana"},
-            {"sentence": "I love cherry pie.", "word": "cherry"},
-            {"sentence": "A date is a sweet fruit.", "word": "date"},
-            {"sentence": "Elderberry is good for health.", "word": "elderberry"}
-        ]"""
+        service.vertex_ai.generate_json = AsyncMock(
+            return_value=[
+                {"sentence": "I eat an apple every day.", "word": "apple"},
+                {"sentence": "The banana is yellow.", "word": "banana"},
+                {"sentence": "I love cherry pie.", "word": "cherry"},
+                {"sentence": "A date is a sweet fruit.", "word": "date"},
+                {"sentence": "Elderberry is good for health.", "word": "elderberry"},
+            ]
+        )
 
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            with patch("services.translation.OpenAI") as mock_openai:
-                mock_client = Mock()
-                mock_client.chat.completions.create = AsyncMock(
-                    return_value=mock_response
-                )
-                mock_openai.return_value = mock_client
-
-                service._ensure_client()
-                results = await service.generate_sentences(words=words, level="A1")
+        results = await service.generate_sentences(words=words, level="A1")
 
         # Verify length matches
         assert len(results) == len(
@@ -72,26 +73,15 @@ class TestSentenceGenerationMisalignment:
         """Test that each sentence object contains the original word field for verification"""
         words = ["like", "change", "run"]
 
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[
-            0
-        ].message.content = """[
-            {"sentence": "I like to read books.", "word": "like"},
-            {"sentence": "Change is inevitable.", "word": "change"},
-            {"sentence": "I run every morning.", "word": "run"}
-        ]"""
+        service.vertex_ai.generate_json = AsyncMock(
+            return_value=[
+                {"sentence": "I like to read books.", "word": "like"},
+                {"sentence": "Change is inevitable.", "word": "change"},
+                {"sentence": "I run every morning.", "word": "run"},
+            ]
+        )
 
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            with patch("services.translation.OpenAI") as mock_openai:
-                mock_client = Mock()
-                mock_client.chat.completions.create = AsyncMock(
-                    return_value=mock_response
-                )
-                mock_openai.return_value = mock_client
-
-                service._ensure_client()
-                results = await service.generate_sentences(words=words)
+        results = await service.generate_sentences(words=words)
 
         # Each result must have word field matching input
         for i, result in enumerate(results):
@@ -104,27 +94,16 @@ class TestSentenceGenerationMisalignment:
         """Test array misalignment scenario when AI returns fewer sentences than words"""
         words = ["word1", "word2", "word3", "word4", "word5"]
 
-        # Mock OpenAI returning only 3 sentences instead of 5
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[
-            0
-        ].message.content = """[
-            {"sentence": "This is word1 example."},
-            {"sentence": "This is word2 example."},
-            {"sentence": "This is word3 example."}
-        ]"""
+        # AI returns only 3 sentences instead of 5
+        service.vertex_ai.generate_json = AsyncMock(
+            return_value=[
+                {"sentence": "This is word1 example."},
+                {"sentence": "This is word2 example."},
+                {"sentence": "This is word3 example."},
+            ]
+        )
 
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            with patch("services.translation.OpenAI") as mock_openai:
-                mock_client = Mock()
-                mock_client.chat.completions.create = AsyncMock(
-                    return_value=mock_response
-                )
-                mock_openai.return_value = mock_client
-
-                service._ensure_client()
-                results = await service.generate_sentences(words=words)
+        results = await service.generate_sentences(words=words)
 
         # Must still return 5 results with fallback for missing ones
         assert len(results) == len(
@@ -143,28 +122,17 @@ class TestSentenceGenerationMisalignment:
         """Test when AI returns more sentences than requested"""
         words = ["cat", "dog"]
 
-        # Mock OpenAI returning 4 sentences instead of 2
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[
-            0
-        ].message.content = """[
-            {"sentence": "The cat is sleeping.", "word": "cat"},
-            {"sentence": "The dog is barking.", "word": "dog"},
-            {"sentence": "Extra sentence 1."},
-            {"sentence": "Extra sentence 2."}
-        ]"""
+        # AI returns 4 sentences instead of 2
+        service.vertex_ai.generate_json = AsyncMock(
+            return_value=[
+                {"sentence": "The cat is sleeping.", "word": "cat"},
+                {"sentence": "The dog is barking.", "word": "dog"},
+                {"sentence": "Extra sentence 1."},
+                {"sentence": "Extra sentence 2."},
+            ]
+        )
 
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            with patch("services.translation.OpenAI") as mock_openai:
-                mock_client = Mock()
-                mock_client.chat.completions.create = AsyncMock(
-                    return_value=mock_response
-                )
-                mock_openai.return_value = mock_client
-
-                service._ensure_client()
-                results = await service.generate_sentences(words=words)
+        results = await service.generate_sentences(words=words)
 
         # Should truncate to match input length
         assert len(results) == len(
@@ -176,17 +144,10 @@ class TestSentenceGenerationMisalignment:
         """Test that fallback mechanism maintains 1:1 word correspondence on error"""
         words = ["test1", "test2", "test3"]
 
-        # Mock exception to trigger fallback
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            with patch("services.translation.OpenAI") as mock_openai:
-                mock_client = Mock()
-                mock_client.chat.completions.create = AsyncMock(
-                    side_effect=Exception("API Error")
-                )
-                mock_openai.return_value = mock_client
+        # Exception triggers fallback
+        service.vertex_ai.generate_json = AsyncMock(side_effect=Exception("API Error"))
 
-                service._ensure_client()
-                results = await service.generate_sentences(words=words)
+        results = await service.generate_sentences(words=words)
 
         # Fallback should still return correct length
         assert len(results) == len(
@@ -204,27 +165,22 @@ class TestSentenceGenerationMisalignment:
         """Test that translations are preserved with word correspondence"""
         words = ["hello", "world"]
 
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[
-            0
-        ].message.content = """[
-            {"sentence": "Hello everyone!", "translation": "大家好！", "word": "hello"},
-            {"sentence": "The world is beautiful.", "translation": "世界很美麗。", "word": "world"}
-        ]"""
+        service.vertex_ai.generate_json = AsyncMock(
+            return_value=[
+                {
+                    "sentence": "Hello everyone!",
+                    "translation": "大家好！",
+                    "word": "hello",
+                },
+                {
+                    "sentence": "The world is beautiful.",
+                    "translation": "世界很美麗。",
+                    "word": "world",
+                },
+            ]
+        )
 
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            with patch("services.translation.OpenAI") as mock_openai:
-                mock_client = Mock()
-                mock_client.chat.completions.create = AsyncMock(
-                    return_value=mock_response
-                )
-                mock_openai.return_value = mock_client
-
-                service._ensure_client()
-                results = await service.generate_sentences(
-                    words=words, translate_to="zh-TW"
-                )
+        results = await service.generate_sentences(words=words, translate_to="zh-TW")
 
         assert len(results) == len(words)
         for i, result in enumerate(results):
@@ -236,26 +192,15 @@ class TestSentenceGenerationMisalignment:
         """Test backend adds word field when AI response doesn't include it"""
         words = ["apple", "banana"]
 
-        # Mock AI returning sentences WITHOUT word field
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[
-            0
-        ].message.content = """[
-            {"sentence": "I like apples."},
-            {"sentence": "Bananas are yellow."}
-        ]"""
+        # AI returns sentences WITHOUT word field
+        service.vertex_ai.generate_json = AsyncMock(
+            return_value=[
+                {"sentence": "I like apples."},
+                {"sentence": "Bananas are yellow."},
+            ]
+        )
 
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            with patch("services.translation.OpenAI") as mock_openai:
-                mock_client = Mock()
-                mock_client.chat.completions.create = AsyncMock(
-                    return_value=mock_response
-                )
-                mock_openai.return_value = mock_client
-
-                service._ensure_client()
-                results = await service.generate_sentences(words=words)
+        results = await service.generate_sentences(words=words)
 
         # Backend should add word field even if AI didn't include it
         assert len(results) == len(words)
@@ -272,10 +217,8 @@ class TestSentenceGenerationChunking:
 
     @pytest.fixture
     def service(self):
-        """Create test service instance with mocked client"""
-        svc = TranslationService()
-        svc.use_vertex_ai = False
-        return svc
+        """Create test service instance with mocked Vertex client"""
+        return _make_vertex_service()
 
     @pytest.mark.asyncio
     async def test_large_batch_is_chunked(self, service):
@@ -284,24 +227,14 @@ class TestSentenceGenerationChunking:
 
         call_count = 0
 
-        async def mock_create(**kwargs):
+        async def mock_generate_json(**kwargs):
             nonlocal call_count
             call_count += 1
-            import json
+            prompt = kwargs.get("prompt", "")
+            chunk_words = [w for w in words if f'"word": "{w}"' in prompt]
+            return [{"sentence": f"Example with {w}.", "word": w} for w in chunk_words]
 
-            prompt_content = kwargs["messages"][1]["content"]
-            chunk_words = [w for w in words if f'"word": "{w}"' in prompt_content]
-            sentences = [
-                {"sentence": f"Example with {w}.", "word": w} for w in chunk_words
-            ]
-            mock_resp = Mock()
-            mock_resp.choices = [Mock()]
-            mock_resp.choices[0].message.content = json.dumps(sentences)
-            return mock_resp
-
-        mock_client = Mock()
-        mock_client.chat.completions.create = AsyncMock(side_effect=mock_create)
-        service.client = mock_client
+        service.vertex_ai.generate_json = AsyncMock(side_effect=mock_generate_json)
 
         results = await service.generate_sentences(words=words, level="A1")
 
@@ -315,24 +248,18 @@ class TestSentenceGenerationChunking:
         """3 words should NOT be chunked (under SENTENCE_CHUNK_SIZE)"""
         words = ["cat", "dog", "bird"]
 
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[
-            0
-        ].message.content = """[
-            {"sentence": "The cat is sleeping.", "word": "cat"},
-            {"sentence": "The dog is barking.", "word": "dog"},
-            {"sentence": "The bird is singing.", "word": "bird"}
-        ]"""
-
-        mock_client = Mock()
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
-        service.client = mock_client
+        service.vertex_ai.generate_json = AsyncMock(
+            return_value=[
+                {"sentence": "The cat is sleeping.", "word": "cat"},
+                {"sentence": "The dog is barking.", "word": "dog"},
+                {"sentence": "The bird is singing.", "word": "bird"},
+            ]
+        )
 
         results = await service.generate_sentences(words=words, level="A1")
 
         assert len(results) == 3
-        assert mock_client.chat.completions.create.call_count == 1
+        assert service.vertex_ai.generate_json.call_count == 1
 
     @pytest.mark.asyncio
     async def test_chunk_failure_isolation(self, service):
@@ -341,26 +268,18 @@ class TestSentenceGenerationChunking:
 
         call_number = 0
 
-        async def mock_create(**kwargs):
+        async def mock_generate_json(**kwargs):
             nonlocal call_number
             call_number += 1
             if call_number == 2:
                 raise Exception("API rate limit exceeded")
-            import json
-
-            prompt_content = kwargs["messages"][1]["content"]
-            chunk_words = [w for w in words if f'"word": "{w}"' in prompt_content]
-            sentences = [
+            prompt = kwargs.get("prompt", "")
+            chunk_words = [w for w in words if f'"word": "{w}"' in prompt]
+            return [
                 {"sentence": f"Good sentence for {w}.", "word": w} for w in chunk_words
             ]
-            mock_resp = Mock()
-            mock_resp.choices = [Mock()]
-            mock_resp.choices[0].message.content = json.dumps(sentences)
-            return mock_resp
 
-        mock_client = Mock()
-        mock_client.chat.completions.create = AsyncMock(side_effect=mock_create)
-        service.client = mock_client
+        service.vertex_ai.generate_json = AsyncMock(side_effect=mock_generate_json)
 
         results = await service.generate_sentences(words=words, level="A1")
 
@@ -380,8 +299,7 @@ class TestSentenceGenerationChunking:
     @pytest.mark.asyncio
     async def test_large_batch_chunked_vertex_ai(self):
         """Vertex AI path: 10 words should be chunked into 2 batches"""
-        svc = TranslationService()
-        svc.use_vertex_ai = True
+        svc = _make_vertex_service()
 
         words = [f"word{i}" for i in range(10)]
         call_count = 0
@@ -396,9 +314,7 @@ class TestSentenceGenerationChunking:
                 for w in chunk_words
             ]
 
-        mock_vertex = Mock()
-        mock_vertex.generate_json = AsyncMock(side_effect=mock_generate_json)
-        svc.vertex_ai = mock_vertex
+        svc.vertex_ai.generate_json = AsyncMock(side_effect=mock_generate_json)
 
         results = await svc.generate_sentences(words=words, level="A1")
 
@@ -421,9 +337,7 @@ class TestSentenceTranslationBackfill:
 
     @pytest.fixture
     def service(self):
-        svc = TranslationService()
-        svc.use_vertex_ai = False
-        return svc
+        return _make_vertex_service()
 
     @pytest.mark.asyncio
     async def test_missing_translation_is_backfilled(self, service):
@@ -431,18 +345,16 @@ class TestSentenceTranslationBackfill:
         words = ["grape", "passionfruit"]
 
         # AI response: first sentence has NO translation, second one does.
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[
-            0
-        ].message.content = """[
-            {"sentence": "I ate a grape.", "word": "grape"},
-            {"sentence": "Passionfruit is sweet.", "translation": "百香果很甜。", "word": "passionfruit"}
-        ]"""
-
-        mock_client = Mock()
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
-        service.client = mock_client
+        service.vertex_ai.generate_json = AsyncMock(
+            return_value=[
+                {"sentence": "I ate a grape.", "word": "grape"},
+                {
+                    "sentence": "Passionfruit is sweet.",
+                    "translation": "百香果很甜。",
+                    "word": "passionfruit",
+                },
+            ]
+        )
 
         # Mock the fallback single-sentence translator.
         service.translate_text = AsyncMock(return_value="我吃了一顆葡萄。")
@@ -461,17 +373,11 @@ class TestSentenceTranslationBackfill:
         """A present-but-empty translation is also treated as missing."""
         words = ["grape"]
 
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[
-            0
-        ].message.content = """[
-            {"sentence": "I ate a grape.", "translation": "  ", "word": "grape"}
-        ]"""
-
-        mock_client = Mock()
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
-        service.client = mock_client
+        service.vertex_ai.generate_json = AsyncMock(
+            return_value=[
+                {"sentence": "I ate a grape.", "translation": "  ", "word": "grape"}
+            ]
+        )
         service.translate_text = AsyncMock(return_value="我吃了一顆葡萄。")
 
         results = await service.generate_sentences(words=words, translate_to="zh-TW")
@@ -484,18 +390,12 @@ class TestSentenceTranslationBackfill:
         """When no translation is requested, no fallback runs and no translation key is added."""
         words = ["grape", "passionfruit"]
 
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[
-            0
-        ].message.content = """[
-            {"sentence": "I ate a grape.", "word": "grape"},
-            {"sentence": "Passionfruit is sweet.", "word": "passionfruit"}
-        ]"""
-
-        mock_client = Mock()
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
-        service.client = mock_client
+        service.vertex_ai.generate_json = AsyncMock(
+            return_value=[
+                {"sentence": "I ate a grape.", "word": "grape"},
+                {"sentence": "Passionfruit is sweet.", "word": "passionfruit"},
+            ]
+        )
         service.translate_text = AsyncMock(return_value="should-not-be-used")
 
         results = await service.generate_sentences(words=words, translate_to=None)
@@ -510,17 +410,9 @@ class TestSentenceTranslationBackfill:
         rather than propagating the error."""
         words = ["grape"]
 
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[
-            0
-        ].message.content = """[
-            {"sentence": "I ate a grape.", "word": "grape"}
-        ]"""
-
-        mock_client = Mock()
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
-        service.client = mock_client
+        service.vertex_ai.generate_json = AsyncMock(
+            return_value=[{"sentence": "I ate a grape.", "word": "grape"}]
+        )
         service.translate_text = AsyncMock(side_effect=Exception("translate down"))
 
         results = await service.generate_sentences(words=words, translate_to="zh-TW")
