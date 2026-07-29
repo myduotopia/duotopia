@@ -1,0 +1,359 @@
+{
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "episode": 7,
+  "episodesTotal": 7,
+  "bgm": "bgm/candidate_Carefree.mp3",
+  "scenes": [
+    {
+      "id": "title_in",
+      "kind": "title",
+      "audio": "ep7/tts/s01.wav",
+      "durationSec": 7.109,
+      "narration": "老師操作系列的最後一段，來看上課時很實用的『數位教學工具列』。",
+      "title": "第七集",
+      "subtitle": "課堂小工具"
+    },
+    {
+      "id": "steps",
+      "kind": "steps",
+      "audio": "ep7/tts/s02.wav",
+      "durationSec": 8.688,
+      "narration": "畫面右邊這排工具，有五個好幫手：計時器、骰子、猜拳、分享登入 QR，還有使用手冊。",
+      "title": "工具列有 5 個小幫手",
+      "steps": [
+        "計時器",
+        "骰子",
+        "猜拳",
+        "分享 QR CODE",
+        "使用手冊"
+      ],
+      "stepTimes": [
+        3.12,
+        3.9,
+        4.48,
+        5.07,
+        7.01
+      ]
+    },
+    {
+      "id": "tb_intro",
+      "kind": "shot",
+      "audio": "ep7/tts/s03.wav",
+      "durationSec": 8.92,
+      "narration": "不管你在老師端的哪一頁，畫面右邊都固定有這一排工具列，隨時點開就能用。我們一個一個看。",
+      "shot": "ep7/shots/t01_intro.png",
+      "caption": "不管在老師端哪一頁，右邊都固定有這排工具列",
+      "highlights": [
+        {
+          "x": 1867,
+          "y": 390,
+          "w": 53,
+          "h": 300
+        }
+      ],
+      "page": "課堂工具列",
+      "camera": {
+        "x": 1867,
+        "y": 390,
+        "w": 53,
+        "h": 300
+      },
+      "clip": "ep7/clips/tb_intro.mp4",
+      "clipDurationSec": 2.688,
+      "freezeShot": "ep7/clips/tb_intro_last.png"
+    },
+    {
+      "id": "tb_timer",
+      "kind": "shot",
+      "audio": "ep7/tts/s04.wav",
+      "durationSec": 11.612,
+      "narration": "第一個是計時器。點開後設定時間、按下開始就開始倒數，時間到會響鈴提醒，很適合限時的課堂活動。",
+      "shot": "ep7/shots/t02_timer.png",
+      "caption": "① 計時器：設定時間 → 開始倒數，時間到會響鈴",
+      "highlights": [
+        {
+          "x": 1874,
+          "y": 423,
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "page": "課堂工具列",
+      "step": {
+        "index": 1,
+        "total": 5,
+        "label": "計時器",
+        "prefix": "工具"
+      },
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep7/clips/tb_timer.mp4",
+      "clipDurationSec": 10.812,
+      "freezeShot": "ep7/clips/tb_timer_last.png",
+      "sfx": [
+        {
+          "t": 2.625,
+          "type": "click",
+          "box": {
+            "x": 1874,
+            "y": 423,
+            "w": 40,
+            "h": 40
+          }
+        },
+        {
+          "t": 6.047,
+          "type": "click",
+          "box": {
+            "x": 902,
+            "y": 472,
+            "w": 40,
+            "h": 40
+          }
+        },
+        {
+          "t": 10.047,
+          "type": "click",
+          "box": {
+            "x": 1874,
+            "y": 423,
+            "w": 40,
+            "h": 40
+          }
+        }
+      ],
+      "hlAtSec": 1.425,
+      "hlOffSec": 2.875
+    },
+    {
+      "id": "tb_dice",
+      "kind": "shot",
+      "audio": "ep7/tts/s05.wav",
+      "durationSec": 10.394,
+      "narration": "第二個是骰子。點一下就擲出點數，分組、抽人、玩小遊戲都好用。",
+      "shot": "ep7/shots/t03_dice.png",
+      "caption": "② 骰子：點一下就擲出點數",
+      "highlights": [
+        {
+          "x": 1874,
+          "y": 467,
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "page": "課堂工具列",
+      "step": {
+        "index": 2,
+        "total": 5,
+        "label": "骰子",
+        "prefix": "工具"
+      },
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep7/clips/tb_dice.mp4",
+      "clipDurationSec": 9.594,
+      "freezeShot": "ep7/clips/tb_dice_last.png",
+      "sfx": [
+        {
+          "t": 3.438,
+          "type": "click",
+          "box": {
+            "x": 1874,
+            "y": 467,
+            "w": 40,
+            "h": 40
+          }
+        },
+        {
+          "t": 6.813,
+          "type": "click",
+          "box": {
+            "x": 930,
+            "y": 510,
+            "w": 179,
+            "h": 179
+          }
+        }
+      ],
+      "hlAtSec": 2.238,
+      "hlOffSec": 3.688
+    },
+    {
+      "id": "tb_rps",
+      "kind": "shot",
+      "audio": "ep7/tts/s06.wav",
+      "durationSec": 11.518,
+      "narration": "第三個是猜拳。按下去隨機出拳，決定順序或分組都很方便。",
+      "shot": "ep7/shots/t04_rps.png",
+      "caption": "③ 猜拳：按一下隨機出拳",
+      "highlights": [
+        {
+          "x": 1874,
+          "y": 511,
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "page": "課堂工具列",
+      "step": {
+        "index": 3,
+        "total": 5,
+        "label": "猜拳",
+        "prefix": "工具"
+      },
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep7/clips/tb_rps.mp4",
+      "clipDurationSec": 10.718,
+      "freezeShot": "ep7/clips/tb_rps_last.png",
+      "sfx": [
+        {
+          "t": 3.781,
+          "type": "click",
+          "box": {
+            "x": 1874,
+            "y": 511,
+            "w": 40,
+            "h": 40
+          }
+        },
+        {
+          "t": 7.843,
+          "type": "click",
+          "box": {
+            "x": 936,
+            "y": 586,
+            "w": 48,
+            "h": 48
+          }
+        }
+      ],
+      "hlAtSec": 2.581,
+      "hlOffSec": 4.031
+    },
+    {
+      "id": "tb_share",
+      "kind": "shot",
+      "audio": "ep7/tts/s07.wav",
+      "durationSec": 8.502,
+      "narration": "第四個是分享學生登入 QR Code，隨時於課中需要時分享給學生，快速掃描登入。",
+      "shot": "ep7/shots/t05_share.png",
+      "caption": "④ 分享：學生登入 QR Code，課中隨時分享給學生",
+      "highlights": [
+        {
+          "x": 1874,
+          "y": 560,
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "page": "課堂工具列",
+      "step": {
+        "index": 4,
+        "total": 5,
+        "label": "分享 QR",
+        "prefix": "工具"
+      },
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep7/clips/tb_share.mp4",
+      "clipDurationSec": 7.203,
+      "freezeShot": "ep7/clips/tb_share_last.png",
+      "sfx": [
+        {
+          "t": 3.594,
+          "type": "click",
+          "box": {
+            "x": 1874,
+            "y": 560,
+            "w": 40,
+            "h": 40
+          }
+        }
+      ],
+      "hlAtSec": 2.394,
+      "hlOffSec": 3.844
+    },
+    {
+      "id": "tb_help",
+      "kind": "shot",
+      "audio": "ep7/tts/s08.wav",
+      "durationSec": 8.966,
+      "narration": "最後是使用手冊，裡面收了老師操作手冊和學生使用指南，忘記怎麼操作隨時來查。",
+      "shot": "ep7/shots/t06_help.png",
+      "caption": "⑤ 使用手冊：老師操作手冊 + 學生使用指南",
+      "highlights": [
+        {
+          "x": 1874,
+          "y": 604,
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "page": "課堂工具列",
+      "step": {
+        "index": 5,
+        "total": 5,
+        "label": "使用手冊",
+        "prefix": "工具"
+      },
+      "stepDone": true,
+      "transition": "fade",
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep7/clips/tb_help.mp4",
+      "clipDurationSec": 7.328,
+      "freezeShot": "ep7/clips/tb_help_last.png",
+      "sfx": [
+        {
+          "t": 3.578,
+          "type": "click",
+          "box": {
+            "x": 1874,
+            "y": 604,
+            "w": 40,
+            "h": 40
+          }
+        }
+      ],
+      "hlAtSec": 2.378,
+      "hlOffSec": 3.828
+    },
+    {
+      "id": "title_out",
+      "kind": "title",
+      "audio": "ep7/tts/s09.wav",
+      "durationSec": 6.737,
+      "narration": "以上就是課堂上的數位小工具。這個老師操作系列到這裡，教學愉快！",
+      "title": "系列完結",
+      "subtitle": "祝教學愉快！",
+      "progressDots": true
+    }
+  ]
+}

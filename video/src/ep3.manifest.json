@@ -5,12 +5,13 @@
   "episode": 3,
   "episodesTotal": 7,
   "bgm": "bgm/candidate_Carefree.mp3",
+  "thumbShot": "ep3/shots/ep3_thumb_preview.png",
   "scenes": [
     {
       "id": "title_in",
       "kind": "title",
       "audio": "ep3/tts/s01.wav",
-      "durationSec": 7.666,
+      "durationSec": 7.202,
       "narration": "作業和教材都準備好了，這一集我們把教材派成作業，發給全班學生。",
       "title": "第三集",
       "subtitle": "派發作業 + 分享 QR"
@@ -19,11 +20,11 @@
       "id": "steps",
       "kind": "steps",
       "audio": "ep3/tts/s02.wav",
-      "durationSec": 7.62,
-      "narration": "整個過程分成兩步：先派一份『例句朗讀』作業，再把學生登入的連結分享出去。",
+      "durationSec": 9.942,
+      "narration": "我們會學習兩種派作業的方法先派，再把學生登入的連結分享出去，學生就能在登入後完成作業。",
       "title": "本集 2 大步驟",
       "steps": [
-        "派一份『例句朗讀』作業",
+        "派一份作業（2 種方法）",
         "分享學生登入 QR"
       ]
     },
@@ -31,10 +32,10 @@
       "id": "c_assignments",
       "kind": "shot",
       "audio": "ep3/tts/s03.wav",
-      "durationSec": 9.893,
-      "narration": "進到班級的『作業』分頁，點右上角的『指派新作業』。",
+      "durationSec": 8.816,
+      "narration": "第一種方法，從我的班級「作業」分頁，點右上角的『指派新作業』。",
       "shot": "ep3/shots/c01_assignments.png",
-      "caption": "① 班級「作業」分頁 →「指派新作業」",
+      "caption": "① 第一種方法：班級「作業」分頁 →「指派新作業」",
       "highlights": [
         {
           "x": 305,
@@ -57,11 +58,11 @@
         "h": 1080
       },
       "clip": "ep3/clips/c_assignments.mp4",
-      "clipDurationSec": 9.093,
+      "clipDurationSec": 8.016,
       "freezeShot": "ep3/clips/c_assignments_last.png",
       "sfx": [
         {
-          "t": 5.062,
+          "t": 4.078,
           "type": "click",
           "box": {
             "x": 305,
@@ -71,17 +72,17 @@
           }
         }
       ],
-      "hlAtSec": 3.862,
-      "hlOffSec": 5.862
+      "hlAtSec": 2.878,
+      "hlOffSec": 4.878
     },
     {
       "id": "c_mode",
       "kind": "shot",
       "audio": "ep3/tts/s04.wav",
-      "durationSec": 9.895,
-      "narration": "第一步，選練習模式。這一集我們用『例句朗讀』，讓學生把例句唸出來，系統自動評分發音。",
+      "durationSec": 7.712,
+      "narration": "先選練習模式。這一次我們用『例句朗讀』，右側可以預覽作業，也就是學生答題的畫面。",
       "shot": "ep3/shots/c02_mode.png",
-      "caption": "② 練習模式選「例句朗讀」（唸例句、AI 評分發音）",
+      "caption": "② 練習模式選「例句朗讀」；右側可預覽學生答題畫面",
       "highlights": [
         {
           "x": 317,
@@ -99,11 +100,11 @@
       },
       "sameScreen": true,
       "clip": "ep3/clips/c_mode.mp4",
-      "clipDurationSec": 8.485,
+      "clipDurationSec": 4.781,
       "freezeShot": "ep3/clips/c_mode_last.png",
       "sfx": [
         {
-          "t": 4.625,
+          "t": 1.328,
           "type": "click",
           "box": {
             "x": 317,
@@ -112,18 +113,16 @@
             "h": 38
           }
         }
-      ],
-      "hlAtSec": 3.425,
-      "hlOffSec": 5.425
+      ]
     },
     {
       "id": "c_content",
       "kind": "shot",
       "audio": "ep3/tts/s05.wav",
-      "durationSec": 25.753,
-      "narration": "第二步，切到『個人教材』，把要派的例句集勾起來。",
+      "durationSec": 18.269,
+      "narration": "然後選擇教材，把要派發的教材勾選起來，也可以多選。",
       "shot": "ep3/shots/c03_content.png",
-      "caption": "③ 切到「個人教材」，勾選要派的例句集",
+      "caption": "③ 選擇教材，勾選要派發的（可多選）",
       "highlights": [
         {
           "x": 343,
@@ -141,11 +140,11 @@
       },
       "sameScreen": true,
       "clip": "ep3/clips/c_content.mp4",
-      "clipDurationSec": 24.953,
+      "clipDurationSec": 17.469,
       "freezeShot": "ep3/clips/c_content_last.png",
       "sfx": [
         {
-          "t": 2.734,
+          "t": 1.188,
           "type": "click",
           "box": {
             "x": 1802,
@@ -155,7 +154,7 @@
           }
         },
         {
-          "t": 7.5,
+          "t": 4.203,
           "type": "click",
           "box": {
             "x": 285,
@@ -165,7 +164,7 @@
           }
         },
         {
-          "t": 11.797,
+          "t": 6.594,
           "type": "click",
           "box": {
             "x": 355,
@@ -175,7 +174,7 @@
           }
         },
         {
-          "t": 16.906,
+          "t": 9.891,
           "type": "click",
           "box": {
             "x": 319,
@@ -185,7 +184,7 @@
           }
         },
         {
-          "t": 21.531,
+          "t": 14.078,
           "type": "click",
           "box": {
             "x": 343,
@@ -200,16 +199,16 @@
       "id": "c_students",
       "kind": "shot",
       "audio": "ep3/tts/s06.wav",
-      "durationSec": 8.472,
-      "narration": "接著選對象，直接指派給全班。",
+      "durationSec": 6.003,
+      "narration": "可以只指派給部分學生，或直接指派給全班。",
       "shot": "ep3/shots/c04_students.png",
-      "caption": "④ 指派對象：全班學生",
+      "caption": "④ 指派給部分學生，或直接給全班",
       "highlights": [
         {
-          "x": 1802,
-          "y": 1028,
-          "w": 94,
-          "h": 40
+          "x": 322,
+          "y": 144,
+          "w": 1507,
+          "h": 20
         }
       ],
       "page": "班級管理 › 作業",
@@ -227,11 +226,11 @@
         "h": 1080
       },
       "clip": "ep3/clips/c_students.mp4",
-      "clipDurationSec": 7.672,
+      "clipDurationSec": 5.203,
       "freezeShot": "ep3/clips/c_students_last.png",
       "sfx": [
         {
-          "t": 2.906,
+          "t": 1.344,
           "type": "click",
           "box": {
             "x": 1802,
@@ -240,15 +239,13 @@
             "h": 40
           }
         }
-      ],
-      "hlAtSec": 1.706,
-      "hlOffSec": 3.706
+      ]
     },
     {
       "id": "c_details",
       "kind": "shot",
       "audio": "ep3/tts/s07.wav",
-      "durationSec": 15.659,
+      "durationSec": 12.269,
       "narration": "填上作業標題，設定截止日，方便學生掌握進度。",
       "shot": "ep3/shots/c05_details.png",
       "caption": "⑤ 填作業標題、設截止日",
@@ -269,11 +266,11 @@
       },
       "sameScreen": true,
       "clip": "ep3/clips/c_details.mp4",
-      "clipDurationSec": 14.859,
+      "clipDurationSec": 11.469,
       "freezeShot": "ep3/clips/c_details_last.png",
       "sfx": [
         {
-          "t": 2.64,
+          "t": 1.125,
           "type": "click",
           "box": {
             "x": 1802,
@@ -283,7 +280,7 @@
           }
         },
         {
-          "t": 7.578,
+          "t": 4.812,
           "type": "click",
           "box": {
             "x": 281,
@@ -293,7 +290,7 @@
           }
         },
         {
-          "t": 12.109,
+          "t": 8.75,
           "type": "click",
           "box": {
             "x": 1086,
@@ -308,10 +305,10 @@
       "id": "c_create",
       "kind": "shot",
       "audio": "ep3/tts/s08.wav",
-      "durationSec": 9.472,
-      "narration": "按『創建作業』，作業就派出去了。",
+      "durationSec": 9.034,
+      "narration": "按『創建作業』，YA! 成功派發學生作業了！",
       "shot": "ep3/shots/c06_created.png",
-      "caption": "「創建作業」→ 作業派發完成！",
+      "caption": "「創建作業」→ 成功派發！",
       "highlights": [
         {
           "x": 1788,
@@ -327,7 +324,6 @@
         "label": "派一份作業",
         "prefix": "步驟"
       },
-      "stepDone": true,
       "sameScreen": true,
       "camera": {
         "x": 0,
@@ -336,11 +332,11 @@
         "h": 1080
       },
       "clip": "ep3/clips/c_create.mp4",
-      "clipDurationSec": 8.672,
+      "clipDurationSec": 8.234,
       "freezeShot": "ep3/clips/c_create_last.png",
       "sfx": [
         {
-          "t": 2.828,
+          "t": 2.453,
           "type": "click",
           "box": {
             "x": 1788,
@@ -350,17 +346,262 @@
           }
         }
       ],
-      "hlAtSec": 1.628,
-      "hlOffSec": 3.628
+      "hlAtSec": 1.253,
+      "hlOffSec": 3.253
     },
     {
-      "id": "c_share_open",
+      "id": "m_card",
       "kind": "shot",
       "audio": "ep3/tts/s09.wav",
-      "durationSec": 8.378,
-      "narration": "作業派好，怎麼讓學生登入？右邊的課堂工具列有一個『分享』。",
-      "shot": "ep3/shots/c07_share_open.png",
-      "caption": "⑥ 右側課堂工具列的「分享」",
+      "durationSec": 6.83,
+      "narration": "第二種方法，從「我的教材」進入，找到教材卡上的綠色派發鈕。",
+      "shot": "ep3/shots/m01_card.png",
+      "caption": "⑥ 第二種方法：教材卡上的綠色派發鈕",
+      "highlights": [
+        {
+          "x": 480,
+          "y": 688,
+          "w": 56,
+          "h": 56
+        }
+      ],
+      "page": "我的教材",
+      "step": {
+        "index": 1,
+        "total": 2,
+        "label": "派一份作業",
+        "prefix": "步驟"
+      },
+      "transition": "slide",
+      "camera": {
+        "x": 335,
+        "y": 806,
+        "w": 258,
+        "h": 26
+      },
+      "clip": "ep3/clips/m_card.mp4",
+      "clipDurationSec": 3.828,
+      "freezeShot": "ep3/clips/m_card_last.png"
+    },
+    {
+      "id": "m_class",
+      "kind": "shot",
+      "audio": "ep3/tts/s10.wav",
+      "durationSec": 12.8,
+      "narration": "與第一種方法稍有不同，從綠色按鈕派發可以一次指定多個班級同步派發。這次我選擇兩個班級。",
+      "shot": "ep3/shots/m02_classes.png",
+      "caption": "一份教材可一次指派給多個班級（這裡選 2 班）",
+      "highlights": [
+        {
+          "x": 480,
+          "y": 688,
+          "w": 56,
+          "h": 56
+        }
+      ],
+      "page": "我的教材 › 指派作業",
+      "step": {
+        "index": 1,
+        "total": 2,
+        "label": "派一份作業",
+        "prefix": "步驟"
+      },
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep3/clips/m_class.mp4",
+      "clipDurationSec": 12.0,
+      "freezeShot": "ep3/clips/m_class_last.png",
+      "sfx": [
+        {
+          "t": 1.563,
+          "type": "click",
+          "box": {
+            "x": 480,
+            "y": 688,
+            "w": 56,
+            "h": 56
+          }
+        },
+        {
+          "t": 5.922,
+          "type": "click",
+          "box": {
+            "x": 339,
+            "y": 159,
+            "w": 1531,
+            "h": 20
+          }
+        },
+        {
+          "t": 9.11,
+          "type": "click",
+          "box": {
+            "x": 339,
+            "y": 466,
+            "w": 1531,
+            "h": 20
+          }
+        }
+      ],
+      "hlAtSec": 0.9,
+      "hlOffSec": 2.363
+    },
+    {
+      "id": "m_mode",
+      "kind": "shot",
+      "audio": "ep3/tts/s11.wav",
+      "durationSec": 12.91,
+      "narration": "這次我們來派發「單字選擇」，進階設定區選擇提示為翻譯或者音檔，這次我選「播放音檔」。看右側預覽區，沒問題就點下一步。",
+      "shot": "ep3/shots/m03_mode.png",
+      "caption": "⑦ 換「單字選擇」，進階設定選「播放音檔」",
+      "highlights": [
+        {
+          "x": 445,
+          "y": 439,
+          "w": 139,
+          "h": 64
+        }
+      ],
+      "page": "我的教材 › 指派作業",
+      "step": {
+        "index": 1,
+        "total": 2,
+        "label": "派一份作業",
+        "prefix": "步驟"
+      },
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep3/clips/m_mode.mp4",
+      "clipDurationSec": 12.11,
+      "freezeShot": "ep3/clips/m_mode_last.png",
+      "sfx": [
+        {
+          "t": 1.313,
+          "type": "click",
+          "box": {
+            "x": 1802,
+            "y": 1028,
+            "w": 94,
+            "h": 40
+          }
+        },
+        {
+          "t": 4.516,
+          "type": "click",
+          "box": {
+            "x": 659,
+            "y": 105,
+            "w": 188,
+            "h": 38
+          }
+        },
+        {
+          "t": 8.704,
+          "type": "click",
+          "box": {
+            "x": 445,
+            "y": 439,
+            "w": 139,
+            "h": 64
+          }
+        }
+      ]
+    },
+    {
+      "id": "m_create",
+      "kind": "shot",
+      "audio": "ep3/tts/s12.wav",
+      "durationSec": 20.987,
+      "narration": "一樣填好標題、截止日，按下創建，兩個班級的作業就同步派發完成了。",
+      "shot": "ep3/shots/m04_created.png",
+      "caption": "填標題、截止日 →「創建作業」（一次建立 2 份）",
+      "highlights": [
+        {
+          "x": 281,
+          "y": 159,
+          "w": 1599,
+          "h": 40
+        }
+      ],
+      "page": "我的教材 › 指派作業",
+      "step": {
+        "index": 1,
+        "total": 2,
+        "label": "派一份作業",
+        "prefix": "步驟"
+      },
+      "stepDone": true,
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep3/clips/m_create.mp4",
+      "clipDurationSec": 20.187,
+      "freezeShot": "ep3/clips/m_create_last.png",
+      "sfx": [
+        {
+          "t": 1.297,
+          "type": "click",
+          "box": {
+            "x": 1802,
+            "y": 1028,
+            "w": 94,
+            "h": 40
+          }
+        },
+        {
+          "t": 5.125,
+          "type": "click",
+          "box": {
+            "x": 281,
+            "y": 159,
+            "w": 1599,
+            "h": 40
+          }
+        },
+        {
+          "t": 9.344,
+          "type": "click",
+          "box": {
+            "x": 1086,
+            "y": 363,
+            "w": 794,
+            "h": 40
+          }
+        },
+        {
+          "t": 14.219,
+          "type": "click",
+          "box": {
+            "x": 1788,
+            "y": 1028,
+            "w": 108,
+            "h": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "s_share",
+      "kind": "shot",
+      "audio": "ep3/tts/s13.wav",
+      "durationSec": 8.05,
+      "narration": "接下來幫助學生登入以完成作業。點擊右邊課堂工具列『分享』小圖示。",
+      "shot": "ep3/shots/s01_share.png",
+      "caption": "⑧ 右側課堂工具列的「分享」",
       "highlights": [
         {
           "x": 1874,
@@ -369,7 +610,7 @@
           "h": 40
         }
       ],
-      "page": "班級管理 › 課堂工具",
+      "page": "我的教材 › 課堂工具",
       "step": {
         "index": 2,
         "total": 2,
@@ -377,12 +618,18 @@
         "prefix": "步驟"
       },
       "sameScreen": true,
-      "clip": "ep3/clips/c_share_open.mp4",
-      "clipDurationSec": 7.578,
-      "freezeShot": "ep3/clips/c_share_open_last.png",
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep3/clips/s_share.mp4",
+      "clipDurationSec": 7.25,
+      "freezeShot": "ep3/clips/s_share_last.png",
       "sfx": [
         {
-          "t": 3.734,
+          "t": 3.36,
           "type": "click",
           "box": {
             "x": 1874,
@@ -392,26 +639,26 @@
           }
         }
       ],
-      "hlAtSec": 2.534,
-      "hlOffSec": 4.534
+      "hlAtSec": 2.16,
+      "hlOffSec": 4.16
     },
     {
-      "id": "c_qr",
+      "id": "s_qr",
       "kind": "shot",
-      "audio": "ep3/tts/s10.wav",
-      "durationSec": 8.92,
-      "narration": "點開就會看到學生登入的 QR 碼和連結。把它投影或傳到群組，學生掃一下就能進來。",
-      "shot": "ep3/shots/c08_qr.png",
-      "caption": "學生登入 QR 碼 + 連結，掃碼即可登入",
+      "audio": "ep3/tts/s14.wav",
+      "durationSec": 5.669,
+      "narration": "把網址傳到學生群組，或讓學生直接掃描 QR 碼。",
+      "shot": "ep3/shots/s02_qr.png",
+      "caption": "把連結傳到群組，或讓學生掃 QR 碼登入",
       "highlights": [
         {
           "x": 860,
           "y": 444,
-          "w": 199,
-          "h": 205
+          "w": 200,
+          "h": 200
         }
       ],
-      "page": "班級管理 › 課堂工具",
+      "page": "我的教材 › 課堂工具",
       "step": {
         "index": 2,
         "total": 2,
@@ -422,20 +669,20 @@
       "spotlight": {
         "x": 860,
         "y": 444,
-        "w": 199,
-        "h": 205
+        "w": 200,
+        "h": 200
       },
       "sameScreen": true,
-      "clip": "ep3/clips/c_qr.mp4",
-      "clipDurationSec": 4.422,
-      "freezeShot": "ep3/clips/c_qr_last.png"
+      "clip": "ep3/clips/s_qr.mp4",
+      "clipDurationSec": 3.985,
+      "freezeShot": "ep3/clips/s_qr_last.png"
     },
     {
       "id": "title_out",
       "kind": "title",
-      "audio": "ep3/tts/s11.wav",
-      "durationSec": 6.366,
-      "narration": "作業派好、連結也發了，下一集換學生上場，登入開始寫作業。",
+      "audio": "ep3/tts/s15.wav",
+      "durationSec": 7.852,
+      "narration": "作業派發完成、連結分享給學生，下一集換學生上場，登入開始寫作業。",
       "title": "下一集",
       "subtitle": "學生登入寫作業",
       "progressDots": true

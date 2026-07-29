@@ -30,11 +30,14 @@ const focusOf = (s: SceneT): Box | undefined => s.camera ?? s.spotlight ?? s.hig
 
 // 焦點框 → 攝影機狀態：框越小 zoom 越大（留呼吸邊距，上限 1.8），焦點中心平移到畫面中心，
 // translate clamp 讓內容不出界（角落元素因此只能「盡量靠中」）
+// EP6（2026-07-17 使用者指定）：群組內場景可用 `zoom` 覆寫倍率（突破呼吸邊距的 ~2.08 極限，上限 4）。
+// ⚠ 改這裡要同步改 qa_frames.py 的 Python 對照實作。
 const cameraFor = (scene: SceneT): Cam => {
   const focus = focusOf(scene);
   if (!focus) return FULL_CAM;
   const b = toScreen(focus);
-  const s = Math.min(1.8, Math.max(1, Math.min(VW / (b.w + 520), VH / (b.h + 520))));
+  const auto = Math.min(1.8, Math.max(1, Math.min(VW / (b.w + 520), VH / (b.h + 520))));
+  const s = scene.zoom ? Math.min(4, Math.max(1, scene.zoom)) : auto;
   const cx = b.x + b.w / 2;
   const cy = b.y + b.h / 2;
   const tx = Math.min(0, Math.max(VW - VW * s, VW / 2 - cx * s));

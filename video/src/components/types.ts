@@ -26,6 +26,7 @@ export type SceneT = {
   progressDots?: boolean; // 片尾字卡顯示系列進度點（吃 manifest.episode/episodesTotal）
   // steps 場景（集頭「本集 N 步驟」總覽卡）
   steps?: string[];
+  stepTimes?: number[]; // 每個 step 在旁白中被唸到的秒數；有則卡片逐項晃動同步旁白（無則沿用 stagger 進場）
   // shot 場景（v1）
   shot?: string;
   caption?: string;
@@ -48,6 +49,9 @@ export type SceneT = {
   // v2.2 運鏡群組：同一畫面連續講不同區塊 → 一鏡到底（無轉場，攝影機 pan/zoom 移動焦點）
   sameScreen?: boolean; // true = 與前一景同畫面，併入同一運鏡群組
   camera?: Box; // 攝影機焦點覆寫（預設 spotlight ?? highlights[0] ?? 全幅）
+  // EP4 手機直式：clip/shot 為 390×844 直式，改渲染在手機「入鏡框」內（置中）＋
+  // 框外模糊放大截圖背景；highlights 座標為 390×844 手機像素（toPhone 映射）。
+  mobile?: boolean;
 };
 
 export type ManifestT = {

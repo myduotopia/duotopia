@@ -24,7 +24,10 @@ export const ShotScene: React.FC<{ scene: SceneT }> = ({ scene }) => {
   const frozen = hasClip && frame >= clipFrames;
 
   const zoomStart = hasClip ? clipFrames : 0;
-  const scale = hasClip && !frozen
+  // 手機直式景不套桌機運鏡縮放（手機入鏡框已置中、highlights 走 toPhone）
+  const scale = scene.mobile
+    ? 1
+    : hasClip && !frozen
     ? 1
     : scene.zoomStatic
       ? scene.zoom ?? 1

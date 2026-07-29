@@ -1,0 +1,133 @@
+{
+  "tb_intro": {
+    "clip": "ep7/clips/tb_intro.mp4",
+    "clipDurationSec": 2.688,
+    "freezeShot": "ep7/clips/tb_intro_last.png",
+    "sfx": []
+  },
+  "tb_timer": {
+    "clip": "ep7/clips/tb_timer.mp4",
+    "clipDurationSec": 10.812,
+    "freezeShot": "ep7/clips/tb_timer_last.png",
+    "sfx": [
+      {
+        "t": 2.625,
+        "type": "click",
+        "box": {
+          "x": 1874,
+          "y": 423,
+          "w": 40,
+          "h": 40
+        }
+      },
+      {
+        "t": 6.047,
+        "type": "click",
+        "box": {
+          "x": 902,
+          "y": 472,
+          "w": 40,
+          "h": 40
+        }
+      },
+      {
+        "t": 10.047,
+        "type": "click",
+        "box": {
+          "x": 1874,
+          "y": 423,
+          "w": 40,
+          "h": 40
+        }
+      }
+    ]
+  },
+  "tb_dice": {
+    "clip": "ep7/clips/tb_dice.mp4",
+    "clipDurationSec": 9.594,
+    "freezeShot": "ep7/clips/tb_dice_last.png",
+    "sfx": [
+      {
+        "t": 3.438,
+        "type": "click",
+        "box": {
+          "x": 1874,
+          "y": 467,
+          "w": 40,
+          "h": 40
+        }
+      },
+      {
+        "t": 6.813,
+        "type": "click",
+        "box": {
+          "x": 930,
+          "y": 510,
+          "w": 179,
+          "h": 179
+        }
+      }
+    ]
+  },
+  "tb_rps": {
+    "clip": "ep7/clips/tb_rps.mp4",
+    "clipDurationSec": 10.718,
+    "freezeShot": "ep7/clips/tb_rps_last.png",
+    "sfx": [
+      {
+        "t": 3.781,
+        "type": "click",
+        "box": {
+          "x": 1874,
+          "y": 511,
+          "w": 40,
+          "h": 40
+        }
+      },
+      {
+        "t": 7.843,
+        "type": "click",
+        "box": {
+          "x": 936,
+          "y": 586,
+          "w": 48,
+          "h": 48
+        }
+      }
+    ]
+  },
+  "tb_share": {
+    "clip": "ep7/clips/tb_share.mp4",
+    "clipDurationSec": 7.203,
+    "freezeShot": "ep7/clips/tb_share_last.png",
+    "sfx": [
+      {
+        "t": 3.594,
+        "type": "click",
+        "box": {
+          "x": 1874,
+          "y": 560,
+          "w": 40,
+          "h": 40
+        }
+      }
+    ]
+  },
+  "tb_help": {
+    "clip": "ep7/clips/tb_help.mp4",
+    "clipDurationSec": 7.328,
+    "freezeShot": "ep7/clips/tb_help_last.png",
+    "sfx": [
+      {
+        "t": 3.578,
+        "type": "click",
+        "box": {
+          "x": 1874,
+          "y": 604,
+          "w": 40,
+          "h": 40
+        }
+      }
+    ]
+  }
+}

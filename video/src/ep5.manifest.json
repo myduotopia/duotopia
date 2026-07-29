@@ -1,0 +1,561 @@
+{
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "episode": 5,
+  "episodesTotal": 7,
+  "bgm": "bgm/candidate_Carefree.mp3",
+  "scenes": [
+    {
+      "id": "title_in",
+      "kind": "title",
+      "audio": "ep5/tts/s01.wav",
+      "durationSec": 9.988,
+      "narration": "第五集，老師批改與作業分析。學生繳交作業後，老師要怎麼快速又清楚地批改呢？讓我們一起看下去吧！",
+      "title": "第五集",
+      "subtitle": "老師批改與作業分析"
+    },
+    {
+      "id": "steps",
+      "kind": "steps",
+      "audio": "ep5/tts/s02.wav",
+      "durationSec": 10.917,
+      "narration": "打開批改頁，你可以讀懂全班的繳交狀態、用 AI 批次批改，也能點進學生個人作業批改，修改評語或給分。",
+      "title": "批改頁能幫你這些",
+      "steps": [
+        "讀懂作業繳交狀態",
+        "批次 AI 批改",
+        "學生個人作業批改",
+        "修改評語或給分"
+      ]
+    },
+    {
+      "id": "enter",
+      "kind": "shot",
+      "audio": "ep5/tts/s03.wav",
+      "durationSec": 9.942,
+      "narration": "先到班級的作業管理，找到要批改的那份作業，在右邊操作區點批改，就會打開批次批改的視窗。",
+      "shot": "ep5/shots/e01_model.png",
+      "caption": "",
+      "highlights": [
+        {
+          "x": 1630,
+          "y": 781,
+          "w": 72,
+          "h": 40
+        }
+      ],
+      "page": "作業管理 › 批改",
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep5/clips/enter.mp4",
+      "clipDurationSec": 8.594,
+      "freezeShot": "ep5/clips/enter_last.png",
+      "sfx": [
+        {
+          "t": 3.984,
+          "type": "click",
+          "box": {
+            "x": 1630,
+            "y": 781,
+            "w": 72,
+            "h": 40
+          }
+        }
+      ],
+      "hlAtSec": 2.784,
+      "hlOffSec": 4.234
+    },
+    {
+      "id": "status_icons",
+      "kind": "shot",
+      "audio": "ep5/tts/s04.wav",
+      "durationSec": 9.802,
+      "narration": "名字前面的小圓點，代表每個學生不同的作業狀態——還沒開始、還沒寫完、已完成待批改、還有老師已經批改。",
+      "shot": "ep5/shots/e02_status.png",
+      "caption": "名字前的圖示＝學生的作業狀態",
+      "highlights": [],
+      "page": "作業管理 › 批改",
+      "step": {
+        "index": 1,
+        "total": 9,
+        "label": "狀態圖示",
+        "prefix": "重點"
+      },
+      "sameScreen": true,
+      "camera": {
+        "x": 565,
+        "y": 250,
+        "w": 300,
+        "h": 120
+      },
+      "clip": "ep5/clips/status_icons.mp4",
+      "clipDurationSec": 7.062,
+      "freezeShot": "ep5/clips/status_icons_last.png"
+    },
+    {
+      "id": "status_legend",
+      "kind": "shot",
+      "audio": "ep5/tts/s05.wav",
+      "durationSec": 8.084,
+      "narration": "如果一時看不懂這些圖示，視窗最下面就有一份狀態圖示說明，可以隨時對照。",
+      "shot": "ep5/shots/e02_status.png",
+      "caption": "看不懂圖示，就看下方「狀態圖示說明」",
+      "highlights": [
+        {
+          "x": 549,
+          "y": 832,
+          "w": 822,
+          "h": 16
+        }
+      ],
+      "page": "作業管理 › 批改",
+      "step": {
+        "index": 1,
+        "total": 9,
+        "label": "狀態圖示",
+        "prefix": "重點"
+      },
+      "sameScreen": true,
+      "camera": {
+        "x": 545,
+        "y": 820,
+        "w": 830,
+        "h": 70
+      }
+    },
+    {
+      "id": "overview",
+      "kind": "shot",
+      "audio": "ep5/tts/s06.wav",
+      "durationSec": 15.143,
+      "narration": "每個人有發音、準確、流暢三個分數，看這三項就能快速掌握完成度。比如陳大雄同學，圖示是未完成、分數卻全空，代表他有登入打開過，但完全沒開始寫。",
+      "shot": "ep5/shots/e03_overview.png",
+      "caption": "看發音、準確、流暢，快速掌握完成度",
+      "highlights": [
+        {
+          "x": 560,
+          "y": 348,
+          "w": 835,
+          "h": 48
+        }
+      ],
+      "page": "作業管理 › 批改",
+      "step": {
+        "index": 2,
+        "total": 9,
+        "label": "完成度",
+        "prefix": "重點"
+      },
+      "hlAtSec": 1.5,
+      "sameScreen": true,
+      "camera": {
+        "x": 560,
+        "y": 342,
+        "w": 560,
+        "h": 92
+      },
+      "clip": "ep5/clips/overview.mp4",
+      "clipDurationSec": 8.36,
+      "freezeShot": "ep5/clips/overview_last.png"
+    },
+    {
+      "id": "overview2",
+      "kind": "shot",
+      "audio": "ep5/tts/s07.wav",
+      "durationSec": 12.171,
+      "narration": "再看看張偉強，他一樣是未完成，但發音、準確、流暢的平均分都很低，這代表他有開始寫，只是可能只完成了一兩題。",
+      "shot": "ep5/shots/e03_overview.png",
+      "caption": "分數很低＝有寫、但只完成一兩題",
+      "highlights": [
+        {
+          "x": 560,
+          "y": 222,
+          "w": 835,
+          "h": 48
+        }
+      ],
+      "page": "作業管理 › 批改",
+      "step": {
+        "index": 2,
+        "total": 9,
+        "label": "完成度",
+        "prefix": "重點"
+      },
+      "hlAtSec": 0.4,
+      "sameScreen": true,
+      "camera": {
+        "x": 560,
+        "y": 216,
+        "w": 560,
+        "h": 92
+      }
+    },
+    {
+      "id": "row_buttons",
+      "kind": "shot",
+      "audio": "ep5/tts/s08.wav",
+      "durationSec": 15.329,
+      "narration": "每位學生右邊有三個按鍵：還原、退回、完成。還原是把作業還原到剛派發的狀態；退回是把作業退回讓學生訂正重寫；完成則是標示為老師批改完成。",
+      "shot": "ep5/shots/e04_rowbtns.png",
+      "caption": "每列右側：還原 / 退回 / 完成",
+      "highlights": [
+        {
+          "x": 1221,
+          "y": 238,
+          "w": 24,
+          "h": 16
+        }
+      ],
+      "page": "作業管理 › 批改",
+      "step": {
+        "index": 3,
+        "total": 9,
+        "label": "還原/退回/完成",
+        "prefix": "重點"
+      },
+      "sameScreen": true,
+      "camera": {
+        "x": 1160,
+        "y": 228,
+        "w": 280,
+        "h": 92
+      },
+      "clip": "ep5/clips/row_buttons.mp4",
+      "clipDurationSec": 3.718,
+      "freezeShot": "ep5/clips/row_buttons_last.png"
+    },
+    {
+      "id": "ai_grade",
+      "kind": "shot",
+      "audio": "ep5/tts/s09.wav",
+      "durationSec": 11.242,
+      "narration": "最省事的，是這顆紫色的 AI 批改。你不用一個一個勾選，直接按下去，系統就會自動幫全班打分數、寫評語。",
+      "shot": "ep5/shots/e05_aigrade.png",
+      "caption": "紫色「AI 批改」：不用勾選，直接按下去",
+      "highlights": [
+        {
+          "x": 886,
+          "y": 932,
+          "w": 134,
+          "h": 48
+        }
+      ],
+      "page": "作業管理 › 批改",
+      "step": {
+        "index": 4,
+        "total": 9,
+        "label": "AI 批改",
+        "prefix": "重點"
+      },
+      "hlAtSec": 0.3,
+      "sameScreen": true,
+      "camera": {
+        "x": 818,
+        "y": 902,
+        "w": 490,
+        "h": 98
+      },
+      "clip": "ep5/clips/ai_grade.mp4",
+      "clipDurationSec": 7.782,
+      "freezeShot": "ep5/clips/ai_grade_last.png",
+      "sfx": [
+        {
+          "t": 4.938,
+          "type": "click",
+          "box": {
+            "x": 898,
+            "y": 941,
+            "w": 87,
+            "h": 32
+          }
+        }
+      ]
+    },
+    {
+      "id": "ai_grade2",
+      "kind": "shot",
+      "audio": "ep5/tts/s10.wav",
+      "durationSec": 13.3,
+      "narration": "稍微等幾秒，你看，每個學生的總分就一次全部跑出來了；本來要改很久的作業，現在幾秒鐘就批完，真的很省時間。",
+      "shot": "ep5/shots/e05_aigrade.png",
+      "caption": "稍等幾秒，全班總分一次跑出來",
+      "highlights": [
+        {
+          "x": 1047,
+          "y": 201,
+          "w": 56,
+          "h": 16
+        }
+      ],
+      "page": "作業管理 › 批改",
+      "step": {
+        "index": 4,
+        "total": 9,
+        "label": "AI 批改",
+        "prefix": "重點"
+      },
+      "hlAtSec": 8.5,
+      "sameScreen": true,
+      "camera": {
+        "x": 955,
+        "y": 224,
+        "w": 235,
+        "h": 285
+      },
+      "clip": "ep5/clips/ai_grade2.mp4",
+      "clipDurationSec": 12.5,
+      "freezeShot": "ep5/clips/ai_grade2_last.png"
+    },
+    {
+      "id": "score_select",
+      "kind": "shot",
+      "audio": "ep5/tts/s11.wav",
+      "durationSec": 12.96,
+      "narration": "想一次處理很多人，就用依分數勾選。例如設定一到六十分，把有寫、但不到六十分的學生一次勾起來，再按退回訂正，請他們重做。",
+      "shot": "ep5/shots/sp1_picked.png",
+      "caption": "依分數勾選：把有寫但不到 60 分的一次選起來退回訂正",
+      "highlights": [
+        {
+          "x": 1108,
+          "y": 941,
+          "w": 134,
+          "h": 32
+        }
+      ],
+      "page": "作業管理 › 批改",
+      "step": {
+        "index": 5,
+        "total": 9,
+        "label": "依分數勾選",
+        "prefix": "重點"
+      },
+      "transition": "fade",
+      "camera": {
+        "x": 528,
+        "y": 142,
+        "w": 620,
+        "h": 335
+      },
+      "clip": "ep5/clips/score_select.mp4",
+      "clipDurationSec": 10.718,
+      "freezeShot": "ep5/clips/score_select_last.png",
+      "sfx": [
+        {
+          "t": 4.234,
+          "type": "click",
+          "box": {
+            "x": 670,
+            "y": 156,
+            "w": 78,
+            "h": 26
+          }
+        }
+      ]
+    },
+    {
+      "id": "credits",
+      "kind": "shot",
+      "audio": "ep5/tts/s12.wav",
+      "durationSec": 14.632,
+      "narration": "要注意，錄音分析和 AI 批改都會用到 AI 點數，左下角看得到剩餘點數。點數用完時，學生只能上傳錄音、拿不到 AI 評分，這時就改用手動批改。",
+      "shot": "ep5/shots/e07b_credits.png",
+      "caption": "錄音分析與 AI 批改會用 AI 點數；點數用完就手動批改",
+      "highlights": [
+        {
+          "x": 12,
+          "y": 916,
+          "w": 236,
+          "h": 84
+        }
+      ],
+      "zoom": 1.5,
+      "zoomStatic": true,
+      "page": "作業管理",
+      "step": {
+        "index": 9,
+        "total": 9,
+        "label": "AI 點數",
+        "prefix": "重點"
+      },
+      "hlAtSec": 1.0,
+      "transition": "fade"
+    },
+    {
+      "id": "open_individual",
+      "kind": "shot",
+      "audio": "ep5/tts/s13.wav",
+      "durationSec": 6.877,
+      "narration": "手動批改也很簡單。點一下學生的名字，就會開啟這位學生的個人批改頁。",
+      "shot": "ep5/shots/e08_individual.png",
+      "caption": "點學生名字，開啟個人批改頁",
+      "highlights": [
+        {
+          "x": 616,
+          "y": 396,
+          "w": 214,
+          "h": 44
+        }
+      ],
+      "zoom": 1.6,
+      "zoomStatic": true,
+      "page": "作業管理 › 批改",
+      "step": {
+        "index": 6,
+        "total": 9,
+        "label": "點名字進個人頁",
+        "prefix": "重點"
+      },
+      "hlAtSec": 0.3,
+      "transition": "fade",
+      "clip": "ep5/clips/open_individual.mp4",
+      "clipDurationSec": 2.157,
+      "freezeShot": "ep5/clips/open_individual_last.png",
+      "sfx": [
+        {
+          "t": 3.063,
+          "type": "click",
+          "box": {
+            "x": 637,
+            "y": 404,
+            "w": 194,
+            "h": 20
+          }
+        }
+      ]
+    },
+    {
+      "id": "per_q_comment",
+      "kind": "shot",
+      "audio": "ep5/tts/s14.wav",
+      "durationSec": 9.106,
+      "narration": "這裡把作業一題一題列出來，你可以聽學生的錄音，在每題旁邊寫下評語；不想寫的題目留白也沒關係。",
+      "shot": "ep5/shots/e09_comment.png",
+      "caption": "逐題聽錄音、寫評語（可留白）",
+      "highlights": [
+        {
+          "x": 885,
+          "y": 178,
+          "w": 287,
+          "h": 60
+        }
+      ],
+      "page": "批改 › 學生個人批改頁",
+      "step": {
+        "index": 7,
+        "total": 9,
+        "label": "逐題評語",
+        "prefix": "重點"
+      },
+      "transition": "fade",
+      "camera": {
+        "x": 360,
+        "y": 150,
+        "w": 980,
+        "h": 560
+      },
+      "clip": "ep5/clips/per_q_comment.mp4",
+      "clipDurationSec": 6.922,
+      "freezeShot": "ep5/clips/per_q_comment_last.png",
+      "sfx": [
+        {
+          "t": 2.938,
+          "type": "click",
+          "box": {
+            "x": 885,
+            "y": 178,
+            "w": 287,
+            "h": 60
+          }
+        }
+      ]
+    },
+    {
+      "id": "score_adjust",
+      "kind": "shot",
+      "audio": "ep5/tts/s15.wav",
+      "durationSec": 19.816,
+      "narration": "右邊直接輸入分數、寫下總評語，最後按完成送出。你會發現，手動批改其實也又快又順手。",
+      "shot": "ep5/shots/e10_done.png",
+      "caption": "輸入分數、寫總評語 → 按完成送出",
+      "highlights": [
+        {
+          "x": 1297,
+          "y": 314,
+          "w": 574,
+          "h": 48
+        },
+        {
+          "x": 1616,
+          "y": 577,
+          "w": 56,
+          "h": 24
+        }
+      ],
+      "page": "批改 › 學生個人批改頁",
+      "step": {
+        "index": 8,
+        "total": 9,
+        "label": "分數調整",
+        "prefix": "重點"
+      },
+      "stepDone": true,
+      "sameScreen": true,
+      "camera": {
+        "x": 1050,
+        "y": 180,
+        "w": 850,
+        "h": 570
+      },
+      "clip": "ep5/clips/score_adjust.mp4",
+      "clipDurationSec": 19.016,
+      "freezeShot": "ep5/clips/score_adjust_last.png",
+      "sfx": [
+        {
+          "t": 2.422,
+          "type": "click",
+          "box": {
+            "x": 1297,
+            "y": 314,
+            "w": 574,
+            "h": 48
+          }
+        },
+        {
+          "t": 5.578,
+          "type": "click",
+          "box": {
+            "x": 1297,
+            "y": 418,
+            "w": 574,
+            "h": 98
+          }
+        },
+        {
+          "t": 10.672,
+          "type": "click",
+          "box": {
+            "x": 1616,
+            "y": 577,
+            "w": 56,
+            "h": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "title_out",
+      "kind": "title",
+      "audio": "ep5/tts/s16.wav",
+      "durationSec": 8.781,
+      "narration": "以上就是老師批改與作業分析。幫助老師們節省 99% 的批改時間，專注在幫助學生進步！",
+      "title": "系列進度",
+      "subtitle": "節省 99% 批改時間",
+      "progressDots": true
+    }
+  ]
+}

@@ -1,0 +1,534 @@
+{
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "episode": 4,
+  "episodesTotal": 7,
+  "bgm": "bgm/candidate_Carefree.mp3",
+  "thumbShot": "ep4/shots/a05_score.png",
+  "scenes": [
+    {
+      "id": "title_in",
+      "kind": "title",
+      "audio": "ep4/tts/s01.wav",
+      "durationSec": 12.681,
+      "narration": "上一集我們把作業派出去，也把學生登入的 QR Code 分享出來了。這一集，我們換到學生的角度，走一遍掃碼登入、寫作業的完整流程。",
+      "title": "第四集",
+      "subtitle": "學生登入寫作業"
+    },
+    {
+      "id": "steps",
+      "kind": "steps",
+      "audio": "ep4/tts/s02.wav",
+      "durationSec": 10.36,
+      "narration": "這一集有三個重點：先帶學生掃碼登入、完成一題感受即時的發音評分，最後教你怎麼引導學生自己變更密碼。",
+      "title": "本集 3 大步驟",
+      "steps": [
+        "掃 QR 登入（密碼＝加入班級那天的日期）",
+        "寫一題，馬上看發音評分",
+        "教學生變更密碼"
+      ]
+    },
+    {
+      "id": "qr_share",
+      "kind": "shot",
+      "audio": "ep4/tts/s03.wav",
+      "durationSec": 14.539,
+      "narration": "先回到老師這邊。上一集我們在課堂工具列點了「分享」，叫出這個學生登入的 QR Code。學生只要用手機鏡頭一掃，就能直接打開登入頁面，完全不用自己輸入老師的信箱。",
+      "shot": "ep4/shots/qr_share.png",
+      "caption": "① 老師端「分享」叫出的學生登入 QR，讓學生用手機掃描",
+      "highlights": [],
+      "page": "課堂工具 › 分享",
+      "step": {
+        "index": 1,
+        "total": 3,
+        "label": "掃 QR 登入",
+        "prefix": "步驟"
+      },
+      "spotlight": {
+        "x": 828,
+        "y": 405,
+        "w": 265,
+        "h": 278
+      }
+    },
+    {
+      "id": "l_class",
+      "kind": "shot",
+      "audio": "ep4/tts/s04.wav",
+      "durationSec": 9.802,
+      "narration": "掃描之後，畫面已經自動對應到老師的班級。學生第一步，先選擇自己所在的班級，這裡我們選「五年級A班」。",
+      "shot": "ep4/shots/l02_class.png",
+      "caption": "② 掃描後自動帶入老師，選自己的班級",
+      "highlights": [
+        {
+          "x": 58,
+          "y": 430,
+          "w": 84,
+          "h": 28
+        }
+      ],
+      "page": "學生專區 › 登入",
+      "step": {
+        "index": 1,
+        "total": 3,
+        "label": "掃 QR 登入",
+        "prefix": "步驟"
+      },
+      "transition": "slide",
+      "mobile": true,
+      "clip": "ep4/clips/l_class.mp4",
+      "clipDurationSec": 6.359,
+      "freezeShot": "ep4/clips/l_class_last.png",
+      "sfx": [
+        {
+          "t": 3.516,
+          "type": "click",
+          "box": {
+            "x": 58,
+            "y": 430,
+            "w": 84,
+            "h": 28
+          }
+        }
+      ],
+      "hlAtSec": 2.316,
+      "hlOffSec": 4.316
+    },
+    {
+      "id": "l_student",
+      "kind": "shot",
+      "audio": "ep4/tts/s05.wav",
+      "durationSec": 6.613,
+      "narration": "然後在班級名單裡，找到並點選自己的名字。",
+      "shot": "ep4/shots/l03_student.png",
+      "caption": "③ 在名單中點自己的名字",
+      "highlights": [
+        {
+          "x": 174,
+          "y": 561,
+          "w": 42,
+          "h": 20
+        }
+      ],
+      "page": "學生專區 › 登入",
+      "step": {
+        "index": 1,
+        "total": 3,
+        "label": "掃 QR 登入",
+        "prefix": "步驟"
+      },
+      "transition": "none",
+      "mobile": true,
+      "clip": "ep4/clips/l_student.mp4",
+      "clipDurationSec": 5.813,
+      "freezeShot": "ep4/clips/l_student_last.png",
+      "sfx": [
+        {
+          "t": 3.547,
+          "type": "click",
+          "box": {
+            "x": 174,
+            "y": 561,
+            "w": 42,
+            "h": 20
+          }
+        }
+      ],
+      "hlAtSec": 2.347,
+      "hlOffSec": 4.347
+    },
+    {
+      "id": "l_password",
+      "kind": "shot",
+      "audio": "ep4/tts/s06.wav",
+      "durationSec": 15.793,
+      "narration": "重點來了，預設密碼就是「加入班級那天的日期」，年、月、日八碼數字。全班同一天加入，就是同一組密碼。如果忘記了，老師可以回第一集複習怎麼查、怎麼重設。",
+      "shot": "ep4/shots/l04_password.png",
+      "caption": "④ 密碼＝加入班級那天的日期，八碼數字",
+      "highlights": [
+        {
+          "x": 41,
+          "y": 328,
+          "w": 308,
+          "h": 50
+        }
+      ],
+      "page": "學生專區 › 登入",
+      "step": {
+        "index": 1,
+        "total": 3,
+        "label": "掃 QR 登入",
+        "prefix": "步驟"
+      },
+      "transition": "none",
+      "mobile": true,
+      "clip": "ep4/clips/l_password.mp4",
+      "clipDurationSec": 7.344,
+      "freezeShot": "ep4/clips/l_password_last.png",
+      "sfx": [
+        {
+          "t": 2.89,
+          "type": "click",
+          "box": {
+            "x": 41,
+            "y": 328,
+            "w": 308,
+            "h": 50
+          }
+        },
+        {
+          "t": 7.109,
+          "type": "click",
+          "box": {
+            "x": 41,
+            "y": 510,
+            "w": 308,
+            "h": 48
+          }
+        }
+      ],
+      "hlAtSec": 1.69,
+      "hlOffSec": 3.69
+    },
+    {
+      "id": "l_done",
+      "kind": "shot",
+      "audio": "ep4/tts/s07.wav",
+      "durationSec": 5.762,
+      "narration": "輸入完按下登入，就成功登入，進到學生的首頁了。",
+      "shot": "ep4/shots/l05_home.png",
+      "caption": "登入成功！進到學生首頁",
+      "highlights": [],
+      "page": "學生專區 › 首頁",
+      "step": {
+        "index": 1,
+        "total": 3,
+        "label": "掃 QR 登入",
+        "prefix": "步驟"
+      },
+      "stepDone": true,
+      "transition": "none",
+      "mobile": true,
+      "clip": "ep4/clips/l_done.mp4",
+      "clipDurationSec": 2.828,
+      "freezeShot": "ep4/clips/l_done_last.png"
+    },
+    {
+      "id": "a_list",
+      "kind": "shot",
+      "audio": "ep4/tts/s08.wav",
+      "durationSec": 5.441,
+      "narration": "點開上一集我們派下去的「例句朗讀」作業。",
+      "shot": "ep4/shots/a01_list.png",
+      "caption": "① 點開老師派的「例句朗讀」作業",
+      "highlights": [
+        {
+          "x": 271,
+          "y": 440,
+          "w": 90,
+          "h": 36
+        }
+      ],
+      "page": "學生專區 › 作業",
+      "step": {
+        "index": 2,
+        "total": 3,
+        "label": "寫一題作業",
+        "prefix": "步驟"
+      },
+      "transition": "none",
+      "mobile": true,
+      "clip": "ep4/clips/a_list.mp4",
+      "clipDurationSec": 4.641,
+      "freezeShot": "ep4/clips/a_list_last.png",
+      "sfx": [
+        {
+          "t": 4.329,
+          "type": "click",
+          "box": {
+            "x": 271,
+            "y": 440,
+            "w": 90,
+            "h": 36
+          }
+        }
+      ],
+      "hlAtSec": 3.129,
+      "hlOffSec": 5.129
+    },
+    {
+      "id": "a_question",
+      "kind": "shot",
+      "audio": "ep4/tts/s09.wav",
+      "durationSec": 7.666,
+      "narration": "進到第一題，畫面上有一個英文例句，學生要做的，就是把這個句子唸出來。",
+      "shot": "ep4/shots/a02_question.png",
+      "caption": "② 看題目，準備跟著唸出例句",
+      "highlights": [],
+      "page": "學生專區 › 作業",
+      "step": {
+        "index": 2,
+        "total": 3,
+        "label": "寫一題作業",
+        "prefix": "步驟"
+      },
+      "transition": "none",
+      "mobile": true,
+      "clip": "ep4/clips/a_question.mp4",
+      "clipDurationSec": 3.625,
+      "freezeShot": "ep4/clips/a_question_last.png"
+    },
+    {
+      "id": "a_record",
+      "kind": "shot",
+      "audio": "ep4/tts/s10.wav",
+      "durationSec": 13.019,
+      "narration": "按下錄音按鈕，開始朗讀。",
+      "shot": "ep4/shots/a03_record.png",
+      "caption": "③ 按錄音，開始朗讀",
+      "highlights": [
+        {
+          "x": 30,
+          "y": 367,
+          "w": 48,
+          "h": 48
+        }
+      ],
+      "page": "學生專區 › 作業",
+      "step": {
+        "index": 2,
+        "total": 3,
+        "label": "寫一題作業",
+        "prefix": "步驟"
+      },
+      "transition": "none",
+      "mobile": true,
+      "clip": "ep4/clips/a_record.mp4",
+      "clipDurationSec": 12.219,
+      "freezeShot": "ep4/clips/a_record_last.png",
+      "sfx": [
+        {
+          "t": 3.625,
+          "type": "click",
+          "box": {
+            "x": 30,
+            "y": 367,
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "t": 10.766,
+          "type": "click",
+          "box": {
+            "x": 132,
+            "y": 367,
+            "w": 58,
+            "h": 28
+          }
+        }
+      ],
+      "hlAtSec": 2.425,
+      "hlOffSec": 4.425
+    },
+    {
+      "id": "a_analyze",
+      "kind": "shot",
+      "audio": "ep4/tts/s11.wav",
+      "durationSec": 8.254,
+      "narration": "唸完停止錄音，再點一下「分析」，把錄音送給 AI 做發音評測。",
+      "shot": "ep4/shots/a04_analyze.png",
+      "caption": "④ 錄完點「分析」，送出 AI 發音評測",
+      "highlights": [
+        {
+          "x": 126,
+          "y": 438,
+          "w": 137,
+          "h": 60
+        }
+      ],
+      "page": "學生專區 › 作業",
+      "step": {
+        "index": 2,
+        "total": 3,
+        "label": "寫一題作業",
+        "prefix": "步驟"
+      },
+      "transition": "none",
+      "mobile": true,
+      "clip": "ep4/clips/a_analyze.mp4",
+      "clipDurationSec": 7.454,
+      "freezeShot": "ep4/clips/a_analyze_last.png",
+      "sfx": [
+        {
+          "t": 5.547,
+          "type": "click",
+          "box": {
+            "x": 126,
+            "y": 438,
+            "w": 137,
+            "h": 60
+          }
+        }
+      ],
+      "hlAtSec": 4.347,
+      "hlOffSec": 6.347
+    },
+    {
+      "id": "a_score",
+      "kind": "shot",
+      "audio": "ep4/tts/s12.wav",
+      "durationSec": 14.678,
+      "narration": "只要幾秒，馬上就有結果。有總體分數，還有準確度、流暢度、完整度，連每一個單字都幫你評分。這種即時回饋，能讓學生馬上知道哪裡要加強，也是很好的鼓勵。",
+      "shot": "ep4/shots/a05_score.png",
+      "caption": "⑤ 幾秒就有評分：總體、準確、流暢、完整，逐字回饋",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 121,
+          "w": 390,
+          "h": 477
+        }
+      ],
+      "page": "學生專區 › 作業",
+      "step": {
+        "index": 2,
+        "total": 3,
+        "label": "寫一題作業",
+        "prefix": "步驟"
+      },
+      "stepDone": true,
+      "transition": "none",
+      "mobile": true,
+      "clip": "ep4/clips/a_score.mp4",
+      "clipDurationSec": 4.875,
+      "freezeShot": "ep4/clips/a_score_last.png"
+    },
+    {
+      "id": "p_profile",
+      "kind": "shot",
+      "audio": "ep4/tts/s13.wav",
+      "durationSec": 8.55,
+      "narration": "最後教大家一件很實用的事：怎麼讓學生自己改密碼。從選單點進「個人資料」。",
+      "shot": "ep4/shots/p01_profile.png",
+      "caption": "① 從選單進到「個人資料」",
+      "highlights": [
+        {
+          "x": 16,
+          "y": 16,
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "page": "學生專區 › 個人資料",
+      "step": {
+        "index": 3,
+        "total": 3,
+        "label": "變更密碼",
+        "prefix": "步驟"
+      },
+      "transition": "none",
+      "mobile": true,
+      "clip": "ep4/clips/p_profile.mp4",
+      "clipDurationSec": 7.75,
+      "freezeShot": "ep4/clips/p_profile_last.png",
+      "sfx": [
+        {
+          "t": 3.735,
+          "type": "click",
+          "box": {
+            "x": 16,
+            "y": 16,
+            "w": 40,
+            "h": 40
+          }
+        },
+        {
+          "t": 7.578,
+          "type": "click",
+          "box": {
+            "x": 16,
+            "y": 736,
+            "w": 224,
+            "h": 48
+          }
+        }
+      ],
+      "hlAtSec": 2.535,
+      "hlOffSec": 4.535
+    },
+    {
+      "id": "p_password",
+      "kind": "shot",
+      "audio": "ep4/tts/s14.wav",
+      "durationSec": 14.238,
+      "narration": "在個人資料頁，就能設定新的密碼。建議請學生第一次登入之後，就把預設密碼換成自己好記、又不容易被猜到的密碼。",
+      "shot": "ep4/shots/p02_password.png",
+      "caption": "② 在這裡就能把密碼換成好記又安全的",
+      "highlights": [
+        {
+          "x": 12,
+          "y": 376,
+          "w": 366,
+          "h": 432
+        }
+      ],
+      "page": "學生專區 › 個人資料",
+      "step": {
+        "index": 3,
+        "total": 3,
+        "label": "變更密碼",
+        "prefix": "步驟"
+      },
+      "stepDone": true,
+      "transition": "fade",
+      "mobile": true,
+      "clip": "ep4/clips/p_password.mp4",
+      "clipDurationSec": 13.438,
+      "freezeShot": "ep4/clips/p_password_last.png",
+      "sfx": [
+        {
+          "t": 2.86,
+          "type": "click",
+          "box": {
+            "x": 40,
+            "y": 535,
+            "w": 313,
+            "h": 40
+          }
+        },
+        {
+          "t": 6.188,
+          "type": "click",
+          "box": {
+            "x": 40,
+            "y": 615,
+            "w": 313,
+            "h": 40
+          }
+        },
+        {
+          "t": 9.547,
+          "type": "click",
+          "box": {
+            "x": 40,
+            "y": 695,
+            "w": 313,
+            "h": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "title_out",
+      "kind": "title",
+      "audio": "ep4/tts/s15.wav",
+      "durationSec": 7.805,
+      "narration": "學生把作業交出去之後，老師要怎麼批改、又怎麼看作業分析？下一集告訴你。",
+      "title": "下一集",
+      "subtitle": "老師批改與作業分析",
+      "progressDots": true
+    }
+  ]
+}

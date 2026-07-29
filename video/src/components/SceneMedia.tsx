@@ -2,7 +2,8 @@ import React from "react";
 import { Img, OffthreadVideo, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { AccountMask } from "./AccountMask";
 import { HighlightBox, SpotlightOverlay } from "./Focus";
-import { FRAME, OX, OY, VH, VW, toScreen } from "./frame";
+import { FRAME, OX, OY, VH, VW, toPhone, toScreen } from "./frame";
+import { PhoneFrame } from "./PhoneFrame";
 import { SceneT } from "./types";
 
 // 媒體層：裱框內容（clip 播放/尾幀定格/靜態截圖）+ mask + spotlight/highlight。
@@ -20,6 +21,28 @@ export const SceneMedia: React.FC<{ scene: SceneT; hlDelayOverride?: number }> =
   const hlDelay = hlDelayOverride ?? Math.round((scene.hlAtSec ?? (hasClip ? scene.clipDurationSec ?? 0 : 0)) * fps);
   // 退場時間：點擊後畫面會變，框不得殘留（未設 = 不退場，靜態講解景適用）
   const hlOff = scene.hlOffSec !== undefined ? Math.round(scene.hlOffSec * fps) : undefined;
+
+  // EP4 手機直式：clip 放進手機入鏡框（置中）＋ 框外模糊放大截圖背景；
+  // highlights/spotlight 座標為 390×844 手機像素，toPhone 映射到框在畫布上的位置。
+  if (scene.mobile) {
+    const bg = ((frozen ? scene.freezeShot : scene.shot) ?? scene.shot ?? scene.freezeShot) as string;
+    const mboxes = (scene.highlights ?? []).map(toPhone);
+    return (
+      <>
+        <PhoneFrame bgSrc={bg}>
+          {hasClip && !frozen ? (
+            <OffthreadVideo src={staticFile(scene.clip as string)} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            <Img src={staticFile((frozen ? scene.freezeShot : scene.shot) ?? scene.shot ?? (scene.freezeShot as string))} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          )}
+        </PhoneFrame>
+        {scene.spotlight ? <SpotlightOverlay box={toPhone(scene.spotlight)} delayFrames={hlDelay} offFrames={hlOff} /> : null}
+        {mboxes.map((b, i) => (
+          <HighlightBox key={i} box={b} delayFrames={hlDelay} offFrames={hlOff} />
+        ))}
+      </>
+    );
+  }
 
   return (
     <>

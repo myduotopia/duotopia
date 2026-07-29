@@ -6,12 +6,20 @@ import { ManifestT } from "./components/types";
 import ep1 from "./ep1.manifest.json";
 import ep2 from "./ep2.manifest.json";
 import ep3 from "./ep3.manifest.json";
+import ep4 from "./ep4.manifest.json";
+import ep5 from "./ep5.manifest.json";
+import ep6 from "./ep6.manifest.json";
+import ep7 from "./ep7.manifest.json";
 
 // 新增一集：import manifest 後加進這張表即可，不碰任何元件程式碼
 const EPISODES: Record<string, ManifestT> = {
   EP1: ep1 as unknown as ManifestT,
   EP2: ep2 as unknown as ManifestT,
   EP3: ep3 as unknown as ManifestT,
+  EP4: ep4 as unknown as ManifestT,
+  EP5: ep5 as unknown as ManifestT,
+  EP6: ep6 as unknown as ManifestT,
+  EP7: ep7 as unknown as ManifestT,
 };
 
 export const RemotionRoot: React.FC = () => {

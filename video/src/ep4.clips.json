@@ -1,0 +1,206 @@
+{
+  "l_class": {
+    "clip": "ep4/clips/l_class.mp4",
+    "clipDurationSec": 6.359,
+    "freezeShot": "ep4/clips/l_class_last.png",
+    "sfx": [
+      {
+        "t": 3.516,
+        "type": "click",
+        "box": {
+          "x": 58,
+          "y": 430,
+          "w": 84,
+          "h": 28
+        }
+      }
+    ]
+  },
+  "l_student": {
+    "clip": "ep4/clips/l_student.mp4",
+    "clipDurationSec": 5.813,
+    "freezeShot": "ep4/clips/l_student_last.png",
+    "sfx": [
+      {
+        "t": 3.547,
+        "type": "click",
+        "box": {
+          "x": 174,
+          "y": 561,
+          "w": 42,
+          "h": 20
+        }
+      }
+    ]
+  },
+  "l_password": {
+    "clip": "ep4/clips/l_password.mp4",
+    "clipDurationSec": 7.344,
+    "freezeShot": "ep4/clips/l_password_last.png",
+    "sfx": [
+      {
+        "t": 2.89,
+        "type": "click",
+        "box": {
+          "x": 41,
+          "y": 328,
+          "w": 308,
+          "h": 50
+        }
+      },
+      {
+        "t": 7.109,
+        "type": "click",
+        "box": {
+          "x": 41,
+          "y": 510,
+          "w": 308,
+          "h": 48
+        }
+      }
+    ]
+  },
+  "l_done": {
+    "clip": "ep4/clips/l_done.mp4",
+    "clipDurationSec": 2.828,
+    "freezeShot": "ep4/clips/l_done_last.png",
+    "sfx": []
+  },
+  "a_list": {
+    "clip": "ep4/clips/a_list.mp4",
+    "clipDurationSec": 4.641,
+    "freezeShot": "ep4/clips/a_list_last.png",
+    "sfx": [
+      {
+        "t": 4.329,
+        "type": "click",
+        "box": {
+          "x": 271,
+          "y": 440,
+          "w": 90,
+          "h": 36
+        }
+      }
+    ]
+  },
+  "a_question": {
+    "clip": "ep4/clips/a_question.mp4",
+    "clipDurationSec": 3.625,
+    "freezeShot": "ep4/clips/a_question_last.png",
+    "sfx": []
+  },
+  "a_record": {
+    "clip": "ep4/clips/a_record.mp4",
+    "clipDurationSec": 12.219,
+    "freezeShot": "ep4/clips/a_record_last.png",
+    "sfx": [
+      {
+        "t": 3.625,
+        "type": "click",
+        "box": {
+          "x": 30,
+          "y": 367,
+          "w": 48,
+          "h": 48
+        }
+      },
+      {
+        "t": 10.766,
+        "type": "click",
+        "box": {
+          "x": 132,
+          "y": 367,
+          "w": 58,
+          "h": 28
+        }
+      }
+    ]
+  },
+  "a_analyze": {
+    "clip": "ep4/clips/a_analyze.mp4",
+    "clipDurationSec": 7.454,
+    "freezeShot": "ep4/clips/a_analyze_last.png",
+    "sfx": [
+      {
+        "t": 5.547,
+        "type": "click",
+        "box": {
+          "x": 126,
+          "y": 438,
+          "w": 137,
+          "h": 60
+        }
+      }
+    ]
+  },
+  "a_score": {
+    "clip": "ep4/clips/a_score.mp4",
+    "clipDurationSec": 4.875,
+    "freezeShot": "ep4/clips/a_score_last.png",
+    "sfx": []
+  },
+  "p_profile": {
+    "clip": "ep4/clips/p_profile.mp4",
+    "clipDurationSec": 7.75,
+    "freezeShot": "ep4/clips/p_profile_last.png",
+    "sfx": [
+      {
+        "t": 3.735,
+        "type": "click",
+        "box": {
+          "x": 16,
+          "y": 16,
+          "w": 40,
+          "h": 40
+        }
+      },
+      {
+        "t": 7.578,
+        "type": "click",
+        "box": {
+          "x": 16,
+          "y": 736,
+          "w": 224,
+          "h": 48
+        }
+      }
+    ]
+  },
+  "p_password": {
+    "clip": "ep4/clips/p_password.mp4",
+    "clipDurationSec": 13.438,
+    "freezeShot": "ep4/clips/p_password_last.png",
+    "sfx": [
+      {
+        "t": 2.86,
+        "type": "click",
+        "box": {
+          "x": 40,
+          "y": 535,
+          "w": 313,
+          "h": 40
+        }
+      },
+      {
+        "t": 6.188,
+        "type": "click",
+        "box": {
+          "x": 40,
+          "y": 615,
+          "w": 313,
+          "h": 40
+        }
+      },
+      {
+        "t": 9.547,
+        "type": "click",
+        "box": {
+          "x": 40,
+          "y": 695,
+          "w": 313,
+          "h": 40
+        }
+      }
+    ]
+  }
+}

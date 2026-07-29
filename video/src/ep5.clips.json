@@ -1,0 +1,154 @@
+{
+  "enter": {
+    "clip": "ep5/clips/enter.mp4",
+    "clipDurationSec": 8.594,
+    "freezeShot": "ep5/clips/enter_last.png",
+    "sfx": [
+      {
+        "t": 3.984,
+        "type": "click",
+        "box": {
+          "x": 1630,
+          "y": 781,
+          "w": 72,
+          "h": 40
+        }
+      }
+    ]
+  },
+  "status_icons": {
+    "clip": "ep5/clips/status_icons.mp4",
+    "clipDurationSec": 7.062,
+    "freezeShot": "ep5/clips/status_icons_last.png",
+    "sfx": []
+  },
+  "overview": {
+    "clip": "ep5/clips/overview.mp4",
+    "clipDurationSec": 8.36,
+    "freezeShot": "ep5/clips/overview_last.png",
+    "sfx": []
+  },
+  "row_buttons": {
+    "clip": "ep5/clips/row_buttons.mp4",
+    "clipDurationSec": 3.718,
+    "freezeShot": "ep5/clips/row_buttons_last.png",
+    "sfx": []
+  },
+  "ai_grade": {
+    "clip": "ep5/clips/ai_grade.mp4",
+    "clipDurationSec": 7.782,
+    "freezeShot": "ep5/clips/ai_grade_last.png",
+    "sfx": [
+      {
+        "t": 4.938,
+        "type": "click",
+        "box": {
+          "x": 898,
+          "y": 941,
+          "w": 87,
+          "h": 32
+        }
+      }
+    ]
+  },
+  "score_select": {
+    "clip": "ep5/clips/score_select.mp4",
+    "clipDurationSec": 10.718,
+    "freezeShot": "ep5/clips/score_select_last.png",
+    "sfx": [
+      {
+        "t": 4.234,
+        "type": "click",
+        "box": {
+          "x": 670,
+          "y": 156,
+          "w": 78,
+          "h": 26
+        }
+      }
+    ]
+  },
+  "credits": {
+    "clip": "ep5/clips/credits.mp4",
+    "clipDurationSec": 4.203,
+    "freezeShot": "ep5/clips/credits_last.png",
+    "sfx": []
+  },
+  "open_individual": {
+    "clip": "ep5/clips/open_individual.mp4",
+    "clipDurationSec": 2.157,
+    "freezeShot": "ep5/clips/open_individual_last.png",
+    "sfx": [
+      {
+        "t": 3.063,
+        "type": "click",
+        "box": {
+          "x": 637,
+          "y": 404,
+          "w": 194,
+          "h": 20
+        }
+      }
+    ]
+  },
+  "per_q_comment": {
+    "clip": "ep5/clips/per_q_comment.mp4",
+    "clipDurationSec": 6.922,
+    "freezeShot": "ep5/clips/per_q_comment_last.png",
+    "sfx": [
+      {
+        "t": 2.938,
+        "type": "click",
+        "box": {
+          "x": 885,
+          "y": 178,
+          "w": 287,
+          "h": 60
+        }
+      }
+    ]
+  },
+  "score_adjust": {
+    "clip": "ep5/clips/score_adjust.mp4",
+    "clipDurationSec": 19.016,
+    "freezeShot": "ep5/clips/score_adjust_last.png",
+    "sfx": [
+      {
+        "t": 2.422,
+        "type": "click",
+        "box": {
+          "x": 1297,
+          "y": 314,
+          "w": 574,
+          "h": 48
+        }
+      },
+      {
+        "t": 5.578,
+        "type": "click",
+        "box": {
+          "x": 1297,
+          "y": 418,
+          "w": 574,
+          "h": 98
+        }
+      },
+      {
+        "t": 10.672,
+        "type": "click",
+        "box": {
+          "x": 1616,
+          "y": 577,
+          "w": 56,
+          "h": 24
+        }
+      }
+    ]
+  },
+  "ai_grade2": {
+    "clip": "ep5/clips/ai_grade2.mp4",
+    "clipDurationSec": 12.5,
+    "freezeShot": "ep5/clips/ai_grade2_last.png",
+    "sfx": []
+  }
+}

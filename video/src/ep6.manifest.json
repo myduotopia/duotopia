@@ -1,0 +1,787 @@
+{
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "episode": 6,
+  "episodesTotal": 7,
+  "bgm": "bgm/candidate_Carefree.mp3",
+  "scenes": [
+    {
+      "id": "title_in",
+      "kind": "title",
+      "audio": "ep6/tts/s01.wav",
+      "durationSec": 6.642,
+      "narration": "第六集，我們來學習如何派發線上小考與即時課後檢討。",
+      "title": "第六集",
+      "subtitle": "派小考與考後檢討"
+    },
+    {
+      "id": "steps",
+      "kind": "steps",
+      "audio": "ep6/tts/s02.wav",
+      "durationSec": 12.628,
+      "narration": "線上派發小考，從統一發卷、線上 LIVE 監考、統一收卷、檢視修改學生成績與查看報告，還有考後檢討。",
+      "title": "這一集你會學到",
+      "steps": [
+        "統一發卷",
+        "LIVE 監考",
+        "統一收卷",
+        "成績與報告",
+        "考後檢討"
+      ]
+    },
+    {
+      "id": "t_dispatch1",
+      "kind": "shot",
+      "audio": "ep6/tts/s03.wav",
+      "durationSec": 9.833,
+      "narration": "先指派新作業，選「單字克漏字·小考」。",
+      "shot": "ep6/shots/t01_settings.png",
+      "caption": "指派新作業 → 選「單字克漏字·小考」",
+      "highlights": [
+        {
+          "x": 305,
+          "y": 314,
+          "w": 126,
+          "h": 40
+        }
+      ],
+      "page": "作業管理",
+      "step": {
+        "index": 1,
+        "total": 5,
+        "label": "統一發卷",
+        "prefix": "重點"
+      },
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep6/clips/t_dispatch1.mp4",
+      "clipDurationSec": 9.033,
+      "freezeShot": "ep6/clips/t_dispatch1_last.png",
+      "sfx": [
+        {
+          "t": 2.813,
+          "type": "click",
+          "box": {
+            "x": 305,
+            "y": 314,
+            "w": 126,
+            "h": 40
+          }
+        },
+        {
+          "t": 7.413,
+          "type": "click",
+          "box": {
+            "x": 1550,
+            "y": 105,
+            "w": 151,
+            "h": 38
+          }
+        }
+      ],
+      "hlAtSec": 1.613,
+      "hlOffSec": 3.063
+    },
+    {
+      "id": "t_dispatch1b",
+      "kind": "shot",
+      "audio": "ep6/tts/s04.wav",
+      "durationSec": 12.938,
+      "narration": "重點是把「老師按開始全班同步進入、按收卷全班結束」打開——這就是 live 模式，發卷收卷都由你控制。",
+      "shot": "ep6/shots/t01_settings.png",
+      "caption": "重點：打開「老師按開始全班同步進入、按收卷全班結束」＝ live 模式",
+      "highlights": [
+        {
+          "x": 280,
+          "y": 402,
+          "w": 330,
+          "h": 78
+        }
+      ],
+      "page": "作業管理",
+      "hlAtSec": 1,
+      "sameScreen": true,
+      "camera": {
+        "x": 270,
+        "y": 395,
+        "w": 90,
+        "h": 70
+      },
+      "clip": "ep6/clips/t_dispatch1b.mp4",
+      "clipDurationSec": 6.033,
+      "freezeShot": "ep6/clips/t_dispatch1b_last.png",
+      "sfx": [
+        {
+          "t": 0.95,
+          "type": "click",
+          "box": {
+            "x": 294,
+            "y": 328,
+            "w": 139,
+            "h": 64
+          }
+        },
+        {
+          "t": 3.438,
+          "type": "click",
+          "box": {
+            "x": 294,
+            "y": 425,
+            "w": 36,
+            "h": 20
+          }
+        },
+        {
+          "t": 5,
+          "type": "click",
+          "box": {
+            "x": 294,
+            "y": 473,
+            "w": 36,
+            "h": 20
+          }
+        }
+      ]
+    },
+    {
+      "id": "t_dispatch2",
+      "kind": "shot",
+      "audio": "ep6/tts/s05.wav",
+      "durationSec": 26.7,
+      "narration": "接著選教材單元、派給指定班級，填好標題按創建作業，考卷就派出去了。",
+      "shot": "ep6/shots/t02_content.png",
+      "caption": "選教材 → 派給指定班級 → 填標題 → 創建作業",
+      "highlights": [
+        {
+          "x": 1802,
+          "y": 1028,
+          "w": 94,
+          "h": 40
+        }
+      ],
+      "page": "作業管理",
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep6/clips/t_dispatch2.mp4",
+      "clipDurationSec": 25.9,
+      "freezeShot": "ep6/clips/t_dispatch2_last.png",
+      "sfx": [
+        {
+          "t": 0.85,
+          "type": "click",
+          "box": {
+            "x": 1802,
+            "y": 1028,
+            "w": 94,
+            "h": 40
+          }
+        },
+        {
+          "t": 3.75,
+          "type": "click",
+          "box": {
+            "x": 355,
+            "y": 207,
+            "w": 164,
+            "h": 24
+          }
+        },
+        {
+          "t": 5.938,
+          "type": "click",
+          "box": {
+            "x": 375,
+            "y": 254,
+            "w": 39,
+            "h": 20
+          }
+        },
+        {
+          "t": 8.987,
+          "type": "click",
+          "box": {
+            "x": 375,
+            "y": 292,
+            "w": 998,
+            "h": 20
+          }
+        },
+        {
+          "t": 11.262,
+          "type": "click",
+          "box": {
+            "x": 1802,
+            "y": 1028,
+            "w": 94,
+            "h": 40
+          }
+        },
+        {
+          "t": 14.225,
+          "type": "click",
+          "box": {
+            "x": 1802,
+            "y": 1028,
+            "w": 94,
+            "h": 40
+          }
+        },
+        {
+          "t": 17.862,
+          "type": "click",
+          "box": {
+            "x": 281,
+            "y": 159,
+            "w": 1599,
+            "h": 40
+          }
+        },
+        {
+          "t": 21.7,
+          "type": "click",
+          "box": {
+            "x": 1788,
+            "y": 1028,
+            "w": 108,
+            "h": 40
+          }
+        }
+      ],
+      "hlAtSec": 0.9,
+      "hlOffSec": 1.1
+    },
+    {
+      "id": "d_qr",
+      "kind": "shot",
+      "audio": "ep6/tts/s06.wav",
+      "durationSec": 11.544,
+      "narration": "學生用 QR Code 掃描登入後，就會在作業列表看到這張考卷卡。不過現在還不能作答——因為老師還沒發卷。",
+      "shot": "ep6/shots/s02_locked.png",
+      "caption": "學生掃 QR 登入：看得到考卷卡，但老師還沒發卷",
+      "highlights": [
+        {
+          "x": 89,
+          "y": 395,
+          "w": 424,
+          "h": 178
+        }
+      ],
+      "page": "學生端 × 老師端",
+      "hlAtSec": 1,
+      "transition": "fade",
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep6/clips/d_qr.mp4",
+      "clipDurationSec": 9.765,
+      "freezeShot": "ep6/clips/d_qr_last.png",
+      "sfx": [
+        {
+          "t": 6.859,
+          "type": "click",
+          "box": {
+            "x": 180,
+            "y": 452,
+            "w": 318,
+            "h": 23
+          }
+        }
+      ]
+    },
+    {
+      "id": "d_liveon",
+      "kind": "shot",
+      "audio": "ep6/tts/s07.wav",
+      "durationSec": 9.831,
+      "narration": "上課時間到，老師把考卷的 LIVE 開關打開，監考視窗跳出來——考試正式開始！",
+      "shot": "ep6/shots/t05_live_on.png",
+      "caption": "老師打開 LIVE 開關，考試開始！",
+      "highlights": [
+        {
+          "x": 1573,
+          "y": 560,
+          "w": 43,
+          "h": 19
+        }
+      ],
+      "zoom": 2.5,
+      "page": "學生端 × 老師端",
+      "step": {
+        "index": 2,
+        "total": 5,
+        "label": "LIVE 監考",
+        "prefix": "重點"
+      },
+      "sameScreen": true,
+      "camera": {
+        "x": 1548,
+        "y": 540,
+        "w": 95,
+        "h": 60
+      },
+      "clip": "ep6/clips/d_liveon.mp4",
+      "clipDurationSec": 9.031,
+      "freezeShot": "ep6/clips/d_liveon_last.png",
+      "sfx": [
+        {
+          "t": 4.187,
+          "type": "click",
+          "box": {
+            "x": 1573,
+            "y": 560,
+            "w": 43,
+            "h": 19
+          }
+        }
+      ],
+      "hlAtSec": 2.987,
+      "hlOffSec": 4.437
+    },
+    {
+      "id": "d_answer",
+      "kind": "shot",
+      "audio": "ep6/tts/s08.wav",
+      "durationSec": 39.933,
+      "narration": "學生這邊的考卷卡變成可以進入了。用畫面上的鍵盤拼出單字，一題一題作答。這裡特別使用內建的虛擬鍵盤，擋掉平板和手機的自動拼字建議，考試才公平，分數也才能反映學生真正的實力。同一時間，老師的監考畫面看得到每個學生寫到第幾題、哪些學生已經交卷，全班進度一目瞭然。",
+      "shot": "ep6/shots/s03_quiz.png",
+      "caption": "學生作答中；老師監考畫面同步看進度",
+      "highlights": [
+        {
+          "x": 917,
+          "y": 251,
+          "w": 607,
+          "h": 578
+        }
+      ],
+      "page": "學生端 × 老師端",
+      "hlAtSec": 14,
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep6/clips/d_answer.mp4",
+      "clipDurationSec": 39.133,
+      "freezeShot": "ep6/clips/d_answer_last.png",
+      "sfx": [
+        {
+          "t": 2.364,
+          "type": "click",
+          "box": {
+            "x": 391,
+            "y": 504,
+            "w": 107,
+            "h": 43
+          }
+        },
+        {
+          "t": 11.739,
+          "type": "click",
+          "box": {
+            "x": 160,
+            "y": 202,
+            "w": 38,
+            "h": 38
+          }
+        },
+        {
+          "t": 17.208,
+          "type": "click",
+          "box": {
+            "x": 203,
+            "y": 202,
+            "w": 38,
+            "h": 38
+          }
+        },
+        {
+          "t": 22.114,
+          "type": "click",
+          "box": {
+            "x": 245,
+            "y": 202,
+            "w": 38,
+            "h": 38
+          }
+        },
+        {
+          "t": 27.161,
+          "type": "click",
+          "box": {
+            "x": 288,
+            "y": 202,
+            "w": 38,
+            "h": 38
+          }
+        },
+        {
+          "t": 31.294,
+          "type": "click",
+          "box": {
+            "x": 331,
+            "y": 202,
+            "w": 38,
+            "h": 38
+          }
+        },
+        {
+          "t": 36.778,
+          "type": "click",
+          "box": {
+            "x": 452,
+            "y": 136,
+            "w": 71,
+            "h": 43
+          }
+        }
+      ]
+    },
+    {
+      "id": "d_collect",
+      "kind": "shot",
+      "audio": "ep6/tts/s09.wav",
+      "durationSec": 14.363,
+      "narration": "時間到，老師按下收卷，全班考試立刻結束——學生畫面同步轉為交卷狀態。還沒考的學生，下次開考時再補考就可以。",
+      "shot": "ep6/shots/t07_collected.png",
+      "caption": "按收卷：全班同步結束；沒考到的下次補考",
+      "highlights": [
+        {
+          "x": 1451,
+          "y": 786,
+          "w": 56,
+          "h": 27
+        }
+      ],
+      "page": "學生端 × 老師端",
+      "step": {
+        "index": 3,
+        "total": 5,
+        "label": "統一收卷",
+        "prefix": "重點"
+      },
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep6/clips/d_collect.mp4",
+      "clipDurationSec": 13.563,
+      "freezeShot": "ep6/clips/d_collect_last.png",
+      "sfx": [
+        {
+          "t": 3.469,
+          "type": "click",
+          "box": {
+            "x": 1451,
+            "y": 786,
+            "w": 56,
+            "h": 27
+          }
+        }
+      ],
+      "hlAtSec": 2.269,
+      "hlOffSec": 3.719
+    },
+    {
+      "id": "d_result",
+      "kind": "shot",
+      "audio": "ep6/tts/s10.wav",
+      "durationSec": 22.535,
+      "narration": "學生也能在「已提交」裡再次打開考卷，看到自己的分數；答錯的題目會清楚標示你的答案和正確答案，錯在哪裡一目瞭然。",
+      "shot": "ep6/shots/s07_wrong.png",
+      "caption": "學生再點開考卷：分數與錯題對照，一目瞭然",
+      "highlights": [
+        {
+          "x": 412,
+          "y": 259,
+          "w": 50,
+          "h": 25
+        }
+      ],
+      "page": "學生端・成績檢視",
+      "transition": "fade",
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep6/clips/d_result.mp4",
+      "clipDurationSec": 21.735,
+      "freezeShot": "ep6/clips/d_result_last.png",
+      "sfx": [
+        {
+          "t": 2.954,
+          "type": "click",
+          "box": {
+            "x": 412,
+            "y": 259,
+            "w": 50,
+            "h": 25
+          }
+        },
+        {
+          "t": 8.125,
+          "type": "click",
+          "box": {
+            "x": 680,
+            "y": 651,
+            "w": 120,
+            "h": 60
+          }
+        }
+      ],
+      "hlAtSec": 1.754,
+      "hlOffSec": 3.204
+    },
+    {
+      "id": "t_grading",
+      "kind": "shot",
+      "audio": "ep6/tts/s11.wav",
+      "durationSec": 9.842,
+      "narration": "打開批改視窗，小考是自動批改的——每個人的正確率和分數都已經算好，不用再改卷。",
+      "shot": "ep6/shots/t08_grading.png",
+      "caption": "小考自動批改：正確率、分數都算好了",
+      "highlights": [
+        {
+          "x": 985,
+          "y": 195,
+          "w": 210,
+          "h": 330
+        }
+      ],
+      "page": "作業管理",
+      "step": {
+        "index": 4,
+        "total": 5,
+        "label": "成績與報告",
+        "prefix": "重點"
+      },
+      "hlAtSec": 3.5,
+      "transition": "fade",
+      "camera": {
+        "x": 955,
+        "y": 224,
+        "w": 235,
+        "h": 285
+      },
+      "clip": "ep6/clips/t_grading.mp4",
+      "clipDurationSec": 7.984,
+      "freezeShot": "ep6/clips/t_grading_last.png",
+      "sfx": [
+        {
+          "t": 2.016,
+          "type": "click",
+          "box": {
+            "x": 1702,
+            "y": 562,
+            "w": 72,
+            "h": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "t_individual",
+      "kind": "shot",
+      "audio": "ep6/tts/s12.wav",
+      "durationSec": 12.363,
+      "narration": "點學生名字，可以看他每一題的答題紀錄。",
+      "shot": "ep6/shots/t09_individual.png",
+      "caption": "點學生名字：看他的答題紀錄",
+      "highlights": [
+        {
+          "x": 637,
+          "y": 446,
+          "w": 330,
+          "h": 20
+        }
+      ],
+      "page": "批改 › 答題紀錄",
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep6/clips/t_individual.mp4",
+      "clipDurationSec": 11.563,
+      "freezeShot": "ep6/clips/t_individual_last.png",
+      "sfx": [
+        {
+          "t": 2.657,
+          "type": "click",
+          "box": {
+            "x": 637,
+            "y": 446,
+            "w": 330,
+            "h": 20
+          }
+        }
+      ],
+      "hlAtSec": 1.457,
+      "hlOffSec": 2.907
+    },
+    {
+      "id": "t_report",
+      "kind": "shot",
+      "audio": "ep6/tts/s13.wav",
+      "durationSec": 5.253,
+      "narration": "左上角的班級報告點開。",
+      "shot": "ep6/shots/t09_individual.png",
+      "caption": "左上角「班級報告」點開",
+      "highlights": [
+        {
+          "x": 45,
+          "y": 102,
+          "w": 270,
+          "h": 40
+        }
+      ],
+      "page": "批改 › 班級報告",
+      "sameScreen": true,
+      "camera": {
+        "x": 20,
+        "y": 85,
+        "w": 320,
+        "h": 75
+      },
+      "clip": "ep6/clips/t_report.mp4",
+      "clipDurationSec": 4.453,
+      "freezeShot": "ep6/clips/t_report_last.png",
+      "sfx": [
+        {
+          "t": 2.969,
+          "type": "click",
+          "box": {
+            "x": 45,
+            "y": 102,
+            "w": 270,
+            "h": 40
+          }
+        }
+      ],
+      "hlAtSec": 1.769,
+      "hlOffSec": 3.219
+    },
+    {
+      "id": "t_report2",
+      "kind": "shot",
+      "audio": "ep6/tts/s14.wav",
+      "durationSec": 10.048,
+      "narration": "每一題哪幾位學生答錯、哪幾位學生答對，又或者哪些學生並沒有回答，長條圖一眼就看懂。",
+      "shot": "ep6/shots/t10_report.png",
+      "caption": "班級報告：每題答對／答錯／未作答",
+      "highlights": [],
+      "page": "批改 › 班級報告",
+      "sameScreen": true,
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep6/clips/t_report2.mp4",
+      "clipDurationSec": 5.891,
+      "freezeShot": "ep6/clips/t_report2_last.png"
+    },
+    {
+      "id": "t_review",
+      "kind": "shot",
+      "audio": "ep6/tts/s15.wav",
+      "durationSec": 22.333,
+      "narration": "要檢討考卷，打開預覽——畫面跟學生看到的一模一樣，每題下方有統計條，滑鼠移上去就知道這題該找哪幾位學生加強。帶著全班一題一題檢討，剛剛好。",
+      "shot": "ep6/shots/t11_preview.png",
+      "caption": "預覽＝學生視角；統計條 hover 看名單，帶全班檢討",
+      "highlights": [
+        {
+          "x": 1642,
+          "y": 562,
+          "w": 52,
+          "h": 40
+        }
+      ],
+      "page": "檢討考卷",
+      "step": {
+        "index": 5,
+        "total": 5,
+        "label": "考後檢討",
+        "prefix": "重點"
+      },
+      "stepDone": true,
+      "transition": "fade",
+      "camera": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
+      "clip": "ep6/clips/t_review.mp4",
+      "clipDurationSec": 21.533,
+      "freezeShot": "ep6/clips/t_review_last.png",
+      "sfx": [
+        {
+          "t": 1.969,
+          "type": "click",
+          "box": {
+            "x": 1642,
+            "y": 562,
+            "w": 52,
+            "h": 40
+          }
+        },
+        {
+          "t": 8.969,
+          "type": "click",
+          "box": {
+            "x": 1115,
+            "y": 580,
+            "w": 60,
+            "h": 40
+          }
+        },
+        {
+          "t": 15.203,
+          "type": "click",
+          "box": {
+            "x": 510,
+            "y": 64,
+            "w": 32,
+            "h": 32
+          }
+        }
+      ],
+      "hlAtSec": 0.769,
+      "hlOffSec": 2.219
+    },
+    {
+      "id": "title_out",
+      "kind": "title",
+      "audio": "ep6/tts/s16.wav",
+      "durationSec": 13.402,
+      "narration": "以上就是派小考與考後檢討；小考後不用再花課堂時間請學生互相批改，課前課中課後，減輕老師的教學行政負擔 50%！",
+      "title": "系列進度",
+      "subtitle": "減輕 50% 行政負擔",
+      "progressDots": true
+    }
+  ],
+  "thumbShot": "ep6/shots/thumb_dual_answer.png"
+}
