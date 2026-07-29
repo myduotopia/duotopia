@@ -2060,6 +2060,8 @@ class ApiClient {
       // issue #862：後端由 group_buy_teams/members 推導的方案身分，供前端分流
       // 顯示（個人 / 團購發起人 / 團購團員）。
       plan_type?: "individual" | "group_buy_owner" | "group_buy_member";
+      // issue #983：團購成員的點數包加購折扣（0.85/0.90/0.95）；非團購為 null。
+      topup_discount?: number | null;
       days_remaining: number | null;
       is_active: boolean;
       quota_used: number;

@@ -87,6 +87,8 @@ interface SubscriptionInfo {
   status: string;
   plan: string | null;
   plan_type?: SubscriptionPlanType;
+  // issue #983：團購成員點數包加購折扣（0.85/0.90/0.95）；非團購為 null。
+  topup_discount?: number | null;
   end_date: string | null;
   days_remaining: number;
   is_active: boolean;
@@ -497,7 +499,13 @@ export default function TeacherSubscription() {
                   let onSelect: ((plan: SubscriptionPlan) => void) | undefined =
                     handleSelectPlan;
 
-                  if (!isAuthenticated) {
+                  if (isGroupBuyPlan) {
+                    // issue #983-3：團購方案進行中，個人方案按鈕一律停用，
+                    // 直到團購方案結束（避免團購成員又去訂個人方案）。
+                    ctaText = t("pricing.actions.groupBuyActive");
+                    disabled = true;
+                    onSelect = undefined;
+                  } else if (!isAuthenticated) {
                     // Not logged in
                     if (plan.id === "free") {
                       ctaText = t("pricing.actions.freeRegister");
@@ -579,6 +587,8 @@ export default function TeacherSubscription() {
                   onSelect={handleSelectPointPackage}
                   ctaText={t("pricing.pointPackages.buy")}
                   baseUnitCost={BASE_UNIT_COST}
+                  // issue #983-5：團購成員顯示折後價（實際收費由後端套用）。
+                  groupBuyDiscount={subscription?.topup_discount ?? null}
                 />
               ))}
             </div>

@@ -21,6 +21,7 @@ from routers.teachers import get_current_teacher
 from services.tappay_service import TapPayService
 from services.email_service import email_service
 from services.subscription_calculator import SubscriptionCalculator
+from services.topup_discount import get_teacher_topup_discount
 from utils.bigquery_logger import (
     log_payment_attempt,
     log_payment_success,
@@ -1084,6 +1085,19 @@ async def get_subscription_status(
             # quota label, auto-renew banner visibility, and any
             # team-management CTAs.
             "plan_type": plan_type,
+            # issue #983-5：團購成員的點數包加購折扣（0.85/0.90/0.95），供
+            # 訂閱頁點數包 tab 顯示折後價。非團購 → None（原價）。折扣的實際
+            # 收費由 /credit-packages/purchase 伺服器端套用（此處僅供顯示）。
+            "topup_discount": (
+                float(_gb_topup_discount)
+                if (
+                    _gb_topup_discount := get_teacher_topup_discount(
+                        current_teacher, db
+                    )
+                )
+                is not None
+                else None
+            ),
             "end_date": (
                 effective_end_date.isoformat() if effective_end_date else None
             ),

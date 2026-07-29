@@ -718,15 +718,17 @@ export default function GroupBuyOpenPage() {
                 className="flex flex-wrap items-center gap-2 border-b border-gray-100 pb-2"
               >
                 <span className="w-8 text-sm text-gray-500">{idx + 1}.</span>
-                <span className="w-20 text-xs text-gray-600">
-                  {idx === 0 ? "發起人" : "團員"}
-                </span>
+                <span className="w-20 text-xs text-gray-600">團員</span>
                 <Input
                   type="email"
+                  // issue #983-2：每個 input 給唯一 name + autoComplete off，
+                  // 避免瀏覽器 email 自動填入時把所有欄位一起填滿。
+                  name={`gb-roster-email-${idx}`}
+                  autoComplete="off"
                   className="flex-1 min-w-[200px]"
                   placeholder={
                     idx === 0
-                      ? "發起人 email（可改填別人）"
+                      ? "預設帶入你自己，可改填團員 email"
                       : `team-member-${idx}@example.com`
                   }
                   value={row.email}
@@ -800,7 +802,8 @@ export default function GroupBuyOpenPage() {
               <DialogDescription>
                 檔案格式：第一列為英文欄位名 <code>Email</code>，下方每列一個
                 email。最多會匯入 {selectedPlan.teacher_seats - 1} 筆，覆蓋第 2
-                ~ 第 {selectedPlan.teacher_seats} 列；發起人那一列不會被動到。
+                ~ 第 {selectedPlan.teacher_seats} 列；第 1
+                列（預設帶你自己）不會被動到。
                 <br />
                 <span className="text-xs text-gray-500">
                   ⚠ 請使用 <strong>UTF-8</strong> 編碼存檔（Excel
