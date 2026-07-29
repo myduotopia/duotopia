@@ -153,6 +153,8 @@ def test_group_buy_member_status_overrides_end_date_and_plan_type(
     body = r.json()
     assert body["plan_type"] == "group_buy_member"
     assert body["auto_renew"] is False
+    # issue #983-5：團購成員回傳團隊方案的加購折扣，供點數包 tab 顯示折後價
+    assert body["topup_discount"] == 0.95
     # Refresh from session so we compare the DB-persisted value (the
     # ORM may return tz-naive on a TIMESTAMP WITHOUT TIME ZONE column;
     # the in-memory fixture value is tz-aware via datetime.now(utc)).
@@ -185,6 +187,7 @@ def test_group_buy_owner_status_returns_group_buy_owner_plan_type(
     body = r.json()
     assert body["plan_type"] == "group_buy_owner"
     assert body["auto_renew"] is False
+    assert body["topup_discount"] == 0.95
 
 
 def test_individual_teacher_status_unaffected_by_group_buy_branch(
@@ -198,6 +201,7 @@ def test_individual_teacher_status_unaffected_by_group_buy_branch(
     assert r.status_code == 200
     body = r.json()
     assert body["plan_type"] == "individual"
+    assert body["topup_discount"] is None
     # auto_renew defaults to True per the existing endpoint behaviour
     # when the teacher has no explicit subscription_auto_renew flag.
     assert body["auto_renew"] is True
