@@ -652,8 +652,11 @@ function TeacherLayoutInner({
       config,
       hasOrgRole,
       handleLogout,
-      // tokenInfo intentionally omitted: SidebarTokenBar is a child component,
-      // so React reconciles it on its own when tokenInfo changes.
+      // tokenInfo IS a dep: <SidebarTokenBar> is created inside this memoized
+      // JSX, so a memoized element carrying a stale tokenInfo prop never
+      // reconciles to new props on its own — personal mode's async point-balance
+      // fetch (null → data) must recompute this memo, or the bar never appears.
+      tokenInfo,
       // mode is needed so the org-mode guard on SidebarTokenBar (#956) uses a
       // fresh value rather than a stale closure.
       mode,
