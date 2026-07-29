@@ -26,6 +26,26 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
+// 可控的 workspace mode：用 module-level 變數模擬「切換 workspace」。
+// WorkspaceProvider 改為 passthrough，useWorkspace 每次讀最新的 mockMode，
+// 於是測試可以 render 後改 mockMode + rerender 來模擬 personal⇄organization 切換。
+let mockMode: "personal" | "organization" = "personal";
+let mockSelectedOrganization: { id: string; name: string } | null = null;
+vi.mock("@/contexts/WorkspaceContext", () => ({
+  WorkspaceProvider: ({ children }: { children: React.ReactNode }) => children,
+  useWorkspace: () => ({
+    mode: mockMode,
+    selectedSchool: null,
+    selectedOrganization: mockSelectedOrganization,
+  }),
+}));
+
+// WorkspaceSwitcher 內部依賴完整 workspace context（已被上面 mock 取代），
+// 這裡 stub 掉；它與剩餘點數看板的行為無關。
+vi.mock("@/components/workspace", () => ({
+  WorkspaceSwitcher: () => <div>WorkspaceSwitcher</div>,
+}));
+
 // Mock DigitalTeachingToolbar component
 vi.mock("@/components/teachingTools/DigitalTeachingToolbar", () => ({
   default: () => (
@@ -52,7 +72,9 @@ describe("TeacherLayout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    // Mock localStorage
+    // 每個測試預設回到 personal 模式
+    mockMode = "personal";
+    mockSelectedOrganization = null;
     const mockProfile = {
       id: 1,
       email: "teacher@example.com",
@@ -107,7 +129,6 @@ describe("TeacherLayout", () => {
 
   it("personal 模式：quota 有值時顯示剩餘點數看板", async () => {
     const { apiClient } = await import("@/lib/api");
-    // 預設 mode = personal（localStorage 未設定 workspace:mode）
     vi.mocked(apiClient.getSubscriptionStatus).mockResolvedValue({
       quota_total: 1000,
       quota_used: 250,
@@ -164,14 +185,60 @@ describe("TeacherLayout", () => {
     });
   });
 
+  it("從機構切回個人模式：點數 fetch 回來後看板自動出現，不需重整", async () => {
+    const { apiClient } = await import("@/lib/api");
+    // 起始為機構模式（org 不 fetch、不顯示看板）
+    mockMode = "organization";
+    mockSelectedOrganization = { id: "org-1", name: "測試機構" };
+    // 切回 personal 後才會用到；用 deferred 控制 resolve 時機。
+    let resolveSub: (v: unknown) => void = () => {};
+    vi.mocked(apiClient.getSubscriptionStatus).mockReturnValue(
+      new Promise((res) => {
+        resolveSub = res;
+      }) as never,
+    );
+
+    // 每次都傳「全新的 element」，避免 React 因 element 參考相同而 bail-out
+    // 不重新 render（那樣 inner 不會重讀 mock 的 mode）。
+    const makeUi = () => (
+      <BrowserRouter>
+        <TeacherLayout>
+          <div>Content</div>
+        </TeacherLayout>
+      </BrowserRouter>
+    );
+    const { rerender } = render(makeUi());
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Teacher")).toBeInTheDocument();
+    });
+    // 機構模式：不顯示看板、也不 fetch 個人點數
+    expect(screen.queryAllByText("剩餘點數")).toHaveLength(0);
+    expect(apiClient.getSubscriptionStatus).not.toHaveBeenCalled();
+
+    // 切回個人模式
+    mockMode = "personal";
+    mockSelectedOrganization = null;
+    rerender(makeUi());
+
+    // 切回後個人點數 effect 應觸發 fetch（等它被呼叫，順便讓 mode 切換造成的
+    // 導頁/其他 dep 變動先 flush，隔離出「只有 tokenInfo 變動」的情境）
+    await waitFor(() => {
+      expect(apiClient.getSubscriptionStatus).toHaveBeenCalled();
+    });
+
+    // 點數回來 → 看板必須自動出現，不需使用者重整
+    resolveSub({ quota_total: 1000, quota_used: 250 });
+    await waitFor(() => {
+      expect(screen.getAllByText("剩餘點數").length).toBeGreaterThan(0);
+    });
+  });
+
   it("機構視圖（organization 模式）不顯示剩餘點數看板，也不 fetch 點數", async () => {
     const { apiClient } = await import("@/lib/api");
     // 切到機構視圖
-    localStorage.setItem("workspace:mode", "organization");
-    localStorage.setItem(
-      "workspace:organization",
-      JSON.stringify({ id: "org-1", name: "測試機構" }),
-    );
+    mockMode = "organization";
+    mockSelectedOrganization = { id: "org-1", name: "測試機構" };
     // 即使 API 會回傳 quota，也不該顯示（org 模式根本不 fetch）
     vi.mocked(apiClient.getSubscriptionStatus).mockResolvedValue({
       quota_total: 1000,
