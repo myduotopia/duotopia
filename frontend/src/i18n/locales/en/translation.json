@@ -493,7 +493,8 @@
       "studentCannotSubscribe": "Students Cannot Subscribe",
       "loginRequired": "Please login to subscribe",
       "studentAccountWarning": "Student accounts cannot subscribe to teacher plans, please use a teacher account",
-      "logoutFirst": "Please logout first and login with a teacher account to subscribe"
+      "logoutFirst": "Please logout first and login with a teacher account to subscribe",
+      "groupBuyActive": "Group-buy plan active"
     },
     "tabs": {
       "subscription": "Monthly Plans",
@@ -511,6 +512,7 @@
       "bonusPoints": "+{{count, number}} bonus pts",
       "unitCost": "NTD/pt",
       "discount": "Save {{percent}}%",
+      "groupBuyDiscount": "Group-buy {{percent}}% off",
       "validity": "Valid for 1 year",
       "purchaseSuccess": "Successfully purchased {{points}} point package! Transaction ID: {{transactionId}}",
       "purchaseTitle": "Purchase {{points}} Point Package"

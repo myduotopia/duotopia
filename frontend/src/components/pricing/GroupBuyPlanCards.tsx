@@ -147,7 +147,7 @@ export function GroupBuyPlanCards({ onSelectPlan }: Props) {
                   </span>
                 </div>
                 <div>
-                  加購折扣{" "}
+                  點數包加購{" "}
                   <span className="font-semibold">
                     {Math.round((1 - p.topup_discount) * 100)}% off
                   </span>

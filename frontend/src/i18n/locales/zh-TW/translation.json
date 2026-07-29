@@ -638,7 +638,8 @@
       "studentCannotSubscribe": "學生無法訂閱",
       "loginRequired": "請先登入才能訂閱方案",
       "studentAccountWarning": "學生帳號無法訂閱教師方案，請使用教師帳號登入",
-      "logoutFirst": "請先登出，使用教師帳號登入才能訂閱"
+      "logoutFirst": "請先登出，使用教師帳號登入才能訂閱",
+      "groupBuyActive": "團購方案進行中"
     },
     "tabs": {
       "subscription": "月訂閱方案",
@@ -656,6 +657,7 @@
       "bonusPoints": "+{{count, number}} 點贈送",
       "unitCost": "元/點",
       "discount": "省 {{percent}}%",
+      "groupBuyDiscount": "團購 {{percent}}% off",
       "validity": "有效期限：1 年",
       "purchaseSuccess": "成功購買 {{points}} 點數包！交易編號：{{transactionId}}",
       "purchaseTitle": "購買 {{points}} 點數包"
