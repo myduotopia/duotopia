@@ -3578,7 +3578,7 @@ const VocabularySetPanel = forwardRef<
       .map((r) => ({ id: r.id, example: r.example_sentence!.trim() }));
     if (!targets.length) return;
     try {
-      const resp = (await apiClient.batchTranslate(
+      const resp = (await apiClient.batchTranslateSentences(
         targets.map((tg) => tg.example),
         langCode,
       )) as { translations?: string[] };
@@ -3781,7 +3781,7 @@ const VocabularySetPanel = forwardRef<
     // 標記此列例句翻譯進行中，避免語言選單 onChange 清空正在寫入的列
     translatingSentenceRowsRef.current.add(rowId);
     try {
-      const response = (await apiClient.translateText(
+      const response = (await apiClient.translateSentence(
         sourceSentence,
         langConfig?.code || "zh-TW",
       )) as { translation: string };
@@ -4495,7 +4495,10 @@ const VocabularySetPanel = forwardRef<
 
           try {
             const translateResponse = await withRetry(() =>
-              apiClient.batchTranslate(textsToTranslate, exampleTargetLang),
+              apiClient.batchTranslateSentences(
+                textsToTranslate,
+                exampleTargetLang,
+              ),
             );
             const translations =
               (translateResponse as { translations?: string[] }).translations ||

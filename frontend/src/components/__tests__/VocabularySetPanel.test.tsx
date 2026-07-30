@@ -18,6 +18,8 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 const mockGetContentDetail = vi.fn();
 // #957: 可控 resolve 時機的翻譯 mock，用來重現「await 期間 rows 被改動」的競態
 const mockTranslateText = vi.fn();
+// #957: 例句翻譯改走整句翻譯路徑（translateSentence），不再走單字翻譯（translateText）
+const mockTranslateSentence = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   apiClient: {
@@ -25,6 +27,7 @@ vi.mock("@/lib/api", () => ({
     generateTTS: vi.fn(),
     uploadAudio: vi.fn(),
     translateText: (...args: unknown[]) => mockTranslateText(...args),
+    translateSentence: (...args: unknown[]) => mockTranslateSentence(...args),
     translateWithPos: vi.fn(),
   },
 }));
@@ -315,7 +318,7 @@ describe("VocabularySetPanel example translation race (issue #957)", () => {
 
     // 可控 resolve 時機的翻譯：呼叫時先卡住，等我們改動 rows 後才 resolve。
     let resolveTranslate: (v: { translation: string }) => void = () => {};
-    mockTranslateText.mockImplementation(
+    mockTranslateSentence.mockImplementation(
       () =>
         new Promise<{ translation: string }>((res) => {
           resolveTranslate = res;
@@ -339,13 +342,15 @@ describe("VocabularySetPanel example translation race (issue #957)", () => {
     expect(translateButtons).toHaveLength(3);
     fireEvent.click(translateButtons[2]);
 
-    // 來源文字必須鎖定為該列的 example_sentence，絕不是「單字的英文翻譯」
+    // #957: 例句翻譯必須走整句翻譯（translateSentence），不可走單字翻譯（translateText），
+    // 且來源文字必須鎖定為該列的 example_sentence。
     await waitFor(() =>
-      expect(mockTranslateText).toHaveBeenCalledWith(
+      expect(mockTranslateSentence).toHaveBeenCalledWith(
         "A red cherry.",
         expect.anything(),
       ),
     );
+    expect(mockTranslateText).not.toHaveBeenCalled();
 
     // await 期間刪掉第一列（apple）→ cherry 由 index 2 移到 index 1
     const deleteButtons = screen.getAllByTitle("contentEditor.tooltips.delete");
@@ -389,7 +394,7 @@ describe("VocabularySetPanel example translation race (issue #957)", () => {
     });
 
     let resolveTranslate: (v: { translation: string }) => void = () => {};
-    mockTranslateText.mockImplementation(
+    mockTranslateSentence.mockImplementation(
       () =>
         new Promise<{ translation: string }>((res) => {
           resolveTranslate = res;
@@ -399,13 +404,13 @@ describe("VocabularySetPanel example translation race (issue #957)", () => {
     render(<VocabularySetPanel content={{ id: 55 }} />, { wrapper });
     await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalledWith(55));
 
-    // 對第一列（apple）觸發例句翻譯
+    // 對第一列（apple）觸發例句翻譯（走整句翻譯路徑）
     const translateButtons = screen.getAllByTitle(
       "vocabularySet.tooltips.generateExampleTranslation",
     );
     fireEvent.click(translateButtons[0]);
     await waitFor(() =>
-      expect(mockTranslateText).toHaveBeenCalledWith(
+      expect(mockTranslateSentence).toHaveBeenCalledWith(
         "I ate an apple.",
         expect.anything(),
       ),

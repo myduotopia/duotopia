@@ -1329,6 +1329,25 @@ class ApiClient {
     });
   }
 
+  // 整句翻譯（例句用）：整句自然翻譯，不逐字、不標詞性
+  async translateSentence(text: string, targetLang: string = "zh-TW") {
+    return this.request("/api/teachers/translate/sentence", {
+      method: "POST",
+      body: JSON.stringify({ text, target_lang: targetLang }),
+    });
+  }
+
+  // 批次整句翻譯（例句用）：整句自然翻譯，不逐字、不標詞性
+  async batchTranslateSentences(
+    texts: string[],
+    targetLang: string = "zh-TW",
+  ) {
+    return this.request("/api/teachers/translate/sentence/batch", {
+      method: "POST",
+      body: JSON.stringify({ texts, target_lang: targetLang }),
+    });
+  }
+
   // 批次翻譯並辨識詞性
   async batchTranslateWithPos(
     texts: string[],
