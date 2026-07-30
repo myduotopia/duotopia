@@ -289,35 +289,24 @@ function TeacherLayoutInner({
   } | null>(null);
   useEffect(() => {
     let cancelled = false;
+    // 機構視圖不顯示剩餘點數看板（產品決策 #956）。切到 org 模式時立即清空
+    // tokenInfo，避免殘留前一個 personal 視圖的數字，且完全略過 fetch。
+    if (mode === "organization") {
+      setTokenInfo(null);
+      return;
+    }
     const fetchToken = async () => {
       try {
-        if (mode === "organization" && selectedOrganization) {
-          const res = await apiClient.get<{
-            total_points: number;
-            used_points: number;
-          }>(`/api/organizations/${selectedOrganization.id}/points`);
-          if (cancelled) return;
-          if (res && typeof res.total_points === "number") {
-            setTokenInfo({
-              used: res.used_points ?? 0,
-              total: res.total_points,
-              sources: [],
-            });
-          } else {
-            setTokenInfo(null);
-          }
+        const res = await apiClient.getSubscriptionStatus();
+        if (cancelled) return;
+        if (typeof res.quota_total === "number" && res.quota_total > 0) {
+          setTokenInfo({
+            used: res.quota_used ?? 0,
+            total: res.quota_total,
+            sources: buildQuotaSources(res),
+          });
         } else {
-          const res = await apiClient.getSubscriptionStatus();
-          if (cancelled) return;
-          if (typeof res.quota_total === "number" && res.quota_total > 0) {
-            setTokenInfo({
-              used: res.quota_used ?? 0,
-              total: res.quota_total,
-              sources: buildQuotaSources(res),
-            });
-          } else {
-            setTokenInfo(null);
-          }
+          setTokenInfo(null);
         }
       } catch {
         // Non-fatal — hide the bar rather than break the sidebar (e.g. a
@@ -329,10 +318,7 @@ function TeacherLayoutInner({
     return () => {
       cancelled = true;
     };
-    // We intentionally key on .id (a primitive) instead of the whole object so
-    // re-renders with the same org don't refetch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, selectedOrganization?.id]);
+  }, [mode]);
 
   // ✅ 切換 workspace mode 時，自動導向 dashboard（避免殘留前一模式的頁面）
   const prevModeRef = useRef(mode);
@@ -509,10 +495,14 @@ function TeacherLayoutInner({
               {/* Render the bar as a child component so that setTokenInfo()
                   doesn't force the whole memoized SidebarContent to rebuild
                   — React reconciles this subtree on its own. */}
-              <SidebarTokenBar
-                tokenInfo={tokenInfo}
-                workspaceColor={workspaceColor}
-              />
+              {/* 機構視圖完全不顯示剩餘點數看板（#956）；同時擋掉切換瞬間
+                  殘留前一個 personal 視圖數字的可能。 */}
+              {mode !== "organization" && (
+                <SidebarTokenBar
+                  tokenInfo={tokenInfo}
+                  workspaceColor={workspaceColor}
+                />
+              )}
             </div>
           )}
 
@@ -662,8 +652,14 @@ function TeacherLayoutInner({
       config,
       hasOrgRole,
       handleLogout,
-      // tokenInfo intentionally omitted: SidebarTokenBar is a child component,
-      // so React reconciles it on its own when tokenInfo changes.
+      // tokenInfo IS a dep: <SidebarTokenBar> is created inside this memoized
+      // JSX, so a memoized element carrying a stale tokenInfo prop never
+      // reconciles to new props on its own — personal mode's async point-balance
+      // fetch (null → data) must recompute this memo, or the bar never appears.
+      tokenInfo,
+      // mode is needed so the org-mode guard on SidebarTokenBar (#956) uses a
+      // fresh value rather than a stale closure.
+      mode,
       workspaceColor,
       isDarkMode,
     ],
