@@ -132,6 +132,187 @@ class TranslationService:
             # 如果翻譯失敗，返回原文
             return text
 
+    async def translate_sentence(self, text: str, target_lang: str = "zh-TW") -> str:
+        """
+        翻譯整句英文（自然通順的整句翻譯，非單字＋詞性）
+
+        用於例句翻譯：把整句英文的「意思」自然翻譯成目標語言，
+        不逐字翻譯、不拆成單字、不標註詞性、不加編號、不加任何說明。
+
+        Args:
+            text: 要翻譯的英文句子
+            target_lang: 目標語言（預設為繁體中文）
+
+        Returns:
+            翻譯後的整句譯文；失敗時返回原文
+        """
+        self._ensure_client()
+
+        try:
+            # 目標語言 label
+            if target_lang == "zh-TW":
+                lang_label = "繁體中文"
+            elif target_lang == "ja":
+                lang_label = "日文"
+            elif target_lang == "ko":
+                lang_label = "韓文"
+            else:
+                lang_label = target_lang
+
+            prompt = (
+                f"請將以下英文句子翻譯成{lang_label}：{text}\n\n"
+                f"規則：\n"
+                f"1. 翻譯整句的意思，翻成一句自然通順的譯文。\n"
+                f"2. 不要逐字翻譯、不要拆成單字、不要標註詞性。\n"
+                f"3. 不要加編號、不要加任何說明，只回覆一句譯文。"
+            )
+
+            system_instruction = (
+                "You are a professional translator. Only provide the "
+                "translation without any explanation. "
+                "CRITICAL: When translating to Chinese, you MUST use Traditional Chinese (繁體中文), "
+                "NOT Simplified Chinese."
+            )
+
+            # Use Vertex AI or OpenAI based on configuration
+            if self.use_vertex_ai:
+                result = await self.vertex_ai.generate_text(
+                    prompt=prompt,
+                    model_type="flash",
+                    max_tokens=200,
+                    temperature=0.3,
+                    system_instruction=system_instruction,
+                    disable_thinking=True,
+                )
+                return result.strip()
+            else:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=200,
+                )
+                return response.choices[0].message.content.strip()
+
+        except Exception as e:
+            logger.error("Sentence translation error: %s", e)
+            # 如果翻譯失敗，返回原文
+            return text
+
+    async def batch_translate_sentences(
+        self, texts: List[str], target_lang: str = "zh-TW"
+    ) -> List[str]:
+        """
+        批次翻譯多個英文句子（整句自然翻譯，非單字＋詞性）
+
+        Args:
+            texts: 要翻譯的英文句子列表
+            target_lang: 目標語言（預設為繁體中文）
+
+        Returns:
+            翻譯後的整句譯文列表；數量不符或失敗時返回原文列表
+        """
+        self._ensure_client()
+
+        try:
+            import json
+
+            texts_json = json.dumps(texts, ensure_ascii=False)
+
+            if target_lang == "zh-TW":
+                lang_label = "繁體中文"
+            elif target_lang == "ja":
+                lang_label = "日文"
+            elif target_lang == "ko":
+                lang_label = "韓文"
+            else:
+                lang_label = target_lang
+
+            prompt = f"""請將以下 JSON 陣列中的每個英文句子完整自然地翻譯成{lang_label}。
+每個句子翻成一句自然通順的譯文，翻譯整句的意思。
+不要逐字翻譯、不要拆成單字、不要標註詞性、不要加編號或說明。
+直接返回 JSON 陣列格式，每個譯文對應一個項目。
+只返回 JSON 陣列，不要任何其他文字或說明。
+
+輸入: {texts_json}
+
+要求: 返回格式必須是 ["譯文1", "譯文2", ...]"""
+
+            system_instruction = (
+                "You are a professional translator. Always return results "
+                "as a valid JSON array with the exact same number of items as input. "
+                "Translate each full sentence naturally, NOT word by word, "
+                "and do NOT add parts of speech. "
+                "Return ONLY the JSON array, no markdown, no explanation. "
+                "CRITICAL: When translating to Chinese, you MUST use Traditional Chinese (繁體中文), "
+                "NOT Simplified Chinese."
+            )
+
+            content = None
+
+            # Use Vertex AI or OpenAI based on configuration
+            if self.use_vertex_ai:
+                translations = await self.vertex_ai.generate_json(
+                    prompt=prompt,
+                    model_type="flash",
+                    max_tokens=3500,
+                    temperature=0.3,
+                    system_instruction=system_instruction,
+                    disable_thinking=True,
+                )
+                if isinstance(translations, str):
+                    translations = translations.split("---")
+            else:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=3500,
+                )
+
+                import re
+
+                content = response.choices[0].message.content.strip()
+                content = re.sub(r"^```json\s*", "", content)
+                content = re.sub(r"\s*```$", "", content)
+                content = content.strip()
+
+                try:
+                    translations = json.loads(content)
+                except Exception:
+                    if "---" in content:
+                        translations = [
+                            seg.strip() for seg in content.split("---") if seg.strip()
+                        ]
+                    else:
+                        translations = [content.strip()] if content else []
+                if isinstance(translations, str):
+                    translations = translations.split("---")
+
+            # 確保返回的翻譯數量與輸入相同
+            if len(translations) != len(texts):
+                logger.warning(
+                    "Batch sentence translation count mismatch "
+                    "(expected %d, got %d), falling back to original texts.",
+                    len(texts),
+                    len(translations),
+                )
+                return texts
+
+            return translations
+        except Exception as e:
+            logger.error(
+                "Batch sentence translation error: %s. Falling back to original texts.",
+                e,
+            )
+            return texts
+
     async def translate_with_pos(
         self, text: str, target_lang: str = "zh-TW"
     ) -> Dict[str, any]:
