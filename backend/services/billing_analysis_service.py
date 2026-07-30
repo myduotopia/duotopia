@@ -1,11 +1,6 @@
-"""GCP Billing AI 分析服務
-
-Supports switching between OpenAI and Vertex AI via USE_VERTEX_AI environment variable.
-"""
-import os
+"""GCP Billing AI 分析服務（Vertex AI / Gemini）"""
 import logging
 from typing import Dict, Any, List
-from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -14,26 +9,12 @@ class BillingAnalysisService:
     """帳單 AI 分析服務"""
 
     def __init__(self):
-        self.use_vertex_ai = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
+        # Use Vertex AI (Gemini)
+        from services.vertex_ai import get_vertex_ai_service
 
-        if self.use_vertex_ai:
-            # Use Vertex AI (Gemini)
-            from services.vertex_ai import get_vertex_ai_service
-
-            self.vertex_ai = get_vertex_ai_service()
-            self.use_ai = True
-            self.client = None
-            logger.info("BillingAnalysisService: Using Vertex AI (Gemini)")
-        else:
-            # Use OpenAI
-            self.openai_api_key = os.getenv("OPENAI_API_KEY")
-            self.use_ai = bool(self.openai_api_key)
-            self.vertex_ai = None
-            if self.use_ai:
-                self.client = AsyncOpenAI(api_key=self.openai_api_key)
-                logger.info("BillingAnalysisService: Using OpenAI")
-            else:
-                self.client = None
+        self.vertex_ai = get_vertex_ai_service()
+        self.use_ai = True
+        logger.info("BillingAnalysisService: Using Vertex AI (Gemini)")
 
     async def analyze_billing_data(
         self,
@@ -234,7 +215,7 @@ class BillingAnalysisService:
         trend: str,
         trend_percent: float,
     ) -> str:
-        """使用 AI (Vertex AI or OpenAI) 生成分析摘要"""
+        """使用 Vertex AI (Gemini) 生成分析摘要"""
         try:
             # 構建 prompt
             prompt = f"""你是一位 GCP 費用分析專家。請根據以下數據生成一份簡潔的分析摘要（2-3 句話）：
@@ -258,29 +239,15 @@ class BillingAnalysisService:
 
             system_instruction = "你是一位專業的 GCP 費用分析專家，擅長用簡潔易懂的語言解釋複雜的帳單數據。"
 
-            # Use Vertex AI or OpenAI based on configuration
-            if self.use_vertex_ai:
-                # Use Gemini Pro for complex analysis (equivalent to gpt-4)
-                summary = await self.vertex_ai.generate_text(
-                    prompt=prompt,
-                    model_type="pro",  # Use pro for complex analysis
-                    max_tokens=300,
-                    temperature=0.7,
-                    system_instruction=system_instruction,
-                )
-                summary = summary.strip()
-            else:
-                # Use OpenAI API
-                response = await self.client.chat.completions.create(
-                    model="gpt-4",
-                    messages=[
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=300,
-                    temperature=0.7,
-                )
-                summary = response.choices[0].message.content.strip()
+            # Use Gemini Pro for complex analysis
+            summary = await self.vertex_ai.generate_text(
+                prompt=prompt,
+                model_type="pro",  # Use pro for complex analysis
+                max_tokens=300,
+                temperature=0.7,
+                system_instruction=system_instruction,
+            )
+            summary = summary.strip()
 
             logger.info("✅ AI summary generated successfully")
             return summary

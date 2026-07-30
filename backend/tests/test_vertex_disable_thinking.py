@@ -29,7 +29,6 @@ class TestVertexDisableThinking:
     def vertex_service(self):
         """Service forced into Vertex AI mode with a mocked vertex client."""
         service = TranslationService()
-        service.use_vertex_ai = True
         service.vertex_ai = AsyncMock()
         # _ensure_client() must not try to (re)initialise the real client
         service._ensure_client = lambda: None

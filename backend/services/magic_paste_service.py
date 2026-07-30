@@ -4,24 +4,19 @@
 從上傳的圖片 / PDF 擷取單字教材內容（單字、翻譯、詞性、例句、例句翻譯），
 一次 AI 呼叫同時完成「圖片擷取」與「資訊不足時 fallback 生成」。
 
-依 USE_VERTEX_AI 環境變數切換：
-- prod：Vertex AI（Gemini vision），原生支援圖片與 PDF。
-- preview / 未設定：OpenAI（gpt-4o-mini vision），支援圖片；PDF 需改用 Vertex。
+統一走 Vertex AI（Gemini vision），原生支援圖片與 PDF。
 
 回傳同時包含 token 用量與估算成本，對應 issue 的「測試每張圖片分析平均消耗成本」。
 """
 
-import os
 import re
 import json
-import base64
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 FLASH_MODEL = "gemini-2.5-flash"
-OPENAI_VISION_MODEL = "gpt-4o-mini"
 
 # 一整張單字表 + 每項的翻譯/詞性/例句/例句翻譯，4000 tokens 會被截斷（issue #891
 # preview 實測 502）。拉高上限；若仍截斷，_parse_json 會救回已完整的項目。
@@ -37,7 +32,6 @@ EXTRACT_MODES = {EXTRACT_MODE_VOCABULARY, EXTRACT_MODE_SENTENCE}
 # 粗略的每百萬 token 美元單價（僅供成本觀測，非計費用途）
 _PRICING_USD_PER_1M = {
     FLASH_MODEL: {"input": 0.30, "output": 2.50},
-    OPENAI_VISION_MODEL: {"input": 0.15, "output": 0.60},
 }
 
 
@@ -56,9 +50,6 @@ class MagicPasteService:
     }
     # PDF 可能比圖片大，統一上限 10MB
     MAX_FILE_BYTES = 10 * 1024 * 1024
-
-    def __init__(self):
-        self.use_vertex_ai = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
 
     # ---------------------------------------------------------------- 驗證
 
@@ -190,7 +181,7 @@ class MagicPasteService:
 
         Returns:
             {"items": [...], "usage": {...}, "estimated_cost_usd": float,
-             "provider": "vertex"|"openai", "model": str}
+             "provider": "vertex", "model": str}
         """
         self.validate_file(file_bytes, mime_type)
         if extract_mode not in EXTRACT_MODES:
@@ -200,21 +191,10 @@ class MagicPasteService:
             normalized_mime = "image/jpeg"
         prompt = self._build_prompt(level, extract_mode)
 
-        if self.use_vertex_ai:
-            raw, usage, model = await self._extract_vertex(
-                file_bytes, normalized_mime, prompt
-            )
-            provider = "vertex"
-        else:
-            if normalized_mime == "application/pdf":
-                raise MagicPasteError(
-                    "目前 preview 環境的 AI 供應商不支援 PDF，請改用圖片，"
-                    "或啟用 Vertex AI（USE_VERTEX_AI）。"
-                )
-            raw, usage, model = await self._extract_openai(
-                file_bytes, normalized_mime, prompt
-            )
-            provider = "openai"
+        raw, usage, model = await self._extract_vertex(
+            file_bytes, normalized_mime, prompt
+        )
+        provider = "vertex"
 
         items = self._normalize_items(raw)
         cost = self._estimate_cost(model, usage)
@@ -272,44 +252,6 @@ class MagicPasteService:
                 "output_tokens": getattr(meta, "candidates_token_count", 0) or 0,
             }
         return self._parse_json(response.text), usage, FLASH_MODEL
-
-    async def _extract_openai(
-        self, file_bytes: bytes, mime_type: str, prompt: str
-    ) -> Tuple[Any, Dict[str, int], str]:
-        from openai import AsyncOpenAI
-        from utils.http_client import get_http_client
-
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise MagicPasteError("OPENAI_API_KEY 未設定，無法進行 AI 擷取")
-        client = AsyncOpenAI(api_key=api_key, http_client=get_http_client())
-
-        b64 = base64.b64encode(file_bytes).decode("ascii")
-        data_url = f"data:{mime_type};base64,{b64}"
-        response = await client.chat.completions.create(
-            model=OPENAI_VISION_MODEL,
-            messages=[
-                {"role": "system", "content": self._system_instruction()},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": data_url}},
-                    ],
-                },
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3,
-            max_tokens=MAX_OUTPUT_TOKENS,
-        )
-        usage = {"input_tokens": 0, "output_tokens": 0}
-        if response.usage:
-            usage = {
-                "input_tokens": response.usage.prompt_tokens or 0,
-                "output_tokens": response.usage.completion_tokens or 0,
-            }
-        content = response.choices[0].message.content
-        return self._parse_json(content), usage, OPENAI_VISION_MODEL
 
     # ---------------------------------------------------------------- helpers
 
