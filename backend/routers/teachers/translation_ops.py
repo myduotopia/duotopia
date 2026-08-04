@@ -257,6 +257,47 @@ async def batch_translate(
         raise HTTPException(status_code=500, detail="Translation service error")
 
 
+@router.post("/translate/sentence")
+async def translate_sentence(
+    request: TranslateRequest, current_teacher: Teacher = Depends(get_current_teacher)
+):
+    """整句翻譯（例句用，非單字＋詞性）"""
+    if not is_valid_language(request.target_lang):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": f"無法辨識的語言：{request.target_lang}"},
+        )
+    try:
+        translation = await translation_service.translate_sentence(
+            request.text, request.target_lang
+        )
+        return {"original": request.text, "translation": translation}
+    except Exception as e:
+        logger.error("Sentence translation error: %s", e)
+        raise HTTPException(status_code=500, detail="Translation service error")
+
+
+@router.post("/translate/sentence/batch")
+async def batch_translate_sentences(
+    request: BatchTranslateRequest,
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """批次整句翻譯（例句用，非單字＋詞性）"""
+    if not is_valid_language(request.target_lang):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": f"無法辨識的語言：{request.target_lang}"},
+        )
+    try:
+        translations = await translation_service.batch_translate_sentences(
+            request.texts, request.target_lang
+        )
+        return {"originals": request.texts, "translations": translations}
+    except Exception as e:
+        logger.error("Batch sentence translation error: %s", e)
+        raise HTTPException(status_code=500, detail="Translation service error")
+
+
 @router.post("/generate-sentences")
 async def generate_sentences(
     request: GenerateSentencesRequest,

@@ -28,6 +28,7 @@ const base: PracticeModeSettings = {
   show_word: true,
   show_image: true,
   show_option_images: false,
+  show_example_sentence: false,
 };
 
 const SHOW_IMAGE: SettingSpec = {

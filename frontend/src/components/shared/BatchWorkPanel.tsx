@@ -9,7 +9,9 @@
  * pasteLabel：覆寫貼上區標題文字（往下傳給 BatchPasteArea 的 label）。
  *   未傳則沿用 BatchPasteArea 預設（單字用字串）；例句集/朗讀應傳入句子相關文案。
  */
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ClipboardList, ImageUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BatchPasteArea } from "./BatchPasteArea";
 import { BatchTTSSettings, type TTSSettingsState } from "./BatchTTSSettings";
@@ -57,6 +59,10 @@ export interface BatchWorkPanelProps {
 
   // --- Extra slot (e.g. AI Generate Examples card for VocabSet) ---
   children?: React.ReactNode;
+
+  // --- 圖片 / PDF tab（issue #891）---
+  /** 若提供，頂部顯示「貼上文字 / 圖片 PDF」tab；此為圖片 tab 的內容（MagicPasteInput） */
+  imageTab?: React.ReactNode;
 }
 
 export function BatchWorkPanel({
@@ -81,21 +87,64 @@ export function BatchWorkPanel({
   isBusy,
   progress,
   children,
+  imageTab,
 }: BatchWorkPanelProps) {
   const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<"text" | "image">("text");
+  const showTabs = !!imageTab;
+  const onTextTab = !showTabs || activeTab === "text";
 
   return (
-    <div className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4 sticky top-0 self-start">
+    // 整塊固定在畫面上：sticky 釘住 + 用滿可視高度；貼上區可壓縮讓內容盡量一次顯示完，
+    // 真的塞不下時面板自己捲（tab 列另設 sticky 不被捲掉）
+    <div className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4 sticky top-0 self-start max-h-[calc(100vh-180px)] overflow-y-auto overscroll-contain">
       <div className="space-y-3 flex-1 flex flex-col">
-        {/* Batch Paste Area */}
-        <BatchPasteArea
-          text={text}
-          onChange={onTextChange}
-          maxItems={maxItems}
-          label={pasteLabel}
-          placeholder={placeholder}
-          variant="inline"
-        />
+        {/* Tab 切換（貼上文字 / 圖片 PDF）— issue #891 */}
+        {showTabs && (
+          // 面板內部捲動時，tab 列釘在面板頂端，不會被捲掉
+          <div className="sticky top-0 z-10 flex gap-1 bg-gray-100 p-1 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setActiveTab("text")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === "text"
+                  ? "bg-white text-purple-700 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <ClipboardList className="h-4 w-4" />
+              {t("contentEditor.batchTabs.text", { defaultValue: "貼上文字" })}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("image")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === "image"
+                  ? "bg-white text-purple-700 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <ImageUp className="h-4 w-4" />
+              {t("contentEditor.batchTabs.image", {
+                defaultValue: "圖片 / PDF",
+              })}
+            </button>
+          </div>
+        )}
+
+        {/* 輸入區：文字 tab = 貼上框；圖片 tab = MagicPasteInput */}
+        {onTextTab ? (
+          <BatchPasteArea
+            text={text}
+            onChange={onTextChange}
+            maxItems={maxItems}
+            label={pasteLabel}
+            placeholder={placeholder}
+            variant="inline"
+          />
+        ) : (
+          imageTab
+        )}
 
         {/* AI Generate Translation */}
         <BatchTranslateSettings
@@ -121,24 +170,26 @@ export function BatchWorkPanel({
         {/* Extra content (e.g. AI Generate Examples) */}
         {children}
 
-        {/* Confirm + Pause Button */}
-        <div className="flex gap-2">
-          <Button
-            onClick={onConfirm}
-            disabled={isBusy}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            {t("contentEditor.buttons.confirmPaste")}
-          </Button>
-          {isBusy && onPause && (
+        {/* Confirm + Pause Button — 僅文字 tab（圖片 tab 由 MagicPasteInput 自帶按鈕） */}
+        {onTextTab && (
+          <div className="flex gap-2">
             <Button
-              onClick={onPause}
-              className="bg-red-500 hover:bg-red-600 text-white px-4"
+              onClick={onConfirm}
+              disabled={isBusy}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {t("contentEditor.buttons.pause")}
+              {t("contentEditor.buttons.confirmPaste")}
             </Button>
-          )}
-        </div>
+            {isBusy && onPause && (
+              <Button
+                onClick={onPause}
+                className="bg-red-500 hover:bg-red-600 text-white px-4"
+              >
+                {t("contentEditor.buttons.pause")}
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Progress Bar */}
         {isBusy && progress && (

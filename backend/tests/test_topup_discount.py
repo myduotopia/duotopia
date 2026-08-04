@@ -1,11 +1,13 @@
-"""Tests for backend.services.topup_discount (issue #768 Phase 2).
+"""Tests for backend.services.topup_discount.
 
-Covers the four scenarios the credit-package purchase flow needs:
-  - teacher not in any group-buy school -> no discount
-  - teacher in one group-buy school     -> that school's discount
-  - teacher in multiple group-buy schools -> best (lowest) discount
-  - teacher's TeacherSchool inactive    -> ignored
-  - school.is_active = False            -> ignored
+issue #862 read-switch：折扣改讀新表 group_buy_members → group_buy_teams → Plan。
+Covers:
+  - teacher not in any group-buy team    -> no discount
+  - teacher in one group-buy team        -> that team's discount
+  - teacher in multiple group-buy teams  -> best (lowest) discount
+  - GroupBuyMember inactive               -> ignored
+  - GroupBuyTeam inactive                 -> ignored
+  - Plan inactive (contract ended)        -> ignored
 """
 
 from decimal import Decimal
@@ -13,23 +15,8 @@ from decimal import Decimal
 import pytest
 
 from auth import get_password_hash
-from models import (
-    Organization,
-    Plan,
-    School,
-    Teacher,
-    TeacherSchool,
-)
+from models import GroupBuyMember, GroupBuyTeam, Plan, Teacher
 from services.topup_discount import get_teacher_topup_discount
-
-
-@pytest.fixture
-def org(shared_test_session):
-    o = Organization(name="Test Org", is_active=True)
-    shared_test_session.add(o)
-    shared_test_session.commit()
-    shared_test_session.refresh(o)
-    return o
 
 
 @pytest.fixture
@@ -63,96 +50,92 @@ def _make_group_buy_plan(db, name, discount):
     return p
 
 
-def _bind(db, teacher, org, plan, *, ts_active=True, school_active=True):
-    s = School(
-        organization_id=org.id,
-        name=f"School-{plan.name}",
+def _bind(db, teacher, plan, *, member_active=True, team_active=True):
+    team = GroupBuyTeam(
+        owner_teacher_id=teacher.id,
         plan_id=plan.id,
-        teacher_seat_limit=plan.teacher_seats,
-        is_active=school_active,
+        seat_limit=plan.teacher_seats,
+        is_active=team_active,
     )
-    db.add(s)
-    db.commit()
-    db.refresh(s)
-    ts = TeacherSchool(
+    db.add(team)
+    db.flush()
+    m = GroupBuyMember(
+        team_id=team.id,
         teacher_id=teacher.id,
-        school_id=s.id,
-        roles=["teacher"],
-        is_active=ts_active,
+        is_owner=False,
+        is_active=member_active,
     )
-    db.add(ts)
+    db.add(m)
     db.commit()
-    return s
+    return team
 
 
-def test_returns_none_when_teacher_has_no_group_buy_school(
-    shared_test_session, teacher
-):
+def test_returns_none_when_teacher_has_no_group_buy_team(shared_test_session, teacher):
     assert get_teacher_topup_discount(teacher, shared_test_session) is None
 
 
-def test_returns_discount_for_single_group_buy_school(
-    shared_test_session, teacher, org
-):
+def test_returns_discount_for_single_group_buy_team(shared_test_session, teacher):
     plan = _make_group_buy_plan(shared_test_session, "團購-30席", 0.90)
-    _bind(shared_test_session, teacher, org, plan)
+    _bind(shared_test_session, teacher, plan)
 
     assert get_teacher_topup_discount(teacher, shared_test_session) == Decimal("0.90")
 
 
-def test_returns_best_discount_when_teacher_in_multiple_group_buy_schools(
-    shared_test_session, teacher, org
+def test_returns_best_discount_when_teacher_in_multiple_group_buy_teams(
+    shared_test_session, teacher
 ):
     # Lowest topup_discount == best discount (most savings)
     p1 = _make_group_buy_plan(shared_test_session, "團購-10席", 0.95)
     p2 = _make_group_buy_plan(shared_test_session, "團購-50席", 0.85)
     p3 = _make_group_buy_plan(shared_test_session, "團購-30席", 0.90)
-    _bind(shared_test_session, teacher, org, p1)
-    _bind(shared_test_session, teacher, org, p2)
-    _bind(shared_test_session, teacher, org, p3)
+    _bind(shared_test_session, teacher, p1)
+    _bind(shared_test_session, teacher, p2)
+    _bind(shared_test_session, teacher, p3)
 
     assert get_teacher_topup_discount(teacher, shared_test_session) == Decimal("0.85")
 
 
-def test_ignores_inactive_teacher_school(shared_test_session, teacher, org):
+def test_owner_membership_also_yields_discount(shared_test_session, teacher):
+    """發起人在名冊也是一列（is_owner=True）；查詢不 filter is_owner，故 owner-only
+    綁定也應拿到折扣。鎖定「owner 也是 member 列」不變式，防未來誤加 is_owner filter。"""
     plan = _make_group_buy_plan(shared_test_session, "團購-30席", 0.90)
-    _bind(shared_test_session, teacher, org, plan, ts_active=False)
+    team = GroupBuyTeam(
+        owner_teacher_id=teacher.id,
+        plan_id=plan.id,
+        seat_limit=plan.teacher_seats,
+        is_active=True,
+    )
+    shared_test_session.add(team)
+    shared_test_session.flush()
+    shared_test_session.add(
+        GroupBuyMember(
+            team_id=team.id, teacher_id=teacher.id, is_owner=True, is_active=True
+        )
+    )
+    shared_test_session.commit()
+
+    assert get_teacher_topup_discount(teacher, shared_test_session) == Decimal("0.90")
+
+
+def test_ignores_inactive_member(shared_test_session, teacher):
+    plan = _make_group_buy_plan(shared_test_session, "團購-30席", 0.90)
+    _bind(shared_test_session, teacher, plan, member_active=False)
 
     assert get_teacher_topup_discount(teacher, shared_test_session) is None
 
 
-def test_ignores_inactive_school(shared_test_session, teacher, org):
+def test_ignores_inactive_team(shared_test_session, teacher):
     plan = _make_group_buy_plan(shared_test_session, "團購-30席", 0.90)
-    _bind(shared_test_session, teacher, org, plan, school_active=False)
+    _bind(shared_test_session, teacher, plan, team_active=False)
 
     assert get_teacher_topup_discount(teacher, shared_test_session) is None
 
 
-def test_ignores_inactive_plan(shared_test_session, teacher, org):
+def test_ignores_inactive_plan(shared_test_session, teacher):
     # Deactivated group-buy plan (contract ended) should not produce a discount
     plan = _make_group_buy_plan(shared_test_session, "團購-30席", 0.90)
     plan.is_active = False
     shared_test_session.commit()
-    _bind(shared_test_session, teacher, org, plan)
-
-    assert get_teacher_topup_discount(teacher, shared_test_session) is None
-
-
-def test_ignores_school_with_no_plan_id(shared_test_session, teacher, org):
-    # School without plan_id (institution school, not group-buy)
-    s = School(
-        organization_id=org.id,
-        name="Institution School",
-        plan_id=None,
-        is_active=True,
-    )
-    shared_test_session.add(s)
-    shared_test_session.commit()
-    shared_test_session.refresh(s)
-    ts = TeacherSchool(
-        teacher_id=teacher.id, school_id=s.id, roles=["teacher"], is_active=True
-    )
-    shared_test_session.add(ts)
-    shared_test_session.commit()
+    _bind(shared_test_session, teacher, plan)
 
     assert get_teacher_topup_discount(teacher, shared_test_session) is None

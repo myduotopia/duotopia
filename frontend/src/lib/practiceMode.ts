@@ -84,7 +84,8 @@ export type SettingKey =
   | "show_translation"
   | "show_word"
   | "show_image"
-  | "show_option_images";
+  | "show_option_images"
+  | "show_example_sentence";
 
 export type SettingValue = boolean | number | string;
 
@@ -202,6 +203,14 @@ const TOGGLE_SHUFFLE: SettingSpec = {
   key: "shuffle_questions",
 };
 const TOGGLE_SHOW_ANSWER: SettingSpec = { kind: "toggle", key: "show_answer" };
+// Issue #860 / #967: 「顯示例句（答案挖空）」開啟時，挖空例句「就是題目」——
+// 題目區不再顯示單字／翻譯，選項固定英文，若同時開播放音檔則改播例句音檔。
+// 因為例句取代了圖片題目，與「選項以圖片呈現」(show_option_images) 互斥（二擇一）。
+const TOGGLE_SHOW_EXAMPLE_SENTENCE: SettingSpec = {
+  kind: "toggle",
+  key: "show_example_sentence",
+  excludes: ["show_option_images"], // Issue #967 互斥
+};
 const TOGGLE_SHOW_TRANSLATION: SettingSpec = {
   kind: "toggle",
   key: "show_translation",
@@ -214,7 +223,7 @@ const TOGGLE_SHOW_IMAGE: SettingSpec = {
 const TOGGLE_SHOW_OPTION_IMAGES: SettingSpec = {
   kind: "toggle",
   key: "show_option_images",
-  excludes: ["show_image"], // Issue #631 互斥
+  excludes: ["show_image", "show_example_sentence"], // #631 圖片題互斥 / #967 例句題互斥
 };
 const NUMBER_TARGET_PROFICIENCY: SettingSpec = {
   kind: "number",
@@ -457,6 +466,7 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
       SEGMENTED_DISPLAY_SELECTION,
       SELECT_TIME_SELECTION,
       TOGGLE_SHOW_ANSWER,
+      TOGGLE_SHOW_EXAMPLE_SENTENCE,
       TOGGLE_SHOW_IMAGE,
       TOGGLE_SHOW_OPTION_IMAGES,
     ],
@@ -493,6 +503,7 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
       SEGMENTED_DISPLAY_SELECTION,
       TOGGLE_LIVE_QUIZ,
       SELECT_QUIZ_TIME,
+      TOGGLE_SHOW_EXAMPLE_SENTENCE,
       TOGGLE_SHOW_IMAGE,
       TOGGLE_SHOW_OPTION_IMAGES,
     ],

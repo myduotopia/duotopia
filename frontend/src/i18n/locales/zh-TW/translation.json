@@ -638,7 +638,8 @@
       "studentCannotSubscribe": "學生無法訂閱",
       "loginRequired": "請先登入才能訂閱方案",
       "studentAccountWarning": "學生帳號無法訂閱教師方案，請使用教師帳號登入",
-      "logoutFirst": "請先登出，使用教師帳號登入才能訂閱"
+      "logoutFirst": "請先登出，使用教師帳號登入才能訂閱",
+      "groupBuyActive": "團購方案進行中"
     },
     "tabs": {
       "subscription": "月訂閱方案",
@@ -656,6 +657,7 @@
       "bonusPoints": "+{{count, number}} 點贈送",
       "unitCost": "元/點",
       "discount": "省 {{percent}}%",
+      "groupBuyDiscount": "團購 {{percent}}% off",
       "validity": "有效期限：1 年",
       "purchaseSuccess": "成功購買 {{points}} 點數包！交易編號：{{transactionId}}",
       "purchaseTitle": "購買 {{points}} 點數包"
@@ -1744,8 +1746,16 @@
       "item1": "9.1 本條款之解釋與適用，以中華民國法律為準據法。",
       "item2": "9.2 因本條款所生之爭議，雙方同意以台灣台北地方法院為第一審管轄法院。"
     },
+    "dataDeletion": {
+      "title": "10. 帳號與資料刪除",
+      "item1": "10.1 您有權隨時申請刪除您的 Duotopia 帳號及相關個人資料。",
+      "item2": "10.2 申請方式：請寄送電子郵件至 contact@duotopia.co，主旨註明「帳號刪除申請」，並於信中提供您註冊時使用的電子郵件地址與帳號類型（教師、學生或家長），以利我們核對身分。",
+      "item3": "10.3 我們將於收到申請並完成身分核對後 30 天內處理刪除，並以電子郵件通知您處理結果。",
+      "item4": "10.4 刪除範圍包括您的帳號基本資料、學習紀錄與語音資料；惟依法令規定須保存之交易與發票紀錄，將於法定保存期限屆滿後刪除。",
+      "item5": "10.5 帳號一經刪除將無法復原，您將無法再存取原有的學習內容與紀錄。"
+    },
     "section10": {
-      "title": "10. 聯絡方式",
+      "title": "11. 聯絡方式",
       "company": "語拓邦數位學習有限公司",
       "taxId": "統編：60619397",
       "contactPrompt": "若對本條款有任何疑問，請透過以下方式聯絡我們：",
@@ -2058,6 +2068,7 @@
         "playAudioWord": "播放音檔",
         "playAudioWordDesc": "聽音檔選翻譯",
         "playAudioFillDesc": "聽音檔拼/填單字",
+        "showExampleSentenceDesc": "練習時顯示例句",
         "showAnswerLockedByAudio": "播放音檔模式必須顯示答案"
       }
     },
@@ -4576,6 +4587,37 @@
     }
   },
   "contentEditor": {
+    "magicPaste": {
+      "fileTooLarge": "檔案過大（上限 10MB）",
+      "noSentenceExtracted": "這張圖片沒有擷取到句子，請換一張試試",
+      "noWordExtracted": "這張圖片沒有擷取到單字，請換一張試試",
+      "extractFailed": "AI 擷取失敗，請稍後再試",
+      "selectAtLeastOne": "請至少勾選一個項目",
+      "quota": "本月免費剩餘 {{remaining}} / {{limit}} 張，超額以點數計費",
+      "cancel": "取消",
+      "pickFile": "選擇圖片或 PDF（一次一張）",
+      "autoFillHint": "擷取後依上方「AI 翻譯 / 語音 / 例句」設定，在插入時自動補齊缺少的欄位。",
+      "overLimitPre": "本月免費次數已用完且點數不足，請",
+      "overLimitLink": "訂閱方案或購買點數",
+      "overLimitPost": "後再使用。",
+      "previewHint": "擷取結果（勾選要插入的，可直接改）",
+      "phSentence": "句子",
+      "phWord": "單字",
+      "phTranslation": "翻譯",
+      "phExample": "例句",
+      "extracting": "擷取中…",
+      "start": "開始擷取",
+      "insertN": "插入 {{count}} 個項目",
+      "insertedN": "已插入 {{count}} 個項目",
+      "insertedNSentences": "已插入 {{count}} 個句子",
+      "dialogTitle": "魔術貼上：從圖片 / PDF 擷取教材",
+      "dialogDescSentence": "上傳一張圖片或 PDF，AI 會自動擷取句子與翻譯，預覽確認後再插入。",
+      "dialogDescVocab": "上傳一張圖片或 PDF，AI 會自動擷取單字、翻譯與例句，預覽確認後再插入。"
+    },
+    "batchTabs": {
+      "text": "貼上文字",
+      "image": "圖片 / PDF"
+    },
     "labels": {
       "title": "標題",
       "pasteContent": "請貼上單字",

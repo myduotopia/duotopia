@@ -1,19 +1,13 @@
 """
-Translation service using OpenAI API or Vertex AI (Gemini)
-
-Supports switching between OpenAI and Vertex AI via USE_VERTEX_AI environment variable.
+Translation service using Vertex AI (Gemini)
 """
 
-import os
-import re
 import json as json_module
 import asyncio
 import logging
 from pathlib import Path
 from typing import List, Dict, Optional  # noqa: F401
-from openai import OpenAI, AsyncOpenAI
 from dotenv import load_dotenv
-from utils.http_client import get_http_client
 
 # 載入文法規則（按 CEFR 級別）
 _grammar_rules_path = Path(__file__).parent.parent / "config" / "grammar_by_level.json"
@@ -27,31 +21,15 @@ logger = logging.getLogger(__name__)
 
 class TranslationService:
     def __init__(self):
-        self.use_vertex_ai = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
-        self.client = None  # OpenAI client (lazy init)
         self.vertex_ai = None  # Vertex AI service (lazy init)
-        self.model = "gpt-4o-mini"  # OpenAI model (for fallback)
 
     def _ensure_client(self):
-        """Lazy initialization of AI client (OpenAI or Vertex AI)"""
-        if self.use_vertex_ai:
-            if self.vertex_ai is None:
-                from services.vertex_ai import get_vertex_ai_service
+        """Lazy initialization of Vertex AI (Gemini) client"""
+        if self.vertex_ai is None:
+            from services.vertex_ai import get_vertex_ai_service
 
-                self.vertex_ai = get_vertex_ai_service()
-                logger.info("Using Vertex AI (Gemini) for translation")
-        else:
-            if self.client is None:
-                api_key = os.getenv("OPENAI_API_KEY")
-                if not api_key:
-                    raise ValueError(
-                        "OPENAI_API_KEY not found in environment variables"
-                    )
-                # Use shared http_client for connection pooling
-                self.client = AsyncOpenAI(
-                    api_key=api_key, http_client=get_http_client()
-                )
-                logger.info("Using OpenAI for translation")
+            self.vertex_ai = get_vertex_ai_service()
+            logger.info("Using Vertex AI (Gemini) for translation")
 
     async def translate_text(self, text: str, target_lang: str = "zh-TW") -> str:
         """
@@ -139,12 +117,69 @@ class TranslationService:
             # 英英釋義需要更多 tokens（最多 3 個定義 + 詞性標記）
             token_limit = 200 if target_lang == "en" else 100
 
+            result = await self.vertex_ai.generate_text(
+                prompt=prompt,
+                model_type="flash",
+                max_tokens=token_limit,
+                temperature=0.3,
+                system_instruction=system_instruction,
+                disable_thinking=True,
+            )
+            return result.strip()
+
+        except Exception as e:
+            logger.error("Translation error: %s", e)
+            # 如果翻譯失敗，返回原文
+            return text
+
+    async def translate_sentence(self, text: str, target_lang: str = "zh-TW") -> str:
+        """
+        翻譯整句英文（自然通順的整句翻譯，非單字＋詞性）
+
+        用於例句翻譯：把整句英文的「意思」自然翻譯成目標語言，
+        不逐字翻譯、不拆成單字、不標註詞性、不加編號、不加任何說明。
+
+        Args:
+            text: 要翻譯的英文句子
+            target_lang: 目標語言（預設為繁體中文）
+
+        Returns:
+            翻譯後的整句譯文；失敗時返回原文
+        """
+        self._ensure_client()
+
+        try:
+            # 目標語言 label
+            if target_lang == "zh-TW":
+                lang_label = "繁體中文"
+            elif target_lang == "ja":
+                lang_label = "日文"
+            elif target_lang == "ko":
+                lang_label = "韓文"
+            else:
+                lang_label = target_lang
+
+            prompt = (
+                f"請將以下英文句子翻譯成{lang_label}：{text}\n\n"
+                f"規則：\n"
+                f"1. 翻譯整句的意思，翻成一句自然通順的譯文。\n"
+                f"2. 不要逐字翻譯、不要拆成單字、不要標註詞性。\n"
+                f"3. 不要加編號、不要加任何說明，只回覆一句譯文。"
+            )
+
+            system_instruction = (
+                "You are a professional translator. Only provide the "
+                "translation without any explanation. "
+                "CRITICAL: When translating to Chinese, you MUST use Traditional Chinese (繁體中文), "
+                "NOT Simplified Chinese."
+            )
+
             # Use Vertex AI or OpenAI based on configuration
             if self.use_vertex_ai:
                 result = await self.vertex_ai.generate_text(
                     prompt=prompt,
                     model_type="flash",
-                    max_tokens=token_limit,
+                    max_tokens=200,
                     temperature=0.3,
                     system_instruction=system_instruction,
                     disable_thinking=True,
@@ -157,15 +192,126 @@ class TranslationService:
                         {"role": "system", "content": system_instruction},
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=0.3,  # 降低隨機性以獲得更一致的翻譯
-                    max_tokens=token_limit,
+                    temperature=0.3,
+                    max_tokens=200,
                 )
                 return response.choices[0].message.content.strip()
 
         except Exception as e:
-            logger.error("Translation error: %s", e)
+            logger.error("Sentence translation error: %s", e)
             # 如果翻譯失敗，返回原文
             return text
+
+    async def batch_translate_sentences(
+        self, texts: List[str], target_lang: str = "zh-TW"
+    ) -> List[str]:
+        """
+        批次翻譯多個英文句子（整句自然翻譯，非單字＋詞性）
+
+        Args:
+            texts: 要翻譯的英文句子列表
+            target_lang: 目標語言（預設為繁體中文）
+
+        Returns:
+            翻譯後的整句譯文列表；數量不符或失敗時返回原文列表
+        """
+        self._ensure_client()
+
+        try:
+            import json
+
+            texts_json = json.dumps(texts, ensure_ascii=False)
+
+            if target_lang == "zh-TW":
+                lang_label = "繁體中文"
+            elif target_lang == "ja":
+                lang_label = "日文"
+            elif target_lang == "ko":
+                lang_label = "韓文"
+            else:
+                lang_label = target_lang
+
+            prompt = f"""請將以下 JSON 陣列中的每個英文句子完整自然地翻譯成{lang_label}。
+每個句子翻成一句自然通順的譯文，翻譯整句的意思。
+不要逐字翻譯、不要拆成單字、不要標註詞性、不要加編號或說明。
+直接返回 JSON 陣列格式，每個譯文對應一個項目。
+只返回 JSON 陣列，不要任何其他文字或說明。
+
+輸入: {texts_json}
+
+要求: 返回格式必須是 ["譯文1", "譯文2", ...]"""
+
+            system_instruction = (
+                "You are a professional translator. Always return results "
+                "as a valid JSON array with the exact same number of items as input. "
+                "Translate each full sentence naturally, NOT word by word, "
+                "and do NOT add parts of speech. "
+                "Return ONLY the JSON array, no markdown, no explanation. "
+                "CRITICAL: When translating to Chinese, you MUST use Traditional Chinese (繁體中文), "
+                "NOT Simplified Chinese."
+            )
+
+            content = None
+
+            # Use Vertex AI or OpenAI based on configuration
+            if self.use_vertex_ai:
+                translations = await self.vertex_ai.generate_json(
+                    prompt=prompt,
+                    model_type="flash",
+                    max_tokens=3500,
+                    temperature=0.3,
+                    system_instruction=system_instruction,
+                    disable_thinking=True,
+                )
+                if isinstance(translations, str):
+                    translations = translations.split("---")
+            else:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=3500,
+                )
+
+                import re
+
+                content = response.choices[0].message.content.strip()
+                content = re.sub(r"^```json\s*", "", content)
+                content = re.sub(r"\s*```$", "", content)
+                content = content.strip()
+
+                try:
+                    translations = json.loads(content)
+                except Exception:
+                    if "---" in content:
+                        translations = [
+                            seg.strip() for seg in content.split("---") if seg.strip()
+                        ]
+                    else:
+                        translations = [content.strip()] if content else []
+                if isinstance(translations, str):
+                    translations = translations.split("---")
+
+            # 確保返回的翻譯數量與輸入相同
+            if len(translations) != len(texts):
+                logger.warning(
+                    "Batch sentence translation count mismatch "
+                    "(expected %d, got %d), falling back to original texts.",
+                    len(texts),
+                    len(translations),
+                )
+                return texts
+
+            return translations
+        except Exception as e:
+            logger.error(
+                "Batch sentence translation error: %s. Falling back to original texts.",
+                e,
+            )
+            return texts
 
     async def translate_with_pos(
         self, text: str, target_lang: str = "zh-TW"
@@ -258,81 +404,28 @@ Required: Return format must be ["translation1", "translation2", ...]"""
                 "NOT Simplified Chinese."
             )
 
-            # Use Vertex AI or OpenAI based on configuration
-            if self.use_vertex_ai:
-                translations = await self.vertex_ai.generate_json(
-                    prompt=prompt,
-                    model_type="flash",
-                    max_tokens=3500,
-                    temperature=0.3,
-                    system_instruction=system_instruction,
-                    disable_thinking=True,
-                )
-                # Ensure it's a list
-                if isinstance(translations, str):
-                    translations = translations.split("---")
-            else:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.3,
-                    max_tokens=3500,  # 提高上限以支持更多句子的批次翻译
-                )
-
-                # 解析 JSON 回應
-                import re
-
-                content = response.choices[0].message.content.strip()
-
-                # 移除可能的 markdown 代碼塊標記
-                content = re.sub(r"^```json\s*", "", content)
-                content = re.sub(r"\s*```$", "", content)
-                content = content.strip()
-
-                # Try JSON parse; handle legacy separator when JSON decode fails
-                try:
-                    translations = json.loads(content)
-                except Exception:
-                    # If not JSON, fall back to separator or raw string
-                    if "---" in content:
-                        translations = [
-                            seg.strip() for seg in content.split("---") if seg.strip()
-                        ]
-                    else:
-                        translations = [content.strip()] if content else []
-                if isinstance(translations, str):
-                    translations = translations.split("---")
+            translations = await self.vertex_ai.generate_json(
+                prompt=prompt,
+                model_type="flash",
+                max_tokens=3500,
+                temperature=0.3,
+                system_instruction=system_instruction,
+                disable_thinking=True,
+            )
+            # Ensure it's a list
+            if isinstance(translations, str):
+                translations = translations.split("---")
 
             # 確保返回的翻譯數量與輸入相同
             if len(translations) != len(texts):
-                # Try manual split on separator if present
-                if isinstance(content, str) and "---" in content:
-                    manual = [
-                        seg.strip() for seg in content.split("---") if seg.strip()
-                    ]
-                    if len(manual) == len(texts):
-                        translations = manual
-                    else:
-                        logger.warning(
-                            "Batch translation count mismatch "
-                            "(expected %d, got %d), "
-                            "falling back to individual translation.",
-                            len(texts),
-                            len(translations),
-                        )
-                        return texts
-                else:
-                    logger.warning(
-                        "Batch translation count mismatch "
-                        "(expected %d, got %d), "
-                        "falling back to individual translation.",
-                        len(texts),
-                        len(translations),
-                    )
-                    return texts
+                logger.warning(
+                    "Batch translation count mismatch "
+                    "(expected %d, got %d), "
+                    "falling back to individual translation.",
+                    len(texts),
+                    len(translations),
+                )
+                return texts
 
             return translations
         except Exception as e:
@@ -447,36 +540,14 @@ Only reply with JSON array, no other text."""
                 "NOT Simplified Chinese. Always respond with valid JSON array only."
             )
 
-            # Use Vertex AI or OpenAI based on configuration
-            if self.use_vertex_ai:
-                results = await self.vertex_ai.generate_json(
-                    prompt=prompt,
-                    model_type="flash",
-                    max_tokens=2000,
-                    temperature=0.2,
-                    system_instruction=system_instruction,
-                    disable_thinking=True,
-                )
-            else:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.2,  # Lower temperature for more consistent POS detection
-                    max_tokens=2000,
-                )
-
-                # 解析 JSON 回應
-                import re
-
-                content = response.choices[0].message.content.strip()
-                content = re.sub(r"^```json\s*", "", content)
-                content = re.sub(r"\s*```$", "", content)
-                content = content.strip()
-
-                results = json.loads(content)
+            results = await self.vertex_ai.generate_json(
+                prompt=prompt,
+                model_type="flash",
+                max_tokens=2000,
+                temperature=0.2,
+                system_instruction=system_instruction,
+                disable_thinking=True,
+            )
 
             # 確保返回數量正確
             if len(results) != len(texts):
@@ -783,36 +854,14 @@ IMPORTANT: Each English sentence MUST contain the exact target word."""
             # 動態計算 max_tokens：分塊後每批 ≤5 字，最低 1000 tokens
             dynamic_max_tokens = max(1000, len(words) * self.TOKENS_PER_WORD)
 
-            # Use Vertex AI or OpenAI based on configuration
-            if self.use_vertex_ai:
-                sentences = await self.vertex_ai.generate_json(
-                    prompt=user_prompt,
-                    model_type="flash",
-                    max_tokens=dynamic_max_tokens,
-                    temperature=0.7,  # Match GPT temperature for consistent quality
-                    system_instruction=system_prompt,
-                    disable_thinking=True,
-                )
-            else:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    temperature=0.7,  # 稍高一點讓例句更有變化
-                    max_tokens=dynamic_max_tokens,
-                )
-
-                # 解析回應
-                content = response.choices[0].message.content.strip()
-
-                # 移除可能的 markdown 代碼塊標記
-                content = re.sub(r"^```json\s*", "", content)
-                content = re.sub(r"\s*```$", "", content)
-                content = content.strip()
-
-                sentences = json_module.loads(content)
+            sentences = await self.vertex_ai.generate_json(
+                prompt=user_prompt,
+                model_type="flash",
+                max_tokens=dynamic_max_tokens,
+                temperature=0.7,  # Match GPT temperature for consistent quality
+                system_instruction=system_prompt,
+                disable_thinking=True,
+            )
 
             # 確保返回數量正確並添加 word 欄位以防止陣列錯位
             if len(sentences) != len(words):
@@ -949,37 +998,14 @@ JSON 陣列，只包含 {count} 個干擾項：
                 "4) All in Traditional Chinese. JSON array only."
             )
 
-            # Use Vertex AI or OpenAI based on configuration
-            if self.use_vertex_ai:
-                distractors = await self.vertex_ai.generate_json(
-                    prompt=prompt,
-                    model_type="flash",
-                    max_tokens=200,
-                    temperature=0.2,  # Very low temperature to strictly follow prompt rules
-                    system_instruction=system_instruction,
-                    disable_thinking=True,
-                )
-            else:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.2,  # Very low temperature to strictly follow prompt rules
-                    max_tokens=200,
-                )
-
-                # Parse JSON response
-                import re
-
-                content = response.choices[0].message.content.strip()
-                # Remove markdown code block markers if present
-                content = re.sub(r"^```json\s*", "", content)
-                content = re.sub(r"\s*```$", "", content)
-                content = content.strip()
-
-                distractors = json.loads(content)
+            distractors = await self.vertex_ai.generate_json(
+                prompt=prompt,
+                model_type="flash",
+                max_tokens=200,
+                temperature=0.2,  # Very low temperature to strictly follow prompt rules
+                system_instruction=system_instruction,
+                disable_thinking=True,
+            )
 
             # Filter: remove duplicates (case-insensitive) and correct answer
             seen = {translation.lower().strip()}
@@ -1081,36 +1107,14 @@ JSON 陣列，每個元素是一個包含 {count} 個干擾項的陣列。
                 "5) All in Traditional Chinese. JSON array only."
             )
 
-            # Use Vertex AI or OpenAI based on configuration
-            if self.use_vertex_ai:
-                all_distractors = await self.vertex_ai.generate_json(
-                    prompt=prompt,
-                    model_type="flash",
-                    max_tokens=1000,
-                    temperature=0.2,  # Very low temperature to strictly follow prompt rules
-                    system_instruction=system_instruction,
-                    disable_thinking=True,
-                )
-            else:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.2,  # Very low temperature to strictly follow prompt rules
-                    max_tokens=1000,
-                )
-
-                # Parse JSON response
-                import re
-
-                content = response.choices[0].message.content.strip()
-                content = re.sub(r"^```json\s*", "", content)
-                content = re.sub(r"\s*```$", "", content)
-                content = content.strip()
-
-                all_distractors = json.loads(content)
+            all_distractors = await self.vertex_ai.generate_json(
+                prompt=prompt,
+                model_type="flash",
+                max_tokens=1000,
+                temperature=0.2,  # Very low temperature to strictly follow prompt rules
+                system_instruction=system_instruction,
+                disable_thinking=True,
+            )
 
             # Verify count matches
             if len(all_distractors) != len(words):

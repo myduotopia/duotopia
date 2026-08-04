@@ -7,7 +7,43 @@ import TeacherLayout from "../TeacherLayout";
 vi.mock("@/lib/api", () => ({
   apiClient: {
     get: vi.fn(),
+    getConfig: vi.fn().mockResolvedValue({
+      enablePayment: true,
+      environment: "development",
+    }),
+    getSubscriptionStatus: vi.fn(),
+    // TeacherLayout 從 getTeacherDashboard().teacher 取得 profile（非 localStorage）
+    getTeacherDashboard: vi.fn().mockResolvedValue({
+      teacher: {
+        id: 1,
+        email: "teacher@example.com",
+        name: "Test Teacher",
+        is_demo: false,
+        is_active: true,
+      },
+    }),
+    logout: vi.fn(),
   },
+}));
+
+// 可控的 workspace mode：用 module-level 變數模擬「切換 workspace」。
+// WorkspaceProvider 改為 passthrough，useWorkspace 每次讀最新的 mockMode，
+// 於是測試可以 render 後改 mockMode + rerender 來模擬 personal⇄organization 切換。
+let mockMode: "personal" | "organization" = "personal";
+let mockSelectedOrganization: { id: string; name: string } | null = null;
+vi.mock("@/contexts/WorkspaceContext", () => ({
+  WorkspaceProvider: ({ children }: { children: React.ReactNode }) => children,
+  useWorkspace: () => ({
+    mode: mockMode,
+    selectedSchool: null,
+    selectedOrganization: mockSelectedOrganization,
+  }),
+}));
+
+// WorkspaceSwitcher 內部依賴完整 workspace context（已被上面 mock 取代），
+// 這裡 stub 掉；它與剩餘點數看板的行為無關。
+vi.mock("@/components/workspace", () => ({
+  WorkspaceSwitcher: () => <div>WorkspaceSwitcher</div>,
 }));
 
 // Mock DigitalTeachingToolbar component
@@ -22,10 +58,23 @@ vi.mock("@/components/LanguageSwitcher", () => ({
   LanguageSwitcher: () => <div>LanguageSwitcher</div>,
 }));
 
+// Mock react-i18next（元件在 sidebar 語言選單使用 i18n.language.startsWith）。
+// t/i18n 必須是「穩定參考」，比照真實 i18next：它們是 SidebarContent memo 的
+// 依賴，若每次 render 都回傳新物件會讓 memo 每次都重算，掩蓋 memo staleness
+// 類的 bug（例如 #956 個人模式看板不顯示的 regression）。
+const stableT = (key: string) => key;
+const stableI18n = { language: "zh-TW", changeLanguage: vi.fn() };
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: stableT, i18n: stableI18n }),
+}));
+
 describe("TeacherLayout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock localStorage
+    localStorage.clear();
+    // 每個測試預設回到 personal 模式
+    mockMode = "personal";
+    mockSelectedOrganization = null;
     const mockProfile = {
       id: 1,
       email: "teacher@example.com",
@@ -76,5 +125,142 @@ describe("TeacherLayout", () => {
       // Teachers should have their own navigation
       expect(screen.getByText("Test Teacher")).toBeInTheDocument();
     });
+  });
+
+  it("personal 模式：quota 有值時顯示剩餘點數看板", async () => {
+    const { apiClient } = await import("@/lib/api");
+    vi.mocked(apiClient.getSubscriptionStatus).mockResolvedValue({
+      quota_total: 1000,
+      quota_used: 250,
+    } as never);
+
+    render(
+      <BrowserRouter>
+        <TeacherLayout>
+          <div>Content</div>
+        </TeacherLayout>
+      </BrowserRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("剩餘點數").length).toBeGreaterThan(0);
+    });
+    expect(apiClient.getSubscriptionStatus).toHaveBeenCalled();
+  });
+
+  it("personal 模式：點數 API 在版面穩定後才回來，看板仍會出現（memo 需依賴 tokenInfo）", async () => {
+    const { apiClient } = await import("@/lib/api");
+    // 用手動 deferred promise 控制 getSubscriptionStatus 的 resolve 時機：
+    // 先讓 profile/config 等其他 async dep 全部落地、memo 以 tokenInfo=null 算完，
+    // 之後才 resolve 點數。若 memo 沒把 tokenInfo 列為依賴，這個晚到的
+    // setTokenInfo 不會觸發 memo 重算，看板永遠不出現（本 regression）。
+    let resolveSub: (v: unknown) => void = () => {};
+    vi.mocked(apiClient.getSubscriptionStatus).mockReturnValue(
+      new Promise((res) => {
+        resolveSub = res;
+      }) as never,
+    );
+
+    render(
+      <BrowserRouter>
+        <TeacherLayout>
+          <div>Content</div>
+        </TeacherLayout>
+      </BrowserRouter>,
+    );
+
+    // 等版面穩定（老師名稱出現 = profile/config 已落地、memo 已首次算完）
+    await waitFor(() => {
+      expect(screen.getByText("Test Teacher")).toBeInTheDocument();
+    });
+    // 此刻點數尚未回來，看板不該顯示
+    expect(screen.queryAllByText("剩餘點數")).toHaveLength(0);
+
+    // 點數晚到
+    resolveSub({ quota_total: 1000, quota_used: 250 });
+
+    // 看板必須因 tokenInfo 變動而出現
+    await waitFor(() => {
+      expect(screen.getAllByText("剩餘點數").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("從機構切回個人模式：點數 fetch 回來後看板自動出現，不需重整", async () => {
+    const { apiClient } = await import("@/lib/api");
+    // 起始為機構模式（org 不 fetch、不顯示看板）
+    mockMode = "organization";
+    mockSelectedOrganization = { id: "org-1", name: "測試機構" };
+    // 切回 personal 後才會用到；用 deferred 控制 resolve 時機。
+    let resolveSub: (v: unknown) => void = () => {};
+    vi.mocked(apiClient.getSubscriptionStatus).mockReturnValue(
+      new Promise((res) => {
+        resolveSub = res;
+      }) as never,
+    );
+
+    // 每次都傳「全新的 element」，避免 React 因 element 參考相同而 bail-out
+    // 不重新 render（那樣 inner 不會重讀 mock 的 mode）。
+    const makeUi = () => (
+      <BrowserRouter>
+        <TeacherLayout>
+          <div>Content</div>
+        </TeacherLayout>
+      </BrowserRouter>
+    );
+    const { rerender } = render(makeUi());
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Teacher")).toBeInTheDocument();
+    });
+    // 機構模式：不顯示看板、也不 fetch 個人點數
+    expect(screen.queryAllByText("剩餘點數")).toHaveLength(0);
+    expect(apiClient.getSubscriptionStatus).not.toHaveBeenCalled();
+
+    // 切回個人模式
+    mockMode = "personal";
+    mockSelectedOrganization = null;
+    rerender(makeUi());
+
+    // 切回後個人點數 effect 應觸發 fetch（等它被呼叫，順便讓 mode 切換造成的
+    // 導頁/其他 dep 變動先 flush，隔離出「只有 tokenInfo 變動」的情境）
+    await waitFor(() => {
+      expect(apiClient.getSubscriptionStatus).toHaveBeenCalled();
+    });
+
+    // 點數回來 → 看板必須自動出現，不需使用者重整
+    resolveSub({ quota_total: 1000, quota_used: 250 });
+    await waitFor(() => {
+      expect(screen.getAllByText("剩餘點數").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("機構視圖（organization 模式）不顯示剩餘點數看板，也不 fetch 點數", async () => {
+    const { apiClient } = await import("@/lib/api");
+    // 切到機構視圖
+    mockMode = "organization";
+    mockSelectedOrganization = { id: "org-1", name: "測試機構" };
+    // 即使 API 會回傳 quota，也不該顯示（org 模式根本不 fetch）
+    vi.mocked(apiClient.getSubscriptionStatus).mockResolvedValue({
+      quota_total: 1000,
+      quota_used: 250,
+    } as never);
+
+    render(
+      <BrowserRouter>
+        <TeacherLayout>
+          <div>Content</div>
+        </TeacherLayout>
+      </BrowserRouter>,
+    );
+
+    // 等版面渲染完成（老師名稱出現）
+    await waitFor(() => {
+      expect(screen.getByText("Test Teacher")).toBeInTheDocument();
+    });
+
+    // 機構視圖不顯示剩餘點數看板
+    expect(screen.queryAllByText("剩餘點數")).toHaveLength(0);
+    // 機構視圖不呼叫個人 quota API，避免殘留個人資料
+    expect(apiClient.getSubscriptionStatus).not.toHaveBeenCalled();
   });
 });

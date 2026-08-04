@@ -112,22 +112,80 @@ export function BatchTTSSettings({
     );
   }
 
-  // card variant
+  // card variant（緊湊：啟用時口音/性別/語速 3 欄窄選單一行；停用只留一行）
+  const compactSelect =
+    "w-full px-1.5 py-1 border border-gray-300 rounded text-xs bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
+  const compactLabel = "text-[11px] text-gray-500 mb-0.5 block";
   return (
-    <div className="bg-yellow-50 rounded-lg border border-yellow-200 overflow-hidden">
-      <div className="flex items-center gap-2 p-3">
+    <div className="bg-yellow-50/60 rounded-lg border border-yellow-200">
+      <div className="flex items-center gap-2 p-2.5">
         <input
           type="checkbox"
           checked={enabled}
           onChange={(e) => onEnabledChange?.(e.target.checked)}
           className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
-        <Volume2 className="h-4 w-4" />
+        <Volume2 className="h-4 w-4 shrink-0" />
         <span className="text-sm font-semibold text-gray-800">
           {t("contentEditor.labels.aiGenerateTTS")}
         </span>
       </div>
-      {enabled && <div className="px-3 pb-3 space-y-2">{settingsGrid}</div>}
+      {enabled && (
+        <div className="grid grid-cols-3 gap-1.5 px-2.5 pb-2.5">
+          <div>
+            <label className={compactLabel}>
+              {t("contentEditor.ttsSettings.accent")}
+            </label>
+            <select
+              value={settings.accent}
+              onChange={(e) =>
+                onChange({ ...settings, accent: e.target.value })
+              }
+              className={compactSelect}
+            >
+              {accents.map((accent) => (
+                <option key={accent} value={accent}>
+                  {accent}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={compactLabel}>
+              {t("contentEditor.ttsSettings.gender")}
+            </label>
+            <select
+              value={settings.gender}
+              onChange={(e) =>
+                onChange({ ...settings, gender: e.target.value })
+              }
+              className={compactSelect}
+            >
+              {genders.map((gender) => (
+                <option key={gender} value={gender}>
+                  {gender}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={compactLabel}>
+              {t("contentEditor.ttsSettings.speed")}
+            </label>
+            <select
+              value={settings.speed}
+              onChange={(e) => onChange({ ...settings, speed: e.target.value })}
+              className={compactSelect}
+            >
+              {speeds.map((speed) => (
+                <option key={speed} value={speed}>
+                  {speed}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

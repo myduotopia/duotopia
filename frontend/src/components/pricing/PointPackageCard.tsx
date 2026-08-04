@@ -19,6 +19,10 @@ interface PointPackageCardProps {
   disabled?: boolean;
   ctaText: string;
   baseUnitCost: number; // highest unit cost for discount calculation
+  // issue #983-5：團購成員的加購折扣（0.85/0.90/0.95）；有值時顯示折後價。
+  // 折後價 = round(price × groupBuyDiscount)，與後端 /credit-packages/purchase
+  // 的 ROUND_HALF_UP 一致（正數 Math.round 即 round-half-up）。null=原價。
+  groupBuyDiscount?: number | null;
 }
 
 export function PointPackageCard({
@@ -27,12 +31,24 @@ export function PointPackageCard({
   disabled,
   ctaText,
   baseUnitCost,
+  groupBuyDiscount,
 }: PointPackageCardProps) {
   const { t } = useTranslation();
   const discountPercent =
     baseUnitCost > pkg.unitCost
       ? Math.round(((baseUnitCost - pkg.unitCost) / baseUnitCost) * 100)
       : 0;
+
+  const hasGbDiscount =
+    typeof groupBuyDiscount === "number" &&
+    groupBuyDiscount > 0 &&
+    groupBuyDiscount < 1;
+  const discountedPrice = hasGbDiscount
+    ? Math.round(pkg.price * (groupBuyDiscount as number))
+    : pkg.price;
+  const gbOffPercent = hasGbDiscount
+    ? Math.round((1 - (groupBuyDiscount as number)) * 100)
+    : 0;
 
   const greenGradient =
     "linear-gradient(145deg, #15803d, #22c55e, #6ee7a0, #22c55e, #15803d)";
@@ -85,12 +101,32 @@ export function PointPackageCard({
 
         {/* Price */}
         <div className="bg-gray-50 rounded-lg p-3 mb-3">
-          <div className="text-2xl font-bold text-gray-900">
-            NT$ {pkg.price.toLocaleString()}
-          </div>
-          <div className="text-xs text-gray-500 mt-1">
-            {pkg.unitCost.toFixed(2)} {t("pricing.pointPackages.unitCost")}
-          </div>
+          {hasGbDiscount ? (
+            <>
+              <div className="text-2xl font-bold text-blue-600">
+                NT$ {discountedPrice.toLocaleString()}
+              </div>
+              <div className="text-xs text-gray-400 mt-1">
+                <span className="line-through">
+                  NT$ {pkg.price.toLocaleString()}
+                </span>{" "}
+                <span className="text-blue-600 font-medium">
+                  {t("pricing.pointPackages.groupBuyDiscount", {
+                    percent: gbOffPercent,
+                  })}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-2xl font-bold text-gray-900">
+                NT$ {pkg.price.toLocaleString()}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                {pkg.unitCost.toFixed(2)} {t("pricing.pointPackages.unitCost")}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Discount Badge */}

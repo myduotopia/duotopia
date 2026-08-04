@@ -153,6 +153,7 @@ export function AssignmentDetailSheet({
     show_image: true,
     show_translation: true,
     show_option_images: false,
+    show_example_sentence: false,
   });
 
   const fetchAssignmentData = useCallback(async () => {
@@ -190,6 +191,8 @@ export function AssignmentDetailSheet({
         show_image: (detail.show_image as boolean) ?? true,
         show_translation: (detail.show_translation as boolean) ?? true,
         show_option_images: (detail.show_option_images as boolean) ?? false,
+        show_example_sentence:
+          (detail.show_example_sentence as boolean) ?? false,
       });
 
       // Extract contents from detail response
@@ -364,6 +367,8 @@ export function AssignmentDetailSheet({
       show_image: (detailData.show_image as boolean) ?? true,
       show_translation: (detailData.show_translation as boolean) ?? true,
       show_option_images: (detailData.show_option_images as boolean) ?? false,
+      show_example_sentence:
+        (detailData.show_example_sentence as boolean) ?? false,
     });
     setIsEditing(false);
   };

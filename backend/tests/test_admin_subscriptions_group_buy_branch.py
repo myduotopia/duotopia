@@ -6,13 +6,15 @@ without going through TapPay. Covers validation, seat / duplicate
 checks, and the happy path.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 
 from auth import create_access_token, get_password_hash
 from models import (
+    GroupBuyMember,
+    GroupBuyTeam,
     Organization,
     Plan,
     School,
@@ -240,6 +242,150 @@ def test_admin_joins_teacher_to_existing_team(
     ops = period.admin_metadata.get("operations", [])
     assert ops and ops[0]["action"] == "admin_join_group_buy"
     assert ops[0]["group_owner_email"] == owner.email
+
+    # issue #862 PR2 雙寫：admin 加團 call-site 應把 target 鏡射進 group_buy_members
+    # （讀取仍走舊表）。鎖定 call-site wiring。
+    team = (
+        shared_test_session.query(GroupBuyTeam)
+        .filter(GroupBuyTeam.source_organization_id == org.id)
+        .one()
+    )
+    member = (
+        shared_test_session.query(GroupBuyMember)
+        .filter(
+            GroupBuyMember.team_id == team.id,
+            GroupBuyMember.teacher_id == target.id,
+        )
+        .one()
+    )
+    assert member.is_owner is False
+    assert member.is_active is True
+
+
+def test_admin_join_survives_mirror_failure(
+    test_client,
+    admin,
+    owner,
+    target,
+    opened_team,
+    gb_plan_30,
+    shared_test_session,
+    monkeypatch,
+):
+    """issue #862：鏡射失敗**不可**回滾已完成的 admin 加團寫入。強迫 sync 拋錯，
+    斷言端點仍成功、TeacherSchool + period 仍寫入。"""
+    import services.group_buy as gb
+
+    def _boom(org, db):
+        raise RuntimeError("mirror boom")
+
+    monkeypatch.setattr(gb, "sync_group_buy_team_from_org", _boom)
+
+    r = _post_create(
+        test_client,
+        admin,
+        {
+            "teacher_email": target.email,
+            "plan_name": gb_plan_30.name,
+            "group_owner_email": owner.email,
+            "reason": "comp",
+        },
+    )
+    assert r.status_code == 200, r.json()  # 加團仍成功
+    org, school = opened_team
+    shared_test_session.expire_all()
+    assert (
+        shared_test_session.query(TeacherSchool)
+        .filter(
+            TeacherSchool.teacher_id == target.id,
+            TeacherSchool.school_id == school.id,
+            TeacherSchool.is_active.is_(True),
+        )
+        .one()
+    )
+    assert (
+        shared_test_session.query(SubscriptionPeriod)
+        .filter(
+            SubscriptionPeriod.teacher_id == target.id,
+            SubscriptionPeriod.payment_method == "group_buy",
+        )
+        .count()
+        >= 1
+    )
+
+
+def _indiv_sub(db, teacher, *, days_left=120):
+    teacher.subscription_auto_renew = True
+    p = SubscriptionPeriod(
+        teacher_id=teacher.id,
+        plan_name="Tutor Teachers",
+        amount_paid=299,
+        quota_total=2000,
+        quota_used=100,
+        start_date=datetime.now(timezone.utc) - timedelta(days=3),
+        end_date=datetime.now(timezone.utc) + timedelta(days=days_left),
+        payment_method="manual",
+        payment_status="paid",
+        status="active",
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+def test_admin_join_pauses_target_existing_individual_sub(
+    test_client, admin, owner, target, opened_team, gb_plan_30, shared_test_session
+):
+    """§4.8：admin 加團時，target 既有個人訂閱應被暫停、auto_renew 關（端點級）。"""
+    ind = _indiv_sub(shared_test_session, target)
+
+    r = _post_create(
+        test_client,
+        admin,
+        {
+            "teacher_email": target.email,
+            "plan_name": gb_plan_30.name,
+            "group_owner_email": owner.email,
+            "reason": "join",
+        },
+    )
+    assert r.status_code == 200, r.json()
+    shared_test_session.expire_all()
+    shared_test_session.refresh(ind)
+    assert ind.status == "paused"
+    t2 = shared_test_session.query(Teacher).filter(Teacher.id == target.id).one()
+    assert t2.subscription_auto_renew is False
+
+
+def test_schools_add_teacher_to_group_buy_school_pauses_and_delete_resumes(
+    test_client, owner, target, opened_team, shared_test_session
+):
+    """§4.8 #1：經通用 schools 端點把有個人訂閱的老師加進團購 school → 暫停；
+    再 DELETE 移除 → 恢復殘值。驗證 router wiring（id / commit 順序）。"""
+    org, school = opened_team
+    ind = _indiv_sub(shared_test_session, target, days_left=120)
+
+    # 通用 join 端點（org_owner 有權限）
+    r = test_client.post(
+        f"/api/schools/{school.id}/teachers",
+        headers=_bearer(owner.id),
+        json={"teacher_id": target.id, "roles": ["teacher"]},
+    )
+    assert r.status_code in (200, 201), r.json()
+    shared_test_session.expire_all()
+    shared_test_session.refresh(ind)
+    assert ind.status == "paused"
+
+    # 通用 leave 端點 → 恢復
+    r = test_client.delete(
+        f"/api/schools/{school.id}/teachers/{target.id}",
+        headers=_bearer(owner.id),
+    )
+    assert r.status_code in (200, 204), getattr(r, "text", "")
+    shared_test_session.expire_all()
+    shared_test_session.refresh(ind)
+    assert ind.status == "active"
 
 
 # ---------- post-join guards ----------

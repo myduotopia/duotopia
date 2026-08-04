@@ -21,6 +21,8 @@ from models import (
     Classroom,
     ClassroomStudent,
     StudentItemProgress,
+    GroupBuyTeam,
+    GroupBuyMember,
 )
 from services.email_service import email_service
 from services.tappay_service import TapPayService
@@ -141,6 +143,24 @@ async def monthly_renewal_cron(
         f"Found {len(teachers_with_auto_renew)} teachers with auto_renew enabled"
     )
 
+    # issue #862 §4.8 P1 雙保險：跳過「仍在享有團購」成員的個人 auto_renew 扣款。
+    # 團購成員點數來自團隊年費、個人訂閱入團時已 paused；這裡在扣款前再攔一次，
+    # 即使某次 pause 漏關 auto_renew，也不會對團購成員重複收費（防 P1）。
+    # 必須同時檢查 subscription_end >= now，與「發點資格」「resume sweep」對齊
+    # 「還在享有團購」的定義——否則團隊年度到期後（沒續約），成員已被 resume、
+    # auto_renew 轉回 True，卻仍被此 skip-list 命中而永遠不扣款、靜默失去訂閱。
+    active_gb_member_ids = {
+        row[0]
+        for row in db.query(GroupBuyMember.teacher_id)
+        .join(GroupBuyTeam, GroupBuyTeam.id == GroupBuyMember.team_id)
+        .filter(
+            GroupBuyMember.is_active.is_(True),
+            GroupBuyTeam.is_active.is_(True),
+            GroupBuyTeam.subscription_end >= now_taipei,
+        )
+        .all()
+    }
+
     results = {
         "status": "completed",
         "date": today_taipei.isoformat(),
@@ -174,6 +194,15 @@ async def monthly_renewal_cron(
 
     for teacher in teachers_with_auto_renew:
         try:
+            # issue #862 §4.8 P1：active 團購成員不對其個人訂閱扣款（雙保險）。
+            if teacher.id in active_gb_member_ids:
+                logger.info(
+                    f"Teacher {teacher.email} is an active group-buy member; "
+                    "skipping individual auto-renew charge"
+                )
+                results["skipped"] += 1
+                continue
+
             # 💳 檢查是否有儲存的信用卡 Token
             if not teacher.card_key or not teacher.card_token:
                 logger.info(
@@ -661,7 +690,7 @@ async def recording_error_report_cron(
 
     功能：
     1. 查詢 BigQuery 過去 24 小時和最近 1 小時的錄音錯誤
-    2. 使用 OpenAI 生成錯誤摘要
+    2. 使用 Vertex AI (Gemini) 生成錯誤摘要
     3. 發送統計報告到官網信箱 (myduotopia@gmail.com)
 
     安全性：只允許帶有正確 X-Cron-Secret header 的請求
@@ -852,7 +881,7 @@ async def recording_error_report_cron(
             "success_count": success_count_24h,
         }
 
-        # 使用 AI 生成摘要（如果有錯誤）- 支援 Vertex AI 或 OpenAI
+        # 使用 Vertex AI (Gemini) 生成摘要（如果有錯誤）
         ai_summary = ""
         if total_errors_24h > 0:
             try:
@@ -885,32 +914,17 @@ async def recording_error_report_cron(
 請用專業但易懂的語言，不要使用 Markdown 格式。
 """
 
-                use_vertex_ai = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
+                # Use Vertex AI (Gemini)
+                from services.vertex_ai import get_vertex_ai_service
 
-                if use_vertex_ai:
-                    # Use Vertex AI (Gemini)
-                    from services.vertex_ai import get_vertex_ai_service
-
-                    vertex_ai = get_vertex_ai_service()
-                    ai_summary = vertex_ai.generate_text_sync(
-                        prompt=prompt,
-                        model_type="flash",
-                        max_tokens=300,
-                        temperature=0.7,
-                        system_instruction="你是 Duotopia 英語學習平台的技術顧問，擅長分析錄音播放錯誤。用繁體中文、專業但易懂的語言回覆，不要使用 Markdown 格式。",
-                    )
-                else:
-                    # Use OpenAI
-                    import openai
-
-                    openai.api_key = os.getenv("OPENAI_API_KEY")
-                    response = openai.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[{"role": "user", "content": prompt}],
-                        max_tokens=300,
-                        temperature=0.7,
-                    )
-                    ai_summary = response.choices[0].message.content.strip()
+                vertex_ai = get_vertex_ai_service()
+                ai_summary = vertex_ai.generate_text_sync(
+                    prompt=prompt,
+                    model_type="flash",
+                    max_tokens=300,
+                    temperature=0.7,
+                    system_instruction="你是 Duotopia 英語學習平台的技術顧問，擅長分析錄音播放錯誤。用繁體中文、專業但易懂的語言回覆，不要使用 Markdown 格式。",
+                )
 
             except Exception as e:
                 logger.warning(f"Failed to generate AI summary: {str(e)}")

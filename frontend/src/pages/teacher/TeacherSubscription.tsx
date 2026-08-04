@@ -87,6 +87,8 @@ interface SubscriptionInfo {
   status: string;
   plan: string | null;
   plan_type?: SubscriptionPlanType;
+  // issue #983：團購成員點數包加購折扣（0.85/0.90/0.95）；非團購為 null。
+  topup_discount?: number | null;
   end_date: string | null;
   days_remaining: number;
   is_active: boolean;
@@ -438,6 +440,12 @@ export default function TeacherSubscription() {
     );
   }
 
+  // issue #862：以後端 plan_type 判定是否已在團購方案（發起人或團員），供各處 upsell
+  // 一致隱藏，取代舊的 plan 名稱前綴檢查。
+  const isGroupBuyPlan =
+    subscription?.plan_type === "group_buy_owner" ||
+    subscription?.plan_type === "group_buy_member";
+
   return (
     <>
       <div>
@@ -491,7 +499,13 @@ export default function TeacherSubscription() {
                   let onSelect: ((plan: SubscriptionPlan) => void) | undefined =
                     handleSelectPlan;
 
-                  if (!isAuthenticated) {
+                  if (isGroupBuyPlan) {
+                    // issue #983-3：團購方案進行中，個人方案按鈕一律停用，
+                    // 直到團購方案結束（避免團購成員又去訂個人方案）。
+                    ctaText = t("pricing.actions.groupBuyActive");
+                    disabled = true;
+                    onSelect = undefined;
+                  } else if (!isAuthenticated) {
                     // Not logged in
                     if (plan.id === "free") {
                       ctaText = t("pricing.actions.freeRegister");
@@ -573,6 +587,8 @@ export default function TeacherSubscription() {
                   onSelect={handleSelectPointPackage}
                   ctaText={t("pricing.pointPackages.buy")}
                   baseUnitCost={BASE_UNIT_COST}
+                  // issue #983-5：團購成員顯示折後價（實際收費由後端套用）。
+                  groupBuyDiscount={subscription?.topup_discount ?? null}
                 />
               ))}
             </div>
@@ -584,9 +600,9 @@ export default function TeacherSubscription() {
                 existing individual subscribers. Hide for teachers already
                 on a group-buy plan — clicking through would hit R2-F2
                 single-org guard and 409.
-                TODO: replace prefix check with a backend-supplied flag
-                when SubscriptionInfo exposes teacher_seats or org_type. */}
-            {ENABLE_GROUP_BUY && !subscription?.plan?.startsWith("團購") && (
+                issue #862：改用後端 plan_type（isGroupBuyPlan）判定，與 plans-tab
+                upsell 一致，取代舊的 plan 名稱前綴檢查。 */}
+            {ENABLE_GROUP_BUY && !isGroupBuyPlan && (
               <Card className="mb-6 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
                 <CardContent className="py-5">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

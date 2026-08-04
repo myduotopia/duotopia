@@ -36,7 +36,6 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import LineContactButton, {
   LINE_FRIEND_URL,
 } from "@/components/LineContactButton";
-import { apiClient } from "@/lib/api";
 import { GroupBuyPlanCards } from "@/components/pricing/GroupBuyPlanCards";
 import { ENABLE_GROUP_BUY } from "@/config/featureFlags";
 
@@ -203,7 +202,6 @@ export default function PricingPage() {
   useEffect(() => {
     window.scrollTo(0, 0);
     checkUserStatus();
-    checkSubscriptionStatus();
   }, []);
 
   const checkUserStatus = () => {
@@ -231,25 +229,6 @@ export default function PricingPage() {
       });
     } else {
       setUserInfo({ isLoggedIn: false });
-    }
-  };
-
-  const checkSubscriptionStatus = async () => {
-    const teacherAuth = useTeacherAuthStore.getState();
-    if (!teacherAuth.isAuthenticated || !teacherAuth.token) return;
-
-    try {
-      const data = await apiClient.get<{ is_active: boolean }>(
-        "/api/subscription/status",
-      );
-      if (data.is_active) {
-        toast.info(t("pricing.payment.hasSubscription"));
-        setTimeout(() => {
-          navigate("/teacher/subscription");
-        }, 1000);
-      }
-    } catch (error) {
-      console.error("Error checking subscription:", error);
     }
   };
 
