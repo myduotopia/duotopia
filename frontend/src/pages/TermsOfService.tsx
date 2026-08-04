@@ -138,6 +138,19 @@ export default function TermsOfService() {
                 </div>
               </section>
 
+              <section id="data-deletion" className="scroll-mt-4">
+                <h2 className="text-xl font-semibold mb-3">
+                  {t("termsOfService.dataDeletion.title")}
+                </h2>
+                <div className="space-y-2 text-sm">
+                  <p>{t("termsOfService.dataDeletion.item1")}</p>
+                  <p>{t("termsOfService.dataDeletion.item2")}</p>
+                  <p>{t("termsOfService.dataDeletion.item3")}</p>
+                  <p>{t("termsOfService.dataDeletion.item4")}</p>
+                  <p>{t("termsOfService.dataDeletion.item5")}</p>
+                </div>
+              </section>
+
               <section>
                 <h2 className="text-xl font-semibold mb-3">
                   {t("termsOfService.section10.title")}

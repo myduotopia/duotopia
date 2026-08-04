@@ -1604,8 +1604,16 @@
       "item1": "9.1 The interpretation and application of these terms shall be governed by the laws of the Republic of China.",
       "item2": "9.2 Any disputes arising from these terms shall be subject to the jurisdiction of the Taipei District Court, Taiwan as the court of first instance."
     },
+    "dataDeletion": {
+      "title": "10. Account & Data Deletion",
+      "item1": "10.1 You have the right to request deletion of your Duotopia account and associated personal data at any time.",
+      "item2": "10.2 How to request: Send an email to contact@duotopia.co with the subject line \"Account Deletion Request\", and include the email address you registered with and your account type (teacher, student, or parent) so that we can verify your identity.",
+      "item3": "10.3 We will process the deletion within 30 days after receiving your request and verifying your identity, and will notify you of the outcome by email.",
+      "item4": "10.4 The deletion covers your account profile, learning records, and voice data. Transaction and invoice records that we are required by law to retain will be deleted after the statutory retention period expires.",
+      "item5": "10.5 Account deletion is irreversible; you will no longer be able to access your previous learning content and records."
+    },
     "section10": {
-      "title": "10. Contact Information",
+      "title": "11. Contact Information",
       "company": "Language Expansion Digital Learning Co., Ltd.",
       "taxId": "Tax ID: 60619397",
       "contactPrompt": "If you have any questions about these terms, please contact us through the following:",
