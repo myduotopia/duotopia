@@ -15,6 +15,9 @@ import ReadingAssessmentPanel, {
 import VocabularySetPanel, {
   type VocabularySetPanelHandle,
 } from "@/components/VocabularySetPanel";
+import ScenarioDialoguePanel, {
+  type ScenarioDialoguePanelHandle,
+} from "@/components/ScenarioDialoguePanel";
 import ContentCopyDialog from "@/components/ContentCopyDialog";
 import ContentDownloadSheet from "@/components/ContentDownloadSheet";
 import { AssignmentDialog, CartItem } from "@/components/AssignmentDialog";
@@ -146,11 +149,28 @@ function TeacherTemplateProgramsInner() {
   // Sentence Making Editor state
   const [showVocabularySetEditor, setShowVocabularySetEditor] = useState(false);
 
+  // Issue #944: 情境對話（口說練習）新增面板
+  const [showScenarioDialogueEditor, setShowScenarioDialogueEditor] =
+    useState(false);
+  const [scenarioProgramLevel, setScenarioProgramLevel] = useState<
+    string | undefined
+  >(undefined);
+  const scenarioPanelRef = useRef<ScenarioDialoguePanelHandle>(null);
+
   // Disable sidebar when editor panels are open
   useEffect(() => {
-    setSidebarDisabled(showReadingEditor || showVocabularySetEditor);
+    setSidebarDisabled(
+      showReadingEditor ||
+        showVocabularySetEditor ||
+        showScenarioDialogueEditor,
+    );
     return () => setSidebarDisabled(false);
-  }, [showReadingEditor, showVocabularySetEditor, setSidebarDisabled]);
+  }, [
+    showReadingEditor,
+    showVocabularySetEditor,
+    showScenarioDialogueEditor,
+    setSidebarDisabled,
+  ]);
   const [vocabularySetLessonId, setVocabularySetLessonId] = useState<
     number | null
   >(null);
@@ -1241,6 +1261,56 @@ function TeacherTemplateProgramsInner() {
           </>
         )}
 
+      {/* Issue #944: 情境對話 Editor (新增模式 - 側滑) */}
+      {showScenarioDialogueEditor && (
+        <div
+          className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+          style={{ left: `${sidebarWidth}px` }}
+        >
+          <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">
+                {t("scenarioDialogue.dialogTitle")}
+              </h2>
+              <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
+                {t("scenarioDialogue.badge")}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <RefSaveButton panelRef={scenarioPanelRef} />
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={editorBusy}
+                onClick={() => {
+                  if (editorBusy) return;
+                  if (
+                    !window.confirm(
+                      t("contentEditor.labels.unsavedChangesConfirm"),
+                    )
+                  )
+                    return;
+                  setShowScenarioDialogueEditor(false);
+                }}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
+            <ScenarioDialoguePanel
+              ref={scenarioPanelRef}
+              programLevel={scenarioProgramLevel}
+              onSave={() => {
+                // 尚未串接後端（#944 只做前端畫面）
+                toast.info(t("scenarioDialogue.messages.frontendOnly"));
+              }}
+              onCancel={() => setShowScenarioDialogueEditor(false)}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Sentence Making Editor (編輯模式 - 側邊欄) */}
       {showVocabularySetEditor &&
         (vocabularySetLessonId || vocabularySetProgramId) &&
@@ -1414,6 +1484,17 @@ function TeacherTemplateProgramsInner() {
               );
               setVocabularySetContentId(null); // null for new content
               setShowVocabularySetEditor(true);
+            } else if (
+              selection.type === "scenario_dialogue" ||
+              selection.type === "SCENARIO_DIALOGUE"
+            ) {
+              // Issue #944: 情境對話 — 目前為前端設計實作，尚未串接後端
+              setScenarioProgramLevel(
+                isProgramDirect
+                  ? programs.find((p) => p.id === selection.programId)?.level
+                  : getProgramLevelByLessonId(programs, selection.lessonId),
+              );
+              setShowScenarioDialogueEditor(true);
             } else {
               toast.info(
                 `${t("teacherTemplatePrograms.messages.featureInDevelopment", { type: selection.type })}`,

@@ -4779,6 +4779,79 @@
       "generate": "生成"
     }
   },
+  "scenarioDialogue": {
+    "dialogTitle": "新增情境對話",
+    "badge": "口說練習",
+    "tabs": {
+      "aiAssist": "AI 輔助編輯",
+      "upload": "上傳圖片 / PDF"
+    },
+    "labels": {
+      "title": "情境對話名稱",
+      "goal": "訓練目標",
+      "level": "教材難度",
+      "materialDesc": "教材描述",
+      "uploadTitle": "點擊或拖放檔案",
+      "rubric": "評分準則（AI 回饋依據）",
+      "noImage": "尚無圖片",
+      "notSpecified": "不指定",
+      "rubricNote": "本題額外說明",
+      "referenceAnswer": "參考答案",
+      "advanced": "參考答案與補充說明",
+      "sharedSettings": "整份設定（所有題目共用）",
+      "context": "情境說明",
+      "globalTense": "整體評分標準",
+      "inherited": "沿用整體設定",
+      "overridden": "本題自訂",
+      "globalRubric": "作答指引（學生看得到）"
+    },
+    "rubricPresets": {
+      "tenseTime": "時間",
+      "tenseAspect": "動貌",
+      "voice": "語態",
+      "keywords": "必用字詞"
+    },
+    "placeholders": {
+      "title": "例如：六年級 · 週末生活口說練習",
+      "goal": "例如：讓學生能用過去式描述週末做過的活動，並說出一個地點與一位同行的人。",
+      "materialDesc": "例如：單元 5 My Weekend — 週末活動、地點、交通方式",
+      "question": "輸入口說題目",
+      "imagePrompt": "情境圖片 prompt（選填）",
+      "keywords": "以逗號分隔，例如 went, visited",
+      "referenceAnswer": "寫一段理想的回答，例如：I went to the park with my family last Saturday.",
+      "rubricNote": "針對這一題的補充說明，例如：請先說出時間，再描述做了什麼。",
+      "globalRubric": "例如：請用完整句子回答，並在句尾補上一個原因。回答時盡量說滿 3 句話。",
+      "context": "用幾句話描述情境，例如：You are at a café with your friend. You want to order lunch."
+    },
+    "buttons": {
+      "generate": "產生題目建議",
+      "generating": "產生中…",
+      "generateFromFiles": "從檔案產生題目",
+      "addQuestion": "新增題目",
+      "generateImage": "生成圖片 · 2 點",
+      "regenerateImage": "重新生成 · 2 點",
+      "generatingImage": "生成中…"
+    },
+    "hints": {
+      "rateLimit": "每分鐘最多重新生成 5 次",
+      "uploadFormats": "支援 JPG、PNG、PDF",
+      "itemRange": "最少 {{min}} 題、最多 {{max}} 題",
+      "maxReached": "已達 {{max}} 題上限",
+      "referenceAnswer": "給 AI 對照語言特徵用（時態、句型、用字），學生看不到；也是回饋「建議答案」的依據",
+      "visibleToStudents": "這段文字會提供給 AI 評分，學生作答時也看得到",
+      "contextOptional": "選填，留空則學生端不顯示",
+      "hasContext": "已設定情境說明",
+      "globalTense": "所有題目預設沿用；單題可個別調整，之後改這裡不會影響已自訂的題目"
+    },
+    "tooltips": {
+      "regenerateQuestion": "重新生成這一題（會避開已出現過的題目）",
+      "generateAudio": "生成語音",
+      "resetToGlobal": "改回沿用整體評分標準"
+    },
+    "messages": {
+      "frontendOnly": "情境對話目前為畫面設計階段，尚未串接後端儲存"
+    }
+  },
   "vocabularySet": {
     "dialogTitle": "新增單字集",
     "editTitle": "編輯單字集",

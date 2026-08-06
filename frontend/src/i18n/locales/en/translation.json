@@ -4759,6 +4759,79 @@
       "speed": "Speed"
     }
   },
+  "scenarioDialogue": {
+    "dialogTitle": "Add Scenario Dialogue",
+    "badge": "Speaking",
+    "tabs": {
+      "aiAssist": "AI Assist",
+      "upload": "Upload Image / PDF"
+    },
+    "labels": {
+      "title": "Scenario Dialogue Name",
+      "goal": "Learning Goal",
+      "level": "Level",
+      "materialDesc": "Material Description",
+      "uploadTitle": "Click or drop files here",
+      "rubric": "Scoring Criteria (AI feedback basis)",
+      "noImage": "No image",
+      "notSpecified": "Not specified",
+      "rubricNote": "Extra note for this question",
+      "referenceAnswer": "Reference Answer",
+      "advanced": "Reference Answer & Notes",
+      "sharedSettings": "Shared Settings (all questions)",
+      "context": "Scenario Context",
+      "globalTense": "Default Scoring Criteria",
+      "inherited": "Inherited",
+      "overridden": "Customized",
+      "globalRubric": "Answering Guidelines (visible to students)"
+    },
+    "rubricPresets": {
+      "tenseTime": "Time",
+      "tenseAspect": "Aspect",
+      "voice": "Voice",
+      "keywords": "Required words"
+    },
+    "placeholders": {
+      "title": "e.g. Grade 6 · Weekend Life Speaking Practice",
+      "goal": "e.g. Students can describe last weekend's activities in past tense, naming a place and a companion.",
+      "materialDesc": "e.g. Unit 5 My Weekend — activities, places, transportation",
+      "question": "Enter a speaking question",
+      "imagePrompt": "Scenario image prompt (optional)",
+      "keywords": "Comma separated, e.g. went, visited",
+      "referenceAnswer": "Write an ideal answer, e.g. I went to the park with my family last Saturday.",
+      "rubricNote": "Extra guidance for this question, e.g. state the time first, then what you did.",
+      "globalRubric": "e.g. Answer in complete sentences and add a reason at the end. Try to speak at least 3 sentences.",
+      "context": "Describe the scenario in a few sentences, e.g. You are at a café with your friend. You want to order lunch."
+    },
+    "buttons": {
+      "generate": "Generate Questions",
+      "generating": "Generating…",
+      "generateFromFiles": "Generate from Files",
+      "addQuestion": "Add Question",
+      "generateImage": "Generate image · 2 credits",
+      "regenerateImage": "Regenerate · 2 credits",
+      "generatingImage": "Generating…"
+    },
+    "hints": {
+      "rateLimit": "Up to 5 regenerations per minute",
+      "uploadFormats": "Supports JPG, PNG, PDF",
+      "itemRange": "min {{min}}, max {{max}} questions",
+      "maxReached": "Reached the {{max}}-question limit",
+      "referenceAnswer": "Used by the AI to compare language features (tense, structure, vocabulary). Never shown to students; also the basis for suggested answers.",
+      "visibleToStudents": "This text is sent to the AI grader and is also shown to students",
+      "contextOptional": "Optional — leave blank to hide it from students",
+      "hasContext": "Context set",
+      "globalTense": "Applied to all questions by default. Customizing a question detaches it, so later changes here won't affect it."
+    },
+    "tooltips": {
+      "regenerateQuestion": "Regenerate this question (avoids previous ones)",
+      "generateAudio": "Generate audio",
+      "resetToGlobal": "Reset to the shared scoring criteria"
+    },
+    "messages": {
+      "frontendOnly": "Scenario Dialogue is UI-only for now; saving is not wired to the backend yet"
+    }
+  },
   "vocabularySet": {
     "dialogTitle": "Add Vocabulary Set",
     "editTitle": "Edit Vocabulary Set",

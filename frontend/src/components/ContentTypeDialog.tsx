@@ -83,7 +83,8 @@ export default function ContentTypeDialog({
       icon: "💬",
       image:
         "https://storage.googleapis.com/duotopia-social-media-videos/website/add3-output.png",
-      disabled: true,
+      isNew: true,
+      disabled: false,
     },
   ];
 
