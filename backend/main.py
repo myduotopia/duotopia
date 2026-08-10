@@ -57,6 +57,7 @@ from routers import school_programs
 from routers import resource_materials
 from routers import magic_paste  # 教材內容魔術貼上（issue #891）
 from routers.auth_one_campus import router as auth_one_campus_router
+from routers.auth_google import router as auth_google_router  # Google OAuth（#740）
 from routers.organization_points import router as organization_points_router
 from routes import logs
 from api import debug
@@ -265,6 +266,7 @@ app.include_router(demo.router)  # Demo 路由（無需認證，有 rate limitin
 app.include_router(logs.router)  # 日誌路由（無需認證）
 app.include_router(auth.router)
 app.include_router(auth_one_campus_router)  # 1Campus SSO 路由
+app.include_router(auth_google_router)  # Google OAuth 路由（#740）
 app.include_router(subscription.router)  # 訂閱路由
 app.include_router(payment.router, prefix="/api", tags=["payment"])  # 金流路由
 app.include_router(credit_packages.router)  # 點數包購買路由
