@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     DateTime,
     ForeignKey,
+    Index,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -26,6 +27,10 @@ class SocialPost(Base):
     """一次發文中，單一平台的發文結果紀錄。"""
 
     __tablename__ = "social_posts"
+    __table_args__ = (
+        Index("ix_social_posts_created_at", "created_at"),
+        Index("ix_social_posts_source_blog_post_id", "source_blog_post_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 

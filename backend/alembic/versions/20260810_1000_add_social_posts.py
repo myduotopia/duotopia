@@ -48,6 +48,21 @@ def upgrade() -> None:
         """
     )
 
+    # 查詢索引（冪等）：歷史列表依 created_at 排序 / 近期失敗告警；
+    # 依來源 blog 文章反查發文紀錄。
+    op.execute(
+        """
+        CREATE INDEX IF NOT EXISTS ix_social_posts_created_at
+        ON social_posts (created_at)
+        """
+    )
+    op.execute(
+        """
+        CREATE INDEX IF NOT EXISTS ix_social_posts_source_blog_post_id
+        ON social_posts (source_blog_post_id)
+        """
+    )
+
 
 def downgrade() -> None:
     # 破壞性操作對其他環境不安全，依專案慣例不在 downgrade 刪表。
