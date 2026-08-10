@@ -1434,6 +1434,11 @@
     "oneCampus": {
       "separator": "或",
       "button": "學校帳號登入 (1Campus)"
+    },
+    "google": {
+      "button": "使用 Google 登入",
+      "loading": "正在前往 Google...",
+      "error": "無法連線 Google，請稍後再試。"
     }
   },
   "studentLoginQR": {
@@ -5622,5 +5627,16 @@
     "collected": "已收卷，全班成績已結算",
     "collectFailed": "收卷失敗，請重試",
     "startFailed": "開始考試失敗，請重試"
+  },
+  "google": {
+    "signingIn": "正在使用 Google 登入...",
+    "backToLogin": "返回老師登入頁",
+    "backToHome": "回到首頁",
+    "errors": {
+      "title": "登入失敗",
+      "missingParams": "缺少必要參數，請重新登入。",
+      "denied": "已取消 Google 登入，請重新嘗試。",
+      "generic": "Google 登入失敗，請重試。"
+    }
   }
 }
