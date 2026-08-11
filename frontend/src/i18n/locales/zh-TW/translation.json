@@ -238,16 +238,17 @@
     "invalidConfig": "Demo 設定錯誤",
     "access": {
       "notStarted": {
-        "title": "這份體驗還沒開放",
-        "availableFrom": "開放時間：{{datetime}}"
+        "title": "體驗還沒開放",
+        "availableFrom": "{{datetime}} 開放",
+        "invitation": "先註冊，開放後就能把教材帶走。",
+        "invitationNoCopy": "先註冊，開放後回來就能直接玩。"
       },
       "expired": {
-        "title": "這份體驗已經結束了",
-        "endedAt": "結束時間：{{datetime}}"
+        "title": "想繼續玩嗎？",
+        "invitation": "這份體驗已結束，但註冊就能把教材帶走。",
+        "invitationNoCopy": "這份體驗已結束，註冊就能免費玩其他教材。"
       },
-      "copyInvitation": "註冊並登入後，就能把這份教材複製到自己的教材庫，免費繼續體驗。",
-      "registerInvitation": "註冊並登入 Duotopia，免費使用更多教材繼續體驗。",
-      "materialName": "教材：{{name}}",
+      "materialName": "{{name}}",
       "registerCta": "免費註冊",
       "loginCta": "已有帳號，登入"
     },

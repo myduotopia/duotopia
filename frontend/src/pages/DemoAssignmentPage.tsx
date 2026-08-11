@@ -215,7 +215,6 @@ export default function DemoAssignmentPage() {
         <DemoAccessGate
           status={accessStatus}
           startDate={activityData.start_date}
-          dueDate={activityData.due_date}
           resourceProgramId={activityData.resource_program_id}
           resourceProgramName={activityData.resource_program_name}
         />

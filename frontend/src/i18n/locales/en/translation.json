@@ -93,16 +93,17 @@
     "invalidConfig": "Invalid demo configuration",
     "access": {
       "notStarted": {
-        "title": "This demo is not open yet",
-        "availableFrom": "Opens on {{datetime}}"
+        "title": "Not open yet",
+        "availableFrom": "Opens {{datetime}}",
+        "invitation": "Register now and the material is yours when it opens.",
+        "invitationNoCopy": "Register now and come back when it opens."
       },
       "expired": {
-        "title": "This demo has ended",
-        "endedAt": "Ended on {{datetime}}"
+        "title": "Want to keep going?",
+        "invitation": "This demo has ended — but register and the material is yours.",
+        "invitationNoCopy": "This demo has ended. Register to explore other materials for free."
       },
-      "copyInvitation": "Register and log in to copy this material into your own library and keep practising for free.",
-      "registerInvitation": "Register and log in to Duotopia to keep exploring more materials for free.",
-      "materialName": "Material: {{name}}",
+      "materialName": "{{name}}",
       "registerCta": "Register for free",
       "loginCta": "I have an account"
     },

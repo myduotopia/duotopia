@@ -26,7 +26,6 @@ import type { DemoAccessStatus } from "@/lib/demoApi";
 interface DemoAccessGateProps {
   status: Exclude<DemoAccessStatus, "active">;
   startDate?: string | null;
-  dueDate?: string | null;
   resourceProgramId?: number | null;
   resourceProgramName?: string | null;
 }
@@ -51,7 +50,6 @@ function formatDateTime(
 export default function DemoAccessGate({
   status,
   startDate,
-  dueDate,
   resourceProgramId,
   resourceProgramName,
 }: DemoAccessGateProps) {
@@ -86,6 +84,9 @@ export default function DemoAccessGate({
             : t("demo.access.notStarted.title")}
         </h1>
 
+        {/* Only the "not open yet" state shows a time — a visitor who arrives
+            too late has no reason to care exactly when it closed, but one who
+            arrives early needs to know when to come back. */}
         {!isExpired && startDate && (
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
             {t("demo.access.notStarted.availableFrom", {
@@ -93,18 +94,13 @@ export default function DemoAccessGate({
             })}
           </p>
         )}
-        {isExpired && dueDate && (
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-            {t("demo.access.expired.endedAt", {
-              datetime: formatDateTime(dueDate, i18n.language),
-            })}
-          </p>
-        )}
 
         <p className="text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">
-          {canCopy
-            ? t("demo.access.copyInvitation")
-            : t("demo.access.registerInvitation")}
+          {t(
+            `demo.access.${isExpired ? "expired" : "notStarted"}.${
+              canCopy ? "invitation" : "invitationNoCopy"
+            }`,
+          )}
         </p>
 
         {canCopy && resourceProgramName && (

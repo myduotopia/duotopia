@@ -52,7 +52,9 @@ describe("DemoAccessGate", () => {
     renderGate({ status: "expired", resourceProgramId: 63 });
 
     expect(screen.getByText("demo.access.expired.title")).toBeInTheDocument();
-    expect(screen.getByText("demo.access.copyInvitation")).toBeInTheDocument();
+    expect(
+      screen.getByText("demo.access.expired.invitation"),
+    ).toBeInTheDocument();
   });
 
   it("shows the not-started heading when the demo has not opened", () => {
@@ -71,10 +73,10 @@ describe("DemoAccessGate", () => {
     renderGate({ status: "expired", resourceProgramId: null });
 
     expect(
-      screen.getByText("demo.access.registerInvitation"),
+      screen.getByText("demo.access.expired.invitationNoCopy"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("demo.access.copyInvitation"),
+      screen.queryByText("demo.access.expired.invitation"),
     ).not.toBeInTheDocument();
   });
 
