@@ -5624,5 +5624,21 @@
       "denied": "Google sign-in was cancelled. Please try again.",
       "generic": "Google sign-in failed. Please try again."
     }
+  },
+  "guide": {
+    "material": {
+      "program": {
+        "title": "This is your new material",
+        "description": "It has been copied into your library. Click this card to open it."
+      },
+      "lesson": {
+        "title": "Open the first lesson",
+        "description": "Materials group their contents into lessons. Click the first one to see what is inside."
+      },
+      "instantPractice": {
+        "title": "Start practising here",
+        "description": "This orange button practises the content right away — no need to assign it to students first."
+      }
+    }
   }
 }

@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { DEMO_GUIDE_PROGRAM_PARAM } from "@/hooks/useDemoMaterialCopy";
+import { useHighlightGuide } from "@/components/guide/useHighlightGuide";
+import { buildMaterialGuideSteps } from "@/components/guide/startMaterialGuide";
 import { RecursiveTreeAccordion } from "@/components/shared/RecursiveTreeAccordion";
 import { programTreeConfig } from "@/components/shared/programTreeConfig";
 import MaterialsToolbar from "@/components/shared/MaterialsToolbar";
@@ -41,6 +45,43 @@ export default function OrgMaterialsPage() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [isReordering, setIsReordering] = useState(false);
+
+  // #989: 從公開 demo 頁註冊的訪客若在機構視圖，教材複製到機構教材後會被導到
+  // 這一頁並帶著新教材 id — 接手同一套「教材→單元→即刻練習」引導。
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { start: startGuide } = useHighlightGuide();
+  const guideStartedRef = useRef(false);
+  const guideProgramParam = searchParams.get(DEMO_GUIDE_PROGRAM_PARAM);
+
+  useEffect(() => {
+    if (!guideProgramParam || guideStartedRef.current) return;
+    const program = programs.find((p) => String(p.id) === guideProgramParam);
+    if (!program) return; // 清單還沒載到新教材
+
+    guideStartedRef.current = true;
+    const firstLesson = program.lessons?.[0];
+    // #587: 內容可能直接掛在教材下，那就沒有單元可以點。
+    const firstContent = firstLesson?.contents?.[0] ?? program.contents?.[0];
+
+    startGuide(
+      buildMaterialGuideSteps(
+        {
+          programId: program.id,
+          firstLessonId: firstLesson?.id ?? null,
+          firstContentId: firstContent?.id ?? null,
+        },
+        t,
+      ),
+    );
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete(DEMO_GUIDE_PROGRAM_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [guideProgramParam, programs, startGuide, setSearchParams, t]);
 
   const [viewMode, setViewMode] = useState<ViewMode>("folder");
   const [searchQuery, setSearchQuery] = useState("");

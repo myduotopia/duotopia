@@ -5668,5 +5668,21 @@
       "denied": "已取消 Google 登入，請重新嘗試。",
       "generic": "Google 登入失敗，請重試。"
     }
+  },
+  "guide": {
+    "material": {
+      "program": {
+        "title": "這是你的新教材",
+        "description": "教材已經複製到你的教材庫了。點一下這張卡片打開它。"
+      },
+      "lesson": {
+        "title": "打開第一個單元",
+        "description": "教材裡的內容依單元分組。點一下第一個單元看看裡面有什麼。"
+      },
+      "instantPractice": {
+        "title": "按這裡開始練習",
+        "description": "點這顆橘色按鈕就能立刻練習這份內容，不用先派發給學生。"
+      }
+    }
   }
 }

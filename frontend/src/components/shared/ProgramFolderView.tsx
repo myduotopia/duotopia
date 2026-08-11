@@ -206,6 +206,8 @@ function ProgramCard({
 
   return (
     <div
+      // #989: anchor for the post-copy highlight guide
+      data-guide-id={`program-${program.id}`}
       className="relative rounded-2xl bg-white cursor-pointer transition-all hover:shadow-md"
       style={{
         border: isSelected ? "3px solid #4CAF50" : "1px solid #E5E7EB",
@@ -298,6 +300,8 @@ function LessonCard({
 
   return (
     <div
+      // #989: anchor for the post-copy highlight guide
+      data-guide-id={`lesson-${lesson.id}`}
       className="relative rounded-2xl bg-white cursor-pointer transition-all hover:shadow-md"
       style={{
         border: isSelected ? "3px solid #7C3AED" : "1px solid #E5E7EB",
@@ -447,6 +451,8 @@ function ContentCard({
                   e.stopPropagation();
                   onInstantPractice();
                 }}
+                // #989: final step of the post-copy highlight guide
+                data-guide-id={`instant-practice-${content.id}`}
                 title={t("instantPractice.title")}
                 // #945: after:inset-[-16px] 透明偽元素向四面各外擴 16px（＝兩鈕 gap-8/2）
                 // 作為點擊容錯圈；圈內點歪仍觸發本按鈕而非落到卡片編輯。視覺大小不變。
