@@ -62,7 +62,9 @@ export function DemoModal({
     setError(null);
 
     try {
-      const data = (await demoApi.getPreview(assignmentId)) as DemoData;
+      const data = (await demoApi.getPreview(
+        assignmentId,
+      )) as unknown as DemoData;
       setDemoData(data);
     } catch (err) {
       const errorMessage =

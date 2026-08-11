@@ -236,6 +236,21 @@
     "configError": "無法載入 Demo 設定",
     "notAvailable": "此 Demo 目前無法使用",
     "invalidConfig": "Demo 設定錯誤",
+    "access": {
+      "notStarted": {
+        "title": "這份體驗還沒開放",
+        "availableFrom": "開放時間：{{datetime}}"
+      },
+      "expired": {
+        "title": "這份體驗已經結束了",
+        "endedAt": "結束時間：{{datetime}}"
+      },
+      "copyInvitation": "註冊並登入後，就能把這份教材複製到自己的教材庫，免費繼續體驗。",
+      "registerInvitation": "註冊並登入 Duotopia，免費使用更多教材繼續體驗。",
+      "materialName": "教材：{{name}}",
+      "registerCta": "免費註冊",
+      "loginCta": "已有帳號，登入"
+    },
     "limitReached": {
       "title": "今日免費試用次數已達上限",
       "description": "您今日已使用完 {{limit}} 次免費語音練習機會。",

@@ -17,7 +17,8 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Info } from "lucide-react";
 import { toast } from "sonner";
-import { demoApi } from "@/lib/demoApi";
+import { demoApi, type DemoAccessStatus } from "@/lib/demoApi";
+import DemoAccessGate from "@/components/demo/DemoAccessGate";
 import {
   setDemoOverrides,
   clearDemoOverrides,
@@ -40,6 +41,13 @@ import { buildInstantPracticeSettings } from "@/lib/instantPracticeSettings";
 interface DemoActivityResponse {
   assignment_id: number;
   title: string;
+  // #989: 派發時設定的開始/結束時間。非 active 時後端不回 activities，
+  // 改由 DemoAccessGate 顯示引導畫面。
+  access_status?: DemoAccessStatus;
+  start_date?: string | null;
+  due_date?: string | null;
+  resource_program_id?: number | null;
+  resource_program_name?: string | null;
   practice_mode?: string | null;
   show_answer?: boolean;
   time_limit_per_question?: number;
@@ -148,6 +156,29 @@ export default function DemoAssignmentPage() {
     navigate("/");
   };
 
+  // Shared between the activity view and the #989 access-gate screen.
+  const demoBanner = (
+    <div className="bg-blue-600 dark:bg-blue-700 text-white border-b dark:border-blue-800 sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Info className="h-5 w-5 flex-shrink-0" />
+            <span className="text-sm font-medium">{t("demo.banner")}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleBack}
+            className="text-white hover:bg-blue-700 dark:hover:bg-blue-600 gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {t("demo.backToHome")}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
@@ -174,28 +205,27 @@ export default function DemoAssignmentPage() {
     );
   }
 
+  // #989: 派發期限外不進入活動，改顯示「尚未開放 / 已結束」引導畫面。
+  // 後端此時不回 activities，所以這個分支必須擋在活動渲染之前。
+  const accessStatus = activityData.access_status ?? "active";
+  if (accessStatus !== "active") {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        {demoBanner}
+        <DemoAccessGate
+          status={accessStatus}
+          startDate={activityData.start_date}
+          dueDate={activityData.due_date}
+          resourceProgramId={activityData.resource_program_id}
+          resourceProgramName={activityData.resource_program_name}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Demo Mode Banner */}
-      <div className="bg-blue-600 dark:bg-blue-700 text-white border-b dark:border-blue-800 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Info className="h-5 w-5 flex-shrink-0" />
-              <span className="text-sm font-medium">{t("demo.banner")}</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleBack}
-              className="text-white hover:bg-blue-700 dark:hover:bg-blue-600 gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              {t("demo.backToHome")}
-            </Button>
-          </div>
-        </div>
-      </div>
+      {demoBanner}
 
       {/* Demo Content - uses StudentActivityPageContent */}
       <StudentActivityPageContent
