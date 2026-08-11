@@ -100,7 +100,7 @@ from .progress import (
 from .oauth_identity import OAuthIdentity
 
 # Blog models
-from .blog import BlogPost, BlogCategory, BlogPostCategory
+from .blog import BlogPost, BlogCategory, BlogPostCategory, BlogPostImage
 
 # Demo models
 from .demo_config import DemoConfig
@@ -185,6 +185,7 @@ __all__ = [
     "BlogPost",
     "BlogCategory",
     "BlogPostCategory",
+    "BlogPostImage",
     # Demo
     "DemoConfig",
 ]

@@ -1,5 +1,5 @@
 """
-Blog models: BlogPost, BlogCategory, BlogPostCategory
+Blog models: BlogPost, BlogCategory, BlogPostCategory, BlogPostImage
 """
 
 from sqlalchemy import (
@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Boolean,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -81,6 +82,12 @@ class BlogPost(Base):
         secondary="blog_post_categories",
         back_populates="posts",
     )
+    images = relationship(
+        "BlogPostImage",
+        back_populates="post",
+        cascade="all, delete-orphan",
+        order_by="BlogPostImage.order_index",
+    )
 
     def __repr__(self):
         return f"<BlogPost {self.title}>"
@@ -101,3 +108,37 @@ class BlogPostCategory(Base):
         ForeignKey("blog_categories.id", ondelete="CASCADE"),
         primary_key=True,
     )
+
+
+class BlogPostImage(Base):
+    """部落格文章圖庫（一篇文章可有多張圖，可插入內文或指定為封面）
+
+    封面不在此表用旗標記錄 — 沿用 BlogPost.cover_image_url 為單一真相來源，
+    前端以 image_url == cover_image_url 判斷哪一張是封面。
+    """
+
+    __tablename__ = "blog_post_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(
+        Integer,
+        ForeignKey("blog_posts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    image_url = Column(String(500), nullable=False)
+    alt_text = Column(String(200), nullable=True)
+    order_index = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    post = relationship("BlogPost", back_populates="images")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "post_id", "order_index", name="uq_blog_post_images_post_order"
+        ),
+    )
+
+    def __repr__(self):
+        return f"<BlogPostImage post={self.post_id} order={self.order_index}>"
