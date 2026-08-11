@@ -5275,7 +5275,10 @@
     "toast": {
       "copySuccess": "Copied \"{{name}}\" to My Materials",
       "copySuccessOrg": "Copied \"{{name}}\" to Organization Materials",
-      "copyFailed": "Copy failed. Please try again later."
+      "copyFailed": "Copy failed. Please try again later.",
+      "autoCopySuccess": "\"{{name}}\" is now in My Materials — ready to practise!",
+      "autoCopySuccessOrg": "\"{{name}}\" is now in Organization Materials — ready to practise!",
+      "autoCopyFailed": "Could not copy the material automatically. Please copy it from Resource Materials."
     }
   },
   "contentCopy": {

@@ -8,6 +8,12 @@ import {
 
 const STORAGE_KEY = REDIRECT_STORAGE_KEY;
 
+/** Read the path out of the stored JSON envelope (#989). */
+function storedPath(): string | null {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return raw ? (JSON.parse(raw) as { path: string }).path : null;
+}
+
 describe("isSafeRedirectPath", () => {
   it("accepts normal absolute paths", () => {
     expect(isSafeRedirectPath("/student/dashboard")).toBe(true);
@@ -51,12 +57,13 @@ describe("isSafeRedirectPath", () => {
 
 describe("saveRedirectTarget / consumeRedirectTarget", () => {
   beforeEach(() => {
+    localStorage.clear();
     sessionStorage.clear();
   });
 
   it("round-trips a safe path", () => {
     saveRedirectTarget("/student/dashboard");
-    expect(sessionStorage.getItem(STORAGE_KEY)).toBe("/student/dashboard");
+    expect(storedPath()).toBe("/student/dashboard");
     expect(consumeRedirectTarget("/fallback")).toBe("/student/dashboard");
   });
 
@@ -65,7 +72,7 @@ describe("saveRedirectTarget / consumeRedirectTarget", () => {
     saveRedirectTarget("/%2Fevil.com");
     saveRedirectTarget("/back\\slash");
     saveRedirectTarget("not-absolute");
-    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it("does not save login-page prefixes", () => {
@@ -74,7 +81,7 @@ describe("saveRedirectTarget / consumeRedirectTarget", () => {
     saveRedirectTarget("/teacher/reset-password/abc123");
     saveRedirectTarget("/auth/1campus/callback?code=xyz");
     saveRedirectTarget("/verify-email?token=abc");
-    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it("consumeRedirectTarget returns fallback when storage is empty", () => {
@@ -86,19 +93,20 @@ describe("saveRedirectTarget / consumeRedirectTarget", () => {
   it("consumeRedirectTarget atomically clears the stored value", () => {
     saveRedirectTarget("/teacher/programs/5");
     expect(consumeRedirectTarget("/fallback")).toBe("/teacher/programs/5");
-    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     // Second call returns fallback because the value was consumed.
     expect(consumeRedirectTarget("/fallback")).toBe("/fallback");
   });
 
   it("consumeRedirectTarget returns fallback if stored value is unsafe", () => {
-    sessionStorage.setItem(STORAGE_KEY, "//evil.com");
+    localStorage.setItem(STORAGE_KEY, "//evil.com");
     expect(consumeRedirectTarget("/safe-fallback")).toBe("/safe-fallback");
   });
 });
 
 describe("consumeRedirectTarget allowedPrefixes (role isolation)", () => {
   beforeEach(() => {
+    localStorage.clear();
     sessionStorage.clear();
   });
 
@@ -148,7 +156,7 @@ describe("consumeRedirectTarget allowedPrefixes (role isolation)", () => {
   it("still consumes (clears storage) when prefix mismatch causes fallback", () => {
     saveRedirectTarget("/teacher/dashboard");
     consumeRedirectTarget("/student/dashboard", ["/student/"]);
-    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it("backwards compatible: omitting allowedPrefixes returns stored target", () => {
@@ -209,5 +217,52 @@ describe("consumeRedirectTarget allowedPrefixes (role isolation)", () => {
     expect(consumeRedirectTarget("/student/dashboard", ["/"])).toBe(
       "/student/dashboard",
     );
+  });
+});
+
+// #989: registration can finish in a different tab (verification link opened
+// from a mail client), so the target must live in localStorage, not
+// sessionStorage — otherwise the "copy this demo material" intent is lost.
+describe("cross-tab persistence and TTL (#989)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("survives a tab that has no sessionStorage entry", () => {
+    saveRedirectTarget("/teacher/programs?demoCopyProgram=63");
+    // Simulate the new tab: sessionStorage is empty there.
+    sessionStorage.clear();
+    expect(consumeRedirectTarget("/fallback", ["/teacher/"])).toBe(
+      "/teacher/programs?demoCopyProgram=63",
+    );
+  });
+
+  it("ignores an expired target", () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        path: "/teacher/programs",
+        expiresAt: Date.now() - 1000,
+      }),
+    );
+    expect(consumeRedirectTarget("/fallback")).toBe("/fallback");
+  });
+
+  it("clears an expired target instead of leaving it around", () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ path: "/teacher/programs", expiresAt: Date.now() - 1 }),
+    );
+    consumeRedirectTarget("/fallback");
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("still honours a legacy sessionStorage value written before this change", () => {
+    sessionStorage.setItem(STORAGE_KEY, "/teacher/dashboard");
+    expect(consumeRedirectTarget("/fallback", ["/teacher/"])).toBe(
+      "/teacher/dashboard",
+    );
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 });

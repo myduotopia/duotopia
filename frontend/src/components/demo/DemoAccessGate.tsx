@@ -20,9 +20,8 @@ import { CalendarClock, Hourglass, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { saveRedirectTarget } from "@/utils/redirectAfterLogin";
+import { DEMO_COPY_PROGRAM_PARAM } from "@/hooks/useDemoMaterialCopy";
 import type { DemoAccessStatus } from "@/lib/demoApi";
-
-export const DEMO_COPY_PROGRAM_PARAM = "demoCopyProgram";
 
 interface DemoAccessGateProps {
   status: Exclude<DemoAccessStatus, "active">;

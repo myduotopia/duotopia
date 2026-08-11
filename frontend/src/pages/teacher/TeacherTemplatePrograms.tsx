@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   RecursiveTreeAccordion,
@@ -30,6 +31,10 @@ import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import { apiClient } from "@/lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useResourceMaterialsAPI } from "@/hooks/useResourceMaterialsAPI";
+import {
+  useDemoMaterialCopy,
+  DEMO_GUIDE_PROGRAM_PARAM,
+} from "@/hooks/useDemoMaterialCopy";
 import { toast } from "sonner";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { Program, Lesson, Content } from "@/types";
@@ -56,6 +61,27 @@ function TeacherTemplateProgramsInner() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [isReordering, setIsReordering] = useState(false);
+
+  // #989: 訪客從過期的公開 demo 頁註冊/登入後會被導回這裡，帶著要複製的資源
+  // 教材包（?demoCopyProgram=）。個人視圖複製完重載清單即可；機構視圖的教材
+  // 在另一頁（/teacher/org-materials），改導過去並帶著新教材 id 供引導使用。
+  const navigate = useNavigate();
+  const handleDemoCopied = useCallback(
+    (programId: number, toOrganization: boolean) => {
+      if (toOrganization) {
+        navigate(
+          `/teacher/org-materials?${DEMO_GUIDE_PROGRAM_PARAM}=${programId}`,
+          { replace: true },
+        );
+        return;
+      }
+      void fetchTemplatePrograms();
+    },
+    // fetchTemplatePrograms is defined below and stable for this page's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [navigate],
+  );
+  useDemoMaterialCopy(!loading, handleDemoCopied);
 
   // View mode: 'tree' (original accordion) or 'folder' (folder-style grid)
   const [viewMode, setViewMode] = useState<ViewMode>("folder");

@@ -5319,7 +5319,10 @@
     "toast": {
       "copySuccess": "已複製「{{name}}」到我的教材",
       "copySuccessOrg": "已複製「{{name}}」到組織教材",
-      "copyFailed": "複製失敗，請稍後再試"
+      "copyFailed": "複製失敗，請稍後再試",
+      "autoCopySuccess": "已把「{{name}}」複製到我的教材，可以開始練習了！",
+      "autoCopySuccessOrg": "已把「{{name}}」複製到機構教材，可以開始練習了！",
+      "autoCopyFailed": "自動複製教材失敗，請到「資源教材包」手動複製"
     }
   },
   "contentCopy": {
