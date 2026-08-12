@@ -42,7 +42,7 @@ Rollback 影響範圍：
 （已加入 .github/workflows/deploy-backend.yml 的 RLS 排除清單）。
 
 Revision ID: 20260811_1000
-Revises: 20260723_1000
+Revises: 20260810_1000
 Create Date: 2026-08-11
 """
 from typing import Union
@@ -51,7 +51,7 @@ from alembic import op
 
 
 revision: str = "20260811_1000"
-down_revision: Union[str, None] = "20260723_1000"
+down_revision: Union[str, None] = "20260810_1000"
 branch_labels = None
 depends_on = None
 
