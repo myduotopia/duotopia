@@ -122,6 +122,19 @@ class TestPublishToPlatforms:
         assert db.added[0].status == "failed"
 
 
+class TestRequestValidation:
+    def test_duplicate_platforms_deduped_preserving_order(self):
+        body = sp.PublishRequest(
+            platforms=["facebook", "facebook", "instagram", "facebook"],
+            message="hi",
+        )
+        assert body.platforms == ["facebook", "instagram"]
+
+    def test_blog_request_dedupes_platforms(self):
+        body = sp.BlogPublishRequest(platforms=["instagram", "instagram"])
+        assert body.platforms == ["instagram"]
+
+
 class TestPublishPostEndpoint:
     @pytest.mark.asyncio
     async def test_empty_message_and_image_returns_400(self, db):

@@ -15,7 +15,7 @@ import logging
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -32,6 +32,15 @@ router = APIRouter(prefix="/api/admin/social", tags=["social-publishing"])
 Platform = Literal["facebook", "instagram"]
 
 
+def _dedupe_platforms(platforms: List[str]) -> List[str]:
+    """去重並保留原順序，避免同平台重複發文（例：誤觸雙擊送出重複陣列）。"""
+    seen: List[str] = []
+    for p in platforms:
+        if p not in seen:
+            seen.append(p)
+    return seen
+
+
 # ============ Schemas ============
 
 
@@ -41,9 +50,19 @@ class PublishRequest(BaseModel):
     image_url: Optional[str] = None
     link: Optional[str] = None
 
+    @field_validator("platforms")
+    @classmethod
+    def _unique_platforms(cls, v: List[str]) -> List[str]:
+        return _dedupe_platforms(v)
+
 
 class BlogPublishRequest(BaseModel):
     platforms: List[Platform] = Field(..., min_length=1)
+
+    @field_validator("platforms")
+    @classmethod
+    def _unique_platforms(cls, v: List[str]) -> List[str]:
+        return _dedupe_platforms(v)
 
 
 class PlatformResult(BaseModel):
