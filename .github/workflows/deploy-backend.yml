@@ -313,6 +313,8 @@ jobs:
               'student_status_history',
               -- 團購脫離機構（#862，JWT auth 業務表）
               'group_buy_teams', 'group_buy_members',
+              -- Meta 社群發文記錄（#591，JWT auth 業務表）
+              'social_posts',
               -- n8n 系統表（外部服務，不適用 RLS）
               'annotation_tag_entity', 'auth_identity', 'auth_provider_sync_history', 'binary_data',
               'chat_hub_agents', 'chat_hub_messages', 'chat_hub_sessions', 'credentials_entity',
