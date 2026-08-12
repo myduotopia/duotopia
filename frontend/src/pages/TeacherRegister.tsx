@@ -28,6 +28,7 @@ import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { validatePasswordStrength } from "@/utils/passwordValidation";
 import { getTeacherDashboardRoute } from "@/utils/authNavigation";
+import { consumeRedirectTarget } from "@/utils/redirectAfterLogin";
 import { trackCompleteRegistration } from "@/services/metaPixelService";
 import { sendEvent as gaSendEvent } from "@/services/gaService";
 
@@ -42,12 +43,20 @@ export default function TeacherRegister() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Redirect authenticated users to dashboard
+  // Redirect authenticated users to dashboard.
+  // #989: honour a stored redirect target the same way TeacherLogin does —
+  // an already-logged-in visitor arriving from the expired demo page should
+  // still land on the material they were promised, not the dashboard.
   useEffect(() => {
     if (isAuthenticated && user) {
-      navigate(getTeacherDashboardRoute(), {
-        replace: true,
-      });
+      navigate(
+        consumeRedirectTarget(getTeacherDashboardRoute(), [
+          "/teacher/",
+          "/organization/",
+          "/dashboard",
+        ]),
+        { replace: true },
+      );
     }
   }, [isAuthenticated, user, navigate]);
   const [formData, setFormData] = useState({

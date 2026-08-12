@@ -91,6 +91,22 @@
     "configError": "Failed to load demo configuration",
     "notAvailable": "This demo is currently unavailable",
     "invalidConfig": "Invalid demo configuration",
+    "access": {
+      "notStarted": {
+        "title": "Not open yet",
+        "availableFrom": "Opens {{datetime}}",
+        "invitation": "Register now and the material is yours when it opens.",
+        "invitationNoCopy": "Register now and come back when it opens."
+      },
+      "expired": {
+        "title": "Want to keep going?",
+        "invitation": "This demo has ended — but register and the material is yours.",
+        "invitationNoCopy": "This demo has ended. Register to explore other materials for free."
+      },
+      "materialName": "{{name}}",
+      "registerCta": "Register for free",
+      "loginCta": "I have an account"
+    },
     "limitReached": {
       "title": "Daily free trial limit reached",
       "description": "You have used all {{limit}} free speech practice sessions today.",
@@ -5260,7 +5276,10 @@
     "toast": {
       "copySuccess": "Copied \"{{name}}\" to My Materials",
       "copySuccessOrg": "Copied \"{{name}}\" to Organization Materials",
-      "copyFailed": "Copy failed. Please try again later."
+      "copyFailed": "Copy failed. Please try again later.",
+      "autoCopySuccess": "\"{{name}}\" is now in My Materials — ready to practise!",
+      "autoCopySuccessOrg": "\"{{name}}\" is now in Organization Materials — ready to practise!",
+      "autoCopyFailed": "Could not copy the material automatically. Please copy it from Resource Materials."
     }
   },
   "contentCopy": {
@@ -5605,6 +5624,22 @@
       "missingParams": "Missing required parameters. Please try logging in again.",
       "denied": "Google sign-in was cancelled. Please try again.",
       "generic": "Google sign-in failed. Please try again."
+    }
+  },
+  "guide": {
+    "material": {
+      "program": {
+        "title": "This is your new material",
+        "description": "It has been copied into your library. Click this card to open it."
+      },
+      "lesson": {
+        "title": "Open the first lesson",
+        "description": "Materials group their contents into lessons. Click the first one to see what is inside."
+      },
+      "instantPractice": {
+        "title": "Start practising here",
+        "description": "This orange button practises the content right away — no need to assign it to students first."
+      }
     }
   }
 }

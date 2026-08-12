@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   RecursiveTreeAccordion,
@@ -30,6 +31,12 @@ import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import { apiClient } from "@/lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useResourceMaterialsAPI } from "@/hooks/useResourceMaterialsAPI";
+import {
+  useDemoMaterialCopy,
+  DEMO_GUIDE_PROGRAM_PARAM,
+} from "@/hooks/useDemoMaterialCopy";
+import { useHighlightGuide } from "@/components/guide/useHighlightGuide";
+import { buildMaterialGuideSteps } from "@/components/guide/startMaterialGuide";
 import { toast } from "sonner";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { Program, Lesson, Content } from "@/types";
@@ -56,6 +63,54 @@ function TeacherTemplateProgramsInner() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [isReordering, setIsReordering] = useState(false);
+
+  // #989: 訪客從過期的公開 demo 頁註冊/登入後會被導回這裡，帶著要複製的資源
+  // 教材包（?demoCopyProgram=）。個人視圖複製完重載清單並開始引導；機構視圖的
+  // 教材在另一頁（/teacher/org-materials），改導過去並帶著新教材 id。
+  const navigate = useNavigate();
+  const { start: startGuide } = useHighlightGuide();
+  // 複製完成後要引導的新教材 id；等清單重載到它之後才開始走引導。
+  const [guideProgramId, setGuideProgramId] = useState<number | null>(null);
+
+  const handleDemoCopied = useCallback(
+    (programId: number, toOrganization: boolean) => {
+      if (toOrganization) {
+        navigate(
+          `/teacher/org-materials?${DEMO_GUIDE_PROGRAM_PARAM}=${programId}`,
+          { replace: true },
+        );
+        return;
+      }
+      setGuideProgramId(programId);
+      void fetchTemplatePrograms();
+    },
+    // fetchTemplatePrograms is defined below and stable for this page's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [navigate],
+  );
+  useDemoMaterialCopy(!loading, handleDemoCopied);
+
+  useEffect(() => {
+    if (guideProgramId === null) return;
+    const program = programs.find((p) => p.id === guideProgramId);
+    if (!program) return; // 清單還沒重載到新教材
+
+    const firstLesson = program.lessons?.[0];
+    // #587: 內容可能直接掛在教材下，那就沒有單元可以點。
+    const firstContent = firstLesson?.contents?.[0] ?? program.contents?.[0];
+
+    startGuide(
+      buildMaterialGuideSteps(
+        {
+          programId: program.id,
+          firstLessonId: firstLesson?.id ?? null,
+          firstContentId: firstContent?.id ?? null,
+        },
+        t,
+      ),
+    );
+    setGuideProgramId(null);
+  }, [guideProgramId, programs, startGuide, t]);
 
   // View mode: 'tree' (original accordion) or 'folder' (folder-style grid)
   const [viewMode, setViewMode] = useState<ViewMode>("folder");
