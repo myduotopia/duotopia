@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { X, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { demoApi, DemoApiError } from "@/lib/demoApi";
+import { demoApi, DemoApiError, type DemoAccessStatus } from "@/lib/demoApi";
 import { toast } from "sonner";
 import StudentActivityPageContent, {
   type Activity,
@@ -30,6 +30,9 @@ interface DemoData {
   assignment_id: number;
   title: string;
   practice_mode: string;
+  // #989: 期限外後端回 access_status 且不帶 activities。此 modal 沒有
+  // DemoAccessGate 的引導版位，改走既有的錯誤區塊提示，不要靜默顯示空題目。
+  access_status?: DemoAccessStatus;
   activities: Activity[];
 }
 
@@ -65,6 +68,16 @@ export function DemoModal({
       const data = (await demoApi.getPreview(
         assignmentId,
       )) as unknown as DemoData;
+      if (data.access_status && data.access_status !== "active") {
+        setError(
+          t(
+            data.access_status === "expired"
+              ? "demo.access.expired.title"
+              : "demo.access.notStarted.title",
+          ),
+        );
+        return;
+      }
       setDemoData(data);
     } catch (err) {
       const errorMessage =

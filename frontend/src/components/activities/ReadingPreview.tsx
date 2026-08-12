@@ -14,7 +14,7 @@
  * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
 import { useEffect, useMemo, useState } from "react";
-import { demoApi } from "@/lib/demoApi";
+import { demoApi, type DemoAccessStatus } from "@/lib/demoApi";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import StudentActivityPageContent, {
   type Activity,
@@ -214,6 +214,10 @@ interface DemoActivityResponse {
   practice_mode?: string | null;
   show_answer?: boolean;
   time_limit_per_question?: number;
+  // #989: demo_config 指向的作業若被設了 start_date / due_date，preview 會回
+  // access_status !== "active" 且不帶 activities。這裡是老師端的教材預覽，
+  // 沒有引導畫面可走，所以直接報錯，避免顯示成「此作業尚無題目」。
+  access_status?: DemoAccessStatus;
   total_activities: number;
   activities: Activity[];
 }
@@ -243,6 +247,11 @@ function ReadingPreviewByDemo({
         const resp = (await demoApi.getPreview(
           parseInt(idStr, 10),
         )) as DemoActivityResponse;
+        if (resp.access_status && resp.access_status !== "active") {
+          throw new Error(
+            `Demo reading assignment is outside its access window (${resp.access_status})`,
+          );
+        }
         if (!cancelled) {
           setData(resp);
           setLoading(false);
