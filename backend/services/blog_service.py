@@ -11,9 +11,12 @@ from typing import Optional
 from sqlalchemy.orm import Session, contains_eager, joinedload
 from sqlalchemy import desc, func as sa_func
 
-from models.blog import BlogPost, BlogCategory, BlogPostCategory
+from models.blog import BlogPost, BlogCategory, BlogPostCategory, BlogPostImage
 
 logger = logging.getLogger(__name__)
+
+# 圖庫單篇上限（防止誤送巨量資料）
+MAX_POST_IMAGES = 100
 
 
 def _generate_slug(text: str) -> str:
@@ -155,9 +158,101 @@ class BlogService:
             db.query(BlogPost)
             .options(joinedload(BlogPost.categories))
             .options(joinedload(BlogPost.author))
+            .options(joinedload(BlogPost.images))
             .filter(BlogPost.id == post_id)
             .first()
         )
+
+    # ============ Post Images (圖庫) ============
+
+    @staticmethod
+    def _replace_post_images(db: Session, post_id: int, images: list) -> None:
+        """整批取代一篇文章的圖庫。
+
+        採「全刪再全插」而非逐列 UPDATE —— (post_id, order_index) 有唯一約束，
+        逐列改順序會在中途撞約束。DELETE 後必須 flush 讓刪除先落地才 INSERT。
+
+        注意：這裡**只動 DB 列，絕不刪 GCS 圖檔**。每次儲存文章都會走這條路徑，
+        若順手刪雲端檔就會把整個圖庫的實體檔案清空。實體檔刪除只發生在
+        delete_post_image()（使用者明確按刪除，且確認沒被引用時）。
+        """
+        db.query(BlogPostImage).filter(BlogPostImage.post_id == post_id).delete()
+        db.flush()
+        for idx, img in enumerate(images):
+            db.add(
+                BlogPostImage(
+                    post_id=post_id,
+                    image_url=img["image_url"],
+                    alt_text=img.get("alt_text"),
+                    order_index=idx,
+                )
+            )
+
+    @staticmethod
+    def is_image_url_referenced(db: Session, image_url: str) -> bool:
+        """檢查圖片網址是否仍被任何文章引用（內文 / 封面 / OG 圖）。
+
+        跨全部文章查（不限單篇）—— 同一張圖可能被別篇引用，誤刪會造成他篇破圖。
+        """
+        if not image_url:
+            return False
+        return (
+            db.query(BlogPost.id)
+            .filter(
+                (BlogPost.content.contains(image_url))
+                | (BlogPost.cover_image_url == image_url)
+                | (BlogPost.og_image_url == image_url)
+            )
+            .first()
+            is not None
+        )
+
+    @staticmethod
+    def delete_post_image(db: Session, post_id: int, image_id: int) -> Optional[dict]:
+        """刪除圖庫中的單張圖；確認沒被任何文章引用時，連 GCS 實體檔一起刪。
+
+        回傳 {"deleted": True, "storage_deleted": bool}，找不到則回 None。
+        """
+        image = (
+            db.query(BlogPostImage)
+            .filter(
+                BlogPostImage.id == image_id,
+                BlogPostImage.post_id == post_id,
+            )
+            .first()
+        )
+        if not image:
+            return None
+
+        image_url = image.image_url
+        db.delete(image)
+        db.commit()
+
+        storage_deleted = False
+        if not BlogService.is_image_url_referenced(db, image_url):
+            try:
+                from services.image_upload import get_image_upload_service
+
+                storage_deleted = get_image_upload_service().delete_image(image_url)
+            except Exception as exc:  # pragma: no cover - 外部儲存失敗不影響 API
+                logger.warning(
+                    "Failed to delete blog image from storage: url=%s err=%s",
+                    image_url,
+                    exc,
+                )
+        else:
+            logger.info(
+                "Blog image row removed but file kept (still referenced): url=%s",
+                image_url,
+            )
+
+        logger.info(
+            "Blog image deleted: post=%s image=%s storage_deleted=%s",
+            post_id,
+            image_id,
+            storage_deleted,
+        )
+        return {"deleted": True, "storage_deleted": storage_deleted}
 
     @staticmethod
     def create_post(db: Session, data: dict, author_id: int) -> BlogPost:
@@ -196,6 +291,10 @@ class BlogService:
         for cat_id in category_ids:
             assoc = BlogPostCategory(post_id=post.id, category_id=cat_id)
             db.add(assoc)
+
+        # Handle gallery images
+        if data.get("images"):
+            BlogService._replace_post_images(db, post.id, data["images"])
 
         db.commit()
         db.refresh(post)
@@ -238,6 +337,11 @@ class BlogService:
             for cat_id in data["category_ids"]:
                 assoc = BlogPostCategory(post_id=post_id, category_id=cat_id)
                 db.add(assoc)
+
+        # Handle gallery update（送 [] 代表清空；不送則不動）
+        # 注意：images 刻意不放進 updatable_fields，避免 setattr 到 relationship
+        if "images" in data:
+            BlogService._replace_post_images(db, post_id, data["images"])
 
         db.commit()
         db.refresh(post)

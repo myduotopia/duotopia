@@ -305,7 +305,7 @@ jobs:
               'demo_config',
               'identities',
               'oauth_identities',
-              'blog_posts', 'blog_categories', 'blog_post_categories',
+              'blog_posts', 'blog_categories', 'blog_post_categories', 'blog_post_images',
               'assignment_analysis_reports',
               -- Promo code 推薦獎勵系統
               'promo_codes', 'promo_referrals', 'promo_reward_configs', 'promo_reward_events',

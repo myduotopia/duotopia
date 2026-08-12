@@ -4,9 +4,11 @@ Tests admin CRUD endpoints and public read endpoints.
 """
 
 from fastapi import status
-from models.blog import BlogPost, BlogCategory, BlogPostCategory
+from models.blog import BlogPost, BlogCategory, BlogPostCategory, BlogPostImage
 from auth import create_access_token, get_password_hash
 from models import Teacher
+from services.blog_service import MAX_POST_IMAGES
+from services.image_upload import get_image_upload_service
 
 
 class TestBlogAdminAuth:
@@ -652,3 +654,335 @@ class TestBlogSEOFields:
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["meta_title"] == "Updated Title"
         assert response.json()["meta_description"] == "Updated Desc"
+
+
+class TestBlogPostImages:
+    """圖庫（blog_post_images）：多圖清單、排序、封面獨立性與刪除行為。"""
+
+    def _make_admin(self, session):
+        """Create an admin teacher and return (teacher, headers)."""
+        teacher = Teacher(
+            email="admin-blog-images@duotopia.com",
+            password_hash=get_password_hash("admin123"),
+            name="Blog Images Admin",
+            is_active=True,
+            is_admin=True,
+            email_verified=True,
+        )
+        session.add(teacher)
+        session.commit()
+        session.refresh(teacher)
+        token = create_access_token(data={"sub": str(teacher.id), "type": "teacher"})
+        return teacher, {"Authorization": f"Bearer {token}"}
+
+    def _url(self, name: str) -> str:
+        """產生一個通過來源驗證的圖片網址（依實際 bucket 設定）。"""
+        service = get_image_upload_service()
+        return f"https://storage.googleapis.com/{service.bucket_name}/blog/test/{name}"
+
+    def test_create_post_with_images(self, test_client, shared_test_session):
+        _, headers = self._make_admin(shared_test_session)
+        response = test_client.post(
+            "/api/blog",
+            json={
+                "title": "Post With Gallery",
+                "images": [
+                    {"image_url": self._url("a.jpg"), "alt_text": "A"},
+                    {"image_url": self._url("b.jpg"), "alt_text": "B"},
+                    {"image_url": self._url("c.jpg")},
+                ],
+            },
+            headers=headers,
+        )
+        assert response.status_code == status.HTTP_200_OK
+        images = response.json()["images"]
+        assert len(images) == 3
+        assert [i["order_index"] for i in images] == [0, 1, 2]
+        assert [i["image_url"] for i in images] == [
+            self._url("a.jpg"),
+            self._url("b.jpg"),
+            self._url("c.jpg"),
+        ]
+        assert images[0]["alt_text"] == "A"
+        assert images[2]["alt_text"] is None
+
+    def test_create_post_without_images(self, test_client, shared_test_session):
+        """未帶 images 的既有 payload 不受影響（回歸保護）。"""
+        _, headers = self._make_admin(shared_test_session)
+        response = test_client.post(
+            "/api/blog", json={"title": "No Gallery"}, headers=headers
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["images"] == []
+
+    def test_get_post_returns_images_ordered(self, test_client, shared_test_session):
+        """DB 中 order_index 亂序寫入，讀取時仍依 order_index 遞增。"""
+        _, headers = self._make_admin(shared_test_session)
+        post_id = test_client.post(
+            "/api/blog", json={"title": "Ordered Gallery"}, headers=headers
+        ).json()["id"]
+
+        for order_index, name in [
+            (2, "third.jpg"),
+            (0, "first.jpg"),
+            (1, "second.jpg"),
+        ]:
+            shared_test_session.add(
+                BlogPostImage(
+                    post_id=post_id,
+                    image_url=self._url(name),
+                    order_index=order_index,
+                )
+            )
+        shared_test_session.commit()
+
+        response = test_client.get(f"/api/blog/{post_id}", headers=headers)
+        assert response.status_code == status.HTTP_200_OK
+        images = response.json()["images"]
+        assert [i["order_index"] for i in images] == [0, 1, 2]
+        assert [i["image_url"].rsplit("/", 1)[-1] for i in images] == [
+            "first.jpg",
+            "second.jpg",
+            "third.jpg",
+        ]
+
+    def test_update_post_replaces_images(self, test_client, shared_test_session):
+        """整批取代：舊列全刪、新列依陣列順序重排，且不撞唯一約束。"""
+        _, headers = self._make_admin(shared_test_session)
+        post_id = test_client.post(
+            "/api/blog",
+            json={
+                "title": "Replace Gallery",
+                "images": [
+                    {"image_url": self._url("old1.jpg")},
+                    {"image_url": self._url("old2.jpg")},
+                    {"image_url": self._url("old3.jpg")},
+                ],
+            },
+            headers=headers,
+        ).json()["id"]
+
+        response = test_client.put(
+            f"/api/blog/{post_id}",
+            json={
+                "images": [
+                    {"image_url": self._url("new1.jpg")},
+                    {"image_url": self._url("new2.jpg")},
+                ]
+            },
+            headers=headers,
+        )
+        assert response.status_code == status.HTTP_200_OK
+        images = response.json()["images"]
+        assert [i["image_url"].rsplit("/", 1)[-1] for i in images] == [
+            "new1.jpg",
+            "new2.jpg",
+        ]
+        assert [i["order_index"] for i in images] == [0, 1]
+
+    def test_update_post_with_empty_images_clears_gallery(
+        self, test_client, shared_test_session
+    ):
+        _, headers = self._make_admin(shared_test_session)
+        post_id = test_client.post(
+            "/api/blog",
+            json={
+                "title": "Clear Gallery",
+                "images": [{"image_url": self._url("x.jpg")}],
+            },
+            headers=headers,
+        ).json()["id"]
+
+        response = test_client.put(
+            f"/api/blog/{post_id}", json={"images": []}, headers=headers
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["images"] == []
+
+    def test_update_post_without_images_key_keeps_gallery(
+        self, test_client, shared_test_session
+    ):
+        _, headers = self._make_admin(shared_test_session)
+        post_id = test_client.post(
+            "/api/blog",
+            json={
+                "title": "Keep Gallery",
+                "images": [{"image_url": self._url("keep.jpg")}],
+            },
+            headers=headers,
+        ).json()["id"]
+
+        response = test_client.put(
+            f"/api/blog/{post_id}",
+            json={"title": "Keep Gallery Renamed"},
+            headers=headers,
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.json()["images"]) == 1
+
+    def test_delete_post_cascades_images(self, test_client, shared_test_session):
+        _, headers = self._make_admin(shared_test_session)
+        post_id = test_client.post(
+            "/api/blog",
+            json={
+                "title": "Cascade Gallery",
+                "images": [{"image_url": self._url("cascade.jpg")}],
+            },
+            headers=headers,
+        ).json()["id"]
+
+        response = test_client.delete(f"/api/blog/{post_id}", headers=headers)
+        assert response.status_code == status.HTTP_200_OK
+        remaining = (
+            shared_test_session.query(BlogPostImage)
+            .filter(BlogPostImage.post_id == post_id)
+            .count()
+        )
+        assert remaining == 0
+
+    def test_reject_external_image_url(self, test_client, shared_test_session):
+        """擋掉外部 hotlink，只收本站上傳的圖。"""
+        _, headers = self._make_admin(shared_test_session)
+        response = test_client.post(
+            "/api/blog",
+            json={
+                "title": "External Image",
+                "images": [{"image_url": "https://evil.example.com/x.png"}],
+            },
+            headers=headers,
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_image_limit_exceeded(self, test_client, shared_test_session):
+        _, headers = self._make_admin(shared_test_session)
+        response = test_client.post(
+            "/api/blog",
+            json={
+                "title": "Too Many Images",
+                "images": [
+                    {"image_url": self._url(f"{i}.jpg")}
+                    for i in range(MAX_POST_IMAGES + 1)
+                ],
+            },
+            headers=headers,
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_delete_image_keeps_file_when_referenced(
+        self, test_client, shared_test_session, monkeypatch
+    ):
+        """圖已插進內文 → 只移除圖庫列，雲端檔保留。"""
+        _, headers = self._make_admin(shared_test_session)
+        url = self._url("referenced.jpg")
+        post_id = test_client.post(
+            "/api/blog",
+            json={
+                "title": "Referenced Image",
+                "content": f"內文有這張圖 ![x]({url})",
+                "images": [{"image_url": url}],
+            },
+            headers=headers,
+        ).json()["id"]
+        image_id = test_client.get(f"/api/blog/{post_id}", headers=headers).json()[
+            "images"
+        ][0]["id"]
+
+        calls = []
+        monkeypatch.setattr(
+            get_image_upload_service(),
+            "delete_image",
+            lambda u: calls.append(u) or True,
+        )
+
+        response = test_client.delete(
+            f"/api/blog/{post_id}/images/{image_id}", headers=headers
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"deleted": True, "storage_deleted": False}
+        assert calls == []
+        assert (
+            shared_test_session.query(BlogPostImage)
+            .filter(BlogPostImage.id == image_id)
+            .count()
+            == 0
+        )
+
+    def test_delete_image_removes_file_when_unreferenced(
+        self, test_client, shared_test_session, monkeypatch
+    ):
+        """圖沒被任何文章引用 → 連雲端檔一起刪。"""
+        _, headers = self._make_admin(shared_test_session)
+        url = self._url("orphan.jpg")
+        post_id = test_client.post(
+            "/api/blog",
+            json={
+                "title": "Orphan Image",
+                "content": "內文沒有引用任何圖",
+                "images": [{"image_url": url}],
+            },
+            headers=headers,
+        ).json()["id"]
+        image_id = test_client.get(f"/api/blog/{post_id}", headers=headers).json()[
+            "images"
+        ][0]["id"]
+
+        calls = []
+        monkeypatch.setattr(
+            get_image_upload_service(),
+            "delete_image",
+            lambda u: calls.append(u) or True,
+        )
+
+        response = test_client.delete(
+            f"/api/blog/{post_id}/images/{image_id}", headers=headers
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"deleted": True, "storage_deleted": True}
+        assert calls == [url]
+
+    def test_delete_image_not_found(self, test_client, shared_test_session):
+        _, headers = self._make_admin(shared_test_session)
+        post_id = test_client.post(
+            "/api/blog", json={"title": "No Such Image"}, headers=headers
+        ).json()["id"]
+        response = test_client.delete(
+            f"/api/blog/{post_id}/images/999999", headers=headers
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_removing_gallery_row_keeps_cover_image_url(
+        self, test_client, shared_test_session, monkeypatch
+    ):
+        """移除圖庫列不會動到 cover_image_url（封面以該欄位為單一真相來源）。"""
+        _, headers = self._make_admin(shared_test_session)
+        url = self._url("cover.jpg")
+        post_id = test_client.post(
+            "/api/blog",
+            json={
+                "title": "Cover Independence",
+                "cover_image_url": url,
+                "images": [{"image_url": url}],
+            },
+            headers=headers,
+        ).json()["id"]
+        image_id = test_client.get(f"/api/blog/{post_id}", headers=headers).json()[
+            "images"
+        ][0]["id"]
+
+        monkeypatch.setattr(get_image_upload_service(), "delete_image", lambda u: True)
+        test_client.delete(f"/api/blog/{post_id}/images/{image_id}", headers=headers)
+
+        data = test_client.get(f"/api/blog/{post_id}", headers=headers).json()
+        assert data["cover_image_url"] == url
+        assert data["images"] == []
+
+    def test_images_require_admin(self, test_client, demo_teacher):
+        token = create_access_token(
+            data={"sub": str(demo_teacher.id), "type": "teacher"}
+        )
+        response = test_client.post(
+            "/api/blog",
+            json={"title": "Nope", "images": [{"image_url": self._url("n.jpg")}]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN

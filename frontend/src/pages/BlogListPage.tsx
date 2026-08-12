@@ -93,7 +93,7 @@ export default function BlogListPage() {
             onClick={() => handleCategoryChange(undefined)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
               !selectedCategory
-                ? "bg-primary text-white"
+                ? "bg-[#204DC0] text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
@@ -105,7 +105,7 @@ export default function BlogListPage() {
               onClick={() => handleCategoryChange(cat.slug)}
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
                 selectedCategory === cat.slug
-                  ? "bg-primary text-white"
+                  ? "bg-[#204DC0] text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
@@ -147,7 +147,7 @@ export default function BlogListPage() {
                 onClick={() => setPage(p)}
                 className={`w-10 h-10 rounded-full text-sm font-medium transition ${
                   p === page
-                    ? "bg-primary text-white"
+                    ? "bg-[#204DC0] text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
