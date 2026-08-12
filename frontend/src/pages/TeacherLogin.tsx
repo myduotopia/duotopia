@@ -23,6 +23,7 @@ import {
   saveRedirectTarget,
 } from "@/utils/redirectAfterLogin";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
+import { GoogleLoginButton } from "@/components/auth/GoogleLoginButton";
 
 export default function TeacherLogin() {
   const navigate = useNavigate();
@@ -251,20 +252,32 @@ export default function TeacherLogin() {
               </div>
             </form>
 
+            {/* SSO 登入（Google / 1Campus） */}
+            {(FEATURE_FLAGS.GOOGLE_LOGIN || FEATURE_FLAGS.ONE_CAMPUS_LOGIN) && (
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">
+                    {t("teacherLogin.oneCampus.separator", "or")}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Google Login（#740） */}
+            {FEATURE_FLAGS.GOOGLE_LOGIN && (
+              <GoogleLoginButton
+                onError={setError}
+                onBeforeRedirect={() => setError("")}
+                className="mb-3"
+              />
+            )}
+
             {/* 1Campus SSO Login */}
             {FEATURE_FLAGS.ONE_CAMPUS_LOGIN && (
               <>
-                <div className="relative my-6">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-200" />
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">
-                      {t("teacherLogin.oneCampus.separator", "or")}
-                    </span>
-                  </div>
-                </div>
-
                 <Button
                   type="button"
                   variant="outline"

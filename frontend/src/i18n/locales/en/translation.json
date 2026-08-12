@@ -1292,6 +1292,11 @@
     "oneCampus": {
       "separator": "or",
       "button": "Log in with School Account (1Campus)"
+    },
+    "google": {
+      "button": "Sign in with Google",
+      "loading": "Redirecting to Google...",
+      "error": "Failed to connect to Google. Please try again."
     }
   },
   "studentLoginQR": {
@@ -5578,5 +5583,16 @@
     "collected": "Quiz collected. Scores finalized.",
     "collectFailed": "Failed to collect quiz. Please try again.",
     "startFailed": "Failed to start quiz. Please try again."
+  },
+  "google": {
+    "signingIn": "Signing you in with Google...",
+    "backToLogin": "Back to teacher login",
+    "backToHome": "Back to home",
+    "errors": {
+      "title": "Sign-in failed",
+      "missingParams": "Missing required parameters. Please try logging in again.",
+      "denied": "Google sign-in was cancelled. Please try again.",
+      "generic": "Google sign-in failed. Please try again."
+    }
   }
 }

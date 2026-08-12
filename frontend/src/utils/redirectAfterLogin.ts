@@ -14,6 +14,7 @@ const LOGIN_PAGE_PREFIXES = [
   "/student/forgot-password",
   "/student/reset-password",
   "/auth/1campus/callback",
+  "/auth/google/callback",
   "/verify-email",
 ];
 
