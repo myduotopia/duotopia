@@ -56,6 +56,7 @@ from routers import organization_programs
 from routers import school_programs
 from routers import resource_materials
 from routers import magic_paste  # 教材內容魔術貼上（issue #891）
+from routers import social_publishing  # Meta 社群發文（issue #591）
 from routers.auth_one_campus import router as auth_one_campus_router
 from routers.auth_google import router as auth_google_router  # Google OAuth（#740）
 from routers.organization_points import router as organization_points_router
@@ -309,6 +310,7 @@ app.include_router(
     institution_invoices.router
 )  # Admin 機構應收帳款路由（Admin only, issue #838 Phase D）
 app.include_router(blog.router)  # Blog 管理路由（Admin only）
+app.include_router(social_publishing.router)  # Meta 社群發文（Admin only，#591）
 app.include_router(cron.router)  # Cron Job 路由
 app.include_router(debug.router)  # Debug 路由
 
