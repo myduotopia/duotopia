@@ -4804,7 +4804,9 @@
       "globalTense": "Default Scoring Criteria",
       "inherited": "Inherited",
       "overridden": "Customized",
-      "globalRubric": "Answering Guidelines (visible to students)"
+      "globalRubric": "Answering Guidelines (visible to students)",
+      "generationSource": "How to generate",
+      "generateCount": "Questions per run"
     },
     "rubricPresets": {
       "tenseTime": "Time",
@@ -4831,7 +4833,12 @@
       "addQuestion": "Add Question",
       "generateImage": "Generate image · 2 credits",
       "regenerateImage": "Regenerate · 2 credits",
-      "generatingImage": "Generating…"
+      "generatingImage": "Generating…",
+      "skipGeneration": "Skip — I'll write my own",
+      "generateAndContinue": "Generate and continue",
+      "generateMore": "Generate more",
+      "editSettings": "Edit settings",
+      "backToSettings": "Back to settings"
     },
     "hints": {
       "rateLimit": "Up to 5 regenerations per minute",
@@ -4842,7 +4849,13 @@
       "visibleToStudents": "This text is sent to the AI grader and is also shown to students",
       "contextOptional": "Optional — leave blank to hide it from students",
       "hasContext": "Context set",
-      "globalTense": "Applied to all questions by default. Customizing a question detaches it, so later changes here won't affect it."
+      "globalTense": "Applied to all questions by default. Customizing a question detaches it, so later changes here won't affect it.",
+      "notSaved": "Not saved",
+      "willBeSaved": "Saved",
+      "generationSourceNote": "Only guides how AI writes the questions — not stored with this material",
+      "sharedSettingsNote": "Shared by every question; students and AI grading both use this",
+      "step1Foot": "Generate once you're set, or skip ahead and write your own",
+      "untitled": "Untitled"
     },
     "tooltips": {
       "regenerateQuestion": "Regenerate this question (avoids previous ones)",
@@ -4851,6 +4864,12 @@
     },
     "messages": {
       "frontendOnly": "Scenario Dialogue is UI-only for now; saving is not wired to the backend yet"
+    },
+    "steps": {
+      "settings": "Settings",
+      "settingsSub": "Generation options · shared content",
+      "questions": "Questions",
+      "questionsSub": "Edit and reorder"
     }
   },
   "vocabularySet": {

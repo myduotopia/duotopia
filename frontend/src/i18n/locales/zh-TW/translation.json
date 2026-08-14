@@ -4824,7 +4824,9 @@
       "globalTense": "整體評分標準",
       "inherited": "沿用整體設定",
       "overridden": "本題自訂",
-      "globalRubric": "作答指引（學生看得到）"
+      "globalRubric": "作答指引（學生看得到）",
+      "generationSource": "產題方式",
+      "generateCount": "一次產生幾題"
     },
     "rubricPresets": {
       "tenseTime": "時間",
@@ -4851,7 +4853,12 @@
       "addQuestion": "新增題目",
       "generateImage": "生成圖片 · 2 點",
       "regenerateImage": "重新生成 · 2 點",
-      "generatingImage": "生成中…"
+      "generatingImage": "生成中…",
+      "skipGeneration": "跳過，我想自己出題",
+      "generateAndContinue": "產生題目並繼續",
+      "generateMore": "再產題",
+      "editSettings": "回設定修改",
+      "backToSettings": "上一步：設定"
     },
     "hints": {
       "rateLimit": "每分鐘最多重新生成 5 次",
@@ -4862,7 +4869,13 @@
       "visibleToStudents": "這段文字會提供給 AI 評分，學生作答時也看得到",
       "contextOptional": "選填，留空則學生端不顯示",
       "hasContext": "已設定情境說明",
-      "globalTense": "所有題目預設沿用；單題可個別調整，之後改這裡不會影響已自訂的題目"
+      "globalTense": "所有題目預設沿用；單題可個別調整，之後改這裡不會影響已自訂的題目",
+      "notSaved": "不會被儲存",
+      "willBeSaved": "會被儲存",
+      "generationSourceNote": "只影響 AI 怎麼出題，不會存進這份教材",
+      "sharedSettingsNote": "所有題目共用；學生端與 AI 評分都吃這一份",
+      "step1Foot": "設定完成後產題，或直接跳到清單自己出題",
+      "untitled": "尚未命名"
     },
     "tooltips": {
       "regenerateQuestion": "重新生成這一題（會避開已出現過的題目）",
@@ -4871,6 +4884,12 @@
     },
     "messages": {
       "frontendOnly": "情境對話目前為畫面設計階段，尚未串接後端儲存"
+    },
+    "steps": {
+      "settings": "設定",
+      "settingsSub": "產題條件 · 整份共用內容",
+      "questions": "題目清單",
+      "questionsSub": "逐題編輯 · 排序"
     }
   },
   "vocabularySet": {
