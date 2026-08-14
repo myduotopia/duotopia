@@ -103,6 +103,7 @@ export function useHighlightGuide(): HighlightGuideController {
             return;
           }
 
+          let highlighted = element;
           instance.highlight({
             element,
             popover: {
@@ -114,19 +115,48 @@ export function useHighlightGuide(): HighlightGuideController {
           });
 
           // The visitor advances by doing the thing, not by clicking "Next".
+          //
+          // The listener goes on `document` rather than on the resolved node:
+          // the list behind these steps refetches (a demo copy just ran) and
+          // re-sorting or filtering can hand React a brand-new DOM node for the
+          // same `data-guide-id`. A listener bound to the captured element
+          // would be orphaned by that remount and never fire, stranding the
+          // visitor under an overlay until they closed it. Matching by
+          // `closest()` at click time survives any number of remounts, and the
+          // poll below re-points the highlight at whatever node is current.
           await new Promise<void>((resolve) => {
             let poll = 0;
             const finish = () => {
               window.clearInterval(poll);
-              element.removeEventListener("click", onClick);
+              document.removeEventListener("click", onClick, true);
               resolve();
             };
-            const onClick = () => finish();
+            const onClick = (event: MouseEvent) => {
+              const target = event.target as Element | null;
+              if (target?.closest(selectorFor(step.guideId))) finish();
+            };
 
-            element.addEventListener("click", onClick);
-            // Also finish if the visitor closes the guide mid-step.
+            document.addEventListener("click", onClick, true);
             poll = window.setInterval(() => {
-              if (signal.cancelled) finish();
+              // Also finish if the visitor closes the guide mid-step.
+              if (signal.cancelled) return finish();
+              // Follow the target across remounts so the overlay never sits on
+              // a detached node.
+              const current = document.querySelector<HTMLElement>(
+                selectorFor(step.guideId),
+              );
+              if (current && current !== highlighted) {
+                highlighted = current;
+                instance.highlight({
+                  element: current,
+                  popover: {
+                    title: step.title,
+                    description: step.description,
+                    side: "bottom",
+                    align: "center",
+                  },
+                });
+              }
             }, POLL_INTERVAL_MS);
           });
 
