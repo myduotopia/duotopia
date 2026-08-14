@@ -9,6 +9,7 @@ regression guard.
 """
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -155,12 +156,40 @@ class TestGetDemoAccessStatus:
         )
         assert get_demo_access_status(assignment) == DEMO_ACCESS_ACTIVE
 
-    def test_due_boundary_is_inclusive(self):
+    def test_just_before_due_is_active(self):
         """A visitor arriving a hair before the deadline is still let in."""
         due = datetime.now(timezone.utc) + timedelta(milliseconds=500)
         assert (
             get_demo_access_status(_FakeAssignment(due_date=due)) == DEMO_ACCESS_ACTIVE
         )
+
+    def test_due_boundary_is_inclusive(self):
+        """`now == due_date` is still active — the comparison is `>`, not `>=`.
+
+        Freezing the clock is the only way to hit the equality case; a test that
+        merely puts `due` slightly in the future exercises the ordinary
+        within-window path instead (that is `test_just_before_due_is_active`).
+        """
+        frozen = datetime(2026, 8, 12, 12, 0, 0, tzinfo=timezone.utc)
+
+        class _FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return frozen if tz else frozen.replace(tzinfo=None)
+
+        with patch("services.demo_access.datetime", _FrozenDatetime):
+            assert (
+                get_demo_access_status(_FakeAssignment(due_date=frozen))
+                == DEMO_ACCESS_ACTIVE
+            )
+            # One microsecond past the deadline flips it, proving the boundary
+            # above is the inclusive edge rather than a gap in the comparison.
+            assert (
+                get_demo_access_status(
+                    _FakeAssignment(due_date=frozen - timedelta(microseconds=1))
+                )
+                == DEMO_ACCESS_EXPIRED
+            )
 
     def test_naive_datetimes_do_not_raise(self):
         """SQLite hands back naive datetimes; they must be treated as UTC."""
