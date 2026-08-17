@@ -54,6 +54,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "driver.js": "^1.8.0",
     "file-saver": "^2.0.5",
     "html2canvas": "^1.4.1",
     "i18next": "^25.6.0",

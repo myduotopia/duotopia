@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { blogAdminApi } from "@/services/blogService";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
+import BlogImageGallery from "@/components/blog/BlogImageGallery";
+import type { GalleryItem } from "@/components/blog/BlogImageGallery";
 import type {
   BlogPostInput,
   BlogCategory,
@@ -49,6 +51,11 @@ export default function AdminBlogEditorPage() {
     locale: "zh-TW",
     category_ids: [],
   });
+  // 圖庫獨立於 form：已存 DB 的項目帶 id（刪除時要用），送出時才轉成 payload
+  const [images, setImages] = useState<GalleryItem[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [hasUnsavedImages, setHasUnsavedImages] = useState(false);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(false);
@@ -86,11 +93,30 @@ export default function AdminBlogEditorPage() {
           og_image_url: p.og_image_url ?? "",
           category_ids: (p.categories ?? []).map((c) => c.id),
         });
+        setImages(
+          (p.images ?? []).map((img) => ({
+            id: img.id,
+            image_url: img.image_url,
+            alt_text: img.alt_text ?? undefined,
+          })),
+        );
+        setHasUnsavedImages(false);
         setSlugManuallyEdited(true);
       })
       .catch(() => toast.error(t("common.error")))
       .finally(() => setLoading(false));
   }, [id, token, t]);
+
+  // 有上傳但未儲存的圖片時，離開前提醒（圖已在雲端，但關聯還沒存進文章）
+  useEffect(() => {
+    if (!hasUnsavedImages) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedImages]);
 
   const updateField = useCallback(
     <K extends keyof BlogPostInput>(key: K, value: BlogPostInput[K]) => {
@@ -123,9 +149,17 @@ export default function AdminBlogEditorPage() {
       return;
     }
     setSaving(true);
+    // 圖庫整包送出，order_index 由陣列順序決定
+    const payload = {
+      ...form,
+      images: images.map((i) => ({
+        image_url: i.image_url,
+        alt_text: i.alt_text,
+      })),
+    };
     try {
       if (isEdit && id) {
-        await blogAdminApi.updatePost(Number(id), form, token);
+        await blogAdminApi.updatePost(Number(id), payload, token);
         if (publish !== undefined) {
           if (publish && !post?.is_published) {
             await blogAdminApi.publishPost(Number(id), token);
@@ -136,12 +170,21 @@ export default function AdminBlogEditorPage() {
         // Refresh post state to reflect publish toggle
         const updated = await blogAdminApi.getPost(Number(id), token);
         setPost(updated.data);
+        setImages(
+          (updated.data.images ?? []).map((img) => ({
+            id: img.id,
+            image_url: img.image_url,
+            alt_text: img.alt_text ?? undefined,
+          })),
+        );
+        setHasUnsavedImages(false);
         toast.success(t("common.success"));
       } else {
-        const res = await blogAdminApi.createPost(form, token);
+        const res = await blogAdminApi.createPost(payload, token);
         if (publish) {
           await blogAdminApi.publishPost(res.data.id, token);
         }
+        setHasUnsavedImages(false);
         toast.success(t("common.success"));
         navigate(`/admin/blog/${res.data.id}/edit`, { replace: true });
       }
@@ -152,39 +195,113 @@ export default function AdminBlogEditorPage() {
     }
   };
 
-  const handleImageUpload = async (file: File) => {
+  const handleImageUpload = async (file: File, name?: string) => {
     try {
       const res = await blogAdminApi.uploadImage(file, token);
       return res.data.url;
     } catch {
-      toast.error(t("common.error"));
+      toast.error(
+        name ? t("blog.admin.uploadFailed", { name }) : t("common.error"),
+      );
       return null;
     }
   };
 
+  /** 把 markdown 插到 textarea 游標處（拖放與圖庫的「插入內文」共用） */
+  const insertAtCursor = useCallback((markdown: string) => {
+    const ta = textareaRef.current;
+    setForm((prev) => {
+      const content = prev.content ?? "";
+      const start = ta ? ta.selectionStart : content.length;
+      const end = ta ? ta.selectionEnd : content.length;
+      return {
+        ...prev,
+        content:
+          content.substring(0, start) + markdown + content.substring(end),
+      };
+    });
+    if (ta) {
+      const caret = ta.selectionStart + markdown.length;
+      setTimeout(() => {
+        ta.focus();
+        ta.setSelectionRange(caret, caret);
+      }, 0);
+    }
+  }, []);
+
+  /** 把上傳好的圖加進圖庫（已存在的網址不重複加） */
+  const appendToGallery = useCallback((item: GalleryItem) => {
+    setImages((prev) =>
+      prev.some((i) => i.image_url === item.image_url) ? prev : [...prev, item],
+    );
+    setHasUnsavedImages(true);
+  }, []);
+
+  /** 逐檔序列上傳，避免多張大圖同時打爆連線；失敗的個別提示 */
+  const uploadFiles = async (files: File[]) => {
+    const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+    if (!imageFiles.length) return [];
+
+    setUploading(true);
+    const uploaded: GalleryItem[] = [];
+    try {
+      for (const file of imageFiles) {
+        const url = await handleImageUpload(file, file.name);
+        if (!url) continue;
+        const item = { image_url: url, alt_text: file.name };
+        appendToGallery(item);
+        uploaded.push(item);
+      }
+    } finally {
+      setUploading(false);
+    }
+    return uploaded;
+  };
+
+  const handleGalleryUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ""; // 允許重選同一個檔案
+    await uploadFiles(files);
+  };
+
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    const url = await handleImageUpload(file);
-    if (url) updateField("cover_image_url", url);
+    const url = await handleImageUpload(file, file.name);
+    if (url) {
+      updateField("cover_image_url", url);
+      appendToGallery({ image_url: url, alt_text: file.name });
+    }
   };
 
   const handleTextareaDrop = async (
     e: React.DragEvent<HTMLTextAreaElement>,
   ) => {
     e.preventDefault();
-    const files = e.dataTransfer.files;
-    if (!files.length) return;
-    const file = files[0];
-    if (!file.type.startsWith("image/")) return;
-    const url = await handleImageUpload(file);
-    if (url && textareaRef.current) {
-      const ta = textareaRef.current;
-      const start = ta.selectionStart;
-      const before = (form.content ?? "").substring(0, start);
-      const after = (form.content ?? "").substring(ta.selectionEnd);
-      const markdown = `![${file.name}](${url})`;
-      updateField("content", before + markdown + after);
+    const uploaded = await uploadFiles(Array.from(e.dataTransfer.files));
+    for (const item of uploaded) {
+      insertAtCursor(`![${item.alt_text ?? ""}](${item.image_url})`);
+    }
+  };
+
+  const handleDeleteGalleryImage = async (item: GalleryItem, index: number) => {
+    if (!window.confirm(t("blog.admin.confirmDeleteImage"))) return;
+
+    // 已存進 DB 的才需要打後端（後端會判斷是否連雲端檔一起刪）
+    if (item.id && isEdit && id) {
+      try {
+        await blogAdminApi.deletePostImage(Number(id), item.id, token);
+      } catch {
+        toast.error(t("common.error"));
+        return;
+      }
+    }
+    setImages((prev) => prev.filter((_, i) => i !== index));
+    if (form.cover_image_url === item.image_url) {
+      updateField("cover_image_url", "");
     }
   };
 
@@ -449,6 +566,33 @@ export default function AdminBlogEditorPage() {
                 </ReactMarkdown>
               </article>
             </div>
+          </div>
+
+          {/* Gallery */}
+          <div className={mobileTab !== "edit" ? "hidden md:block" : ""}>
+            <BlogImageGallery
+              images={images}
+              coverImageUrl={form.cover_image_url ?? ""}
+              uploading={uploading}
+              onReorder={(next) => {
+                setImages(next);
+                setHasUnsavedImages(true);
+              }}
+              onInsert={(item) =>
+                insertAtCursor(`![${item.alt_text ?? ""}](${item.image_url})`)
+              }
+              onSetCover={(url) => updateField("cover_image_url", url)}
+              onDelete={handleDeleteGalleryImage}
+              onUploadClick={() => galleryInputRef.current?.click()}
+            />
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleGalleryUpload}
+            />
           </div>
         </div>
 

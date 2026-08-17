@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from database import get_db
 from models import Teacher
 from routers.teachers import get_current_teacher
-from services.blog_service import BlogService
+from services.blog_service import BlogService, MAX_POST_IMAGES
 from services.image_upload import get_image_upload_service
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,28 @@ class AuthorResponse(BaseModel):
         from_attributes = True
 
 
+class BlogImageInput(BaseModel):
+    """圖庫的單張圖（排序由陣列順序決定，不由前端指定 order_index）"""
+
+    image_url: str
+    alt_text: Optional[str] = None
+
+
+class BlogImageResponse(BaseModel):
+    id: int
+    image_url: str
+    alt_text: Optional[str] = None
+    order_index: int
+
+    class Config:
+        from_attributes = True
+
+
+class DeleteImageResponse(BaseModel):
+    deleted: bool
+    storage_deleted: bool
+
+
 class BlogPostResponse(BaseModel):
     id: int
     title: str
@@ -76,6 +98,7 @@ class BlogPostResponse(BaseModel):
     linked_post_slug: Optional[str] = None
     author: Optional[AuthorResponse] = None
     categories: List[CategoryResponse] = []
+    images: List[BlogImageResponse] = []
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -104,6 +127,7 @@ class CreatePostRequest(BaseModel):
     locale: Literal["zh-TW", "en"] = "zh-TW"
     linked_post_id: Optional[int] = None
     category_ids: List[int] = []
+    images: Optional[List[BlogImageInput]] = None
 
 
 class TranslatePostRequest(BaseModel):
@@ -125,6 +149,7 @@ class UpdatePostRequest(BaseModel):
     meta_description: Optional[str] = None
     og_image_url: Optional[str] = None
     category_ids: Optional[List[int]] = None
+    images: Optional[List[BlogImageInput]] = None
 
 
 class CreateCategoryRequest(BaseModel):
@@ -170,9 +195,56 @@ def _serialize_post(post) -> dict:
             {"id": c.id, "name": c.name, "slug": c.slug}
             for c in (post.categories or [])
         ],
+        "images": [
+            {
+                "id": i.id,
+                "image_url": i.image_url,
+                "alt_text": i.alt_text,
+                "order_index": i.order_index,
+            }
+            for i in (post.images or [])
+        ],
         "created_at": (post.created_at.isoformat() if post.created_at else None),
         "updated_at": (post.updated_at.isoformat() if post.updated_at else None),
     }
+
+
+def _validate_gallery_images(images: Optional[List[BlogImageInput]]) -> Optional[list]:
+    """驗證圖庫並轉成 service 用的 dict list。
+
+    只接受本站自己上傳的圖（GCS bucket 或本地 static），擋掉管理者誤貼的外部
+    hotlink —— 外部網址隨時可能失效，且會讓「刪除時檢查是否被引用」的判斷失去意義。
+    """
+    if images is None:
+        return None
+
+    if len(images) > MAX_POST_IMAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many images (max {MAX_POST_IMAGES})",
+        )
+
+    service = get_image_upload_service()
+    allowed_prefixes = (
+        f"https://storage.googleapis.com/{service.bucket_name}/",
+        "/static/images/",
+    )
+    backend_url = getattr(service, "backend_url", None)
+    if backend_url:
+        allowed_prefixes += (f"{backend_url.rstrip('/')}/static/images/",)
+
+    result = []
+    for img in images:
+        url = (img.image_url or "").strip()
+        if not url.startswith(allowed_prefixes):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid image URL: only images uploaded to this site are allowed",
+            )
+        if len(url) > 500:
+            raise HTTPException(status_code=400, detail="Image URL too long")
+        result.append({"image_url": url, "alt_text": img.alt_text})
+    return result
 
 
 # ============ Post Endpoints ============
@@ -221,7 +293,9 @@ def create_post(
                 status_code=400,
                 detail=f"Invalid category IDs: {sorted(invalid)}",
             )
-    post = BlogService.create_post(db, request.model_dump(), admin.id)
+    data = request.model_dump()
+    data["images"] = _validate_gallery_images(request.images)
+    post = BlogService.create_post(db, data, admin.id)
     return _serialize_post(post)
 
 
@@ -370,6 +444,9 @@ def update_post(
 ):
     """Update a blog post."""
     data = request.model_dump(exclude_none=True)
+    # images 送 [] 代表清空圖庫、不送則不動（exclude_none 已濾掉未送的情況）
+    if request.images is not None:
+        data["images"] = _validate_gallery_images(request.images)
     post = BlogService.update_post(db, post_id, data)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
@@ -386,6 +463,24 @@ def delete_post(
     if not BlogService.delete_post(db, post_id):
         raise HTTPException(status_code=404, detail="Post not found")
     return {"message": "Post deleted"}
+
+
+@router.delete("/{post_id}/images/{image_id}", response_model=DeleteImageResponse)
+def delete_post_image(
+    post_id: int,
+    image_id: int,
+    db: Session = Depends(get_db),
+    _admin: Teacher = Depends(get_current_admin),
+):
+    """從圖庫移除單張圖；確認沒被任何文章引用時，連雲端檔一起刪。
+
+    已插進內文（或仍是封面 / OG 圖）的圖只移除圖庫關聯，實體檔保留，
+    避免已發布文章變破圖。
+    """
+    result = BlogService.delete_post_image(db, post_id, image_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+    return result
 
 
 @router.post("/{post_id}/publish", response_model=BlogPostResponse)

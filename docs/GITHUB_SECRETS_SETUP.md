@@ -56,6 +56,26 @@ SMTP_USER=[Gmail 帳號]
 SMTP_PASSWORD=[Gmail App Password]
 ```
 
+### Google OAuth 老師登入 (#740，所有環境共用一組 client)
+```bash
+GOOGLE_OAUTH_CLIENT_ID=[GCP Console → API 與服務 → 憑證 → OAuth 2.0 用戶端 ID]
+GOOGLE_OAUTH_CLIENT_SECRET=[同一頁的 client secret]
+```
+
+Google Console 需註冊的「已授權的重新導向 URI」只有兩筆（不需要 JavaScript 來源）：
+
+| 環境 | Redirect URI |
+|------|--------------|
+| develop / staging / per-issue | `https://duotopia-staging-backend-b2ovkkgl6a-de.a.run.app/api/auth/google/relay` |
+| production | `https://duotopia.co/auth/google/callback` |
+
+Google 的 redirect URI 不支援萬用字元，per-issue 預覽環境網址每次都不同，因此
+非 production 環境一律先導到 staging 後端的 relay 端點，再由 relay 依簽章 state
+內的 origin 轉回該環境前端。workflow 內對應常數為 `GOOGLE_OAUTH_RELAY_URI`。
+
+OAuth 同意畫面只使用 `openid` / `email` / `profile` 這三個非敏感 scope，
+不需要 Google 審核，也沒有測試人數上限。
+
 ---
 
 ## 🔧 設定方式

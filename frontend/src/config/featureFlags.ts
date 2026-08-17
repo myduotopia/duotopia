@@ -7,6 +7,8 @@ export const FEATURE_FLAGS = {
   ASSIGNMENTS: true,
   /** 1Campus SSO 登入按鈕 */
   ONE_CAMPUS_LOGIN: true,
+  /** 老師端 Google 登入按鈕（#740） */
+  GOOGLE_LOGIN: true,
 } as const;
 
 /**

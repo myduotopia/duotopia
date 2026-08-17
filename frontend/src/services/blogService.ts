@@ -19,6 +19,7 @@ export interface BlogPost {
   linked_post_slug: string | null;
   author: { id: number; name: string } | null;
   categories: BlogCategory[];
+  images: BlogPostImage[];
   created_at: string;
   updated_at: string | null;
 }
@@ -27,6 +28,20 @@ export interface BlogCategory {
   id: number;
   name: string;
   slug: string;
+}
+
+/** 圖庫中的一張圖（已存進 DB） */
+export interface BlogPostImage {
+  id: number;
+  image_url: string;
+  alt_text: string | null;
+  order_index: number;
+}
+
+/** 送出時的圖庫項目；order_index 由陣列順序決定，不需帶 */
+export interface BlogPostImageInput {
+  image_url: string;
+  alt_text?: string;
 }
 
 export interface BlogPostInput {
@@ -41,6 +56,7 @@ export interface BlogPostInput {
   locale?: string;
   linked_post_id?: number;
   category_ids?: number[];
+  images?: BlogPostImageInput[];
 }
 
 export interface TranslatePostInput {
@@ -101,6 +117,12 @@ export const blogAdminApi = {
     axios.delete(`${API_BASE}/blog/${id}`, {
       headers: { Authorization: `Bearer ${token}` },
     }),
+  /** 從圖庫移除單張圖；後端確認沒被任何文章引用時才會連雲端檔一起刪 */
+  deletePostImage: (postId: number, imageId: number, token: string) =>
+    axios.delete<{ deleted: boolean; storage_deleted: boolean }>(
+      `${API_BASE}/blog/${postId}/images/${imageId}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    ),
   publishPost: (id: number, token: string) =>
     axios.post(`${API_BASE}/blog/${id}/publish`, null, {
       headers: { Authorization: `Bearer ${token}` },

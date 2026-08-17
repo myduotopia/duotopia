@@ -30,6 +30,7 @@ import StudentLogin from "./pages/StudentLogin";
 import StudentForgotPassword from "./pages/StudentForgotPassword";
 import StudentResetPassword from "./pages/StudentResetPassword";
 import OneCampusCallback from "./pages/OneCampusCallback";
+import GoogleCallback from "./pages/GoogleCallback";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentAssignmentList from "./pages/student/StudentAssignmentList";
 import StudentAssignmentDetail from "./pages/student/StudentAssignmentDetail";
@@ -304,6 +305,9 @@ function App() {
 
         {/* 1Campus SSO Callback */}
         <Route path="/auth/1campus/callback" element={<OneCampusCallback />} />
+
+        {/* Google OAuth Callback（#740） */}
+        <Route path="/auth/google/callback" element={<GoogleCallback />} />
 
         {/* Student Routes */}
         <Route path="/student/login" element={<StudentLogin />} />

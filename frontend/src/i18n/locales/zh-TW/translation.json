@@ -236,6 +236,22 @@
     "configError": "無法載入 Demo 設定",
     "notAvailable": "此 Demo 目前無法使用",
     "invalidConfig": "Demo 設定錯誤",
+    "access": {
+      "notStarted": {
+        "title": "體驗還沒開放",
+        "availableFrom": "{{datetime}} 開放",
+        "invitation": "先註冊，開放後就能把教材帶走。",
+        "invitationNoCopy": "先註冊，開放後回來就能直接玩。"
+      },
+      "expired": {
+        "title": "想繼續玩嗎？",
+        "invitation": "這份體驗已結束，但註冊就能把教材帶走。",
+        "invitationNoCopy": "這份體驗已結束，註冊就能免費玩其他教材。"
+      },
+      "materialName": "{{name}}",
+      "registerCta": "免費註冊",
+      "loginCta": "已有帳號，登入"
+    },
     "limitReached": {
       "title": "今日免費試用次數已達上限",
       "description": "您今日已使用完 {{limit}} 次免費語音練習機會。",
@@ -1434,6 +1450,11 @@
     "oneCampus": {
       "separator": "或",
       "button": "學校帳號登入 (1Campus)"
+    },
+    "google": {
+      "button": "使用 Google 登入",
+      "loading": "正在前往 Google...",
+      "error": "無法連線 Google，請稍後再試。"
     }
   },
   "studentLoginQR": {
@@ -5299,7 +5320,10 @@
     "toast": {
       "copySuccess": "已複製「{{name}}」到我的教材",
       "copySuccessOrg": "已複製「{{name}}」到組織教材",
-      "copyFailed": "複製失敗，請稍後再試"
+      "copyFailed": "複製失敗，請稍後再試",
+      "autoCopySuccess": "已把「{{name}}」複製到我的教材，可以開始練習了！",
+      "autoCopySuccessOrg": "已把「{{name}}」複製到機構教材，可以開始練習了！",
+      "autoCopyFailed": "自動複製教材失敗，請到「資源教材包」手動複製"
     }
   },
   "contentCopy": {
@@ -5478,6 +5502,18 @@
       "preview": "預覽",
       "edit": "編輯",
       "uploadImage": "上傳圖片",
+      "gallery": "圖庫",
+      "uploadImages": "上傳圖片（可多選）",
+      "galleryEmpty": "尚未上傳圖片，可拖曳圖片到內容區，或點右上角上傳",
+      "insertIntoContent": "插入內文",
+      "setAsCover": "設為封面",
+      "currentCover": "封面",
+      "removeCover": "取消封面",
+      "deleteImage": "刪除圖片",
+      "confirmDeleteImage": "確定要從圖庫移除這張圖片嗎？已插入內文或設為封面的圖片不會被刪除檔案。",
+      "reorderHint": "可拖曳縮圖調整順序",
+      "uploading": "上傳中…",
+      "uploadFailed": "{{name}} 上傳失敗",
       "back": "返回",
       "locale": "語言版本",
       "localeZhTW": "🇹🇼 中文",
@@ -5622,5 +5658,32 @@
     "collected": "已收卷，全班成績已結算",
     "collectFailed": "收卷失敗，請重試",
     "startFailed": "開始考試失敗，請重試"
+  },
+  "google": {
+    "signingIn": "正在使用 Google 登入...",
+    "backToLogin": "返回老師登入頁",
+    "backToHome": "回到首頁",
+    "errors": {
+      "title": "登入失敗",
+      "missingParams": "缺少必要參數，請重新登入。",
+      "denied": "已取消 Google 登入，請重新嘗試。",
+      "generic": "Google 登入失敗，請重試。"
+    }
+  },
+  "guide": {
+    "material": {
+      "program": {
+        "title": "這是你的新教材",
+        "description": "教材已經複製到你的教材庫了。點一下這張卡片打開它。"
+      },
+      "lesson": {
+        "title": "打開第一個單元",
+        "description": "教材裡的內容依單元分組。點一下第一個單元看看裡面有什麼。"
+      },
+      "instantPractice": {
+        "title": "按這裡開始練習",
+        "description": "點這顆橘色按鈕就能立刻練習這份內容，不用先派發給學生。"
+      }
+    }
   }
 }

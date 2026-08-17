@@ -56,6 +56,12 @@ from services.preview_service import (
     RearrangementAnswerRequest,
     RearrangementCompleteRequest,
 )
+from services.demo_access import (
+    DEMO_ACCESS_ACTIVE,
+    DEMO_ACCESS_NOT_STARTED,
+    get_demo_access_status,
+    resolve_demo_resource_program,
+)
 from utils.practice_mode import validate_practice_mode
 from utils.score_category import resolve_score_category
 
@@ -72,19 +78,26 @@ DEMO_TEACHER_EMAIL = os.getenv("DEMO_TEACHER_EMAIL", "contact@duotopia.co")
 # ============================================================================
 
 
-def get_demo_assignment(assignment_id: int, db: Session) -> Assignment:
+def get_demo_assignment(
+    assignment_id: int, db: Session, enforce_window: bool = True
+) -> Assignment:
     """
     Validate that assignment belongs to demo teacher account.
 
     Args:
         assignment_id: Assignment ID to validate
         db: Database session
+        enforce_window: Reject the request when the assignment's schedule
+            (start_date / due_date) says the demo is not open yet or has expired
+            (#989). Only the preview endpoint opts out, so it can render the
+            guidance screen instead of an error.
 
     Returns:
         Assignment object if valid
 
     Raises:
-        HTTPException: 404 if assignment not found or doesn't belong to demo account
+        HTTPException: 404 if assignment not found or doesn't belong to demo
+            account; 403 if the demo is outside its access window
     """
     assignment = (
         db.query(Assignment)
@@ -104,7 +117,33 @@ def get_demo_assignment(assignment_id: int, db: Session) -> Assignment:
             detail="Demo assignment not found",
         )
 
+    if enforce_window:
+        access_status = get_demo_access_status(assignment)
+        if access_status != DEMO_ACCESS_ACTIVE:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_access_denied_detail(assignment, access_status),
+            )
+
     return assignment
+
+
+def _access_denied_detail(assignment: Assignment, access_status: str) -> dict:
+    """Structured 403 body so the frontend can tell 'not open yet' from 'over'."""
+    return {
+        "error": (
+            "demo_not_started"
+            if access_status == DEMO_ACCESS_NOT_STARTED
+            else "demo_expired"
+        ),
+        "access_status": access_status,
+        "start_date": _isoformat(assignment.start_date),
+        "due_date": _isoformat(assignment.due_date),
+    }
+
+
+def _isoformat(value) -> Optional[str]:
+    return value.isoformat() if value else None
 
 
 # ============================================================================
@@ -410,9 +449,40 @@ async def get_demo_preview(
 
     Optional settings overrides (#923) let the advanced-settings panel preview
     the same material in a different mode/config without persisting.
+
+    Unlike every other demo endpoint this one answers 200 outside the access
+    window (#989), carrying `access_status` so the page can render the
+    "not open yet" / "expired" guidance screen. Activities are withheld in that
+    case so the material never leaks past its schedule.
     """
-    assignment = _apply_overrides(get_demo_assignment(assignment_id, db), ov)
-    return build_assignment_preview(assignment, db)
+    real_assignment = get_demo_assignment(assignment_id, db, enforce_window=False)
+
+    # The schedule is read from the real row: the #923 overlay only carries
+    # practice settings, never dates, so it cannot widen the window.
+    access_status = get_demo_access_status(real_assignment)
+    window = {
+        "access_status": access_status,
+        "start_date": _isoformat(real_assignment.start_date),
+        "due_date": _isoformat(real_assignment.due_date),
+    }
+
+    if access_status != DEMO_ACCESS_ACTIVE:
+        program = resolve_demo_resource_program(real_assignment, db)
+        return {
+            "assignment_id": real_assignment.id,
+            "title": real_assignment.title,
+            **window,
+            "resource_program_id": program.id if program else None,
+            "resource_program_name": program.name if program else None,
+            "total_activities": 0,
+            "activities": [],
+        }
+
+    assignment = _apply_overrides(real_assignment, ov)
+    preview = build_assignment_preview(assignment, db)
+    if isinstance(preview, dict):
+        preview.update(window)
+    return preview
 
 
 @router.post("/assignments/preview/assess-speech")

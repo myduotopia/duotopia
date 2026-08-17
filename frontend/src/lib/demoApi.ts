@@ -25,6 +25,28 @@ interface DemoConfig {
   demo_word_selection_writing_assignment_id?: string;
 }
 
+/**
+ * #989: the demo page honours the schedule its teacher set when dispatching.
+ * `access_status` says whether the visitor may play right now; outside the
+ * window the backend withholds `activities` and instead hands back the resource
+ * pack behind the assignment, so the guidance screen can offer to copy it once
+ * the visitor registers.
+ */
+export type DemoAccessStatus = "active" | "not_started" | "expired";
+
+export interface DemoPreviewResponse {
+  assignment_id: number;
+  title: string;
+  access_status?: DemoAccessStatus;
+  start_date?: string | null;
+  due_date?: string | null;
+  resource_program_id?: number | null;
+  resource_program_name?: string | null;
+  total_activities: number;
+  activities: unknown[];
+  [key: string]: unknown;
+}
+
 interface AssessmentRequest {
   assignment_id: number;
   sentence_id: number;
@@ -82,7 +104,7 @@ class DemoApiClient {
   async getPreview(
     assignmentId: number,
     overrides?: DemoOverrides,
-  ): Promise<unknown> {
+  ): Promise<DemoPreviewResponse> {
     const qs = overrides ? toQueryString(overrides) : "";
     const url =
       `${this.baseUrl}/api/demo/assignments/${assignmentId}/preview` +

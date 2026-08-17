@@ -39,6 +39,9 @@ env:
   PROJECT_ID: duotopia-472708
   REGION: asia-east1
   REPOSITORY: duotopia-repo
+  # Google OAuth relay (#740): the single redirect URI registered in Google
+  # Console for every non-production environment. Must match exactly.
+  GOOGLE_OAUTH_RELAY_URI: https://duotopia-staging-backend-b2ovkkgl6a-de.a.run.app/api/auth/google/relay
 
 jobs:
   test-backend:
@@ -302,7 +305,7 @@ jobs:
               'demo_config',
               'identities',
               'oauth_identities',
-              'blog_posts', 'blog_categories', 'blog_post_categories',
+              'blog_posts', 'blog_categories', 'blog_post_categories', 'blog_post_images',
               'assignment_analysis_reports',
               -- Promo code 推薦獎勵系統
               'promo_codes', 'promo_referrals', 'promo_reward_configs', 'promo_reward_events',
@@ -310,6 +313,8 @@ jobs:
               'student_status_history',
               -- 團購脫離機構（#862，JWT auth 業務表）
               'group_buy_teams', 'group_buy_members',
+              -- Meta 社群發文記錄（#591，JWT auth 業務表）
+              'social_posts',
               -- n8n 系統表（外部服務，不適用 RLS）
               'annotation_tag_entity', 'auth_identity', 'auth_provider_sync_history', 'binary_data',
               'chat_hub_agents', 'chat_hub_messages', 'chat_hub_sessions', 'credentials_entity',
@@ -436,6 +441,20 @@ jobs:
         # (or split into different clients in the future) without code changes.
         ENV_VARS="$ENV_VARS,ONE_CAMPUS_CLIENT_ID=${{ secrets.ONE_CAMPUS_CLIENT_ID }}"
         ENV_VARS="$ENV_VARS,ONE_CAMPUS_CLIENT_SECRET=${{ secrets.ONE_CAMPUS_CLIENT_SECRET }}"
+
+        # Google OAuth teacher login (#740).
+        # Google's Authorized redirect URIs don't support wildcards, so every
+        # non-production environment (develop / staging / per-issue previews)
+        # shares ONE registered URI — the staging backend relay endpoint, which
+        # forwards back to whichever frontend origin the signed state carries.
+        # Production registers its own URI and never depends on staging.
+        ENV_VARS="$ENV_VARS,GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}"
+        ENV_VARS="$ENV_VARS,GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}"
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          ENV_VARS="$ENV_VARS,GOOGLE_REDIRECT_URI=${{ steps.db_env.outputs.FRONTEND_URL }}/auth/google/callback"
+        else
+          ENV_VARS="$ENV_VARS,GOOGLE_REDIRECT_URI=${GOOGLE_OAUTH_RELAY_URI}"
+        fi
 
         # Environment-specific configuration
         if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
