@@ -160,7 +160,14 @@ export interface ScenarioDialogueRow {
   referenceAnswer: string;
   /** 本題額外說明（選填）。與全份共用的作答指引一起給 AI 與學生看 */
   rubricNote: string;
-  /** 情境圖片的生成 prompt（老師可改） */
+  /**
+   * 情境圖片的生成 prompt。
+   *
+   * @deprecated 候選 —— UI 已經不顯示也不讓老師編輯（圖片改成「勾選自動生成」
+   * 或手動上傳二擇一）。欄位暫時保留是因為串接後端後，AI 產題預期會連 prompt
+   * 一起回傳給圖片生成用；等後端定案，若確認前端不需要持有它就整個移除，
+   * 連同 `isBlankRow` 裡的判斷一起清掉。
+   */
   imagePrompt: string;
   /** 已生成的情境圖片；null = 尚未生成 */
   imageUrl: string | null;
