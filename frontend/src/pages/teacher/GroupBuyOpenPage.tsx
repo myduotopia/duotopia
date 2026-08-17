@@ -728,7 +728,6 @@ export default function GroupBuyOpenPage() {
                     觸發的隱式送出（否則會整頁重新載入、名冊全失）。 */}
                 <form
                   className="flex-1 min-w-[200px]"
-                  autoComplete="off"
                   onSubmit={(e) => e.preventDefault()}
                 >
                   <Input
