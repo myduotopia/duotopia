@@ -4788,25 +4788,24 @@
       "upload": "Upload Image / PDF"
     },
     "labels": {
-      "title": "Scenario Dialogue Name",
+      "title": "Title",
       "goal": "Learning Goal",
       "level": "Level",
       "materialDesc": "Material Description",
       "uploadTitle": "Click or drop files here",
       "rubric": "Scoring Criteria (AI feedback basis)",
-      "noImage": "No image",
       "notSpecified": "Not specified",
       "rubricNote": "Extra note for this question",
       "referenceAnswer": "Reference Answer",
       "advanced": "Reference Answer & Notes",
-      "sharedSettings": "Shared Settings (all questions)",
       "context": "Scenario Context",
       "globalTense": "Default Scoring Criteria",
       "inherited": "Inherited",
       "overridden": "Customized",
       "globalRubric": "Answering Guidelines (visible to students)",
-      "generationSource": "How to generate",
-      "generateCount": "Questions per run"
+      "generateCount": "Questions per run",
+      "reference": "Settings reference",
+      "autoContextImage": "Generate scenario image with AI"
     },
     "rubricPresets": {
       "tenseTime": "Time",
@@ -4819,7 +4818,6 @@
       "goal": "e.g. Students can describe last weekend's activities in past tense, naming a place and a companion.",
       "materialDesc": "e.g. Unit 5 My Weekend — activities, places, transportation",
       "question": "Enter a speaking question",
-      "imagePrompt": "Scenario image prompt (optional)",
       "keywords": "Comma separated, e.g. went, visited",
       "referenceAnswer": "Write an ideal answer, e.g. I went to the park with my family last Saturday.",
       "rubricNote": "Extra guidance for this question, e.g. state the time first, then what you did.",
@@ -4827,18 +4825,18 @@
       "context": "Describe the scenario in a few sentences, e.g. You are at a café with your friend. You want to order lunch."
     },
     "buttons": {
-      "generate": "Generate Questions",
       "generating": "Generating…",
       "generateFromFiles": "Generate from Files",
       "addQuestion": "Add Question",
-      "generateImage": "Generate image · 2 credits",
-      "regenerateImage": "Regenerate · 2 credits",
-      "generatingImage": "Generating…",
       "skipGeneration": "Skip — I'll write my own",
       "generateAndContinue": "Generate and continue",
-      "generateMore": "Generate more",
       "editSettings": "Edit settings",
-      "backToSettings": "Back to settings"
+      "backToSettings": "Back to settings",
+      "viewQuestions": "View questions",
+      "generateAnother": "Generate more questions",
+      "uploadImage": "Upload image",
+      "replaceImage": "Replace",
+      "removeImage": "Remove"
     },
     "hints": {
       "rateLimit": "Up to 5 regenerations per minute",
@@ -4848,14 +4846,13 @@
       "referenceAnswer": "Used by the AI to compare language features (tense, structure, vocabulary). Never shown to students; also the basis for suggested answers.",
       "visibleToStudents": "This text is sent to the AI grader and is also shown to students",
       "contextOptional": "Optional — leave blank to hide it from students",
-      "hasContext": "Context set",
       "globalTense": "Applied to all questions by default. Customizing a question detaches it, so later changes here won't affect it.",
-      "notSaved": "Not saved",
-      "willBeSaved": "Saved",
-      "generationSourceNote": "Only guides how AI writes the questions — not stored with this material",
-      "sharedSettingsNote": "Shared by every question; students and AI grading both use this",
       "step1Foot": "Generate once you're set, or skip ahead and write your own",
-      "untitled": "Untitled"
+      "untitled": "Untitled",
+      "referenceNote": "Check the questions against the scenario and instructions",
+      "noContextYet": "No scenario description yet",
+      "noRubricYet": "No instructions yet",
+      "autoContextImage": "Generates the scenario image when you generate questions; uses credits. You can also upload your own"
     },
     "tooltips": {
       "regenerateQuestion": "Regenerate this question (avoids previous ones)",

@@ -46,10 +46,17 @@ const K = {
   stepQuestions: "scenarioDialogue.steps.questions",
   skip: "scenarioDialogue.buttons.skipGeneration",
   generate: "scenarioDialogue.buttons.generateAndContinue",
+  generateAnother: "scenarioDialogue.buttons.generateAnother",
+  viewQuestions: "scenarioDialogue.buttons.viewQuestions",
   back: "scenarioDialogue.buttons.backToSettings",
   addQuestion: "scenarioDialogue.buttons.addQuestion",
+  editSettings: "scenarioDialogue.buttons.editSettings",
   titlePlaceholder: "scenarioDialogue.placeholders.title",
   questionPlaceholder: "scenarioDialogue.placeholders.question",
+  contextPlaceholder: "scenarioDialogue.placeholders.context",
+  rubricPlaceholder: "scenarioDialogue.placeholders.globalRubric",
+  noContextYet: "scenarioDialogue.hints.noContextYet",
+  noRubricYet: "scenarioDialogue.hints.noRubricYet",
   enterTitle: "contentEditor.messages.enterTitle",
   atLeastN: "contentEditor.messages.addAtLeastNItems",
 };
@@ -120,6 +127,88 @@ describe("ScenarioDialoguePanel 兩步驟流程", () => {
     expect(onQuestionList()).toBe(false);
   });
 
+  it("已有題目時，Step 1 底部改成「查看題目清單」而不是「跳過」", async () => {
+    vi.useFakeTimers();
+    try {
+      renderPanel();
+
+      // 還沒題目：出口是「跳過，我想自己出題」
+      expect(screen.queryByText(K.skip)).not.toBeNull();
+      expect(screen.queryByText(K.viewQuestions)).toBeNull();
+
+      fireEvent.click(screen.getByText(K.generate));
+      await act(async () => {
+        vi.advanceTimersByTime(700);
+      });
+      fireEvent.click(screen.getByText(K.stepSettings));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // 回到設定頁，出口換成「查看題目清單」，老師才找得到回清單的路
+    expect(screen.queryByText(K.skip)).toBeNull();
+    expect(screen.queryByText(K.viewQuestions)).not.toBeNull();
+    expect(screen.queryByText(K.generateAnother)).not.toBeNull();
+  });
+
+  it("「查看題目清單」進 Step 2 且不會動到既有題目", async () => {
+    vi.useFakeTimers();
+    let before = 0;
+    try {
+      renderPanel();
+      fireEvent.click(screen.getByText(K.generate));
+      await act(async () => {
+        vi.advanceTimersByTime(700);
+      });
+      before = screen.getAllByPlaceholderText(K.questionPlaceholder).length;
+      fireEvent.click(screen.getByText(K.stepSettings));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    fireEvent.click(screen.getByText(K.viewQuestions));
+
+    expect(onQuestionList()).toBe(true);
+    expect(screen.getAllByPlaceholderText(K.questionPlaceholder).length).toBe(
+      before,
+    );
+  });
+});
+
+describe("ScenarioDialoguePanel Step 2 設定對照欄", () => {
+  it("帶入 Step 1 填的情境說明與作答指引", () => {
+    renderPanel();
+
+    fireEvent.change(screen.getByPlaceholderText(K.contextPlaceholder), {
+      target: { value: "你和同學在星期一早上聊天。" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(K.rubricPlaceholder), {
+      target: { value: "請用完整句子回答。" },
+    });
+    fireEvent.click(screen.getByText(K.skip));
+
+    expect(screen.getByText("你和同學在星期一早上聊天。")).toBeInTheDocument();
+    expect(screen.getByText("請用完整句子回答。")).toBeInTheDocument();
+  });
+
+  it("兩者都沒填時顯示空狀態，而不是留一塊空白", () => {
+    renderPanel();
+
+    fireEvent.click(screen.getByText(K.skip));
+
+    expect(screen.getByText(K.noContextYet)).toBeInTheDocument();
+    expect(screen.getByText(K.noRubricYet)).toBeInTheDocument();
+  });
+
+  it("對照欄的「回設定修改」可以回 Step 1", () => {
+    renderPanel();
+
+    fireEvent.click(screen.getByText(K.skip));
+    fireEvent.click(screen.getByText(K.editSettings));
+
+    expect(onQuestionList()).toBe(false);
+  });
+
   it("產生題目後自動翻到 Step 2，並帶入題目", async () => {
     vi.useFakeTimers();
     try {
@@ -137,6 +226,68 @@ describe("ScenarioDialoguePanel 兩步驟流程", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("ScenarioDialoguePanel 情境圖片手動上傳", () => {
+  const createObjectURL = vi.fn();
+  const revokeObjectURL = vi.fn();
+  let seq = 0;
+
+  beforeEach(() => {
+    seq = 0;
+    createObjectURL.mockReset().mockImplementation(() => `blob:mock-${++seq}`);
+    revokeObjectURL.mockReset();
+    // jsdom 沒有這兩個 API，要自己補
+    global.URL.createObjectURL =
+      createObjectURL as unknown as typeof URL.createObjectURL;
+    global.URL.revokeObjectURL =
+      revokeObjectURL as unknown as typeof URL.revokeObjectURL;
+  });
+
+  /** 情境圖片的 input 用 accept="image/*"，與 PDF 上傳的 input 區分得開 */
+  const imageInput = (container: HTMLElement) =>
+    container.querySelector<HTMLInputElement>('input[accept="image/*"]')!;
+
+  const upload = (input: HTMLInputElement, name: string) =>
+    fireEvent.change(input, {
+      target: { files: [new File(["x"], name, { type: "image/png" })] },
+    });
+
+  it("上傳後顯示預覽圖", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+
+    upload(imageInput(container), "a.png");
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("img")).toHaveAttribute(
+      "src",
+      "blob:mock-1",
+    );
+  });
+
+  it("換圖時釋放舊的 blob，不會一路累積", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+
+    upload(imageInput(container), "a.png");
+    upload(imageInput(container), "b.png");
+
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-1");
+    expect(container.querySelector("img")).toHaveAttribute(
+      "src",
+      "blob:mock-2",
+    );
+  });
+
+  it("卸載時把還沒釋放的 blob 清乾淨", () => {
+    const { container, unmount } = render(<ScenarioDialoguePanel />, {
+      wrapper,
+    });
+
+    upload(imageInput(container), "a.png");
+    unmount();
+
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-1");
   });
 });
 

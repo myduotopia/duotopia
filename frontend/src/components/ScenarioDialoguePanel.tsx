@@ -3,24 +3,31 @@
  *
  * Issue #944 / #864。面板分成兩個步驟，**不跳頁**，只在同一塊區域切換顯示：
  *
- * - **Step 1 設定** — 左右兩張卡，用底色區分「會不會被儲存」：
- *   - 左（`bg-gray-50`）**產題方式**：兩個 tab —「AI 輔助編輯」（訓練目標／
- *     難度／教材描述／產題數）與「上傳圖片 / PDF」；再加 AI 自動翻譯與
- *     AI 生成語音（沿用 BatchTranslateSettings、BatchTTSSettings，兩者
- *     **預設都不勾**、語言也不預選，避免替老師做他沒做過的決定）。
- *     這一整張卡不會被儲存，只影響 AI 怎麼出題。
- *   - 右（`bg-blue-50`）**整份設定**：標題、情境說明（文字＋選填圖片＋語音）、
- *     作答指引、整體評分標準（時間×動貌×語態）。全部會被儲存、所有題目共用。
- *   - 出口兩顆：「產生題目並繼續」（產完直接翻到 Step 2）與
- *     「跳過，我想自己出題」（帶一張空白卡翻頁）。
+ * - **Step 1 設定** — 單欄由上而下，內容限寬 `max-w-3xl` 免得一行橫跨整個面板：
+ *   1. 標題、作答指引、情境說明（文字＋選填圖片）—— 會被儲存的內容
+ *   2. 兩個 tab：「AI 輔助編輯」（訓練目標／難度／題數／教材描述）與
+ *      「上傳圖片 / PDF」—— 產題的兩種輸入來源
+ *   3. 整體評分標準（時間×動貌×語態）—— 既是產題條件，也是每題的預設值
+ *   4. AI 自動翻譯／AI 生成語音／AI 生成情境圖片，三者**預設都不勾**，
+ *      語言也不預選，避免替老師做他沒做過的決定
  *
- * - **Step 2 題目清單** — 佔滿整個寬度：頂部摘要列（標題／整體設定摘要／
- *   回設定修改／再產題）、可拖曳排序的題目卡、題目計數、上一步。
- *   題目卡因為變寬改為橫向：左邊題目／翻譯／圖片 prompt／參考答案，
- *   右邊 260px 獨立放評分準則，不必再往下捲。
+ *   出口按鈕看清單有沒有題目而變：**沒題目**是「跳過，我想自己出題」＋
+ *   「產生題目並繼續」；**已有題目**主按鈕換成「查看題目清單」，產題退成次要。
+ *   老師習慣按下方的大按鈕、不會發現上方步驟列可點，回設定後得有路走回清單。
+ *
+ * - **Step 2 題目清單** — 左右兩欄：
+ *   - 左欄 280px（sticky）是 Step 1 設定的**唯讀對照**：標題、情境說明、
+ *     作答指引、整體評分標準，外加「回設定修改」。老師邊看情境邊確認題目
+ *     出得合不合適，不必來回翻頁。
+ *   - 右欄是可拖曳排序的題目卡、新增題目、題數計數、上一步。
+ *     單題設定一路往下讀：題目／翻譯／參考答案／評分準則。
  *
  * 兩步共用同一份 state，只是切換顯示 —— 回 Step 1 改設定不會弄丟已產生的題目。
  * 步驟列本身即導覽，兩步隨時可來回。
+ *
+ * 情境圖片（整份與逐題）都走 `ScenarioImageSlot`：勾了「AI 生成情境圖片」就在
+ * 產題時一併生成，任何時候也都能點縮圖換成自己的圖。因此圖框上沒有生成按鈕，
+ * 也不再讓老師編輯 prompt —— 一個位置只有一種操作方式。
  *
  * 評分標準採「預設 + 覆寫」：`row.tenseOverride/voiceOverride` 為 `null` 代表沿用
  * 整體，會跟著整體變動；老師動過單題就脫鉤（可用 ↺ 復原）。這讓「整份成套出題」
@@ -35,6 +42,7 @@
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -50,7 +58,6 @@ import {
   ClipboardList,
   Copy,
   GripVertical,
-  Image as ImageIcon,
   ImagePlus,
   Loader2,
   Mic,
@@ -359,6 +366,89 @@ function Chip({ label, onRemove }: { label: string; onRemove?: () => void }) {
   );
 }
 
+/**
+ * 情境圖片欄位 —— AI 生成與手動上傳共用同一個位置。
+ *
+ * 老師不必先決定「這張要 AI 產還是自己傳」：勾了「AI 生成情境圖片」就在產題時
+ * 自動填進來，任何時候都可以點縮圖換成自己的圖。因此這裡不提供生成按鈕，
+ * 只負責顯示、上傳、替換、移除。
+ */
+function ScenarioImageSlot({
+  imageUrl,
+  loading,
+  onPick,
+  onRemove,
+  className = "w-[104px] h-[74px]",
+}: {
+  imageUrl: string | null;
+  loading: boolean;
+  onPick: (file: File) => void;
+  onRemove: () => void;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const pick = () => inputRef.current?.click();
+
+  return (
+    <div
+      className={`${className} relative shrink-0 rounded-md border border-gray-200 bg-gray-100 overflow-hidden group`}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onPick(file);
+          // 清空才能連續選同一個檔案（否則第二次不觸發 change）
+          e.target.value = "";
+        }}
+      />
+
+      {loading ? (
+        <div className="w-full h-full flex items-center justify-center">
+          <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+        </div>
+      ) : imageUrl ? (
+        <>
+          <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+          {/* 有圖時才出現的替換／移除，平常不擋住圖 */}
+          <div className="absolute inset-0 hidden group-hover:flex group-focus-within:flex items-center justify-center gap-1 bg-black/50">
+            <button
+              type="button"
+              onClick={pick}
+              className="px-1.5 py-0.5 rounded bg-white/90 text-[10px] font-semibold text-gray-700 hover:bg-white"
+            >
+              {t("scenarioDialogue.buttons.replaceImage")}
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="px-1.5 py-0.5 rounded bg-white/90 text-[10px] font-semibold text-red-600 hover:bg-white"
+            >
+              {t("scenarioDialogue.buttons.removeImage")}
+            </button>
+          </div>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={pick}
+          className="w-full h-full flex flex-col items-center justify-center gap-1 hover:bg-gray-200 transition-colors"
+        >
+          <ImagePlus className="h-4 w-4 text-gray-400" />
+          <span className="text-[10px] text-gray-400">
+            {t("scenarioDialogue.buttons.uploadImage")}
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 interface RowProps {
   row: ScenarioDialogueRow;
   index: number;
@@ -375,7 +465,8 @@ interface RowProps {
   onDuplicate: () => void;
   onDelete: () => void;
   onRegenerate: () => void;
-  onGenerateImage: () => void;
+  onPickImage: (file: File) => void;
+  onRemoveImage: () => void;
 }
 
 function SortableRow({
@@ -392,7 +483,8 @@ function SortableRow({
   onDuplicate,
   onDelete,
   onRegenerate,
-  onGenerateImage,
+  onPickImage,
+  onRemoveImage,
 }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: row.id });
@@ -501,30 +593,14 @@ function SortableRow({
       </div>
 
       <div className="flex gap-3">
-        {/* 情境圖片：純預覽，不可點。生成的動作統一在 prompt 列右側 */}
-        <div className="w-[104px] h-[74px] shrink-0 rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
-          {imageLoading ? (
-            <div className="w-full h-full flex items-center justify-center">
-              <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-            </div>
-          ) : row.imageUrl ? (
-            <img
-              src={row.imageUrl}
-              alt=""
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center gap-1">
-              <ImageIcon className="h-4 w-4 text-gray-400" />
-              <span className="text-[10px] text-gray-400">
-                {t("scenarioDialogue.labels.noImage")}
-              </span>
-            </div>
-          )}
-        </div>
+        <ScenarioImageSlot
+          imageUrl={row.imageUrl}
+          loading={imageLoading}
+          onPick={onPickImage}
+          onRemove={onRemoveImage}
+        />
 
-        <div className="flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_260px] gap-3 items-start">
-          {/* 左欄：題目本文相關（題目／翻譯／圖片 prompt／參考答案） */}
+        <div className="flex-1 min-w-0">
           <div className="min-w-0 space-y-2">
             {/* 題目：AI 產生但可編輯 */}
             <div className="relative">
@@ -576,45 +652,6 @@ function SortableRow({
                   {langLabel}
                 </span>
               )}
-            </div>
-
-            {/* 圖片 prompt + 唯一的生成按鈕（緊鄰左側預覽） */}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={row.imagePrompt}
-                onChange={(e) => onChange({ imagePrompt: e.target.value })}
-                placeholder={t("scenarioDialogue.placeholders.imagePrompt")}
-                className="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 rounded text-[11px] text-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-              <button
-                type="button"
-                onClick={onGenerateImage}
-                disabled={imageLoading}
-                className={`shrink-0 h-[30px] px-3 rounded text-[11px] font-semibold flex items-center gap-1.5 disabled:opacity-50 ${
-                  row.imageUrl
-                    ? "border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-                    : "bg-blue-600 text-white hover:bg-blue-700"
-                }`}
-              >
-                {imageLoading ? (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    {t("scenarioDialogue.buttons.generatingImage")}
-                  </>
-                ) : (
-                  <>
-                    {row.imageUrl ? (
-                      <RotateCw className="h-3 w-3" />
-                    ) : (
-                      <ImagePlus className="h-3 w-3" />
-                    )}
-                    {row.imageUrl
-                      ? t("scenarioDialogue.buttons.regenerateImage")
-                      : t("scenarioDialogue.buttons.generateImage")}
-                  </>
-                )}
-              </button>
             </div>
 
             {/* 參考答案與補充說明：有內容時預設展開，避免看不見卻生效的設定 */}
@@ -673,81 +710,83 @@ function SortableRow({
                 </div>
               )}
             </div>
-          </div>
 
-          {/* 右欄：評分準則。清單頁佔滿寬度後獨立成一欄，不必再往下捲 */}
-          <div className="min-w-0 bg-white rounded-md border border-gray-200 divide-y divide-gray-100">
-            <div className="flex items-center justify-between gap-2 px-2.5 py-2">
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="h-3 w-3 text-gray-500" />
-                <span className="text-[11px] font-semibold text-gray-600">
-                  {t("scenarioDialogue.labels.rubric")}
-                </span>
+            {/* 評分準則：接在題目下方，單題設定一路往下讀 */}
+            <div className="bg-white rounded-md border border-gray-200 divide-y divide-gray-100">
+              <div className="flex items-center justify-between gap-2 px-2.5 py-2">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3 text-gray-500" />
+                  <span className="text-[11px] font-semibold text-gray-600">
+                    {t("scenarioDialogue.labels.rubric")}
+                  </span>
+                </div>
+                {/* 沿用/自訂狀態必須看得見，否則改了整體卻沒變的題目會像壞掉 */}
+                {isOverridden ? (
+                  <button
+                    type="button"
+                    onClick={resetToGlobal}
+                    className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:underline"
+                    title={t("scenarioDialogue.tooltips.resetToGlobal")}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    {t("scenarioDialogue.labels.overridden")}
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-gray-400">
+                    {t("scenarioDialogue.labels.inherited")}
+                  </span>
+                )}
               </div>
-              {/* 沿用/自訂狀態必須看得見，否則改了整體卻沒變的題目會像壞掉 */}
-              {isOverridden ? (
-                <button
-                  type="button"
-                  onClick={resetToGlobal}
-                  className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:underline"
-                  title={t("scenarioDialogue.tooltips.resetToGlobal")}
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  {t("scenarioDialogue.labels.overridden")}
-                </button>
-              ) : (
-                <span className="text-[10px] text-gray-400">
-                  {t("scenarioDialogue.labels.inherited")}
-                </span>
+
+              <div className="flex flex-wrap items-end gap-2 px-2.5 py-2">
+                <TenseSelects
+                  tense={effTense}
+                  voice={effVoice}
+                  onTenseChange={overrideTense}
+                  onVoiceChange={overrideVoice}
+                />
+                <label className="flex flex-col gap-1 flex-1 min-w-[140px]">
+                  <span className="text-[10px] text-gray-500">
+                    {t("scenarioDialogue.rubricPresets.keywords")}
+                  </span>
+                  <input
+                    type="text"
+                    value={keywordDraft}
+                    onChange={(e) => setKeywordDraft(e.target.value)}
+                    onBlur={commitKeywords}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitKeywords();
+                      }
+                    }}
+                    placeholder={t("scenarioDialogue.placeholders.keywords")}
+                    className="w-full px-1.5 py-1 border border-gray-300 rounded text-[11px] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                </label>
+              </div>
+
+              {/* 生效中的條件 */}
+              {(isTenseSet(effTense) ||
+                effVoice ||
+                row.keywords.length > 0) && (
+                <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2">
+                  {isTenseSet(effTense) && (
+                    <Chip label={`時態：${tenseLabel(effTense)}`} />
+                  )}
+                  {effVoice && <Chip label={`語態：${effVoice}`} />}
+                  {row.keywords.length > 0 && (
+                    <Chip
+                      label={`必用：${row.keywords.join(", ")}`}
+                      onRemove={() => {
+                        setKeywordDraft("");
+                        onChange({ keywords: [] });
+                      }}
+                    />
+                  )}
+                </div>
               )}
             </div>
-
-            <div className="flex flex-wrap items-end gap-2 px-2.5 py-2">
-              <TenseSelects
-                tense={effTense}
-                voice={effVoice}
-                onTenseChange={overrideTense}
-                onVoiceChange={overrideVoice}
-              />
-              <label className="flex flex-col gap-1 flex-1 min-w-[140px]">
-                <span className="text-[10px] text-gray-500">
-                  {t("scenarioDialogue.rubricPresets.keywords")}
-                </span>
-                <input
-                  type="text"
-                  value={keywordDraft}
-                  onChange={(e) => setKeywordDraft(e.target.value)}
-                  onBlur={commitKeywords}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      commitKeywords();
-                    }
-                  }}
-                  placeholder={t("scenarioDialogue.placeholders.keywords")}
-                  className="w-full px-1.5 py-1 border border-gray-300 rounded text-[11px] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
-              </label>
-            </div>
-
-            {/* 生效中的條件 */}
-            {(isTenseSet(effTense) || effVoice || row.keywords.length > 0) && (
-              <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2">
-                {isTenseSet(effTense) && (
-                  <Chip label={`時態：${tenseLabel(effTense)}`} />
-                )}
-                {effVoice && <Chip label={`語態：${effVoice}`} />}
-                {row.keywords.length > 0 && (
-                  <Chip
-                    label={`必用：${row.keywords.join(", ")}`}
-                    onRemove={() => {
-                      setKeywordDraft("");
-                      onChange({ keywords: [] });
-                    }}
-                  />
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -819,7 +858,6 @@ const ScenarioDialoguePanel = forwardRef<
   // 一開啟就給一張空白卡，老師可以直接打字，不必先產題
   const [rows, setRows] = useState<ScenarioDialogueRow[]>(() => [createRow()]);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
-  const [imageLoadingId, setImageLoadingId] = useState<string | null>(null);
 
   // 左側 AI 輔助編輯
   const [goal, setGoal] = useState("");
@@ -831,12 +869,10 @@ const ScenarioDialoguePanel = forwardRef<
   const [sourceTab, setSourceTab] = useState<"ai" | "upload">("ai");
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // ===== 整份設定（Step 1 右半，所有題目共用）=====
+  // ===== 整份設定（所有題目共用）=====
   /** 情境背景：幾句話設定場景，不是閱讀文章。空的話學生端不會出現說明卡 */
   const [contextText, setContextText] = useState("");
-  const [contextImagePrompt, setContextImagePrompt] = useState("");
   const [contextImageUrl, setContextImageUrl] = useState<string | null>(null);
-  const [contextImageLoading, setContextImageLoading] = useState(false);
   /** 全份共用的作答指引 — 同時給 AI 評分與學生作答參考 */
   const [globalRubric, setGlobalRubric] = useState("");
   /** 整體評分標準，單題未覆寫時沿用 */
@@ -857,6 +893,32 @@ const ScenarioDialoguePanel = forwardRef<
     gender: "Random",
     speed: "Normal x1",
   });
+  /** 產題時要不要一併生成情境圖片。與翻譯／語音同一組，預設不勾（會扣點） */
+  const [autoContextImage, setAutoContextImage] = useState(false);
+
+  /**
+   * 手動上傳的預覽網址是 `blob:`，換掉或移除時必須 revoke，否則老師在編輯階段
+   * 反覆換圖會一路累積不釋放。這裡記下所有我們建立的 URL，卸載時一次清乾淨。
+   */
+  const objectUrlsRef = useRef<Set<string>>(new Set());
+
+  const createPreviewUrl = useCallback((file: File) => {
+    const url = URL.createObjectURL(file);
+    objectUrlsRef.current.add(url);
+    return url;
+  }, []);
+
+  const releasePreviewUrl = useCallback((url: string | null) => {
+    if (url && objectUrlsRef.current.delete(url)) URL.revokeObjectURL(url);
+  }, []);
+
+  useEffect(() => {
+    const urls = objectUrlsRef.current;
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+      urls.clear();
+    };
+  }, []);
 
   /** 老師還沒選語言前，翻譯欄不該替他假設成中文（對齊例句集的行為） */
   const hasLanguage = !!translateLang;
@@ -874,6 +936,20 @@ const ScenarioDialoguePanel = forwardRef<
   const filledCount = rows.filter((r) => r.question.trim()).length;
   const overLimit = filledCount > MAX_ITEMS;
   const underLimit = filledCount < MIN_ITEMS;
+
+  /**
+   * 已經有題目了，Step 1 的主要動作就從「產題」變成「回去看題目」——
+   * 老師常常直接按下方的大按鈕，不會發現上方步驟列可以點。
+   */
+  const hasQuestions = filledCount > 0;
+
+  const generateDisabled =
+    isGenerating ||
+    filledCount >= MAX_ITEMS ||
+    (sourceTab === "upload" && uploadedFiles.length === 0);
+
+  /** 勾了「AI 生成情境圖片」才會在產題時一併跑圖，所有圖框同時進 loading */
+  const imageGenerating = autoContextImage && isGenerating;
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -922,6 +998,8 @@ const ScenarioDialoguePanel = forwardRef<
         ];
       });
       setIsGenerating(false);
+      // 串接後改為把 API 回傳的圖片網址填進 contextImageUrl 與各題 imageUrl；
+      // stub 階段不偽造圖片，只把 loading 收掉
       if (advance) setStep(2);
     }, 600);
   };
@@ -932,29 +1010,29 @@ const ScenarioDialoguePanel = forwardRef<
     setStep(2);
   };
 
-  /** 前端 stub：實際串接後呼叫圖片生成 API 並扣點 */
-  const handleGenerateImage = (id: string) => {
-    setImageLoadingId(id);
-    setTimeout(() => setImageLoadingId(null), 800);
+  /** 整份情境圖片：手動上傳／替換／移除。舊的 blob 先釋放再換新的 */
+  const pickContextImage = (file: File) => {
+    releasePreviewUrl(contextImageUrl);
+    setContextImageUrl(createPreviewUrl(file));
   };
 
-  const handleGenerateContextImage = () => {
-    setContextImageLoading(true);
-    setTimeout(() => {
-      // 串接後改為 setContextImageUrl(回傳的圖片網址)；stub 階段不偽造圖片
-      setContextImageUrl(null);
-      setContextImageLoading(false);
-    }, 800);
+  const removeContextImage = () => {
+    releasePreviewUrl(contextImageUrl);
+    setContextImageUrl(null);
   };
 
-  /** Step 2 摘要列用：讓老師不必翻回 Step 1 就知道整體設過什麼 */
-  const settingsSummary = [
-    contextText.trim() && t("scenarioDialogue.hints.hasContext"),
-    isTenseSet(globalTense) && tenseLabel(globalTense),
-    globalVoice,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  /** 逐題情境圖片，行為與整份的一致 */
+  const pickRowImage = (id: string, file: File) => {
+    const current = rows.find((r) => r.id === id)?.imageUrl ?? null;
+    releasePreviewUrl(current);
+    patchRow(id, { imageUrl: createPreviewUrl(file) });
+  };
+
+  const removeRowImage = (id: string) => {
+    const current = rows.find((r) => r.id === id)?.imageUrl ?? null;
+    releasePreviewUrl(current);
+    patchRow(id, { imageUrl: null });
+  };
 
   const handleFiles = (files: FileList | null) => {
     if (!files) return;
@@ -1031,392 +1109,359 @@ const ScenarioDialoguePanel = forwardRef<
       {/* ===== Step 1：設定 ===== */}
       {step === 1 && (
         <div className="flex-1 min-h-0">
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,38%)_minmax(0,62%)] gap-4 items-start">
-            {/* 產題方式：只影響 AI 怎麼出題，不會存進這份教材 */}
-            <div className="border rounded-lg bg-gray-50 p-4">
+          {/* 面板很寬，設定欄位限寬才不會一行文字橫跨整個畫面 */}
+          <div className="max-w-3xl space-y-4">
+            {/* 標題 */}
+            <div className="space-y-1.5">
+              <label
+                className="text-xs font-semibold text-gray-700 block"
+                htmlFor="sd-title"
+              >
+                {t("scenarioDialogue.labels.title")}
+                <span className="text-red-500 ml-0.5">*</span>
+              </label>
+              <input
+                id="sd-title"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t("scenarioDialogue.placeholders.title")}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* 作答指引：學生看得到 */}
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-gray-700">
+                {t("scenarioDialogue.labels.globalRubric")}
+              </span>
+              <textarea
+                value={globalRubric}
+                onChange={(e) => setGlobalRubric(e.target.value)}
+                rows={2}
+                placeholder={t("scenarioDialogue.placeholders.globalRubric")}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+              <p className="text-[10px] text-gray-500">
+                {t("scenarioDialogue.hints.visibleToStudents")}
+              </p>
+            </div>
+
+            {/* 情境說明：選填。空的話學生端不會出現說明卡 */}
+            <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-gray-500 shrink-0" />
-                <span className="text-sm font-semibold text-gray-800">
-                  {t("scenarioDialogue.labels.generationSource")}
+                <span className="text-xs font-semibold text-gray-700">
+                  {t("scenarioDialogue.labels.context")}
                 </span>
-                <span className="ml-auto text-[10px] font-semibold text-gray-500 bg-white border border-gray-200 rounded-full px-2 py-0.5">
-                  {t("scenarioDialogue.hints.notSaved")}
+                <span className="text-[10px] text-gray-400">
+                  {t("scenarioDialogue.hints.contextOptional")}
                 </span>
               </div>
-              <p className="text-[11px] text-gray-500 mt-1 mb-3">
-                {t("scenarioDialogue.hints.generationSourceNote")}
-              </p>
-
-              <div className="space-y-3">
-                <Tabs
-                  value={sourceTab}
-                  onValueChange={(v) => setSourceTab(v as "ai" | "upload")}
-                >
-                  <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg">
-                    <TabsTrigger
-                      value="ai"
-                      className="rounded-md px-1 text-xs whitespace-nowrap data-[state=active]:bg-blue-500 data-[state=active]:text-white"
-                    >
-                      {t("scenarioDialogue.tabs.aiAssist")}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="upload"
-                      className="rounded-md px-1 text-xs whitespace-nowrap data-[state=active]:bg-blue-500 data-[state=active]:text-white"
-                    >
-                      {t("scenarioDialogue.tabs.upload")}
-                    </TabsTrigger>
-                  </TabsList>
-
-                  {/* Tab 1：AI 輔助編輯 */}
-                  <TabsContent value="ai" className="space-y-3 mt-3">
-                    <div>
-                      <label className="text-xs text-gray-600 mb-1 block">
-                        {t("scenarioDialogue.labels.goal")}
-                      </label>
-                      <textarea
-                        value={goal}
-                        onChange={(e) => setGoal(e.target.value)}
-                        rows={3}
-                        placeholder={t("scenarioDialogue.placeholders.goal")}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs text-gray-600 mb-1 block">
-                        {t("scenarioDialogue.labels.level")}
-                      </label>
-                      <div className="flex flex-wrap gap-1">
-                        {CEFR_LEVELS.map((lv) => (
-                          <button
-                            key={lv}
-                            type="button"
-                            onClick={() => setLevel(lv)}
-                            className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-                              level === lv
-                                ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
-                                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                            }`}
-                          >
-                            {lv}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs text-gray-600 mb-1 block">
-                        {t("scenarioDialogue.labels.materialDesc")}
-                      </label>
-                      <textarea
-                        value={materialDesc}
-                        onChange={(e) => setMaterialDesc(e.target.value)}
-                        rows={2}
-                        placeholder={t(
-                          "scenarioDialogue.placeholders.materialDesc",
-                        )}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="text-xs text-gray-600 mb-1 block"
-                        htmlFor="sd-generate-count"
-                      >
-                        {t("scenarioDialogue.labels.generateCount")}
-                      </label>
-                      <select
-                        id="sd-generate-count"
-                        value={generateCount}
-                        onChange={(e) =>
-                          setGenerateCount(Number(e.target.value))
-                        }
-                        className="px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      >
-                        {[3, 5, 8, 10].map((n) => (
-                          <option key={n} value={n}>
-                            {n}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </TabsContent>
-
-                  {/* Tab 2：上傳圖片 / PDF */}
-                  <TabsContent value="upload" className="space-y-3 mt-3">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        handleFiles(e.dataTransfer.files);
-                      }}
-                      className="w-full py-8 border-2 border-dashed border-gray-300 rounded-lg bg-white flex flex-col items-center justify-center gap-2 hover:border-blue-400 transition-colors"
-                    >
-                      <Upload className="h-6 w-6 text-gray-400" />
-                      <span className="text-sm font-medium text-gray-600">
-                        {t("scenarioDialogue.labels.uploadTitle")}
-                      </span>
-                      <span className="text-[11px] text-gray-400">
-                        {t("scenarioDialogue.hints.uploadFormats")}
-                      </span>
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*,application/pdf"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => handleFiles(e.target.files)}
-                    />
-
-                    {uploadedFiles.length > 0 && (
-                      <ul className="space-y-1">
-                        {uploadedFiles.map((f, i) => (
-                          <li
-                            key={`${f.name}-${i}`}
-                            className="flex items-center justify-between gap-2 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-700"
-                          >
-                            <span className="truncate">{f.name}</span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setUploadedFiles((prev) =>
-                                  prev.filter((_, j) => j !== i),
-                                )
-                              }
-                              className="p-0.5 rounded hover:bg-gray-100"
-                            >
-                              <X className="h-3 w-3 text-gray-400" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </TabsContent>
-                </Tabs>
-
-                {/* AI 自動翻譯 — 沿用共用元件 */}
-                <BatchTranslateSettings
-                  enabled={autoTranslate}
-                  onEnabledChange={setAutoTranslate}
-                  selectedLanguage={translateLang}
-                  onLanguageChange={setTranslateLang}
-                  languages={TRANSLATION_LANGUAGES}
-                  customLanguage={customLang}
-                  onCustomLanguageChange={setCustomLang}
-                  variant="card"
+              <div className="flex gap-2">
+                <ScenarioImageSlot
+                  imageUrl={contextImageUrl}
+                  loading={imageGenerating}
+                  onPick={pickContextImage}
+                  onRemove={removeContextImage}
                 />
-
-                {/* AI 生成語音 — 沿用共用元件 */}
-                <BatchTTSSettings
-                  settings={ttsSettings}
-                  onChange={setTTSSettings}
-                  enabled={autoTTS}
-                  onEnabledChange={setAutoTTS}
-                  variant="card"
-                />
+                <div className="flex-1 min-w-0 relative">
+                  <textarea
+                    value={contextText}
+                    onChange={(e) => setContextText(e.target.value)}
+                    rows={3}
+                    placeholder={t("scenarioDialogue.placeholders.context")}
+                    className="w-full h-full px-3 py-2 pr-10 border border-gray-300 rounded-md bg-white text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-2 p-1 rounded text-gray-600 bg-yellow-100 hover:bg-yellow-200"
+                    title={t("scenarioDialogue.tooltips.generateAudio")}
+                  >
+                    <Volume2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* 整份設定：所有題目共用，會被儲存。標題屬於被儲存的內容，也歸在這裡 */}
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-              <div className="flex items-center gap-2">
-                <ClipboardList className="h-4 w-4 text-blue-600 shrink-0" />
-                <span className="text-sm font-semibold text-gray-800">
-                  {t("scenarioDialogue.labels.sharedSettings")}
-                </span>
-                <span className="ml-auto text-[10px] font-semibold text-blue-700 bg-white border border-blue-200 rounded-full px-2 py-0.5">
-                  {t("scenarioDialogue.hints.willBeSaved")}
-                </span>
-              </div>
-              <p className="text-[11px] text-gray-600 mt-1 mb-3">
-                {t("scenarioDialogue.hints.sharedSettingsNote")}
-              </p>
+            <hr className="border-gray-200" />
 
-              <div className="space-y-3">
-                {/* 標題 */}
-                <div className="space-y-1.5">
-                  <label
-                    className="text-xs font-semibold text-gray-700 block"
-                    htmlFor="sd-title"
-                  >
-                    {t("scenarioDialogue.labels.title")}
-                    <span className="text-red-500 ml-0.5">*</span>
+            {/* 產題輸入：兩種來源二選一 */}
+            <Tabs
+              value={sourceTab}
+              onValueChange={(v) => setSourceTab(v as "ai" | "upload")}
+            >
+              <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg">
+                <TabsTrigger
+                  value="ai"
+                  className="rounded-md px-1 text-xs whitespace-nowrap data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+                >
+                  {t("scenarioDialogue.tabs.aiAssist")}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="upload"
+                  className="rounded-md px-1 text-xs whitespace-nowrap data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+                >
+                  {t("scenarioDialogue.tabs.upload")}
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Tab 1：AI 輔助編輯 */}
+              <TabsContent value="ai" className="space-y-3 mt-3">
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">
+                    {t("scenarioDialogue.labels.goal")}
                   </label>
-                  <input
-                    id="sd-title"
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder={t("scenarioDialogue.placeholders.title")}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                  <textarea
+                    value={goal}
+                    onChange={(e) => setGoal(e.target.value)}
+                    rows={3}
+                    placeholder={t("scenarioDialogue.placeholders.goal")}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
 
-                {/* 情境說明：選填。空的話學生端不會出現說明卡 */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-gray-700">
-                      {t("scenarioDialogue.labels.context")}
-                    </span>
-                    <span className="text-[10px] text-gray-400">
-                      {t("scenarioDialogue.hints.contextOptional")}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="w-[104px] h-[74px] shrink-0 rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
-                      {contextImageLoading ? (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                        </div>
-                      ) : contextImageUrl ? (
-                        <img
-                          src={contextImageUrl}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center gap-1">
-                          <ImageIcon className="h-4 w-4 text-gray-400" />
-                          <span className="text-[10px] text-gray-400">
-                            {t("scenarioDialogue.labels.noImage")}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      <div className="relative">
-                        <textarea
-                          value={contextText}
-                          onChange={(e) => setContextText(e.target.value)}
-                          rows={3}
-                          placeholder={t(
-                            "scenarioDialogue.placeholders.context",
-                          )}
-                          className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md bg-white text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                        />
+                {/* 難度與題數都很短，併排才不會各佔一整行 */}
+                <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+                  <div>
+                    <label className="text-xs text-gray-600 mb-1 block">
+                      {t("scenarioDialogue.labels.level")}
+                    </label>
+                    <div className="flex flex-wrap gap-1">
+                      {CEFR_LEVELS.map((lv) => (
                         <button
+                          key={lv}
                           type="button"
-                          className="absolute right-2 top-2 p-1 rounded text-gray-600 bg-yellow-100 hover:bg-yellow-200"
-                          title={t("scenarioDialogue.tooltips.generateAudio")}
-                        >
-                          <Volume2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={contextImagePrompt}
-                          onChange={(e) =>
-                            setContextImagePrompt(e.target.value)
-                          }
-                          placeholder={t(
-                            "scenarioDialogue.placeholders.imagePrompt",
-                          )}
-                          className="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 rounded bg-white text-[11px] text-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleGenerateContextImage}
-                          disabled={contextImageLoading}
-                          className={`shrink-0 h-[30px] px-3 rounded text-[11px] font-semibold flex items-center gap-1.5 disabled:opacity-50 ${
-                            contextImageUrl
-                              ? "border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-                              : "bg-blue-600 text-white hover:bg-blue-700"
+                          onClick={() => setLevel(lv)}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                            level === lv
+                              ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
+                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                           }`}
                         >
-                          {contextImageUrl ? (
-                            <RotateCw className="h-3 w-3" />
-                          ) : (
-                            <ImagePlus className="h-3 w-3" />
-                          )}
-                          {contextImageUrl
-                            ? t("scenarioDialogue.buttons.regenerateImage")
-                            : t("scenarioDialogue.buttons.generateImage")}
+                          {lv}
                         </button>
-                      </div>
+                      ))}
                     </div>
                   </div>
+
+                  <div>
+                    <label
+                      className="text-xs text-gray-600 mb-1 block"
+                      htmlFor="sd-generate-count"
+                    >
+                      {t("scenarioDialogue.labels.generateCount")}
+                    </label>
+                    <select
+                      id="sd-generate-count"
+                      value={generateCount}
+                      onChange={(e) => setGenerateCount(Number(e.target.value))}
+                      className="px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    >
+                      {[3, 5, 8, 10].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                {/* 作答指引：學生看得到 */}
-                <div className="space-y-1">
-                  <span className="text-xs font-semibold text-gray-700">
-                    {t("scenarioDialogue.labels.globalRubric")}
-                  </span>
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">
+                    {t("scenarioDialogue.labels.materialDesc")}
+                  </label>
                   <textarea
-                    value={globalRubric}
-                    onChange={(e) => setGlobalRubric(e.target.value)}
+                    value={materialDesc}
+                    onChange={(e) => setMaterialDesc(e.target.value)}
                     rows={2}
                     placeholder={t(
-                      "scenarioDialogue.placeholders.globalRubric",
+                      "scenarioDialogue.placeholders.materialDesc",
                     )}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
-                  <p className="text-[10px] text-gray-500">
-                    {t("scenarioDialogue.hints.visibleToStudents")}
-                  </p>
                 </div>
+              </TabsContent>
 
-                {/* 整體評分標準：單題未覆寫時沿用。不含必用字詞（逐題獨立） */}
-                <div className="space-y-1">
-                  <span className="text-xs font-semibold text-gray-700">
-                    {t("scenarioDialogue.labels.globalTense")}
+              {/* Tab 2：上傳圖片 / PDF */}
+              <TabsContent value="upload" className="space-y-3 mt-3">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    handleFiles(e.dataTransfer.files);
+                  }}
+                  className="w-full py-8 border-2 border-dashed border-gray-300 rounded-lg bg-white flex flex-col items-center justify-center gap-2 hover:border-blue-400 transition-colors"
+                >
+                  <Upload className="h-6 w-6 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-600">
+                    {t("scenarioDialogue.labels.uploadTitle")}
                   </span>
-                  <div className="flex flex-wrap items-end gap-2">
-                    <TenseSelects
-                      tense={globalTense}
-                      voice={globalVoice}
-                      onTenseChange={(time, aspect) =>
-                        setGlobalTense({ time, aspect })
-                      }
-                      onVoiceChange={setGlobalVoice}
-                    />
-                  </div>
-                  <p className="text-[10px] text-gray-500">
-                    {t("scenarioDialogue.hints.globalTense")}
-                  </p>
-                </div>
+                  <span className="text-[11px] text-gray-400">
+                    {t("scenarioDialogue.hints.uploadFormats")}
+                  </span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleFiles(e.target.files)}
+                />
+
+                {uploadedFiles.length > 0 && (
+                  <ul className="space-y-1">
+                    {uploadedFiles.map((f, i) => (
+                      <li
+                        key={`${f.name}-${i}`}
+                        className="flex items-center justify-between gap-2 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-700"
+                      >
+                        <span className="truncate">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setUploadedFiles((prev) =>
+                              prev.filter((_, j) => j !== i),
+                            )
+                          }
+                          className="p-0.5 rounded hover:bg-gray-100"
+                        >
+                          <X className="h-3 w-3 text-gray-400" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </TabsContent>
+            </Tabs>
+
+            <hr className="border-gray-200" />
+
+            {/* 整體評分標準：也是產題條件，並決定每題的預設時態／語態 */}
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-gray-700">
+                {t("scenarioDialogue.labels.globalTense")}
+              </span>
+              <div className="flex flex-wrap items-end gap-2">
+                <TenseSelects
+                  tense={globalTense}
+                  voice={globalVoice}
+                  onTenseChange={(time, aspect) =>
+                    setGlobalTense({ time, aspect })
+                  }
+                  onVoiceChange={setGlobalVoice}
+                />
               </div>
+              <p className="text-[10px] text-gray-500">
+                {t("scenarioDialogue.hints.globalTense")}
+              </p>
+            </div>
+
+            <hr className="border-gray-200" />
+
+            {/* 產題時要一併做的事，三個都預設不勾 */}
+            <div className="space-y-2">
+              <BatchTranslateSettings
+                enabled={autoTranslate}
+                onEnabledChange={setAutoTranslate}
+                selectedLanguage={translateLang}
+                onLanguageChange={setTranslateLang}
+                languages={TRANSLATION_LANGUAGES}
+                customLanguage={customLang}
+                onCustomLanguageChange={setCustomLang}
+                variant="card"
+              />
+
+              <BatchTTSSettings
+                settings={ttsSettings}
+                onChange={setTTSSettings}
+                enabled={autoTTS}
+                onEnabledChange={setAutoTTS}
+                variant="card"
+              />
+
+              {/* 情境圖片：勾了就在產題時一併生成，不勾也能自己上傳 */}
+              <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoContextImage}
+                  onChange={(e) => setAutoContextImage(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-gray-800">
+                    {t("scenarioDialogue.labels.autoContextImage")}
+                  </span>
+                  <span className="block text-[11px] text-gray-500">
+                    {t("scenarioDialogue.hints.autoContextImage")}
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
 
-          {/* Step 1 的出口：產題後直接翻頁，或跳過 AI 自己打字 */}
+          {/* Step 1 的出口。已有題目時「查看題目清單」才是主要動作 */}
           <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap items-center gap-3">
             <span className="text-xs text-gray-500">
               {t("scenarioDialogue.hints.step1Foot")}
             </span>
             <span className="flex-1" />
-            <Button variant="outline" onClick={handleSkipToList}>
-              {t("scenarioDialogue.buttons.skipGeneration")}
-              <ArrowRight className="ml-1 h-4 w-4" />
-            </Button>
-            <Button
-              onClick={() => handleGenerate(true)}
-              disabled={
-                isGenerating ||
-                filledCount >= MAX_ITEMS ||
-                (sourceTab === "upload" && uploadedFiles.length === 0)
-              }
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  {t("scenarioDialogue.buttons.generating")}
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-1 h-4 w-4" />
-                  {sourceTab === "upload"
-                    ? t("scenarioDialogue.buttons.generateFromFiles")
-                    : t("scenarioDialogue.buttons.generateAndContinue")}
-                </>
-              )}
-            </Button>
+            {hasQuestions ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => handleGenerate(false)}
+                  disabled={generateDisabled}
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      {t("scenarioDialogue.buttons.generating")}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-1 h-4 w-4" />
+                      {t("scenarioDialogue.buttons.generateAnother")}
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={() => setStep(2)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {t("scenarioDialogue.buttons.viewQuestions")}
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={handleSkipToList}>
+                  {t("scenarioDialogue.buttons.skipGeneration")}
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={() => handleGenerate(true)}
+                  disabled={generateDisabled}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      {t("scenarioDialogue.buttons.generating")}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-1 h-4 w-4" />
+                      {sourceTab === "upload"
+                        ? t("scenarioDialogue.buttons.generateFromFiles")
+                        : t("scenarioDialogue.buttons.generateAndContinue")}
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
           </div>
           <p className="mt-2 text-right text-[11px] text-gray-400">
             {t("scenarioDialogue.hints.rateLimit")}
@@ -1426,129 +1471,206 @@ const ScenarioDialoguePanel = forwardRef<
 
       {/* ===== Step 2：題目清單 ===== */}
       {step === 2 && (
-        <div className="flex-1 min-w-0">
-          {/* 摘要列：不必翻回 Step 1 也知道整體設定是什麼 */}
-          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
-            <span className="text-sm font-semibold text-gray-800 truncate max-w-full">
-              {title.trim() || t("scenarioDialogue.hints.untitled")}
-            </span>
-            {settingsSummary && (
-              <span className="text-xs text-gray-600">{settingsSummary}</span>
-            )}
-            <span className="flex-1" />
-            <button
-              type="button"
-              onClick={() => setStep(1)}
-              className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
-            >
-              <PencilLine className="h-3.5 w-3.5" />
-              {t("scenarioDialogue.buttons.editSettings")}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleGenerate(false)}
-              disabled={isGenerating || filledCount >= MAX_ITEMS}
-              className="flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              {isGenerating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5" />
-              )}
-              {t("scenarioDialogue.buttons.generateMore")}
-            </button>
-          </div>
+        <div className="flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] gap-4 items-start">
+          {/* 左欄：Step 1 設定的唯讀對照，讓老師邊看情境與作答指引邊確認題目 */}
+          <aside className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3 lg:sticky lg:top-0">
+            <div className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4 text-blue-600 shrink-0" />
+              <span className="text-sm font-semibold text-gray-800">
+                {t("scenarioDialogue.labels.reference")}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-600">
+              {t("scenarioDialogue.hints.referenceNote")}
+            </p>
 
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={rows.map((r) => r.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="space-y-3 pr-1">
-                {rows.map((row, index) => (
-                  <SortableRow
-                    key={row.id}
-                    row={row}
-                    index={index}
-                    langLabel={langLabel}
-                    hasLanguage={hasLanguage}
-                    globalTense={globalTense}
-                    globalVoice={globalVoice}
-                    canDelete={rows.length > 1}
-                    regenerating={regeneratingId === row.id}
-                    imageLoading={imageLoadingId === row.id}
-                    onChange={(patch) => patchRow(row.id, patch)}
-                    onDuplicate={() =>
-                      setRows((prev) =>
-                        prev.length >= MAX_ITEMS
-                          ? prev
-                          : [
-                              ...prev.slice(0, index + 1),
-                              createRow({ ...row, id: nextRowId() }),
-                              ...prev.slice(index + 1),
-                            ],
-                      )
-                    }
-                    onDelete={() =>
-                      setRows((prev) => prev.filter((r) => r.id !== row.id))
-                    }
-                    onRegenerate={() => {
-                      setRegeneratingId(row.id);
-                      setTimeout(() => setRegeneratingId(null), 800);
-                    }}
-                    onGenerateImage={() => handleGenerateImage(row.id)}
-                  />
-                ))}
+            <div className="rounded-md border border-blue-100 bg-white p-2.5 space-y-3">
+              <div>
+                <span className="block text-[10px] font-semibold text-gray-500">
+                  {t("scenarioDialogue.labels.title")}
+                </span>
+                <span className="block text-sm font-semibold text-gray-800 break-words">
+                  {title.trim() || t("scenarioDialogue.hints.untitled")}
+                </span>
               </div>
-            </SortableContext>
-          </DndContext>
 
-          <button
-            type="button"
-            onClick={addRow}
-            disabled={rows.length >= MAX_ITEMS}
-            className="mt-3 w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:hover:border-gray-300 disabled:hover:text-gray-600"
-          >
-            <Plus className="h-5 w-5" />
-            {rows.length >= MAX_ITEMS
-              ? t("scenarioDialogue.hints.maxReached", { max: MAX_ITEMS })
-              : t("scenarioDialogue.buttons.addQuestion")}
-          </button>
+              <div className="space-y-1">
+                <span className="block text-[10px] font-semibold text-gray-500">
+                  {t("scenarioDialogue.labels.context")}
+                </span>
+                {contextImageUrl && (
+                  <img
+                    src={contextImageUrl}
+                    alt=""
+                    className="w-full max-h-32 rounded border border-gray-200 object-cover"
+                  />
+                )}
+                {contextText.trim() ? (
+                  <p className="text-xs text-gray-700 whitespace-pre-wrap break-words">
+                    {contextText}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-400">
+                    {t("scenarioDialogue.hints.noContextYet")}
+                  </p>
+                )}
+              </div>
 
-          {/* 題目計數：對著題目看才有意義，所以跟著清單走而不是留在設定頁 */}
-          <div
-            className={`mt-3 text-xs tabular-nums ${
-              overLimit || underLimit
-                ? "text-red-500 font-medium"
-                : "text-gray-500"
-            }`}
-          >
-            {filledCount} {t("contentEditor.messages.items")}
-            {` / ${MAX_ITEMS}`}
-            {` (${t("scenarioDialogue.hints.itemRange", {
-              min: MIN_ITEMS,
-              max: MAX_ITEMS,
-            })})`}
-          </div>
+              <div className="space-y-1">
+                <span className="block text-[10px] font-semibold text-gray-500">
+                  {t("scenarioDialogue.labels.globalRubric")}
+                </span>
+                {globalRubric.trim() ? (
+                  <p className="text-xs text-gray-700 whitespace-pre-wrap break-words">
+                    {globalRubric}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-400">
+                    {t("scenarioDialogue.hints.noRubricYet")}
+                  </p>
+                )}
+              </div>
 
-          <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={() => setStep(1)}>
-              <ArrowLeft className="mr-1 h-4 w-4" />
-              {t("scenarioDialogue.buttons.backToSettings")}
+              <div className="space-y-1">
+                <span className="block text-[10px] font-semibold text-gray-500">
+                  {t("scenarioDialogue.labels.globalTense")}
+                </span>
+                {isTenseSet(globalTense) || globalVoice ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {isTenseSet(globalTense) && (
+                      <Chip label={`時態：${tenseLabel(globalTense)}`} />
+                    )}
+                    {globalVoice && <Chip label={`語態：${globalVoice}`} />}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">
+                    {t("scenarioDialogue.labels.notSpecified")}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full bg-white"
+              onClick={() => setStep(1)}
+            >
+              <PencilLine className="mr-1 h-3.5 w-3.5" />
+              {t("scenarioDialogue.buttons.editSettings")}
             </Button>
-            {onCancel && (
-              <Button
-                variant="outline"
-                className="md:hidden"
-                onClick={onCancel}
+          </aside>
+
+          {/* 右欄：題目清單 */}
+          <div className="min-w-0">
+            <div className="mb-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => handleGenerate(false)}
+                disabled={generateDisabled}
+                className="flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
-                {t("contentEditor.buttons.cancel")}
+                {isGenerating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                {t("scenarioDialogue.buttons.generateAnother")}
+              </button>
+            </div>
+
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={rows.map((r) => r.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-3 pr-1">
+                  {rows.map((row, index) => (
+                    <SortableRow
+                      key={row.id}
+                      row={row}
+                      index={index}
+                      langLabel={langLabel}
+                      hasLanguage={hasLanguage}
+                      globalTense={globalTense}
+                      globalVoice={globalVoice}
+                      canDelete={rows.length > 1}
+                      regenerating={regeneratingId === row.id}
+                      imageLoading={imageGenerating}
+                      onChange={(patch) => patchRow(row.id, patch)}
+                      onDuplicate={() =>
+                        setRows((prev) =>
+                          prev.length >= MAX_ITEMS
+                            ? prev
+                            : [
+                                ...prev.slice(0, index + 1),
+                                createRow({ ...row, id: nextRowId() }),
+                                ...prev.slice(index + 1),
+                              ],
+                        )
+                      }
+                      onDelete={() =>
+                        setRows((prev) => prev.filter((r) => r.id !== row.id))
+                      }
+                      onRegenerate={() => {
+                        setRegeneratingId(row.id);
+                        setTimeout(() => setRegeneratingId(null), 800);
+                      }}
+                      onPickImage={(file) => pickRowImage(row.id, file)}
+                      onRemoveImage={() => removeRowImage(row.id)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+
+            <button
+              type="button"
+              onClick={addRow}
+              disabled={rows.length >= MAX_ITEMS}
+              className="mt-3 w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:hover:border-gray-300 disabled:hover:text-gray-600"
+            >
+              <Plus className="h-5 w-5" />
+              {rows.length >= MAX_ITEMS
+                ? t("scenarioDialogue.hints.maxReached", { max: MAX_ITEMS })
+                : t("scenarioDialogue.buttons.addQuestion")}
+            </button>
+
+            {/* 題目計數：對著題目看才有意義，所以跟著清單走而不是留在設定頁 */}
+            <div
+              className={`mt-3 text-xs tabular-nums ${
+                overLimit || underLimit
+                  ? "text-red-500 font-medium"
+                  : "text-gray-500"
+              }`}
+            >
+              {filledCount} {t("contentEditor.messages.items")}
+              {` / ${MAX_ITEMS}`}
+              {` (${t("scenarioDialogue.hints.itemRange", {
+                min: MIN_ITEMS,
+                max: MAX_ITEMS,
+              })})`}
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap items-center gap-3">
+              <Button variant="outline" onClick={() => setStep(1)}>
+                <ArrowLeft className="mr-1 h-4 w-4" />
+                {t("scenarioDialogue.buttons.backToSettings")}
               </Button>
-            )}
+              {onCancel && (
+                <Button
+                  variant="outline"
+                  className="md:hidden"
+                  onClick={onCancel}
+                >
+                  {t("contentEditor.buttons.cancel")}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
