@@ -279,6 +279,35 @@ describe("ScenarioDialoguePanel 情境圖片手動上傳", () => {
     );
   });
 
+  it("複製題目後，其中一列換圖不會弄壞另一列（共用同一個 blob）", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+
+    // 先進 Step 2 才有題目卡可以複製
+    fireEvent.click(screen.getByText(K.skip));
+
+    const slots = () =>
+      container.querySelectorAll<HTMLInputElement>('input[accept="image/*"]');
+    // Step 2 的第一張圖是對照欄以外的題目卡；上傳到第 1 題
+    const rowSlot = slots()[slots().length - 1];
+    upload(rowSlot, "a.png");
+    expect(container.querySelectorAll("img").length).toBeGreaterThan(0);
+
+    // 複製這一題 → 兩列共用同一個 blob:mock-1
+    fireEvent.click(screen.getAllByTitle("contentEditor.tooltips.copy")[0]);
+    const shared = Array.from(container.querySelectorAll("img")).filter(
+      (img) => img.getAttribute("src") === "blob:mock-1",
+    );
+    expect(shared.length).toBe(2);
+
+    // 換掉其中一列的圖：另一列還在用，所以不能 revoke
+    upload(slots()[slots().length - 1], "b.png");
+
+    expect(revokeObjectURL).not.toHaveBeenCalledWith("blob:mock-1");
+    expect(
+      container.querySelector('img[src="blob:mock-1"]'),
+    ).toBeInTheDocument();
+  });
+
   it("卸載時把還沒釋放的 blob 清乾淨", () => {
     const { container, unmount } = render(<ScenarioDialoguePanel />, {
       wrapper,

@@ -110,21 +110,48 @@ const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 /**
  * 時態＝時間 × 動貌，共 12 種；被動是「語態」，與時態正交，因此獨立成第三個下拉
  * （若併入時態清單會膨脹成 24 項）。時間與動貌兩者都選才組成 chip，避免半套條件。
+ *
+ * 存的是**穩定代碼**、顯示才走 i18n —— 老師切換介面語言不該改變存進資料庫、
+ * 送去給 AI 評分的值，否則英文介面存 "past"、中文介面存 "過去"，後端得同時
+ * 認兩套。代碼與 `scenarioDialogue.tenseTimes.*` 等 i18n key 一一對應。
  */
-const TENSE_TIMES = ["現在", "過去", "未來"] as const;
-const TENSE_ASPECTS = ["簡單式", "進行式", "完成式", "完成進行式"] as const;
-const VOICES = ["主動", "被動"] as const;
+const TENSE_TIMES = ["present", "past", "future"] as const;
+const TENSE_ASPECTS = [
+  "simple",
+  "progressive",
+  "perfect",
+  "perfectProgressive",
+] as const;
+const VOICES = ["active", "passive"] as const;
 
 /** 時態＝時間＋動貌，兩者都選才成立（避免「過去」但沒說哪一種的半套條件） */
 export interface TenseSetting {
+  /** TENSE_TIMES 之一，或空字串代表不指定 */
   time: string;
+  /** TENSE_ASPECTS 之一，或空字串代表不指定 */
   aspect: string;
 }
 
+/** 只取字面翻譯用；型別放寬成字串以免每個呼叫點都要轉型 i18next 的 TFunction */
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
 const EMPTY_TENSE: TenseSetting = { time: "", aspect: "" };
-const isTenseSet = (t: TenseSetting) => !!t.time && !!t.aspect;
-const tenseLabel = (t: TenseSetting) =>
-  isTenseSet(t) ? t.time + t.aspect : "";
+const isTenseSet = (tense: TenseSetting) => !!tense.time && !!tense.aspect;
+
+const voiceLabel = (voice: string, t: Translate) =>
+  voice ? t(`scenarioDialogue.voices.${voice}`) : "";
+
+/**
+ * 中文是「過去簡單式」直接相接，英文要「Past Simple」中間有空格，
+ * 所以連接方式本身也交給 i18n（`tenseCombo`）決定。
+ */
+const tenseLabel = (tense: TenseSetting, t: Translate) =>
+  isTenseSet(tense)
+    ? t("scenarioDialogue.tenseCombo", {
+        time: t(`scenarioDialogue.tenseTimes.${tense.time}`),
+        aspect: t(`scenarioDialogue.tenseAspects.${tense.aspect}`),
+      })
+    : "";
 
 /** 與 ReadingAssessmentPanel 相同的輔助語言清單 */
 const TRANSLATION_LANGUAGES: TranslationLanguageOption[] = [
@@ -312,7 +339,7 @@ function TenseSelects({
           <option value="">{notSpecified}</option>
           {TENSE_TIMES.map((o) => (
             <option key={o} value={o}>
-              {o}
+              {t(`scenarioDialogue.tenseTimes.${o}`)}
             </option>
           ))}
         </select>
@@ -329,7 +356,7 @@ function TenseSelects({
           <option value="">{notSpecified}</option>
           {TENSE_ASPECTS.map((o) => (
             <option key={o} value={o}>
-              {o}
+              {t(`scenarioDialogue.tenseAspects.${o}`)}
             </option>
           ))}
         </select>
@@ -346,7 +373,7 @@ function TenseSelects({
           <option value="">{notSpecified}</option>
           {VOICES.map((o) => (
             <option key={o} value={o}>
-              {o}
+              {t(`scenarioDialogue.voices.${o}`)}
             </option>
           ))}
         </select>
@@ -474,6 +501,8 @@ interface RowProps {
   onRegenerate: () => void;
   onPickImage: (file: File) => void;
   onRemoveImage: () => void;
+  /** 尚未串接後端的動作（語音生成／播放）按下去的提示 */
+  onNotWired: () => void;
 }
 
 function SortableRow({
@@ -492,6 +521,7 @@ function SortableRow({
   onRegenerate,
   onPickImage,
   onRemoveImage,
+  onNotWired,
 }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: row.id });
@@ -623,6 +653,7 @@ function SortableRow({
                 {row.audioUrl && (
                   <button
                     type="button"
+                    onClick={onNotWired}
                     className="p-1 rounded text-green-600 hover:bg-green-100"
                     title={t("contentEditor.tooltips.play")}
                   >
@@ -631,6 +662,7 @@ function SortableRow({
                 )}
                 <button
                   type="button"
+                  onClick={onNotWired}
                   className={`p-1 rounded ${
                     row.audioUrl
                       ? "text-blue-600 hover:bg-blue-100"
@@ -779,12 +811,24 @@ function SortableRow({
                 row.keywords.length > 0) && (
                 <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2">
                   {isTenseSet(effTense) && (
-                    <Chip label={`時態：${tenseLabel(effTense)}`} />
+                    <Chip
+                      label={t("scenarioDialogue.chips.tense", {
+                        value: tenseLabel(effTense, t),
+                      })}
+                    />
                   )}
-                  {effVoice && <Chip label={`語態：${effVoice}`} />}
+                  {effVoice && (
+                    <Chip
+                      label={t("scenarioDialogue.chips.voice", {
+                        value: voiceLabel(effVoice, t),
+                      })}
+                    />
+                  )}
                   {row.keywords.length > 0 && (
                     <Chip
-                      label={`必用：${row.keywords.join(", ")}`}
+                      label={t("scenarioDialogue.chips.keywords", {
+                        value: row.keywords.join(", "),
+                      })}
                       onRemove={() => {
                         setKeywordDraft("");
                         onChange({ keywords: [] });
@@ -941,6 +985,11 @@ const ScenarioDialoguePanel = forwardRef<
 
   /** 只算真的有輸入題目的列 — 預設那張空白卡不計入 */
   const filledCount = rows.filter((r) => r.question.trim()).length;
+  /**
+   * 目前 addRow、複製、產題三條路都已經卡在 MAX_ITEMS，所以這個條件實際上不會
+   * 成立。刻意留著當最後一道守衛：日後多一條新增題目的路徑（貼上、匯入、
+   * 後端回填）忘了設上限時，至少擋在儲存前而不是靜靜地存進超量資料。
+   */
   const overLimit = filledCount > MAX_ITEMS;
   const underLimit = filledCount < MIN_ITEMS;
 
@@ -1011,40 +1060,87 @@ const ScenarioDialoguePanel = forwardRef<
     }, 600);
   };
 
+  /**
+   * 單題重新生成。stub 也要真的換掉題目 —— tooltip 寫的是「會避開已出現過的
+   * 題目」，如果只轉個 spinner 就結束，之後接真 API 的人會以為這裡本來就沒事做。
+   * 換上一則還沒被用到的示範題，把「避開重複」這件事實際做出來。
+   */
+  const regenerateRow = (id: string) => {
+    setRegeneratingId(id);
+    setTimeout(() => {
+      setRows((prev) => {
+        const used = new Set(
+          prev.map((r) => r.question.trim()).filter(Boolean),
+        );
+        const fresh = SAMPLE_QUESTIONS.find((q) => !used.has(q.question));
+        // 示範題用光了就維持原樣，總比換成重複的好
+        if (!fresh) return prev;
+        return prev.map((r) => (r.id === id ? { ...r, ...fresh } : r));
+      });
+      setRegeneratingId(null);
+    }, 800);
+  };
+
   /** 跳過 AI 自己出題：至少留一張空白卡可以打字 */
   const handleSkipToList = () => {
     setRows((prev) => (prev.length === 0 ? [createRow()] : prev));
     setStep(2);
   };
 
-  /** 整份情境圖片：手動上傳／替換／移除。舊的 blob 先釋放再換新的 */
-  const pickContextImage = (file: File) => {
-    releasePreviewUrl(contextImageUrl);
-    setContextImageUrl(createPreviewUrl(file));
+  /**
+   * 換圖／移除時**不能無條件 revoke** —— 複製題目會把 imageUrl 一起帶走，
+   * 同一個 blob 網址因此可能同時掛在多列（或整份情境圖）上。若照舊釋放，
+   * 另一列的 `<img>` 會指到已作廢的 blob 而變成破圖。
+   *
+   * 這裡改成先確認沒有別人還在用才釋放。用掃描而非計數器，是因為列可以被
+   * 複製、刪除、拖曳排序，計數器很容易跟真實狀態脫節；列數上限只有 10，
+   * 掃一次的成本可以忽略。
+   */
+  const releaseIfUnused = (url: string | null, exceptRowId?: string) => {
+    if (!url) return;
+    const stillUsed =
+      url === contextImageUrl ||
+      rows.some((r) => r.id !== exceptRowId && r.imageUrl === url);
+    if (!stillUsed) releasePreviewUrl(url);
   };
 
-  const removeContextImage = () => {
-    releasePreviewUrl(contextImageUrl);
-    setContextImageUrl(null);
+  /** 整份情境圖片：手動上傳／替換／移除 */
+  const setContextImage = (next: string | null) => {
+    if (contextImageUrl && contextImageUrl !== next) {
+      // 整份的圖被複製到題目上時同樣要留著
+      if (!rows.some((r) => r.imageUrl === contextImageUrl)) {
+        releasePreviewUrl(contextImageUrl);
+      }
+    }
+    setContextImageUrl(next);
   };
+
+  const pickContextImage = (file: File) =>
+    setContextImage(createPreviewUrl(file));
+  const removeContextImage = () => setContextImage(null);
 
   /** 逐題情境圖片，行為與整份的一致 */
-  const pickRowImage = (id: string, file: File) => {
+  const setRowImage = (id: string, next: string | null) => {
     const current = rows.find((r) => r.id === id)?.imageUrl ?? null;
-    releasePreviewUrl(current);
-    patchRow(id, { imageUrl: createPreviewUrl(file) });
+    if (current !== next) releaseIfUnused(current, id);
+    patchRow(id, { imageUrl: next });
   };
 
-  const removeRowImage = (id: string) => {
-    const current = rows.find((r) => r.id === id)?.imageUrl ?? null;
-    releasePreviewUrl(current);
-    patchRow(id, { imageUrl: null });
-  };
+  const pickRowImage = (id: string, file: File) =>
+    setRowImage(id, createPreviewUrl(file));
+  const removeRowImage = (id: string) => setRowImage(id, null);
 
   const handleFiles = (files: FileList | null) => {
     if (!files) return;
     setUploadedFiles((prev) => [...prev, ...Array.from(files)]);
   };
+
+  /**
+   * 語音生成與播放還沒有後端可打。按鈕維持可點並回一句提示，而不是靜靜地
+   * 沒反應 —— 沒反應的按鈕會被當成壞掉，老師會一直重按。
+   */
+  const notWired = () =>
+    toast.info(t("scenarioDialogue.messages.frontendOnly"));
 
   /**
    * 兩個步驟都能按儲存，但擋關的條件一樣 —— 缺什麼就把老師帶到那一步，
@@ -1181,6 +1277,7 @@ const ScenarioDialoguePanel = forwardRef<
                   />
                   <button
                     type="button"
+                    onClick={notWired}
                     className="absolute right-2 top-2 p-1 rounded text-gray-600 bg-yellow-100 hover:bg-yellow-200"
                     title={t("scenarioDialogue.tooltips.generateAudio")}
                   >
@@ -1545,9 +1642,19 @@ const ScenarioDialoguePanel = forwardRef<
                 {isTenseSet(globalTense) || globalVoice ? (
                   <div className="flex flex-wrap gap-1.5">
                     {isTenseSet(globalTense) && (
-                      <Chip label={`時態：${tenseLabel(globalTense)}`} />
+                      <Chip
+                        label={t("scenarioDialogue.chips.tense", {
+                          value: tenseLabel(globalTense, t),
+                        })}
+                      />
                     )}
-                    {globalVoice && <Chip label={`語態：${globalVoice}`} />}
+                    {globalVoice && (
+                      <Chip
+                        label={t("scenarioDialogue.chips.voice", {
+                          value: voiceLabel(globalVoice, t),
+                        })}
+                      />
+                    )}
                   </div>
                 ) : (
                   <p className="text-xs text-gray-400">
@@ -1623,12 +1730,10 @@ const ScenarioDialoguePanel = forwardRef<
                       onDelete={() =>
                         setRows((prev) => prev.filter((r) => r.id !== row.id))
                       }
-                      onRegenerate={() => {
-                        setRegeneratingId(row.id);
-                        setTimeout(() => setRegeneratingId(null), 800);
-                      }}
+                      onRegenerate={() => regenerateRow(row.id)}
                       onPickImage={(file) => pickRowImage(row.id, file)}
                       onRemoveImage={() => removeRowImage(row.id)}
+                      onNotWired={notWired}
                     />
                   ))}
                 </div>

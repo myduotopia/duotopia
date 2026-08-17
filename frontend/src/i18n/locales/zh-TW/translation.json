@@ -4887,7 +4887,28 @@
       "settingsSub": "產題條件 · 整份共用內容",
       "questions": "題目清單",
       "questionsSub": "逐題編輯 · 排序"
-    }
+    },
+    "tenseTimes": {
+      "present": "現在",
+      "past": "過去",
+      "future": "未來"
+    },
+    "tenseAspects": {
+      "simple": "簡單式",
+      "progressive": "進行式",
+      "perfect": "完成式",
+      "perfectProgressive": "完成進行式"
+    },
+    "voices": {
+      "active": "主動",
+      "passive": "被動"
+    },
+    "chips": {
+      "tense": "時態：{{value}}",
+      "voice": "語態：{{value}}",
+      "keywords": "必用：{{value}}"
+    },
+    "tenseCombo": "{{time}}{{aspect}}"
   },
   "vocabularySet": {
     "dialogTitle": "新增單字集",

@@ -4867,7 +4867,28 @@
       "settingsSub": "Generation options · shared content",
       "questions": "Questions",
       "questionsSub": "Edit and reorder"
-    }
+    },
+    "tenseTimes": {
+      "present": "Present",
+      "past": "Past",
+      "future": "Future"
+    },
+    "tenseAspects": {
+      "simple": "Simple",
+      "progressive": "Progressive",
+      "perfect": "Perfect",
+      "perfectProgressive": "Perfect progressive"
+    },
+    "voices": {
+      "active": "Active",
+      "passive": "Passive"
+    },
+    "chips": {
+      "tense": "Tense: {{value}}",
+      "voice": "Voice: {{value}}",
+      "keywords": "Must use: {{value}}"
+    },
+    "tenseCombo": "{{time}} {{aspect}}"
   },
   "vocabularySet": {
     "dialogTitle": "Add Vocabulary Set",
