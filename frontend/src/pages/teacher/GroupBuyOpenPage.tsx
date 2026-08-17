@@ -719,38 +719,50 @@ export default function GroupBuyOpenPage() {
               >
                 <span className="w-8 text-sm text-gray-500">{idx + 1}.</span>
                 <span className="w-20 text-xs text-gray-600">團員</span>
-                <Input
-                  type="email"
-                  // issue #983-2：每個 input 給唯一 name + autoComplete off，
-                  // 避免瀏覽器 email 自動填入時把所有欄位一起填滿。
-                  name={`gb-roster-email-${idx}`}
-                  autoComplete="off"
+                {/* issue #983-2：每列 email 各自包一個 <form>。
+                    瀏覽器的自動填入以 form 為範圍，單欄 form 就只可能被填
+                    一個值。先前只加唯一 name + autoComplete="off" 無效——
+                    整頁沒有任何 form，瀏覽器把全文件當成同一個 autofill
+                    section；且 Chrome 對聯絡資訊類自動填入本來就會忽略
+                    autocomplete="off"。onSubmit 擋掉單欄 form 被 Enter
+                    觸發的隱式送出（否則會整頁重新載入、名冊全失）。 */}
+                <form
                   className="flex-1 min-w-[200px]"
-                  placeholder={
-                    idx === 0
-                      ? "預設帶入你自己，可改填團員 email"
-                      : `team-member-${idx}@example.com`
-                  }
-                  value={row.email}
-                  onChange={(e) =>
-                    // Apply dedupe to the resulting roster (not just the
-                    // rendered view) so other rows that were "duplicate"
-                    // because of the edited row immediately reset to
-                    // "idle". Otherwise revalidateAll / rosterRef would
-                    // still see stale "duplicate" statuses on those rows
-                    // and skip them on the next "重新檢查" press.
-                    setRoster((prev) =>
-                      dedupeStatuses(
-                        prev.map((r, i) =>
-                          i === idx
-                            ? { ...r, email: e.target.value, status: "idle" }
-                            : r,
+                  onSubmit={(e) => e.preventDefault()}
+                >
+                  <Input
+                    type="email"
+                    name={`gb-roster-email-${idx}`}
+                    // 目標不是關掉自動填入，而是讓它只填這一欄，所以明確
+                    // 宣告欄位語意（"off" 對 Chrome 無效）。
+                    autoComplete="email"
+                    className="w-full"
+                    placeholder={
+                      idx === 0
+                        ? "預設帶入你自己，可改填團員 email"
+                        : `team-member-${idx}@example.com`
+                    }
+                    value={row.email}
+                    onChange={(e) =>
+                      // Apply dedupe to the resulting roster (not just the
+                      // rendered view) so other rows that were "duplicate"
+                      // because of the edited row immediately reset to
+                      // "idle". Otherwise revalidateAll / rosterRef would
+                      // still see stale "duplicate" statuses on those rows
+                      // and skip them on the next "重新檢查" press.
+                      setRoster((prev) =>
+                        dedupeStatuses(
+                          prev.map((r, i) =>
+                            i === idx
+                              ? { ...r, email: e.target.value, status: "idle" }
+                              : r,
+                          ),
                         ),
-                      ),
-                    )
-                  }
-                  onBlur={() => validateRow(idx)}
-                />
+                      )
+                    }
+                    onBlur={() => validateRow(idx)}
+                  />
+                </form>
                 <span
                   className={`text-sm w-28 text-right ${STATUS_COLOR[row.status]}`}
                 >
