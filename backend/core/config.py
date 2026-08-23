@@ -84,6 +84,18 @@ class Settings:
         "ONE_CAMPUS_OAUTH_REDIRECT_URI"
     )
 
+    # LINE 官方帳號（issue #804 — 自動發布更新公告）
+    # 與 CI 通知共用同一個 channel（Secret Manager: line-channel-access-token）
+    LINE_CHANNEL_ACCESS_TOKEN: Optional[str] = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+    # 非 production 環境「發布 LINE」時的收件人（開發者本人），不做 broadcast
+    LINE_TEST_USER_ID: Optional[str] = os.getenv("LINE_TEST_USER_ID")
+    # 更新公告的樣板圖（先用官網 OG 圖佔位，換圖不用改程式）
+    RELEASE_ANNOUNCEMENT_BANNER_URL: Optional[str] = os.getenv(
+        "RELEASE_ANNOUNCEMENT_BANNER_URL"
+    )
+    # CI 呼叫「產生公告草稿」webhook 用的密鑰
+    RELEASE_WEBHOOK_SECRET: Optional[str] = os.getenv("RELEASE_WEBHOOK_SECRET")
+
     # OpenAI (optional)
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
 
