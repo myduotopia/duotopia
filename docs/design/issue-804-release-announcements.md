@@ -67,6 +67,15 @@ LINE 官方帳號免費方案每月 200 則，**broadcast 一次消耗「好友�
 | POST | `/api/admin/release-announcements/{id}/publish` | 發布（`channels: line / website`） |
 | POST | `/api/admin/release-announcements/{id}/discard` | 捨棄草稿 |
 
-## 後續
+## 後台（PR2）
 
-- PR2：admin 後台頁面（雙區塊預覽 / 編輯、Flex 卡片預覽、通道勾選、載入未發布草稿）
+管理員控制台 `/admin` →「更新公告」分頁（`AdminReleaseAnnouncementsPage`）：
+
+- 左側草稿清單：環境、變更類型、狀態、release 標題
+- 右側分兩個獨立區塊：
+  - **LINE 推播文案** — 中／英文案 + 圖片網址 + Flex 卡片即時預覽
+    （`LineFlexPreview` 版型對齊後端 `build_release_flex`）
+  - **官網雙語文章** — 中／英標題與內文；已發布時顯示文章連結
+- 合併：`載入舊草稿` → 勾選未發布的舊草稿 → `併入這一則`
+- 發布：勾選 `LINE 官方帳號` / `官網文章`（已發布的通道自動停用，不會重複發）
+- `儲存草稿` 只送出有改動的欄位；`捨棄` 從待辦清單移除
