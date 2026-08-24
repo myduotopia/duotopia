@@ -87,6 +87,15 @@ class Settings:
     # OpenAI (optional)
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
 
+    # Meta 社群發文（Facebook 粉專 / Instagram，issue #591，optional）
+    # 建議用 Business Manager 的 System User 產生長效 Page Access Token。
+    META_APP_ID: Optional[str] = os.getenv("META_APP_ID")
+    META_APP_SECRET: Optional[str] = os.getenv("META_APP_SECRET")
+    META_PAGE_ACCESS_TOKEN: Optional[str] = os.getenv("META_PAGE_ACCESS_TOKEN")
+    META_PAGE_ID: Optional[str] = os.getenv("META_PAGE_ID")
+    META_IG_USER_ID: Optional[str] = os.getenv("META_IG_USER_ID")
+    META_GRAPH_VERSION: str = os.getenv("META_GRAPH_VERSION", "v21.0")
+
     # Azure Speech Services (optional)
     AZURE_SPEECH_KEY: Optional[str] = os.getenv("AZURE_SPEECH_KEY")
     # 預設 japaneast（東京）：教育部校園徵求案規定不得連線至中國大陸含港澳，
