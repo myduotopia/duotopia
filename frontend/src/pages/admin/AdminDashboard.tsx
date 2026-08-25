@@ -7,6 +7,7 @@ import {
   Building,
   Tag,
   Ticket,
+  Megaphone,
 } from "lucide-react";
 import AdminSubscriptionDashboard from "./AdminSubscriptionDashboard";
 import AdminBillingDashboard from "./AdminBillingDashboard";
@@ -14,6 +15,7 @@ import AdminAudioErrorDashboard from "./AdminAudioErrorDashboard";
 import AdminOrganizations from "./AdminOrganizations";
 import AdminPlansPage from "./AdminPlansPage";
 import AdminPromoCodesPage from "./AdminPromoCodesPage";
+import AdminReleaseAnnouncementsPage from "./AdminReleaseAnnouncementsPage";
 import AdminLayout from "@/components/admin/AdminLayout";
 
 export default function AdminDashboard() {
@@ -79,6 +81,14 @@ export default function AdminDashboard() {
             <span className="hidden sm:inline">推薦碼</span>
             <span className="sm:hidden">推薦</span>
           </TabsTrigger>
+          <TabsTrigger
+            value="release-announcements"
+            className="flex items-center gap-2 px-4 py-3 text-sm md:text-base font-medium text-gray-500 bg-transparent border-b-2 border-transparent rounded-none data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 data-[state=active]:font-semibold data-[state=active]:shadow-none hover:text-gray-700 transition-colors"
+          >
+            <Megaphone className="h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
+            <span className="hidden sm:inline">更新公告</span>
+            <span className="sm:hidden">公告</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* Subscription Management Tab */}
@@ -109,6 +119,11 @@ export default function AdminDashboard() {
         {/* Promo Codes Tab */}
         <TabsContent value="promo-codes" className="space-y-4">
           <AdminPromoCodesPage />
+        </TabsContent>
+
+        {/* Release Announcements Tab（issue #804） */}
+        <TabsContent value="release-announcements" className="space-y-4">
+          <AdminReleaseAnnouncementsPage />
         </TabsContent>
       </Tabs>
     </AdminLayout>
