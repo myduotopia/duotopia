@@ -346,13 +346,17 @@ function mapApiItemToRow(item: ApiContentItem, index: number): ContentRow {
   let example_sentence_translation = "";
   let example_sentence_japanese = "";
   let example_sentence_korean = "";
-  let selectedSentenceLanguage: SentenceTranslationLanguage = "chinese";
+  // #1004: 語言只要有存就採用，不能綁「必須同時有譯文」——老師把譯文清空後
+  // 重新載入會退回中文，接著補翻譯就翻錯語言。
+  const selectedSentenceLanguage: SentenceTranslationLanguage =
+    item.example_sentence_translation_lang ||
+    item.selectedSentenceLanguage ||
+    "chinese";
 
   if (
     item.example_sentence_translation_lang &&
     item.example_sentence_translation
   ) {
-    selectedSentenceLanguage = item.example_sentence_translation_lang;
     if (item.example_sentence_translation_lang === "chinese") {
       example_sentence_translation = item.example_sentence_translation;
     } else if (item.example_sentence_translation_lang === "japanese") {
@@ -364,7 +368,6 @@ function mapApiItemToRow(item: ApiContentItem, index: number): ContentRow {
     example_sentence_translation = item.example_sentence_translation || "";
     example_sentence_japanese = item.example_sentence_japanese || "";
     example_sentence_korean = item.example_sentence_korean || "";
-    selectedSentenceLanguage = item.selectedSentenceLanguage || "chinese";
   }
 
   return {
@@ -389,6 +392,70 @@ function mapApiItemToRow(item: ApiContentItem, index: number): ContentRow {
     distractors: item.distractors,
   };
 }
+
+// #1004: 例句翻譯語言的推導集中在這兩個 helper，避免載入、批次補齊、單題翻譯
+// 各自用不同的 fallback，導致「翻到 A 語言卻寫進 B 語言欄位」或靜默不翻譯。
+type SentenceLangSource = {
+  example_sentence?: string;
+  example_sentence_translation?: string;
+  example_sentence_japanese?: string;
+  example_sentence_korean?: string;
+  selectedSentenceLanguage?: SentenceTranslationLanguage;
+};
+
+const hasAnyExampleTranslation = (row: SentenceLangSource) =>
+  !!(
+    row.example_sentence_translation?.trim() ||
+    row.example_sentence_japanese?.trim() ||
+    row.example_sentence_korean?.trim()
+  );
+
+/** 從既有資料推出左側「翻譯成」的預設值；沒有任何列時回傳空字串（新增模式不預選）。 */
+export function getInitialSentenceLang(
+  rows: SentenceLangSource[],
+): SentenceTranslationLanguage | "" {
+  if (rows.length === 0) return "";
+  const translated = rows.find(hasAnyExampleTranslation);
+  if (translated) return translated.selectedSentenceLanguage || "chinese";
+  return rows[0].selectedSentenceLanguage || "chinese";
+}
+
+/**
+ * 決定例句翻譯的目標語言與 API 語言代碼。
+ *
+ * 左側「翻譯成」沒選時，不可以靜默跳過翻譯（#1004 的「批次補翻譯全部失敗」），
+ * 改用列上既有的語言，最後 fallback 中文。回傳的 value 同時決定譯文要寫進
+ * 哪個欄位，確保「翻成什麼語言」與「寫進哪一欄」永遠一致。
+ */
+export function resolveExampleTranslationTarget(
+  selectedLang: string,
+  customLang: string,
+  rows: SentenceLangSource[],
+): { value: SentenceTranslationLanguage | "other"; code: string } {
+  if (selectedLang === "other") {
+    return { value: "other", code: (customLang || "").trim() };
+  }
+  const value = (selectedLang ||
+    rows.find((r) => r.example_sentence?.trim())?.selectedSentenceLanguage ||
+    rows[0]?.selectedSentenceLanguage ||
+    "chinese") as SentenceTranslationLanguage;
+  return {
+    value,
+    code:
+      SENTENCE_TRANSLATION_LANGUAGES.find((l) => l.value === value)?.code ||
+      "zh-TW",
+  };
+}
+
+/** 依語言取出該列的例句翻譯欄位（"other" 沿用中文欄位）。 */
+const getExampleTranslationByLang = (
+  row: SentenceLangSource,
+  lang: SentenceTranslationLanguage | "other",
+) => {
+  if (lang === "japanese") return row.example_sentence_japanese || "";
+  if (lang === "korean") return row.example_sentence_korean || "";
+  return row.example_sentence_translation || "";
+};
 
 function getDistractorText(d: Distractor): string {
   if (typeof d === "string") return d;
@@ -2122,6 +2189,13 @@ const VocabularySetPanel = forwardRef<
         if (firstLang) {
           setLastSelectedWordLang(firstLang);
         }
+
+        // #1004: 例句翻譯語言同樣要還原。沒還原的話左側「翻譯成」顯示「尚未選擇」，
+        // 老師一選就把既有例句翻譯全部清空；批次補翻譯也會因為沒有目標語言而靜默跳過。
+        const firstSentenceLang = getInitialSentenceLang(convertedRows);
+        if (firstSentenceLang) {
+          setAiGenerateTranslateLang(firstSentenceLang);
+        }
       }
     } catch (error) {
       console.error("Failed to load content:", error);
@@ -3786,17 +3860,25 @@ const VocabularySetPanel = forwardRef<
         langConfig?.code || "zh-TW",
       )) as { translation: string };
 
+      // #1004: 後端 AI 失敗時會原樣回傳英文句子。直接寫進翻譯欄位的話，
+      // 使用者只看到「翻譯沒成功」卻沒有任何錯誤訊息，這裡明確報錯。
+      const translated = (response?.translation || "").trim();
+      if (!translated || translated === sourceSentence.trim()) {
+        toast.error(t("vocabularySet.messages.exampleTranslationFailed"));
+        return;
+      }
+
       setRows((prev) =>
         prev.map((r) => {
           if (r.id !== rowId) return r;
           const next = { ...r };
           // 根據目標語言寫入對應欄位
           if (targetLang === "chinese") {
-            next.example_sentence_translation = response.translation;
+            next.example_sentence_translation = translated;
           } else if (targetLang === "japanese") {
-            next.example_sentence_japanese = response.translation;
+            next.example_sentence_japanese = translated;
           } else if (targetLang === "korean") {
-            next.example_sentence_korean = response.translation;
+            next.example_sentence_korean = translated;
           }
           // 記錄最後選擇的語言
           next.selectedSentenceLanguage = targetLang;
@@ -3818,6 +3900,12 @@ const VocabularySetPanel = forwardRef<
     // 每次打開 modal 都重設為 Program level
     setAiGenerateLevel(programLevel || "A1");
     // 預選左側 AI Generate Examples 的翻譯語言
+    // #1004: 已經有例句翻譯語言（既有資料還原或老師選過）就沿用，
+    // 否則打開單題 AI 對話框會把左側批次區的語言一起改掉
+    if (aiGenerateTranslateLang) {
+      setAiGenerateModalOpen(true);
+      return;
+    }
     // 英英翻譯時不預選
     if (lastSelectedWordLang === "english") {
       setAiGenerateTranslateLang("");
@@ -4151,17 +4239,17 @@ const VocabularySetPanel = forwardRef<
         }
 
         const shouldGenerateExamples = aiGenerateExpanded;
-        let exampleTargetLang = "";
-        if (shouldGenerateExamples) {
-          if (aiGenerateTranslateLang === "other") {
-            exampleTargetLang = customSentenceTranslationLang || "";
-          } else if (aiGenerateTranslateLang) {
-            exampleTargetLang =
-              SENTENCE_TRANSLATION_LANGUAGES.find(
-                (l) => l.value === aiGenerateTranslateLang,
-              )?.code || "";
-          }
-        }
+        // #1004: 「翻譯成」沒選時改用列上既有語言（最後 fallback 中文），
+        // 不再因為目標語言是空字串就整個 Phase 4 靜默跳過。
+        const exampleTarget = resolveExampleTranslationTarget(
+          aiGenerateTranslateLang,
+          customSentenceTranslationLang,
+          rows,
+        );
+        const exampleTargetLang = shouldGenerateExamples
+          ? exampleTarget.code
+          : "";
+        const exampleTargetValue = exampleTarget.value;
 
         const currentRows = [...rows];
         let completedItems = 0;
@@ -4187,18 +4275,9 @@ const VocabularySetPanel = forwardRef<
           if (autoTTS && !row.audioUrl && !row.audio_url) steps++;
           if (shouldGenerateExamples && !row.example_sentence?.trim()) steps++;
           if (shouldGenerateExamples && row.example_sentence?.trim()) {
-            const sentenceLang =
-              row.selectedSentenceLanguage ||
-              aiGenerateTranslateLang ||
-              "chinese";
-            const hasExampleTranslation = (() => {
-              if (sentenceLang === "japanese")
-                return !!row.example_sentence_japanese?.trim();
-              if (sentenceLang === "korean")
-                return !!row.example_sentence_korean?.trim();
-              return !!row.example_sentence_translation?.trim();
-            })();
-            if (!hasExampleTranslation) steps++;
+            // #1004: 以「這次要翻成的語言」判斷缺不缺，與實際寫入的欄位一致
+            if (!getExampleTranslationByLang(row, exampleTargetValue).trim())
+              steps++;
             // Issue #757: 例句已存在但缺音檔（舊資料常見情境）
             // 也算一步要補，否則「無需補齊」會誤報而漏掉聽力派發要用的 TTS。
             if (!row.example_sentence_audio_url) steps++;
@@ -4276,18 +4355,9 @@ const VocabularySetPanel = forwardRef<
           if (shouldGenerateExamples && !row.example_sentence?.trim())
             needsExamples.push(idx);
           if (shouldGenerateExamples && row.example_sentence?.trim()) {
-            const sentenceLang =
-              row.selectedSentenceLanguage ||
-              aiGenerateTranslateLang ||
-              "chinese";
-            const hasExampleTranslation = (() => {
-              if (sentenceLang === "japanese")
-                return !!row.example_sentence_japanese?.trim();
-              if (sentenceLang === "korean")
-                return !!row.example_sentence_korean?.trim();
-              return !!row.example_sentence_translation?.trim();
-            })();
-            if (!hasExampleTranslation) needsExampleTranslation.push(idx);
+            // #1004: 同上，判斷依據 = 這次要翻成的語言
+            if (!getExampleTranslationByLang(row, exampleTargetValue).trim())
+              needsExampleTranslation.push(idx);
             if (!row.example_sentence_audio_url) {
               needsExampleAudio.push(idx);
             }
@@ -4484,6 +4554,15 @@ const VocabularySetPanel = forwardRef<
         }
 
         // --- Phase 4: Translate existing example sentences missing translation ---
+        // #1004: 只剩「自訂語言但沒填語言名稱」會沒有目標語言，這種情況要明確報錯，
+        // 不能像以前一樣靜默跳過（使用者只會看到「翻譯全部失敗」）。
+        if (
+          needsExampleTranslation.length > 0 &&
+          !batchPauseRef.current &&
+          !exampleTargetLang
+        ) {
+          toast.error(t("contentEditor.labels.enterCustomLanguage"));
+        }
         if (
           needsExampleTranslation.length > 0 &&
           !batchPauseRef.current &&
@@ -4506,16 +4585,19 @@ const VocabularySetPanel = forwardRef<
             translations.forEach((trans: string, i: number) => {
               if (!trans) return;
               const idx = needsExampleTranslation[i];
-              const sentenceLang =
-                currentRows[idx].selectedSentenceLanguage ||
-                aiGenerateTranslateLang ||
-                "chinese";
-              if (sentenceLang === "japanese") {
+              // #1004: 寫入欄位＋列上語言都跟著「實際翻成的語言」走，
+              // 避免翻日文卻寫進中文欄位（或反過來顯示不出來）
+              if (exampleTargetValue === "japanese") {
                 currentRows[idx].example_sentence_japanese = trans;
-              } else if (sentenceLang === "korean") {
+                currentRows[idx].selectedSentenceLanguage = "japanese";
+              } else if (exampleTargetValue === "korean") {
                 currentRows[idx].example_sentence_korean = trans;
+                currentRows[idx].selectedSentenceLanguage = "korean";
               } else {
                 currentRows[idx].example_sentence_translation = trans;
+                if (exampleTargetValue === "chinese") {
+                  currentRows[idx].selectedSentenceLanguage = "chinese";
+                }
               }
             });
           } catch (error) {
@@ -5044,14 +5126,16 @@ const VocabularySetPanel = forwardRef<
                       {t("vocabularySet.labels.translateTo")}
                     </label>
                     <select
+                      data-testid="example-sentence-lang-select"
                       value={aiGenerateTranslateLang}
                       onChange={(e) => {
                         const val = e.target.value;
                         setAiGenerateTranslateLang(val);
                         if (val !== "other")
                           setCustomSentenceTranslationLang("");
-                        // 切換語言時清空所有例句翻譯欄位
-                        // #957: 正在翻譯（in-flight）的列不動，避免把即將回寫的結果清掉
+                        // #1004: 只切換顯示語言，不再清空譯文。中/日/韓各自有欄位，
+                        // 清空等於把老師已完成的翻譯直接丟掉（切回原語言也救不回來）。
+                        // #957: 正在翻譯（in-flight）的列不動，避免蓋掉即將回寫的結果
                         setRows((prev) =>
                           prev.map((row) => {
                             if (
@@ -5061,10 +5145,11 @@ const VocabularySetPanel = forwardRef<
                             }
                             return {
                               ...row,
-                              example_sentence_translation: "",
-                              example_sentence_japanese: "",
-                              example_sentence_korean: "",
-                              selectedSentenceLanguage: (val || undefined) as
+                              // "other"（自訂語言）的譯文沿用中文欄位，不寫入
+                              // 不存在於 SentenceTranslationLanguage 的值
+                              selectedSentenceLanguage: (val && val !== "other"
+                                ? val
+                                : undefined) as
                                 | SentenceTranslationLanguage
                                 | undefined,
                             };
