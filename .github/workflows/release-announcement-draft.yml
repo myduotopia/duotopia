@@ -1,0 +1,155 @@
+name: Release Announcement Draft
+
+# issue #804 — 每次 release 進 staging / production，產生一則「更新公告草稿」。
+#
+# 草稿只是草稿：內含 LINE 文案與官網雙語文章兩份內容，都不會自動對外發布。
+# 管理者在後台（/api/admin/release-announcements）預覽、編輯、選擇要發 LINE、
+# 官網或兩者。沒發的草稿可以併進下一次一起發，節省 LINE 每月訊息量。
+#
+# 觸發用 push 而非 workflow_run：
+# 1. workflow_run 只會執行 default branch（main）版本的 workflow，
+#    推到 staging 時無法用 staging 上的版本測試。
+# 2. 產生草稿只需要資料庫與 AI，不依賴新版程式已經上線。
+# 部署失敗時仍會產生草稿，管理者在後台按「捨棄」即可。
+
+on:
+  push:
+    branches:
+      - staging
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '產生草稿的環境'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      commit_sha:
+        description: '來源 commit sha（草稿去重用）'
+        required: true
+        type: string
+      release_title:
+        description: 'Release 標題（例：Release: [Feature]: ... (Fixes #123)）'
+        required: true
+        type: string
+
+jobs:
+  create-draft:
+    name: 📢 Create release announcement draft
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve environment and release info
+        id: info
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          INPUT_TITLE: ${{ inputs.release_title }}
+          INPUT_SHA: ${{ inputs.commit_sha }}
+          INPUT_ENV: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENVIRONMENT="$INPUT_ENV"
+            COMMIT_SHA="$INPUT_SHA"
+            RELEASE_TITLE="$INPUT_TITLE"
+            BRANCH="${{ github.ref_name }}"
+          else
+            if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+              ENVIRONMENT="production"
+            else
+              ENVIRONMENT="staging"
+            fi
+            COMMIT_SHA="${{ github.sha }}"
+            # 只取 commit message 第一行當標題
+            RELEASE_TITLE=$(printf '%s' "$COMMIT_MESSAGE" | head -1)
+            BRANCH="${{ github.ref_name }}"
+          fi
+
+          # 從標題結尾的 (#N) 取 PR 編號（沒有就留空）
+          PR_NUMBER=$(printf '%s' "$RELEASE_TITLE" | grep -oE '\(#[0-9]+\)$' | grep -oE '[0-9]+' || true)
+
+          {
+            echo "environment=$ENVIRONMENT"
+            echo "commit_sha=$COMMIT_SHA"
+            echo "branch=$BRANCH"
+            echo "pr_number=$PR_NUMBER"
+          } >> "$GITHUB_OUTPUT"
+
+          # 標題可能含特殊字元，用 heredoc 形式寫入 output
+          {
+            echo "release_title<<RELEASE_TITLE_EOF"
+            printf '%s\n' "$RELEASE_TITLE"
+            echo "RELEASE_TITLE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create draft via backend webhook
+        env:
+          BACKEND_URL: ${{ steps.info.outputs.environment == 'production' && secrets.PRODUCTION_BACKEND_URL || secrets.STAGING_BACKEND_URL }}
+          RELEASE_WEBHOOK_SECRET: ${{ secrets.RELEASE_WEBHOOK_SECRET }}
+          ENVIRONMENT: ${{ steps.info.outputs.environment }}
+          COMMIT_SHA: ${{ steps.info.outputs.commit_sha }}
+          BRANCH: ${{ steps.info.outputs.branch }}
+          PR_NUMBER: ${{ steps.info.outputs.pr_number }}
+          RELEASE_TITLE: ${{ steps.info.outputs.release_title }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${RELEASE_WEBHOOK_SECRET:-}" ] || [ -z "${BACKEND_URL:-}" ]; then
+            echo "⚠️  缺少 RELEASE_WEBHOOK_SECRET 或 BACKEND_URL，略過草稿產生"
+            exit 0
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg environment "$ENVIRONMENT" \
+            --arg source_ref "$COMMIT_SHA" \
+            --arg source_branch "$BRANCH" \
+            --arg release_title "$RELEASE_TITLE" \
+            --arg pr_number "$PR_NUMBER" \
+            '{
+              environment: $environment,
+              source_ref: $source_ref,
+              source_branch: $source_branch,
+              release_title: $release_title
+            }
+            + (if $pr_number == "" then {} else {pr_number: ($pr_number | tonumber)} end)')
+
+          echo "📢 產生更新公告草稿：$ENVIRONMENT / $COMMIT_SHA"
+
+          # Cloud Run min-instances=0 時第一次請求可能 cold start，重試 3 次
+          for attempt in 1 2 3; do
+            HTTP_CODE=$(curl -s -o response.json -w "%{http_code}" \
+              -X POST "${BACKEND_URL%/}/api/internal/release-announcements" \
+              -H "Content-Type: application/json" \
+              -H "X-Release-Secret: $RELEASE_WEBHOOK_SECRET" \
+              --max-time 120 \
+              -d "$PAYLOAD") || HTTP_CODE="000"
+
+            if [ "$HTTP_CODE" = "201" ]; then
+              cat response.json
+              echo ""
+              echo "✅ 草稿已建立（後台可預覽、編輯、選擇發布 LINE / 官網）"
+              exit 0
+            fi
+
+            echo "⚠️  第 $attempt 次嘗試失敗（HTTP $HTTP_CODE）"
+            cat response.json 2>/dev/null || true
+            sleep 10
+          done
+
+          echo "❌ 無法建立更新公告草稿"
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### 📢 更新公告草稿"
+            echo ""
+            echo "- 環境：\`${{ steps.info.outputs.environment }}\`"
+            echo "- Commit：\`${{ steps.info.outputs.commit_sha }}\`"
+            echo "- 標題：${{ steps.info.outputs.release_title }}"
+            echo ""
+            echo "草稿不會自動對外發布，請到後台選擇發布通道。"
+          } >> "$GITHUB_STEP_SUMMARY"

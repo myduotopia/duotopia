@@ -315,6 +315,8 @@ jobs:
               'group_buy_teams', 'group_buy_members',
               -- Meta 社群發文記錄（#591，JWT auth 業務表）
               'social_posts',
+              -- 更新公告（#804，JWT auth 業務表）
+              'release_announcements',
               -- n8n 系統表（外部服務，不適用 RLS）
               'annotation_tag_entity', 'auth_identity', 'auth_provider_sync_history', 'binary_data',
               'chat_hub_agents', 'chat_hub_messages', 'chat_hub_sessions', 'credentials_entity',
@@ -455,6 +457,30 @@ jobs:
         else
           ENV_VARS="$ENV_VARS,GOOGLE_REDIRECT_URI=${GOOGLE_OAUTH_RELAY_URI}"
         fi
+
+        # LINE 官方帳號 / 官網更新公告（#804）
+        # 與 CI 通知共用同一個 LINE channel；LINE_TEST_USER_ID 讓非 production
+        # 環境只推播給開發者本人，不會 broadcast 給真實好友。
+        # 只在 secret 有值時才加入：避免把空值塞進 --set-env-vars，
+        # 也讓「secret 還沒設定」時部署行為與現況完全相同。
+        LINE_TOKEN_VALUE="${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}"
+        if [ -n "$LINE_TOKEN_VALUE" ]; then
+          ENV_VARS="$ENV_VARS,LINE_CHANNEL_ACCESS_TOKEN=$LINE_TOKEN_VALUE"
+        fi
+        LINE_TEST_USER_VALUE="${{ secrets.LINE_USER_ID }}"
+        if [ -n "$LINE_TEST_USER_VALUE" ]; then
+          ENV_VARS="$ENV_VARS,LINE_TEST_USER_ID=$LINE_TEST_USER_VALUE"
+        fi
+        RELEASE_SECRET_VALUE="${{ secrets.RELEASE_WEBHOOK_SECRET }}"
+        if [ -n "$RELEASE_SECRET_VALUE" ]; then
+          ENV_VARS="$ENV_VARS,RELEASE_WEBHOOK_SECRET=$RELEASE_SECRET_VALUE"
+        fi
+        # 公告樣板圖：先用官網現有圖片佔位，之後改 repo variable 即可換圖
+        BANNER_URL="${{ vars.RELEASE_ANNOUNCEMENT_BANNER_URL }}"
+        if [ -z "$BANNER_URL" ]; then
+          BANNER_URL="${{ steps.db_env.outputs.FRONTEND_URL }}/android-chrome-512x512.png"
+        fi
+        ENV_VARS="$ENV_VARS,RELEASE_ANNOUNCEMENT_BANNER_URL=$BANNER_URL"
 
         # Environment-specific configuration
         if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then

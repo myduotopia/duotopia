@@ -52,6 +52,7 @@ from routers import (
     demo,
 )
 from routers import blog
+from routers import release_announcements
 from routers import organization_programs
 from routers import school_programs
 from routers import resource_materials
@@ -309,6 +310,10 @@ app.include_router(
     institution_invoices.router
 )  # Admin 機構應收帳款路由（Admin only, issue #838 Phase D）
 app.include_router(blog.router)  # Blog 管理路由（Admin only）
+app.include_router(release_announcements.router)  # 更新公告管理路由（Admin only，issue #804）
+app.include_router(
+    release_announcements.internal_router
+)  # 更新公告 CI webhook（X-Release-Secret）
 app.include_router(cron.router)  # Cron Job 路由
 app.include_router(debug.router)  # Debug 路由
 
