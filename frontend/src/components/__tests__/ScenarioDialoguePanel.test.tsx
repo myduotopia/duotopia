@@ -1,9 +1,9 @@
 /**
- * ScenarioDialoguePanel — 兩步驟流程（#944）
+ * ScenarioDialoguePanel — 兩步驟流程與情境內容（#944）
  *
- * 重點在「兩步共用同一份 state」與「儲存擋關會把老師帶回出問題的那一步」：
- * 這兩件事壞掉的時候畫面看起來都還是正常的，只有操作到一半才會發現，
- * 所以用測試釘住。
+ * 釘住兩件容易在改版時走鐘、但畫面看起來都正常的行為：
+ * 1. 兩步共用同一份 state，來回切換不會弄丟填過的東西
+ * 2. 「標題必填」擋的是儲存、「情境內容必填」擋的是 AI 產題 —— 兩者不同
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createRef, type ReactNode } from "react";
@@ -42,8 +42,6 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 );
 
 const K = {
-  stepSettings: "scenarioDialogue.steps.settings",
-  stepQuestions: "scenarioDialogue.steps.questions",
   skip: "scenarioDialogue.buttons.skipGeneration",
   generate: "scenarioDialogue.buttons.generateAndContinue",
   generateAnother: "scenarioDialogue.buttons.generateAnother",
@@ -51,14 +49,21 @@ const K = {
   back: "scenarioDialogue.buttons.backToSettings",
   addQuestion: "scenarioDialogue.buttons.addQuestion",
   editSettings: "scenarioDialogue.buttons.editSettings",
+  generateScenario: "scenarioDialogue.buttons.generateScenario",
+  uploadImage: "scenarioDialogue.buttons.uploadImage",
+  generateImage: "scenarioDialogue.buttons.generateImage",
+  tabManual: "scenarioDialogue.tabs.sourceManual",
+  tabAi: "scenarioDialogue.tabs.sourceAi",
+  tabUpload: "scenarioDialogue.tabs.sourceUpload",
   titlePlaceholder: "scenarioDialogue.placeholders.title",
+  scenarioPlaceholder: "scenarioDialogue.placeholders.scenarioContent",
   questionPlaceholder: "scenarioDialogue.placeholders.question",
-  contextPlaceholder: "scenarioDialogue.placeholders.context",
   rubricPlaceholder: "scenarioDialogue.placeholders.globalRubric",
   noContextYet: "scenarioDialogue.hints.noContextYet",
   noRubricYet: "scenarioDialogue.hints.noRubricYet",
   enterTitle: "contentEditor.messages.enterTitle",
   atLeastN: "contentEditor.messages.addAtLeastNItems",
+  scenarioRequired: "scenarioDialogue.messages.scenarioRequired",
 };
 
 /** Step 2 才有的「新增題目」按鈕，用來判斷現在在哪一步 */
@@ -72,100 +77,98 @@ const renderPanel = (
   return ref;
 };
 
-const typeTitle = (value: string) =>
-  fireEvent.change(screen.getByPlaceholderText(K.titlePlaceholder), {
+const type = (placeholder: string, value: string) =>
+  fireEvent.change(screen.getByPlaceholderText(placeholder), {
     target: { value },
   });
 
-describe("ScenarioDialoguePanel 兩步驟流程", () => {
-  beforeEach(() => {
-    mockToastError.mockClear();
-  });
+const fillRequiredForGenerate = () => {
+  type(K.titlePlaceholder, "週末活動");
+  type(K.scenarioPlaceholder, "你和同學在星期一早上聊天，聊各自的週末。");
+};
 
+/** Radix 的 TabsTrigger 是 mousedown 觸發，fireEvent.click 不會切換 */
+const switchTab = (label: string) =>
+  fireEvent.mouseDown(screen.getByText(label));
+
+/** 產題是 setTimeout 驅動的 stub，用假時鐘推完 */
+const runGenerate = async (label: string) => {
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(screen.getByText(label));
+    await act(async () => {
+      vi.advanceTimersByTime(900);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+};
+
+beforeEach(() => {
+  mockToastError.mockClear();
+});
+
+describe("ScenarioDialoguePanel 兩步驟流程", () => {
   it("一開啟停在 Step 1，看不到題目清單", () => {
     renderPanel();
 
-    expect(screen.getByText(K.stepSettings)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(K.titlePlaceholder)).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(K.scenarioPlaceholder),
+    ).toBeInTheDocument();
     expect(onQuestionList()).toBe(false);
   });
 
-  it("「跳過，我想自己出題」直接進 Step 2 並留一張可打字的空白卡", () => {
+  it("沒有步驟列，但底部按鈕仍能雙向切換", () => {
     renderPanel();
 
-    fireEvent.click(screen.getByText(K.skip));
+    // 步驟列已移除：畫面上不該再有「設定 / 題目清單」那組步驟按鈕
+    expect(screen.queryByText("scenarioDialogue.steps.settings")).toBeNull();
+    expect(screen.queryByText("scenarioDialogue.steps.questions")).toBeNull();
 
+    fireEvent.click(screen.getByText(K.skip));
     expect(onQuestionList()).toBe(true);
-    expect(
-      screen.getAllByPlaceholderText(K.questionPlaceholder).length,
-    ).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByText(K.back));
+    expect(onQuestionList()).toBe(false);
   });
 
   it("回 Step 1 不會弄丟已經填的設定（兩步共用同一份 state）", () => {
     renderPanel();
 
-    typeTitle("週末活動");
+    type(K.titlePlaceholder, "週末活動");
     fireEvent.click(screen.getByText(K.skip));
-    expect(onQuestionList()).toBe(true);
-
     fireEvent.click(screen.getByText(K.back));
 
-    expect(onQuestionList()).toBe(false);
     expect(screen.getByPlaceholderText(K.titlePlaceholder)).toHaveValue(
       "週末活動",
     );
   });
 
-  it("步驟列本身可以直接跳回 Step 1", () => {
-    renderPanel();
-
-    fireEvent.click(screen.getByText(K.skip));
-    expect(onQuestionList()).toBe(true);
-
-    fireEvent.click(screen.getByText(K.stepSettings));
-
-    expect(onQuestionList()).toBe(false);
-  });
-
   it("已有題目時，Step 1 底部改成「查看題目清單」而不是「跳過」", async () => {
-    vi.useFakeTimers();
-    try {
-      renderPanel();
+    renderPanel();
+    fillRequiredForGenerate();
 
-      // 還沒題目：出口是「跳過，我想自己出題」
-      expect(screen.queryByText(K.skip)).not.toBeNull();
-      expect(screen.queryByText(K.viewQuestions)).toBeNull();
+    expect(screen.queryByText(K.skip)).not.toBeNull();
+    expect(screen.queryByText(K.viewQuestions)).toBeNull();
 
-      fireEvent.click(screen.getByText(K.generate));
-      await act(async () => {
-        vi.advanceTimersByTime(700);
-      });
-      fireEvent.click(screen.getByText(K.stepSettings));
-    } finally {
-      vi.useRealTimers();
-    }
+    await runGenerate(K.generate);
+    fireEvent.click(screen.getByText(K.back));
 
-    // 回到設定頁，出口換成「查看題目清單」，老師才找得到回清單的路
     expect(screen.queryByText(K.skip)).toBeNull();
     expect(screen.queryByText(K.viewQuestions)).not.toBeNull();
     expect(screen.queryByText(K.generateAnother)).not.toBeNull();
   });
 
   it("「查看題目清單」進 Step 2 且不會動到既有題目", async () => {
-    vi.useFakeTimers();
-    let before = 0;
-    try {
-      renderPanel();
-      fireEvent.click(screen.getByText(K.generate));
-      await act(async () => {
-        vi.advanceTimersByTime(700);
-      });
-      before = screen.getAllByPlaceholderText(K.questionPlaceholder).length;
-      fireEvent.click(screen.getByText(K.stepSettings));
-    } finally {
-      vi.useRealTimers();
-    }
+    renderPanel();
+    fillRequiredForGenerate();
 
+    await runGenerate(K.generate);
+    const before = screen.getAllByPlaceholderText(K.questionPlaceholder).length;
+    expect(before).toBeGreaterThanOrEqual(3);
+
+    fireEvent.click(screen.getByText(K.back));
     fireEvent.click(screen.getByText(K.viewQuestions));
 
     expect(onQuestionList()).toBe(true);
@@ -175,156 +178,69 @@ describe("ScenarioDialoguePanel 兩步驟流程", () => {
   });
 });
 
-describe("ScenarioDialoguePanel Step 2 設定對照欄", () => {
-  it("帶入 Step 1 填的情境說明與作答指引", () => {
+describe("ScenarioDialoguePanel 情境內容", () => {
+  it("三種產生方式都在，共用同一個文字框", () => {
     renderPanel();
 
-    fireEvent.change(screen.getByPlaceholderText(K.contextPlaceholder), {
-      target: { value: "你和同學在星期一早上聊天。" },
-    });
-    fireEvent.change(screen.getByPlaceholderText(K.rubricPlaceholder), {
-      target: { value: "請用完整句子回答。" },
-    });
+    expect(screen.getByText(K.tabManual)).toBeInTheDocument();
+    expect(screen.getByText(K.tabAi)).toBeInTheDocument();
+    expect(screen.getByText(K.tabUpload)).toBeInTheDocument();
+    // 文字框只有一個，不隨 tab 切換而複製
+    expect(screen.getAllByPlaceholderText(K.scenarioPlaceholder).length).toBe(
+      1,
+    );
+  });
+
+  it("AI 生成會把情境文章填進共用文字框，切回其他 tab 也還在", async () => {
+    renderPanel();
+
+    switchTab(K.tabAi);
+    await runGenerate(K.generateScenario);
+
+    const box = screen.getByPlaceholderText(K.scenarioPlaceholder);
+    expect((box as HTMLTextAreaElement).value).not.toBe("");
+
+    switchTab(K.tabManual);
+    expect(screen.getByPlaceholderText(K.scenarioPlaceholder)).toHaveValue(
+      (box as HTMLTextAreaElement).value,
+    );
+  });
+
+  it("沒有情境內容就按產題 → 提示並且不產題", async () => {
+    renderPanel();
+    type(K.titlePlaceholder, "週末活動");
+
+    await runGenerate(K.generate);
+
+    expect(mockToastError).toHaveBeenCalledWith(K.scenarioRequired);
+    expect(onQuestionList()).toBe(false);
+    // 一張預設空白卡，沒有被 AI 填進題目
+    expect(
+      screen
+        .queryAllByPlaceholderText(K.questionPlaceholder)
+        .filter((el) => (el as HTMLTextAreaElement).value !== "").length,
+    ).toBe(0);
+  });
+
+  it("Step 2 對照欄帶入情境內容與作答指引，沒填則顯示空狀態", () => {
+    renderPanel();
+
+    fireEvent.click(screen.getByText(K.skip));
+    expect(screen.getByText(K.noContextYet)).toBeInTheDocument();
+    expect(screen.getByText(K.noRubricYet)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText(K.back));
+    type(K.scenarioPlaceholder, "你和同學在星期一早上聊天。");
+    type(K.rubricPlaceholder, "請用完整句子回答。");
+    // 空白卡不算題目，所以出口按鈕仍是「跳過」
     fireEvent.click(screen.getByText(K.skip));
 
     expect(screen.getByText("你和同學在星期一早上聊天。")).toBeInTheDocument();
     expect(screen.getByText("請用完整句子回答。")).toBeInTheDocument();
   });
-
-  it("兩者都沒填時顯示空狀態，而不是留一塊空白", () => {
-    renderPanel();
-
-    fireEvent.click(screen.getByText(K.skip));
-
-    expect(screen.getByText(K.noContextYet)).toBeInTheDocument();
-    expect(screen.getByText(K.noRubricYet)).toBeInTheDocument();
-  });
-
-  it("對照欄的「回設定修改」可以回 Step 1", () => {
-    renderPanel();
-
-    fireEvent.click(screen.getByText(K.skip));
-    fireEvent.click(screen.getByText(K.editSettings));
-
-    expect(onQuestionList()).toBe(false);
-  });
-
-  it("產生題目後自動翻到 Step 2，並帶入題目", async () => {
-    vi.useFakeTimers();
-    try {
-      renderPanel();
-
-      fireEvent.click(screen.getByText(K.generate));
-      await act(async () => {
-        vi.advanceTimersByTime(700);
-      });
-
-      expect(onQuestionList()).toBe(true);
-      expect(
-        screen.getAllByPlaceholderText(K.questionPlaceholder).length,
-      ).toBeGreaterThanOrEqual(3);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
-
-describe("ScenarioDialoguePanel 情境圖片手動上傳", () => {
-  const createObjectURL = vi.fn();
-  const revokeObjectURL = vi.fn();
-  let seq = 0;
-
-  beforeEach(() => {
-    seq = 0;
-    createObjectURL.mockReset().mockImplementation(() => `blob:mock-${++seq}`);
-    revokeObjectURL.mockReset();
-    // jsdom 沒有這兩個 API，要自己補
-    global.URL.createObjectURL =
-      createObjectURL as unknown as typeof URL.createObjectURL;
-    global.URL.revokeObjectURL =
-      revokeObjectURL as unknown as typeof URL.revokeObjectURL;
-  });
-
-  /** 情境圖片的 input 用 accept="image/*"，與 PDF 上傳的 input 區分得開 */
-  const imageInput = (container: HTMLElement) =>
-    container.querySelector<HTMLInputElement>('input[accept="image/*"]')!;
-
-  const upload = (input: HTMLInputElement, name: string) =>
-    fireEvent.change(input, {
-      target: { files: [new File(["x"], name, { type: "image/png" })] },
-    });
-
-  it("上傳後顯示預覽圖", () => {
-    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
-
-    upload(imageInput(container), "a.png");
-
-    expect(createObjectURL).toHaveBeenCalledTimes(1);
-    expect(container.querySelector("img")).toHaveAttribute(
-      "src",
-      "blob:mock-1",
-    );
-  });
-
-  it("換圖時釋放舊的 blob，不會一路累積", () => {
-    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
-
-    upload(imageInput(container), "a.png");
-    upload(imageInput(container), "b.png");
-
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-1");
-    expect(container.querySelector("img")).toHaveAttribute(
-      "src",
-      "blob:mock-2",
-    );
-  });
-
-  it("複製題目後，其中一列換圖不會弄壞另一列（共用同一個 blob）", () => {
-    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
-
-    // 先進 Step 2 才有題目卡可以複製
-    fireEvent.click(screen.getByText(K.skip));
-
-    const slots = () =>
-      container.querySelectorAll<HTMLInputElement>('input[accept="image/*"]');
-    // Step 2 的第一張圖是對照欄以外的題目卡；上傳到第 1 題
-    const rowSlot = slots()[slots().length - 1];
-    upload(rowSlot, "a.png");
-    expect(container.querySelectorAll("img").length).toBeGreaterThan(0);
-
-    // 複製這一題 → 兩列共用同一個 blob:mock-1
-    fireEvent.click(screen.getAllByTitle("contentEditor.tooltips.copy")[0]);
-    const shared = Array.from(container.querySelectorAll("img")).filter(
-      (img) => img.getAttribute("src") === "blob:mock-1",
-    );
-    expect(shared.length).toBe(2);
-
-    // 換掉其中一列的圖：另一列還在用，所以不能 revoke
-    upload(slots()[slots().length - 1], "b.png");
-
-    expect(revokeObjectURL).not.toHaveBeenCalledWith("blob:mock-1");
-    expect(
-      container.querySelector('img[src="blob:mock-1"]'),
-    ).toBeInTheDocument();
-  });
-
-  it("卸載時把還沒釋放的 blob 清乾淨", () => {
-    const { container, unmount } = render(<ScenarioDialoguePanel />, {
-      wrapper,
-    });
-
-    upload(imageInput(container), "a.png");
-    unmount();
-
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-1");
-  });
 });
 
 describe("ScenarioDialoguePanel 儲存擋關", () => {
-  beforeEach(() => {
-    mockToastError.mockClear();
-  });
-
   it("沒填標題就儲存 → 擋下並留在 Step 1", async () => {
     const onSave = vi.fn();
     const ref = renderPanel({ onSave });
@@ -342,8 +258,7 @@ describe("ScenarioDialoguePanel 儲存擋關", () => {
     const onSave = vi.fn();
     const ref = renderPanel({ onSave });
 
-    typeTitle("週末活動");
-
+    type(K.titlePlaceholder, "週末活動");
     await act(async () => {
       await ref.current?.save();
     });
@@ -351,33 +266,159 @@ describe("ScenarioDialoguePanel 儲存擋關", () => {
     expect(onSave).not.toHaveBeenCalled();
     // t 被 mock 成只回傳 key，插值參數不會傳到 toast
     expect(mockToastError).toHaveBeenCalledWith(K.atLeastN);
-    // 問題出在題目上，所以要停在題目清單而不是設定頁
     expect(onQuestionList()).toBe(true);
   });
 
-  it("標題與題數都齊全 → 真的送出", async () => {
-    vi.useFakeTimers();
+  it("情境內容是空的照樣能存 —— 它擋的是產題，不是儲存", async () => {
     const onSave = vi.fn();
-    let ref: ReturnType<typeof renderPanel>;
-    try {
-      ref = renderPanel({ onSave });
+    const ref = renderPanel({ onSave });
 
-      typeTitle("週末活動");
-      fireEvent.click(screen.getByText(K.generate));
-      await act(async () => {
-        vi.advanceTimersByTime(700);
-      });
-    } finally {
-      vi.useRealTimers();
-    }
+    type(K.titlePlaceholder, "週末活動");
+    fireEvent.click(screen.getByText(K.skip));
+
+    // 自己在題目清單打滿 3 題，全程沒碰情境內容
+    screen
+      .getAllByPlaceholderText(K.questionPlaceholder)
+      .slice(0, 1)
+      .forEach((el) =>
+        fireEvent.change(el, { target: { value: "Question one?" } }),
+      );
+    fireEvent.click(screen.getByText(K.addQuestion));
+    fireEvent.click(screen.getByText(K.addQuestion));
+    const boxes = screen.getAllByPlaceholderText(K.questionPlaceholder);
+    fireEvent.change(boxes[1], { target: { value: "Question two?" } });
+    fireEvent.change(boxes[2], { target: { value: "Question three?" } });
 
     await act(async () => {
-      await ref!.current?.save();
+      await ref.current?.save();
     });
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(mockToastError).not.toHaveBeenCalled();
-    expect(onSave.mock.calls[0][0]).toMatchObject({ title: "週末活動" });
-    expect(onSave.mock.calls[0][0].rows.length).toBeGreaterThanOrEqual(3);
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      title: "週末活動",
+      scenarioContent: "",
+    });
+  });
+
+  it("標題、情境內容、題數都齊全 → 真的送出", async () => {
+    const onSave = vi.fn();
+    const ref = renderPanel({ onSave });
+
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
+
+    await act(async () => {
+      await ref.current?.save();
+    });
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(mockToastError).not.toHaveBeenCalled();
+    const payload = onSave.mock.calls[0][0];
+    expect(payload.title).toBe("週末活動");
+    expect(payload.scenarioContent).not.toBe("");
+    expect(payload.rows.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("ScenarioDialoguePanel 單題情境圖片", () => {
+  const createObjectURL = vi.fn();
+  const revokeObjectURL = vi.fn();
+  let seq = 0;
+
+  beforeEach(() => {
+    seq = 0;
+    createObjectURL.mockReset().mockImplementation(() => `blob:mock-${++seq}`);
+    revokeObjectURL.mockReset();
+    // jsdom 沒有這兩個 API，要自己補
+    global.URL.createObjectURL =
+      createObjectURL as unknown as typeof URL.createObjectURL;
+    global.URL.revokeObjectURL =
+      revokeObjectURL as unknown as typeof URL.revokeObjectURL;
+  });
+
+  /** 圖片欄位已經只存在於題目卡，所以每個案例都得先進 Step 2 */
+  const gotoList = () => fireEvent.click(screen.getByText(K.skip));
+
+  const imageInputs = (container: HTMLElement) =>
+    container.querySelectorAll<HTMLInputElement>('input[accept="image/*"]');
+
+  const upload = (input: HTMLInputElement, name: string) =>
+    fireEvent.change(input, {
+      target: { files: [new File(["x"], name, { type: "image/png" })] },
+    });
+
+  it("空圖框同時提供「上傳」與「AI 生成」兩個入口", () => {
+    renderPanel();
+    gotoList();
+
+    expect(screen.getAllByText(K.uploadImage).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(K.generateImage).length).toBeGreaterThan(0);
+  });
+
+  it("Step 1 已經沒有整份情境圖片欄位", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+
+    expect(imageInputs(container).length).toBe(0);
+  });
+
+  it("上傳後顯示預覽圖", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    gotoList();
+
+    upload(imageInputs(container)[0], "a.png");
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("img")).toHaveAttribute(
+      "src",
+      "blob:mock-1",
+    );
+  });
+
+  it("換圖時釋放舊的 blob，不會一路累積", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    gotoList();
+
+    upload(imageInputs(container)[0], "a.png");
+    upload(imageInputs(container)[0], "b.png");
+
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-1");
+    expect(container.querySelector("img")).toHaveAttribute(
+      "src",
+      "blob:mock-2",
+    );
+  });
+
+  it("複製題目後，其中一列換圖不會弄壞另一列（共用同一個 blob）", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    gotoList();
+
+    upload(imageInputs(container)[0], "a.png");
+    fireEvent.click(screen.getAllByTitle("contentEditor.tooltips.copy")[0]);
+
+    const shared = Array.from(container.querySelectorAll("img")).filter(
+      (img) => img.getAttribute("src") === "blob:mock-1",
+    );
+    expect(shared.length).toBe(2);
+
+    // 換掉其中一列：另一列還在用，所以不能 revoke
+    upload(imageInputs(container)[0], "b.png");
+
+    expect(revokeObjectURL).not.toHaveBeenCalledWith("blob:mock-1");
+    expect(
+      container.querySelector('img[src="blob:mock-1"]'),
+    ).toBeInTheDocument();
+  });
+
+  it("卸載時把還沒釋放的 blob 清乾淨", () => {
+    const { container, unmount } = render(<ScenarioDialoguePanel />, {
+      wrapper,
+    });
+    gotoList();
+
+    upload(imageInputs(container)[0], "a.png");
+    unmount();
+
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-1");
   });
 });
