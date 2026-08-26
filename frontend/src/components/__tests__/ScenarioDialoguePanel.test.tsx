@@ -356,9 +356,14 @@ describe("ScenarioDialoguePanel 單題重新生成", () => {
     type(K.titlePlaceholder, "週末活動");
     type(K.scenarioPlaceholder, "情境");
     // 只產 3 題，才留得下沒被用過的示範題可以換
-    fireEvent.change(container.querySelector("#sd-generate-count")!, {
-      target: { value: "3" },
-    });
+    const countGroup = container.querySelector(
+      '[aria-labelledby="sd-generate-count-label"]',
+    )!;
+    fireEvent.click(
+      Array.from(countGroup.querySelectorAll("button")).find(
+        (b) => b.textContent === "3",
+      )!,
+    );
     await runGenerate(K.generate);
 
     const firstQuestion = () =>

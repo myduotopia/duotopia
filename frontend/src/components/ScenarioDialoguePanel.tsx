@@ -114,6 +114,9 @@ export const MAX_ITEMS = 10;
 
 const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 
+/** 一次產生幾題的預設值。與 CEFR 一樣是「挑一個」，所以用同一種藥丸按鈕 */
+const GENERATE_COUNTS = [3, 5, 8, 10] as const;
+
 /**
  * 時態＝時間 × 動貌，共 12 種；被動是「語態」，與時態正交，因此獨立成第三個下拉
  * （若併入時態清單會膨脹成 24 項）。時間與動貌兩者都選才組成 chip，避免半套條件。
@@ -1513,6 +1516,7 @@ const ScenarioDialoguePanel = forwardRef<
                     <button
                       key={lv}
                       type="button"
+                      aria-pressed={questionLevel === lv}
                       onClick={() => setQuestionLevel(lv)}
                       className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
                         questionLevel === lv
@@ -1527,24 +1531,38 @@ const ScenarioDialoguePanel = forwardRef<
               </div>
 
               <div>
-                <label
+                <span
                   className="text-xs font-semibold text-gray-700 mb-1 block"
-                  htmlFor="sd-generate-count"
+                  id="sd-generate-count-label"
                 >
                   {t("scenarioDialogue.labels.generateCount")}
-                </label>
-                <select
-                  id="sd-generate-count"
-                  value={generateCount}
-                  onChange={(e) => setGenerateCount(Number(e.target.value))}
-                  className="px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                </span>
+                {/*
+                  與「題目難度」同一層級、同樣是從幾個預設值挑一個，所以用同一種
+                  控制項。原本這裡是原生 select，在一排藥丸按鈕旁邊高度與字級都
+                  對不上，同一個區塊出現三種尺寸的控制項。
+                */}
+                <div
+                  role="group"
+                  aria-labelledby="sd-generate-count-label"
+                  className="flex flex-wrap gap-1"
                 >
-                  {[3, 5, 8, 10].map((n) => (
-                    <option key={n} value={n}>
+                  {GENERATE_COUNTS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      aria-pressed={generateCount === n}
+                      onClick={() => setGenerateCount(n)}
+                      className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                        generateCount === n
+                          ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
                       {n}
-                    </option>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
             </div>
 
