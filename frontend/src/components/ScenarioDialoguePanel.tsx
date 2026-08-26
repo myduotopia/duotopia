@@ -422,6 +422,7 @@ function TenseSelects({
 
 /** 生效中的條件標籤；`onRemove` 未給則不顯示移除鍵（繼承來的條件要去整體改） */
 function Chip({ label, onRemove }: { label: string; onRemove?: () => void }) {
+  const { t } = useTranslation();
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-100 px-2.5 py-0.5 text-[11px] font-semibold text-blue-800">
       {label}
@@ -429,6 +430,7 @@ function Chip({ label, onRemove }: { label: string; onRemove?: () => void }) {
         <button
           type="button"
           onClick={onRemove}
+          title={t("contentEditor.tooltips.delete")}
           className="opacity-60 hover:opacity-100"
         >
           <X className="h-2.5 w-2.5" />
@@ -587,6 +589,12 @@ function SortableRow({
   );
 
   /** 與 ReadingAssessmentPanel 相同：textarea 依內容自動長高，避免文字被裁切 */
+  /** 打字時同步長高。callback ref 只在掛載時跑，光靠它文字會被 overflow-hidden 裁掉 */
+  const growOnInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    e.target.style.height = "auto";
+    e.target.style.height = e.target.scrollHeight + "px";
+  };
+
   const autoHeightRef = useCallback((el: HTMLTextAreaElement | null) => {
     if (el) {
       el.style.height = "auto";
@@ -695,7 +703,10 @@ function SortableRow({
             <div className="relative">
               <textarea
                 value={row.question}
-                onChange={(e) => onChange({ question: e.target.value })}
+                onChange={(e) => {
+                  growOnInput(e);
+                  onChange({ question: e.target.value });
+                }}
                 placeholder={t("scenarioDialogue.placeholders.question")}
                 ref={autoHeightRef}
                 rows={1}
@@ -731,7 +742,10 @@ function SortableRow({
             <div className="relative">
               <textarea
                 value={row.translation}
-                onChange={(e) => onChange({ translation: e.target.value })}
+                onChange={(e) => {
+                  growOnInput(e);
+                  onChange({ translation: e.target.value });
+                }}
                 placeholder={langLabel}
                 ref={autoHeightRef}
                 rows={1}
@@ -1029,10 +1043,17 @@ const ScenarioDialoguePanel = forwardRef<
 
   // 情境內容沒填不在這裡擋 —— 按下去要看到「請先輸入情境內容」的提示，
   // 而不是一顆沒說明理由的灰色按鈕
-  const generateDisabled = isGenerating || filledCount >= MAX_ITEMS;
+  const generateDisabled =
+    isGenerating || isGeneratingScenario || filledCount >= MAX_ITEMS;
+  /** 產題與生成情境內容互相擋，避免兩個 stub 同時跑 */
+  const scenarioBusy = isGenerating || isGeneratingScenario;
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    // 與 ReadingAssessmentPanel 一致：要移動 8px 才算拖曳，
+    // 否則在把手上手抖一下就會把題目順序換掉
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
@@ -1162,6 +1183,17 @@ const ScenarioDialoguePanel = forwardRef<
   const pickRowImage = (id: string, file: File) =>
     setRowImage(id, createPreviewUrl(file));
   const removeRowImage = (id: string) => setRowImage(id, null);
+
+  /**
+   * 刪除整列時也要把它的圖釋放掉 —— 先前只有換圖／移除圖走 releaseIfUnused，
+   * 整列被刪的話那張 blob 就一路留到面板卸載才清。同樣要確認沒有別列共用
+   * （複製過的題目會共享同一個網址）。
+   */
+  const deleteRow = (id: string) => {
+    const current = rows.find((r) => r.id === id)?.imageUrl ?? null;
+    releaseIfUnused(current, id);
+    setRows((prev) => prev.filter((r) => r.id !== id));
+  };
 
   /**
    * 逐題 AI 生圖。前端 stub：只跑 loading，串接後把回傳的圖片網址填進 imageUrl。
@@ -1343,7 +1375,7 @@ const ScenarioDialoguePanel = forwardRef<
                         variant="outline"
                         size="sm"
                         onClick={handleGenerateScenario}
-                        disabled={isGeneratingScenario}
+                        disabled={scenarioBusy}
                       >
                         {isGeneratingScenario ? (
                           <>
@@ -1416,9 +1448,7 @@ const ScenarioDialoguePanel = forwardRef<
                         variant="outline"
                         size="sm"
                         onClick={handleGenerateScenario}
-                        disabled={
-                          isGeneratingScenario || uploadedFiles.length === 0
-                        }
+                        disabled={scenarioBusy || uploadedFiles.length === 0}
                       >
                         {isGeneratingScenario ? (
                           <>
@@ -1795,9 +1825,7 @@ const ScenarioDialoguePanel = forwardRef<
                               ],
                         )
                       }
-                      onDelete={() =>
-                        setRows((prev) => prev.filter((r) => r.id !== row.id))
-                      }
+                      onDelete={() => deleteRow(row.id)}
                       onRegenerate={() => regenerateRow(row.id)}
                       onPickImage={(file) => pickRowImage(row.id, file)}
                       onRemoveImage={() => removeRowImage(row.id)}

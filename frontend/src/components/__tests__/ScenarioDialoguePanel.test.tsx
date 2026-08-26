@@ -559,6 +559,39 @@ describe("ScenarioDialoguePanel 單題情境圖片", () => {
     ).toBeInTheDocument();
   });
 
+  it("刪掉整列題目時，它的圖也要釋放", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    gotoList();
+
+    // 先多一列，刪除鍵才不會因為「至少留一列」而 disabled
+    fireEvent.click(screen.getByText(K.addQuestion));
+    upload(imageInputs(container)[0], "a.png");
+    expect(
+      container.querySelector('img[src="blob:mock-1"]'),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByTitle("contentEditor.tooltips.delete")[0]);
+
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-1");
+  });
+
+  it("被複製過的圖，刪掉其中一列不會弄壞另一列", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    gotoList();
+
+    upload(imageInputs(container)[0], "a.png");
+    fireEvent.click(screen.getAllByTitle("contentEditor.tooltips.copy")[0]);
+    expect(container.querySelectorAll('img[src="blob:mock-1"]').length).toBe(2);
+
+    fireEvent.click(screen.getAllByTitle("contentEditor.tooltips.delete")[0]);
+
+    // 另一列還在用，不能 revoke
+    expect(revokeObjectURL).not.toHaveBeenCalledWith("blob:mock-1");
+    expect(
+      container.querySelector('img[src="blob:mock-1"]'),
+    ).toBeInTheDocument();
+  });
+
   it("卸載時把還沒釋放的 blob 清乾淨", () => {
     const { container, unmount } = render(<ScenarioDialoguePanel />, {
       wrapper,
