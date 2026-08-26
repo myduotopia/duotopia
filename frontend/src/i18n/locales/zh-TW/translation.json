@@ -4825,7 +4825,9 @@
       "reference": "設定對照",
       "scenarioContent": "情境內容",
       "articleLevel": "文章難度",
-      "questionLevel": "題目難度"
+      "questionLevel": "題目難度",
+      "scenarioText": "情境文章",
+      "sectionGenerate": "出題設定"
     },
     "rubricPresets": {
       "tenseTime": "時間",
@@ -4872,9 +4874,11 @@
       "referenceNote": "對照情境與作答指引，確認題目出得合不合適",
       "noRubricYet": "尚未設定作答指引",
       "scenarioRequiredForAi": "使用 AI 產題時必填",
-      "sourceManual": "直接在下方文字框輸入情境文章",
+      "sourceManual": "在下方「情境文章」直接輸入",
       "optional": "選填",
-      "noContextYet": "尚未設定情境內容"
+      "noContextYet": "尚未設定情境內容",
+      "scenarioText": "三種方式產生後都可以在這裡修改",
+      "sectionGenerate": "AI 產題時使用；產完仍可逐題調整"
     },
     "tooltips": {
       "regenerateQuestion": "重新生成這一題（會避開已出現過的題目）",

@@ -213,6 +213,18 @@ export interface ScenarioDialogueRow {
   imageUrl: string | null;
   /** 題目語音；null = 尚未生成 */
   audioUrl: string | null;
+  /**
+   * 內容被整批換掉的次數（目前只有「重新生成這一題」會加）。
+   *
+   * SortableRow 有兩個從 props 取一次初值的本地狀態：關鍵字草稿與「參考答案」
+   * 展開與否。重新生成沿用同一個 row id，React 不會重新掛載，這兩個本地狀態
+   * 就會停在舊值 —— 關鍵字輸入框顯示舊字，老師只要 focus 再 blur，onBlur 的
+   * commitKeywords 就用舊草稿把新關鍵字蓋回去，而且沒有任何提示。
+   *
+   * 所以 render 時把 key 設成 `id:revision`：id 保持穩定給拖曳排序用，
+   * revision 一變就重新掛載，本地狀態自然跟著重新取一次初值。
+   */
+  revision: number;
 }
 
 export interface ScenarioDialoguePanelHandle {
@@ -261,6 +273,7 @@ const createRow = (
   imagePrompt: "",
   imageUrl: null,
   audioUrl: null,
+  revision: 0,
   ...overrides,
 });
 
@@ -1080,7 +1093,9 @@ const ScenarioDialoguePanel = forwardRef<
         const fresh = SAMPLE_QUESTIONS.find((q) => !used.has(q.question));
         // 示範題用光了就維持原樣，總比換成重複的好
         if (!fresh) return prev;
-        return prev.map((r) => (r.id === id ? { ...r, ...fresh } : r));
+        return prev.map((r) =>
+          r.id === id ? { ...r, ...fresh, revision: r.revision + 1 } : r,
+        );
       });
       setRegeneratingId(null);
     }, 800);
@@ -1235,182 +1250,213 @@ const ScenarioDialoguePanel = forwardRef<
                 </span>
               </div>
 
-              <Tabs
-                value={sourceTab}
-                onValueChange={(v) => setSourceTab(v as ScenarioSource)}
-              >
-                <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 rounded-lg">
-                  {(
-                    [
-                      ["manual", "sourceManual"],
-                      ["ai", "sourceAi"],
-                      ["upload", "sourceUpload"],
-                    ] as const
-                  ).map(([value, key]) => (
-                    <TabsTrigger
-                      key={value}
-                      value={value}
-                      className="rounded-md px-1 text-xs whitespace-nowrap data-[state=active]:bg-blue-500 data-[state=active]:text-white"
-                    >
-                      {t(`scenarioDialogue.tabs.${key}`)}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-
-                {/* 直接輸入：沒有額外控制項，下面的文字框就是全部 */}
-                <TabsContent value="manual" className="mt-2">
-                  <p className="text-[11px] text-gray-500">
-                    {t("scenarioDialogue.hints.sourceManual")}
-                  </p>
-                </TabsContent>
-
-                {/* AI 輔助生成：訓練目標 + 文章難度 */}
-                <TabsContent value="ai" className="space-y-3 mt-3">
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
-                      {t("scenarioDialogue.labels.goal")}
-                    </label>
-                    <textarea
-                      value={goal}
-                      onChange={(e) => setGoal(e.target.value)}
-                      rows={2}
-                      placeholder={t("scenarioDialogue.placeholders.goal")}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
-                      {t("scenarioDialogue.labels.articleLevel")}
-                    </label>
-                    <div className="flex flex-wrap gap-1">
-                      {CEFR_LEVELS.map((lv) => (
-                        <button
-                          key={lv}
-                          type="button"
-                          onClick={() => setArticleLevel(lv)}
-                          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-                            articleLevel === lv
-                              ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
-                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                          }`}
+              {/*
+                工具區（灰底）與產出區（白底）包在同一張卡裡。先前三者平鋪，
+                最後那個 textarea 看起來就像「第 N 個欄位」，但它才是真正
+                被儲存的東西 —— 上面的 tab 只是把內容填進去的工具。
+              */}
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="bg-gray-50 border-b border-gray-200 p-3 space-y-3">
+                  <Tabs
+                    value={sourceTab}
+                    onValueChange={(v) => setSourceTab(v as ScenarioSource)}
+                  >
+                    <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 rounded-lg">
+                      {(
+                        [
+                          ["manual", "sourceManual"],
+                          ["ai", "sourceAi"],
+                          ["upload", "sourceUpload"],
+                        ] as const
+                      ).map(([value, key]) => (
+                        <TabsTrigger
+                          key={value}
+                          value={value}
+                          className="rounded-md px-1 text-xs whitespace-nowrap data-[state=active]:bg-blue-500 data-[state=active]:text-white"
                         >
-                          {lv}
-                        </button>
+                          {t(`scenarioDialogue.tabs.${key}`)}
+                        </TabsTrigger>
                       ))}
-                    </div>
+                    </TabsList>
+
+                    {/* 直接輸入：沒有額外控制項，下面的文字框就是全部 */}
+                    <TabsContent value="manual" className="mt-2">
+                      <p className="text-[11px] text-gray-500">
+                        {t("scenarioDialogue.hints.sourceManual")}
+                      </p>
+                    </TabsContent>
+
+                    {/* AI 輔助生成：訓練目標 + 文章難度 */}
+                    <TabsContent value="ai" className="space-y-3 mt-3">
+                      <div>
+                        <label className="text-xs text-gray-600 mb-1 block">
+                          {t("scenarioDialogue.labels.goal")}
+                        </label>
+                        <textarea
+                          value={goal}
+                          onChange={(e) => setGoal(e.target.value)}
+                          rows={2}
+                          placeholder={t("scenarioDialogue.placeholders.goal")}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-gray-600 mb-1 block">
+                          {t("scenarioDialogue.labels.articleLevel")}
+                        </label>
+                        <div className="flex flex-wrap gap-1">
+                          {CEFR_LEVELS.map((lv) => (
+                            <button
+                              key={lv}
+                              type="button"
+                              onClick={() => setArticleLevel(lv)}
+                              className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                                articleLevel === lv
+                                  ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-white shadow-sm"
+                                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                              }`}
+                            >
+                              {lv}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGenerateScenario}
+                        disabled={isGeneratingScenario}
+                      >
+                        {isGeneratingScenario ? (
+                          <>
+                            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                            {t("scenarioDialogue.buttons.generating")}
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="mr-1 h-4 w-4" />
+                            {t("scenarioDialogue.buttons.generateScenario")}
+                          </>
+                        )}
+                      </Button>
+                    </TabsContent>
+
+                    {/* 上傳圖片 / PDF：辨識後填進同一個文字框 */}
+                    <TabsContent value="upload" className="space-y-3 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          handleFiles(e.dataTransfer.files);
+                        }}
+                        className="w-full py-8 border-2 border-dashed border-gray-300 rounded-lg bg-white flex flex-col items-center justify-center gap-2 hover:border-blue-400 transition-colors"
+                      >
+                        <Upload className="h-6 w-6 text-gray-400" />
+                        <span className="text-sm font-medium text-gray-600">
+                          {t("scenarioDialogue.labels.uploadTitle")}
+                        </span>
+                        <span className="text-[11px] text-gray-400">
+                          {t("scenarioDialogue.hints.uploadFormats")}
+                        </span>
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*,application/pdf"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => handleFiles(e.target.files)}
+                      />
+
+                      {uploadedFiles.length > 0 && (
+                        <ul className="space-y-1">
+                          {uploadedFiles.map((f, i) => (
+                            <li
+                              key={`${f.name}-${i}`}
+                              className="flex items-center justify-between gap-2 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-700"
+                            >
+                              <span className="truncate">{f.name}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setUploadedFiles((prev) =>
+                                    prev.filter((_, j) => j !== i),
+                                  )
+                                }
+                                className="p-0.5 rounded hover:bg-gray-100"
+                              >
+                                <X className="h-3 w-3 text-gray-400" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGenerateScenario}
+                        disabled={
+                          isGeneratingScenario || uploadedFiles.length === 0
+                        }
+                      >
+                        {isGeneratingScenario ? (
+                          <>
+                            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                            {t("scenarioDialogue.buttons.generating")}
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="mr-1 h-4 w-4" />
+                            {t("scenarioDialogue.buttons.extractScenario")}
+                          </>
+                        )}
+                      </Button>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+
+                {/* 三種方式的共同產物，產生後仍可手改 —— 這一格才是會被儲存的內容 */}
+                <div className="p-3 space-y-1.5 bg-white">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs font-semibold text-gray-700">
+                      {t("scenarioDialogue.labels.scenarioText")}
+                    </span>
+                    <span className="text-[10px] text-gray-400">
+                      {t("scenarioDialogue.hints.scenarioText")}
+                    </span>
                   </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateScenario}
-                    disabled={isGeneratingScenario}
-                  >
-                    {isGeneratingScenario ? (
-                      <>
-                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                        {t("scenarioDialogue.buttons.generating")}
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="mr-1 h-4 w-4" />
-                        {t("scenarioDialogue.buttons.generateScenario")}
-                      </>
+                  <textarea
+                    ref={scenarioRef}
+                    value={scenarioContent}
+                    onChange={(e) => setScenarioContent(e.target.value)}
+                    rows={5}
+                    placeholder={t(
+                      "scenarioDialogue.placeholders.scenarioContent",
                     )}
-                  </Button>
-                </TabsContent>
-
-                {/* 上傳圖片 / PDF：辨識後填進同一個文字框 */}
-                <TabsContent value="upload" className="space-y-3 mt-3">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      handleFiles(e.dataTransfer.files);
-                    }}
-                    className="w-full py-8 border-2 border-dashed border-gray-300 rounded-lg bg-white flex flex-col items-center justify-center gap-2 hover:border-blue-400 transition-colors"
-                  >
-                    <Upload className="h-6 w-6 text-gray-400" />
-                    <span className="text-sm font-medium text-gray-600">
-                      {t("scenarioDialogue.labels.uploadTitle")}
-                    </span>
-                    <span className="text-[11px] text-gray-400">
-                      {t("scenarioDialogue.hints.uploadFormats")}
-                    </span>
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,application/pdf"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => handleFiles(e.target.files)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
-
-                  {uploadedFiles.length > 0 && (
-                    <ul className="space-y-1">
-                      {uploadedFiles.map((f, i) => (
-                        <li
-                          key={`${f.name}-${i}`}
-                          className="flex items-center justify-between gap-2 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-700"
-                        >
-                          <span className="truncate">{f.name}</span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setUploadedFiles((prev) =>
-                                prev.filter((_, j) => j !== i),
-                              )
-                            }
-                            className="p-0.5 rounded hover:bg-gray-100"
-                          >
-                            <X className="h-3 w-3 text-gray-400" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateScenario}
-                    disabled={
-                      isGeneratingScenario || uploadedFiles.length === 0
-                    }
-                  >
-                    {isGeneratingScenario ? (
-                      <>
-                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                        {t("scenarioDialogue.buttons.generating")}
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="mr-1 h-4 w-4" />
-                        {t("scenarioDialogue.buttons.extractScenario")}
-                      </>
-                    )}
-                  </Button>
-                </TabsContent>
-              </Tabs>
-
-              {/* 三種方式的共同產物，產生後仍可手改 */}
-              <textarea
-                ref={scenarioRef}
-                value={scenarioContent}
-                onChange={(e) => setScenarioContent(e.target.value)}
-                rows={5}
-                placeholder={t("scenarioDialogue.placeholders.scenarioContent")}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
+                </div>
+              </div>
             </div>
 
-            <hr className="border-gray-200" />
+            {/*
+              分隔線本身不會告訴人兩邊是什麼。把線和區塊標題綁在一起，
+              往下是哪一組設定就一眼可見。
+            */}
+            <div className="pt-5 border-t border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900">
+                {t("scenarioDialogue.labels.sectionGenerate")}
+              </h3>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                {t("scenarioDialogue.hints.sectionGenerate")}
+              </p>
+            </div>
 
-            {/* 出題設定 */}
             <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
               <div>
                 <span className="text-xs font-semibold text-gray-700 mb-1 block">
@@ -1498,18 +1544,19 @@ const ScenarioDialoguePanel = forwardRef<
               />
             </div>
 
-            <hr className="border-gray-200" />
-
-            {/* 選填設定 */}
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-gray-700">
+            <div className="pt-5 border-t border-gray-200 space-y-1.5">
+              <div className="flex items-baseline gap-2">
+                <h3 className="text-sm font-semibold text-gray-900">
                   {t("scenarioDialogue.labels.globalRubric")}
-                </span>
+                </h3>
                 <span className="text-[10px] text-gray-400">
                   {t("scenarioDialogue.hints.optional")}
                 </span>
               </div>
+              {/* 說明放在輸入框上方 —— 先知道這段字給誰看，才知道怎麼寫 */}
+              <p className="text-[11px] text-gray-500">
+                {t("scenarioDialogue.hints.visibleToStudents")}
+              </p>
               <textarea
                 value={globalRubric}
                 onChange={(e) => setGlobalRubric(e.target.value)}
@@ -1517,9 +1564,6 @@ const ScenarioDialoguePanel = forwardRef<
                 placeholder={t("scenarioDialogue.placeholders.globalRubric")}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               />
-              <p className="text-[10px] text-gray-500">
-                {t("scenarioDialogue.hints.visibleToStudents")}
-              </p>
             </div>
           </div>
 
@@ -1713,7 +1757,7 @@ const ScenarioDialoguePanel = forwardRef<
                 <div className="space-y-3 pr-1">
                   {rows.map((row, index) => (
                     <SortableRow
-                      key={row.id}
+                      key={`${row.id}:${row.revision}`}
                       row={row}
                       index={index}
                       langLabel={langLabel}

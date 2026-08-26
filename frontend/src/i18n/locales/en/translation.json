@@ -4805,7 +4805,9 @@
       "reference": "Settings reference",
       "scenarioContent": "Scenario",
       "articleLevel": "Text difficulty",
-      "questionLevel": "Question difficulty"
+      "questionLevel": "Question difficulty",
+      "scenarioText": "Scenario text",
+      "sectionGenerate": "Question settings"
     },
     "rubricPresets": {
       "tenseTime": "Time",
@@ -4852,9 +4854,11 @@
       "referenceNote": "Check the questions against the scenario and instructions",
       "noRubricYet": "No instructions yet",
       "scenarioRequiredForAi": "Required to generate questions with AI",
-      "sourceManual": "Type the scenario in the box below",
+      "sourceManual": "Type it in the Scenario text box below",
       "optional": "Optional",
-      "noContextYet": "No scenario yet"
+      "noContextYet": "No scenario yet",
+      "scenarioText": "Edit here after producing it any of the three ways",
+      "sectionGenerate": "Used when AI writes the questions; each one stays editable afterwards"
     },
     "tooltips": {
       "regenerateQuestion": "Regenerate this question (avoids previous ones)",

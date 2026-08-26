@@ -282,6 +282,54 @@ describe("ScenarioDialoguePanel 情境內容", () => {
   });
 });
 
+describe("ScenarioDialoguePanel 單題重新生成", () => {
+  const KEYWORDS = "scenarioDialogue.placeholders.keywords";
+  const REGEN = "scenarioDialogue.tooltips.regenerateQuestion";
+
+  /**
+   * 重新生成沿用同一個 row id，所以 SortableRow 不會重新掛載。若關鍵字草稿
+   * 沒跟著更新，輸入框會停在舊字；老師只要 focus 再 blur，onBlur 就用舊草稿
+   * 把新關鍵字蓋回去，而且全程沒有提示。
+   */
+  it("重新生成後關鍵字輸入框跟著換，不會留在舊值", async () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+
+    type(K.titlePlaceholder, "週末活動");
+    type(K.scenarioPlaceholder, "情境");
+    // 只產 3 題，才留得下沒被用過的示範題可以換
+    fireEvent.change(container.querySelector("#sd-generate-count")!, {
+      target: { value: "3" },
+    });
+    await runGenerate(K.generate);
+
+    const firstQuestion = () =>
+      (
+        screen.getAllByPlaceholderText(
+          K.questionPlaceholder,
+        )[0] as HTMLTextAreaElement
+      ).value;
+    const firstKeywords = () =>
+      (screen.getAllByPlaceholderText(KEYWORDS)[0] as HTMLInputElement).value;
+
+    const oldQuestion = firstQuestion();
+    const oldKeywords = firstKeywords();
+    expect(oldKeywords).not.toBe("");
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getAllByTitle(REGEN)[0]);
+      await act(async () => {
+        vi.advanceTimersByTime(900);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(firstQuestion()).not.toBe(oldQuestion);
+    expect(firstKeywords()).not.toBe(oldKeywords);
+  });
+});
+
 describe("ScenarioDialoguePanel 儲存擋關", () => {
   it("沒填標題就儲存 → 擋下並留在 Step 1", async () => {
     const onSave = vi.fn();
