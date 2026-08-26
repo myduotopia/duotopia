@@ -17,7 +17,7 @@ import {
 import ScenarioDialoguePanel, {
   type ScenarioDialoguePanelHandle,
 } from "../ScenarioDialoguePanel";
-import { SidebarProvider } from "@/contexts/SidebarContext";
+import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 
 const mockToastError = vi.fn();
 
@@ -279,6 +279,65 @@ describe("ScenarioDialoguePanel 情境內容", () => {
 
     expect(screen.getByText("你和同學在星期一早上聊天。")).toBeInTheDocument();
     expect(screen.getByText("請用完整句子回答。")).toBeInTheDocument();
+  });
+});
+
+describe("ScenarioDialoguePanel busy 狀態", () => {
+  /** RefSaveButton 與面板的 X 都是讀 context 的 editorBusy，不是 panelRef */
+  function BusyProbe() {
+    const { editorBusy } = useSidebar();
+    return <span data-testid="busy">{String(editorBusy)}</span>;
+  }
+
+  const busy = () => screen.getByTestId("busy").textContent;
+
+  it("生成情境內容期間，editorBusy 會被撐起來", async () => {
+    render(
+      <SidebarProvider>
+        <ScenarioDialoguePanel />
+        <BusyProbe />
+      </SidebarProvider>,
+    );
+
+    expect(busy()).toBe("false");
+
+    switchTab(K.tabAi);
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByText(K.generateScenario));
+      // 沒同步的話這裡會是 false，儲存鍵就不會 disabled
+      expect(busy()).toBe("true");
+      await act(async () => {
+        vi.advanceTimersByTime(900);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(busy()).toBe("false");
+  });
+
+  it("產題期間也算 busy", async () => {
+    render(
+      <SidebarProvider>
+        <ScenarioDialoguePanel />
+        <BusyProbe />
+      </SidebarProvider>,
+    );
+
+    fillRequiredForGenerate();
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByText(K.generate));
+      expect(busy()).toBe("true");
+      await act(async () => {
+        vi.advanceTimersByTime(900);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(busy()).toBe("false");
   });
 });
 

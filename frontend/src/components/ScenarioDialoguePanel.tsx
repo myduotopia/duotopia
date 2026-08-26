@@ -79,6 +79,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useSidebar } from "@/contexts/SidebarContext";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -929,6 +930,21 @@ const ScenarioDialoguePanel = forwardRef<
   const [isGenerating, setIsGenerating] = useState(false);
   /** 生成情境內容與產題是兩件事，loading 各自獨立 */
   const [isGeneratingScenario, setIsGeneratingScenario] = useState(false);
+
+  /**
+   * 把 busy 狀態同步到 SidebarContext。
+   *
+   * RefSaveButton 的 disabled 讀的是 context 的 editorBusy，不是 panelRef 的
+   * isBusy（#651：直接讀 ref 會拿到 stale 值）。不同步的話，生成期間儲存鍵
+   * 看起來可以按，按下去卻被 handleClick 裡的 isBusy 無聲吞掉；面板右上的 X
+   * 也是靠 editorBusy 擋，同樣會失效。與 ReadingAssessmentPanel、
+   * VocabularySetPanel 用同一套寫法。
+   */
+  const { setEditorBusy } = useSidebar();
+  useEffect(() => {
+    setEditorBusy(isGenerating || isGeneratingScenario);
+    return () => setEditorBusy(false);
+  }, [isGenerating, isGeneratingScenario, setEditorBusy]);
 
   // ===== 整份設定（所有題目共用）=====
   /**
