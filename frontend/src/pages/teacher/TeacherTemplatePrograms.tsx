@@ -1497,6 +1497,7 @@ function TeacherTemplateProgramsInner() {
 
       {contentLessonInfo && (
         <ContentTypeDialog
+          enableScenarioDialogue
           open={showContentTypeDialog}
           lessonInfo={contentLessonInfo}
           onClose={() => {

@@ -35,6 +35,15 @@ interface ContentTypeDialogProps {
     // Issue #587: when set, creating content directly under this program (no lesson)
     programId?: number;
   };
+  /**
+   * 是否開放「情境對話」（#944）。
+   *
+   * 這個 dialog 被五個頁面共用，但目前只有「我的教材」接了
+   * ScenarioDialoguePanel；其他頁面沒有對應的 selection.type 分支，點下去會
+   * 靜靜地什麼都不發生。所以預設關閉（顯示為 Soon），由已經接好面板的頁面
+   * 自己打開。等其他頁面也接上、或後端串好之後再拿掉這個開關。
+   */
+  enableScenarioDialogue?: boolean;
 }
 
 export default function ContentTypeDialog({
@@ -42,6 +51,7 @@ export default function ContentTypeDialog({
   onClose,
   onSelect,
   lessonInfo,
+  enableScenarioDialogue = false,
 }: ContentTypeDialogProps) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -84,7 +94,7 @@ export default function ContentTypeDialog({
       image:
         "https://storage.googleapis.com/duotopia-social-media-videos/website/add3-output.png",
       isNew: true,
-      disabled: false,
+      disabled: !enableScenarioDialogue,
     },
   ];
 
