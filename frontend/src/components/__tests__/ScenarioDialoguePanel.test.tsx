@@ -206,6 +206,48 @@ describe("ScenarioDialoguePanel 情境內容", () => {
     );
   });
 
+  it("再產一批題目不會貼出重複的題目", async () => {
+    renderPanel();
+    fillRequiredForGenerate();
+
+    await runGenerate(K.generate);
+    const first = screen
+      .getAllByPlaceholderText(K.questionPlaceholder)
+      .map((el) => (el as HTMLTextAreaElement).value)
+      .filter(Boolean);
+
+    fireEvent.click(screen.getByText(K.back));
+    await runGenerate(K.generateAnother);
+    // 「再產一批」是留在 Step 1 的，要回清單才數得到題目
+    fireEvent.click(screen.getByText(K.viewQuestions));
+
+    const all = screen
+      .getAllByPlaceholderText(K.questionPlaceholder)
+      .map((el) => (el as HTMLTextAreaElement).value)
+      .filter(Boolean);
+    expect(all.length).toBeGreaterThanOrEqual(first.length);
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("情境內容生成中算 busy，儲存鍵才擋得住", async () => {
+    const ref = renderPanel();
+
+    switchTab(K.tabAi);
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByText(K.generateScenario));
+      // 還沒 resolve：這段期間存下去會存到舊的 scenarioContent
+      expect(ref.current?.isBusy).toBe(true);
+      await act(async () => {
+        vi.advanceTimersByTime(900);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(ref.current?.isBusy).toBe(false);
+  });
+
   it("沒有情境內容就按產題 → 提示並且不產題", async () => {
     renderPanel();
     type(K.titlePlaceholder, "週末活動");

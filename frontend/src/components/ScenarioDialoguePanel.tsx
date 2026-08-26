@@ -41,7 +41,11 @@
  * 決定出題出多難 —— 簡單文章出難題目是合理的教法，共用一個值反而綁死。
  *
  * 現階段為**前端設計實作**：不呼叫後端，AI 產題／情境生成／PDF 辨識／圖片生成／
- * TTS 皆為本地 stub，save() 只回傳目前的資料並由呼叫端關閉面板。串接 API 為後續 issue。
+ * TTS 皆為本地 stub，save() 通過擋關後只把資料交給呼叫端。
+ *
+ * 呼叫端（TeacherTemplatePrograms）此刻**刻意不關閉面板**，只跳一句「尚未串接後端
+ * 儲存」。因為真的關掉等於暗示存好了，而實際上什麼都沒存 —— 老師填的東西會直接
+ * 消失。等 API 接上再改成「存成功 → 關閉 + 成功提示」。
  */
 import {
   forwardRef,
@@ -1043,12 +1047,17 @@ const ScenarioDialoguePanel = forwardRef<
         // 尚未動過的空白卡直接被產出的題目取代，避免最前面卡著一張空的
         const kept = prev.filter((r) => !isBlankRow(r));
         const room = MAX_ITEMS - kept.length;
+        // 避開已經出現過的題目，與 regenerateRow 同一套規則 —— 否則按第二次
+        // 「再產一批題目」會原封不動再貼一次同樣的示範題
+        const used = new Set(
+          kept.map((r) => r.question.trim()).filter(Boolean),
+        );
+        const fresh = SAMPLE_QUESTIONS.filter((q) => !used.has(q.question));
         return [
           ...kept,
-          ...SAMPLE_QUESTIONS.slice(
-            0,
-            Math.max(0, Math.min(generateCount, room)),
-          ).map((q) => createRow(q)),
+          ...fresh
+            .slice(0, Math.max(0, Math.min(generateCount, room)))
+            .map((q) => createRow(q)),
         ];
       });
       setIsGenerating(false);
@@ -1180,7 +1189,9 @@ const ScenarioDialoguePanel = forwardRef<
   };
 
   useImperativeHandle(ref, () => ({
-    isBusy: isGenerating,
+    // 兩種生成都要算 busy —— 只看 isGenerating 的話，老師在情境內容還在
+    // 生成時就能按儲存，存進去的是那一刻的舊值。真 API 更慢，更容易中招。
+    isBusy: isGenerating || isGeneratingScenario,
     save: handleSave,
   }));
 
