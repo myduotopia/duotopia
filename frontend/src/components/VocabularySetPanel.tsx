@@ -447,6 +447,35 @@ export function resolveExampleTranslationTarget(
   };
 }
 
+/**
+ * 存檔時決定要送哪一段例句翻譯與語言。
+ *
+ * 後端一個 item 只存一段譯文＋一個語言，所以必須送「真的有內容的那一個」。
+ * 左側「翻譯成」會把所有列標成同一個語言，若該列在新語言底下還沒翻譯，
+ * 照著空欄位存檔會把後端既有的譯文覆寫成空字串（老師畫面上只看到空白，
+ * 完全沒有警示）。因此空的時候退回真的有譯文的語言；三個欄位都空才送空字串
+ * （老師手動清空翻譯仍然有效）。
+ */
+export function resolveExampleTranslationForSave(row: SentenceLangSource): {
+  translation: string;
+  lang: SentenceTranslationLanguage;
+} {
+  const lang = row.selectedSentenceLanguage || "chinese";
+  const current = getExampleTranslationByLang(row, lang);
+  if (current.trim()) return { translation: current, lang };
+
+  const fallbackLang = SENTENCE_TRANSLATION_LANGUAGES.map((l) => l.value).find(
+    (l) => l !== lang && getExampleTranslationByLang(row, l).trim(),
+  );
+  if (fallbackLang) {
+    return {
+      translation: getExampleTranslationByLang(row, fallbackLang),
+      lang: fallbackLang,
+    };
+  }
+  return { translation: "", lang };
+}
+
 /** 依語言取出該列的例句翻譯欄位（"other" 沿用中文欄位）。 */
 const getExampleTranslationByLang = (
   row: SentenceLangSource,
@@ -2426,15 +2455,9 @@ const VocabularySetPanel = forwardRef<
       vocabularyTranslation = row.korean_translation || "";
     }
 
-    const sentenceLang = row.selectedSentenceLanguage || "chinese";
-    let exampleTranslation = "";
-    if (sentenceLang === "chinese") {
-      exampleTranslation = row.example_sentence_translation || "";
-    } else if (sentenceLang === "japanese") {
-      exampleTranslation = row.example_sentence_japanese || "";
-    } else if (sentenceLang === "korean") {
-      exampleTranslation = row.example_sentence_korean || "";
-    }
+    // #1004: 送出「真的有內容」的譯文與其語言，避免切換語言後存檔把既有翻譯洗掉
+    const { translation: exampleTranslation, lang: sentenceLang } =
+      resolveExampleTranslationForSave(row);
 
     return {
       // #861: 既有題目帶回真實 DB id，後端據此原地更新（保留學生作答）；

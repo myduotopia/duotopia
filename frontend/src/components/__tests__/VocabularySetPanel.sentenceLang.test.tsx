@@ -7,12 +7,21 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ReactNode } from "react";
-import { render, waitFor, fireEvent, screen } from "@testing-library/react";
+import {
+  render,
+  waitFor,
+  fireEvent,
+  screen,
+  act,
+} from "@testing-library/react";
 import { toast } from "sonner";
+import { createRef } from "react";
 import VocabularySetPanel, {
   resolveExampleTranslationTarget,
   getInitialSentenceLang,
+  resolveExampleTranslationForSave,
 } from "../VocabularySetPanel";
+import type { VocabularySetPanelHandle } from "../VocabularySetPanel";
 import { SidebarProvider } from "@/contexts/SidebarContext";
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -22,6 +31,7 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 const mockGetContentDetail = vi.fn();
 const mockBatchTranslateSentences = vi.fn();
 const mockTranslateSentence = vi.fn();
+const mockUpdateContent = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   apiClient: {
@@ -29,6 +39,7 @@ vi.mock("@/lib/api", () => ({
     batchTranslateSentences: (...args: unknown[]) =>
       mockBatchTranslateSentences(...args),
     translateSentence: (...args: unknown[]) => mockTranslateSentence(...args),
+    updateContent: (...args: unknown[]) => mockUpdateContent(...args),
     translateText: vi.fn(),
     translateWithPos: vi.fn(),
     batchTranslate: vi.fn(),
@@ -37,7 +48,6 @@ vi.mock("@/lib/api", () => ({
     generateTTS: vi.fn(),
     batchGenerateTTS: vi.fn(),
     uploadAudio: vi.fn(),
-    updateContent: vi.fn(),
   },
 }));
 
@@ -316,5 +326,103 @@ describe("單題例句翻譯按鈕 (#1004)", () => {
     expect(screen.queryByDisplayValue("I eat an apple.")).toBeTruthy(); // 例句本身還在
     const translationInputs = screen.queryAllByDisplayValue("I eat an apple.");
     expect(translationInputs.length).toBe(1); // 翻譯欄位沒有被填入英文原句
+  });
+});
+
+describe("resolveExampleTranslationForSave (#1004)", () => {
+  it("saves the field of the row's own language", () => {
+    expect(
+      resolveExampleTranslationForSave({
+        selectedSentenceLanguage: "korean",
+        example_sentence_korean: "나는 사과를 먹습니다.",
+      }),
+    ).toEqual({ translation: "나는 사과를 먹습니다.", lang: "korean" });
+  });
+
+  it("falls back to whichever language actually has content", () => {
+    // 老師把左側「翻譯成」切成日文 → 這一列被標成 japanese，但它其實只有韓文譯文。
+    // 若照著空的日文欄位存檔，後端會把既有韓文翻譯覆寫成空字串。
+    expect(
+      resolveExampleTranslationForSave({
+        selectedSentenceLanguage: "japanese",
+        example_sentence_japanese: "",
+        example_sentence_korean: "나는 사과를 먹습니다.",
+      }),
+    ).toEqual({ translation: "나는 사과를 먹습니다.", lang: "korean" });
+  });
+
+  it("still allows clearing a translation", () => {
+    expect(
+      resolveExampleTranslationForSave({
+        selectedSentenceLanguage: "chinese",
+        example_sentence_translation: "",
+      }),
+    ).toEqual({ translation: "", lang: "chinese" });
+  });
+});
+
+describe("儲存時不得洗掉其他語言的既有翻譯 (#1004)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const makeItem = (i: number, extra: Record<string, unknown>) => ({
+    text: `word${i}`,
+    definition: `翻譯${i}`,
+    vocabulary_translation: `翻譯${i}`,
+    vocabulary_translation_lang: "chinese",
+    audio_url: `https://example.com/${i}.mp3`,
+    example_sentence: `This is sentence ${i}.`,
+    example_sentence_audio_url: `https://example.com/${i}-s.mp3`,
+    ...extra,
+  });
+
+  it("keeps a row's existing translation when the batch language is switched", async () => {
+    mockGetContentDetail.mockResolvedValue({
+      id: 9,
+      title: "Vocab",
+      items: [
+        makeItem(0, {
+          example_sentence_translation: "나는 사과를 먹습니다.",
+          example_sentence_translation_lang: "korean",
+        }),
+        ...[1, 2, 3, 4].map((i) =>
+          makeItem(i, {
+            example_sentence_translation: `中文翻譯 ${i}`,
+            example_sentence_translation_lang: "chinese",
+          }),
+        ),
+      ],
+    });
+    mockUpdateContent.mockResolvedValue({ id: 9 });
+
+    const ref = createRef<VocabularySetPanelHandle>();
+    render(<VocabularySetPanel ref={ref} content={{ id: 9 }} />, { wrapper });
+    await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
+
+    // 老師把左側「翻譯成」切成日文（例如想幫其他列補日文）
+    fireEvent.change(await getSentenceLangSelect(), {
+      target: { value: "japanese" },
+    });
+
+    await act(async () => {
+      await ref.current!.save();
+    });
+
+    expect(mockUpdateContent).toHaveBeenCalled();
+    const items = (
+      mockUpdateContent.mock.calls[0][1] as {
+        items: Array<{
+          example_sentence_translation: string;
+          example_sentence_translation_lang: string;
+        }>;
+      }
+    ).items;
+    // 韓文那一列不可以被存成空字串
+    expect(items[0].example_sentence_translation).toBe("나는 사과를 먹습니다.");
+    expect(items[0].example_sentence_translation_lang).toBe("korean");
+    // 其他中文列也一樣要保留
+    expect(items[1].example_sentence_translation).toBe("中文翻譯 1");
+    expect(items[1].example_sentence_translation_lang).toBe("chinese");
   });
 });
