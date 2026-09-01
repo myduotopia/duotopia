@@ -24,6 +24,7 @@ import {
 } from "@/utils/redirectAfterLogin";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
 import { GoogleLoginButton } from "@/components/auth/GoogleLoginButton";
+import { resolveLoginErrorKey } from "@/utils/loginErrorMessage";
 
 export default function TeacherLogin() {
   const navigate = useNavigate();
@@ -90,7 +91,7 @@ export default function TeacherLogin() {
       // isAuthenticated effect above handles navigation.
     } catch (err) {
       console.error("🔑 [ERROR] 登入失敗:", err);
-      setError(t("teacherLogin.errors.loginFailed"));
+      setError(t(resolveLoginErrorKey(err, "teacherLogin.errors.loginFailed")));
     } finally {
       setIsLoading(false);
     }
@@ -123,7 +124,11 @@ export default function TeacherLogin() {
       // isAuthenticated effect above handles navigation.
     } catch (err) {
       console.error("🔑 [ERROR] 快速登入失敗:", err);
-      setError(t("teacherLogin.errors.quickLoginFailed", { email }));
+      setError(
+        t(resolveLoginErrorKey(err, "teacherLogin.errors.quickLoginFailed"), {
+          email,
+        }),
+      );
     } finally {
       setIsLoading(false);
     }

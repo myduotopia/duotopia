@@ -17,6 +17,7 @@ import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
 import { GoogleLoginButton } from "@/components/auth/GoogleLoginButton";
+import { resolveLoginErrorKey } from "@/utils/loginErrorMessage";
 
 interface TeacherLoginSheetProps {
   isOpen: boolean;
@@ -67,7 +68,7 @@ export default function TeacherLoginSheet({
       navigate("/teacher/dashboard");
     } catch (err) {
       console.error("Login failed:", err);
-      setError(t("teacherLogin.errors.loginFailed"));
+      setError(t(resolveLoginErrorKey(err, "teacherLogin.errors.loginFailed")));
     } finally {
       setIsLoading(false);
     }
@@ -100,7 +101,11 @@ export default function TeacherLoginSheet({
       navigate("/teacher/dashboard");
     } catch (err) {
       console.error("Quick login failed:", err);
-      setError(t("teacherLogin.errors.quickLoginFailed", { email }));
+      setError(
+        t(resolveLoginErrorKey(err, "teacherLogin.errors.quickLoginFailed"), {
+          email,
+        }),
+      );
     } finally {
       setIsLoading(false);
     }

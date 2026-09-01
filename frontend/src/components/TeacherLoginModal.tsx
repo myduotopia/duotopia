@@ -11,11 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Mail, Lock, AlertCircle, Eye, EyeOff } from "lucide-react";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import SubscriptionProgressBanner from "./SubscriptionProgressBanner";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { useTranslation } from "react-i18next";
+import { resolveLoginErrorKey } from "@/utils/loginErrorMessage";
 
 interface SelectedPlan {
   id: string;
@@ -83,25 +84,24 @@ export default function TeacherLoginModal({
       onLoginSuccess(response.user);
       onClose();
     } catch (err: unknown) {
-      const error = err as {
-        response?: { status?: number; data?: { detail?: string } };
-        message?: string;
-      };
       console.error("Login error:", err);
-      if (error.response?.status === 401) {
+      // apiClient 丟的是 ApiError（status 在 err.status），不是 axios 的
+      // err.response.status，所以舊的分支條件永遠不成立、一律落到通用訊息。
+      if (err instanceof ApiError && err.status === 401) {
         setError(t("dialogs.teacherLoginModal.errors.invalidCredentials"));
-      } else if (error.response?.status === 500) {
-        setError(t("dialogs.teacherLoginModal.errors.serverError"));
-      } else if (error.message?.includes("Network")) {
-        setError(t("dialogs.teacherLoginModal.errors.networkError"));
       } else {
+        const key = resolveLoginErrorKey(
+          err,
+          "dialogs.teacherLoginModal.errors.loginFailed",
+        );
         setError(
-          t("dialogs.teacherLoginModal.errors.loginFailed", {
-            detail:
-              error.response?.data?.detail ||
-              error.message ||
-              t("dialogs.teacherLoginModal.errors.tryAgain"),
-          }),
+          key === "dialogs.teacherLoginModal.errors.loginFailed"
+            ? t(key, {
+                detail:
+                  (err instanceof Error && err.message) ||
+                  t("dialogs.teacherLoginModal.errors.tryAgain"),
+              })
+            : t(key),
         );
       }
     } finally {

@@ -81,6 +81,11 @@
     "retry": "Retry",
     "lineContact": {
       "ariaLabel": "LINE Customer Service"
+    },
+    "errors": {
+      "networkError": "Cannot reach the server. Please check your connection and try again.",
+      "rateLimited": "Too many attempts. Please wait a minute and try again.",
+      "serverError": "A server error occurred. Please try again later."
     }
   },
   "demo": {

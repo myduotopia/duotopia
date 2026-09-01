@@ -92,7 +92,9 @@ elif environment == "production":
     # 生產環境只允許生產域名
     allowed_origins = [
         "https://duotopia.co",  # 主要自定義域名
+        "https://www.duotopia.co",  # 主要自定義域名（www）
         "https://duotopia.net",  # 備用自定義域名
+        "https://www.duotopia.net",  # 備用自定義域名（www）
         # Production Cloud Run (短網址)
         "https://duotopia-production-frontend-b2ovkkgl6a-de.a.run.app",
         # Production Cloud Run (完整網址)
