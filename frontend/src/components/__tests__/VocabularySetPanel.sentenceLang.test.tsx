@@ -426,3 +426,93 @@ describe("儲存時不得洗掉其他語言的既有翻譯 (#1004)", () => {
     expect(items[1].example_sentence_translation_lang).toBe("chinese");
   });
 });
+
+describe("英英字典模式不應預選例句翻譯語言 (#1004 round-2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("keeps 翻譯成 unselected for an English-definition set with no example translations", async () => {
+    mockGetContentDetail.mockResolvedValue({
+      id: 11,
+      title: "English-English",
+      items: [
+        {
+          text: "apple",
+          vocabulary_translation: "a round fruit",
+          vocabulary_translation_lang: "english",
+          example_sentence: "I eat an apple.",
+          example_sentence_translation: "",
+        },
+      ],
+    });
+
+    render(<VocabularySetPanel content={{ id: 11 }} />, { wrapper });
+    await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
+
+    // 點該列的 AI 生成例句按鈕
+    fireEvent.click(
+      screen.getByTitle("vocabularySet.tooltips.generateExampleSentence"),
+    );
+
+    const modalSelect = (await screen.findByTestId(
+      "ai-modal-sentence-lang-select",
+    )) as HTMLSelectElement;
+    expect(modalSelect.value).toBe("");
+  });
+});
+
+describe("批次翻譯成自訂語言（other） (#1004 round-2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows the custom-language translation instead of the stale japanese field", async () => {
+    mockGetContentDetail.mockResolvedValue({
+      id: 12,
+      title: "Vocab",
+      items: [
+        {
+          text: "apple",
+          definition: "蘋果",
+          vocabulary_translation: "蘋果",
+          vocabulary_translation_lang: "chinese",
+          audio_url: "https://example.com/apple.mp3",
+          example_sentence: "I eat an apple.",
+          // 這一列既有日文翻譯（中文欄位是空的 → 會被判定為缺翻譯）
+          example_sentence_translation: "私はりんごを食べます。",
+          example_sentence_translation_lang: "japanese",
+          example_sentence_audio_url: "https://example.com/apple-s.mp3",
+        },
+      ],
+    });
+    mockBatchTranslateSentences.mockResolvedValue({
+      translations: ["ฉันกินแอปเปิ้ล"],
+    });
+
+    render(<VocabularySetPanel content={{ id: 12 }} />, { wrapper });
+    await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
+
+    // 左側「翻譯成」選「其他」+ 填自訂語言
+    fireEvent.change(await getSentenceLangSelect(), {
+      target: { value: "other" },
+    });
+    const customInput = await screen.findByPlaceholderText(
+      "contentEditor.labels.enterLanguage",
+    );
+    fireEvent.change(customInput, { target: { value: "Thai" } });
+
+    fireEvent.click(screen.getByText("contentEditor.buttons.confirmPaste"));
+
+    await waitFor(() => {
+      expect(mockBatchTranslateSentences).toHaveBeenCalledWith(
+        ["I eat an apple."],
+        "Thai",
+      );
+    });
+    // 翻好的泰文必須看得到，而不是繼續顯示舊的日文欄位
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("ฉันกินแอปเปิ้ล")).toBeTruthy();
+    });
+  });
+});

@@ -215,7 +215,7 @@ async def create_content(
                 ]
 
             # Issue #1004: 例句翻譯語言（中/日/韓），沒存的話重新編輯時會誤判成中文
-            if "example_sentence_translation_lang" in item_data:
+            if item_data.get("example_sentence_translation_lang"):
                 metadata["example_sentence_translation_lang"] = item_data[
                     "example_sentence_translation_lang"
                 ]
@@ -460,10 +460,10 @@ def _build_item_fields(
     # 沒存的話重新編輯時一律變回「中文」，日/韓譯文會被當成中文欄位而清空。
     # 次要儲存路徑（例如只改音檔）不一定會帶這個 key，UPDATE 時沿用既有值，
     # 避免 metadata 重建把語言洗掉。
-    if "example_sentence_translation_lang" in item_data:
-        metadata["example_sentence_translation_lang"] = item_data[
-            "example_sentence_translation_lang"
-        ]
+    # 空字串視同「沒帶」，否則會把既有語言洗成空值（round-2 review 防呆）
+    incoming_sentence_lang = item_data.get("example_sentence_translation_lang")
+    if incoming_sentence_lang:
+        metadata["example_sentence_translation_lang"] = incoming_sentence_lang
     elif existing_row is not None and existing_row.item_metadata:
         existing_lang = existing_row.item_metadata.get(
             "example_sentence_translation_lang"

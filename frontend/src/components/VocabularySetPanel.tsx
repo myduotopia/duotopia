@@ -3923,13 +3923,24 @@ const VocabularySetPanel = forwardRef<
     // 每次打開 modal 都重設為 Program level
     setAiGenerateLevel(programLevel || "A1");
     // 預選左側 AI Generate Examples 的翻譯語言
+    // 英英翻譯時不預選。這段必須排在「沿用既有語言」前面：載入既有單字集時
+    // aiGenerateTranslateLang 一定會被還原成非空值（最差 fallback "chinese"），
+    // 若先 return 就永遠走不到這裡，英英字典模式會被預選成中文而產生不該有的翻譯。
+    // 但單字集若真的已經有例句翻譯，就尊重既有語言而不是清掉。
+    if (
+      lastSelectedWordLang === "english" &&
+      !rows.some(hasAnyExampleTranslation)
+    ) {
+      setAiGenerateTranslateLang("");
+      setAiGenerateModalOpen(true);
+      return;
+    }
     // #1004: 已經有例句翻譯語言（既有資料還原或老師選過）就沿用，
     // 否則打開單題 AI 對話框會把左側批次區的語言一起改掉
     if (aiGenerateTranslateLang) {
       setAiGenerateModalOpen(true);
       return;
     }
-    // 英英翻譯時不預選
     if (lastSelectedWordLang === "english") {
       setAiGenerateTranslateLang("");
     } else if (lastSelectedWordLang === "other") {
@@ -4618,9 +4629,11 @@ const VocabularySetPanel = forwardRef<
                 currentRows[idx].selectedSentenceLanguage = "korean";
               } else {
                 currentRows[idx].example_sentence_translation = trans;
-                if (exampleTargetValue === "chinese") {
-                  currentRows[idx].selectedSentenceLanguage = "chinese";
-                }
+                // "other"（自訂語言）的譯文也是寫進中文欄位，同樣要把列上的語言
+                // 一起帶過來，否則列若還停在日/韓，畫面會繼續顯示舊欄位、
+                // 看起來像「翻了但沒反應」。
+                currentRows[idx].selectedSentenceLanguage =
+                  exampleTargetValue === "chinese" ? "chinese" : undefined;
               }
             });
           } catch (error) {
@@ -5555,6 +5568,7 @@ const VocabularySetPanel = forwardRef<
                 {t("vocabularySet.labels.translateTo")}
               </label>
               <select
+                data-testid="ai-modal-sentence-lang-select"
                 value={aiGenerateTranslateLang}
                 onChange={(e) => {
                   const val = e.target.value;

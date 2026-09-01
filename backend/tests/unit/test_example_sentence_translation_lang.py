@@ -238,3 +238,51 @@ class TestExampleSentenceTranslationLang:
         assert response.status_code == 200
         item = response.json()[0]["items"][0]
         assert item["example_sentence_translation_lang"] == "japanese"
+
+    def test_update_with_empty_lang_does_not_wipe_existing(
+        self, test_client: TestClient, auth_token
+    ):
+        """語言送空字串時視為「沒帶」，沿用既有值而不是洗掉（防呆，round-2 review）"""
+        content_id = _create_content(
+            test_client,
+            auth_token,
+            [
+                {
+                    "text": "apple",
+                    "example_sentence": "I eat an apple.",
+                    "example_sentence_translation": "私はりんごを食べます。",
+                    "example_sentence_translation_lang": "japanese",
+                }
+            ],
+        )
+
+        detail = test_client.get(
+            f"/api/teachers/contents/{content_id}", headers=_auth(auth_token)
+        ).json()
+        item_id = detail["items"][0]["id"]
+
+        update = test_client.put(
+            f"/api/teachers/contents/{content_id}",
+            headers=_auth(auth_token),
+            json={
+                "title": "Vocabulary Set",
+                "items": [
+                    {
+                        "id": item_id,
+                        "text": "apple",
+                        "example_sentence": "I eat an apple.",
+                        "example_sentence_translation": "私はりんごを食べます。",
+                        "example_sentence_translation_lang": "",
+                    }
+                ],
+            },
+        )
+        assert update.status_code == 200
+
+        response = test_client.get(
+            f"/api/teachers/contents/{content_id}", headers=_auth(auth_token)
+        )
+        assert (
+            response.json()["items"][0]["example_sentence_translation_lang"]
+            == "japanese"
+        )
