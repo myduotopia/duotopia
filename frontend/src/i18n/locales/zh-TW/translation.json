@@ -4805,6 +4805,117 @@
       "generate": "生成"
     }
   },
+  "scenarioDialogue": {
+    "dialogTitle": "新增情境對話",
+    "badge": "口說練習",
+    "tabs": {
+      "sourceManual": "直接輸入情境文章",
+      "sourceAi": "AI 輔助生成",
+      "sourceUpload": "上傳圖片 / PDF"
+    },
+    "labels": {
+      "title": "標題",
+      "goal": "訓練目標",
+      "uploadTitle": "點擊或拖放檔案",
+      "rubric": "評分準則（AI 回饋依據）",
+      "notSpecified": "不指定",
+      "rubricNote": "本題額外說明",
+      "referenceAnswer": "參考答案",
+      "advanced": "參考答案與補充說明",
+      "globalTense": "整體評分標準",
+      "inherited": "沿用整體設定",
+      "overridden": "本題自訂",
+      "globalRubric": "作答指引（學生看得到）",
+      "generateCount": "一次產生幾題",
+      "reference": "設定對照",
+      "scenarioContent": "情境內容",
+      "articleLevel": "文章難度",
+      "questionLevel": "題目難度",
+      "scenarioText": "情境文章",
+      "sectionGenerate": "出題設定"
+    },
+    "rubricPresets": {
+      "tenseTime": "時間",
+      "tenseAspect": "動貌",
+      "voice": "語態",
+      "keywords": "必用字詞"
+    },
+    "placeholders": {
+      "title": "例如：六年級 · 週末生活口說練習",
+      "goal": "例如：讓學生能用過去式描述週末做過的活動，並說出一個地點與一位同行的人。",
+      "question": "輸入口說題目",
+      "keywords": "以逗號分隔，例如 went, visited",
+      "referenceAnswer": "寫一段理想的回答，例如：I went to the park with my family last Saturday.",
+      "rubricNote": "針對這一題的補充說明，例如：請先說出時間，再描述做了什麼。",
+      "globalRubric": "例如：請用完整句子回答，並在句尾補上一個原因。回答時盡量說滿 3 句話。",
+      "scenarioContent": "描述情境，或用上方任一種方式產生後再修改。例如：It is Monday morning at school. You and your classmate are talking about the weekend."
+    },
+    "buttons": {
+      "generating": "產生中…",
+      "addQuestion": "新增題目",
+      "skipGeneration": "跳過，我想自己出題",
+      "generateAndContinue": "產生題目並繼續",
+      "editSettings": "回設定修改",
+      "backToSettings": "上一步：設定",
+      "viewQuestions": "查看題目清單",
+      "generateAnother": "再產一批題目",
+      "uploadImage": "上傳圖片",
+      "replaceImage": "替換",
+      "removeImage": "移除",
+      "generateScenario": "生成情境文章",
+      "extractScenario": "從檔案擷取",
+      "generateImage": "AI 生成"
+    },
+    "hints": {
+      "rateLimit": "每分鐘最多重新生成 5 次",
+      "uploadFormats": "支援 JPG、PNG、PDF",
+      "itemRange": "最少 {{min}} 題、最多 {{max}} 題",
+      "maxReached": "已達 {{max}} 題上限",
+      "referenceAnswer": "給 AI 對照語言特徵用（時態、句型、用字），學生看不到；也是回饋「建議答案」的依據",
+      "visibleToStudents": "這段文字會提供給 AI 評分，學生作答時也看得到",
+      "globalTense": "所有題目預設沿用；單題可個別調整，之後改這裡不會影響已自訂的題目",
+      "step1Foot": "設定完成後產題，或直接跳到清單自己出題",
+      "untitled": "尚未命名",
+      "referenceNote": "對照情境與作答指引，確認題目出得合不合適",
+      "noRubricYet": "尚未設定作答指引",
+      "scenarioRequiredForAi": "使用 AI 產題時必填",
+      "sourceManual": "在下方「情境文章」直接輸入",
+      "optional": "選填",
+      "noContextYet": "尚未設定情境內容",
+      "scenarioText": "三種方式產生後都可以在這裡修改",
+      "sectionGenerate": "AI 產題時使用；產完仍可逐題調整"
+    },
+    "tooltips": {
+      "regenerateQuestion": "重新生成這一題（會避開已出現過的題目）",
+      "generateAudio": "生成語音",
+      "resetToGlobal": "改回沿用整體評分標準"
+    },
+    "messages": {
+      "frontendOnly": "情境對話目前為畫面設計階段，尚未串接後端儲存",
+      "scenarioRequired": "請先輸入情境內容，AI 才有素材可以出題"
+    },
+    "tenseTimes": {
+      "present": "現在",
+      "past": "過去",
+      "future": "未來"
+    },
+    "tenseAspects": {
+      "simple": "簡單式",
+      "progressive": "進行式",
+      "perfect": "完成式",
+      "perfectProgressive": "完成進行式"
+    },
+    "voices": {
+      "active": "主動",
+      "passive": "被動"
+    },
+    "chips": {
+      "tense": "時態：{{value}}",
+      "voice": "語態：{{value}}",
+      "keywords": "必用：{{value}}"
+    },
+    "tenseCombo": "{{time}}{{aspect}}"
+  },
   "vocabularySet": {
     "dialogTitle": "新增單字集",
     "editTitle": "編輯單字集",

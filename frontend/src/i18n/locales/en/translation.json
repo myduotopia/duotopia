@@ -4785,6 +4785,117 @@
       "speed": "Speed"
     }
   },
+  "scenarioDialogue": {
+    "dialogTitle": "Add Scenario Dialogue",
+    "badge": "Speaking",
+    "tabs": {
+      "sourceManual": "Write it yourself",
+      "sourceAi": "Generate with AI",
+      "sourceUpload": "Upload image / PDF"
+    },
+    "labels": {
+      "title": "Title",
+      "goal": "Learning Goal",
+      "uploadTitle": "Click or drop files here",
+      "rubric": "Scoring Criteria (AI feedback basis)",
+      "notSpecified": "Not specified",
+      "rubricNote": "Extra note for this question",
+      "referenceAnswer": "Reference Answer",
+      "advanced": "Reference Answer & Notes",
+      "globalTense": "Default Scoring Criteria",
+      "inherited": "Inherited",
+      "overridden": "Customized",
+      "globalRubric": "Answering Guidelines (visible to students)",
+      "generateCount": "Questions per run",
+      "reference": "Settings reference",
+      "scenarioContent": "Scenario",
+      "articleLevel": "Text difficulty",
+      "questionLevel": "Question difficulty",
+      "scenarioText": "Scenario text",
+      "sectionGenerate": "Question settings"
+    },
+    "rubricPresets": {
+      "tenseTime": "Time",
+      "tenseAspect": "Aspect",
+      "voice": "Voice",
+      "keywords": "Required words"
+    },
+    "placeholders": {
+      "title": "e.g. Grade 6 · Weekend Life Speaking Practice",
+      "goal": "For example: students describe what they did last weekend in the past tense, naming a place and a person they went with.",
+      "question": "Enter a speaking question",
+      "keywords": "Comma separated, e.g. went, visited",
+      "referenceAnswer": "Write an ideal answer, e.g. I went to the park with my family last Saturday.",
+      "rubricNote": "Extra guidance for this question, e.g. state the time first, then what you did.",
+      "globalRubric": "e.g. Answer in complete sentences and add a reason at the end. Try to speak at least 3 sentences.",
+      "scenarioContent": "Describe the scenario, or produce one above and edit it. For example: It is Monday morning at school. You and your classmate are talking about the weekend."
+    },
+    "buttons": {
+      "generating": "Generating…",
+      "addQuestion": "Add Question",
+      "skipGeneration": "Skip — I'll write my own",
+      "generateAndContinue": "Generate and continue",
+      "editSettings": "Edit settings",
+      "backToSettings": "Back to settings",
+      "viewQuestions": "View questions",
+      "generateAnother": "Generate more questions",
+      "uploadImage": "Upload image",
+      "replaceImage": "Replace",
+      "removeImage": "Remove",
+      "generateScenario": "Generate scenario",
+      "extractScenario": "Extract from files",
+      "generateImage": "Generate"
+    },
+    "hints": {
+      "rateLimit": "Up to 5 regenerations per minute",
+      "uploadFormats": "Supports JPG, PNG, PDF",
+      "itemRange": "min {{min}}, max {{max}} questions",
+      "maxReached": "Reached the {{max}}-question limit",
+      "referenceAnswer": "Used by the AI to compare language features (tense, structure, vocabulary). Never shown to students; also the basis for suggested answers.",
+      "visibleToStudents": "This text is sent to the AI grader and is also shown to students",
+      "globalTense": "Applied to all questions by default. Customizing a question detaches it, so later changes here won't affect it.",
+      "step1Foot": "Generate once you're set, or skip ahead and write your own",
+      "untitled": "Untitled",
+      "referenceNote": "Check the questions against the scenario and instructions",
+      "noRubricYet": "No instructions yet",
+      "scenarioRequiredForAi": "Required to generate questions with AI",
+      "sourceManual": "Type it in the Scenario text box below",
+      "optional": "Optional",
+      "noContextYet": "No scenario yet",
+      "scenarioText": "Edit here after producing it any of the three ways",
+      "sectionGenerate": "Used when AI writes the questions; each one stays editable afterwards"
+    },
+    "tooltips": {
+      "regenerateQuestion": "Regenerate this question (avoids previous ones)",
+      "generateAudio": "Generate audio",
+      "resetToGlobal": "Reset to the shared scoring criteria"
+    },
+    "messages": {
+      "frontendOnly": "Scenario Dialogue is UI-only for now; saving is not wired to the backend yet",
+      "scenarioRequired": "Add the scenario first — AI needs it to write questions"
+    },
+    "tenseTimes": {
+      "present": "Present",
+      "past": "Past",
+      "future": "Future"
+    },
+    "tenseAspects": {
+      "simple": "Simple",
+      "progressive": "Progressive",
+      "perfect": "Perfect",
+      "perfectProgressive": "Perfect progressive"
+    },
+    "voices": {
+      "active": "Active",
+      "passive": "Passive"
+    },
+    "chips": {
+      "tense": "Tense: {{value}}",
+      "voice": "Voice: {{value}}",
+      "keywords": "Must use: {{value}}"
+    },
+    "tenseCombo": "{{time}} {{aspect}}"
+  },
   "vocabularySet": {
     "dialogTitle": "Add Vocabulary Set",
     "editTitle": "Edit Vocabulary Set",
