@@ -31,6 +31,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _example_sentence_translation_lang(item: ContentItem) -> str:
+    """Issue #1004: 例句翻譯語言，舊資料沒存過就 fallback 中文。
+
+    每個回傳 content items 的端點都要帶這個欄位，否則前端重新載入時會把
+    日/韓譯文誤判成中文，切換語言時整欄被清空。
+    """
+    if item.item_metadata:
+        return item.item_metadata.get("example_sentence_translation_lang") or "chinese"
+    return "chinese"
+
+
 @router.get("/lessons/{lesson_id}/contents")
 async def get_lesson_contents(
     lesson_id: int,
@@ -71,6 +82,10 @@ async def get_lesson_contents(
                 # 例句相關欄位
                 "example_sentence": item.example_sentence,
                 "example_sentence_translation": item.example_sentence_translation,
+                # Issue #1004: 例句翻譯語言（中/日/韓），前端據此決定譯文欄位
+                "example_sentence_translation_lang": (
+                    _example_sentence_translation_lang(item)
+                ),
                 "example_sentence_definition": item.example_sentence_definition,
                 # 例句重組欄位
                 "word_count": item.word_count,
@@ -197,6 +212,12 @@ async def create_content(
             if "vocabulary_translation_lang" in item_data:
                 metadata["vocabulary_translation_lang"] = item_data[
                     "vocabulary_translation_lang"
+                ]
+
+            # Issue #1004: 例句翻譯語言（中/日/韓），沒存的話重新編輯時會誤判成中文
+            if item_data.get("example_sentence_translation_lang"):
+                metadata["example_sentence_translation_lang"] = item_data[
+                    "example_sentence_translation_lang"
                 ]
 
             # 向後相容：ReadingAssessmentPanel 仍送舊欄位
@@ -366,6 +387,10 @@ async def get_content_detail(
                 # 單字集相關欄位
                 "example_sentence": item.example_sentence,
                 "example_sentence_translation": item.example_sentence_translation,
+                # Issue #1004: 例句翻譯語言（中/日/韓），前端據此決定譯文欄位
+                "example_sentence_translation_lang": (
+                    _example_sentence_translation_lang(item)
+                ),
                 "example_sentence_audio_url": item.example_sentence_audio_url,
                 "cloze_answer": item.cloze_answer,
                 "image_url": item.image_url,
@@ -430,6 +455,21 @@ def _build_item_fields(
         metadata["vocabulary_translation_lang"] = item_data[
             "vocabulary_translation_lang"
         ]
+
+    # Issue #1004: 例句翻譯語言（中/日/韓）。前端靠它決定譯文要落在哪個欄位，
+    # 沒存的話重新編輯時一律變回「中文」，日/韓譯文會被當成中文欄位而清空。
+    # 次要儲存路徑（例如只改音檔）不一定會帶這個 key，UPDATE 時沿用既有值，
+    # 避免 metadata 重建把語言洗掉。
+    # 空字串視同「沒帶」，否則會把既有語言洗成空值（round-2 review 防呆）
+    incoming_sentence_lang = item_data.get("example_sentence_translation_lang")
+    if incoming_sentence_lang:
+        metadata["example_sentence_translation_lang"] = incoming_sentence_lang
+    elif existing_row is not None and existing_row.item_metadata:
+        existing_lang = existing_row.item_metadata.get(
+            "example_sentence_translation_lang"
+        )
+        if existing_lang:
+            metadata["example_sentence_translation_lang"] = existing_lang
 
     # 向後相容：ReadingAssessmentPanel 仍送 english_definition
     # + selectedLanguage，接受並映射到新欄位
@@ -702,6 +742,10 @@ async def update_content(
                 # 例句相關欄位
                 "example_sentence": item.example_sentence,
                 "example_sentence_translation": item.example_sentence_translation,
+                # Issue #1004: 例句翻譯語言（中/日/韓），前端據此決定譯文欄位
+                "example_sentence_translation_lang": (
+                    _example_sentence_translation_lang(item)
+                ),
                 "example_sentence_definition": item.example_sentence_definition,
                 "word_count": item.word_count,
                 "max_errors": item.max_errors,
