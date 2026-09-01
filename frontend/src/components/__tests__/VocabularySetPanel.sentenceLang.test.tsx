@@ -516,3 +516,133 @@ describe("批次翻譯成自訂語言（other） (#1004 round-2)", () => {
     });
   });
 });
+
+describe("getInitialSentenceLang 英英模式 (#1004 round-3)", () => {
+  it("returns empty for an English set with no example translations", () => {
+    expect(
+      getInitialSentenceLang(
+        [{ selectedSentenceLanguage: "chinese", example_sentence: "I eat." }],
+        "english",
+      ),
+    ).toBe("");
+  });
+
+  it("still respects an existing translation language in an English set", () => {
+    expect(
+      getInitialSentenceLang(
+        [
+          {
+            selectedSentenceLanguage: "japanese",
+            example_sentence_japanese: "私はりんごを食べます。",
+          },
+        ],
+        "english",
+      ),
+    ).toBe("japanese");
+  });
+});
+
+describe("英英單字集的批次面板也不可預選語言 (#1004 round-3)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("leaves the batch 翻譯成 dropdown blank", async () => {
+    mockGetContentDetail.mockResolvedValue({
+      id: 13,
+      title: "English-English",
+      items: [
+        {
+          text: "apple",
+          vocabulary_translation: "a round fruit",
+          vocabulary_translation_lang: "english",
+          example_sentence: "I eat an apple.",
+          example_sentence_translation: "",
+        },
+      ],
+    });
+
+    render(<VocabularySetPanel content={{ id: 13 }} />, { wrapper });
+    await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
+
+    const select = await getSentenceLangSelect();
+    expect(select.value).toBe("");
+  });
+});
+
+describe("多語言殘留時要保留最後實際使用的語言 (#1004 round-3)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("prefers the language the row was last working in over list order", () => {
+    expect(
+      resolveExampleTranslationForSave({
+        selectedSentenceLanguage: "chinese",
+        example_sentence_translation: "",
+        example_sentence_japanese: "私はりんごを食べます。",
+        example_sentence_korean: "나는 사과를 먹습니다.",
+        previousSentenceLang: "korean",
+      }),
+    ).toEqual({ translation: "나는 사과를 먹습니다.", lang: "korean" });
+  });
+
+  it("keeps the existing korean translation after switching languages twice", async () => {
+    mockGetContentDetail.mockResolvedValue({
+      id: 14,
+      title: "Vocab",
+      items: [0, 1, 2, 3, 4].map((i) => ({
+        text: `word${i}`,
+        definition: `翻譯${i}`,
+        vocabulary_translation: `翻譯${i}`,
+        vocabulary_translation_lang: "chinese",
+        audio_url: `https://example.com/${i}.mp3`,
+        example_sentence: `This is sentence ${i}.`,
+        example_sentence_audio_url: `https://example.com/${i}-s.mp3`,
+        example_sentence_translation: `日本語 ${i}`,
+        example_sentence_translation_lang: "japanese",
+      })),
+    });
+    mockTranslateSentence.mockResolvedValue({
+      translation: "나는 사과를 먹습니다.",
+    });
+    mockUpdateContent.mockResolvedValue({ id: 14 });
+
+    const ref = createRef<VocabularySetPanelHandle>();
+    render(<VocabularySetPanel ref={ref} content={{ id: 14 }} />, { wrapper });
+    await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
+
+    // 日文 → 韓文，並在韓文底下翻譯第一列
+    fireEvent.change(await getSentenceLangSelect(), {
+      target: { value: "korean" },
+    });
+    fireEvent.click(
+      screen.getAllByTitle(
+        "vocabularySet.tooltips.generateExampleTranslation",
+      )[0],
+    );
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("나는 사과를 먹습니다.")).toBeTruthy(),
+    );
+
+    // 再切到中文（中文欄位是空的）後存檔
+    fireEvent.change(await getSentenceLangSelect(), {
+      target: { value: "chinese" },
+    });
+    await act(async () => {
+      await ref.current!.save();
+    });
+
+    const items = (
+      mockUpdateContent.mock.calls[0][1] as {
+        items: Array<{
+          example_sentence_translation: string;
+          example_sentence_translation_lang: string;
+        }>;
+      }
+    ).items;
+    // 最後實際翻譯的是韓文，不可以退回更早的日文
+    expect(items[0].example_sentence_translation).toBe("나는 사과를 먹습니다.");
+    expect(items[0].example_sentence_translation_lang).toBe("korean");
+  });
+});

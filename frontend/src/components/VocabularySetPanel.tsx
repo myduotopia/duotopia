@@ -271,6 +271,9 @@ interface ContentRow {
   korean_translation?: string; // 韓文翻譯
   selectedWordLanguage?: WordTranslationLanguage; // 單字翻譯語言
   selectedSentenceLanguage?: SentenceTranslationLanguage; // 例句翻譯語言
+  // #1004: 切換語言前這一列實際在用的語言（該語言有譯文時才記）。
+  // 存檔時若目前語言沒有內容，優先退回這個語言而不是照清單順序猜。
+  previousSentenceLang?: SentenceTranslationLanguage;
   partsOfSpeech?: string[]; // 詞性陣列（可複選）
   audioSettings?: {
     accent: string;
@@ -401,6 +404,7 @@ type SentenceLangSource = {
   example_sentence_japanese?: string;
   example_sentence_korean?: string;
   selectedSentenceLanguage?: SentenceTranslationLanguage;
+  previousSentenceLang?: SentenceTranslationLanguage;
 };
 
 const hasAnyExampleTranslation = (row: SentenceLangSource) =>
@@ -410,13 +414,21 @@ const hasAnyExampleTranslation = (row: SentenceLangSource) =>
     row.example_sentence_korean?.trim()
   );
 
-/** 從既有資料推出左側「翻譯成」的預設值；沒有任何列時回傳空字串（新增模式不預選）。 */
+/**
+ * 從既有資料推出「翻譯成」的預設值；沒有任何列時回傳空字串（新增模式不預選）。
+ *
+ * 英英字典模式（單字翻譯選 English）且完全沒有例句翻譯時同樣不預選 —— 預選成
+ * 中文會讓批次生成靜默產出老師不要的中文翻譯，且「請選擇語言」的防呆也會失效。
+ * 載入與單題 AI 對話框共用這個判斷，避免兩邊各寫一份而漏掉其中一個入口。
+ */
 export function getInitialSentenceLang(
   rows: SentenceLangSource[],
+  wordLang?: string,
 ): SentenceTranslationLanguage | "" {
   if (rows.length === 0) return "";
   const translated = rows.find(hasAnyExampleTranslation);
   if (translated) return translated.selectedSentenceLanguage || "chinese";
+  if (wordLang === "english") return "";
   return rows[0].selectedSentenceLanguage || "chinese";
 }
 
@@ -464,9 +476,17 @@ export function resolveExampleTranslationForSave(row: SentenceLangSource): {
   const current = getExampleTranslationByLang(row, lang);
   if (current.trim()) return { translation: current, lang };
 
-  const fallbackLang = SENTENCE_TRANSLATION_LANGUAGES.map((l) => l.value).find(
-    (l) => l !== lang && getExampleTranslationByLang(row, l).trim(),
-  );
+  // 先看「切換語言前實際在用的語言」，避免多個語言都有殘留內容時，
+  // 照清單順序挑到比較舊的那一份，把老師最後做的翻譯丟掉。
+  const previous = row.previousSentenceLang;
+  const fallbackLang =
+    previous &&
+    previous !== lang &&
+    getExampleTranslationByLang(row, previous).trim()
+      ? previous
+      : SENTENCE_TRANSLATION_LANGUAGES.map((l) => l.value).find(
+          (l) => l !== lang && getExampleTranslationByLang(row, l).trim(),
+        );
   if (fallbackLang) {
     return {
       translation: getExampleTranslationByLang(row, fallbackLang),
@@ -2221,7 +2241,10 @@ const VocabularySetPanel = forwardRef<
 
         // #1004: 例句翻譯語言同樣要還原。沒還原的話左側「翻譯成」顯示「尚未選擇」，
         // 老師一選就把既有例句翻譯全部清空；批次補翻譯也會因為沒有目標語言而靜默跳過。
-        const firstSentenceLang = getInitialSentenceLang(convertedRows);
+        const firstSentenceLang = getInitialSentenceLang(
+          convertedRows,
+          firstLang,
+        );
         if (firstSentenceLang) {
           setAiGenerateTranslateLang(firstSentenceLang);
         }
@@ -3927,10 +3950,7 @@ const VocabularySetPanel = forwardRef<
     // aiGenerateTranslateLang 一定會被還原成非空值（最差 fallback "chinese"），
     // 若先 return 就永遠走不到這裡，英英字典模式會被預選成中文而產生不該有的翻譯。
     // 但單字集若真的已經有例句翻譯，就尊重既有語言而不是清掉。
-    if (
-      lastSelectedWordLang === "english" &&
-      !rows.some(hasAnyExampleTranslation)
-    ) {
+    if (!getInitialSentenceLang(rows, lastSelectedWordLang)) {
       setAiGenerateTranslateLang("");
       setAiGenerateModalOpen(true);
       return;
@@ -5179,6 +5199,8 @@ const VocabularySetPanel = forwardRef<
                             ) {
                               return row;
                             }
+                            const currentLang =
+                              row.selectedSentenceLanguage || "chinese";
                             return {
                               ...row,
                               // "other"（自訂語言）的譯文沿用中文欄位，不寫入
@@ -5188,6 +5210,13 @@ const VocabularySetPanel = forwardRef<
                                 : undefined) as
                                 | SentenceTranslationLanguage
                                 | undefined,
+                              // 目前語言真的有譯文才記，存檔時才知道該退回哪一個
+                              previousSentenceLang: getExampleTranslationByLang(
+                                row,
+                                currentLang,
+                              ).trim()
+                                ? currentLang
+                                : row.previousSentenceLang,
                             };
                           }),
                         );
