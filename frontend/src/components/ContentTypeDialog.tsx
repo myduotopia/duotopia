@@ -175,6 +175,7 @@ export default function ContentTypeDialog({
           <Button
             variant="ghost"
             size="icon"
+            aria-label={t("common.close")}
             onClick={handleClose}
             disabled={loading}
           >

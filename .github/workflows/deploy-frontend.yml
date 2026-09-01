@@ -17,9 +17,10 @@ on:
       # 前端相關檔案
       - 'frontend/**'
       - '!frontend/**/*.md'
+      # Issue #1008: 只排除 Playwright E2E（frontend/tests/**、*.spec.ts）。
+      # *.test.ts(x) 不能排除 —— 排掉的話「只改測試」的 PR 根本不會觸發這個 workflow，
+      # 新增/修改的單元測試就永遠不會在 CI 跑到。
       - '!frontend/tests/**'
-      - '!frontend/**/*.test.ts'
-      - '!frontend/**/*.test.tsx'
       - '!frontend/**/*.spec.ts'
       - '!frontend/**/*.spec.tsx'
       - 'package*.json'
@@ -35,9 +36,10 @@ on:
     paths:
       - 'frontend/**'
       - '!frontend/**/*.md'
+      # Issue #1008: 只排除 Playwright E2E（frontend/tests/**、*.spec.ts）。
+      # *.test.ts(x) 不能排除 —— 排掉的話「只改測試」的 PR 根本不會觸發這個 workflow，
+      # 新增/修改的單元測試就永遠不會在 CI 跑到。
       - '!frontend/tests/**'
-      - '!frontend/**/*.test.ts'
-      - '!frontend/**/*.test.tsx'
       - '!frontend/**/*.spec.ts'
       - '!frontend/**/*.spec.tsx'
       - 'package*.json'
@@ -97,13 +99,17 @@ jobs:
         echo "Running ESLint..."
         npm run lint:ci
 
-    - name: Run API Testing Framework
+    - name: Run frontend unit tests
       working-directory: ./frontend
+      # Issue #1008: 之前這裡只跑 2 個 API 測試檔，60+ 個單元測試從來沒被跑過。
+      # 現在改跑 test:ci（= 全部測試檔扣掉 frontend/vitest.ci.config.ts 的隔離名單）。
+      # timeout-minutes 是硬保險：萬一又有測試同步佔住事件迴圈，job 會在 15 分鐘被砍掉，
+      # 而不是一路掛到 GitHub Actions 的預設 6 小時。
+      timeout-minutes: 15
       run: |
-        echo "🚀 Running comprehensive API tests..."
-        echo "📊 Testing API contracts, health checks, and error handling..."
-        npm run test:replace-e2e
-        echo "✅ API testing complete!"
+        echo "🧪 Running frontend unit tests (vitest)..."
+        npm run test:ci
+        echo "✅ Unit tests complete!"
 
     - name: Build frontend (test build)
       working-directory: ./frontend

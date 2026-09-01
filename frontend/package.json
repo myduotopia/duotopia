@@ -24,7 +24,9 @@
     "test:api:realtime": "vitest run src/lib/__tests__/api.realtime.test.ts",
     "test:api:all": "vitest run src/lib/__tests__/api.*.test.ts",
     "test:api:ci": "vitest run src/lib/__tests__/api.comprehensive.test.ts src/lib/__tests__/api.realtime.test.ts",
-    "test:replace-e2e": "npm run test:api:ci && echo '✅ API tests complete - E2E replacement ready!'",
+    "test:ci": "vitest run --config vitest.ci.config.ts",
+    "test:api:smoke": "npm run test:api:ci && echo '✅ API smoke tests complete (2 files only — full unit suite is test:ci)'",
+    "test:replace-e2e": "npm run test:api:smoke",
     "test:e2e": "playwright test",
     "test:e2e:auth": "playwright test tests/e2e/teacher-auth-refactor.spec.ts --project=chromium",
     "test:e2e:ui": "playwright test --ui"
