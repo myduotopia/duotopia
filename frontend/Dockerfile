@@ -65,6 +65,10 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # 複製 nginx 配置模板
 COPY nginx.conf.template /etc/nginx/conf.d/nginx.conf.template
 
+# 共用 security headers 片段（Issue #940）— nginx.conf.template include 它。
+# 放 snippets/ 而非 conf.d/：conf.d/*.conf 會被主設定自動載入成 http-level 設定。
+COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
+
 # 複製啟動腳本
 COPY start.sh /start.sh
 RUN chmod +x /start.sh

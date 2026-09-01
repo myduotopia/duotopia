@@ -109,9 +109,21 @@ jobs:
       working-directory: ./frontend
       run: npm run build
 
+  nginx-smoke-test:
+    name: 🔒 Nginx Cache-Control / Security Headers Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    # Issue #940（起因 #936）：驗證 nginx 設定真的送出正確的 Cache-Control 與
+    # security headers。用 nginx:alpine + 假的 html root，不需要跑 npm build，
+    # 所以很快；#936 那種「index.html 被快取住」的回歸會在這裡被擋下來。
+    - name: Run nginx smoke test
+      run: ./frontend/scripts/nginx-smoke-test.sh
+
   deploy-frontend:
     name: 🚀 Deploy Frontend
-    needs: test-frontend
+    needs: [test-frontend, nginx-smoke-test]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
