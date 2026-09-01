@@ -81,6 +81,11 @@
     "retry": "重試",
     "lineContact": {
       "ariaLabel": "LINE 客服"
+    },
+    "errors": {
+      "networkError": "無法連線到伺服器，請檢查網路連線後再試一次",
+      "rateLimited": "嘗試次數過多，請稍候一分鐘再試",
+      "serverError": "伺服器發生錯誤，請稍後再試"
     }
   },
   "assignmentDetail": {

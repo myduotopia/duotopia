@@ -26,6 +26,7 @@ import {
   consumeRedirectTarget,
   saveRedirectTarget,
 } from "@/utils/redirectAfterLogin";
+import { resolveLoginErrorKey } from "@/utils/loginErrorMessage";
 
 interface TeacherHistory {
   email: string;
@@ -249,7 +250,7 @@ export default function StudentLogin() {
       }
     } catch (err) {
       console.error("Student login failed:", err);
-      setError(t("studentLogin.errors.loginFailed"));
+      setError(t(resolveLoginErrorKey(err, "studentLogin.errors.loginFailed")));
     } finally {
       setLoading(false);
     }
@@ -290,7 +291,7 @@ export default function StudentLogin() {
       });
     } catch (err) {
       console.error("Email login failed:", err);
-      setError(t("studentLogin.emailLogin.error"));
+      setError(t(resolveLoginErrorKey(err, "studentLogin.emailLogin.error")));
     } finally {
       setLoading(false);
     }
