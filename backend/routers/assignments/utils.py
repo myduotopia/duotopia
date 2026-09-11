@@ -463,6 +463,7 @@ async def trigger_ai_assessment_for_item(
         return True
 
     except Exception as e:
-        logger.error(f"Failed to assess item_progress {item_progress.id}: {e}")
+        # 用 repr：HTTPException 的 str() 是空字串（#1047）
+        logger.error(f"Failed to assess item_progress {item_progress.id}: {e!r}")
         db.rollback()
         return False

@@ -537,7 +537,8 @@ def assess_pronunciation(audio_data: bytes, reference_text: str) -> Dict[str, An
             logger.warning(f"⚠️ Azure rate limit hit (429): {e}")
             raise AzureRateLimitError(f"Azure API rate limit exceeded: {e}")
 
-        logger.error(f"Azure Speech API error: {str(e)}")
+        # HTTPException 的 str() 是空字串，用 repr 才看得到真正的原因（#1047）
+        logger.error(f"Azure Speech API error: {e!r}")
         logger.error(f"Total processing time before failure: {total_latency:.2f}s")
         logger.debug(f"Error type: {type(e)}")
         import traceback

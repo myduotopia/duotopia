@@ -32,7 +32,7 @@ google-cloud-storage==2.13.0
 google-cloud-bigquery==3.14.1
 google-cloud-aiplatform==1.95.0  # Vertex AI (Gemini) for AI services
 google-cloud-tasks==2.16.4  # 1Campus class sync background jobs
-azure-cognitiveservices-speech==1.45.0  # Official Azure TTS (replaces edge-tts)
+azure-cognitiveservices-speech==1.51.2  # Official Azure TTS (replaces edge-tts); 1.45.0 起在 Linux 已無法與 Azure 建立 websocket（#1047），勿降版
 
 # Performance Monitoring (OpenTelemetry + Cloud Trace)
 opentelemetry-api==1.22.0

@@ -263,13 +263,22 @@ class TTSService:
                         else:
                             return f"/static/tts/{filename}"
                 else:
-                    cancellation_details = speechsdk.CancellationDetails(result)
+                    # 合成結果只能用 SpeechSynthesisCancellationDetails 解析。
+                    # 用辨識用的 CancellationDetails 會丟 SPXERR_INVALID_ARG，
+                    # 把 Azure 真正的失敗原因整個蓋掉（Issue #1047）。
+                    cancellation_details = speechsdk.SpeechSynthesisCancellationDetails(
+                        result
+                    )
                     error_msg = f"Azure TTS failed: {result.reason}"
                     if (
                         cancellation_details.reason
                         == speechsdk.CancellationReason.Error
                     ):
-                        error_msg += f" - {cancellation_details.error_details}"
+                        error_msg += (
+                            f" - {cancellation_details.error_code}: "
+                            f"{cancellation_details.error_details}"
+                        )
+                    logger.error(error_msg)
                     raise Exception(error_msg)
             finally:
                 # 確保清理臨時檔案
