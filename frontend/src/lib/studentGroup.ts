@@ -87,6 +87,27 @@ export interface StudentGroupPayload {
   leader_student_id: number | null;
 }
 
+/**
+ * 派發作業時點一下組別 chip 的結果（issue #1046）。
+ *
+ * 整組尚未全選 → 把整組**加進**現有勾選（聯集，不清掉其他人）；整組都已選
+ * → 才把整組移除。這樣老師可以「先點兩組，再取消其中一位請假的學生」，
+ * 取消完 chip 變成部分選取，再點一次是補齊而不是清空。
+ */
+export function toggleGroupInSelection(
+  selectedIds: number[],
+  memberIds: number[],
+): number[] {
+  if (memberIds.length === 0) return selectedIds;
+
+  const allSelected = memberIds.every((id) => selectedIds.includes(id));
+  if (allSelected) {
+    const toRemove = new Set(memberIds);
+    return selectedIds.filter((id) => !toRemove.has(id));
+  }
+  return Array.from(new Set([...selectedIds, ...memberIds]));
+}
+
 /** 一位學生在某一組裡的身分。一個學生可能有好幾筆（可屬多組）。 */
 export interface StudentGroupMembership {
   groupId: number;

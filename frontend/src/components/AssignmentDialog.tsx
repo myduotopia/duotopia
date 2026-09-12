@@ -72,6 +72,12 @@ import {
   reasonNothingSelectable,
 } from "@/lib/assignableContentType";
 import { cn } from "@/lib/utils";
+import { compareStudentsBySeat } from "@/lib/studentSort";
+import {
+  GROUP_COLOR_DOT,
+  toggleGroupInSelection,
+  type StudentGroup as ClassroomGroup,
+} from "@/lib/studentGroup";
 import {
   practiceModeLabelKey,
   listModesForDataset,
@@ -369,14 +375,9 @@ const getExampleSentenceErrorDetail = (
 const isExampleSentenceRequiredError = (error: unknown): boolean =>
   getExampleSentenceErrorDetail(error) !== null;
 
-const sortByStudentNumber = (a: Student, b: Student) => {
-  if (!a.student_number && !b.student_number) return 0;
-  if (!a.student_number) return 1;
-  if (!b.student_number) return -1;
-  return a.student_number.localeCompare(b.student_number, undefined, {
-    numeric: true,
-  });
-};
+// #1046: 排序規則抽到 lib/studentSort 與班級頁共用。原本兩位學生都沒有座號時
+// 回傳 0，順序就落回 API 回來的任意次序；現在會依姓名排。
+const sortByStudentNumber = compareStudentsBySeat;
 
 export function AssignmentDialog({
   open,
@@ -436,6 +437,9 @@ export function AssignmentDialog({
     SelectedClassroom[]
   >([]);
   const [activeClassroomTab, setActiveClassroomTab] = useState<number>(0);
+
+  // #1046: 單一班級派發時才載入分組，用來做組別快選 chips。機構多班分頁不支援。
+  const [classroomGroups, setClassroomGroups] = useState<ClassroomGroup[]>([]);
 
   // 學生列表：多班級模式用 selectedClassrooms，單班級模式用原有邏輯
   const effectiveStudents = needsClassroomStep
@@ -676,6 +680,15 @@ export function AssignmentDialog({
       loadTemplatePrograms();
       if (classroomId) {
         loadClassroomPrograms();
+      }
+      // #1046: 只有單一班級派發才有組別快選；多班分頁的學生來自不同班級，
+      // 一份分組套不上去。載入失敗就當作沒有分組，chips 不顯示而已，不擋派發。
+      setClassroomGroups([]);
+      if (classroomId && !needsClassroomStep) {
+        apiClient
+          .getClassroomGroups(classroomId)
+          .then(setClassroomGroups)
+          .catch(() => setClassroomGroups([]));
       }
       if (showOrgTab) {
         loadOrgPrograms();
@@ -1254,6 +1267,29 @@ export function AssignmentDialog({
         ? effectiveStudents.map((s) => s.id)
         : [],
     }));
+  };
+
+  /**
+   * #1046: 點組別 chip 就整組加入現有勾選（聯集，不清空別人）；整組都已勾選
+   * 時再點一次才移除。這樣老師可以「先點兩組，再取消其中一位請假的學生」，
+   * 保持最大彈性。
+   */
+  const toggleGroupSelection = (group: ClassroomGroup) => {
+    const inClass = new Set(effectiveStudents.map((s) => s.id));
+    // 組員可能已離班（分組資料與名冊各自載入），只挑名冊裡真的有的人。
+    const memberIds = group.members
+      .map((m) => m.student_id)
+      .filter((sid) => inClass.has(sid));
+    if (memberIds.length === 0) return;
+
+    setFormData((prev) => {
+      const newIds = toggleGroupInSelection(prev.student_ids, memberIds);
+      return {
+        ...prev,
+        student_ids: newIds,
+        assign_to_all: newIds.length === effectiveStudents.length,
+      };
+    });
   };
 
   const handleSubmit = async () => {
@@ -3272,6 +3308,57 @@ export function AssignmentDialog({
                       )}
                     </div>
                   </Card>
+
+                  {/* #1046 組別快選：點一下整組加入現有勾選，可再個別取消 */}
+                  {classroomGroups.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-xs text-gray-500 mb-1.5">
+                        {t("dialogs.assignmentDialog.selectStudents.byGroup")}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {classroomGroups.map((group) => {
+                          const memberIds = group.members.map(
+                            (m) => m.student_id,
+                          );
+                          const selectedCount = memberIds.filter((sid) =>
+                            formData.student_ids.includes(sid),
+                          ).length;
+                          const allSelected =
+                            memberIds.length > 0 &&
+                            selectedCount === memberIds.length;
+                          return (
+                            <button
+                              key={group.id}
+                              type="button"
+                              onClick={() => toggleGroupSelection(group)}
+                              className={cn(
+                                "inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-xs transition-colors",
+                                allSelected
+                                  ? "bg-blue-50 border-blue-300 text-blue-700"
+                                  : "bg-white border-gray-200 text-gray-700 hover:border-gray-300",
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "h-2 w-2 rounded-full shrink-0",
+                                  group.color
+                                    ? GROUP_COLOR_DOT[group.color]
+                                    : "bg-gray-300",
+                                )}
+                              />
+                              <span className="truncate max-w-[8rem]">
+                                {group.name}
+                              </span>
+                              {/* 部分選取時顯示 2/5，讓老師看得出來自己取消過誰 */}
+                              <span className="tabular-nums opacity-70">
+                                {selectedCount}/{memberIds.length}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Student Grid */}
                   <div className="flex-1 border rounded-lg bg-gray-50 p-2 overflow-hidden">
