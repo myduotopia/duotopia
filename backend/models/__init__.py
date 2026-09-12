@@ -79,6 +79,13 @@ from .institution_invoice import (
 # Classroom models
 from .classroom import Classroom, ClassroomStudent
 
+# Student group models (issue #1046)
+from .student_group import (
+    StudentGroup,
+    StudentGroupMember,
+    GROUP_COLOR_VALUES,
+)
+
 # Program models
 from .program import Program, Lesson, Content, ContentItem, ProgramCopyLog
 
@@ -165,6 +172,10 @@ __all__ = [
     # Classrooms
     "Classroom",
     "ClassroomStudent",
+    # Student groups (issue #1046)
+    "StudentGroup",
+    "StudentGroupMember",
+    "GROUP_COLOR_VALUES",
     # Programs
     "Program",
     "Lesson",
