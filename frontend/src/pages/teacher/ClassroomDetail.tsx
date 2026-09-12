@@ -22,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import StudentTable, { Student } from "@/components/StudentTable";
+import { GroupSettingsTab } from "@/components/classroom/GroupSettingsTab";
 import { StudentDialogs } from "@/components/StudentDialogs";
 import { ProgramDialog } from "@/components/ProgramDialog";
 import { LessonDialog } from "@/components/LessonDialog";
@@ -50,6 +51,7 @@ import { programTreeConfig } from "@/components/shared/programTreeConfig";
 import {
   ArrowLeft,
   Users,
+  UsersRound,
   BookOpen,
   Plus,
   Edit,
@@ -1969,6 +1971,19 @@ export default function ClassroomDetail({
                         {t("classroomDetail.tabs.assignments")}
                       </span>
                     </TabsTrigger>
+                    {/* #1046 分組設定 */}
+                    <TabsTrigger
+                      value="groups"
+                      className="relative px-4 sm:px-6 py-3 text-sm sm:text-base font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 bg-transparent data-[state=active]:bg-transparent rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 dark:data-[state=active]:border-blue-400 transition-colors flex items-center gap-2"
+                    >
+                      <UsersRound className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <span className="hidden sm:inline">
+                        {t("classroomDetail.tabs.groupSettings")}
+                      </span>
+                      <span className="sm:hidden">
+                        {t("classroomDetail.tabs.groups")}
+                      </span>
+                    </TabsTrigger>
                   </TabsList>
                 )}
                 {/* 底部分隔線 */}
@@ -2983,6 +2998,16 @@ export default function ClassroomDetail({
                       </div>
                     )}
                   </div>
+                </TabsContent>
+              )}
+
+              {/* Groups Tab (#1046) - classroom mode only */}
+              {!isTemplateMode && (
+                <TabsContent value="groups" className="p-3 sm:p-6">
+                  <GroupSettingsTab
+                    classroomId={Number(id)}
+                    students={classroom?.students || []}
+                  />
                 </TabsContent>
               )}
             </Tabs>

@@ -58,6 +58,7 @@ from routers import school_programs
 from routers import resource_materials
 from routers import magic_paste  # 教材內容魔術貼上（issue #891）
 from routers import scenario_dialogue_ai  # 情境對話 AI 生成（issue #1021）
+from routers import student_groups  # 班級學生分組（issue #1046）
 from routers.auth_one_campus import router as auth_one_campus_router
 from routers.auth_google import router as auth_google_router  # Google OAuth（#740）
 from routers.organization_points import router as organization_points_router
@@ -286,6 +287,7 @@ if environment in ["development", "staging"]:
         pass
 app.include_router(teachers.router)
 app.include_router(students.router)
+app.include_router(student_groups.router)  # 班級學生分組路由（issue #1046）
 app.include_router(organizations.router)  # 機構管理路由
 app.include_router(organization_programs.router)  # 機構教材管理路由
 app.include_router(organization_points_router)  # 機構點數管理路由
