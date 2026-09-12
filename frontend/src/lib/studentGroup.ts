@@ -87,25 +87,116 @@ export interface StudentGroupPayload {
   leader_student_id: number | null;
 }
 
-/**
- * 派發作業時點一下組別 chip 的結果（issue #1046）。
- *
- * 整組尚未全選 → 把整組**加進**現有勾選（聯集，不清掉其他人）；整組都已選
- * → 才把整組移除。這樣老師可以「先點兩組，再取消其中一位請假的學生」，
- * 取消完 chip 變成部分選取，再點一次是補齊而不是清空。
- */
-export function toggleGroupInSelection(
-  selectedIds: number[],
-  memberIds: number[],
-): number[] {
-  if (memberIds.length === 0) return selectedIds;
+// ===== 派發作業的學生選擇（issue #1046）=====
 
-  const allSelected = memberIds.every((id) => selectedIds.includes(id));
-  if (allSelected) {
-    const toRemove = new Set(memberIds);
-    return selectedIds.filter((id) => !toRemove.has(id));
+/**
+ * 老師目前是用哪一種方式在選學生。三種方式互斥，一次只有一種在作用。
+ *
+ * `manual` 是取消「指派全班」或把下拉選單清空後的自然狀態：基底為空，
+ * 只剩老師逐一勾選的人（等同這個功能出現前的原始行為）。
+ */
+export type SelectionMode = "all" | "groups" | "orders" | "manual";
+
+/**
+ * 老師的**選擇意圖**，而不是選到的結果。
+ *
+ * 為什麼不直接存一串學生 id：兩個組別可能有重疊成員（第一組 ABCD、第二組
+ * DEFG），一旦只留下扁平的 id 陣列，取消第二組時就分不出 D 是誰帶進來的，
+ * 只能連 D 一起刪掉。記住意圖、每次重新推導，這個問題就不存在。
+ */
+export interface StudentScope {
+  mode: SelectionMode;
+  /** mode === "groups" 時有效。 */
+  groupIds: number[];
+  /** mode === "orders" 時有效，存的是給人看的 1 起算序位。 */
+  orders: number[];
+  /** 疊在基底上的個別加入。 */
+  included: number[];
+  /** 疊在基底上的個別排除。 */
+  excluded: number[];
+}
+
+export const EMPTY_SCOPE: StudentScope = {
+  mode: "manual",
+  groupIds: [],
+  orders: [],
+  included: [],
+  excluded: [],
+};
+
+export function createScope(mode: SelectionMode): StudentScope {
+  return { ...EMPTY_SCOPE, mode };
+}
+
+/**
+ * 依選擇意圖推導出實際被選到的學生 id。
+ *
+ * 基底依 mode 決定：all=全班、groups=所勾組別成員的聯集、orders=在任一組別
+ * 中序位落在所勾序位的人、manual=空集合。最後再疊上個別的加入與排除。
+ *
+ * 回傳順序跟著 `allStudentIds` 傳進來的順序，呼叫端先排好就不必再排一次。
+ */
+export function resolveStudentScope(
+  scope: StudentScope,
+  allStudentIds: number[],
+  groups: StudentGroup[],
+): number[] {
+  const inClass = new Set(allStudentIds);
+  const base = new Set<number>();
+
+  if (scope.mode === "all") {
+    allStudentIds.forEach((id) => base.add(id));
+  } else if (scope.mode === "groups") {
+    const wanted = new Set(scope.groupIds);
+    groups
+      .filter((g) => wanted.has(g.id))
+      .forEach((g) =>
+        g.members.forEach((m) => {
+          // 組員可能已離班（分組與名冊各自載入），只認名冊裡真的有的人。
+          if (inClass.has(m.student_id)) base.add(m.student_id);
+        }),
+      );
+  } else if (scope.mode === "orders") {
+    const wanted = new Set(scope.orders);
+    buildStudentGroupIndex(groups).forEach((memberships, studentId) => {
+      if (!inClass.has(studentId)) return;
+      if (memberships.some((m) => wanted.has(m.order))) base.add(studentId);
+    });
   }
-  return Array.from(new Set([...selectedIds, ...memberIds]));
+
+  scope.included.forEach((id) => {
+    if (inClass.has(id)) base.add(id);
+  });
+  scope.excluded.forEach((id) => base.delete(id));
+
+  return allStudentIds.filter((id) => base.has(id));
+}
+
+export interface OrderOption {
+  /** 給人看的序位，1 起算。 */
+  order: number;
+  /** 全班有多少人在某一組裡排這個序位。 */
+  count: number;
+}
+
+/**
+ * 可選的組員序位清單。序位跨組別計算 —— 「第 1 號」指的是各組的第 1 號，
+ * 不限定哪一組。
+ */
+export function buildOrderOptions(groups: StudentGroup[]): OrderOption[] {
+  const counts = new Map<number, Set<number>>();
+
+  buildStudentGroupIndex(groups).forEach((memberships, studentId) => {
+    memberships.forEach((m) => {
+      const bucket = counts.get(m.order) ?? new Set<number>();
+      bucket.add(studentId);
+      counts.set(m.order, bucket);
+    });
+  });
+
+  return [...counts.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([order, students]) => ({ order, count: students.size }));
 }
 
 /** 一位學生在某一組裡的身分。一個學生可能有好幾筆（可屬多組）。 */
