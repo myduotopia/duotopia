@@ -10,6 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { StudentGroupBadges } from "@/components/classroom/StudentGroupBadges";
+import { buildStudentGroupIndex, type StudentGroup } from "@/lib/studentGroup";
 import {
   Edit,
   Users,
@@ -48,6 +50,11 @@ export interface Student {
 interface StudentTableProps {
   students: Student[];
   showClassroom?: boolean; // Show classroom column in all students view
+  /**
+   * #1046: 該班級的分組。只有傳進來時才會多渲染一欄「組別」——
+   * 這個元件同時被 AllStudentsTab / TeacherStudents 使用，不傳就跟以前一模一樣。
+   */
+  groups?: StudentGroup[];
   onAddStudent?: () => void;
   onEditStudent?: (student: Student) => void;
   onViewStudent?: (student: Student) => void;
@@ -71,6 +78,7 @@ interface StudentTableProps {
 export default function StudentTable({
   students,
   showClassroom = false,
+  groups,
   onAddStudent,
   onEditStudent,
   onViewStudent,
@@ -91,6 +99,13 @@ export default function StudentTable({
   >(new Set());
   const selectedIds = externalSelectedIds || internalSelectedIds;
   const setSelectedIds = onSelectionChange || setInternalSelectedIds;
+
+  // #1046: 沒傳 groups 就完全不渲染組別欄，維持既有呼叫端的樣子。
+  const showGroups = groups !== undefined;
+  const groupIndex = React.useMemo(
+    () => buildStudentGroupIndex(groups ?? []),
+    [groups],
+  );
 
   const toggleSelect = (id: number) => {
     const newSelected = new Set(selectedIds);
@@ -201,6 +216,19 @@ export default function StudentTable({
 
               {/* Info Grid */}
               <div className="space-y-2 text-sm">
+                {showGroups && (
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {t("studentTable.columns.groups")}:{" "}
+                    </span>
+                    <div className="mt-1">
+                      <StudentGroupBadges
+                        memberships={groupIndex.get(student.id) ?? []}
+                        leaderLabel={t("studentTable.info.groupLeader")}
+                      />
+                    </div>
+                  </div>
+                )}
                 <div>
                   <span className="text-gray-600 dark:text-gray-400">
                     Email:{" "}
@@ -366,6 +394,11 @@ export default function StudentTable({
               <TableHead className="text-left min-w-[120px]">
                 {t("studentTable.columns.studentName")}
               </TableHead>
+              {showGroups && (
+                <TableHead className="text-left min-w-[140px]">
+                  {t("studentTable.columns.groups")}
+                </TableHead>
+              )}
               <TableHead className="text-left min-w-[250px]">
                 {t("studentTable.columns.contactInfo")}
               </TableHead>
@@ -419,6 +452,14 @@ export default function StudentTable({
                     </div>
                   </div>
                 </TableCell>
+                {showGroups && (
+                  <TableCell>
+                    <StudentGroupBadges
+                      memberships={groupIndex.get(student.id) ?? []}
+                      leaderLabel={t("studentTable.info.groupLeader")}
+                    />
+                  </TableCell>
+                )}
                 <TableCell>
                   <div>
                     <div className="text-sm">{student.email || "-"}</div>

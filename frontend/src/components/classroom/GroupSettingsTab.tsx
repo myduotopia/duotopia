@@ -59,8 +59,16 @@ export interface GroupSettingsStudent {
 interface GroupSettingsTabProps {
   classroomId: number;
   students: GroupSettingsStudent[];
-  /** 分組變動後通知外層，讓學生列表那邊的組別欄位跟著更新。 */
-  onGroupsChange?: (groups: StudentGroup[]) => void;
+  /**
+   * 分組資料由 ClassroomDetail 擁有，這裡是受控元件。
+   *
+   * 理由：學生列表那邊的組別欄位與兩個篩選也要用同一份資料，而 Radix 的
+   * TabsContent 在非作用中時不會掛載，若讓這個元件自己抓，老師沒點過
+   * 「分組設定」之前學生列表就拿不到任何組別。
+   */
+  groups: StudentGroup[];
+  loading?: boolean;
+  onGroupsChange: (groups: StudentGroup[]) => void;
 }
 
 interface Draft {
@@ -93,12 +101,12 @@ function toPayload(draft: Draft): StudentGroupPayload {
 export function GroupSettingsTab({
   classroomId,
   students,
+  groups,
+  loading = false,
   onGroupsChange,
 }: GroupSettingsTabProps) {
   const { t } = useTranslation();
 
-  const [groups, setGroups] = useState<StudentGroup[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [nameInput, setNameInput] = useState("");
@@ -125,37 +133,17 @@ export function GroupSettingsTab({
   const selectedRef = useRef<number | null>(null);
   selectedRef.current = selectedId;
 
-  const applyGroups = useCallback(
-    (next: StudentGroup[]) => {
-      setGroups(next);
-      onGroupsChange?.(next);
-    },
-    [onGroupsChange],
-  );
+  const applyGroups = onGroupsChange;
 
+  // 外層把選中的組別刪掉、或重新載入後該組已不存在時，把編輯區收起來，
+  // 否則會對著一個不存在的 id 繼續送 PUT。
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    apiClient
-      .getClassroomGroups(classroomId)
-      .then((data) => {
-        if (cancelled) return;
-        setGroups(data);
-        onGroupsChange?.(data);
-      })
-      .catch(() => {
-        if (!cancelled) toast.error(t("classroomDetail.groups.loadFailed"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // onGroupsChange 由外層每次 render 產生新 reference 的話會造成重抓，
-    // 所以只跟著 classroomId 走。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classroomId]);
+    if (selectedId !== null && !groups.some((g) => g.id === selectedId)) {
+      setSelectedId(null);
+      setDraft(null);
+      setNameInput("");
+    }
+  }, [groups, selectedId]);
 
   // ---- 序列化合併的存檔佇列 ----
   const pending = useRef(new Map<number, Draft>());

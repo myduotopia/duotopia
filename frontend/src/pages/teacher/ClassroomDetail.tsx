@@ -23,6 +23,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import StudentTable, { Student } from "@/components/StudentTable";
 import { GroupSettingsTab } from "@/components/classroom/GroupSettingsTab";
+import type { StudentGroup } from "@/lib/studentGroup";
+import { buildStudentGroupIndex } from "@/lib/studentGroup";
+import { sortStudentsBySeat } from "@/lib/studentSort";
 import { StudentDialogs } from "@/components/StudentDialogs";
 import { ProgramDialog } from "@/components/ProgramDialog";
 import { LessonDialog } from "@/components/LessonDialog";
@@ -163,6 +166,12 @@ export default function ClassroomDetail({
   );
   // Track if we've initialized the tab based on student count
   const [hasInitializedTab, setHasInitializedTab] = useState(false);
+
+  // #1046 分組：分組設定 tab 載入後回拋上來，學生列表的組別欄位與篩選共用同一份。
+  const [groups, setGroups] = useState<StudentGroup[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupFilter, setGroupFilter] = useState("");
+  const [memberOrderFilter, setMemberOrderFilter] = useState("");
 
   // Teacher subscription state
   const [canAssignHomework, setCanAssignHomework] = useState<boolean>(false);
@@ -1301,6 +1310,57 @@ export default function ClassroomDetail({
   };
 
   // Student CRUD handlers
+  // ===== #1046 分組 =====
+  // 分組資料在這一層抓，因為學生列表的組別欄位與兩個篩選都要用，而 Radix 的
+  // TabsContent 在非作用中時不掛載 —— 放在「分組設定」tab 裡抓的話，老師沒點
+  // 過那個 tab 之前學生列表就看不到任何組別。
+  useEffect(() => {
+    if (!id || isTemplateMode) return;
+    let cancelled = false;
+    setGroupsLoading(true);
+    apiClient
+      .getClassroomGroups(Number(id))
+      .then((data) => {
+        if (!cancelled) setGroups(data);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error(t("classroomDetail.groups.loadFailed"));
+      })
+      .finally(() => {
+        if (!cancelled) setGroupsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, isTemplateMode, t]);
+
+  const groupIndex = useMemo(() => buildStudentGroupIndex(groups), [groups]);
+
+  /** 目前所選組別的可用序號；沒選組別時列出全班最長的一組的序號。 */
+  const memberOrderOptions = useMemo(() => {
+    const relevant = groupFilter
+      ? groups.filter((g) => String(g.id) === groupFilter)
+      : groups;
+    const max = relevant.reduce((n, g) => Math.max(n, g.members.length), 0);
+    return Array.from({ length: max }, (_, i) => i + 1);
+  }, [groups, groupFilter]);
+
+  const filteredStudents = useMemo(() => {
+    const sorted = sortStudentsBySeat(classroom?.students || []);
+    if (!groupFilter && !memberOrderFilter) return sorted;
+
+    return sorted.filter((student) => {
+      const memberships = groupIndex.get(student.id) ?? [];
+      // 兩個條件要落在**同一筆**組員身分上：選了「第一組 + 3 號」，就該只留
+      // 在第一組排第 3 的人，而不是「在第一組」又「在別組排第 3」的人。
+      return memberships.some(
+        (m) =>
+          (!groupFilter || String(m.groupId) === groupFilter) &&
+          (!memberOrderFilter || String(m.order) === memberOrderFilter),
+      );
+    });
+  }, [classroom?.students, groupIndex, groupFilter, memberOrderFilter]);
+
   const handleCreateStudent = () => {
     setSelectedStudent(null);
     setDialogType("create");
@@ -2009,20 +2069,52 @@ export default function ClassroomDetail({
                       <Plus className="h-4 w-4 mr-2" />
                       {t("classroomDetail.buttons.addStudent")}
                     </Button>
+
+                    {/* #1046 組別／組員序號篩選 */}
+                    {groups.length > 0 && (
+                      <div className="flex items-center gap-2 ml-auto">
+                        <select
+                          value={groupFilter}
+                          onChange={(e) => {
+                            setGroupFilter(e.target.value);
+                            // 換組別時舊的序號多半不存在，留著會篩出空清單。
+                            setMemberOrderFilter("");
+                          }}
+                          className="h-10 px-3 rounded-md border border-gray-300 bg-white text-sm dark:bg-gray-800 dark:border-gray-600"
+                        >
+                          <option value="">
+                            {t("classroomDetail.groups.filterAllGroups")}
+                          </option>
+                          {groups.map((g) => (
+                            <option key={g.id} value={String(g.id)}>
+                              {g.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          value={memberOrderFilter}
+                          onChange={(e) => setMemberOrderFilter(e.target.value)}
+                          className="h-10 px-3 rounded-md border border-gray-300 bg-white text-sm dark:bg-gray-800 dark:border-gray-600"
+                        >
+                          <option value="">
+                            {t("classroomDetail.groups.filterAllOrders")}
+                          </option>
+                          {memberOrderOptions.map((n) => (
+                            <option key={n} value={String(n)}>
+                              {t("classroomDetail.groups.filterOrderOption", {
+                                number: n,
+                              })}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   <StudentTable
-                    students={[...(classroom?.students || [])].sort((a, b) => {
-                      // 按學號排序，沒有學號的放在後面
-                      if (!a.student_number && !b.student_number) return 0;
-                      if (!a.student_number) return 1;
-                      if (!b.student_number) return -1;
-                      return a.student_number.localeCompare(
-                        b.student_number,
-                        undefined,
-                        { numeric: true },
-                      );
-                    })}
+                    students={filteredStudents}
+                    groups={groups}
                     showClassroom={false}
                     onAddStudent={handleCreateStudent}
                     onViewStudent={handleViewStudent}
@@ -3007,6 +3099,9 @@ export default function ClassroomDetail({
                   <GroupSettingsTab
                     classroomId={Number(id)}
                     students={classroom?.students || []}
+                    groups={groups}
+                    loading={groupsLoading}
+                    onGroupsChange={setGroups}
                   />
                 </TabsContent>
               )}

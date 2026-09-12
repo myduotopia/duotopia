@@ -86,3 +86,43 @@ export interface StudentGroupPayload {
   member_student_ids: number[];
   leader_student_id: number | null;
 }
+
+/** 一位學生在某一組裡的身分。一個學生可能有好幾筆（可屬多組）。 */
+export interface StudentGroupMembership {
+  groupId: number;
+  groupName: string;
+  color: GroupColor | null;
+  /** 組內序號，已經是給人看的 1 起算。 */
+  order: number;
+  isLeader: boolean;
+}
+
+/**
+ * 把「組別 → 成員」的資料翻轉成「學生 → 他所屬的組別」，給學生列表用。
+ *
+ * 組別依 sort_order 排，所以同一位學生的多筆組別在每一列的呈現順序是穩定的。
+ */
+export function buildStudentGroupIndex(
+  groups: StudentGroup[],
+): Map<number, StudentGroupMembership[]> {
+  const index = new Map<number, StudentGroupMembership[]>();
+  const ordered = [...groups].sort((a, b) => a.sort_order - b.sort_order);
+
+  ordered.forEach((group) => {
+    [...group.members]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .forEach((member, position) => {
+        const list = index.get(member.student_id) ?? [];
+        list.push({
+          groupId: group.id,
+          groupName: group.name,
+          color: group.color,
+          order: position + 1,
+          isLeader: group.leader_student_id === member.student_id,
+        });
+        index.set(member.student_id, list);
+      });
+  });
+
+  return index;
+}

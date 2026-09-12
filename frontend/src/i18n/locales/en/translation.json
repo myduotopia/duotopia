@@ -2538,6 +2538,7 @@
       "passwordStatus": "Password Status",
       "status": "Status",
       "lastLogin": "Last Login",
+      "groups": "Groups",
       "actions": "Actions"
     },
     "status": {
@@ -2574,7 +2575,8 @@
       "classroom": "Classroom:",
       "password": "Password:",
       "lastLogin": "Last Login:",
-      "studentNumber": "Student Number:"
+      "studentNumber": "Student Number:",
+      "groupLeader": "Group leader"
     }
   },
   "subscriptionProgressBanner": {
@@ -2969,6 +2971,9 @@
       "removeMember": "Remove {{name}} from this group",
       "rosterHeading": "Class roster",
       "rosterHint": "Tick students to add them to the selected group",
+      "filterAllGroups": "All groups",
+      "filterAllOrders": "All numbers",
+      "filterOrderOption": "No. {{number}}",
       "noStudents": "This class has no students yet",
       "color": {
         "amber": "Amber",

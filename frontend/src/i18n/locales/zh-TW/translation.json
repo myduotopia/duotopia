@@ -2680,6 +2680,7 @@
       "passwordStatus": "密碼狀態",
       "status": "狀態",
       "lastLogin": "最後登入",
+      "groups": "組別",
       "actions": "操作"
     },
     "status": {
@@ -2716,7 +2717,8 @@
       "classroom": "班級:",
       "password": "密碼:",
       "lastLogin": "最後登入:",
-      "studentNumber": "學號:"
+      "studentNumber": "學號:",
+      "groupLeader": "組長"
     }
   },
   "subscriptionProgressBanner": {
@@ -3112,6 +3114,9 @@
       "removeMember": "把 {{name}} 移出這組",
       "rosterHeading": "班級學生",
       "rosterHint": "勾選要加入目前組別的學生",
+      "filterAllGroups": "所有組別",
+      "filterAllOrders": "所有序號",
+      "filterOrderOption": "第 {{number}} 號",
       "noStudents": "這個班級還沒有學生",
       "color": {
         "amber": "琥珀",
