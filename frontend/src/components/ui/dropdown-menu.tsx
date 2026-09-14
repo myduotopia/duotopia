@@ -1,10 +1,12 @@
 /**
  * Radix 下拉選單。
  *
- * 顏色刻意硬寫，**不要**改回 shadcn 的語意 token（bg-popover /
- * text-popover-foreground / bg-accent）—— 本專案的 tailwind.config.js 從來沒有
- * 定義那組顏色，也沒有對應的 CSS 變數，那些 class 根本不會被產生出來，結果就是
- * 選單背景整片透明、下層內容直接透出來（issue #1046 實測回報）。
+ * 顏色刻意硬寫，**不要**改回 shadcn 的語意 token（bg-popover / bg-accent /
+ * bg-muted / text-*-foreground）—— tailwind.config.js 的 theme.extend 裡沒有
+ * colors 設定，那些 class 名稱根本不會被 Tailwind 產生出來。index.css 雖然有
+ * --accent / --muted 這幾個 CSS 變數，但沒有在 config 裡接成 colors，所以一樣
+ * 無效（--popover 則是連變數都沒有）。結果就是選單背景整片透明、下層內容直接
+ * 透出來，分隔線也看不見（issue #1046 實測回報）。
  * ui/dialog.tsx 早就因為同樣的原因硬寫 bg-white。
  *
  * z-index 用 z-[60] 而非 z-50：DialogContent 也是 z-50，同層時誰在上面只能靠
@@ -172,7 +174,10 @@ const DropdownMenuSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Separator
     ref={ref}
-    className={cn("-mx-1 my-1 h-px bg-muted", className)}
+    className={cn(
+      "-mx-1 my-1 h-px bg-gray-200 dark:bg-gray-700",
+      className,
+    )}
     {...props}
   />
 ));
