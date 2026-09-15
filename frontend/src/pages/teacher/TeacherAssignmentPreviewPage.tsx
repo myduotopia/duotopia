@@ -7,7 +7,8 @@
  * #1045 階段 4：小考（*_quiz）預覽有兩種示範模式
  *   - 考前說明（explain）：提交後不顯示分數/✓✗/正解，只顯示「示範結束」＋「重新示範」
  *   - 考後檢討（review）：提交後顯示 QuizReviewView（分數＋逐題對錯＋正解）＋「重新示範」
- * 進頁提示 Dialog 對小考改為兩個模式選項（直接關閉＝考後檢討，沿用原行為）；
+ * 進頁提示 Dialog 對小考改為兩個模式選項。未明確選「考後檢討」前一律視為考前說明：
+ * Dialog 開著尚未選、或用 X / Esc / 點外面直接關閉，都不揭示答案（避免投影時意外洩漏正解）；
  * 頁面頂端常駐切換鈕，切換時遞增 quizResetKey 讓作答重置。非小考 Dialog 維持只有「關閉」。
  */
 
@@ -116,11 +117,12 @@ export default function TeacherAssignmentPreviewPage() {
 
   const practiceMode = activityData?.practice_mode || null;
   const isQuiz = !!practiceMode && practiceMode.endsWith("_quiz");
-  // #1045 階段 4：小考示範模式（null＝尚未在 Dialog 選；未選即關閉視為考後檢討）
+  // #1045 階段 4：小考示範模式（null＝尚未在 Dialog 選）。未選（含直接關閉 Dialog）一律
+  // 視為考前說明 → revealAnswersOnSubmit 只有老師明確選「考後檢討」才會是 true。
   const [previewRevealMode, setPreviewRevealMode] = useState<
     "explain" | "review" | null
   >(null);
-  const effectiveRevealMode = previewRevealMode ?? "review";
+  const effectiveRevealMode = previewRevealMode ?? "explain";
   // 遞增 → 重掛載小考 Activity（回第一題、作答清空）
   const [quizResetKey, setQuizResetKey] = useState(0);
   const chooseRevealMode = (mode: "explain" | "review") => {

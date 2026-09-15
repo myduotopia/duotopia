@@ -130,6 +130,35 @@ describe("TeacherAssignmentPreviewPage quiz demo modes (#1045 P1/P5)", () => {
     expect(last().quizPreviewResetKey).toBe(keyBefore + 2);
   });
 
+  it("closing the dialog without choosing (Esc) → explain (no answers revealed)", async () => {
+    mockPreview("word_cloze_quiz");
+    render(<TeacherAssignmentPreviewPage />);
+    const explainOption = await screen.findByTestId("quiz-mode-explain");
+    // Dialog 開著、尚未選：也不得揭示答案
+    expect(last().quizPreviewRevealAnswers).toBe(false);
+    expect(screen.getByTestId("quiz-mode-current")).toHaveAttribute(
+      "data-mode",
+      "explain",
+    );
+
+    await act(async () => {
+      fireEvent.keyDown(document.activeElement ?? explainOption, {
+        key: "Escape",
+        code: "Escape",
+      });
+    });
+    expect(screen.queryByTestId("quiz-mode-options")).toBeNull();
+    expect(last().quizPreviewRevealAnswers).toBe(false);
+    expect(screen.getByTestId("quiz-mode-current")).toHaveAttribute(
+      "data-mode",
+      "explain",
+    );
+    // 從未出現過 true（只有明確選考後檢討才會）
+    expect(captured.some((p) => p.quizPreviewRevealAnswers === true)).toBe(
+      false,
+    );
+  });
+
   it("P1 non-quiz: dialog keeps only the close button and passes no mode", async () => {
     mockPreview("reading");
     render(<TeacherAssignmentPreviewPage />);
