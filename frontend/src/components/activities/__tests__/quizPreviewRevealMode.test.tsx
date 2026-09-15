@@ -16,9 +16,11 @@ import WordSelectionQuizActivity from "../WordSelectionQuizActivity";
 import WordSpellingQuizActivity from "../WordSpellingQuizActivity";
 import WordClozeQuizActivity from "../WordClozeQuizActivity";
 
+// t 必須是穩定參照：Activity 的載入 effect 依賴 t，每次 render 給新函式會無限重跑 effect
+const stableT = (key: string) => key;
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: stableT,
     i18n: { language: "zh-TW" },
   }),
 }));

@@ -9,8 +9,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import TeacherAssignmentPreviewPage from "../TeacherAssignmentPreviewPage";
 
+// t 必須是穩定參照：頁面 effect 依賴 t，每次 render 給新函式會無限重跑 effect
+const stableT = (key: string) => key;
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: stableT }),
 }));
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
@@ -107,8 +109,10 @@ describe("TeacherAssignmentPreviewPage quiz demo modes (#1045 P1/P5)", () => {
   it("P5 toggle shows current mode, switches and resets answers", async () => {
     mockPreview("word_selection_quiz");
     render(<TeacherAssignmentPreviewPage />);
+    // findBy 不可包在 act 內：act 會暫緩載入完成的 state 更新，畫面永遠停在 loading
+    const reviewButton = await screen.findByTestId("quiz-mode-review");
     await act(async () => {
-      fireEvent.click(await screen.findByTestId("quiz-mode-review"));
+      fireEvent.click(reviewButton);
     });
     expect(last().quizPreviewRevealAnswers).toBe(true);
     expect(screen.getByTestId("quiz-mode-current")).toHaveAttribute(
