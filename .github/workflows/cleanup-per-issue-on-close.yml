@@ -13,6 +13,7 @@ env:
 permissions:
   issues: write
   contents: write
+  pull-requests: read # gh pr list: skip branches that still have open PRs
   id-token: write
 
 jobs:
@@ -84,6 +85,8 @@ jobs:
           echo "✅ Cleanup completed"
 
       - name: Cleanup all related branches
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           ISSUE_NUM=${{ steps.extract.outputs.issue_number }}
 
@@ -103,20 +106,33 @@ jobs:
             # Delete each branch
             DELETED=0
             FAILED=0
+            SKIPPED=0
             while IFS= read -r branch; do
               if [ -n "$branch" ]; then
+                # Keep branches that are still the head of an open PR (e.g. an
+                # intermediate PR merged while the release PR reuses the branch).
+                # If the lookup fails, skip rather than risk deleting.
+                OPEN_PRS=$(gh pr list --head "$branch" --state open --json number --jq 'length' 2>/dev/null || echo "lookup-failed")
+                if [ "$OPEN_PRS" != "0" ]; then
+                  echo "⏭️ Skipped: $branch (open PRs: $OPEN_PRS)"
+                  SKIPPED=$((SKIPPED + 1))
+                  continue
+                fi
+
                 echo "Deleting branch: $branch"
                 if git push origin --delete "$branch" 2>/dev/null; then
                   echo "✅ Deleted: $branch"
-                  ((DELETED++))
+                  # Not ((DELETED++)): it returns status 1 when DELETED is 0,
+                  # which aborts the step under bash -e.
+                  DELETED=$((DELETED + 1))
                 else
                   echo "⚠️ Failed to delete: $branch"
-                  ((FAILED++))
+                  FAILED=$((FAILED + 1))
                 fi
               fi
             done <<< "$BRANCHES"
             
-            echo "📊 Summary: Deleted $DELETED branch(es), Failed $FAILED"
+            echo "📊 Summary: Deleted $DELETED branch(es), Skipped $SKIPPED, Failed $FAILED"
           fi
 
       - name: Comment on issue
@@ -208,6 +224,8 @@ jobs:
 
       - name: Cleanup all related branches
         if: steps.extract.outputs.issue_number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           ISSUE_NUM=${{ steps.extract.outputs.issue_number }}
 
@@ -227,20 +245,33 @@ jobs:
             # Delete each branch
             DELETED=0
             FAILED=0
+            SKIPPED=0
             while IFS= read -r branch; do
               if [ -n "$branch" ]; then
+                # Keep branches that are still the head of an open PR (e.g. an
+                # intermediate PR merged while the release PR reuses the branch).
+                # If the lookup fails, skip rather than risk deleting.
+                OPEN_PRS=$(gh pr list --head "$branch" --state open --json number --jq 'length' 2>/dev/null || echo "lookup-failed")
+                if [ "$OPEN_PRS" != "0" ]; then
+                  echo "⏭️ Skipped: $branch (open PRs: $OPEN_PRS)"
+                  SKIPPED=$((SKIPPED + 1))
+                  continue
+                fi
+
                 echo "Deleting branch: $branch"
                 if git push origin --delete "$branch" 2>/dev/null; then
                   echo "✅ Deleted: $branch"
-                  ((DELETED++))
+                  # Not ((DELETED++)): it returns status 1 when DELETED is 0,
+                  # which aborts the step under bash -e.
+                  DELETED=$((DELETED + 1))
                 else
                   echo "⚠️ Failed to delete: $branch"
-                  ((FAILED++))
+                  FAILED=$((FAILED + 1))
                 fi
               fi
             done <<< "$BRANCHES"
             
-            echo "📊 Summary: Deleted $DELETED branch(es), Failed $FAILED"
+            echo "📊 Summary: Deleted $DELETED branch(es), Skipped $SKIPPED, Failed $FAILED"
           fi
 
       - name: Comment on related issue
