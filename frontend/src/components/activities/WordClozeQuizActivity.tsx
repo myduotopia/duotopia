@@ -687,7 +687,6 @@ export default function WordClozeQuizActivity({
     ? previewResultByItem[currentWord.content_item_id]
     : undefined;
   const previewJudged = previewResult !== undefined;
-  const currentTyped = (typedByItem[currentWord.content_item_id] || "").trim();
 
   // 題號 bar — Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
@@ -873,8 +872,9 @@ export default function WordClozeQuizActivity({
                           ? () => persistAnswer()
                           : () => goTo(currentIndex + 1)
                   }
-                  // #1045 階段 4b：考後檢討預覽改用下方「對答案」鈕（Enter 仍觸發 onSubmit）
-                  hideSubmitButton={(isLast && !isRevision) || isReviewDemo}
+                  // #1045 階段 4b：考後檢討預覽沿用同一顆送出箭頭（與 Enter 同走 onSubmit → 對答案）；
+                  // 最後一題也要能判斷，故預覽時不隱藏。箭頭於未作答或已判斷（disabled）時不可按。
+                  hideSubmitButton={isLast && !isRevision && !isReviewDemo}
                   // 訂正模式已答對的題目鎖定唯讀，不可再改
                   disabled={(isRevision && currentResolved) || previewJudged}
                   submitting={submittingAnswer}
@@ -882,27 +882,15 @@ export default function WordClozeQuizActivity({
                   autoFocus
                 />
 
-                {isReviewDemo && (
-                  <div className="flex flex-col items-center gap-2">
-                    <Button
-                      type="button"
-                      data-testid="preview-check-answer"
-                      onClick={handlePreviewCheck}
-                      disabled={!currentTyped || previewJudged}
-                    >
-                      {t("previewPage.quizMode.checkAnswer") || "對答案"}
-                    </Button>
-                    {previewResult === false && (
-                      <p
-                        data-testid="preview-correct-answer"
-                        className="text-center text-sm font-medium text-red-600"
-                      >
-                        {t("wordQuiz.revision.correctAnswer", {
-                          answer: currentWord.cloze_answer,
-                        }) || `正解：${currentWord.cloze_answer}`}
-                      </p>
-                    )}
-                  </div>
+                {previewResult === false && (
+                  <p
+                    data-testid="preview-correct-answer"
+                    className="text-center text-sm font-medium text-red-600"
+                  >
+                    {t("wordQuiz.revision.correctAnswer", {
+                      answer: currentWord.cloze_answer,
+                    }) || `正解：${currentWord.cloze_answer}`}
+                  </p>
                 )}
 
                 {isRevision && currentReveal && !currentResolved && (

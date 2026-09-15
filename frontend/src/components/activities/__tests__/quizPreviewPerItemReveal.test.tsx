@@ -2,7 +2,8 @@
  * #1045 階段 4b：考後檢討預覽逐題判斷＋正確動畫、作答卡片無內部卷軸
  *
  *   Q1 選擇題（revealAnswersOnSubmit=true）：點對 → ScoreOverlay 開；點錯 → 不開、該題鎖定不可改選
- *   Q2 拼字／克漏字（true）：「對答案」鈕未作答 disabled；按鈕或 Enter 判斷；答對 → overlay；答錯 → 顯示正解
+ *   Q2 拼字／克漏字（true）：沿用學生端 QuizAnswerInput 送出箭頭（aria-label "Submit answer"），
+ *      未作答 disabled；箭頭或 Enter 判斷；答對 → overlay；答錯 → 顯示正解；畫面上沒有另加的「對答案」鈕
  *   Q3 考前說明（false）：三種小考作答時不播動畫、無對答案鈕、不鎖定
  *   Q5 無模式（undefined，學生作答／派發 dialog 即時預覽同一路徑）：無對答案鈕、不播動畫
  *   Q6 卡片區不含 overflow-y-auto 與 max-h-[..dvh]
@@ -164,20 +165,26 @@ describe.each([
   ["word_spelling_quiz", renderSpelling],
   ["word_cloze_quiz", renderCloze],
 ] as const)("Q2 %s — review preview check answer", (_name, renderQuiz) => {
-  it("check button is disabled until something is typed; correct → animation", () => {
+  const submitArrow = () =>
+    screen.getByRole("button", { name: "Submit answer" });
+
+  it("uses the student submit arrow (no extra check button): disabled until typed; correct → animation", () => {
     renderQuiz(true);
-    const check = screen.getByTestId("preview-check-answer");
-    expect(check).toBeDisabled();
+    expect(screen.queryByTestId("preview-check-answer")).toBeNull();
+    expect(submitArrow()).toBeDisabled();
     fireEvent.change(firstInput(), { target: { value: "apple" } });
-    expect(screen.getByTestId("preview-check-answer")).not.toBeDisabled();
-    fireEvent.click(screen.getByTestId("preview-check-answer"));
+    expect(submitArrow()).not.toBeDisabled();
+    fireEvent.click(submitArrow());
     expect(screen.getByTestId("score-overlay")).toBeInTheDocument();
     expect(screen.queryByTestId("preview-correct-answer")).toBeNull();
-    expect(screen.getByTestId("preview-check-answer")).toBeDisabled();
+    // 已判斷 → 輸入鎖定、箭頭不可再按
+    expect(submitArrow()).toBeDisabled();
+    expect(screen.queryByTestId("preview-check-answer")).toBeNull();
   });
 
   it("Enter judges too; wrong answer reveals the correct answer without animation", () => {
     renderQuiz(true);
+    expect(screen.queryByTestId("preview-check-answer")).toBeNull();
     fireEvent.change(firstInput(), { target: { value: "appl" } });
     fireEvent.keyDown(firstInput(), { key: "Enter", code: "Enter" });
     expect(screen.queryByTestId("score-overlay")).toBeNull();
