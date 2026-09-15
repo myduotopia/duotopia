@@ -638,6 +638,14 @@ async def submit_word_selection_quiz_answer(
     correct_text = getattr(item, answer_key) or ""
     is_correct = request.selected_answer.strip().lower() == correct_text.strip().lower()
 
+    # #1045: 記下學生作答當下看到的選項（文字＋順序），批改頁優先顯示這份，
+    # 老師事後改派發設定也不會讓批改頁選項與學生當時畫面不一致。
+    # 與 start 相同的 items 順序（同 seed）→ 干擾選項 pool 順序一致 → 選項完全相同。
+    options_items = _load_quiz_items(
+        db, assignment, assignment.shuffle_questions, seed=session.id
+    )
+    options_shown = _build_selection_options(options_items, assignment).get(item.id, [])
+
     _upsert_quiz_answer(
         db,
         session,
@@ -648,6 +656,7 @@ async def submit_word_selection_quiz_answer(
             "type": "word_selection_quiz",
             "selected_answer": request.selected_answer,
             "correct_text": correct_text,
+            "options_shown": options_shown,
         },
         revised=sa.returned_at is not None,
     )

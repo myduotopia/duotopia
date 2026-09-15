@@ -438,6 +438,9 @@ def _build_quiz_submission(
     成績紀錄＝第一次作答（最早 completed PracticeSession），與凍結的 sa.score 一致。
     逐題回傳學生答案 / 正解 / 對錯，供老師端 QuizGradingPanel 顯示錯題清單與答對率。
     同題重複列（#1045 並發殘留）取最新一筆；只迭代本作業題目，故 correct ≤ total。
+    #1045 題目區：每題附 image_url、blanked_sentence、options（選擇題：優先學生作答時
+    存下的 answer_data.options_shown，舊資料以同 seed 重建）、deduction（已存扣分）；
+    頂層附 quiz_settings 供前端依派發設定呈現。
     """
     source = (
         db.query(PracticeSession)
@@ -480,11 +483,48 @@ def _build_quiz_submission(
             return item.cloze_answer or item.text or ""
         return item.text or ""
 
+    # #1045 題目區：函式內 import 避免 students.quiz_assignments ↔ assignments 循環
+    from routers.students.quiz_assignments import (
+        _build_selection_options,
+        _example_cloze_fields,
+        _load_quiz_items,
+    )
+
+    parent = (
+        db.query(Assignment)
+        .filter(Assignment.id == student_assignment.assignment_id)
+        .first()
+    )
+    # 舊資料（無 options_shown）fallback：以與 start 相同的 seed 重建選項
+    fallback_options: Dict[int, List[Dict[str, Any]]] = {}
+    if practice_mode == "word_selection_quiz" and parent is not None:
+        pool_items = _load_quiz_items(
+            db,
+            parent,
+            bool(parent.shuffle_questions),
+            seed=source.id if source else student_assignment.id,
+        )
+        fallback_options = _build_selection_options(pool_items, parent)
+
+    # #1045 每題扣分：已存於 StudentItemProgress.teacher_review_score（以 content_item_id 對題）
+    deductions: Dict[int, float] = {
+        ip.content_item_id: float(ip.teacher_review_score)
+        for ip in db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == student_assignment.id,
+            StudentItemProgress.teacher_review_score.isnot(None),
+        )
+        .all()
+    }
+
     questions = []
     correct_count = 0
     for idx, item in enumerate(items, start=1):
         ans = answers_by_item.get(item.id)
         data = (ans.answer_data if ans and ans.answer_data else {}) or {}
+        options = None
+        if practice_mode == "word_selection_quiz":
+            options = data.get("options_shown") or fallback_options.get(item.id, [])
         student_answer = data.get("typed_answer") or data.get("selected_answer") or ""
         correct_answer = (
             data.get("correct_answer")
@@ -506,6 +546,11 @@ def _build_quiz_submission(
                 "is_correct": is_correct,
                 "passed": is_correct,  # 沿用右欄逐題燈號（pass/fail）
                 "time_spent_seconds": ans.time_spent_seconds if ans else 0,
+                # #1045 題目區
+                "image_url": item.image_url,
+                "blanked_sentence": _example_cloze_fields(item)["blanked_sentence"],
+                "options": options,
+                "deduction": deductions.get(item.id),
             }
         )
 
@@ -533,6 +578,28 @@ def _build_quiz_submission(
         "accuracy": accuracy,
         "current_score": student_assignment.score,
         "current_feedback": student_assignment.feedback,
+        # #1045 批改頁題目區依派發設定呈現
+        "quiz_settings": {
+            "show_example_sentence": bool(
+                getattr(parent, "show_example_sentence", False)
+            ),
+            "show_image": (
+                parent.show_image
+                if parent is not None and parent.show_image is not None
+                else True
+            ),
+            "show_option_images": bool(getattr(parent, "show_option_images", False)),
+            "show_translation": (
+                parent.show_translation
+                if parent is not None and parent.show_translation is not None
+                else True
+            ),
+            "show_word": (
+                parent.show_word
+                if parent is not None and parent.show_word is not None
+                else True
+            ),
+        },
     }
 
 
