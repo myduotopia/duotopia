@@ -20,6 +20,19 @@ describe("createAnswerPersistTracker (#1045)", () => {
     expect(tracker.isSavedOrPending(1, "apple")).toBe(true);
   });
 
+  it("does not confirm a skipped send and resends later", async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, skipped: true })
+      .mockResolvedValueOnce({ ok: true });
+    const tracker = createAnswerPersistTracker(() => send);
+    expect((await tracker.save(1, "apple")).ok).toBe(true);
+    expect(tracker.isSavedOrPending(1, "apple")).toBe(false);
+    await tracker.save(1, "apple");
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(tracker.isSavedOrPending(1, "apple")).toBe(true);
+  });
+
   it("awaits same-value in-flight save instead of sending twice", async () => {
     const d = deferred<{ ok: boolean }>();
     const send = vi.fn().mockReturnValueOnce(d.promise);

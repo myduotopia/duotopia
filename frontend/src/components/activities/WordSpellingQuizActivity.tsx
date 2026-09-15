@@ -301,10 +301,12 @@ export default function WordSpellingQuizActivity({
     async (
       itemId: number,
       typed: string,
-    ): Promise<{ ok: boolean; isCorrect?: boolean }> => {
-      if (isLivePreview || isDemoMode || sessionId == null) return { ok: true };
+    ): Promise<{ ok: boolean; isCorrect?: boolean; skipped?: boolean }> => {
+      // #1045: 沒有真的送出 → skipped，tracker 不會記成已確認，之後仍會重送
+      if (isLivePreview || isDemoMode || sessionId == null)
+        return { ok: true, skipped: true };
       const trimmed = typed.trim();
-      if (!trimmed) return { ok: true };
+      if (!trimmed) return { ok: true, skipped: true };
       try {
         const data = (await apiClient.post(
           `/api/students/assignments/${assignmentId}/vocabulary/spelling_quiz/answer`,
@@ -331,9 +333,22 @@ export default function WordSpellingQuizActivity({
   // 同題同值 in-flight 時 await 它、失敗則重送；送出整卷前 flush 等所有 in-flight。
   const persistItemAnswerRef = useRef(persistItemAnswer);
   persistItemAnswerRef.current = persistItemAnswer;
-  const persistTrackerRef = useRef(
-    createAnswerPersistTracker(() => persistItemAnswerRef.current),
-  );
+  const persistTrackerRef = useRef<ReturnType<
+    typeof createAnswerPersistTracker<{
+      ok: boolean;
+      isCorrect?: boolean;
+      skipped?: boolean;
+    }>
+  > | null>(null);
+  // lazy init：只在首次使用時建立 tracker（refs 穩定，故 deps 為空）
+  const getPersistTracker = useCallback(() => {
+    if (!persistTrackerRef.current) {
+      persistTrackerRef.current = createAnswerPersistTracker(
+        () => persistItemAnswerRef.current,
+      );
+    }
+    return persistTrackerRef.current;
+  }, []);
 
   const persistAnswer = useCallback(async (): Promise<boolean> => {
     if (!currentWord) return true;
@@ -341,7 +356,7 @@ export default function WordSpellingQuizActivity({
     const typed = typedByItem[itemId] || "";
     if (!typed.trim()) return true;
     setSubmittingAnswer(true);
-    const res = await persistTrackerRef.current.save(itemId, typed.trim());
+    const res = await getPersistTracker().save(itemId, typed.trim());
     setSubmittingAnswer(false);
     if (!res.ok) {
       toast.error(
@@ -349,7 +364,7 @@ export default function WordSpellingQuizActivity({
       );
     }
     return res.ok;
-  }, [currentWord, t, typedByItem]);
+  }, [getPersistTracker, currentWord, t, typedByItem]);
 
   const goTo = useCallback(
     async (idx: number) => {
@@ -409,7 +424,7 @@ export default function WordSpellingQuizActivity({
       let persisted = await persistAnswer();
       if (!persisted) persisted = await persistAnswer();
       // #1045: 等所有題目的 in-flight autosave 完成（失敗者重送）後才 finalize
-      const allFlushed = await persistTrackerRef.current.flush();
+      const allFlushed = await getPersistTracker().flush();
       if (!allFlushed) persisted = false;
       if (!persisted) {
         toast.warning(
@@ -430,6 +445,7 @@ export default function WordSpellingQuizActivity({
       setCompleting(false);
     }
   }, [
+    getPersistTracker,
     assignmentId,
     isDemoMode,
     isLivePreview,
@@ -534,12 +550,13 @@ export default function WordSpellingQuizActivity({
     const itemId = currentWord.content_item_id;
     const val = (typedByItem[itemId] || "").trim();
     if (!val) return;
-    if (persistTrackerRef.current.isSavedOrPending(itemId, val)) return;
+    if (getPersistTracker().isSavedOrPending(itemId, val)) return;
     const handle = setTimeout(() => {
-      void persistTrackerRef.current.save(itemId, val);
+      void getPersistTracker().save(itemId, val);
     }, 1000);
     return () => clearTimeout(handle);
   }, [
+    getPersistTracker,
     currentWord,
     typedByItem,
     isLivePreview,

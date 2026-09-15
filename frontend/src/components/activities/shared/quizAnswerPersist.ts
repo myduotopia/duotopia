@@ -3,7 +3,7 @@
  *
  * 背景：autosave（停手 1 秒）與換題／送出會對同一題同時打 answer API，
  * 後端並發時曾產生重複列（監考 31/30）。前端用本追蹤器：
- *   - 只有「已確認成功寫入」的值才略過（confirmed）
+ *   - 只有「已確認成功寫入」的值才略過（confirmed）；sender 回 skipped 不算確認
  *   - 同題同值已有 in-flight 請求 → await 它；失敗則重送
  *   - 同題不同值已有 in-flight → 先等它結束再送（同題請求序列化）
  *   - flush()：等所有 in-flight 完成，失敗者重送一次；供送出整卷前呼叫
@@ -11,6 +11,8 @@
 
 export interface PersistResult {
   ok: boolean;
+  /** true＝sender 沒有真的送出（預覽/demo/session 未建立/空值）；不記 confirmed */
+  skipped?: boolean;
 }
 
 export type PersistSender<R extends PersistResult> = (
@@ -48,7 +50,8 @@ export function createAnswerPersistTracker<R extends PersistResult>(
       } catch {
         result = { ok: false } as R;
       }
-      if (result.ok) confirmed.set(itemId, value);
+      // skipped（未真的送出，如 session 尚未建立）不可記成已確認，否則之後永遠不送
+      if (result.ok && !result.skipped) confirmed.set(itemId, value);
       else if (confirmed.get(itemId) === value) confirmed.delete(itemId);
       if (inflight.get(itemId) === entry) inflight.delete(itemId);
       return result;
