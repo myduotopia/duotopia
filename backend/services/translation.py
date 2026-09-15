@@ -174,28 +174,15 @@ class TranslationService:
                 "NOT Simplified Chinese."
             )
 
-            # Use Vertex AI or OpenAI based on configuration
-            if self.use_vertex_ai:
-                result = await self.vertex_ai.generate_text(
-                    prompt=prompt,
-                    model_type="flash",
-                    max_tokens=200,
-                    temperature=0.3,
-                    system_instruction=system_instruction,
-                    disable_thinking=True,
-                )
-                return result.strip()
-            else:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.3,
-                    max_tokens=200,
-                )
-                return response.choices[0].message.content.strip()
+            result = await self.vertex_ai.generate_text(
+                prompt=prompt,
+                model_type="flash",
+                max_tokens=200,
+                temperature=0.3,
+                system_instruction=system_instruction,
+                disable_thinking=True,
+            )
+            return result.strip()
 
         except Exception as e:
             logger.error("Sentence translation error: %s", e)
@@ -251,49 +238,16 @@ class TranslationService:
                 "NOT Simplified Chinese."
             )
 
-            content = None
-
-            # Use Vertex AI or OpenAI based on configuration
-            if self.use_vertex_ai:
-                translations = await self.vertex_ai.generate_json(
-                    prompt=prompt,
-                    model_type="flash",
-                    max_tokens=3500,
-                    temperature=0.3,
-                    system_instruction=system_instruction,
-                    disable_thinking=True,
-                )
-                if isinstance(translations, str):
-                    translations = translations.split("---")
-            else:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.3,
-                    max_tokens=3500,
-                )
-
-                import re
-
-                content = response.choices[0].message.content.strip()
-                content = re.sub(r"^```json\s*", "", content)
-                content = re.sub(r"\s*```$", "", content)
-                content = content.strip()
-
-                try:
-                    translations = json.loads(content)
-                except Exception:
-                    if "---" in content:
-                        translations = [
-                            seg.strip() for seg in content.split("---") if seg.strip()
-                        ]
-                    else:
-                        translations = [content.strip()] if content else []
-                if isinstance(translations, str):
-                    translations = translations.split("---")
+            translations = await self.vertex_ai.generate_json(
+                prompt=prompt,
+                model_type="flash",
+                max_tokens=3500,
+                temperature=0.3,
+                system_instruction=system_instruction,
+                disable_thinking=True,
+            )
+            if isinstance(translations, str):
+                translations = translations.split("---")
 
             # 確保返回的翻譯數量與輸入相同
             if len(translations) != len(texts):

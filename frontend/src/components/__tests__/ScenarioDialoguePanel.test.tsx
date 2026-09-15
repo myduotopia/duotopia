@@ -922,11 +922,13 @@ describe("ScenarioDialoguePanel AI 串接（#1021）", () => {
  * 這件事不只是畫面上怪 —— `audioUrl` 會跟著存進 content item，一路播給學生聽。
  */
 describe("ScenarioDialoguePanel 題目語音與題目本文的一致性", () => {
+  // Issue #1051：麥克風先開設定視窗，按「生成」才產生
   const generateAudioFor = async (index: number) => {
     const buttons = screen.getAllByTitle(
       "scenarioDialogue.tooltips.generateAudio",
     );
     fireEvent.click(buttons[index]);
+    fireEvent.click(screen.getByText("contentEditor.ttsSettings.generate"));
     await act(async () => {
       await Promise.resolve();
     });
@@ -934,6 +936,51 @@ describe("ScenarioDialoguePanel 題目語音與題目本文的一致性", () => 
 
   const playButtons = () =>
     screen.queryAllByTitle("contentEditor.tooltips.play");
+
+  it("Issue #1051：麥克風先開設定視窗，未按生成不會呼叫 TTS", async () => {
+    renderPanel();
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
+
+    fireEvent.click(
+      screen.getAllByTitle("scenarioDialogue.tooltips.generateAudio")[0],
+    );
+
+    expect(screen.getByText("contentEditor.ttsSettings.generate")).toBeTruthy();
+    expect(generateTTS).not.toHaveBeenCalled();
+  });
+
+  it("Issue #1051：視窗選定的口音／性別／語速會送進 TTS，且下次打開帶上次設定", async () => {
+    renderPanel();
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
+
+    fireEvent.click(
+      screen.getAllByTitle("scenarioDialogue.tooltips.generateAudio")[0],
+    );
+    const selects = () => screen.getByRole("dialog").querySelectorAll("select");
+    fireEvent.change(selects()[0], { target: { value: "British English" } });
+    fireEvent.change(selects()[1], { target: { value: "Female" } });
+    fireEvent.change(selects()[2], { target: { value: "Slow x0.75" } });
+    fireEvent.click(screen.getByText("contentEditor.ttsSettings.generate"));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(generateTTS).toHaveBeenCalledWith(
+      expect.any(String),
+      "en-GB-SoniaNeural",
+      "-25%",
+      "+0%",
+    );
+
+    fireEvent.click(
+      screen.getAllByTitle("scenarioDialogue.tooltips.generateAudio")[0],
+    );
+    expect((selects()[0] as HTMLSelectElement).value).toBe("British English");
+    expect((selects()[1] as HTMLSelectElement).value).toBe("Female");
+    expect((selects()[2] as HTMLSelectElement).value).toBe("Slow x0.75");
+  });
 
   it("產生語音後會出現播放鍵", async () => {
     renderPanel();

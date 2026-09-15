@@ -243,6 +243,8 @@ class GenerateSentencesRequest(BaseModel):
     parts_of_speech: Optional[List[List[str]]] = None
     # Issue #757: 同步生成例句音檔的 voice 設定；省略時用預設語音。
     audio_settings: Optional[GenerateSentencesAudioSettings] = None
+    # Issue #1051: 單題「AI 生成例句」只要例句＋翻譯，不產生音檔
+    generate_audio: bool = True
 
 
 class TTSRequest(BaseModel):

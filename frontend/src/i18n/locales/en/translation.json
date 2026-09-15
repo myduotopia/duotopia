@@ -4837,7 +4837,8 @@
       "title": "Audio Settings",
       "accent": "Accent",
       "gender": "Gender",
-      "speed": "Speed"
+      "speed": "Speed",
+      "generate": "Generate"
     }
   },
   "scenarioDialogue": {
