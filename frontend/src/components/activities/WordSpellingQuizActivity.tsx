@@ -21,6 +21,8 @@
  *
  * #1045 階段 4b：考後檢討預覽（isLivePreview && revealAnswersOnSubmit===true）每題作答當下判斷，
  * 答對播 ScoreOverlay（不自動跳題）、答錯揭示正解並鎖定該題；考前說明／學生作答／訂正流程不變。
+ * #1045 階段 4c：回饋對齊艾賓浩斯練習版 — 答對輸入格綠＋星星動畫（不翻卡）；答錯輸入格直接顯示
+ * 紅色正解並鎖定、不播動畫。提交計分用判斷當下的原始作答（previewOriginalTyped），答錯仍算錯。
  * 作答卡片不再有內部卷軸（移除 max-h 與 overflow-y-auto），內容撐開、由瀏覽器外層捲動。
  */
 
@@ -139,6 +141,10 @@ export default function WordSpellingQuizActivity({
     Record<number, boolean>
   >({});
   const [previewOverlayOpen, setPreviewOverlayOpen] = useState(false);
+  // #1045 階段 4c：答錯後輸入格改顯示正解，提交計分須用判斷當下的原始作答
+  const [previewOriginalTyped, setPreviewOriginalTyped] = useState<
+    Record<number, string>
+  >({});
   const closePreviewOverlay = useCallback(
     () => setPreviewOverlayOpen(false),
     [],
@@ -420,7 +426,12 @@ export default function WordSpellingQuizActivity({
       const norm = (s: string | null | undefined) =>
         (s ?? "").trim().toLowerCase();
       const reviewWords: SpellingReviewWord[] = words.map((w) => {
-        const typed = (typedByItem[w.content_item_id] || "").trim();
+        // #1045 階段 4c：已對答案的題用判斷當下的原始作答（答錯後輸入格已改為正解）
+        const typed = (
+          previewOriginalTyped[w.content_item_id] ??
+          typedByItem[w.content_item_id] ??
+          ""
+        ).trim();
         const isCorrect = !!typed && norm(typed) === norm(w.text);
         return {
           content_item_id: w.content_item_id,
@@ -485,6 +496,7 @@ export default function WordSpellingQuizActivity({
     }
   }, [
     getPersistTracker,
+    previewOriginalTyped,
     assignmentId,
     isDemoMode,
     isLivePreview,
@@ -535,8 +547,15 @@ export default function WordSpellingQuizActivity({
     if (!typed) return;
     const isCorrect =
       typed.toLowerCase() === (currentWord.text || "").trim().toLowerCase();
+    setPreviewOriginalTyped((m) => ({ ...m, [itemId]: typed }));
     setPreviewResultByItem((m) => ({ ...m, [itemId]: isCorrect }));
-    if (isCorrect) setPreviewOverlayOpen(true);
+    if (isCorrect) {
+      // #1045 階段 4c：答對 → 輸入格綠＋星星動畫（不翻卡）
+      setPreviewOverlayOpen(true);
+    } else {
+      // #1045 階段 4c：答錯 → 輸入格直接顯示紅色正解並鎖定，不播動畫
+      setTypedByItem((m) => ({ ...m, [itemId]: currentWord.text || "" }));
+    }
   }, [currentWord, previewResultByItem, typedByItem]);
 
   const answeredCount = useMemo(
@@ -885,20 +904,17 @@ export default function WordSpellingQuizActivity({
                   // 訂正模式已答對的題目鎖定唯讀，不可再改
                   disabled={(isRevision && currentResolved) || previewJudged}
                   submitting={submittingAnswer}
-                  // #844：小考 input 一律中性色，不因正誤變色（防作弊；state 預設 neutral）
+                  // #844：小考 input 一律中性色，不因正誤變色（防作弊；state 預設 neutral）。
+                  // #1045 階段 4c 例外：老師考後檢討預覽已對答案 → 答對綠、答錯紅（顯示正解）
+                  state={
+                    previewResult === true
+                      ? "correct"
+                      : previewResult === false
+                        ? "wrong"
+                        : "neutral"
+                  }
                   autoFocus
                 />
-
-                {previewResult === false && (
-                  <p
-                    data-testid="preview-correct-answer"
-                    className="text-center text-sm font-medium text-red-600"
-                  >
-                    {t("wordQuiz.revision.correctAnswer", {
-                      answer: currentWord.text,
-                    }) || `正解：${currentWord.text}`}
-                  </p>
-                )}
 
                 {isRevision && currentReveal && !currentResolved && (
                   <p className="text-center text-sm font-medium text-red-600">

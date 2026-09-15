@@ -21,6 +21,8 @@
  *
  * #1045 階段 4b：考後檢討預覽（isLivePreview && revealAnswersOnSubmit===true）每題作答當下判斷，
  * 答對播 ScoreOverlay（不自動跳題）、答錯揭示正解並鎖定該題；考前說明／學生作答／訂正流程不變。
+ * #1045 階段 4c：回饋對齊艾賓浩斯練習版 WordSelectionActivity — 答對所選綠＋score=100 動畫；
+ * 答錯所選紅＋score=0 isError 動畫，動畫結束後才揭示正解綠並打勾（animateReveal）。
  * 作答卡片不再有內部卷軸（移除 max-h 與 overflow-y-auto），內容撐開、由瀏覽器外層捲動。
  */
 
@@ -152,10 +154,20 @@ export default function WordSelectionQuizActivity({
     Record<number, boolean>
   >({});
   const [previewOverlayOpen, setPreviewOverlayOpen] = useState(false);
-  const closePreviewOverlay = useCallback(
-    () => setPreviewOverlayOpen(false),
-    [],
-  );
+  // #1045 階段 4c：對齊艾賓浩斯練習版 — 答對 score=100、答錯 score=0 isError；
+  // 答錯時動畫結束（onComplete）才揭示正解綠（animateReveal）。不自動跳題。
+  const [previewLastCorrect, setPreviewLastCorrect] = useState(true);
+  const [previewRevealedByItem, setPreviewRevealedByItem] = useState<
+    Record<number, boolean>
+  >({});
+  const previewOverlayItemRef = useRef<number | null>(null);
+  const closePreviewOverlay = useCallback(() => {
+    setPreviewOverlayOpen(false);
+    const itemId = previewOverlayItemRef.current;
+    if (itemId != null) {
+      setPreviewRevealedByItem((m) => ({ ...m, [itemId]: true }));
+    }
+  }, []);
 
   const [loading, setLoading] = useState(!isLivePreview);
   const [words, setWords] = useState<QuizWord[]>([]);
@@ -433,7 +445,8 @@ export default function WordSelectionQuizActivity({
     async (text: string) => {
       if (!currentWord) return;
       const itemId = currentWord.content_item_id;
-      // #1045 階段 4b：考後檢討預覽 → 點選即本地判斷並鎖定該題；答對播動畫
+      // #1045 階段 4b／4c：考後檢討預覽 → 點選即本地判斷並鎖定該題；
+      // 答對／答錯都播 ScoreOverlay（與艾賓浩斯練習版同款），不自動跳題
       if (isReviewDemo) {
         if (previewResultByItem[itemId] !== undefined) return;
         const isCorrect =
@@ -441,7 +454,9 @@ export default function WordSelectionQuizActivity({
           currentWord.correct_text.trim().toLowerCase();
         setSelectedByItem((m) => ({ ...m, [itemId]: text }));
         setPreviewResultByItem((m) => ({ ...m, [itemId]: isCorrect }));
-        if (isCorrect) setPreviewOverlayOpen(true);
+        setPreviewLastCorrect(isCorrect);
+        previewOverlayItemRef.current = itemId;
+        setPreviewOverlayOpen(true);
         return;
       }
       // 訂正模式：已答對的題目鎖定，不可改選
@@ -644,6 +659,14 @@ export default function WordSelectionQuizActivity({
   const revealCurrent =
     (isRevision && (currentCorrect === true || currentCorrect === false)) ||
     previewJudged;
+  // #1045 階段 4c：考後檢討預覽答錯 → 先只標所選紅，動畫結束後才揭示正解綠（animateReveal）
+  const previewResultCurrent = isReviewDemo
+    ? previewResultByItem[currentWord.content_item_id]
+    : undefined;
+  const previewCorrectRevealed =
+    previewResultCurrent === true ||
+    (previewResultCurrent === false &&
+      previewRevealedByItem[currentWord.content_item_id] === true);
 
   // 題號 bar：Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
@@ -854,9 +877,18 @@ export default function WordSelectionQuizActivity({
                         submittingAnswer || currentResolved || previewJudged
                       }
                       showResult={revealCurrent}
-                      showCorrect={revealCurrent && isCorrectOption}
+                      showCorrect={
+                        revealCurrent &&
+                        isCorrectOption &&
+                        (!previewJudged || previewCorrectRevealed)
+                      }
                       showIncorrect={
                         revealCurrent && isSelected && !isCorrectOption
+                      }
+                      animateReveal={
+                        previewResultCurrent === false &&
+                        previewCorrectRevealed &&
+                        isCorrectOption
                       }
                       onClick={() => choose(opt.text)}
                     />
@@ -893,12 +925,12 @@ export default function WordSelectionQuizActivity({
           {renderCardFooter?.(currentWord.content_item_id)}
         </CardContent>
       </Card>
-      {/* #1045 階段 4b：考後檢討預覽答對動畫（fixed 全螢幕，結束後關閉；不自動跳題） */}
+      {/* #1045 階段 4b／4c：考後檢討預覽答對／答錯動畫（fixed 全螢幕，結束後關閉；不自動跳題） */}
       {isReviewDemo && (
         <ScoreOverlay
           open={previewOverlayOpen}
-          score={100}
-          isError={false}
+          score={previewLastCorrect ? 100 : 0}
+          isError={!previewLastCorrect}
           onComplete={closePreviewOverlay}
         />
       )}
