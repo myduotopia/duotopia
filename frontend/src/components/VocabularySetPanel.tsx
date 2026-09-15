@@ -2644,6 +2644,7 @@ const VocabularySetPanel = forwardRef<
     if (index === null) return;
     const sentence = rows[index]?.example_sentence;
     if (!sentence) return;
+    // 設定與音檔都用 functional setRows 寫入，避免之後用舊 rows 覆蓋掉剛存的設定
     setRows((prev) =>
       prev.map((r, i) => (i === index ? { ...r, audioSettings: settings } : r)),
     );
@@ -2655,7 +2656,18 @@ const VocabularySetPanel = forwardRef<
     try {
       const result = await apiClient.generateTTS(sentence, voice, rate, "+0%");
       if (result?.audio_url) {
-        handleUpdateRow(index, "example_sentence_audio_url", result.audio_url);
+        const audioUrl = result.audio_url;
+        setRows((prev) =>
+          prev.map((r, i) =>
+            i === index
+              ? {
+                  ...r,
+                  audioSettings: settings,
+                  example_sentence_audio_url: audioUrl,
+                }
+              : r,
+          ),
+        );
         toast.success(t("contentEditor.messages.audioGeneratedSuccess"));
       }
     } catch (err) {
@@ -4037,6 +4049,8 @@ const VocabularySetPanel = forwardRef<
       );
 
       // 呼叫 API 生成例句（後端會同步跑 TTS，audio_url 一起回來；Issue #757）
+      // Issue #1051：單題按鈕只生成例句＋翻譯，不產生音檔
+      const isSingleRow = aiGenerateTargetIndex !== null;
       const firstAudioSettings = rows[targetIndices[0]]?.audioSettings;
       const response = await apiClient.generateSentences({
         words: wordsToGenerate.map((w) => w.word),
@@ -4046,13 +4060,15 @@ const VocabularySetPanel = forwardRef<
         prompt: aiGeneratePrompt || undefined,
         translate_to: targetLanguage || undefined,
         parts_of_speech: wordsToGenerate.map((w) => w.partsOfSpeech),
-        audio_settings: firstAudioSettings
-          ? {
-              accent: firstAudioSettings.accent,
-              gender: firstAudioSettings.gender,
-              speed: firstAudioSettings.speed,
-            }
-          : undefined,
+        audio_settings:
+          !isSingleRow && firstAudioSettings
+            ? {
+                accent: firstAudioSettings.accent,
+                gender: firstAudioSettings.gender,
+                speed: firstAudioSettings.speed,
+              }
+            : undefined,
+        ...(isSingleRow ? { generate_audio: false } : {}),
       });
 
       // 更新 rows
@@ -4102,7 +4118,7 @@ const VocabularySetPanel = forwardRef<
             newRows[idx].example_sentence_translation =
               matchedResult.translation;
           }
-          if (matchedResult.audio_url) {
+          if (!isSingleRow && matchedResult.audio_url) {
             newRows[idx].example_sentence_audio_url = matchedResult.audio_url;
           }
           // Issue #632: AI 生成例句後立即帶入抽取的克漏字答案供老師確認
@@ -4266,7 +4282,12 @@ const VocabularySetPanel = forwardRef<
       lastSelectedWordLang !== "english"
     ) {
       const existingWithExampleTranslation = rows.find((r) => {
-        if (!r.text?.trim() || !r.example_sentence_translation?.trim())
+        // Issue #1051：例句已被清空的列會重新造句＋翻譯，殘留的舊翻譯不算數
+        if (
+          !r.text?.trim() ||
+          !r.example_sentence?.trim() ||
+          !r.example_sentence_translation?.trim()
+        )
           return false;
         // Skip check when "other" is selected — custom languages can't be compared
         if (aiGenerateTranslateLang === "other") return false;
@@ -4601,12 +4622,10 @@ const VocabularySetPanel = forwardRef<
               const idx = needsExamples[i];
               currentRows[idx].example_sentence = s.sentence || "";
               currentRows[idx].cloze_answer = s.cloze_answer || "";
-              if (s.translation) {
-                currentRows[idx].example_sentence_translation = s.translation;
-              }
-              if (s.audio_url) {
-                currentRows[idx].example_sentence_audio_url = s.audio_url;
-              }
+              // Issue #1051：例句是重新造的，舊翻譯／舊音檔一律覆寫，不可殘留
+              currentRows[idx].example_sentence_translation =
+                s.translation || "";
+              currentRows[idx].example_sentence_audio_url = s.audio_url || "";
             });
           } catch (error) {
             console.error("Batch example sentence generation failed:", error);

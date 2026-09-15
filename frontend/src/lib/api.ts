@@ -1486,6 +1486,8 @@ class ApiClient {
     translate_to?: string;
     parts_of_speech?: string[][];
     audio_settings?: { accent?: string; gender?: string; speed?: string };
+    /** Issue #1051: false = 只生成例句＋翻譯，不跑 TTS（預設 true） */
+    generate_audio?: boolean;
   }): Promise<{
     sentences: Array<{
       sentence: string;
