@@ -437,6 +437,7 @@ def _build_quiz_submission(
 
     成績紀錄＝第一次作答（最早 completed PracticeSession），與凍結的 sa.score 一致。
     逐題回傳學生答案 / 正解 / 對錯，供老師端 QuizGradingPanel 顯示錯題清單與答對率。
+    同題重複列（#1045 並發殘留）取最新一筆；只迭代本作業題目，故 correct ≤ total。
     """
     source = (
         db.query(PracticeSession)
@@ -453,6 +454,8 @@ def _build_quiz_submission(
         for ans in (
             db.query(PracticeAnswer)
             .filter(PracticeAnswer.practice_session_id == source.id)
+            # #1045: id 升冪讓後寫入者覆蓋 → 同題重複列時取最新答案
+            .order_by(PracticeAnswer.id.asc())
             .all()
         ):
             answers_by_item[ans.content_item_id] = ans

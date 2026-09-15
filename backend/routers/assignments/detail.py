@@ -757,6 +757,7 @@ async def get_quiz_live_progress(
     與 ``/progress`` 不同：correct_count 取「最新 session（含未完成）」的即時答對數，
     而非批改 hub 那筆「第一次 completed」凍結值，這樣考試進行中就看得到排行變化。
     回應 students 形狀對齊 StudentStatusPanel 期望的欄位。
+    #1045：答案逐題取最新一筆去重，correct_count ≤ total_questions。
     """
     assignment = _get_owned_live_quiz_or_404(assignment_id, db, current_teacher)
     practice_mode = assignment.practice_mode
@@ -802,25 +803,31 @@ async def get_quiz_live_progress(
             .group_by(PracticeSession.student_assignment_id)
             .subquery()
         )
-        for sa_id, answered, correct in (
-            db.query(
-                latest_session.c.sa_id,
-                func.count(PracticeAnswer.id),
-                func.coalesce(
-                    func.sum(case((PracticeAnswer.is_correct.is_(True), 1), else_=0)),
-                    0,
-                ),
-            )
-            .select_from(latest_session)
-            .outerjoin(
-                PracticeAnswer,
-                PracticeAnswer.practice_session_id == latest_session.c.sid,
-            )
-            .group_by(latest_session.c.sa_id)
-            .all()
-        ):
-            answered_by_sa[sa_id] = int(answered or 0)
-            correct_by_sa[sa_id] = int(correct or 0)
+        # #1045: 同題可能殘留重複列（並發寫入），故不數 row：逐題取最新一筆（id 升冪
+        # 後者覆蓋）、只算本作業題目，保證 correct ≤ answered ≤ total。
+        sid_to_sa = {
+            sid: sa_id
+            for sa_id, sid in db.query(latest_session.c.sa_id, latest_session.c.sid)
+        }
+        item_ids = {item.id for item in _get_canonical_items(assignment.id, db)}
+        latest_by_sid: dict = {}
+        if sid_to_sa:
+            for sid, item_id, is_correct in (
+                db.query(
+                    PracticeAnswer.practice_session_id,
+                    PracticeAnswer.content_item_id,
+                    PracticeAnswer.is_correct,
+                )
+                .filter(PracticeAnswer.practice_session_id.in_(list(sid_to_sa)))
+                .order_by(PracticeAnswer.id.asc())
+                .all()
+            ):
+                if item_id in item_ids:
+                    latest_by_sid.setdefault(sid, {})[item_id] = bool(is_correct)
+        for sid, sa_id in sid_to_sa.items():
+            per_item = latest_by_sid.get(sid, {})
+            answered_by_sa[sa_id] = len(per_item)
+            correct_by_sa[sa_id] = sum(1 for ok in per_item.values() if ok)
 
     students = []
     for student in all_students:

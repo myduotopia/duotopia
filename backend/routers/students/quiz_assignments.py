@@ -12,6 +12,15 @@ Issue #828: introduces ``word_selection_quiz`` / ``word_spelling_quiz`` /
     - Quiz answers live in ``practice_answers.answer_data.type =
       "word_*_quiz"``; the same row is UPDATEd when a student revisits a
       question before submitting (跳題 / 改答案 supported).
+    - Issue #1045: the upsert locks the PracticeSession row first so two
+      concurrent answers for the same question (autosave + 換題/送出) cannot
+      both INSERT. Readers still de-duplicate (latest row per content_item_id,
+      only items of the assignment) so legacy duplicates never push
+      correct_count above the question total. No UNIQUE constraint on
+      (practice_session_id, content_item_id): non-quiz practice legitimately
+      stores one row per attempt.
+    - Scoring: per-question deduction = 100 / total (not pre-rounded); only the
+      final score rounds to 1 decimal.
 """
 import random
 from datetime import datetime, timezone
@@ -216,14 +225,31 @@ def _existing_answers_for_session(
     """Return {content_item_id -> PracticeAnswer} for a quiz session.
 
     Quiz answers UPDATE in place when a student revisits a question, so we
-    keep at most one PracticeAnswer per (session, content_item).
+    keep at most one PracticeAnswer per (session, content_item). Legacy
+    duplicate rows (#1045 race) resolve to the latest one (largest id).
+    """
+    return latest_quiz_answers_by_item(db, session_id)
+
+
+def latest_quiz_answers_by_item(
+    db: Session, session_id: int, item_ids: Optional[set] = None
+) -> Dict[int, PracticeAnswer]:
+    """{content_item_id -> 最新一筆 PracticeAnswer}（#1045 讀取端去重）。
+
+    依 id 升冪讀、後者覆蓋前者＝每題取最新；給 ``item_ids`` 時只保留本作業題目。
     """
     rows = (
         db.query(PracticeAnswer)
         .filter(PracticeAnswer.practice_session_id == session_id)
+        .order_by(PracticeAnswer.id.asc())
         .all()
     )
-    return {row.content_item_id: row for row in rows}
+    result: Dict[int, PracticeAnswer] = {}
+    for row in rows:
+        if item_ids is not None and row.content_item_id not in item_ids:
+            continue
+        result[row.content_item_id] = row
+    return result
 
 
 def _upsert_quiz_answer(
@@ -243,12 +269,23 @@ def _upsert_quiz_answer(
     """
     if revised:
         answer_data = {**answer_data, "revised": True}
+    # #1045: 先鎖 session row 再查既有答案。同題並發（autosave＋換題/送出）時第二個
+    # transaction 會等第一個 commit 後才查，看得到剛插入那筆而走 UPDATE；
+    # populate_existing 重讀最新計數，順帶修掉 correct_count / words_practiced lost update。
+    session = (
+        db.query(PracticeSession)
+        .filter(PracticeSession.id == session.id)
+        .populate_existing()
+        .with_for_update()
+        .one()
+    )
     existing = (
         db.query(PracticeAnswer)
         .filter(
             PracticeAnswer.practice_session_id == session.id,
             PracticeAnswer.content_item_id == content_item_id,
         )
+        .order_by(PracticeAnswer.id.desc())
         .first()
     )
     if existing:
@@ -272,6 +309,8 @@ def _upsert_quiz_answer(
         answer_data=answer_data,
     )
     db.add(answer)
+    # flush 讓同 transaction 內下一次 upsert（autoflush 關閉時）也查得到這筆
+    db.flush()
     session.words_practiced = (session.words_practiced or 0) + 1
     if is_correct:
         session.correct_count = (session.correct_count or 0) + 1
@@ -1010,23 +1049,25 @@ def compute_quiz_score(
     correct_count = 0
     answered = 0
     if session is not None:
-        correct_count = (
-            db.query(PracticeAnswer)
-            .filter(
-                PracticeAnswer.practice_session_id == session.id,
-                PracticeAnswer.is_correct.is_(True),
+        # #1045: 每題只算最新一筆、只算本作業題目 → correct ≤ answered ≤ total。
+        item_ids = {
+            row[0]
+            for row in db.query(ContentItem.id)
+            .join(
+                AssignmentContent,
+                AssignmentContent.content_id == ContentItem.content_id,
             )
-            .count()
-        )
-        answered = (
-            db.query(PracticeAnswer)
-            .filter(PracticeAnswer.practice_session_id == session.id)
-            .count()
-        )
-    # 計分：每題扣分 = round(100 / 總題數, 1)；分數 = 100 − 錯誤題數 × 每題扣分。
-    # 未作答視同答錯（錯誤題數 = 總題數 − 答對題數）。clamp 到 [0, 100]。
+            .filter(AssignmentContent.assignment_id == sa.assignment_id)
+            .all()
+        }
+        latest = latest_quiz_answers_by_item(db, session.id, item_ids)
+        answered = len(latest)
+        correct_count = sum(1 for ans in latest.values() if ans.is_correct)
+    # 計分：每題扣分 = 100 / 總題數（#1045：不先捨入，只對總分 round 1）；
+    # 分數 = 100 − 錯誤題數 × 每題扣分。未作答視同答錯（錯誤題數 = 總題數 − 答對題數）。
+    # clamp 到 [0, 100]。
     if total_items:
-        per_question = round(100 / total_items, 1)
+        per_question = 100 / total_items
         wrong_count = total_items - correct_count
         score = round(max(0.0, min(100.0, 100.0 - wrong_count * per_question)), 1)
     else:

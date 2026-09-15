@@ -9,6 +9,7 @@
  *   - 題目以 example_sentence 將 cloze_answer 挖空，學生填入正確變形
  *   - #844：手機/平板顯示 VirtualKeyboard（同艾賓浩斯版 WordClozeActivity），
  *     mobile 在卡片下方、tablet 在右側；inputMode=none 抑制系統鍵盤建議列
+ *   - #1045：autosave 與換題/送出共用 lastPersistedRef，同題同值不重送（防並發重複列）
  */
 
 import {
@@ -328,14 +329,24 @@ export default function WordClozeQuizActivity({
     [assignmentId, isDemoMode, isLivePreview, sessionId, recordResult],
   );
 
+  // 每題最後一次已送出（或送出中）的值；autosave 與換題/送出共用，同值不重送（#1045）
+  const lastPersistedRef = useRef<Record<number, string>>({});
+
   const persistAnswer = useCallback(async (): Promise<boolean> => {
     if (!currentWord) return true;
-    const typed = typedByItem[currentWord.content_item_id] || "";
+    const itemId = currentWord.content_item_id;
+    const typed = typedByItem[itemId] || "";
     if (!typed.trim()) return true;
+    // #1045: 與 autosave 已送的值相同就不再送，避免同題並發寫入造成重複列（監考 31/30）
+    if (lastPersistedRef.current[itemId] === typed.trim()) return true;
+    lastPersistedRef.current[itemId] = typed.trim();
     setSubmittingAnswer(true);
-    const res = await persistItemAnswer(currentWord.content_item_id, typed);
+    const res = await persistItemAnswer(itemId, typed);
     setSubmittingAnswer(false);
     if (!res.ok) {
+      if (lastPersistedRef.current[itemId] === typed.trim()) {
+        delete lastPersistedRef.current[itemId];
+      }
       toast.error(t("wordCloze.toast.saveFailed") || "Failed to save answer");
     }
     return res.ok;
@@ -498,7 +509,6 @@ export default function WordClozeQuizActivity({
   }, [alreadySubmitted, assignmentId, isDemoMode, isLivePreview, t]);
 
   // Auto-persist on typing pause (1s) — see WordSpellingQuizActivity for rationale.
-  const lastPersistedRef = useRef<Record<number, string>>({});
   useEffect(() => {
     // 訂正模式不自動 persist：改答案由學生按「送出」明確觸發，才即時揭示正解
     if (
@@ -515,7 +525,12 @@ export default function WordClozeQuizActivity({
     if (lastPersistedRef.current[itemId] === val) return;
     const handle = setTimeout(() => {
       lastPersistedRef.current[itemId] = val;
-      persistItemAnswer(itemId, val);
+      void persistItemAnswer(itemId, val).then((res) => {
+        // 失敗時清掉 ref，讓換題/送出時仍會重送
+        if (!res.ok && lastPersistedRef.current[itemId] === val) {
+          delete lastPersistedRef.current[itemId];
+        }
+      });
     }, 1000);
     return () => clearTimeout(handle);
   }, [
