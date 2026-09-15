@@ -13,6 +13,7 @@
  *     字級用 fit-to-box（撐大／縮／不裁字）
  *   - #967 例句挖空模式（show_example_sentence）：題目改為挖空例句、不顯示單字/翻譯（單字圖仍可顯示）；
  *     選項一律英文（後端強制）；播放音檔改播例句音檔；與選項圖片互斥；版面固定直式（例句是長文）。
+ *   - #1045 選項 A/B/C/D 左上角標：作答用 WordSelectionOptionButton label、檢討用 shared/QuizOptionChip
  */
 
 import {
@@ -37,6 +38,8 @@ import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import CardNavArrow from "./shared/CardNavArrow";
 import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
+import QuizOptionChip from "./shared/QuizOptionChip";
+import { optionLabelAt } from "./shared/optionLabels";
 import ClozeBlankText from "./shared/ClozeBlankText";
 import { buildBlankedSentence } from "@/lib/cloze";
 import { useShortLandscape } from "./shared/useShortLandscape";
@@ -497,7 +500,7 @@ export default function WordSelectionQuizActivity({
               )}
             </div>
             <div className="grid grid-cols-2 gap-1.5">
-              {w.options.map((opt) => {
+              {w.options.map((opt, index) => {
                 const isCorrectOption =
                   opt.text.trim().toLowerCase() ===
                   w.correct_answer.trim().toLowerCase();
@@ -506,21 +509,13 @@ export default function WordSelectionQuizActivity({
                   opt.text.trim().toLowerCase() ===
                     w.student_answer.trim().toLowerCase();
                 return (
-                  <div
+                  <QuizOptionChip
                     key={opt.text}
-                    className={cn(
-                      "p-2 rounded border text-sm",
-                      isCorrectOption
-                        ? "border-emerald-400 bg-emerald-50 text-emerald-800"
-                        : isStudentPick
-                          ? "border-rose-400 bg-rose-50 text-rose-800"
-                          : "border-gray-200 text-gray-500",
-                    )}
-                  >
-                    {opt.text}
-                    {isCorrectOption && " ✓"}
-                    {isStudentPick && !isCorrectOption && " ✗"}
-                  </div>
+                    text={opt.text}
+                    label={optionLabelAt(index)}
+                    isCorrect={isCorrectOption}
+                    isStudentPick={isStudentPick}
+                  />
                 );
               })}
             </div>
@@ -784,6 +779,7 @@ export default function WordSelectionQuizActivity({
                       imageUrl={opt.image_url}
                       showAsImage={renderAsImage}
                       colorIndex={index}
+                      label={optionLabelAt(index)}
                       isSelected={isSelected}
                       // 已答對鎖定；答錯時仍可改選正解
                       disabled={submittingAnswer || currentResolved}

@@ -30,6 +30,8 @@
  * - 播放音檔改播例句音檔；與「選項以圖片呈現」互斥
  * - 版面固定直式（例句是長文，不走橫式窄欄）
  *
+ * #1045：選項按鈕左上角顯示 A/B/C/D 標號（shared/optionLabels 單一來源）。
+ *
  * ⚠️ 此元件同時被學生作答頁與派發 sheet 預覽共用。
  *    改動前必讀：docs/design/preview-architecture.md
  */
@@ -65,6 +67,7 @@ import { withDemoOverrides } from "@/lib/demoOverrides";
 import ScoreOverlay from "./shared/ScoreOverlay";
 import CountdownRing from "./shared/CountdownRing";
 import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
+import { optionLabelAt } from "./shared/optionLabels";
 import ClozeBlankText from "./shared/ClozeBlankText";
 import { buildBlankedSentence } from "@/lib/cloze";
 import { useShortLandscape } from "./shared/useShortLandscape";
@@ -1110,6 +1113,7 @@ export default function WordSelectionActivity({
                   imageUrl={optionImage}
                   showAsImage={renderAsImage}
                   colorIndex={index}
+                  label={optionLabelAt(index)}
                   isSelected={isSelected}
                   disabled={showResult || submitting}
                   onClick={() => handleSelectAnswer(optionText)}
