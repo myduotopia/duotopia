@@ -19,9 +19,12 @@ from services.translation import TranslationService  # noqa: E402
 
 
 def _vertex_service():
-    """建立一個走 Vertex 路徑、已注入 mock vertex_ai 的 service"""
+    """建立已注入 mock vertex_ai 的 service
+
+    Issue #1051: 不可手動補 use_vertex_ai 等屬性，否則會掩蓋 service 讀取
+    已移除屬性（#980 刪掉 OpenAI fallback）導致例句翻譯永遠回傳原文的 bug。
+    """
     service = TranslationService()
-    service.use_vertex_ai = True
     service.vertex_ai = AsyncMock()
     return service
 

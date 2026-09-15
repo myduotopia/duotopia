@@ -55,6 +55,8 @@ import {
   BatchPasteArea,
   BatchTTSSettings,
 } from "@/components/shared/batch";
+import { TTSSettingsDialog } from "@/components/shared/TTSSettingsDialog";
+import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 // dnd-kit imports
 import {
   DndContext,
@@ -1389,6 +1391,8 @@ interface SortableRowInnerProps {
   handleRemoveRow: (index: number) => void;
   handleDuplicateRow: (index: number) => void;
   handleOpenTTSModal: (row: ContentRow) => void;
+  /** Issue #1051：例句麥克風先開語音設定視窗，確認後才產生 */
+  handleOpenExampleTTSDialog: (index: number) => void;
   handleRemoveAudio: (index: number) => void;
   handleImageUpload: (index: number, file: File) => Promise<void>;
   handleRemoveImage: (index: number) => void;
@@ -1424,6 +1428,7 @@ function SortableRowInner({
   handleRemoveRow,
   handleDuplicateRow,
   handleOpenTTSModal,
+  handleOpenExampleTTSDialog,
   handleRemoveAudio,
   handleImageUpload,
   handleRemoveImage,
@@ -1799,39 +1804,12 @@ function SortableRowInner({
           {/* 例句 TTS 生成 */}
           {row.example_sentence && (
             <button
-              onClick={async () => {
+              onClick={() => {
                 if (!row.example_sentence) return;
                 // Stop any currently playing audio before regenerating
                 inlineAudioRef.current?.pause();
                 inlineAudioRef.current = null;
-                const { voice, rate } = getVoiceAndRate(
-                  row.audioSettings?.accent || "American English",
-                  row.audioSettings?.gender || "Male",
-                  row.audioSettings?.speed || "Normal x1",
-                );
-                try {
-                  const result = await apiClient.generateTTS(
-                    row.example_sentence,
-                    voice,
-                    rate,
-                    "+0%",
-                  );
-                  if (result?.audio_url) {
-                    handleUpdateRow(
-                      index,
-                      "example_sentence_audio_url",
-                      result.audio_url,
-                    );
-                    toast.success(
-                      t("contentEditor.messages.audioGeneratedSuccess"),
-                    );
-                  }
-                } catch (err) {
-                  console.error("TTS generation failed:", err);
-                  toast.error(
-                    t("contentEditor.messages.audioGenerationFailed"),
-                  );
-                }
+                handleOpenExampleTTSDialog(index);
               }}
               className={`p-1 rounded ${
                 row.example_sentence_audio_url
@@ -2647,6 +2625,43 @@ const VocabularySetPanel = forwardRef<
   const handleOpenTTSModal = (row: ContentRow) => {
     setSelectedRow(row);
     setTtsModalOpen(true);
+  };
+
+  /**
+   * Issue #1051：例句語音先讓老師設定口音／性別／語速。
+   * 選定值（含 Random）存回 row.audioSettings，下次打開就帶上次的設定；
+   * Random 保持 Random，每次產生時才抽聲音。
+   */
+  const [exampleTTSIndex, setExampleTTSIndex] = useState<number | null>(null);
+
+  const handleOpenExampleTTSDialog = (index: number) => {
+    setExampleTTSIndex(index);
+  };
+
+  const handleGenerateExampleAudio = async (settings: TTSSettingsState) => {
+    const index = exampleTTSIndex;
+    setExampleTTSIndex(null);
+    if (index === null) return;
+    const sentence = rows[index]?.example_sentence;
+    if (!sentence) return;
+    setRows((prev) =>
+      prev.map((r, i) => (i === index ? { ...r, audioSettings: settings } : r)),
+    );
+    const { voice, rate } = getVoiceAndRate(
+      settings.accent,
+      settings.gender,
+      settings.speed,
+    );
+    try {
+      const result = await apiClient.generateTTS(sentence, voice, rate, "+0%");
+      if (result?.audio_url) {
+        handleUpdateRow(index, "example_sentence_audio_url", result.audio_url);
+        toast.success(t("contentEditor.messages.audioGeneratedSuccess"));
+      }
+    } catch (err) {
+      console.error("TTS generation failed:", err);
+      toast.error(t("contentEditor.messages.audioGenerationFailed"));
+    }
   };
 
   const handleTTSConfirm = async (
@@ -5317,6 +5332,7 @@ const VocabularySetPanel = forwardRef<
                       handleRemoveRow={handleDeleteRow}
                       handleDuplicateRow={handleCopyRow}
                       handleOpenTTSModal={handleOpenTTSModal}
+                      handleOpenExampleTTSDialog={handleOpenExampleTTSDialog}
                       handleRemoveAudio={handleRemoveAudio}
                       handleImageUpload={handleImageUpload}
                       handleRemoveImage={handleRemoveImage}
@@ -5381,6 +5397,29 @@ const VocabularySetPanel = forwardRef<
           isCreating={isCreating}
         />
       )}
+
+      {/* 例句語音設定（Issue #1051） */}
+      <TTSSettingsDialog
+        open={exampleTTSIndex !== null}
+        onOpenChange={(open) => {
+          if (!open) setExampleTTSIndex(null);
+        }}
+        initialSettings={{
+          accent:
+            (exampleTTSIndex !== null &&
+              rows[exampleTTSIndex]?.audioSettings?.accent) ||
+            "American English",
+          gender:
+            (exampleTTSIndex !== null &&
+              rows[exampleTTSIndex]?.audioSettings?.gender) ||
+            "Male",
+          speed:
+            (exampleTTSIndex !== null &&
+              rows[exampleTTSIndex]?.audioSettings?.speed) ||
+            "Normal x1",
+        }}
+        onConfirm={handleGenerateExampleAudio}
+      />
 
       {/* 多義 Picker Dialog（英英釋義 / 中文翻譯） */}
       <Dialog
