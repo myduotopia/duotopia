@@ -9,9 +9,14 @@
  *   - `isAutoScored` → 主按鈕文案改為「儲存」（auto-graded 模式不是「完成批改」，
  *     批改在學生作答當下就完成了，老師只是儲存最終分數/評語）
  *
+ * 分數輸入（#1045）：以字串 draft 呈現，允許 0–100、最多一位小數，可逐字打出 "85.5"；
+ * 拒絕 "85.55"、"101"；清空回報 null；blur 時 "85." 正規化為 "85"。
+ * 只有外部 score 變動（非本元件輸入造成）才覆寫 draft。
+ *
  * 詳見 docs/design/grading-page-architecture.md
  */
 
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
@@ -65,6 +70,24 @@ export function OverallFeedbackPanel({
   onJumpToItem,
 }: OverallFeedbackPanelProps) {
   const { t } = useTranslation();
+
+  // #1045: 分數 input 以字串 draft 呈現，才能保留打字中的小數點（"85."）。
+  // 綁 number 時 "85." 會被正規化成 85、點被吃掉，打不出 85.5。
+  const [scoreDraft, setScoreDraft] = useState<string>(
+    score === null ? "" : String(score),
+  );
+  // 自己剛回報給父層的值；外部 score 與它不同（換學生、自動計分、扣分回填）才同步 draft
+  const lastEmittedScoreRef = useRef<number | null>(score);
+  useEffect(() => {
+    if (score !== lastEmittedScoreRef.current) {
+      lastEmittedScoreRef.current = score;
+      setScoreDraft(score === null ? "" : String(score));
+    }
+  }, [score]);
+  const emitScore = (value: number | null) => {
+    lastEmittedScoreRef.current = value;
+    onScoreChange(value);
+  };
 
   // #861 c-2: 三顆動作鈕的 disabled 狀態與 Grade hub（StudentStatusPanel）一致
   const status = submission?.status;
@@ -184,18 +207,26 @@ export function OverallFeedbackPanel({
                 <input
                   type="text"
                   inputMode="decimal"
-                  value={score === null ? "" : score}
+                  aria-label={t("gradingPage.labels.giveScore")}
+                  value={scoreDraft}
                   onBlur={async () => {
+                    // 正規化尾端小數點（"85." → "85"）
+                    if (scoreDraft !== "") {
+                      setScoreDraft(String(parseFloat(scoreDraft)));
+                    }
                     await onAutoSave();
                   }}
                   onChange={(e) => {
                     const value = e.target.value;
                     if (value === "") {
-                      onScoreChange(null);
-                    } else if (/^\d+(\.\d{0,1})?$/.test(value)) {
+                      setScoreDraft("");
+                      emitScore(null);
+                    } else if (/^\d+(\.\d?)?$/.test(value)) {
+                      // 最多一位小數；允許暫態 "85."（draft 保留點，數值先以 85 回報）
                       const numValue = parseFloat(value);
                       if (numValue >= 0 && numValue <= 100) {
-                        onScoreChange(numValue);
+                        setScoreDraft(value);
+                        emitScore(numValue);
                       }
                     }
                   }}
