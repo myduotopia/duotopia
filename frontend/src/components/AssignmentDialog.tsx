@@ -75,6 +75,7 @@ import { cn } from "@/lib/utils";
 import {
   practiceModeLabelKey,
   listModesForDataset,
+  listAllDispatchableModes,
   applyModeDefaults,
   getModeConfig,
   DEFAULT_MODE_BY_DATASET,
@@ -2872,9 +2873,12 @@ export function AssignmentDialog({
             (() => {
               // Issue #1030: 不要用「不是例句集就是單字集」的二分法 —— 未知型別會被
               // 默默當成單字集，然後顯示一整排單字模式（情境對話就是這樣中招的）。
-              // 購物車現在只可能有可派發的型別，null 代表空車，此時不列模式。
+              // Issue #1052: null 代表空車 ＝「先選方式、再選教材」的路徑（班級頁派發），
+              // 要列出全部可派發模式；有內容時才依資料集縮小。開放與否由 registry 決定。
               const dataset = getCartContentTypeCategory();
-              const modeList = dataset ? listModesForDataset(dataset) : [];
+              const modeList = dataset
+                ? listModesForDataset(dataset)
+                : listAllDispatchableModes();
               const currentConfig = formData.practice_mode
                 ? getModeConfig(formData.practice_mode)
                 : undefined;

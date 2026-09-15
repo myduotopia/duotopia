@@ -67,23 +67,28 @@ describe("開關關閉時，情境對話不可派發", () => {
   });
 });
 
-describe("開關打開時，行為回到 #1031 交付的樣子", () => {
-  it("isAssignableContentType 對情境對話回 true", async () => {
+/**
+ * Issue #1052: 派發可不可以改由 registry 的 DATASET_DISPATCH_STATUS 單一決定。
+ * 情境對話仍在開發中，開關打開（staging / develop）也不能派發 —— 開關只管建立教材入口。
+ * 這組守的是「flag 不會再從 isAssignableContentType 漏進派發流程」。
+ */
+describe("開關打開時，派發仍然擋下（開發中由 registry 決定）", () => {
+  it("isAssignableContentType 對情境對話回 false", async () => {
     const { isAssignableContentType } = await loadWith(true);
-    expect(isAssignableContentType("SCENARIO_DIALOGUE")).toBe(true);
+    expect(isAssignableContentType("SCENARIO_DIALOGUE")).toBe(false);
   });
 
-  it("情境對話模式下選情境對話是選得到的", async () => {
+  it("點下去給的仍是「還不能派發」", async () => {
     const { explainNotSelectable } = await loadWith(true);
     expect(
       explainNotSelectable("SCENARIO_DIALOGUE", "scenario_dialogue"),
-    ).toBeNull();
+    ).toEqual({ kind: "not_assignable" });
   });
 
-  it("整課都是情境對話時，回的是「模式不合」而不是「不能派發」", async () => {
+  it("整課都是情境對話時，不會叫老師去換模式", async () => {
     const { reasonNothingSelectable } = await loadWith(true);
     expect(reasonNothingSelectable(["SCENARIO_DIALOGUE"])).toBe(
-      "mode_mismatch",
+      "not_assignable",
     );
   });
 });
