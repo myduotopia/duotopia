@@ -15,14 +15,21 @@
  *   - show_image 且有圖 → 題目圖
  *   窄版（手機）時選項改單欄、題目與答案上下排。
  *
+ * Issue #1045 每題扣分（滿分 100）：每題一個扣分 input（一位小數），答對預設 0、
+ * 答錯預設 100/題數（不先捨入，顯示 round 1）；已存扣分優先。改動 → GradingPage
+ * 以 quizDeductions.scoreFromDeductions 即時重算總分（round1(max(0, 100 − Σ扣分))）。
+ * 老師直接改總分時以總分為準，扣分不反向改。存檔送 quiz_deductions（依 content_item_id）。
+ *
  * 退回（要求訂正）鈕沿用右欄 OverallFeedbackPanel；訂正不改成績紀錄（成績以舊
  * 的為準），故此面板永遠顯示第一次作答的對錯，與凍結分數一致。
  *
  * 詳見 docs/design/grading-page-architecture.md
  */
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CheckCircle, X } from "lucide-react";
+import { defaultDeduction, round1 } from "./quizDeductions";
 import { Card } from "@/components/ui/card";
 import ClozeBlankText from "@/components/activities/shared/ClozeBlankText";
 import QuizOptionChip from "@/components/activities/shared/QuizOptionChip";
@@ -35,6 +42,51 @@ import type {
 interface QuizGradingPanelProps {
   submission: StudentSubmission;
   activeTab: "students" | "content" | "grading";
+  // #1045 每題扣分（state 在 GradingPage）；未傳 onDeductionChange 則不顯示扣分欄
+  deductions?: Record<number, number>;
+  onDeductionChange?: (contentItemId: number, value: number) => void;
+}
+
+/** #1045 每題扣分 input：最多一位小數、0–100；顯示 round1，編輯中保留原字串。 */
+function DeductionInput({
+  value,
+  onChange,
+  label,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  label: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? String(round1(value));
+  return (
+    <label className="inline-flex items-center gap-1.5 text-sm text-gray-600">
+      <span>{label}</span>
+      <span aria-hidden="true">−</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        aria-label={label}
+        data-testid="quiz-deduction-input"
+        value={display}
+        onChange={(e) => {
+          const next = e.target.value;
+          if (next === "") {
+            setDraft("");
+            onChange(0);
+          } else if (/^\d+(\.\d?)?$/.test(next)) {
+            const numValue = parseFloat(next);
+            if (numValue <= 100) {
+              setDraft(next);
+              onChange(numValue);
+            }
+          }
+        }}
+        onBlur={() => setDraft(null)}
+        className="w-16 px-2 py-1 text-right border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+    </label>
+  );
 }
 
 const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
@@ -134,6 +186,8 @@ function QuestionArea({
 export function QuizGradingPanel({
   submission,
   activeTab,
+  deductions,
+  onDeductionChange,
 }: QuizGradingPanelProps) {
   const { t } = useTranslation();
 
@@ -241,6 +295,18 @@ export function QuizGradingPanel({
                           </span>
                         )}
                       </div>
+                      {onDeductionChange && item.content_item_id != null && (
+                        <DeductionInput
+                          label={t("gradingPage.quiz.deduction") || "扣分"}
+                          value={
+                            deductions?.[item.content_item_id] ??
+                            defaultDeduction(correct, total)
+                          }
+                          onChange={(value) =>
+                            onDeductionChange(item.content_item_id!, value)
+                          }
+                        />
+                      )}
                     </div>
                   </div>
                 );

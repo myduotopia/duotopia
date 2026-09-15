@@ -41,6 +41,10 @@ const SentenceRearrangementPanel = lazy(() =>
     default: m.SentenceRearrangementPanel,
   })),
 );
+import {
+  initialDeductions,
+  scoreFromDeductions,
+} from "@/components/grading/quizDeductions";
 // Issue #1031: 情境對話批改 Panel（依 ADR 每個 practice_mode 各自 lazy 切 chunk）
 const ScenarioDialogueGradingPanel = lazy(() =>
   import("@/components/grading/ScenarioDialogueGradingPanel").then((m) => ({
@@ -281,6 +285,10 @@ export default function GradingPage() {
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [loading, setLoading] = useState(true);
   const [score, setScore] = useState<number | null>(null);
+  // Issue #1045: 小考每題扣分 {content_item_id → 扣分}；改動時即時重算總分
+  const [quizDeductions, setQuizDeductions] = useState<Record<number, number>>(
+    {},
+  );
   const [isAutoCalculatedScore, setIsAutoCalculatedScore] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -402,6 +410,16 @@ export default function GradingPage() {
       )) as StudentSubmission;
 
       setSubmission(response);
+
+      // Issue #1045: 小考扣分初值（已存扣分優先，否則答對 0／答錯單題分）
+      if (response.practice_mode?.endsWith("_quiz")) {
+        const quizItems = response.submissions || [];
+        setQuizDeductions(
+          initialDeductions(quizItems, response.total ?? quizItems.length),
+        );
+      } else {
+        setQuizDeductions({});
+      }
 
       if (
         response.current_score !== undefined &&
@@ -838,11 +856,23 @@ export default function GradingPage() {
         });
       });
 
+      // Issue #1045: 小考改送 quiz_deductions（依 content_item_id 對題），不送 item_results
+      // —— 後者的 passed→100/60 映射會覆寫存在 teacher_review_score 的扣分。
+      const isQuizSubmission = submission.practice_mode?.endsWith("_quiz");
       await apiClient.post(`/api/teachers/assignments/${assignmentId}/grade`, {
         student_id: parseInt(studentId!),
         score: score ?? 0,
         feedback: feedback || "",
-        item_results: itemResults,
+        ...(isQuizSubmission
+          ? {
+              quiz_deductions: Object.entries(quizDeductions).map(
+                ([contentItemId, deduction]) => ({
+                  content_item_id: Number(contentItemId),
+                  deduction,
+                }),
+              ),
+            }
+          : { item_results: itemResults }),
         update_status: true,
       });
 
@@ -1068,7 +1098,21 @@ export default function GradingPage() {
 
     // Issue #830: 小考自動判分 — 逐題對錯 + 答對率，不走 ReadingAssessmentPanel
     if (submission.practice_mode?.endsWith("_quiz")) {
-      return <QuizGradingPanel submission={submission} activeTab={activeTab} />;
+      return (
+        <QuizGradingPanel
+          submission={submission}
+          activeTab={activeTab}
+          deductions={quizDeductions}
+          // Issue #1045: 任一扣分改動 → 總分 = round1(max(0, 100 − Σ扣分))；
+          // 老師之後直接改總分則以總分為準（扣分不反向改）
+          onDeductionChange={(contentItemId, value) => {
+            const next = { ...quizDeductions, [contentItemId]: value };
+            setQuizDeductions(next);
+            setScore(scoreFromDeductions(next));
+            setIsAutoCalculatedScore(false);
+          }}
+        />
+      );
     }
 
     return (

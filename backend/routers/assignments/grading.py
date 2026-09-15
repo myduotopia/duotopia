@@ -941,6 +941,61 @@ def _is_quiz_assignment(
     )
 
 
+def _save_quiz_deductions(
+    db: Session,
+    student_assignment: StudentAssignment,
+    deductions: List[Dict[str, Any]],
+    teacher_id: int,
+) -> None:
+    """#1045 小考每題扣分 → StudentItemProgress.teacher_review_score（以 content_item_id 對題）。
+
+    不經 item_results 的 item_index / StudentContentProgress 映射，所以多題組或
+    沒有 StudentContentProgress 的小考也能正確對題。content_item_id 不屬於本作業 → 400。
+    """
+    valid_ids = {
+        row[0]
+        for row in db.query(ContentItem.id)
+        .join(AssignmentContent, AssignmentContent.content_id == ContentItem.content_id)
+        .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
+        .all()
+    }
+    unknown = sorted(
+        {d["content_item_id"] for d in deductions} - valid_ids,
+    )
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"content_item_id not in this assignment: {unknown}",
+        )
+
+    ids = {d["content_item_id"] for d in deductions}
+    progress_by_item = {
+        ip.content_item_id: ip
+        for ip in db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == student_assignment.id,
+            StudentItemProgress.content_item_id.in_(ids),
+        )
+        .all()
+    }
+    now = datetime.now(timezone.utc)
+    for entry in deductions:
+        item_id = entry["content_item_id"]
+        progress = progress_by_item.get(item_id)
+        if progress is None:
+            progress = StudentItemProgress(
+                student_assignment_id=student_assignment.id,
+                content_item_id=item_id,
+                status="NOT_SUBMITTED",
+                review_status="PENDING",
+            )
+            db.add(progress)
+            progress_by_item[item_id] = progress
+        progress.teacher_review_score = entry["deduction"]
+        progress.teacher_id = teacher_id
+        progress.teacher_reviewed_at = now
+
+
 @router.post("/{assignment_id}/grade")
 async def grade_student_assignment(
     assignment_id: int,
@@ -990,8 +1045,10 @@ async def grade_student_assignment(
     # 小考自動判分：預設不覆寫系統算的分數（避免送 null 歸零）；但老師在批改頁
     # 明確調整分數時（score 有值）允許寫入，作為老師最終裁量（#861 c-2）。
     # 非小考一律沿用送來的 score。
+    is_quiz = _is_quiz_assignment(db, assignment)
     incoming_score = grade_data.get("score")
-    if not _is_quiz_assignment(db, assignment) or incoming_score is not None:
+    # #1045：老師直接改總分時以送出的 score 為準，扣分不反向改寫總分
+    if not is_quiz or incoming_score is not None:
         assignment.score = incoming_score
     assignment.feedback = grade_data.get("feedback")
 
@@ -1000,8 +1057,15 @@ async def grade_student_assignment(
         assignment.status = AssignmentStatus.GRADED
         assignment.graded_at = datetime.now(timezone.utc)
 
+    # #1045 小考每題扣分（以 content_item_id upsert teacher_review_score）
+    if is_quiz and grade_data.get("quiz_deductions"):
+        _save_quiz_deductions(
+            db, assignment, grade_data["quiz_deductions"], current_teacher.id
+        )
+
     # 更新個別題目的評分和回饋
-    if "item_results" in grade_data:
+    # #1045：小考不走 item_results —— 其 100/60 映射會覆寫存在 teacher_review_score 的扣分
+    if "item_results" in grade_data and not is_quiz:
         # 獲取所有內容進度記錄
         progress_records = (
             db.query(StudentContentProgress)
