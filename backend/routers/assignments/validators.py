@@ -290,6 +290,13 @@ class TeacherItemGradeResult(BaseModel):
     score: Optional[float] = Field(default=None, ge=0, le=100)
 
 
+class QuizDeduction(BaseModel):
+    """#1045 小考每題扣分：以 content_item_id 對題（不經 item_results 的 100/60 映射）。"""
+
+    content_item_id: int
+    deduction: float = Field(ge=0, le=100)
+
+
 class GradeStudentAssignmentRequest(BaseModel):
     """Body for POST /{assignment_id}/grade."""
 
@@ -298,6 +305,8 @@ class GradeStudentAssignmentRequest(BaseModel):
     feedback: Optional[str] = None
     update_status: bool = True
     item_results: Optional[List[TeacherItemGradeResult]] = None
+    # #1045 小考批改頁每題扣分，存 StudentItemProgress.teacher_review_score
+    quiz_deductions: Optional[List[QuizDeduction]] = None
 
 
 class SetAssignmentInProgressRequest(BaseModel):

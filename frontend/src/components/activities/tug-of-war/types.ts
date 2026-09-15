@@ -87,5 +87,4 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
 export const TEAM_A_KEYS = ["1", "2", "3", "4"];
 export const TEAM_B_KEYS = ["7", "8", "9", "0"];
 
-// Display labels for options (shown in UI)
-export const OPTION_LABELS = ["A", "B", "C", "D"];
+// Display labels for options: moved to ../shared/optionLabels (#1045 單一來源)

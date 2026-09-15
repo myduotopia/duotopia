@@ -14,6 +14,7 @@
  *   - showIncorrect → 紅底/邊/字 + 左上角 ✗
  *   - 兩者皆無 + 答題已揭示但這顆不是正解也不是學生選的 → opacity-50 淡化
  * - 選中態（!showResult）：ring-2 ring-indigo-400 + scale-95
+ * - #1045 `label`（選填，A/B/C/D）：左上角角標；有角標時 ✓/✗ 揭示圖示改放右上角避免重疊
  */
 
 import { useRef } from "react";
@@ -41,6 +42,8 @@ interface Props {
   showCorrect?: boolean;
   showIncorrect?: boolean;
   animateReveal?: boolean;
+  // #1045 選項標號（A/B/C/D），左上角角標；不傳則不顯示
+  label?: string;
 }
 
 export default function WordSelectionOptionButton({
@@ -55,6 +58,7 @@ export default function WordSelectionOptionButton({
   showCorrect,
   showIncorrect,
   animateReveal,
+  label,
 }: Props) {
   const renderAsImage = showAsImage && !!imageUrl;
   const dimmed = showResult && !showCorrect && !showIncorrect;
@@ -78,7 +82,7 @@ export default function WordSelectionOptionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label={text}
+      aria-label={label ? `${label}. ${text}` : text}
       className={cn(
         "h-full min-h-[4rem] py-1 px-3 sm:py-1 sm:px-4 font-medium",
         "grid overflow-hidden",
@@ -97,10 +101,20 @@ export default function WordSelectionOptionButton({
         dimmed && "opacity-50",
       )}
     >
+      {label && (
+        <span
+          data-testid="option-label"
+          aria-hidden="true"
+          className="absolute top-1.5 left-2 z-10 text-xs sm:text-sm font-bold leading-none text-gray-500"
+        >
+          {label}
+        </span>
+      )}
       {(showCorrect || showIncorrect) && (
         <span
           className={cn(
-            "absolute top-2 left-2 z-10",
+            "absolute top-2 z-10",
+            label ? "right-2" : "left-2",
             animateReveal && "animate-in zoom-in-50 fade-in duration-500",
           )}
         >

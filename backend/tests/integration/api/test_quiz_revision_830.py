@@ -367,13 +367,12 @@ def test_revision_success_freezes_original_score(setup_database):
     assert stored == 66.7
 
 
-def test_first_submission_all_wrong_scores_point_one(setup_database):
-    """All-wrong first submission → score 0.1 (NOT 0.0), SUBMITTED.
+def test_first_submission_all_wrong_scores_zero(setup_database):
+    """All-wrong first submission → score 0.0, SUBMITTED.
 
-    Documents the deliberate edge case flagged in the #845 review: with 3 items,
-    per_question = round(100/3, 1) = 33.3, so 100 - 3*33.3 = 0.1 after rounding,
-    which clamps to 0.1 rather than the old formula's 0.0. Pinning this guards
-    against an accidental flip back to a hard zero.
+    #1045 changed per_question to the exact 100/n (no pre-rounding; only the
+    total rounds to 1dp), so 3 wrong out of 3 is a clean 0 instead of the old
+    round(100/3, 1)=33.3 residue of 0.1.
     """
     _seed()
     headers = _student_headers()
@@ -385,7 +384,7 @@ def test_first_submission_all_wrong_scores_point_one(setup_database):
     done = _complete(headers, session_id)
     assert done.status_code == 200, done.text
     body = done.json()
-    assert body["score"] == 0.1
+    assert body["score"] == 0.0
     assert body["correct_count"] == 0
     assert _sa_status() == AssignmentStatus.SUBMITTED
 

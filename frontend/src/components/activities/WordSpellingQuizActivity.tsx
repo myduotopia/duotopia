@@ -12,6 +12,18 @@
  *
  * #844：手機/平板顯示 VirtualKeyboard（同艾賓浩斯版 WordSpellingActivity），
  * mobile 在卡片下方、tablet 在右側；inputMode=none 抑制系統鍵盤建議列。
+ *
+ * #1045：autosave 與換題/送出共用 quizAnswerPersist 追蹤器：僅已確認成功的值略過，in-flight 失敗會重送，送出前 flush（防並發重複列且不遺失答案）。
+ *
+ * #1045 階段 4（老師預覽頁）：revealAnswersOnSubmit=false（考前說明）提交後只顯示「示範結束」＋
+ * 「重新示範」，不顯示分數/✓✗/正解；true（考後檢討）顯示 QuizReviewView ＋「重新示範」；
+ * undefined（學生作答、demo、派發 dialog 即時預覽）行為不變。
+ *
+ * #1045 階段 4b：考後檢討預覽（isLivePreview && revealAnswersOnSubmit===true）每題作答當下判斷，
+ * 答對播 ScoreOverlay（不自動跳題）、答錯揭示正解並鎖定該題；考前說明／學生作答／訂正流程不變。
+ * #1045 階段 4c：回饋對齊艾賓浩斯練習版 — 答對輸入格綠＋星星動畫（不翻卡）；答錯輸入格直接顯示
+ * 紅色正解並鎖定、不播動畫。提交計分用判斷當下的原始作答（previewOriginalTyped），答錯仍算錯。
+ * 作答卡片不再有內部卷軸（移除 max-h 與 overflow-y-auto），內容撐開、由瀏覽器外層捲動。
  */
 
 import {
@@ -34,6 +46,7 @@ import { apiClient } from "@/lib/api";
 import { withDemoOverrides } from "@/lib/demoOverrides";
 import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
+import { createAnswerPersistTracker } from "./shared/quizAnswerPersist";
 import { useShortLandscape } from "./shared/useShortLandscape";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
@@ -42,6 +55,10 @@ import QuizAnswerInput, {
 } from "./shared/QuizAnswerInput";
 import VirtualKeyboard from "./shared/VirtualKeyboard";
 import CardNavArrow from "./shared/CardNavArrow";
+import ScoreOverlay from "./shared/ScoreOverlay";
+import PreviewDemoDoneView, {
+  RestartDemoButton,
+} from "./shared/PreviewDemoDoneView";
 import QuizReviewView, {
   type QuizReviewPayload,
   type QuizReviewWord,
@@ -92,6 +109,11 @@ interface Props {
   previewSettings?: Partial<StartResponse>;
   // #830: 老師預覽時注入每張卡底部的「該題班級表現」%條（學生端不傳）。
   renderCardFooter?: (contentItemId: number) => ReactNode;
+  // #1045 階段 4：老師預覽頁模式。false＝考前說明（提交後不對答案）、true＝考後檢討；
+  // undefined＝維持原行為（學生作答、demo、派發 dialog 即時預覽）。僅 previewWords 路徑生效。
+  revealAnswersOnSubmit?: boolean;
+  // #1045 階段 4：「重新示範」— 父層遞增 key 重掛載，回到第一題並清空作答
+  onRestartDemo?: () => void;
 }
 
 export default function WordSpellingQuizActivity({
@@ -102,10 +124,31 @@ export default function WordSpellingQuizActivity({
   previewWords,
   previewSettings,
   renderCardFooter,
+  revealAnswersOnSubmit,
+  onRestartDemo,
 }: Props) {
   void _isPreviewMode;
   const { t } = useTranslation();
   const isLivePreview = !!previewWords;
+  // #1045 階段 4：考前說明模式提交後的「示範結束」狀態
+  const [demoDone, setDemoDone] = useState(false);
+  const revealAnswersRef = useRef(revealAnswersOnSubmit);
+  revealAnswersRef.current = revealAnswersOnSubmit;
+  // #1045 階段 4b：考後檢討預覽 → 每題作答當下判斷、答對播 ScoreOverlay、答錯揭示正解。
+  // 只在老師預覽頁（previewWords）且明確選「考後檢討」時生效；學生作答、訂正、考前說明不受影響。
+  const isReviewDemo = isLivePreview && revealAnswersOnSubmit === true;
+  const [previewResultByItem, setPreviewResultByItem] = useState<
+    Record<number, boolean>
+  >({});
+  const [previewOverlayOpen, setPreviewOverlayOpen] = useState(false);
+  // #1045 階段 4c：答錯後輸入格改顯示正解，提交計分須用判斷當下的原始作答
+  const [previewOriginalTyped, setPreviewOriginalTyped] = useState<
+    Record<number, string>
+  >({});
+  const closePreviewOverlay = useCallback(
+    () => setPreviewOverlayOpen(false),
+    [],
+  );
 
   const [loading, setLoading] = useState(!isLivePreview);
   const [words, setWords] = useState<QuizWord[]>([]);
@@ -145,7 +188,7 @@ export default function WordSpellingQuizActivity({
   const navSlot = useQuizNavSlot();
   // #844：手機/平板顯示虛擬鍵盤（同艾賓浩斯版）；桌機用實體鍵盤
   const deviceMode = useInputDeviceMode();
-  // #861 E: 手機橫放（矮）→ 題目與鍵盤共用一個捲軸，避免互搶高度
+  // #861 E: 手機橫放（矮）→ 版面不強制填滿高度（#1045 階段 4b 起改由瀏覽器外層捲動，無內部卷軸）
   const shortLandscape = useShortLandscape();
   // #861 E: 老師預覽也顯示虛擬鍵盤（即使桌機）以便示範
   const useVirtualKeyboard = isLivePreview || deviceMode !== "desktop";
@@ -298,10 +341,12 @@ export default function WordSpellingQuizActivity({
     async (
       itemId: number,
       typed: string,
-    ): Promise<{ ok: boolean; isCorrect?: boolean }> => {
-      if (isLivePreview || isDemoMode || sessionId == null) return { ok: true };
+    ): Promise<{ ok: boolean; isCorrect?: boolean; skipped?: boolean }> => {
+      // #1045: 沒有真的送出 → skipped，tracker 不會記成已確認，之後仍會重送
+      if (isLivePreview || isDemoMode || sessionId == null)
+        return { ok: true, skipped: true };
       const trimmed = typed.trim();
-      if (!trimmed) return { ok: true };
+      if (!trimmed) return { ok: true, skipped: true };
       try {
         const data = (await apiClient.post(
           `/api/students/assignments/${assignmentId}/vocabulary/spelling_quiz/answer`,
@@ -324,12 +369,34 @@ export default function WordSpellingQuizActivity({
   );
 
   // 學生切題 / 提交時用。失敗會 toast，並回傳 false 讓 caller 決定重試。
+  // #1045: autosave 與換題/送出共用的寫入追蹤器。只有「已確認成功」的值才略過；
+  // 同題同值 in-flight 時 await 它、失敗則重送；送出整卷前 flush 等所有 in-flight。
+  const persistItemAnswerRef = useRef(persistItemAnswer);
+  persistItemAnswerRef.current = persistItemAnswer;
+  const persistTrackerRef = useRef<ReturnType<
+    typeof createAnswerPersistTracker<{
+      ok: boolean;
+      isCorrect?: boolean;
+      skipped?: boolean;
+    }>
+  > | null>(null);
+  // lazy init：只在首次使用時建立 tracker（refs 穩定，故 deps 為空）
+  const getPersistTracker = useCallback(() => {
+    if (!persistTrackerRef.current) {
+      persistTrackerRef.current = createAnswerPersistTracker(
+        () => persistItemAnswerRef.current,
+      );
+    }
+    return persistTrackerRef.current;
+  }, []);
+
   const persistAnswer = useCallback(async (): Promise<boolean> => {
     if (!currentWord) return true;
-    const typed = typedByItem[currentWord.content_item_id] || "";
+    const itemId = currentWord.content_item_id;
+    const typed = typedByItem[itemId] || "";
     if (!typed.trim()) return true;
     setSubmittingAnswer(true);
-    const res = await persistItemAnswer(currentWord.content_item_id, typed);
+    const res = await getPersistTracker().save(itemId, typed.trim());
     setSubmittingAnswer(false);
     if (!res.ok) {
       toast.error(
@@ -337,7 +404,7 @@ export default function WordSpellingQuizActivity({
       );
     }
     return res.ok;
-  }, [currentWord, persistItemAnswer, t, typedByItem]);
+  }, [getPersistTracker, currentWord, t, typedByItem]);
 
   const goTo = useCallback(
     async (idx: number) => {
@@ -350,11 +417,21 @@ export default function WordSpellingQuizActivity({
 
   const handleSubmitAll = useCallback(async () => {
     if (isLivePreview) {
+      // #1045 階段 4：考前說明 → 不組複盤資料，不揭示分數/對錯/正解
+      if (revealAnswersRef.current === false) {
+        setDemoDone(true);
+        return;
+      }
       // #861 D: 預覽提交 → 前端用目前打字作答組複盤，重用學生端 QuizReviewView。
       const norm = (s: string | null | undefined) =>
         (s ?? "").trim().toLowerCase();
       const reviewWords: SpellingReviewWord[] = words.map((w) => {
-        const typed = (typedByItem[w.content_item_id] || "").trim();
+        // #1045 階段 4c：已對答案的題用判斷當下的原始作答（答錯後輸入格已改為正解）
+        const typed = (
+          previewOriginalTyped[w.content_item_id] ??
+          typedByItem[w.content_item_id] ??
+          ""
+        ).trim();
         const isCorrect = !!typed && norm(typed) === norm(w.text);
         return {
           content_item_id: w.content_item_id,
@@ -396,6 +473,9 @@ export default function WordSpellingQuizActivity({
       // 但提示學生（避免靜默失敗）。已答對的題目早已 persist，不會被影響。
       let persisted = await persistAnswer();
       if (!persisted) persisted = await persistAnswer();
+      // #1045: 等所有題目的 in-flight autosave 完成（失敗者重送）後才 finalize
+      const allFlushed = await getPersistTracker().flush();
+      if (!allFlushed) persisted = false;
       if (!persisted) {
         toast.warning(
           t("wordQuiz.toast.lastAnswerNotSaved") ||
@@ -415,6 +495,8 @@ export default function WordSpellingQuizActivity({
       setCompleting(false);
     }
   }, [
+    getPersistTracker,
+    previewOriginalTyped,
     assignmentId,
     isDemoMode,
     isLivePreview,
@@ -455,6 +537,26 @@ export default function WordSpellingQuizActivity({
     currentIndex,
     handleSubmitAll,
   ]);
+
+  // #1045 階段 4b：考後檢討預覽「對答案」（按鈕或 Enter）— 本地比對，答對播動畫、答錯揭示正解
+  const handlePreviewCheck = useCallback(() => {
+    if (!currentWord) return;
+    const itemId = currentWord.content_item_id;
+    if (previewResultByItem[itemId] !== undefined) return;
+    const typed = (typedByItem[itemId] || "").trim();
+    if (!typed) return;
+    const isCorrect =
+      typed.toLowerCase() === (currentWord.text || "").trim().toLowerCase();
+    setPreviewOriginalTyped((m) => ({ ...m, [itemId]: typed }));
+    setPreviewResultByItem((m) => ({ ...m, [itemId]: isCorrect }));
+    if (isCorrect) {
+      // #1045 階段 4c：答對 → 輸入格綠＋星星動畫（不翻卡）
+      setPreviewOverlayOpen(true);
+    } else {
+      // #1045 階段 4c：答錯 → 輸入格直接顯示紅色正解並鎖定，不播動畫
+      setTypedByItem((m) => ({ ...m, [itemId]: currentWord.text || "" }));
+    }
+  }, [currentWord, previewResultByItem, typedByItem]);
 
   const answeredCount = useMemo(
     () =>
@@ -506,7 +608,6 @@ export default function WordSpellingQuizActivity({
 
   // Issue #828: 學生只打字、未送出、未切題時自動 persist，避免
   // 「時間到才提交但網路抖一下答案沒進 DB」的場景。
-  const lastPersistedRef = useRef<Record<number, string>>({});
   useEffect(() => {
     // 訂正模式不自動 persist：改答案由學生按「送出」明確觸發，才即時揭示正解
     if (
@@ -520,13 +621,13 @@ export default function WordSpellingQuizActivity({
     const itemId = currentWord.content_item_id;
     const val = (typedByItem[itemId] || "").trim();
     if (!val) return;
-    if (lastPersistedRef.current[itemId] === val) return;
+    if (getPersistTracker().isSavedOrPending(itemId, val)) return;
     const handle = setTimeout(() => {
-      lastPersistedRef.current[itemId] = val;
-      persistItemAnswer(itemId, val);
+      void getPersistTracker().save(itemId, val);
     }, 1000);
     return () => clearTimeout(handle);
   }, [
+    getPersistTracker,
     currentWord,
     typedByItem,
     isLivePreview,
@@ -547,6 +648,10 @@ export default function WordSpellingQuizActivity({
     );
   }
 
+  if (demoDone) {
+    return <PreviewDemoDoneView onRestart={onRestartDemo} />;
+  }
+
   if (alreadySubmitted) {
     if (reviewLoading || !reviewData) {
       return (
@@ -558,6 +663,13 @@ export default function WordSpellingQuizActivity({
     return (
       <QuizReviewView
         data={reviewData}
+        // #1045 階段 4：老師預覽頁（有模式）隱藏「提交後不可重做」並附「重新示範」
+        isPreview={isLivePreview && revealAnswersOnSubmit !== undefined}
+        footer={
+          isLivePreview && revealAnswersOnSubmit !== undefined ? (
+            <RestartDemoButton onRestart={onRestartDemo} />
+          ) : undefined
+        }
         renderQuestion={(w) => (
           <div className="text-center py-2 space-y-1">
             {w.image_url && (
@@ -595,6 +707,11 @@ export default function WordSpellingQuizActivity({
   const currentResolved = currentCorrect === true;
   const everyResolved = allCorrect(words, correctByItem);
   const currentReveal = revealByItem[currentWord.content_item_id];
+  // #1045 階段 4b：考後檢討預覽該題判斷結果（undefined＝尚未對答案）
+  const previewResult = isReviewDemo
+    ? previewResultByItem[currentWord.content_item_id]
+    : undefined;
+  const previewJudged = previewResult !== undefined;
 
   // 題號 bar — Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
@@ -654,21 +771,16 @@ export default function WordSpellingQuizActivity({
   );
 
   return (
-    <div className="flex flex-col gap-4 min-h-[calc(98dvh-14rem)] max-h-[98dvh]">
+    <div className="flex flex-col gap-4 min-h-[calc(98dvh-14rem)]">
       {navSlot ? (
         createPortal(navBar, navSlot)
       ) : (
         <div className="flex gap-1 sm:gap-1.5 items-center">{navBar}</div>
       )}
 
-      {/* #861 E: 鍵盤一律置於下方（移除平板右側窄欄）。手機橫放(shortLandscape)時
-          外層整塊一起捲，題目與鍵盤共用一個捲軸、互不搶高度。 */}
-      <div
-        className={cn(
-          "flex-1 min-h-0 flex flex-col gap-4",
-          shortLandscape && "overflow-y-auto",
-        )}
-      >
+      {/* #861 E: 鍵盤一律置於下方（移除平板右側窄欄）。
+          #1045 階段 4b：卡片不再有內部卷軸（含手機橫放），題目與鍵盤一起撐開、由瀏覽器外層捲動。 */}
+      <div className="flex-1 flex flex-col gap-4">
         <div
           className={cn(
             "min-w-0 flex flex-col",
@@ -704,7 +816,7 @@ export default function WordSpellingQuizActivity({
               <div
                 className={cn(
                   "flex flex-col gap-4 px-10 sm:px-12",
-                  !shortLandscape && "flex-1 min-h-0 overflow-y-auto",
+                  !shortLandscape && "flex-1",
                 )}
               >
                 <div className="text-sm text-gray-500">
@@ -767,26 +879,40 @@ export default function WordSpellingQuizActivity({
                   useVirtualKeyboard={useVirtualKeyboard}
                   value={typedByItem[currentWord.content_item_id] || ""}
                   expectedAnswer={currentWord.text}
-                  onChange={(next) =>
+                  onChange={(next) => {
+                    // #1045 階段 4b：已對答案的題鎖定（含虛擬鍵盤輸入）
+                    if (previewJudged) return;
                     setTypedByItem((m) => ({
                       ...m,
                       [currentWord.content_item_id]: next,
-                    }))
-                  }
+                    }));
+                  }}
                   // 訂正：對答案；其餘：暫存/跳題。最後一題整卷送出改由頁面頂部「提交」負責，
                   // 故最後一題隱藏內嵌箭頭（hideSubmitButton），避免重複提交入口。
                   onSubmit={
-                    isRevision
-                      ? handleRevisionCheck
-                      : isLast
-                        ? () => persistAnswer()
-                        : () => goTo(currentIndex + 1)
+                    isReviewDemo
+                      ? handlePreviewCheck
+                      : isRevision
+                        ? handleRevisionCheck
+                        : isLast
+                          ? () => persistAnswer()
+                          : () => goTo(currentIndex + 1)
                   }
-                  hideSubmitButton={isLast && !isRevision}
+                  // #1045 階段 4b：考後檢討預覽沿用同一顆送出箭頭（與 Enter 同走 onSubmit → 對答案）；
+                  // 最後一題也要能判斷，故預覽時不隱藏。箭頭於未作答或已判斷（disabled）時不可按。
+                  hideSubmitButton={isLast && !isRevision && !isReviewDemo}
                   // 訂正模式已答對的題目鎖定唯讀，不可再改
-                  disabled={isRevision && currentResolved}
+                  disabled={(isRevision && currentResolved) || previewJudged}
                   submitting={submittingAnswer}
-                  // #844：小考 input 一律中性色，不因正誤變色（防作弊；state 預設 neutral）
+                  // #844：小考 input 一律中性色，不因正誤變色（防作弊；state 預設 neutral）。
+                  // #1045 階段 4c 例外：老師考後檢討預覽已對答案 → 答對綠、答錯紅（顯示正解）
+                  state={
+                    previewResult === true
+                      ? "correct"
+                      : previewResult === false
+                        ? "wrong"
+                        : "neutral"
+                  }
                   autoFocus
                 />
 
@@ -837,6 +963,15 @@ export default function WordSpellingQuizActivity({
           </div>
         )}
       </div>
+      {/* #1045 階段 4b：考後檢討預覽答對動畫（fixed 全螢幕，結束後關閉；不自動跳題） */}
+      {isReviewDemo && (
+        <ScoreOverlay
+          open={previewOverlayOpen}
+          score={100}
+          isError={false}
+          onComplete={closePreviewOverlay}
+        />
+      )}
     </div>
   );
 }

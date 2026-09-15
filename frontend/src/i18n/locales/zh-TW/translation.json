@@ -3173,7 +3173,11 @@
       "noAnswers": "尚無作答紀錄",
       "studentAnswer": "學生答案",
       "correctAnswer": "正解",
-      "blank": "（未作答）"
+      "blank": "（未作答）",
+      "question": "題目",
+      "options": "選項",
+      "deduction": "扣分",
+      "deductionHint": "答對預設 0、答錯預設單題分；修改後總分即時更新"
     },
     "tabs": {
       "students": "學生",
@@ -3384,6 +3388,20 @@
     "info": {
       "description": "這是預覽示範模式，您看到的畫面與學生完全相同。所有操作（包括錄音）都可正常使用，但不會儲存到資料庫。",
       "suffix": "：您看到的畫面與學生完全相同。所有操作（包括錄音）都可正常使用，但不會儲存到資料庫。"
+    },
+    "quizMode": {
+      "chooseTitle": "選擇示範方式",
+      "explain": "考前說明（不對答案）",
+      "explainDesc": "投影示範怎麼作答；提交後不顯示分數、對錯與正解。",
+      "review": "考後檢討（對答案）",
+      "reviewDesc": "帶全班對答案；提交後顯示分數、每題對錯與正解。",
+      "explainShort": "考前說明",
+      "reviewShort": "考後檢討",
+      "current": "目前模式：{{mode}}",
+      "switchTo": "切換為{{mode}}",
+      "demoDone": "示範結束",
+      "demoDoneDesc": "考前說明模式不顯示分數與正解。",
+      "restart": "重新示範"
     }
   },
   "teacherClassrooms": {

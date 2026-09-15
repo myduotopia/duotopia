@@ -3030,7 +3030,11 @@
       "noAnswers": "No answers yet",
       "studentAnswer": "Answer",
       "correctAnswer": "Correct",
-      "blank": "(blank)"
+      "blank": "(blank)",
+      "question": "Question",
+      "options": "Options",
+      "deduction": "Deduction",
+      "deductionHint": "Defaults: 0 if correct, one question's points if wrong. Total updates instantly."
     },
     "tabs": {
       "students": "Students",
@@ -3385,6 +3389,20 @@
     "info": {
       "description": "This is preview mode. You see exactly what students see. All operations (including recording) work normally, but nothing is saved to the database.",
       "suffix": " - You see exactly what students see. All operations (including recording) work normally, but nothing is saved to the database."
+    },
+    "quizMode": {
+      "chooseTitle": "Choose a demo mode",
+      "explain": "Pre-quiz walkthrough (no answers)",
+      "explainDesc": "Show the class how to answer; after submitting, no score, right/wrong or correct answers are shown.",
+      "review": "Post-quiz review (show answers)",
+      "reviewDesc": "Go over answers with the class; after submitting, show the score, each question's result and the correct answers.",
+      "explainShort": "Pre-quiz walkthrough",
+      "reviewShort": "Post-quiz review",
+      "current": "Mode: {{mode}}",
+      "switchTo": "Switch to {{mode}}",
+      "demoDone": "Demo finished",
+      "demoDoneDesc": "Walkthrough mode doesn't show the score or correct answers.",
+      "restart": "Restart demo"
     }
   },
   "teacherClassrooms": {
