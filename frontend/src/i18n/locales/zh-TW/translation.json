@@ -3401,7 +3401,8 @@
       "switchTo": "切換為{{mode}}",
       "demoDone": "示範結束",
       "demoDoneDesc": "考前說明模式不顯示分數與正解。",
-      "restart": "重新示範"
+      "restart": "重新示範",
+      "checkAnswer": "對答案"
     }
   },
   "teacherClassrooms": {

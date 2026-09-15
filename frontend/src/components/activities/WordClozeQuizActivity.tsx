@@ -14,6 +14,10 @@
  * #1045 階段 4（老師預覽頁）：revealAnswersOnSubmit=false（考前說明）提交後只顯示「示範結束」＋
  * 「重新示範」，不顯示分數/✓✗/正解；true（考後檢討）顯示 QuizReviewView ＋「重新示範」；
  * undefined（學生作答、demo、派發 dialog 即時預覽）行為不變。
+ *
+ * #1045 階段 4b：考後檢討預覽（isLivePreview && revealAnswersOnSubmit===true）每題作答當下判斷，
+ * 答對播 ScoreOverlay（不自動跳題）、答錯揭示正解並鎖定該題；考前說明／學生作答／訂正流程不變。
+ * 作答卡片不再有內部卷軸（移除 max-h 與 overflow-y-auto），內容撐開、由瀏覽器外層捲動。
  */
 
 import {
@@ -46,6 +50,7 @@ import ClozeBlankText from "./shared/ClozeBlankText";
 import { buildClozeBlank } from "./shared/clozeBlank";
 import VirtualKeyboard from "./shared/VirtualKeyboard";
 import CardNavArrow from "./shared/CardNavArrow";
+import ScoreOverlay from "./shared/ScoreOverlay";
 import PreviewDemoDoneView, {
   RestartDemoButton,
 } from "./shared/PreviewDemoDoneView";
@@ -147,6 +152,17 @@ export default function WordClozeQuizActivity({
   const [demoDone, setDemoDone] = useState(false);
   const revealAnswersRef = useRef(revealAnswersOnSubmit);
   revealAnswersRef.current = revealAnswersOnSubmit;
+  // #1045 階段 4b：考後檢討預覽 → 每題作答當下判斷、答對播 ScoreOverlay、答錯揭示正解。
+  // 只在老師預覽頁（previewWords）且明確選「考後檢討」時生效；學生作答、訂正、考前說明不受影響。
+  const isReviewDemo = isLivePreview && revealAnswersOnSubmit === true;
+  const [previewResultByItem, setPreviewResultByItem] = useState<
+    Record<number, boolean>
+  >({});
+  const [previewOverlayOpen, setPreviewOverlayOpen] = useState(false);
+  const closePreviewOverlay = useCallback(
+    () => setPreviewOverlayOpen(false),
+    [],
+  );
 
   const [loading, setLoading] = useState(!isLivePreview);
   const [words, setWords] = useState<QuizWord[]>([]);
@@ -180,7 +196,7 @@ export default function WordClozeQuizActivity({
   const navSlot = useQuizNavSlot();
   // #844：手機/平板顯示虛擬鍵盤（同艾賓浩斯版）；桌機用實體鍵盤
   const deviceMode = useInputDeviceMode();
-  // #861 E: 手機橫放（矮）→ 題目與鍵盤共用一個捲軸，避免互搶高度
+  // #861 E: 手機橫放（矮）→ 版面不強制填滿高度（#1045 階段 4b 起改由瀏覽器外層捲動，無內部卷軸）
   const shortLandscape = useShortLandscape();
   // #861 E: 老師預覽也顯示虛擬鍵盤（即使桌機）以便示範
   const useVirtualKeyboard = isLivePreview || deviceMode !== "desktop";
@@ -507,6 +523,20 @@ export default function WordClozeQuizActivity({
     handleSubmitAll,
   ]);
 
+  // #1045 階段 4b：考後檢討預覽「對答案」（按鈕或 Enter）— 本地比對，答對播動畫、答錯揭示正解
+  const handlePreviewCheck = useCallback(() => {
+    if (!currentWord) return;
+    const itemId = currentWord.content_item_id;
+    if (previewResultByItem[itemId] !== undefined) return;
+    const typed = (typedByItem[itemId] || "").trim();
+    if (!typed) return;
+    const isCorrect =
+      typed.toLowerCase() ===
+      (currentWord.cloze_answer || "").trim().toLowerCase();
+    setPreviewResultByItem((m) => ({ ...m, [itemId]: isCorrect }));
+    if (isCorrect) setPreviewOverlayOpen(true);
+  }, [currentWord, previewResultByItem, typedByItem]);
+
   const answeredCount = useMemo(
     () =>
       Object.values(typedByItem).filter((v) => v && v.trim().length > 0).length,
@@ -652,6 +682,12 @@ export default function WordClozeQuizActivity({
   const currentResolved = currentCorrect === true;
   const everyResolved = allCorrect(words, correctByItem);
   const currentReveal = revealByItem[currentWord.content_item_id];
+  // #1045 階段 4b：考後檢討預覽該題判斷結果（undefined＝尚未對答案）
+  const previewResult = isReviewDemo
+    ? previewResultByItem[currentWord.content_item_id]
+    : undefined;
+  const previewJudged = previewResult !== undefined;
+  const currentTyped = (typedByItem[currentWord.content_item_id] || "").trim();
 
   // 題號 bar — Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
@@ -711,21 +747,16 @@ export default function WordClozeQuizActivity({
   );
 
   return (
-    <div className="flex flex-col gap-4 min-h-[calc(98dvh-14rem)] max-h-[98dvh]">
+    <div className="flex flex-col gap-4 min-h-[calc(98dvh-14rem)]">
       {navSlot ? (
         createPortal(navBar, navSlot)
       ) : (
         <div className="flex gap-1 sm:gap-1.5 items-center">{navBar}</div>
       )}
 
-      {/* #861 E: 鍵盤一律置於下方（移除平板右側窄欄）。手機橫放(shortLandscape)時
-          外層整塊一起捲，題目與鍵盤共用一個捲軸、互不搶高度。 */}
-      <div
-        className={cn(
-          "flex-1 min-h-0 flex flex-col gap-4",
-          shortLandscape && "overflow-y-auto",
-        )}
-      >
+      {/* #861 E: 鍵盤一律置於下方（移除平板右側窄欄）。
+          #1045 階段 4b：卡片不再有內部卷軸（含手機橫放），題目與鍵盤一起撐開、由瀏覽器外層捲動。 */}
+      <div className="flex-1 flex flex-col gap-4">
         <div
           className={cn(
             "min-w-0 flex flex-col",
@@ -761,7 +792,7 @@ export default function WordClozeQuizActivity({
               <div
                 className={cn(
                   "flex flex-col gap-4 px-10 sm:px-12",
-                  !shortLandscape && "flex-1 min-h-0 overflow-y-auto",
+                  !shortLandscape && "flex-1",
                 )}
               >
                 <div className="text-sm text-gray-500">
@@ -823,28 +854,56 @@ export default function WordClozeQuizActivity({
                   useVirtualKeyboard={useVirtualKeyboard}
                   value={typedByItem[currentWord.content_item_id] || ""}
                   expectedAnswer={currentWord.cloze_answer}
-                  onChange={(next) =>
+                  onChange={(next) => {
+                    // #1045 階段 4b：已對答案的題鎖定（含虛擬鍵盤輸入）
+                    if (previewJudged) return;
                     setTypedByItem((m) => ({
                       ...m,
                       [currentWord.content_item_id]: next,
-                    }))
-                  }
+                    }));
+                  }}
                   // 訂正：對答案；其餘：暫存/跳題。最後一題整卷送出改由頁面頂部「提交」負責，
                   // 故最後一題隱藏內嵌箭頭（hideSubmitButton），避免重複提交入口。
                   onSubmit={
-                    isRevision
-                      ? handleRevisionCheck
-                      : isLast
-                        ? () => persistAnswer()
-                        : () => goTo(currentIndex + 1)
+                    isReviewDemo
+                      ? handlePreviewCheck
+                      : isRevision
+                        ? handleRevisionCheck
+                        : isLast
+                          ? () => persistAnswer()
+                          : () => goTo(currentIndex + 1)
                   }
-                  hideSubmitButton={isLast && !isRevision}
+                  // #1045 階段 4b：考後檢討預覽改用下方「對答案」鈕（Enter 仍觸發 onSubmit）
+                  hideSubmitButton={(isLast && !isRevision) || isReviewDemo}
                   // 訂正模式已答對的題目鎖定唯讀，不可再改
-                  disabled={isRevision && currentResolved}
+                  disabled={(isRevision && currentResolved) || previewJudged}
                   submitting={submittingAnswer}
                   // #844：小考 input 一律中性色，不因正誤變色（防作弊；state 預設 neutral）
                   autoFocus
                 />
+
+                {isReviewDemo && (
+                  <div className="flex flex-col items-center gap-2">
+                    <Button
+                      type="button"
+                      data-testid="preview-check-answer"
+                      onClick={handlePreviewCheck}
+                      disabled={!currentTyped || previewJudged}
+                    >
+                      {t("previewPage.quizMode.checkAnswer") || "對答案"}
+                    </Button>
+                    {previewResult === false && (
+                      <p
+                        data-testid="preview-correct-answer"
+                        className="text-center text-sm font-medium text-red-600"
+                      >
+                        {t("wordQuiz.revision.correctAnswer", {
+                          answer: currentWord.cloze_answer,
+                        }) || `正解：${currentWord.cloze_answer}`}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {isRevision && currentReveal && !currentResolved && (
                   <p className="text-center text-sm font-medium text-red-600">
@@ -893,6 +952,15 @@ export default function WordClozeQuizActivity({
           </div>
         )}
       </div>
+      {/* #1045 階段 4b：考後檢討預覽答對動畫（fixed 全螢幕，結束後關閉；不自動跳題） */}
+      {isReviewDemo && (
+        <ScoreOverlay
+          open={previewOverlayOpen}
+          score={100}
+          isError={false}
+          onComplete={closePreviewOverlay}
+        />
+      )}
     </div>
   );
 }

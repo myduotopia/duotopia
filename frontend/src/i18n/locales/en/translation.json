@@ -3402,7 +3402,8 @@
       "switchTo": "Switch to {{mode}}",
       "demoDone": "Demo finished",
       "demoDoneDesc": "Walkthrough mode doesn't show the score or correct answers.",
-      "restart": "Restart demo"
+      "restart": "Restart demo",
+      "checkAnswer": "Check answer"
     }
   },
   "teacherClassrooms": {

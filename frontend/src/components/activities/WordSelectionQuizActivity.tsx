@@ -18,6 +18,10 @@
  * #1045 階段 4（老師預覽頁）：revealAnswersOnSubmit=false（考前說明）提交後只顯示「示範結束」＋
  * 「重新示範」，不顯示分數/✓✗/正解；true（考後檢討）顯示 QuizReviewView ＋「重新示範」；
  * undefined（學生作答、demo、派發 dialog 即時預覽）行為不變。
+ *
+ * #1045 階段 4b：考後檢討預覽（isLivePreview && revealAnswersOnSubmit===true）每題作答當下判斷，
+ * 答對播 ScoreOverlay（不自動跳題）、答錯揭示正解並鎖定該題；考前說明／學生作答／訂正流程不變。
+ * 作答卡片不再有內部卷軸（移除 max-h 與 overflow-y-auto），內容撐開、由瀏覽器外層捲動。
  */
 
 import {
@@ -47,6 +51,7 @@ import { optionLabelAt } from "./shared/optionLabels";
 import ClozeBlankText from "./shared/ClozeBlankText";
 import { buildBlankedSentence } from "@/lib/cloze";
 import { useShortLandscape } from "./shared/useShortLandscape";
+import ScoreOverlay from "./shared/ScoreOverlay";
 import PreviewDemoDoneView, {
   RestartDemoButton,
 } from "./shared/PreviewDemoDoneView";
@@ -140,6 +145,17 @@ export default function WordSelectionQuizActivity({
   const [demoDone, setDemoDone] = useState(false);
   const revealAnswersRef = useRef(revealAnswersOnSubmit);
   revealAnswersRef.current = revealAnswersOnSubmit;
+  // #1045 階段 4b：考後檢討預覽 → 每題作答當下判斷、答對播 ScoreOverlay、答錯揭示正解。
+  // 只在老師預覽頁（previewWords）且明確選「考後檢討」時生效；學生作答、訂正、考前說明不受影響。
+  const isReviewDemo = isLivePreview && revealAnswersOnSubmit === true;
+  const [previewResultByItem, setPreviewResultByItem] = useState<
+    Record<number, boolean>
+  >({});
+  const [previewOverlayOpen, setPreviewOverlayOpen] = useState(false);
+  const closePreviewOverlay = useCallback(
+    () => setPreviewOverlayOpen(false),
+    [],
+  );
 
   const [loading, setLoading] = useState(!isLivePreview);
   const [words, setWords] = useState<QuizWord[]>([]);
@@ -417,6 +433,17 @@ export default function WordSelectionQuizActivity({
     async (text: string) => {
       if (!currentWord) return;
       const itemId = currentWord.content_item_id;
+      // #1045 階段 4b：考後檢討預覽 → 點選即本地判斷並鎖定該題；答對播動畫
+      if (isReviewDemo) {
+        if (previewResultByItem[itemId] !== undefined) return;
+        const isCorrect =
+          text.trim().toLowerCase() ===
+          currentWord.correct_text.trim().toLowerCase();
+        setSelectedByItem((m) => ({ ...m, [itemId]: text }));
+        setPreviewResultByItem((m) => ({ ...m, [itemId]: isCorrect }));
+        if (isCorrect) setPreviewOverlayOpen(true);
+        return;
+      }
       // 訂正模式：已答對的題目鎖定，不可改選
       if (isRevision && correctByItem[itemId] === true) return;
       setSelectedByItem((m) => ({ ...m, [itemId]: text }));
@@ -433,6 +460,8 @@ export default function WordSelectionQuizActivity({
     },
     [
       currentWord,
+      isReviewDemo,
+      previewResultByItem,
       persistSelection,
       isRevision,
       correctByItem,
@@ -608,8 +637,13 @@ export default function WordSelectionQuizActivity({
   const currentResolved = currentCorrect === true;
   const everyResolved = allCorrect(words, correctByItem);
   // 訂正模式下已作答（對或錯）→ 揭示選項正解（參考艾賓浩斯）
+  // #1045 階段 4b：考後檢討預覽已判斷的題 → 同樣揭示正解綠／錯選紅，並鎖定
+  const previewJudged =
+    isReviewDemo &&
+    previewResultByItem[currentWord.content_item_id] !== undefined;
   const revealCurrent =
-    isRevision && (currentCorrect === true || currentCorrect === false);
+    (isRevision && (currentCorrect === true || currentCorrect === false)) ||
+    previewJudged;
 
   // 題號 bar：Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
@@ -671,7 +705,7 @@ export default function WordSelectionQuizActivity({
   );
 
   return (
-    <div className="flex flex-col gap-4 pb-6 sm:pb-8 min-h-[calc(100dvh-14rem)] max-h-[100dvh]">
+    <div className="flex flex-col gap-4 pb-6 sm:pb-8 min-h-[calc(100dvh-14rem)]">
       {navSlot ? (
         createPortal(navBar, navSlot)
       ) : (
@@ -680,7 +714,7 @@ export default function WordSelectionQuizActivity({
         </div>
       )}
 
-      <Card className="relative flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+      <Card className="relative flex-1 flex flex-col border-0 shadow-none bg-transparent">
         {/* #830: 上一題 / 下一題改為卡片左右兩側箭頭（對齊一般單字卡 WordCard） */}
         {currentIndex > 0 && (
           <CardNavArrow
@@ -695,7 +729,7 @@ export default function WordSelectionQuizActivity({
             onClick={() => goTo(currentIndex + 1)}
           />
         )}
-        <CardContent className="flex-1 min-h-0 flex flex-col gap-3 px-10 sm:px-12 py-0">
+        <CardContent className="flex-1 flex flex-col gap-3 px-10 sm:px-12 py-0">
           <div className="text-sm text-gray-500 shrink-0">
             {t("wordQuiz.questionLabel", {
               current: currentWord.question_number,
@@ -816,7 +850,9 @@ export default function WordSelectionQuizActivity({
                       label={optionLabelAt(index)}
                       isSelected={isSelected}
                       // 已答對鎖定；答錯時仍可改選正解
-                      disabled={submittingAnswer || currentResolved}
+                      disabled={
+                        submittingAnswer || currentResolved || previewJudged
+                      }
                       showResult={revealCurrent}
                       showCorrect={revealCurrent && isCorrectOption}
                       showIncorrect={
@@ -857,6 +893,15 @@ export default function WordSelectionQuizActivity({
           {renderCardFooter?.(currentWord.content_item_id)}
         </CardContent>
       </Card>
+      {/* #1045 階段 4b：考後檢討預覽答對動畫（fixed 全螢幕，結束後關閉；不自動跳題） */}
+      {isReviewDemo && (
+        <ScoreOverlay
+          open={previewOverlayOpen}
+          score={100}
+          isError={false}
+          onComplete={closePreviewOverlay}
+        />
+      )}
     </div>
   );
 }
