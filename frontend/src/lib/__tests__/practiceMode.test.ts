@@ -14,6 +14,9 @@ import {
   PRACTICE_MODE_REGISTRY,
   getModeConfig,
   listModesForDataset,
+  listAllDispatchableModes,
+  isDatasetDispatchable,
+  DATASET_DISPATCH_STATUS,
   contentTypeToDataset,
   DEFAULT_MODE_BY_DATASET,
   DATASET_LABEL_KEY,
@@ -200,6 +203,36 @@ describe("listModesForDataset", () => {
   });
 });
 
+describe("listAllDispatchableModes（#1052：班級頁先選方式、空購物車時的 chip 列）", () => {
+  it("列出例句集與單字集的全部模式，依 chip 順序、不重複", () => {
+    const modes = listAllDispatchableModes();
+    expect(modes).toEqual(listModesForDataset("vocabulary_set"));
+    expect(new Set(modes).size).toBe(modes.length);
+    for (const m of listModesForDataset("example_sentences")) {
+      expect(modes).toContain(m);
+    }
+  });
+
+  it("不含開發中的情境對話，也不含不經 dialog 派發的 tug_of_war", () => {
+    const modes = listAllDispatchableModes();
+    expect(modes).not.toContain("scenario_dialogue");
+    expect(modes).not.toContain("tug_of_war");
+  });
+
+  it("不是空的 —— 空清單就是 #1052 的症狀", () => {
+    expect(listAllDispatchableModes().length).toBeGreaterThan(0);
+  });
+});
+
+describe("DATASET_DISPATCH_STATUS（派發開放與否的唯一開關）", () => {
+  it("例句集、單字集已開放；情境對話開發中", () => {
+    expect(isDatasetDispatchable("example_sentences")).toBe(true);
+    expect(isDatasetDispatchable("vocabulary_set")).toBe(true);
+    expect(DATASET_DISPATCH_STATUS.scenario_dialogue).toBe("in_development");
+    expect(isDatasetDispatchable("scenario_dialogue")).toBe(false);
+  });
+});
+
 describe("applyModeDefaults", () => {
   it("帶出 chip onClick 既有的 per-mode 預設", () => {
     // #878：reading 預設 20 秒（10/20/30 選單）
@@ -344,10 +377,13 @@ describe("情境對話的資料集與模式對應（#1031）", () => {
     expect(contentTypeToDataset("scenario_dialogue")).toBe("scenario_dialogue");
   });
 
-  it("情境對話資料集只給情境對話模式 —— 不會混進朗讀或單字模式", () => {
-    expect(listModesForDataset("scenario_dialogue")).toEqual([
+  it("情境對話仍在開發中 → 派發 chip 列不給任何模式（#1052）", () => {
+    // registry 仍保留 supportedDatasets 的對應（既有作業的顯示／批改要用），
+    // 只是 DATASET_DISPATCH_STATUS 還沒開放，派發清單一律過濾掉
+    expect(PRACTICE_MODE_REGISTRY.scenario_dialogue.supportedDatasets).toEqual([
       "scenario_dialogue",
     ]);
+    expect(listModesForDataset("scenario_dialogue")).toEqual([]);
   });
 
   it("情境對話模式不會出現在例句集／單字集的模式清單裡", () => {

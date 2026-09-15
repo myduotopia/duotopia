@@ -1,8 +1,8 @@
-import { ENABLE_SCENARIO_DIALOGUE } from "@/config/featureFlags";
 import {
   PRACTICE_MODE_REGISTRY,
   contentTypeToDataset,
   datasetLabelKeysForMode,
+  isDatasetDispatchable,
   type PracticeMode,
 } from "./practiceMode";
 
@@ -25,10 +25,11 @@ import {
  * 結果是老師可以派出一份「用單字集模式跑的情境對話作業」，學生端再落到不認得的
  * practice_mode。所以這裡把判定從「是不是這兩種」補上「**其餘一律不可派發**」。
  *
- * ## 情境對話（#1031 起可派發）
+ * ## 情境對話（開發中，不可派發）
  *
- * #1030 先把它擋下（當時學生端作答與批改頁都還沒做），#1031 做完後移到支援名單。
- * **防呆本身保留** —— 未來新增的題型仍然預設不可派發，要開放必須明確加進來。
+ * #1030 先把它擋下，#1031 開放，#1039 用 flag 關 prod。#1052 起開放與否統一由
+ * `practiceMode.ts` 的 `DATASET_DISPATCH_STATUS` 決定（目前 `in_development`，所有
+ * 環境都不可派發）。**防呆本身保留** —— 未知型別仍然預設不可派發。
  */
 
 /** 例句集（含 legacy 名稱 READING_ASSESSMENT） */
@@ -55,19 +56,14 @@ export function isScenarioDialogueType(type?: string | null): boolean {
 }
 
 export function isAssignableContentType(type?: string | null): boolean {
-  return (
-    isExampleSentencesType(type) ||
-    isVocabularySetType(type) ||
-    // Issue #1031: 學生端作答與批改頁都做好了，從 #1030 的擋板移到支援名單。
-    // 白名單的意義就在這裡 —— 開放一個題型是「明確加進來」的動作，而不是
-    // 悄悄從某個 fallback 漏過去。
-    //
-    // Issue #1039: 再加一道開關。功能是完整的，但在人工驗證做完之前先關著
-    // （PR #1038 把它連同整條線發到 prod 了）。關閉時等於回到 #1030 的狀態，
-    // 連「還不能派發」的提示文案都是現成的。
-    // prod 關、staging/develop 開 —— 值由 deploy-frontend.yml 依分支決定。
-    (ENABLE_SCENARIO_DIALOGUE && isScenarioDialogueType(type))
-  );
+  // Issue #1052: 開不開放改由 registry 的 DATASET_DISPATCH_STATUS 單一決定，與派發
+  // chip 列同一個來源。原本這裡接 ENABLE_SCENARIO_DIALOGUE（#1039），chip 列卻沒接，
+  // 兩邊各說各話。情境對話仍在開發中，所有環境一律不可派發；該 flag 只留給建立教材
+  // 入口（ContentTypeDialog）。
+  //
+  // 白名單語意不變：未知型別 contentTypeToDataset 回 null → 不可派發。
+  const dataset = contentTypeToDataset(type);
+  return dataset !== null && isDatasetDispatchable(dataset);
 }
 
 /**

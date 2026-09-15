@@ -3,18 +3,11 @@
  *
  * 這張單的起因是「情境對話尚未開放派發，卻在派發流程裡點得下去，而且會被當成
  * 單字集」。所以測試盯的是白名單本身：認得的兩種可派，**其餘一律不可派**。
- */
-import { describe, it, expect, vi } from "vitest";
-
-/**
- * 這個檔案驗的是「模式與型別相不相容」的規則，而那些規則的前提是**該型別可以派發**。
- * 所以這裡把情境對話的功能開關固定成開啟（Issue #1039）—— 否則規則測試會跟著開關的
- * 當下狀態一起紅，而那不是這個檔案要守的東西。
  *
- * 開關本身造成什麼差別（關閉時不可派發、提示改成「還不能派發」），由
- * `featureFlags.scenarioDialogue.test.ts` 兩種狀態都測，包含預設值必須是關閉。
+ * Issue #1052: 可派發與否改由 registry 的 `DATASET_DISPATCH_STATUS` 單一決定，
+ * 不再看 feature flag，所以這裡不需要 mock 開關。情境對話目前是開發中 → 不可派發。
  */
-vi.mock("@/config/featureFlags", () => ({ ENABLE_SCENARIO_DIALOGUE: true }));
+import { describe, it, expect } from "vitest";
 import {
   explainNotSelectable,
   isAssignableContentType,
@@ -58,9 +51,9 @@ describe("可派發白名單", () => {
     expect(isAssignableContentType(type)).toBe(true);
   });
 
-  it("情境對話可以派發（#1031 起：學生端作答與批改頁都做好了）", () => {
-    expect(isAssignableContentType("SCENARIO_DIALOGUE")).toBe(true);
-    expect(isAssignableContentType("scenario_dialogue")).toBe(true);
+  it("情境對話開發中，不可派發（#1052：由 DATASET_DISPATCH_STATUS 決定）", () => {
+    expect(isAssignableContentType("SCENARIO_DIALOGUE")).toBe(false);
+    expect(isAssignableContentType("scenario_dialogue")).toBe(false);
   });
 
   it.each(["MULTIPLE_CHOICE", "SOMETHING_NEW", "", null, undefined])(
@@ -76,11 +69,13 @@ describe("可派發白名單", () => {
 // （見 components/assignment/__tests__/ContentSelectCard.test.tsx）。
 
 describe("整課都不能選時，原因要分得出來（PR #1032 review round 2）", () => {
-  // 用仍不可派發的型別當例子（情境對話已於 #1031 開放）——
-  // 這裡驗的是規則，不是某個特定題型
   it("整課都是還不能派發的題型 → 叫老師換模式沒有用", () => {
     expect(reasonNothingSelectable(["MULTIPLE_CHOICE"])).toBe("not_assignable");
     expect(reasonNothingSelectable(["MULTIPLE_CHOICE", "SOMETHING_NEW"])).toBe(
+      "not_assignable",
+    );
+    // 情境對話開發中，同屬還不能派發
+    expect(reasonNothingSelectable(["SCENARIO_DIALOGUE"])).toBe(
       "not_assignable",
     );
   });
@@ -90,10 +85,6 @@ describe("整課都不能選時，原因要分得出來（PR #1032 review round 
       reasonNothingSelectable(["MULTIPLE_CHOICE", "EXAMPLE_SENTENCES"]),
     ).toBe("mode_mismatch");
     expect(reasonNothingSelectable(["VOCABULARY_SET"])).toBe("mode_mismatch");
-    // #1031 起情境對話也算可派發
-    expect(reasonNothingSelectable(["SCENARIO_DIALOGUE"])).toBe(
-      "mode_mismatch",
-    );
   });
 
   it("空的一課視為「還不能派發」，不會誤導成換模式", () => {
@@ -119,15 +110,19 @@ describe("點了灰掉的卡片要給哪一句提示（Issue #1033）", () => {
 
   it("未選模式時，可派發的型別本來就選得到 —— 沒有要解釋的事", () => {
     expect(explainNotSelectable("EXAMPLE_SENTENCES", "")).toBeNull();
-    expect(explainNotSelectable("SCENARIO_DIALOGUE", "")).toBeNull();
   });
 
   it("選得到的組合回 null，不會憑空跳提示", () => {
     expect(explainNotSelectable("VOCABULARY_SET", "word_reading")).toBeNull();
     expect(explainNotSelectable("EXAMPLE_SENTENCES", "reading")).toBeNull();
-    expect(
-      explainNotSelectable("SCENARIO_DIALOGUE", "scenario_dialogue"),
-    ).toBeNull();
+  });
+
+  it("情境對話開發中 → 任何模式下都說「還不能派發」，不叫老師換模式", () => {
+    for (const mode of ["", "reading", "scenario_dialogue"] as const) {
+      expect(explainNotSelectable("SCENARIO_DIALOGUE", mode)).toEqual({
+        kind: "not_assignable",
+      });
+    }
   });
 
   describe("模式與型別不合時，要說對「現在能選什麼」", () => {
@@ -151,28 +146,6 @@ describe("點了灰掉的卡片要給哪一句提示（Issue #1033）", () => {
       ).toEqual({
         kind: "mode_mismatch",
         allowedDatasetKeys: [DATASET_LABEL_KEY.scenario_dialogue],
-      });
-    });
-
-    it("朗讀模式下點情境對話 → 說例句集與單字集，不是單字集而已", () => {
-      expect(explainNotSelectable("SCENARIO_DIALOGUE", "reading")).toEqual({
-        kind: "mode_mismatch",
-        allowedDatasetKeys: [
-          DATASET_LABEL_KEY.example_sentences,
-          DATASET_LABEL_KEY.vocabulary_set,
-        ],
-      });
-    });
-
-    it("重組模式下點情境對話 → 同樣是例句集與單字集", () => {
-      expect(
-        explainNotSelectable("SCENARIO_DIALOGUE", "rearrangement"),
-      ).toEqual({
-        kind: "mode_mismatch",
-        allowedDatasetKeys: [
-          DATASET_LABEL_KEY.example_sentences,
-          DATASET_LABEL_KEY.vocabulary_set,
-        ],
       });
     });
 

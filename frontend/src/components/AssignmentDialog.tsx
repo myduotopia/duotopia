@@ -75,9 +75,11 @@ import { cn } from "@/lib/utils";
 import {
   practiceModeLabelKey,
   listModesForDataset,
+  listAllDispatchableModes,
   applyModeDefaults,
   getModeConfig,
   DEFAULT_MODE_BY_DATASET,
+  isDatasetDispatchable,
   DATASET_LABEL_KEY,
   type PracticeMode,
   type PracticeDataset,
@@ -731,6 +733,27 @@ export function AssignmentDialog({
       });
     }
   }, [formData.practice_mode]);
+
+  // Issue #1052: 選中的模式必須在 chip 列裡。開啟時 reset 一律寫 word_selection，
+  // 「先帶入內容」的路徑（教材卡派發）若是例句集，word_selection 不在清單裡 ——
+  // chip 沒有一個被選中、預覽卻顯示單字選擇，直接下一步還會派出錯的模式。
+  // 購物車資料集確定後，模式不相容就套該資料集的預設（查 registry，不另寫規則）。
+  // 空購物車（班級頁先選方式）dataset 為 null，不介入。
+  useEffect(() => {
+    const dataset = getCartContentTypeCategory();
+    if (!dataset || !isDatasetDispatchable(dataset)) return;
+    const mode = formData.practice_mode;
+    if (mode && listModesForDataset(dataset).includes(mode as PracticeMode)) {
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      ...(applyModeDefaults(DEFAULT_MODE_BY_DATASET[dataset]) as Partial<
+        typeof prev
+      >),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getCartContentTypeCategory 每次 render 重建，只依 cart 與模式觸發
+  }, [cartItems, formData.practice_mode]);
 
   const loadQuotaInfo = async () => {
     try {
@@ -1624,23 +1647,9 @@ export function AssignmentDialog({
 
   // 處理下一步按鈕點擊
   const handleNextStep = () => {
-    // 從 step 1 移動到 step 2 時，根據內容類型設定預設練習模式（僅在尚未選擇時）
-    if (currentStep === 1 && !formData.practice_mode) {
-      // Issue #1031: 依資料集查表取預設模式，不再用「是不是單字集」的二分法 ——
-      // 加入情境對話之後，二分法會讓它落到 else 選到 rearrangement，那是它根本不
-      // 支援的模式（PR #1034 review round 3）。時間等預設值一併由 registry 帶出，
-      // 不在這裡硬寫秒數。
-      const contentCategory = getCartContentTypeCategory();
-      if (contentCategory) {
-        setFormData((prev) => ({
-          ...prev,
-          // 與下方 chip 切換模式同一種寫法（SettingPatch 的值型別較寬，需收斂）
-          ...(applyModeDefaults(
-            DEFAULT_MODE_BY_DATASET[contentCategory],
-          ) as Partial<typeof prev>),
-        }));
-      }
-    }
+    // Issue #1052: 「依資料集給預設模式」改由上方的相容性 effect 處理（購物車或模式
+    // 一變就校正）。原本這裡只在 practice_mode 為空時生效，但開啟時 reset 已寫入
+    // word_selection，永遠不會空 —— 是死碼，也正是例句集卡片派發時 chip 沒被選中的原因。
 
     // 進入作業詳情前，檢查音檔驗證（從 step 2 或從 step 1 跳過時都需要）
     const nextIndex = stepNumbers.indexOf(currentStep) + 1;
@@ -2872,9 +2881,12 @@ export function AssignmentDialog({
             (() => {
               // Issue #1030: 不要用「不是例句集就是單字集」的二分法 —— 未知型別會被
               // 默默當成單字集，然後顯示一整排單字模式（情境對話就是這樣中招的）。
-              // 購物車現在只可能有可派發的型別，null 代表空車，此時不列模式。
+              // Issue #1052: null 代表空車 ＝「先選方式、再選教材」的路徑（班級頁派發），
+              // 要列出全部可派發模式；有內容時才依資料集縮小。開放與否由 registry 決定。
               const dataset = getCartContentTypeCategory();
-              const modeList = dataset ? listModesForDataset(dataset) : [];
+              const modeList = dataset
+                ? listModesForDataset(dataset)
+                : listAllDispatchableModes();
               const currentConfig = formData.practice_mode
                 ? getModeConfig(formData.practice_mode)
                 : undefined;
