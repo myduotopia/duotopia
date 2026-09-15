@@ -13,7 +13,7 @@
  * #844：手機/平板顯示 VirtualKeyboard（同艾賓浩斯版 WordSpellingActivity），
  * mobile 在卡片下方、tablet 在右側；inputMode=none 抑制系統鍵盤建議列。
  *
- * #1045：autosave 與換題/送出共用 lastPersistedRef，同題同值不重送（防並發重複列）。
+ * #1045：autosave 與換題/送出共用 quizAnswerPersist 追蹤器：僅已確認成功的值略過，in-flight 失敗會重送，送出前 flush（防並發重複列且不遺失答案）。
  */
 
 import {
@@ -36,6 +36,7 @@ import { apiClient } from "@/lib/api";
 import { withDemoOverrides } from "@/lib/demoOverrides";
 import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
+import { createAnswerPersistTracker } from "./shared/quizAnswerPersist";
 import { useShortLandscape } from "./shared/useShortLandscape";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
@@ -326,30 +327,29 @@ export default function WordSpellingQuizActivity({
   );
 
   // 學生切題 / 提交時用。失敗會 toast，並回傳 false 讓 caller 決定重試。
-  // 每題最後一次已送出（或送出中）的值；autosave 與換題/送出共用，同值不重送（#1045）
-  const lastPersistedRef = useRef<Record<number, string>>({});
+  // #1045: autosave 與換題/送出共用的寫入追蹤器。只有「已確認成功」的值才略過；
+  // 同題同值 in-flight 時 await 它、失敗則重送；送出整卷前 flush 等所有 in-flight。
+  const persistItemAnswerRef = useRef(persistItemAnswer);
+  persistItemAnswerRef.current = persistItemAnswer;
+  const persistTrackerRef = useRef(
+    createAnswerPersistTracker(() => persistItemAnswerRef.current),
+  );
 
   const persistAnswer = useCallback(async (): Promise<boolean> => {
     if (!currentWord) return true;
     const itemId = currentWord.content_item_id;
     const typed = typedByItem[itemId] || "";
     if (!typed.trim()) return true;
-    // #1045: 與 autosave 已送的值相同就不再送，避免同題並發寫入造成重複列（監考 31/30）
-    if (lastPersistedRef.current[itemId] === typed.trim()) return true;
-    lastPersistedRef.current[itemId] = typed.trim();
     setSubmittingAnswer(true);
-    const res = await persistItemAnswer(itemId, typed);
+    const res = await persistTrackerRef.current.save(itemId, typed.trim());
     setSubmittingAnswer(false);
     if (!res.ok) {
-      if (lastPersistedRef.current[itemId] === typed.trim()) {
-        delete lastPersistedRef.current[itemId];
-      }
       toast.error(
         t("wordSpelling.toast.saveFailed") || "Failed to save answer",
       );
     }
     return res.ok;
-  }, [currentWord, persistItemAnswer, t, typedByItem]);
+  }, [currentWord, t, typedByItem]);
 
   const goTo = useCallback(
     async (idx: number) => {
@@ -408,6 +408,9 @@ export default function WordSpellingQuizActivity({
       // 但提示學生（避免靜默失敗）。已答對的題目早已 persist，不會被影響。
       let persisted = await persistAnswer();
       if (!persisted) persisted = await persistAnswer();
+      // #1045: 等所有題目的 in-flight autosave 完成（失敗者重送）後才 finalize
+      const allFlushed = await persistTrackerRef.current.flush();
+      if (!allFlushed) persisted = false;
       if (!persisted) {
         toast.warning(
           t("wordQuiz.toast.lastAnswerNotSaved") ||
@@ -531,15 +534,9 @@ export default function WordSpellingQuizActivity({
     const itemId = currentWord.content_item_id;
     const val = (typedByItem[itemId] || "").trim();
     if (!val) return;
-    if (lastPersistedRef.current[itemId] === val) return;
+    if (persistTrackerRef.current.isSavedOrPending(itemId, val)) return;
     const handle = setTimeout(() => {
-      lastPersistedRef.current[itemId] = val;
-      void persistItemAnswer(itemId, val).then((res) => {
-        // 失敗時清掉 ref，讓換題/送出時仍會重送
-        if (!res.ok && lastPersistedRef.current[itemId] === val) {
-          delete lastPersistedRef.current[itemId];
-        }
-      });
+      void persistTrackerRef.current.save(itemId, val);
     }, 1000);
     return () => clearTimeout(handle);
   }, [
