@@ -3173,7 +3173,11 @@
       "noAnswers": "尚無作答紀錄",
       "studentAnswer": "學生答案",
       "correctAnswer": "正解",
-      "blank": "（未作答）"
+      "blank": "（未作答）",
+      "question": "題目",
+      "options": "選項",
+      "deduction": "扣分",
+      "deductionHint": "答對預設 0、答錯預設單題分；修改後總分即時更新"
     },
     "tabs": {
       "students": "學生",

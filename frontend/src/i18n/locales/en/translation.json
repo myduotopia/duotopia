@@ -3030,7 +3030,11 @@
       "noAnswers": "No answers yet",
       "studentAnswer": "Answer",
       "correctAnswer": "Correct",
-      "blank": "(blank)"
+      "blank": "(blank)",
+      "question": "Question",
+      "options": "Options",
+      "deduction": "Deduction",
+      "deductionHint": "Defaults: 0 if correct, one question's points if wrong. Total updates instantly."
     },
     "tabs": {
       "students": "Students",

@@ -168,6 +168,21 @@ export interface SubmissionItem {
   correct_answer?: string;
   is_correct?: boolean;
   time_spent_seconds?: number;
+  // Issue #1045: 小考批改頁題目區 + 每題扣分
+  content_item_id?: number;
+  image_url?: string | null;
+  blanked_sentence?: string;
+  options?: Array<{ text: string; image_url?: string | null }> | null;
+  deduction?: number | null;
+}
+
+// Issue #1045: 小考派發設定（批改頁題目區依此呈現）
+export interface QuizSettings {
+  show_example_sentence: boolean;
+  show_image: boolean;
+  show_option_images: boolean;
+  show_translation: boolean;
+  show_word: boolean;
 }
 
 // Issue #843: practice_mode 型別統一由 @/lib/practiceMode 提供（含全部模式與三種小考），
@@ -196,6 +211,8 @@ export interface StudentSubmission {
   correct_count?: number;
   total?: number;
   accuracy?: number;
+  // Issue #1045
+  quiz_settings?: QuizSettings;
 }
 
 export interface ItemFeedback {
