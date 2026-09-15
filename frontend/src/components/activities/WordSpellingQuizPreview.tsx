@@ -5,6 +5,10 @@
  * previewWords / previewSettings 路徑，不打 student/preview/demo 任何 API。
  *
  * ⚠️ 改動前必讀：docs/design/preview-architecture.md
+ *
+ * #1045 階段 4：老師預覽頁傳 revealAnswersOnSubmit / onRestartDemo 轉給 Activity，
+ * resetKey 當 Activity 的 key → 「重新示範」或切換模式時重掛載（回第一題、作答清空，不重抓題目）。
+ * 派發 dialog 即時預覽不傳，行為不變。
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import WordSpellingQuizActivity from "./WordSpellingQuizActivity";
@@ -25,6 +29,10 @@ interface Props {
   };
   // #830: 老師預覽時注入每張卡底部「該題班級表現」%條（派發 sheet 不傳）。
   renderCardFooter?: (contentItemId: number) => ReactNode;
+  // #1045 階段 4：老師預覽頁「考前說明／考後檢討」模式與重置
+  revealAnswersOnSubmit?: boolean;
+  onRestartDemo?: () => void;
+  resetKey?: number;
 }
 
 interface ApiItem {
@@ -62,6 +70,9 @@ export default function WordSpellingQuizPreview({
   contentId,
   settings,
   renderCardFooter,
+  revealAnswersOnSubmit,
+  onRestartDemo,
+  resetKey = 0,
 }: Props) {
   const { token } = useTeacherAuthStore();
   const [items, setItems] = useState<ApiItem[]>([]);
@@ -173,10 +184,13 @@ export default function WordSpellingQuizPreview({
         </div>
       )}
       <WordSpellingQuizActivity
+        key={resetKey}
         assignmentId={assignmentId ?? 0}
         previewWords={previewWords}
         previewSettings={previewSettings}
         renderCardFooter={renderCardFooter}
+        revealAnswersOnSubmit={revealAnswersOnSubmit}
+        onRestartDemo={onRestartDemo}
       />
     </div>
   );

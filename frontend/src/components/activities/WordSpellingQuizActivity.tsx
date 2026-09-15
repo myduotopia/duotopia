@@ -14,6 +14,10 @@
  * mobile 在卡片下方、tablet 在右側；inputMode=none 抑制系統鍵盤建議列。
  *
  * #1045：autosave 與換題/送出共用 quizAnswerPersist 追蹤器：僅已確認成功的值略過，in-flight 失敗會重送，送出前 flush（防並發重複列且不遺失答案）。
+ *
+ * #1045 階段 4（老師預覽頁）：revealAnswersOnSubmit=false（考前說明）提交後只顯示「示範結束」＋
+ * 「重新示範」，不顯示分數/✓✗/正解；true（考後檢討）顯示 QuizReviewView ＋「重新示範」；
+ * undefined（學生作答、demo、派發 dialog 即時預覽）行為不變。
  */
 
 import {
@@ -45,6 +49,9 @@ import QuizAnswerInput, {
 } from "./shared/QuizAnswerInput";
 import VirtualKeyboard from "./shared/VirtualKeyboard";
 import CardNavArrow from "./shared/CardNavArrow";
+import PreviewDemoDoneView, {
+  RestartDemoButton,
+} from "./shared/PreviewDemoDoneView";
 import QuizReviewView, {
   type QuizReviewPayload,
   type QuizReviewWord,
@@ -95,6 +102,11 @@ interface Props {
   previewSettings?: Partial<StartResponse>;
   // #830: 老師預覽時注入每張卡底部的「該題班級表現」%條（學生端不傳）。
   renderCardFooter?: (contentItemId: number) => ReactNode;
+  // #1045 階段 4：老師預覽頁模式。false＝考前說明（提交後不對答案）、true＝考後檢討；
+  // undefined＝維持原行為（學生作答、demo、派發 dialog 即時預覽）。僅 previewWords 路徑生效。
+  revealAnswersOnSubmit?: boolean;
+  // #1045 階段 4：「重新示範」— 父層遞增 key 重掛載，回到第一題並清空作答
+  onRestartDemo?: () => void;
 }
 
 export default function WordSpellingQuizActivity({
@@ -105,10 +117,16 @@ export default function WordSpellingQuizActivity({
   previewWords,
   previewSettings,
   renderCardFooter,
+  revealAnswersOnSubmit,
+  onRestartDemo,
 }: Props) {
   void _isPreviewMode;
   const { t } = useTranslation();
   const isLivePreview = !!previewWords;
+  // #1045 階段 4：考前說明模式提交後的「示範結束」狀態
+  const [demoDone, setDemoDone] = useState(false);
+  const revealAnswersRef = useRef(revealAnswersOnSubmit);
+  revealAnswersRef.current = revealAnswersOnSubmit;
 
   const [loading, setLoading] = useState(!isLivePreview);
   const [words, setWords] = useState<QuizWord[]>([]);
@@ -377,6 +395,11 @@ export default function WordSpellingQuizActivity({
 
   const handleSubmitAll = useCallback(async () => {
     if (isLivePreview) {
+      // #1045 階段 4：考前說明 → 不組複盤資料，不揭示分數/對錯/正解
+      if (revealAnswersRef.current === false) {
+        setDemoDone(true);
+        return;
+      }
       // #861 D: 預覽提交 → 前端用目前打字作答組複盤，重用學生端 QuizReviewView。
       const norm = (s: string | null | undefined) =>
         (s ?? "").trim().toLowerCase();
@@ -577,6 +600,10 @@ export default function WordSpellingQuizActivity({
     );
   }
 
+  if (demoDone) {
+    return <PreviewDemoDoneView onRestart={onRestartDemo} />;
+  }
+
   if (alreadySubmitted) {
     if (reviewLoading || !reviewData) {
       return (
@@ -588,6 +615,13 @@ export default function WordSpellingQuizActivity({
     return (
       <QuizReviewView
         data={reviewData}
+        // #1045 階段 4：老師預覽頁（有模式）隱藏「提交後不可重做」並附「重新示範」
+        isPreview={isLivePreview && revealAnswersOnSubmit !== undefined}
+        footer={
+          isLivePreview && revealAnswersOnSubmit !== undefined ? (
+            <RestartDemoButton onRestart={onRestartDemo} />
+          ) : undefined
+        }
         renderQuestion={(w) => (
           <div className="text-center py-2 space-y-1">
             {w.image_url && (
