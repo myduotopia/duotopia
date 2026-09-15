@@ -652,9 +652,12 @@ describe("Issue #1051 例句麥克風記住上次設定", () => {
     render(<VocabularySetPanel content={{ id: 23 }} />, { wrapper });
     await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
 
-    fireEvent.click(
-      screen.getByTitle("contentEditor.tooltips.openTTSRecording"),
+    // 單字已有音檔，其麥克風的 title 也是 rerecordOrGenerate；
+    // 先抓住例句麥克風本身，產生後才不會跟單字麥克風混淆
+    const exampleMic = screen.getByTitle(
+      "contentEditor.tooltips.openTTSRecording",
     );
+    fireEvent.click(exampleMic);
     const selects = () => screen.getByRole("dialog").querySelectorAll("select");
     fireEvent.change(selects()[0], { target: { value: "British English" } });
     fireEvent.change(selects()[1], { target: { value: "Random" } });
@@ -663,10 +666,13 @@ describe("Issue #1051 例句麥克風記住上次設定", () => {
 
     await waitFor(() => expect(apiClient.generateTTS).toHaveBeenCalled());
     // 產生後按鈕變成「重新錄製或生成」
-    const mic = await screen.findByTitle(
-      "contentEditor.tooltips.rerecordOrGenerate",
+    await waitFor(() =>
+      expect(exampleMic).toHaveAttribute(
+        "title",
+        "contentEditor.tooltips.rerecordOrGenerate",
+      ),
     );
-    fireEvent.click(mic);
+    fireEvent.click(exampleMic);
 
     expect((selects()[0] as HTMLSelectElement).value).toBe("British English");
     expect((selects()[1] as HTMLSelectElement).value).toBe("Random");
