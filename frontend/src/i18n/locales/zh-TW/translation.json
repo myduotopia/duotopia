@@ -5961,7 +5961,50 @@
     },
     "messages": {
       "loadFailed": "載入題庫失敗",
-      "editorComingSoon": "選擇題編輯器將在下一版提供"
+      "editorComingSoon": "選擇題編輯器將在下一版提供",
+      "created": "題目已新增",
+      "updated": "題目已更新",
+      "deleted": "題目已刪除",
+      "saveFailed": "儲存失敗",
+      "deleteFailed": "刪除失敗"
+    },
+    "form": {
+      "titleCreate": "新增選擇題",
+      "titleEdit": "編輯選擇題",
+      "titleView": "檢視題目",
+      "description": "填寫題目與選項，勾選正確答案；可設定年級、考點與教材關聯。",
+      "stem": "題目",
+      "stemPlaceholder": "輸入題目內容…",
+      "duplicateFound": "題庫已有一模一樣的題目，請修改題目或取消：",
+      "similarFound": "題庫有相似題目，請確認是否重複：",
+      "options": "選項",
+      "optionsHint": "（至少填 {{min}} 個，勾選正確答案）",
+      "optionPlaceholder": "選項 {{index}}",
+      "markCorrect": "選項 {{index}} 為正確答案",
+      "allowMultiple": "允許複選",
+      "explanation": "解析（選填）",
+      "grade": "適合年級",
+      "gradeAny": "不限",
+      "visibility": "公開設定",
+      "examPoints": "考點",
+      "pickExamPoints": "選擇考點",
+      "examPointSearchPlaceholder": "搜尋考點（可輸入慣用名稱，如「現完式」）",
+      "noExamPoints": "找不到考點",
+      "removeExamPoint": "移除考點 {{name}}",
+      "programLinks": "關聯教材包／單元",
+      "pickProgram": "選擇教材包",
+      "pickLessonOptional": "單元（選填）",
+      "addLink": "加入",
+      "removeLink": "移除關聯",
+      "confirmDelete": "確定要刪除這題嗎？已派發的考卷不受影響。",
+      "errors": {
+        "stemRequired": "請輸入題目",
+        "duplicate": "題目與既有題目重複",
+        "minOptions": "至少填 {{min}} 個選項",
+        "noCorrect": "請勾選正確答案",
+        "singleOnly": "單選題只能有一個正確答案，或開啟「允許複選」",
+        "gradeRange": "年級下限不可大於上限"
+      }
     }
   }
 }

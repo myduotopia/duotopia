@@ -13,6 +13,8 @@ import MaterialsPageTabs, {
   type MaterialsPageTab,
 } from "@/components/shared/MaterialsPageTabs";
 import QuestionBankTab from "@/components/question-bank/QuestionBankTab";
+import MultipleChoiceQuestionDialog from "@/components/question-bank/MultipleChoiceQuestionDialog";
+import type { Question } from "@/types/questionBank";
 import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import ProgramFolderView from "@/components/shared/ProgramFolderView";
 import { ProgramDialog } from "@/components/ProgramDialog";
@@ -56,6 +58,13 @@ export default function OrgMaterialsPage() {
   const canManage = !!selectedOrganization;
 
   const [programs, setPrograms] = useState<Program[]>([]);
+  // 題庫：新增／編輯選擇題 dialog（issue #1064）
+  const [questionDialog, setQuestionDialog] = useState<{
+    open: boolean;
+    question: Question | null;
+  }>({ open: false, question: null });
+  const [questionRefreshKey, setQuestionRefreshKey] = useState(0);
+
   const [loading, setLoading] = useState(true);
   const [isReordering, setIsReordering] = useState(false);
 
@@ -683,6 +692,13 @@ export default function OrgMaterialsPage() {
             <QuestionBankTab
               scope="organization"
               organizationId={selectedOrganization?.id}
+              refreshKey={questionRefreshKey}
+              onCreateQuestion={() =>
+                setQuestionDialog({ open: true, question: null })
+              }
+              onSelectQuestion={(q) =>
+                setQuestionDialog({ open: true, question: q })
+              }
             />
           ) : (
             <>
@@ -1309,6 +1325,18 @@ export default function OrgMaterialsPage() {
           )}
 
         {/* Dialogs */}
+        {/* 機構題庫：成員都可新增；編輯／刪除由後端依教材管理權限判定，前端不擋 */}
+        <MultipleChoiceQuestionDialog
+          open={questionDialog.open}
+          question={questionDialog.question}
+          programs={programs}
+          organizationId={selectedOrganization?.id}
+          canDelete={canManage}
+          onClose={() => setQuestionDialog({ open: false, question: null })}
+          onSaved={() => setQuestionRefreshKey((k) => k + 1)}
+          onDeleted={() => setQuestionRefreshKey((k) => k + 1)}
+        />
+
         <ProgramDialog
           program={selectedProgram}
           dialogType={programDialogType}

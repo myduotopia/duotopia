@@ -5917,7 +5917,50 @@
     },
     "messages": {
       "loadFailed": "Failed to load question bank",
-      "editorComingSoon": "The multiple-choice editor is coming in the next release"
+      "editorComingSoon": "The multiple-choice editor is coming in the next release",
+      "created": "Question created",
+      "updated": "Question updated",
+      "deleted": "Question deleted",
+      "saveFailed": "Failed to save",
+      "deleteFailed": "Failed to delete"
+    },
+    "form": {
+      "titleCreate": "New Multiple-Choice Question",
+      "titleEdit": "Edit Question",
+      "titleView": "View Question",
+      "description": "Enter the question and options, mark the correct answers; optionally set grade, exam points and material links.",
+      "stem": "Question",
+      "stemPlaceholder": "Type the question…",
+      "duplicateFound": "An identical question already exists. Edit the question or cancel:",
+      "similarFound": "Similar questions exist. Please check for duplicates:",
+      "options": "Options",
+      "optionsHint": "(at least {{min}}, tick the correct ones)",
+      "optionPlaceholder": "Option {{index}}",
+      "markCorrect": "Option {{index}} is correct",
+      "allowMultiple": "Allow multiple answers",
+      "explanation": "Explanation (optional)",
+      "grade": "Grade",
+      "gradeAny": "Any",
+      "visibility": "Visibility",
+      "examPoints": "Exam points",
+      "pickExamPoints": "Pick exam points",
+      "examPointSearchPlaceholder": "Search exam points (aliases work too)",
+      "noExamPoints": "No exam points found",
+      "removeExamPoint": "Remove exam point {{name}}",
+      "programLinks": "Linked material packs / lessons",
+      "pickProgram": "Pick a material pack",
+      "pickLessonOptional": "Lesson (optional)",
+      "addLink": "Add",
+      "removeLink": "Remove link",
+      "confirmDelete": "Delete this question? Assigned papers are not affected.",
+      "errors": {
+        "stemRequired": "Question is required",
+        "duplicate": "Duplicate of an existing question",
+        "minOptions": "At least {{min}} options",
+        "noCorrect": "Tick a correct answer",
+        "singleOnly": "Single-answer questions can have only one correct option; enable multiple answers otherwise",
+        "gradeRange": "Minimum grade cannot exceed maximum"
+      }
     }
   }
 }
