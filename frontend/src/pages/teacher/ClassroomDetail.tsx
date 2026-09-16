@@ -2102,9 +2102,7 @@ export default function ClassroomDetail({
                           </option>
                           {memberOrderOptions.map((n) => (
                             <option key={n} value={String(n)}>
-                              {t("classroomDetail.groups.filterOrderOption", {
-                                number: n,
-                              })}
+                              {t("common.orderOption", { number: n })}
                             </option>
                           ))}
                         </select>

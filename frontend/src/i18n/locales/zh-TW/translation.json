@@ -52,6 +52,7 @@
     }
   },
   "common": {
+    "orderOption": "第 {{number}} 號",
     "save": "儲存",
     "cancel": "取消",
     "confirm": "確認",
@@ -1938,7 +1939,6 @@
         "byGroupCount": "組別：{{count}} 組",
         "byOrder": "依組員序位",
         "byOrderCount": "序位：{{count}} 個",
-        "orderOption": "第 {{number}} 號",
         "groupSize": "{{count}} 人",
         "assignAll": "指派全班",
         "totalStudents": "共 {{count}} 位學生",
@@ -3119,7 +3119,6 @@
       "rosterHint": "勾選要加入目前組別的學生",
       "filterAllGroups": "所有組別",
       "filterAllOrders": "所有序號",
-      "filterOrderOption": "第 {{number}} 號",
       "noStudents": "這個班級還沒有學生",
       "color": {
         "amber": "琥珀",

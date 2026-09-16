@@ -52,6 +52,7 @@
     }
   },
   "common": {
+    "orderOption": "No. {{number}}",
     "save": "Save",
     "cancel": "Cancel",
     "confirm": "Confirm",
@@ -1777,7 +1778,6 @@
         "byGroupCount": "Groups: {{count}}",
         "byOrder": "By member number",
         "byOrderCount": "Numbers: {{count}}",
-        "orderOption": "No. {{number}}",
         "groupSize": "{{count}} students",
         "assignAll": "Assign to all",
         "totalStudents": "Total {{count}} students",
@@ -2976,7 +2976,6 @@
       "rosterHint": "Tick students to add them to the selected group",
       "filterAllGroups": "All groups",
       "filterAllOrders": "All numbers",
-      "filterOrderOption": "No. {{number}}",
       "noStudents": "This class has no students yet",
       "color": {
         "amber": "Amber",

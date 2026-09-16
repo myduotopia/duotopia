@@ -184,14 +184,7 @@ export function StudentScopeSelector({
                   onCheckedChange={() => toggleOrder(order)}
                 >
                   <span className="flex items-center gap-2">
-                    <span>
-                      {t(
-                        "dialogs.assignmentDialog.selectStudents.orderOption",
-                        {
-                          number: order,
-                        },
-                      )}
-                    </span>
+                    <span>{t("common.orderOption", { number: order })}</span>
                     <span className="text-xs text-gray-400 tabular-nums">
                       {t("dialogs.assignmentDialog.selectStudents.groupSize", {
                         count,

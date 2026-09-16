@@ -20,6 +20,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
@@ -175,6 +176,20 @@ def _name_taken(
     return db.query(q.exists()).scalar()
 
 
+def _commit_or_name_conflict(db: Session) -> None:
+    """commit，並把組名 unique 衝突翻成 409。
+
+    `_name_taken` 只是預檢：兩個並發請求（連點兩下、兩個分頁同時送）可能同時
+    通過預檢，最後由 DB 的 uq_student_group_classroom_name 擋下。少了這層轉譯，
+    第二個請求會變成未處理的 500，而不是預期的 409。
+    """
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Group name already exists")
+
+
 def _replace_members(db: Session, group: StudentGroup, student_ids: List[int]) -> None:
     """整批取代成員：一組只有數十人，全刪重插比 diff 好推理。"""
     db.query(StudentGroupMember).filter(StudentGroupMember.group_id == group.id).delete(
@@ -274,7 +289,7 @@ async def create_group(
     db.flush()  # 取得 group.id 才能插成員
 
     _replace_members(db, group, body.member_student_ids)
-    db.commit()
+    _commit_or_name_conflict(db)
     db.refresh(group)
 
     return _to_out(group, _classroom_student_map(db, classroom_id))
@@ -300,7 +315,7 @@ async def update_group(
     group.leader_student_id = body.leader_student_id
     _replace_members(db, group, body.member_student_ids)
 
-    db.commit()
+    _commit_or_name_conflict(db)
     db.refresh(group)
 
     return _to_out(group, _classroom_student_map(db, group.classroom_id))
