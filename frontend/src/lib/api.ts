@@ -3,6 +3,15 @@
  */
 
 import { API_URL } from "../config/api";
+import type {
+  ExamPoint,
+  Question,
+  QuestionCreateInput,
+  QuestionListParams,
+  QuestionListResponse,
+  QuestionUpdateInput,
+  SimilarQuestionsResponse,
+} from "@/types/questionBank";
 import { retryAIAnalysis } from "../utils/retryHelper";
 import { clearAllAuth } from "./authUtils";
 import { appendAudioToFormData } from "@/utils/audioFormatDetection";
@@ -539,6 +548,59 @@ class ApiClient {
     const queryString = params.toString();
     return this.request(
       `/api/teachers/programs${queryString ? `?${queryString}` : ""}`,
+    );
+  }
+
+  // ============ 題庫（Issue #1061） ============
+
+  async listQuestions(params: QuestionListParams = {}) {
+    const qs = new URLSearchParams();
+    (Object.keys(params) as (keyof QuestionListParams)[]).forEach((key) => {
+      const value = params[key];
+      if (value === undefined || value === null || value === "") return;
+      if (Array.isArray(value)) {
+        value.forEach((v) => qs.append(key, String(v)));
+      } else {
+        qs.append(key, String(value));
+      }
+    });
+    const query = qs.toString();
+    return this.get<QuestionListResponse>(
+      `/api/question-bank/questions${query ? `?${query}` : ""}`,
+    );
+  }
+
+  async getQuestion(questionId: number) {
+    return this.get<Question>(`/api/question-bank/questions/${questionId}`);
+  }
+
+  async createQuestion(data: QuestionCreateInput) {
+    return this.post<Question>("/api/question-bank/questions", data);
+  }
+
+  async updateQuestion(questionId: number, data: QuestionUpdateInput) {
+    return this.patch<Question>(
+      `/api/question-bank/questions/${questionId}`,
+      data,
+    );
+  }
+
+  async deleteQuestion(questionId: number) {
+    return this.delete<void>(`/api/question-bank/questions/${questionId}`);
+  }
+
+  async findSimilarQuestions(stem: string, excludeId?: number) {
+    const qs = new URLSearchParams({ stem });
+    if (excludeId !== undefined) qs.append("exclude_id", String(excludeId));
+    return this.get<SimilarQuestionsResponse>(
+      `/api/question-bank/questions/similar?${qs.toString()}`,
+    );
+  }
+
+  async listExamPoints(q?: string) {
+    const query = q ? `?q=${encodeURIComponent(q)}` : "";
+    return this.get<{ items: ExamPoint[] }>(
+      `/api/question-bank/exam-points${query}`,
     );
   }
 

@@ -5870,5 +5870,54 @@
         "description": "This orange button practises the content right away — no need to assign it to students first."
       }
     }
+  },
+  "questionBank": {
+    "title": {
+      "mine": "My Question Bank",
+      "organization": "Organization Question Bank"
+    },
+    "buttons": {
+      "addQuestion": "Add Question",
+      "prevPage": "Previous page",
+      "nextPage": "Next page"
+    },
+    "searchPlaceholder": "Search questions...",
+    "comingSoon": "Coming soon",
+    "types": {
+      "multiple_choice": "Multiple Choice",
+      "reading": "Reading",
+      "cloze": "Cloze",
+      "fill_in": "Fill in the Blank",
+      "listening": "Listening",
+      "listening_image": "Picture Listening"
+    },
+    "columns": {
+      "stem": "Question",
+      "type": "Type",
+      "grade": "Grade",
+      "examPoints": "Exam Points",
+      "visibility": "Visibility"
+    },
+    "visibility": {
+      "private": "Private",
+      "public": "Public",
+      "organization_only": "Organizations only",
+      "individual_only": "Individuals only"
+    },
+    "owner": {
+      "platform": "Platform",
+      "other": "Other teacher"
+    },
+    "gradeRange": "Grade {{min}}–{{max}}",
+    "gradeSingle": "Grade {{grade}}",
+    "pagination": "Page {{page}} / {{totalPages}}, {{total}} questions",
+    "empty": {
+      "noQuestions": "No questions yet. Click \"Add Question\" to start.",
+      "noMatch": "No matching questions"
+    },
+    "messages": {
+      "loadFailed": "Failed to load question bank",
+      "editorComingSoon": "The multiple-choice editor is coming in the next release"
+    }
   }
 }

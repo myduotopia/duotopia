@@ -7,6 +7,12 @@ import { buildMaterialGuideSteps } from "@/components/guide/startMaterialGuide";
 import { RecursiveTreeAccordion } from "@/components/shared/RecursiveTreeAccordion";
 import { programTreeConfig } from "@/components/shared/programTreeConfig";
 import MaterialsToolbar from "@/components/shared/MaterialsToolbar";
+import MaterialsPageTabs, {
+  readMaterialsTab,
+  withMaterialsTab,
+  type MaterialsPageTab,
+} from "@/components/shared/MaterialsPageTabs";
+import QuestionBankTab from "@/components/question-bank/QuestionBankTab";
 import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import ProgramFolderView from "@/components/shared/ProgramFolderView";
 import { ProgramDialog } from "@/components/ProgramDialog";
@@ -56,6 +62,10 @@ export default function OrgMaterialsPage() {
   // #989: 從公開 demo 頁註冊的訪客若在機構視圖，教材複製到機構教材後會被導到
   // 這一頁並帶著新教材 id — 接手同一套「教材→單元→即刻練習」引導。
   const [searchParams, setSearchParams] = useSearchParams();
+  // 教材｜題庫 tab，存在 URL query（?tab=questions）重整後保留
+  const activeTab = readMaterialsTab(searchParams);
+  const setActiveTab = (tab: MaterialsPageTab) =>
+    setSearchParams(withMaterialsTab(searchParams, tab), { replace: true });
   const { start: startGuide } = useHighlightGuide();
   const guideStartedRef = useRef(false);
   const guideProgramParam = searchParams.get(DEMO_GUIDE_PROGRAM_PARAM);
@@ -661,182 +671,219 @@ export default function OrgMaterialsPage() {
             </div>
           )}
 
-          <MaterialsToolbar
-            title="機構教材"
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            searchPlaceholder="搜尋機構教材..."
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            onAdd={canManage ? handleCreateProgram : undefined}
-            addButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
+          {/* 教材｜題庫 tab（issue #1061） */}
+          <MaterialsPageTabs
+            value={activeTab}
+            onChange={setActiveTab}
+            materialsLabel={t("orgMaterials.title", "機構教材")}
+            questionsLabel={t("questionBank.title.organization")}
           />
 
-          {viewMode === "tree" ? (
-            <RecursiveTreeAccordion
-              data={filteredPrograms}
-              config={programTreeConfig}
-              showCreateButton={false}
-              disableActions={!canManage}
-              disableReason="僅機構管理員可編輯機構教材"
-              onEdit={(item, level, parentId) => {
-                if (level === 0) handleEditProgram(item.id);
-                else if (level === 1)
-                  handleEditLesson(parentId as number, item.id);
-              }}
-              onDelete={(item, level, parentId) => {
-                if (level === 0) handleDeleteProgram(item.id);
-                else if (level === 1)
-                  handleDeleteLesson(parentId as number, item.id);
-                else if (level === 2)
-                  handleDeleteContent(parentId as number, item.id, item.title);
-              }}
-              onClick={(item, level, parentId) => {
-                if (level === 2) {
-                  const program = programs.find((p) =>
-                    p.lessons?.some((l) => l.id === parentId),
-                  );
-                  const lesson = program?.lessons?.find(
-                    (l) => l.id === parentId,
-                  );
-                  handleContentClick({
-                    ...item,
-                    lesson_id: parentId as number,
-                    lessonName: lesson?.name,
-                    programName: program?.name,
-                  });
-                }
-              }}
-              onCreate={(level, parentId) => {
-                if (level === 1) {
-                  handleCreateLesson(parentId as number);
-                } else if (level === 2) {
-                  const program = programs.find((p) =>
-                    p.lessons?.some((l) => l.id === parentId),
-                  );
-                  if (program) {
-                    handleCreateContent(program.id, parentId as number);
-                  }
-                }
-              }}
-              onReorder={(fromIndex, toIndex, level, parentId) => {
-                if (level === 0) handleReorderPrograms(fromIndex, toIndex);
-                else if (level === 1)
-                  handleReorderLessons(parentId as number, fromIndex, toIndex);
-                else if (level === 2)
-                  handleReorderContents(parentId as number, fromIndex, toIndex);
-              }}
-              onCopy={(item, level) => {
-                if (level === 2) {
-                  setCopyContentInfo({
-                    id: item.id as number,
-                    title: (item.title || item.name || "") as string,
-                  });
-                  setShowCopyDialog(true);
-                }
-              }}
-              onDownload={(item, level) => {
-                if (
-                  level === 2 &&
-                  typeof item.type === "string" &&
-                  item.type.toLowerCase() === "vocabulary_set"
-                ) {
-                  setDownloadContentInfo({
-                    id: item.id as number,
-                    title: (item.title || item.name || "") as string,
-                  });
-                  setDownloadSheetOpen(true);
-                }
-              }}
+          {activeTab === "questions" ? (
+            <QuestionBankTab
+              scope="organization"
+              organizationId={selectedOrganization?.id}
             />
           ) : (
-            <ProgramFolderView
-              programs={filteredPrograms}
-              onEditProgram={canManage ? handleEditProgram : () => {}}
-              onDeleteProgram={canManage ? handleDeleteProgram : () => {}}
-              onEditLesson={(programId, lessonId) =>
-                canManage && handleEditLesson(programId, lessonId)
-              }
-              onDeleteLesson={(programId, lessonId) =>
-                canManage && handleDeleteLesson(programId, lessonId)
-              }
-              onCreateLesson={(programId) =>
-                canManage && handleCreateLesson(programId)
-              }
-              onContentClick={(content, lessonId) => {
-                const program = programs.find((p) =>
-                  p.lessons?.some((l) => l.id === lessonId),
-                );
-                const lesson = program?.lessons?.find((l) => l.id === lessonId);
-                handleContentClick({
-                  ...content,
-                  lesson_id: lessonId,
-                  lessonName: lesson?.name,
-                  programName: program?.name,
-                });
-              }}
-              onDeleteContent={(lessonId, contentId, title) =>
-                canManage && handleDeleteContent(lessonId, contentId, title)
-              }
-              onCopyContent={(contentId, title) => {
-                setCopyContentInfo({ id: contentId, title });
-                setShowCopyDialog(true);
-              }}
-              onDownloadContent={(content) => {
-                if (
-                  typeof content.type === "string" &&
-                  content.type.toLowerCase() === "vocabulary_set"
-                ) {
-                  setDownloadContentInfo({
-                    id: content.id,
-                    title: content.title,
-                  });
-                  setDownloadSheetOpen(true);
-                }
-              }}
-              onCreateContent={(programId, lessonId) =>
-                canManage && handleCreateContent(programId, lessonId)
-              }
-              onInstantPractice={(content) => {
-                setInstantPracticeContent({
-                  id: content.id,
-                  title: content.title,
-                  type: content.type,
-                });
-                setShowInstantPractice(true);
-              }}
-              onAssignContent={(content, lessonId, programId) => {
-                // Issue #847: program-direct content (lessonId === 0) is looked
-                // up by programId, not by lesson.
-                const program =
-                  lessonId === 0
-                    ? programs.find((p) => p.id === programId)
-                    : programs.find((p) =>
-                        p.lessons?.some((l) => l.id === lessonId),
+            <>
+              <MaterialsToolbar
+                title="機構教材"
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                searchPlaceholder="搜尋機構教材..."
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                onAdd={canManage ? handleCreateProgram : undefined}
+                addButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
+              />
+
+              {viewMode === "tree" ? (
+                <RecursiveTreeAccordion
+                  data={filteredPrograms}
+                  config={programTreeConfig}
+                  showCreateButton={false}
+                  disableActions={!canManage}
+                  disableReason="僅機構管理員可編輯機構教材"
+                  onEdit={(item, level, parentId) => {
+                    if (level === 0) handleEditProgram(item.id);
+                    else if (level === 1)
+                      handleEditLesson(parentId as number, item.id);
+                  }}
+                  onDelete={(item, level, parentId) => {
+                    if (level === 0) handleDeleteProgram(item.id);
+                    else if (level === 1)
+                      handleDeleteLesson(parentId as number, item.id);
+                    else if (level === 2)
+                      handleDeleteContent(
+                        parentId as number,
+                        item.id,
+                        item.title,
                       );
-                const lesson =
-                  lessonId === 0
-                    ? undefined
-                    : program?.lessons?.find((l) => l.id === lessonId);
-                const cartItem: CartItem = {
-                  contentId: content.id,
-                  programName: program?.name || "",
-                  lessonName: lesson?.name || "",
-                  contentTitle: content.title,
-                  contentType: content.type || "",
-                  itemsCount: content.items_count,
-                  order: 0,
-                  hasMissingAudio: false,
-                  hasMissingExampleAudio: false,
-                  hasMissingImage: false,
-                };
-                setAssignContents([cartItem]);
-                setShowAssignmentDialog(true);
-              }}
-              onReorderPrograms={canManage ? handleReorderPrograms : undefined}
-              onReorderLessons={canManage ? handleReorderLessons : undefined}
-              onReorderContents={canManage ? handleReorderContents : undefined}
-            />
+                  }}
+                  onClick={(item, level, parentId) => {
+                    if (level === 2) {
+                      const program = programs.find((p) =>
+                        p.lessons?.some((l) => l.id === parentId),
+                      );
+                      const lesson = program?.lessons?.find(
+                        (l) => l.id === parentId,
+                      );
+                      handleContentClick({
+                        ...item,
+                        lesson_id: parentId as number,
+                        lessonName: lesson?.name,
+                        programName: program?.name,
+                      });
+                    }
+                  }}
+                  onCreate={(level, parentId) => {
+                    if (level === 1) {
+                      handleCreateLesson(parentId as number);
+                    } else if (level === 2) {
+                      const program = programs.find((p) =>
+                        p.lessons?.some((l) => l.id === parentId),
+                      );
+                      if (program) {
+                        handleCreateContent(program.id, parentId as number);
+                      }
+                    }
+                  }}
+                  onReorder={(fromIndex, toIndex, level, parentId) => {
+                    if (level === 0) handleReorderPrograms(fromIndex, toIndex);
+                    else if (level === 1)
+                      handleReorderLessons(
+                        parentId as number,
+                        fromIndex,
+                        toIndex,
+                      );
+                    else if (level === 2)
+                      handleReorderContents(
+                        parentId as number,
+                        fromIndex,
+                        toIndex,
+                      );
+                  }}
+                  onCopy={(item, level) => {
+                    if (level === 2) {
+                      setCopyContentInfo({
+                        id: item.id as number,
+                        title: (item.title || item.name || "") as string,
+                      });
+                      setShowCopyDialog(true);
+                    }
+                  }}
+                  onDownload={(item, level) => {
+                    if (
+                      level === 2 &&
+                      typeof item.type === "string" &&
+                      item.type.toLowerCase() === "vocabulary_set"
+                    ) {
+                      setDownloadContentInfo({
+                        id: item.id as number,
+                        title: (item.title || item.name || "") as string,
+                      });
+                      setDownloadSheetOpen(true);
+                    }
+                  }}
+                />
+              ) : (
+                <ProgramFolderView
+                  programs={filteredPrograms}
+                  onEditProgram={canManage ? handleEditProgram : () => {}}
+                  onDeleteProgram={canManage ? handleDeleteProgram : () => {}}
+                  onEditLesson={(programId, lessonId) =>
+                    canManage && handleEditLesson(programId, lessonId)
+                  }
+                  onDeleteLesson={(programId, lessonId) =>
+                    canManage && handleDeleteLesson(programId, lessonId)
+                  }
+                  onCreateLesson={(programId) =>
+                    canManage && handleCreateLesson(programId)
+                  }
+                  onContentClick={(content, lessonId) => {
+                    const program = programs.find((p) =>
+                      p.lessons?.some((l) => l.id === lessonId),
+                    );
+                    const lesson = program?.lessons?.find(
+                      (l) => l.id === lessonId,
+                    );
+                    handleContentClick({
+                      ...content,
+                      lesson_id: lessonId,
+                      lessonName: lesson?.name,
+                      programName: program?.name,
+                    });
+                  }}
+                  onDeleteContent={(lessonId, contentId, title) =>
+                    canManage && handleDeleteContent(lessonId, contentId, title)
+                  }
+                  onCopyContent={(contentId, title) => {
+                    setCopyContentInfo({ id: contentId, title });
+                    setShowCopyDialog(true);
+                  }}
+                  onDownloadContent={(content) => {
+                    if (
+                      typeof content.type === "string" &&
+                      content.type.toLowerCase() === "vocabulary_set"
+                    ) {
+                      setDownloadContentInfo({
+                        id: content.id,
+                        title: content.title,
+                      });
+                      setDownloadSheetOpen(true);
+                    }
+                  }}
+                  onCreateContent={(programId, lessonId) =>
+                    canManage && handleCreateContent(programId, lessonId)
+                  }
+                  onInstantPractice={(content) => {
+                    setInstantPracticeContent({
+                      id: content.id,
+                      title: content.title,
+                      type: content.type,
+                    });
+                    setShowInstantPractice(true);
+                  }}
+                  onAssignContent={(content, lessonId, programId) => {
+                    // Issue #847: program-direct content (lessonId === 0) is looked
+                    // up by programId, not by lesson.
+                    const program =
+                      lessonId === 0
+                        ? programs.find((p) => p.id === programId)
+                        : programs.find((p) =>
+                            p.lessons?.some((l) => l.id === lessonId),
+                          );
+                    const lesson =
+                      lessonId === 0
+                        ? undefined
+                        : program?.lessons?.find((l) => l.id === lessonId);
+                    const cartItem: CartItem = {
+                      contentId: content.id,
+                      programName: program?.name || "",
+                      lessonName: lesson?.name || "",
+                      contentTitle: content.title,
+                      contentType: content.type || "",
+                      itemsCount: content.items_count,
+                      order: 0,
+                      hasMissingAudio: false,
+                      hasMissingExampleAudio: false,
+                      hasMissingImage: false,
+                    };
+                    setAssignContents([cartItem]);
+                    setShowAssignmentDialog(true);
+                  }}
+                  onReorderPrograms={
+                    canManage ? handleReorderPrograms : undefined
+                  }
+                  onReorderLessons={
+                    canManage ? handleReorderLessons : undefined
+                  }
+                  onReorderContents={
+                    canManage ? handleReorderContents : undefined
+                  }
+                />
+              )}
+            </>
           )}
         </div>
 

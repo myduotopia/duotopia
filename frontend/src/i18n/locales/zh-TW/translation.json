@@ -5914,5 +5914,54 @@
         "description": "點這顆橘色按鈕就能立刻練習這份內容，不用先派發給學生。"
       }
     }
+  },
+  "questionBank": {
+    "title": {
+      "mine": "我的題庫",
+      "organization": "機構題庫"
+    },
+    "buttons": {
+      "addQuestion": "新增題目",
+      "prevPage": "上一頁",
+      "nextPage": "下一頁"
+    },
+    "searchPlaceholder": "搜尋題目...",
+    "comingSoon": "即將推出",
+    "types": {
+      "multiple_choice": "選擇題",
+      "reading": "閱讀測驗",
+      "cloze": "克漏字",
+      "fill_in": "填充題",
+      "listening": "聽力選擇",
+      "listening_image": "圖片聽力"
+    },
+    "columns": {
+      "stem": "題目",
+      "type": "題型",
+      "grade": "適合年級",
+      "examPoints": "考點",
+      "visibility": "公開"
+    },
+    "visibility": {
+      "private": "私人",
+      "public": "公開",
+      "organization_only": "僅機構",
+      "individual_only": "僅個人"
+    },
+    "owner": {
+      "platform": "平台題庫",
+      "other": "其他老師"
+    },
+    "gradeRange": "{{min}}–{{max}} 年級",
+    "gradeSingle": "{{grade}} 年級",
+    "pagination": "第 {{page}} / {{totalPages}} 頁，共 {{total}} 題",
+    "empty": {
+      "noQuestions": "還沒有題目，點「新增題目」開始建立",
+      "noMatch": "沒有符合的題目"
+    },
+    "messages": {
+      "loadFailed": "載入題庫失敗",
+      "editorComingSoon": "選擇題編輯器將在下一版提供"
+    }
   }
 }
