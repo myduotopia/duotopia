@@ -23,6 +23,14 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+    /* #1046: card / popover 是這組變數裡唯二缺的兩個，但 ui/card.tsx 與
+       ui/popover.tsx 早就在用 bg-card / bg-popover。依 shadcn 慣例取與
+       background / foreground 同值（白底近黑字），與這些元件目前硬寫的
+       bg-white 視覺一致，所以補上後外觀不會變。 */
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
     --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96%;

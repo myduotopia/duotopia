@@ -52,6 +52,7 @@
     }
   },
   "common": {
+    "orderOption": "No. {{number}}",
     "save": "Save",
     "cancel": "Cancel",
     "confirm": "Confirm",
@@ -1773,12 +1774,14 @@
         "description": "Select students to receive the assignment",
         "multiDescription": "Select students per classroom (switch tabs to view)",
         "selected": "{{selected}}/{{total}} selected",
-        "assignAll": "Assign to all students in class",
+        "byGroup": "By group",
+        "byGroupCount": "Groups: {{count}}",
+        "byOrder": "By member number",
+        "byOrderCount": "Numbers: {{count}}",
+        "groupSize": "{{count}} students",
+        "assignAll": "Assign to all",
         "totalStudents": "Total {{count}} students",
         "allSelected": "All Selected",
-        "selectAllBtn": "Select All",
-        "deselectAllBtn": "Deselect All",
-        "invertSelection": "Invert Selection",
         "willCreate": "Will create {{count}} assignments"
       },
       "details": {
@@ -2538,6 +2541,7 @@
       "passwordStatus": "Password Status",
       "status": "Status",
       "lastLogin": "Last Login",
+      "groups": "Groups",
       "actions": "Actions"
     },
     "status": {
@@ -2574,7 +2578,8 @@
       "classroom": "Classroom:",
       "password": "Password:",
       "lastLogin": "Last Login:",
-      "studentNumber": "Student Number:"
+      "studentNumber": "Student Number:",
+      "groupLeader": "Group leader"
     }
   },
   "subscriptionProgressBanner": {
@@ -2934,7 +2939,52 @@
       "assignments": "Assignments",
       "assignmentManagement": "Assignment Management",
       "activeAssignments": "Active",
-      "archivedAssignments": "Archived"
+      "archivedAssignments": "Archived",
+      "groups": "Groups",
+      "groupSettings": "Group Settings"
+    },
+    "groups": {
+      "loading": "Loading groups…",
+      "loadFailed": "Failed to load groups",
+      "createFailed": "Failed to create group",
+      "deleteFailed": "Failed to delete group",
+      "saveFailed": "Save failed, please try again",
+      "saveFailedShort": "Save failed",
+      "duplicateName": "A group with that name already exists",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "listHeading": "Groups",
+      "addGroup": "Add group",
+      "defaultName": "Group {{number}}",
+      "deleteGroup": "Delete \"{{name}}\"",
+      "confirmDelete": "Delete \"{{name}}\"? The students stay in the class — only the grouping is removed.",
+      "dragToReorder": "Drag to reorder",
+      "emptyHint": "No groups yet — click \"Add group\" to create one",
+      "selectHint": "Pick a group on the left to edit it",
+      "fieldName": "Group name",
+      "fieldColor": "Group color",
+      "membersHeading": "Members ({{count}})",
+      "membersHint": "Drag to reorder; click the star to set the leader",
+      "noMembers": "No members yet — tick students from the roster on the right",
+      "colOrder": "#",
+      "colSeat": "Seat",
+      "colName": "Name",
+      "colLeader": "Leader",
+      "setLeader": "Make {{name}} the leader",
+      "removeMember": "Remove {{name}} from this group",
+      "rosterHeading": "Class roster",
+      "rosterHint": "Tick students to add them to the selected group",
+      "filterAllGroups": "All groups",
+      "filterAllOrders": "All numbers",
+      "noStudents": "This class has no students yet",
+      "color": {
+        "amber": "Amber",
+        "rose": "Rose",
+        "sky": "Sky",
+        "emerald": "Emerald",
+        "violet": "Violet",
+        "slate": "Slate"
+      }
     },
     "sections": {
       "classStudents": "Class Students",
