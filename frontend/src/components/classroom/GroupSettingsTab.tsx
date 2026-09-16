@@ -34,7 +34,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import {
@@ -507,7 +506,7 @@ export function GroupSettingsTab({
                     items={draft.memberIds}
                     strategy={verticalListSortingStrategy}
                   >
-                    <ul className="space-y-1 pt-1 max-h-96 overflow-y-auto">
+                    <ul className="space-y-1 pt-1">
                       {draft.memberIds.map((id, index) => {
                         const s = studentById.get(id);
                         if (!s) return null;
@@ -560,40 +559,38 @@ export function GroupSettingsTab({
             {t("classroomDetail.groups.noStudents")}
           </p>
         ) : (
-          <ScrollArea className="max-h-96">
-            <ul className="space-y-1 pr-2">
-              {roster.map((s) => {
-                const checked = draft?.memberIds.includes(s.id) ?? false;
-                return (
-                  <li key={s.id}>
-                    <button
-                      type="button"
-                      disabled={!draft}
-                      onClick={() => toggleMember(s.id)}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-2 py-2 rounded-lg border text-left transition-colors",
-                        checked
-                          ? "bg-blue-50 border-blue-300"
-                          : "bg-white border-gray-200 hover:border-gray-300",
-                        !draft && "opacity-50 cursor-not-allowed",
-                      )}
-                    >
-                      <Checkbox
-                        checked={checked}
-                        className="pointer-events-none"
-                      />
-                      <span className="w-10 text-xs text-gray-500 truncate">
-                        {s.student_number || "-"}
-                      </span>
-                      <span className="flex-1 min-w-0 truncate text-sm text-gray-900">
-                        {s.name}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </ScrollArea>
+          <ul className="space-y-1">
+            {roster.map((s) => {
+              const checked = draft?.memberIds.includes(s.id) ?? false;
+              return (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    disabled={!draft}
+                    onClick={() => toggleMember(s.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-2 py-2 rounded-lg border text-left transition-colors",
+                      checked
+                        ? "bg-blue-50 border-blue-300"
+                        : "bg-white border-gray-200 hover:border-gray-300",
+                      !draft && "opacity-50 cursor-not-allowed",
+                    )}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      className="pointer-events-none"
+                    />
+                    <span className="w-10 text-xs text-gray-500 truncate">
+                      {s.student_number || "-"}
+                    </span>
+                    <span className="flex-1 min-w-0 truncate text-sm text-gray-900">
+                      {s.name}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
     </div>
