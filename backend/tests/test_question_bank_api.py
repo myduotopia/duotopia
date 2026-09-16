@@ -363,6 +363,44 @@ def test_organization_bank_visible_to_members_only(
     )
     assert resp.status_code == 403
 
+    # B 加入為一般成員：可以新增到機構題庫，但不能編輯／刪除（需擁有人或管理權限）
+    s.add(
+        TeacherOrganization(
+            teacher_id=teacher_b.id, organization_id=org.id, role="teacher"
+        )
+    )
+    s.commit()
+    q_b = _create(
+        test_client,
+        teacher_b,
+        stem="Member adds org question",
+        organization_id=str(org.id),
+    )
+    assert q_b["organization_id"] == str(org.id)
+    assert (
+        test_client.patch(
+            f"/api/question-bank/questions/{q_b['id']}",
+            json={"explanation": "member edit"},
+            headers=_headers(teacher_b),
+        ).status_code
+        == 403
+    )
+    assert (
+        test_client.delete(
+            f"/api/question-bank/questions/{q_b['id']}", headers=_headers(teacher_b)
+        ).status_code
+        == 403
+    )
+    # A 是 org_owner：可以編輯成員建的題
+    assert (
+        test_client.patch(
+            f"/api/question-bank/questions/{q_b['id']}",
+            json={"explanation": "owner edit"},
+            headers=_headers(teacher_a),
+        ).status_code
+        == 200
+    )
+
 
 def test_individual_only_and_organization_only(
     test_client, shared_test_session, teacher_a, teacher_b, platform_teacher

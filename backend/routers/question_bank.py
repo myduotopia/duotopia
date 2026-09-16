@@ -45,6 +45,7 @@ from routers.teachers import get_current_teacher
 from services import question_bank_service as qbs
 from utils.permissions import (
     has_manage_materials_permission,
+    has_read_org_materials_permission,
     has_school_materials_permission,
 )
 
@@ -260,7 +261,11 @@ def _parse_uuid(value: Optional[str], field: str) -> Optional[uuid.UUID]:
 
 
 def _can_edit(db: Session, teacher: Teacher, q: Question) -> bool:
-    """自己的題目：建立者本人。機構／學校題庫：有教材管理權限者。"""
+    """自己的題目：建立者本人。
+
+    機構／學校題庫：所有 active 成員都能新增（見 create_question），但編輯／刪除
+    只有機構擁有人或有教材管理權限的管理者可以（使用者定案）。
+    """
     if q.organization_id is not None:
         return has_manage_materials_permission(teacher.id, q.organization_id, db)
     if q.school_id is not None:
@@ -408,14 +413,15 @@ def create_question(
 
     org_uuid = _parse_uuid(payload.organization_id, "organization_id")
     school_uuid = _parse_uuid(payload.school_id, "school_id")
-    if org_uuid is not None and not has_manage_materials_permission(
+    # 新增：機構／學校的 active 成員都可以；編輯／刪除才需要管理權限（_can_edit）
+    if org_uuid is not None and not has_read_org_materials_permission(
         teacher.id, org_uuid, db
     ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="沒有管理機構題庫的權限")
-    if school_uuid is not None and not has_school_materials_permission(
-        teacher.id, school_uuid, db
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不是此機構的成員")
+    if school_uuid is not None and school_uuid not in qbs.teacher_school_ids(
+        db, teacher.id
     ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="沒有管理學校題庫的權限")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不是此學校的成員")
 
     dup = qbs.find_exact_duplicate(db, teacher, payload.stem)
     if dup is not None:
